@@ -29,9 +29,9 @@ def question_summary(entry: QuestionEntry) -> str:
     if getattr(entry, "question_type", "") in PSYCHO_SUPPORTED_TYPES and bool(getattr(entry, "psycho_enabled", False)):
         bias_text = {
             "left": "低分倾向",
-            "center": "中间倾向",
+            "center": "中立",
             "right": "高分倾向",
-        }.get(str(getattr(entry, "psycho_bias", "center") or "center"), "中间倾向")
+        }.get(str(getattr(entry, "psycho_bias", "center") or "center"), "中立")
         return f"倾向模式: {bias_text}"
 
     if entry.question_type in ("text", "multi_text"):
@@ -62,12 +62,12 @@ def question_summary(entry: QuestionEntry) -> str:
         return f"{rows} 行 × {cols} 列 - 完全随机"
     if entry.question_type == "order":
         return "排序题 - 自动随机排序"
-    if entry.custom_weights:
+    if entry.custom_weights and not isinstance(entry.custom_weights[0], list):
         weights = entry.custom_weights
         if entry.question_type == "multiple":
-            summary = f"自定义概率: {','.join(f'{int(w)}%' for w in weights[:4])}"
+            summary = f"自定义概率: {','.join(f'{int(w)}%' for w in weights[:4] if isinstance(w, (int, float)))}"
         else:
-            summary = f"自定义配比: {','.join(str(int(w)) for w in weights[:4])}"
+            summary = f"自定义配比: {','.join(str(int(w)) for w in weights[:4] if isinstance(w, (int, float)))}"
         if len(weights) > 4:
             summary += "..."
         return summary
@@ -230,7 +230,11 @@ class DashboardEntriesMixin:
             return False
         title = survey_title if survey_title is not None else self._survey_title
         reliability_mode_enabled = getattr(self.runtime_page.reliability_mode_switch, "isChecked", lambda: True)()
-        dlg = QuestionWizardDialog(entries, info, title, self, reliability_mode_enabled=reliability_mode_enabled)
+        try:
+            ai_master_enabled = self.runtime_page.ai_section.ai_enabled_card.isChecked()
+        except Exception:
+            ai_master_enabled = True
+        dlg = QuestionWizardDialog(entries, info, title, self, reliability_mode_enabled=reliability_mode_enabled, ai_master_enabled=ai_master_enabled)
         if dlg.exec() == QDialog.DialogCode.Accepted:
             self._apply_wizard_results(entries, dlg)
             return True

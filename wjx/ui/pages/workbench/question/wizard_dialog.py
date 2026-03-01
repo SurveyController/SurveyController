@@ -113,7 +113,7 @@ class QuestionWizardDialog(WizardSectionsMixin, QDialog):
             max_int = min_int + 1
         return (min_int, max_int)
 
-    def __init__(self, entries: List[QuestionEntry], info: List[Dict[str, Any]], survey_title: Optional[str] = None, parent=None, reliability_mode_enabled: bool = True):
+    def __init__(self, entries: List[QuestionEntry], info: List[Dict[str, Any]], survey_title: Optional[str] = None, parent=None, reliability_mode_enabled: bool = True, ai_master_enabled: bool = True):
         super().__init__(parent)
         window_title = "配置向导"
         if survey_title:
@@ -123,6 +123,7 @@ class QuestionWizardDialog(WizardSectionsMixin, QDialog):
         self.entries = entries
         self.info = info or []
         self.reliability_mode_enabled = reliability_mode_enabled
+        self.ai_master_enabled = ai_master_enabled
         self.slider_map: Dict[int, List[NoWheelSlider]] = {}
         self.matrix_row_slider_map: Dict[int, List[List[NoWheelSlider]]] = {}
         self.text_edit_map: Dict[int, List[LineEdit]] = {}
@@ -198,6 +199,13 @@ class QuestionWizardDialog(WizardSectionsMixin, QDialog):
             info=self.info,
             psycho_check_map=self.psycho_check_map,
             psycho_bias_map=self.psycho_bias_map,
+            text_edit_map=self.text_edit_map,
+            text_random_mode_map=self.text_random_mode_map,
+            text_random_name_check_map=self.text_random_name_check_map,
+            text_random_mobile_check_map=self.text_random_mobile_check_map,
+            ai_check_map=self.ai_check_map,
+            text_container_map=self.text_container_map,
+            text_add_btn_map=self.text_add_btn_map,
             parent=self,
         )
         self.stacked_widget.addWidget(self.tendency_page)
@@ -274,7 +282,7 @@ class QuestionWizardDialog(WizardSectionsMixin, QDialog):
         else:
             self.mode_display_label.setText("倾向模式（按高低分倾向）")
             _apply_label_color(self.mode_display_label, "#d97706", "#e5a00d")
-            self.mode_status_label.setText("作答时将忽略权重配置")
+            self.mode_status_label.setText("作答时将忽略选择题权重配置，填空题配置仍生效")
             if force_tab:
                 self.stacked_widget.setCurrentIndex(1)
                 self.pivot.setCurrentItem("tendency")

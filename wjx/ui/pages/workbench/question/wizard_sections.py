@@ -10,7 +10,12 @@ from wjx.core.questions.config import QuestionEntry
 from wjx.utils.app.config import DEFAULT_FILL_TEXT
 from wjx.ui.helpers.ai_fill import ensure_ai_ready
 
-from .utils import _shorten_text, _apply_label_color, _bind_slider_input
+from .utils import (
+    _shorten_text,
+    _apply_label_color,
+    _bind_slider_input,
+    infer_reverse_by_option_texts,
+)
 
 _TEXT_RANDOM_NONE = "none"
 _TEXT_RANDOM_NAME = "name"
@@ -33,6 +38,7 @@ class WizardSectionsMixin:
     text_edit_map: Dict[int, Any]
     info: List[Any]
     reliability_mode_enabled: bool
+    ai_master_enabled: bool
     matrix_row_slider_map: Dict[int, Any]
     matrix_reverse_check_map: Dict[int, Any]
     reverse_check_map: Dict[int, Any]
@@ -129,8 +135,14 @@ class WizardSectionsMixin:
             )
 
             ai_cb = CheckBox("启用 AI", card)
-            ai_cb.setToolTip("运行时每次填空都会调用 AI")
-            ai_cb.setChecked(bool(getattr(entry, "ai_enabled", False)))
+            ai_master_on = getattr(self, "ai_master_enabled", True)
+            if not ai_master_on:
+                ai_cb.setToolTip('请先在运行参数页开启"启用 AI 填空"总开关')
+                ai_cb.setEnabled(False)
+                ai_cb.setChecked(False)
+            else:
+                ai_cb.setToolTip("运行时每次填空都会调用 AI")
+                ai_cb.setChecked(bool(getattr(entry, "ai_enabled", False)))
             ai_cb.toggled.connect(lambda checked, i=idx: self._on_entry_ai_toggled(i, checked))
             btn_row.addWidget(ai_cb)
             self.ai_check_map[idx] = ai_cb
@@ -216,7 +228,8 @@ class WizardSectionsMixin:
         matrix_weights = self._resolve_matrix_weights(entry, rows, columns)
 
         saved_row_flags = list(getattr(entry, "row_reverse_flags", []) or [])
-        if not saved_row_flags and getattr(entry, "is_reverse", False):
+        auto_reverse = infer_reverse_by_option_texts(option_texts)
+        if not saved_row_flags and (getattr(entry, "is_reverse", False) or auto_reverse):
             saved_row_flags = [True] * rows
 
         per_row_sliders: List[List[NoWheelSlider]] = []
@@ -240,7 +253,10 @@ class WizardSectionsMixin:
                 rev_row_layout = QHBoxLayout()
                 rev_row_layout.setContentsMargins(0, 0, 0, 2)
                 rev_cb = CheckBox("反向题请勾选此处", row_card)
-                rev_cb.setToolTip("勾选后，该行的答题倾向会翻转（正向高分 → 反向低分）")
+                tip = "勾选后，该行的答题倾向会翻转（正向高分 → 反向低分）"
+                if auto_reverse and not getattr(entry, "is_reverse", False):
+                    tip += "\n已根据选项文本自动推断为反向题，可手动修改。"
+                rev_cb.setToolTip(tip)
                 row_is_rev = saved_row_flags[row_idx] if row_idx < len(saved_row_flags) else False
                 rev_cb.setChecked(bool(row_is_rev))
                 rev_row_layout.addWidget(rev_cb)
@@ -293,8 +309,12 @@ class WizardSectionsMixin:
             rev_row = QHBoxLayout()
             rev_row.setContentsMargins(0, 2, 0, 2)
             rev_cb = CheckBox("反向题请勾选此处", card)
-            rev_cb.setToolTip("勾选后，信效度一致性约束会翻转该题的基准偏好（正向高分 → 反向低分）")
-            rev_cb.setChecked(bool(getattr(entry, "is_reverse", False)))
+            auto_reverse = infer_reverse_by_option_texts(option_texts)
+            tip = "勾选后，信效度一致性约束会翻转该题的基准偏好（正向高分 → 反向低分）"
+            if auto_reverse and not getattr(entry, "is_reverse", False):
+                tip += "\n已根据选项文本自动推断为反向题，可手动修改。"
+            rev_cb.setToolTip(tip)
+            rev_cb.setChecked(bool(getattr(entry, "is_reverse", False) or auto_reverse))
             rev_row.addWidget(rev_cb)
             rev_row.addStretch(1)
             card_layout.addLayout(rev_row)
@@ -428,8 +448,12 @@ class WizardSectionsMixin:
             self._set_text_answer_enabled(idx, False)
             return
         if ai_cb:
-            ai_cb.setEnabled(True)
-            self._set_text_answer_enabled(idx, not ai_cb.isChecked())
+            ai_master_on = getattr(self, "ai_master_enabled", True)
+            ai_cb.setEnabled(ai_master_on)
+            if ai_master_on:
+                self._set_text_answer_enabled(idx, not ai_cb.isChecked())
+            else:
+                self._set_text_answer_enabled(idx, True)
             return
         self._set_text_answer_enabled(idx, True)
 

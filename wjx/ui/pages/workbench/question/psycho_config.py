@@ -13,7 +13,7 @@ PSYCHO_SUPPORTED_TYPES = {"single", "scale", "score", "dropdown", "matrix"}
 # 偏向选项
 PSYCHO_BIAS_CHOICES = [
     ("left", "低分倾向"),
-    ("center", "中间倾向"),
+    ("center", "居中"),
     ("right", "高分倾向"),
 ]
 

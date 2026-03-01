@@ -83,12 +83,12 @@ def _infer_option_count(entry: "QuestionEntry") -> int:
 @dataclass
 class QuestionEntry:
     question_type: str
-    probabilities: Union[List[float], int, None]
+    probabilities: Union[List[float], List[List[float]], int, None]
     texts: Optional[List[str]] = None
     rows: int = 1
     option_count: int = 0
     distribution_mode: str = "random"  # random, custom
-    custom_weights: Optional[List[float]] = None
+    custom_weights: Union[List[float], List[List[float]], None] = None
     question_num: Optional[int] = None
     question_title: Optional[str] = None
     ai_enabled: bool = False
@@ -166,7 +166,7 @@ class QuestionEntry:
             fillable_hint = " | 含填空项"
 
         if self.question_type == "multiple" and self.custom_weights:
-            weights_str = ",".join(f"{int(round(max(w, 0)))}%" for w in self.custom_weights)
+            weights_str = ",".join(f"{int(round(max(w, 0)))}%" for w in self.custom_weights if isinstance(w, (int, float)))
             return f"{self.option_count} 个选项 - 概率 {weights_str}{fillable_hint}"
 
         if self.distribution_mode == "custom" and self.custom_weights:
@@ -182,7 +182,7 @@ class QuestionEntry:
                 except Exception:
                     return 0.0
 
-            weights_str = ":".join(_format_ratio(_safe_weight(w)) for w in self.custom_weights)
+            weights_str = ":".join(_format_ratio(_safe_weight(w)) for w in self.custom_weights if isinstance(w, (int, float)))
             return f"{self.option_count} 个选项 - 配比 {weights_str}{fillable_hint}"
 
         return f"{self.option_count} 个选项 - {mode_text}{fillable_hint}"
@@ -336,7 +336,8 @@ def configure_probabilities(
             target_value: Optional[float] = None
             if isinstance(entry.custom_weights, (list, tuple)) and entry.custom_weights:
                 try:
-                    target_value = float(entry.custom_weights[0])
+                    first = entry.custom_weights[0]
+                    target_value = float(first) if isinstance(first, (int, float)) else None
                 except Exception:
                     target_value = None
             if target_value is None:

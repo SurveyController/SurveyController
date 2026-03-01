@@ -4,7 +4,7 @@
 导致 Cronbach's Alpha 信效度极低，一看就是假数据。
 
 方案：每次填写问卷时，按维度（dimension）独立生成"基准偏好"，
-同维度内的量表题围绕该基准 ±1 波动，不同维度之间互不干扰。
+同维度内的量表题围绕该基准按量程自适应波动，不同维度之间互不干扰。
 未分组的题目走纯随机，不受一致性约束。
 
 增强（画像融合）：当存在虚拟画像时，基准偏好由画像的 satisfaction_tendency
@@ -24,8 +24,11 @@ from wjx.utils.app.config import DIMENSION_UNGROUPED
 # 线程局部存储：每个浏览器线程有自己独立的答题倾向
 _thread_local = threading.local()
 
-# 波动范围（基准 ±1）
-_FLUCTUATION = 1
+# 波动参数：按量程自适应窗口，避免小量程过度跳变、大量程过度僵硬
+_FLUCTUATION_RATIO = 0.15
+_FLUCTUATION_MAX = 8
+_SMALL_SCALE_STATIC_MAX_OPTIONS = 3
+_OUTSIDE_WINDOW_DECAY = 0.02
 
 
 def reset_tendency() -> None:
@@ -98,10 +101,10 @@ def get_tendency_index(
     """获取带有一致性倾向的选项索引。
 
     支持两种模式：
-    1. 简单倾向模式（默认）：同维度内的题目共享基准 ±1 波动
+    1. 简单倾向模式（默认）：同维度内的题目共享基准并按量程自适应波动
     2. 潜变量模式：基于心理测量学模型，可精确控制 Cronbach's Alpha
 
-    按维度隔离基准偏好：同维度内的题目共享基准 ±1 波动，
+    按维度隔离基准偏好：同维度内的题目共享基准并按量程自适应波动，
     不同维度之间独立生成基准。未分组的题目走纯随机。
 
     Args:
@@ -170,13 +173,16 @@ def _apply_consistency(
     option_count: int,
     probabilities: Union[List[float], int, None],
 ) -> int:
-    """在基准 ±1 范围内应用一致性约束选择选项。"""
+    """在基准附近的自适应窗口内应用一致性约束选择选项。"""
     # 当前题目选项数可能与生成 base 时不同，需要夹到合法范围
     effective_base = min(base, option_count - 1)
+    fluctuation_window = _resolve_fluctuation_window(option_count)
+    if fluctuation_window <= 0:
+        return effective_base
 
-    # 在基准附近 ±1 波动
-    low = max(0, effective_base - _FLUCTUATION)
-    high = min(option_count - 1, effective_base + _FLUCTUATION)
+    # 在基准附近按量程自适应波动
+    low = max(0, effective_base - fluctuation_window)
+    high = min(option_count - 1, effective_base + fluctuation_window)
 
     # 如果有显式概率配置，需要结合原概率和距离衰减
     if isinstance(probabilities, list) and len(probabilities) == option_count:
@@ -184,24 +190,22 @@ def _apply_consistency(
         for i in range(option_count):
             if low <= i <= high:
                 distance = abs(i - effective_base)
-                decay = 2.0 if distance == 0 else (1.0 if distance == 1 else 0.1)
+                decay = _window_decay(distance, fluctuation_window)
                 adjusted_probs.append(probabilities[i] * decay)
             else:
-                adjusted_probs.append(probabilities[i] * 0.05)
+                adjusted_probs.append(probabilities[i] * _OUTSIDE_WINDOW_DECAY)
 
         total = sum(adjusted_probs)
         if total > 0:
             adjusted_probs = [p / total for p in adjusted_probs]
             return weighted_index(adjusted_probs)
 
-    # 随机模式或无有效概率：在约束范围内均匀波动，但偏向基准
+    # 随机模式或无有效概率：在约束范围内按距离衰减抽样，偏向基准
     candidates = list(range(low, high + 1))
     weights = []
     for c in candidates:
-        if c == effective_base:
-            weights.append(2.0)
-        else:
-            weights.append(1.0)
+        distance = abs(c - effective_base)
+        weights.append(_window_decay(distance, fluctuation_window))
 
     total = sum(weights)
     pivot = random.random() * total
@@ -211,6 +215,30 @@ def _apply_consistency(
         if pivot <= running:
             return candidates[i]
     return candidates[-1]
+
+
+def _resolve_fluctuation_window(option_count: int) -> int:
+    """根据量程动态计算波动窗口。"""
+    if option_count <= _SMALL_SCALE_STATIC_MAX_OPTIONS:
+        # 3级及以下量表不做波动，避免语义直接翻转
+        return 0
+
+    span = max(option_count, 1)
+    window = int(round(span * _FLUCTUATION_RATIO))
+    if window < 1:
+        window = 1
+    return min(window, _FLUCTUATION_MAX)
+
+
+def _window_decay(distance: int, window: int) -> float:
+    """窗口内距离衰减：中心最高，边缘次之。"""
+    if distance <= 0:
+        return 1.6
+    if window <= 0:
+        return 0.0
+
+    normalized = min(1.0, float(distance) / float(window))
+    return max(0.8, 1.6 - 0.8 * normalized)
 
 
 def _get_psychometric_answer(
