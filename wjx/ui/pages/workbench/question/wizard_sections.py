@@ -1,7 +1,7 @@
 """WizardSectionsMixin：各题型配置区 UI 构建方法，供 QuestionWizardDialog 通过多继承引入。"""
 from typing import List, Dict, Any, Tuple
 
-from PySide6.QtCore import Qt
+from PySide6.QtCore import Qt, QPropertyAnimation, QTimer, QEasingCurve
 from PySide6.QtWidgets import QWidget, QVBoxLayout, QHBoxLayout, QButtonGroup
 from qfluentwidgets import ScrollArea, BodyLabel, CardWidget, PushButton, LineEdit, CheckBox, SegmentedWidget
 
@@ -181,24 +181,9 @@ class WizardSectionsMixin:
         _apply_label_color(hint, "#666666", "#bfbfbf")
         card_layout.addWidget(hint)
 
-        # 矩阵题倾向预设选择器
-        _matrix_preset_seg = None
-        if entry.question_type in PSYCHO_SUPPORTED_TYPES:
-            m_preset_row = QHBoxLayout()
-            m_preset_row.setSpacing(8)
-            m_preset_label = BodyLabel("倾向预设：", card)
-            m_preset_label.setStyleSheet("font-size: 12px;")
-            _apply_label_color(m_preset_label, "#666666", "#bfbfbf")
-            m_preset_row.addWidget(m_preset_label)
-            _matrix_preset_seg = SegmentedWidget(card)
-            for value, text in BIAS_PRESET_CHOICES:
-                _matrix_preset_seg.addItem(routeKey=value, text=text)
-            current_bias = getattr(entry, "psycho_bias", "custom") or "custom"
-            _matrix_preset_seg.setCurrentItem(current_bias)
-            m_preset_row.addWidget(_matrix_preset_seg)
-            m_preset_row.addStretch(1)
-            card_layout.addLayout(m_preset_row)
-            self.bias_preset_map[idx] = _matrix_preset_seg
+        _is_psycho = entry.question_type in PSYCHO_SUPPORTED_TYPES
+        _saved_bias = getattr(entry, "psycho_bias", None)
+        _matrix_row_preset_segs = []
 
         per_row_scroll = ScrollArea(card)
         per_row_scroll.setWidgetResizable(True)
@@ -270,6 +255,25 @@ class WizardSectionsMixin:
             _apply_label_color(row_label, "#444444", "#e0e0e0")
             row_card_layout.addWidget(row_label)
 
+            if _is_psycho:
+                r_preset_row = QHBoxLayout()
+                r_preset_row.setSpacing(8)
+                r_preset_lbl = BodyLabel("倾向预设：", row_card)
+                r_preset_lbl.setStyleSheet("font-size: 12px;")
+                _apply_label_color(r_preset_lbl, "#666666", "#bfbfbf")
+                r_preset_row.addWidget(r_preset_lbl)
+                r_seg = SegmentedWidget(row_card)
+                for _v, _t in BIAS_PRESET_CHOICES:
+                    r_seg.addItem(routeKey=_v, text=_t)
+                if isinstance(_saved_bias, list) and row_idx < len(_saved_bias):
+                    r_seg.setCurrentItem(_saved_bias[row_idx] or "custom")
+                else:
+                    r_seg.setCurrentItem((_saved_bias if isinstance(_saved_bias, str) else None) or "custom")
+                r_preset_row.addWidget(r_seg)
+                r_preset_row.addStretch(1)
+                row_card_layout.addLayout(r_preset_row)
+                _matrix_row_preset_segs.append(r_seg)
+
             if self.reliability_mode_enabled:
                 rev_row_layout = QHBoxLayout()
                 rev_row_layout.setContentsMargins(0, 0, 0, 2)
@@ -293,32 +297,45 @@ class WizardSectionsMixin:
         if self.reliability_mode_enabled and row_reverse_cbs:
             self.matrix_reverse_check_map[idx] = row_reverse_cbs
 
-        # 矩阵预设 ↔ 滑块联动（用标志位避免循环触发）
-        if _matrix_preset_seg is not None:
-            _m_applying_preset = [False]
+        # 每行预设 ↔ 该行滑块联动
+        if _matrix_row_preset_segs:
+            self.bias_preset_map[idx] = _matrix_row_preset_segs
 
-            def _on_matrix_preset(route_key: str, _all_sliders=per_row_sliders, _cols=columns, _flag=_m_applying_preset):
-                if route_key == "custom":
-                    return
-                _flag[0] = True
-                weights = build_bias_weights(_cols, route_key)
-                for row_sl in _all_sliders:
-                    for si, sl in enumerate(row_sl):
-                        sl.setValue(int(weights[si]) if si < len(weights) else 1)
-                _flag[0] = False
-            _matrix_preset_seg.currentItemChanged.connect(_on_matrix_preset)
+            def _wire_row(seg, sliders, cols):
+                _flag = [False]
+                _anims: Dict[object, QPropertyAnimation] = {}
 
-            def _make_matrix_cb(_seg=_matrix_preset_seg, _flag=_m_applying_preset):
-                def _cb(value):
+                def _on_preset(route_key):
+                    if route_key == "custom":
+                        return
+                    _flag[0] = True
+                    weights = build_bias_weights(cols, route_key)
+                    for si, sl in enumerate(sliders):
+                        old = _anims.get(sl)
+                        if old:
+                            old.stop()
+                        target = int(weights[si]) if si < len(weights) else 1
+                        anim = QPropertyAnimation(sl, b"value", sl)
+                        anim.setDuration(300)
+                        anim.setStartValue(sl.value())
+                        anim.setEndValue(target)
+                        anim.setEasingCurve(QEasingCurve.Type.OutCubic)
+                        anim.start()
+                        _anims[sl] = anim
+                    QTimer.singleShot(320, lambda: _flag.__setitem__(0, False))
+
+                seg.currentItemChanged.connect(_on_preset)
+
+                def _on_slider(_):
                     if _flag[0]:
                         return
-                    if _seg.currentItem() != "custom":
-                        _seg.setCurrentItem("custom")
-                return _cb
-            _m_cb = _make_matrix_cb()
-            for row_sl in per_row_sliders:
-                for sl in row_sl:
-                    sl.valueChanged.connect(_m_cb)
+                    if seg.currentItem() != "custom":
+                        seg.setCurrentItem("custom")
+                for sl in sliders:
+                    sl.valueChanged.connect(_on_slider)
+
+            for r_seg, row_sl in zip(_matrix_row_preset_segs, per_row_sliders):
+                _wire_row(r_seg, row_sl, columns)
 
     def _build_order_section(self, card: CardWidget, card_layout: QVBoxLayout, option_texts: List[str]) -> None:
         self._has_content = True
@@ -486,14 +503,26 @@ class WizardSectionsMixin:
         if _preset_seg is not None:
             _applying_preset = [False]
 
-            def _on_preset_changed(route_key: str, _sliders=sliders, _flag=_applying_preset):
+            _slider_anims: Dict[object, QPropertyAnimation] = {}
+
+            def _on_preset_changed(route_key: str, _sliders=sliders, _flag=_applying_preset, _sa=_slider_anims):
                 if route_key == "custom":
                     return
                 _flag[0] = True
                 weights = build_bias_weights(len(_sliders), route_key)
                 for si, sl in enumerate(_sliders):
-                    sl.setValue(int(weights[si]) if si < len(weights) else 1)
-                _flag[0] = False
+                    old = _sa.get(sl)
+                    if old:
+                        old.stop()
+                    target = int(weights[si]) if si < len(weights) else 1
+                    anim = QPropertyAnimation(sl, b"value", sl)
+                    anim.setDuration(300)
+                    anim.setStartValue(sl.value())
+                    anim.setEndValue(target)
+                    anim.setEasingCurve(QEasingCurve.Type.OutCubic)
+                    anim.start()
+                    _sa[sl] = anim
+                QTimer.singleShot(320, lambda: _flag.__setitem__(0, False))
             _preset_seg.currentItemChanged.connect(_on_preset_changed)
 
             def _make_slider_cb(_seg=_preset_seg, _flag=_applying_preset):

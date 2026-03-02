@@ -19,6 +19,7 @@ from qfluentwidgets import (
     PrimaryPushButton,
     LineEdit,
     CheckBox,
+    SegmentedWidget,
 )
 
 from wjx.ui.widgets.no_wheel import NoWheelSlider
@@ -28,6 +29,7 @@ from wjx.utils.app.config import DEFAULT_FILL_TEXT
 from .constants import _get_entry_type_label
 from .utils import _shorten_text, _apply_label_color
 from .wizard_sections import WizardSectionsMixin, _TEXT_RANDOM_NONE
+from .psycho_config import BIAS_PRESET_CHOICES
 
 
 # ---------------------------------------------------------------------------
@@ -154,8 +156,50 @@ class QuestionWizardDialog(WizardSectionsMixin, QDialog):
         inner.setContentsMargins(4, 4, 12, 4)
         inner.setSpacing(20)
 
+        # 批量倾向预设（在滚动区内最顶部）
+        master_row = QHBoxLayout()
+        master_row.setSpacing(8)
+        master_lbl = BodyLabel("批量倾向预设：", container)
+        master_lbl.setStyleSheet("font-size: 13px;")
+        _apply_label_color(master_lbl, "#444444", "#e0e0e0")
+        master_row.addWidget(master_lbl)
+        _master_seg = SegmentedWidget(container)
+        for _v, _t in BIAS_PRESET_CHOICES:
+            _master_seg.addItem(routeKey=_v, text=_t)
+        _master_seg.setCurrentItem("custom")
+        master_row.addWidget(_master_seg)
+        master_row.addStretch(1)
+        inner.addLayout(master_row)
+
         for idx, entry in enumerate(self.entries):
             self._build_entry_card(idx, entry, container, inner)
+
+        self._master_applying = False
+
+        def _on_master_preset(route_key: str):
+            if route_key == "custom":
+                return
+            self._master_applying = True
+            for seg in self.bias_preset_map.values():
+                if isinstance(seg, list):
+                    for s in seg:
+                        s.setCurrentItem(route_key)
+                else:
+                    seg.setCurrentItem(route_key)
+            self._master_applying = False
+        _master_seg.currentItemChanged.connect(_on_master_preset)
+
+        def _reset_master(_=None):
+            if self._master_applying:
+                return
+            if _master_seg.currentItem() != "custom":
+                _master_seg.setCurrentItem("custom")
+        for seg in self.bias_preset_map.values():
+            if isinstance(seg, list):
+                for s in seg:
+                    s.currentItemChanged.connect(_reset_master)
+            else:
+                seg.currentItemChanged.connect(_reset_master)
 
         if not self._has_content:
             empty_label = BodyLabel("当前无题目需要配置", container)
@@ -365,9 +409,12 @@ class QuestionWizardDialog(WizardSectionsMixin, QDialog):
             result[idx] = [cb.isChecked() for cb in cbs]
         return result
 
-    def get_bias_presets(self) -> Dict[int, str]:
-        """获取每个题目的倾向预设值"""
-        result: Dict[int, str] = {}
+    def get_bias_presets(self) -> Dict[int, Any]:
+        """获取每个题目的倾向预设值（矩阵题返回列表）"""
+        result: Dict[int, Any] = {}
         for idx, seg in self.bias_preset_map.items():
-            result[idx] = seg.currentItem() or "custom"
+            if isinstance(seg, list):
+                result[idx] = [s.currentItem() or "custom" for s in seg]
+            else:
+                result[idx] = seg.currentItem() or "custom"
         return result
