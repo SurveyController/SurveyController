@@ -9,7 +9,6 @@ from PySide6.QtWidgets import (
     QHBoxLayout,
     QDialog,
     QButtonGroup,
-    QStackedWidget,
 )
 from qfluentwidgets import (
     ScrollArea,
@@ -20,9 +19,6 @@ from qfluentwidgets import (
     PrimaryPushButton,
     LineEdit,
     CheckBox,
-    ComboBox,
-    Pivot,
-    FluentIcon as FIF,
 )
 
 from wjx.ui.widgets.no_wheel import NoWheelSlider
@@ -32,7 +28,6 @@ from wjx.utils.app.config import DEFAULT_FILL_TEXT
 from .constants import _get_entry_type_label
 from .utils import _shorten_text, _apply_label_color
 from .wizard_sections import WizardSectionsMixin, _TEXT_RANDOM_NONE
-from .tendency_page import TendencySettingsPage
 
 
 # ---------------------------------------------------------------------------
@@ -128,118 +123,32 @@ class QuestionWizardDialog(WizardSectionsMixin, QDialog):
         self.matrix_row_slider_map: Dict[int, List[List[NoWheelSlider]]] = {}
         self.text_edit_map: Dict[int, List[LineEdit]] = {}
         self.ai_check_map: Dict[int, CheckBox] = {}
-        self.reverse_check_map: Dict[int, CheckBox] = {}          # scale/score 用
-        self.matrix_reverse_check_map: Dict[int, List[CheckBox]] = {}  # matrix 每行用
+        self.reverse_check_map: Dict[int, CheckBox] = {}
+        self.matrix_reverse_check_map: Dict[int, List[CheckBox]] = {}
         self.text_container_map: Dict[int, QWidget] = {}
         self.text_add_btn_map: Dict[int, PushButton] = {}
         self.text_random_mode_map: Dict[int, str] = {}
         self.text_random_name_check_map: Dict[int, CheckBox] = {}
         self.text_random_mobile_check_map: Dict[int, CheckBox] = {}
         self.text_random_group_map: Dict[int, QButtonGroup] = {}
-        # 潜变量模式配置映射表
-        self.psycho_check_map: Dict[int, CheckBox] = {}
-        self.psycho_bias_map: Dict[int, ComboBox] = {}
+        self.bias_preset_map: Dict[int, Any] = {}
         self._entry_snapshots: List[QuestionEntry] = [copy.deepcopy(entry) for entry in entries]
         self._has_content = False
-        self.answer_mode = self._resolve_initial_answer_mode()
 
         layout = QVBoxLayout(self)
         layout.setContentsMargins(24, 20, 24, 20)
         layout.setSpacing(16)
 
-        # 顶部说明
         intro = BodyLabel("配置各题目的选项权重/概率或填空答案", self)
         intro.setStyleSheet("font-size: 13px;")
         _apply_label_color(intro, "#666666", "#bfbfbf")
         layout.addWidget(intro)
 
-        # 作答模式（二选一）
-        mode_card = CardWidget(self)
-        mode_layout = QHBoxLayout(mode_card)
-        mode_layout.setContentsMargins(16, 10, 16, 10)
-        mode_layout.setSpacing(10)
-        mode_label = BodyLabel("作答模式：", mode_card)
-        mode_label.setStyleSheet("font-size: 13px; font-weight: 500;")
-        mode_layout.addWidget(mode_label)
-        self.mode_display_label = BodyLabel("", mode_card)
-        self.mode_display_label.setStyleSheet("font-size: 13px; font-weight: 500;")
-        mode_layout.addWidget(self.mode_display_label)
-        self.mode_status_label = BodyLabel("", mode_card)
-        self.mode_status_label.setStyleSheet("font-size: 12px;")
-        _apply_label_color(self.mode_status_label, "#666666", "#bfbfbf")
-        mode_layout.addWidget(self.mode_status_label, 1)
-        layout.addWidget(mode_card)
-
-        # 导航栏
-        self.pivot = Pivot(self)
-        self.pivot.addItem(
-            routeKey="weights",
-            text="权重模式",
-            onClick=lambda: self._apply_answer_mode("weights", force_tab=True),
-            icon=FIF.SETTING,
-        )
-        self.pivot.addItem(
-            routeKey="tendency",
-            text="倾向模式",
-            onClick=lambda: self._apply_answer_mode("tendency", force_tab=True),
-            icon=FIF.CERTIFICATE,
-        )
-        layout.addWidget(self.pivot)
-
-        # 页面容器
-        self.stacked_widget = QStackedWidget(self)
-
-        # 权重配置页面（现有的滚动区域）
-        self.weights_page = self._build_weights_page()
-        self.stacked_widget.addWidget(self.weights_page)
-
-        # 倾向设置页面
-        self.tendency_page = TendencySettingsPage(
-            entries=self.entries,
-            info=self.info,
-            psycho_check_map=self.psycho_check_map,
-            psycho_bias_map=self.psycho_bias_map,
-            text_edit_map=self.text_edit_map,
-            text_random_mode_map=self.text_random_mode_map,
-            text_random_name_check_map=self.text_random_name_check_map,
-            text_random_mobile_check_map=self.text_random_mobile_check_map,
-            ai_check_map=self.ai_check_map,
-            text_container_map=self.text_container_map,
-            text_add_btn_map=self.text_add_btn_map,
-            parent=self,
-        )
-        self.stacked_widget.addWidget(self.tendency_page)
-
-        layout.addWidget(self.stacked_widget, 1)
-        self._apply_answer_mode(self.answer_mode, force_tab=True)
-
-        # 底部按钮
-        btn_row = QHBoxLayout()
-        btn_row.setSpacing(12)
-        btn_row.addStretch(1)
-        cancel_btn = PushButton("取消", self)
-        cancel_btn.setFixedWidth(80)
-        ok_btn = PrimaryPushButton("保存", self)
-        ok_btn.setFixedWidth(80)
-        btn_row.addWidget(cancel_btn)
-        btn_row.addWidget(ok_btn)
-        layout.addLayout(btn_row)
-
-        ok_btn.clicked.connect(self.accept)
-        cancel_btn.clicked.connect(self.reject)
-
-    def _build_weights_page(self) -> QWidget:
-        """构建权重配置页面"""
-        page = QWidget(self)
-        page_layout = QVBoxLayout(page)
-        page_layout.setContentsMargins(0, 8, 0, 0)
-        page_layout.setSpacing(0)
-
-        # 滚动区域
-        scroll = ScrollArea(page)
+        # 单一滚动页面
+        scroll = ScrollArea(self)
         scroll.setWidgetResizable(True)
         scroll.enableTransparentBackground()
-        container = QWidget(page)
+        container = QWidget(self)
         scroll.setWidget(container)
         inner = QVBoxLayout(container)
         inner.setContentsMargins(4, 4, 12, 4)
@@ -255,37 +164,22 @@ class QuestionWizardDialog(WizardSectionsMixin, QDialog):
             inner.addWidget(empty_label)
 
         inner.addStretch(1)
-        page_layout.addWidget(scroll)
+        layout.addWidget(scroll, 1)
 
-        return page
+        # 底部按钮
+        btn_row = QHBoxLayout()
+        btn_row.setSpacing(12)
+        btn_row.addStretch(1)
+        cancel_btn = PushButton("取消", self)
+        cancel_btn.setFixedWidth(80)
+        ok_btn = PrimaryPushButton("保存", self)
+        ok_btn.setFixedWidth(80)
+        btn_row.addWidget(cancel_btn)
+        btn_row.addWidget(ok_btn)
+        layout.addLayout(btn_row)
 
-    def _resolve_initial_answer_mode(self) -> str:
-        """根据现有配置推断初始作答模式。"""
-        for entry in self.entries:
-            if bool(getattr(entry, "psycho_enabled", False)):
-                return "tendency"
-        return "weights"
-
-    def _apply_answer_mode(self, mode: str, force_tab: bool = False) -> None:
-        """应用作答模式：两种模式互斥，只允许编辑当前模式对应页。"""
-        self.answer_mode = "tendency" if mode == "tendency" else "weights"
-        is_weights_mode = self.answer_mode == "weights"
-        self.weights_page.setEnabled(is_weights_mode)
-        self.tendency_page.setEnabled(not is_weights_mode)
-        if is_weights_mode:
-            self.mode_display_label.setText("权重模式（按权重/概率）")
-            _apply_label_color(self.mode_display_label, "#0078d4", "#4da6ff")
-            self.mode_status_label.setText("作答时将忽略倾向设置")
-            if force_tab:
-                self.stacked_widget.setCurrentIndex(0)
-                self.pivot.setCurrentItem("weights")
-        else:
-            self.mode_display_label.setText("倾向模式（按高低分倾向）")
-            _apply_label_color(self.mode_display_label, "#d97706", "#e5a00d")
-            self.mode_status_label.setText("作答时将忽略选择题权重配置，填空题配置仍生效")
-            if force_tab:
-                self.stacked_widget.setCurrentIndex(1)
-                self.pivot.setCurrentItem("tendency")
+        ok_btn.clicked.connect(self.accept)
+        cancel_btn.clicked.connect(self.reject)
 
     # ------------------------------------------------------------------ #
     #  题目配置卡片                                                        #
@@ -471,11 +365,9 @@ class QuestionWizardDialog(WizardSectionsMixin, QDialog):
             result[idx] = [cb.isChecked() for cb in cbs]
         return result
 
-    def get_psycho_results(self) -> Dict[int, Dict[str, Any]]:
-        """获取潜变量模式配置结果"""
-        from wjx.ui.pages.workbench.question.psycho_config import get_psycho_results
-        return get_psycho_results(self.psycho_check_map, self.psycho_bias_map)
-
-    def get_answer_mode(self) -> str:
-        """获取当前作答模式（weights/tendency）。"""
-        return self.answer_mode
+    def get_bias_presets(self) -> Dict[int, str]:
+        """获取每个题目的倾向预设值"""
+        result: Dict[int, str] = {}
+        for idx, seg in self.bias_preset_map.items():
+            result[idx] = seg.currentItem() or "custom"
+        return result

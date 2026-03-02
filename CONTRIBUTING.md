@@ -58,7 +58,7 @@ wjx/
 │           ├── answer_rules.py   # 作答规则页（条件 -> 动作）
 │           ├── log.py
 │           ├── dashboard_parts/  # dashboard 拆分模块（clipboard/entries/random_ip）
-│           ├── question/         # 题目配置界面（page/add_dialog/add_preview/wizard_dialog/wizard_sections/tendency_page/psycho_config/constants/utils）
+│           ├── question/         # 题目配置界面（page/add_dialog/add_preview/wizard_dialog/wizard_sections/psycho_config/constants/utils）
 │           └── runtime/          # 运行时界面（main/cards/ai/dialogs）
 ├── network/               # 网络相关
 │   ├── browser/driver.py  # 浏览器驱动封装

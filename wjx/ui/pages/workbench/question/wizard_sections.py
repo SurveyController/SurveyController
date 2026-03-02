@@ -3,7 +3,7 @@ from typing import List, Dict, Any, Tuple
 
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import QWidget, QVBoxLayout, QHBoxLayout, QButtonGroup
-from qfluentwidgets import ScrollArea, BodyLabel, CardWidget, PushButton, LineEdit, CheckBox
+from qfluentwidgets import ScrollArea, BodyLabel, CardWidget, PushButton, LineEdit, CheckBox, SegmentedWidget
 
 from wjx.ui.widgets.no_wheel import NoWheelSlider
 from wjx.core.questions.config import QuestionEntry
@@ -16,6 +16,7 @@ from .utils import (
     _bind_slider_input,
     infer_reverse_by_option_texts,
 )
+from .psycho_config import PSYCHO_SUPPORTED_TYPES, BIAS_PRESET_CHOICES, build_bias_weights
 
 _TEXT_RANDOM_NONE = "none"
 _TEXT_RANDOM_NAME = "name"
@@ -44,6 +45,7 @@ class WizardSectionsMixin:
     reverse_check_map: Dict[int, Any]
     entries: List[Any]
     slider_map: Dict[int, Any]
+    bias_preset_map: Dict[int, Any]
     def _resolve_matrix_weights(self, entry: Any, rows: int, columns: int) -> List[List[float]]: ...
     def _resolve_slider_bounds(self, idx: int, entry: Any) -> Tuple[int, int]: ...
 
@@ -179,6 +181,25 @@ class WizardSectionsMixin:
         _apply_label_color(hint, "#666666", "#bfbfbf")
         card_layout.addWidget(hint)
 
+        # 矩阵题倾向预设选择器
+        _matrix_preset_seg = None
+        if entry.question_type in PSYCHO_SUPPORTED_TYPES:
+            m_preset_row = QHBoxLayout()
+            m_preset_row.setSpacing(8)
+            m_preset_label = BodyLabel("倾向预设：", card)
+            m_preset_label.setStyleSheet("font-size: 12px;")
+            _apply_label_color(m_preset_label, "#666666", "#bfbfbf")
+            m_preset_row.addWidget(m_preset_label)
+            _matrix_preset_seg = SegmentedWidget(card)
+            for value, text in BIAS_PRESET_CHOICES:
+                _matrix_preset_seg.addItem(routeKey=value, text=text)
+            current_bias = getattr(entry, "psycho_bias", "custom") or "custom"
+            _matrix_preset_seg.setCurrentItem(current_bias)
+            m_preset_row.addWidget(_matrix_preset_seg)
+            m_preset_row.addStretch(1)
+            card_layout.addLayout(m_preset_row)
+            self.bias_preset_map[idx] = _matrix_preset_seg
+
         per_row_scroll = ScrollArea(card)
         per_row_scroll.setWidgetResizable(True)
         per_row_scroll.setMinimumHeight(180)
@@ -272,6 +293,33 @@ class WizardSectionsMixin:
         if self.reliability_mode_enabled and row_reverse_cbs:
             self.matrix_reverse_check_map[idx] = row_reverse_cbs
 
+        # 矩阵预设 ↔ 滑块联动（用标志位避免循环触发）
+        if _matrix_preset_seg is not None:
+            _m_applying_preset = [False]
+
+            def _on_matrix_preset(route_key: str, _all_sliders=per_row_sliders, _cols=columns, _flag=_m_applying_preset):
+                if route_key == "custom":
+                    return
+                _flag[0] = True
+                weights = build_bias_weights(_cols, route_key)
+                for row_sl in _all_sliders:
+                    for si, sl in enumerate(row_sl):
+                        sl.setValue(int(weights[si]) if si < len(weights) else 1)
+                _flag[0] = False
+            _matrix_preset_seg.currentItemChanged.connect(_on_matrix_preset)
+
+            def _make_matrix_cb(_seg=_matrix_preset_seg, _flag=_m_applying_preset):
+                def _cb(value):
+                    if _flag[0]:
+                        return
+                    if _seg.currentItem() != "custom":
+                        _seg.setCurrentItem("custom")
+                return _cb
+            _m_cb = _make_matrix_cb()
+            for row_sl in per_row_sliders:
+                for sl in row_sl:
+                    sl.valueChanged.connect(_m_cb)
+
     def _build_order_section(self, card: CardWidget, card_layout: QVBoxLayout, option_texts: List[str]) -> None:
         self._has_content = True
         hint = BodyLabel("排序题无需设置配比，执行时会随机排序；如题干要求仅排序前 N 项，将自动识别。", card)
@@ -321,6 +369,25 @@ class WizardSectionsMixin:
             self.reverse_check_map[idx] = rev_cb
 
         options = max(1, int(entry.option_count or 1))
+
+        # 倾向预设选择器（仅支持的题型）
+        _preset_seg = None
+        if entry.question_type in PSYCHO_SUPPORTED_TYPES:
+            preset_row = QHBoxLayout()
+            preset_row.setSpacing(8)
+            preset_label = BodyLabel("倾向预设：", card)
+            preset_label.setStyleSheet("font-size: 12px;")
+            _apply_label_color(preset_label, "#666666", "#bfbfbf")
+            preset_row.addWidget(preset_label)
+            _preset_seg = SegmentedWidget(card)
+            for value, text in BIAS_PRESET_CHOICES:
+                _preset_seg.addItem(routeKey=value, text=text)
+            current_bias = getattr(entry, "psycho_bias", "custom") or "custom"
+            _preset_seg.setCurrentItem(current_bias)
+            preset_row.addWidget(_preset_seg)
+            preset_row.addStretch(1)
+            card_layout.addLayout(preset_row)
+            self.bias_preset_map[idx] = _preset_seg
         if entry.question_type == "multiple":
             default_weight = 50
         elif entry.question_type == "slider":
@@ -414,6 +481,31 @@ class WizardSectionsMixin:
             sliders.append(slider)
 
         self.slider_map[idx] = sliders
+
+        # 预设 ↔ 滑块联动（用标志位避免循环触发，不用 blockSignals 以保证输入框同步）
+        if _preset_seg is not None:
+            _applying_preset = [False]
+
+            def _on_preset_changed(route_key: str, _sliders=sliders, _flag=_applying_preset):
+                if route_key == "custom":
+                    return
+                _flag[0] = True
+                weights = build_bias_weights(len(_sliders), route_key)
+                for si, sl in enumerate(_sliders):
+                    sl.setValue(int(weights[si]) if si < len(weights) else 1)
+                _flag[0] = False
+            _preset_seg.currentItemChanged.connect(_on_preset_changed)
+
+            def _make_slider_cb(_seg=_preset_seg, _flag=_applying_preset):
+                def _cb(value):
+                    if _flag[0]:
+                        return
+                    if _seg.currentItem() != "custom":
+                        _seg.setCurrentItem("custom")
+                return _cb
+            _slider_cb = _make_slider_cb()
+            for sl in sliders:
+                sl.valueChanged.connect(_slider_cb)
 
     def _set_text_answer_enabled(self, idx: int, enabled: bool) -> None:
         container = self.text_container_map.get(idx)

@@ -253,9 +253,19 @@ def serialize_question_entry(entry: QuestionEntry) -> Dict[str, Any]:
         "is_location": getattr(entry, "is_location", False),
         "is_reverse": bool(getattr(entry, "is_reverse", False)),
         "row_reverse_flags": list(getattr(entry, "row_reverse_flags", []) or []),
-        "psycho_enabled": bool(getattr(entry, "psycho_enabled", False)),
-        "psycho_bias": str(getattr(entry, "psycho_bias", "center") or "center"),
+        "psycho_bias": str(getattr(entry, "psycho_bias", "custom") or "custom"),
     }
+
+
+def _compat_psycho_bias(data: Dict[str, Any]) -> str:
+    """向后兼容：旧配置 psycho_enabled=True 时保留 psycho_bias，否则设为 custom。"""
+    bias = str(data.get("psycho_bias") or "custom")
+    if bias in ("left", "center", "right"):
+        # 旧配置有 psycho_enabled 字段时，仅在启用时保留 bias
+        if "psycho_enabled" in data and not data.get("psycho_enabled"):
+            return "custom"
+        return bias
+    return "custom"
 
 
 def deserialize_question_entry(data: Dict[str, Any]) -> "QuestionEntry":
@@ -321,8 +331,7 @@ def deserialize_question_entry(data: Dict[str, Any]) -> "QuestionEntry":
         is_location=bool(data.get("is_location")),
         is_reverse=bool(data.get("is_reverse", False)),
         row_reverse_flags=[bool(v) for v in (data.get("row_reverse_flags") or [])],
-        psycho_enabled=bool(data.get("psycho_enabled", False)),
-        psycho_bias=str(data.get("psycho_bias") or "center"),
+        psycho_bias=_compat_psycho_bias(data),
     )
 
 
