@@ -377,9 +377,20 @@ class QuestionWizardDialog(WizardSectionsMixin, QDialog):
 
     def get_text_results(self) -> Dict[int, List[str]]:
         """获取填空题答案结果"""
+        from wjx.core.questions.types.text import MULTI_TEXT_DELIMITER
         result: Dict[int, List[str]] = {}
         for idx, edits in self.text_edit_map.items():
-            texts = [e.text().strip() for e in edits if e.text().strip()]
+            if edits and isinstance(edits[0], list):
+                # 多项填空题：二维列表
+                texts = []
+                for row_edits in edits:
+                    row_values = [edit.text().strip() for edit in row_edits]
+                    merged = MULTI_TEXT_DELIMITER.join(row_values)
+                    if merged:
+                        texts.append(merged)
+            else:
+                # 普通填空题：一维列表
+                texts = [e.text().strip() for e in edits if e.text().strip()]
             if not texts:
                 texts = [DEFAULT_FILL_TEXT]
             result[idx] = texts

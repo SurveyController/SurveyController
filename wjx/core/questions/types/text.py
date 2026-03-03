@@ -455,7 +455,7 @@ def _handle_multi_text(driver: BrowserDriver, current: int, selected_answer: str
         except Exception:
             primary_inputs = []
 
-    input_elements = primary_inputs + secondary_inputs if primary_inputs else secondary_inputs
+    input_elements = primary_inputs if primary_inputs else secondary_inputs
     visible_count = len(primary_inputs) if primary_inputs else len(input_elements)
 
     fill_values = [v if v else DEFAULT_FILL_TEXT for v in values] or [DEFAULT_FILL_TEXT]

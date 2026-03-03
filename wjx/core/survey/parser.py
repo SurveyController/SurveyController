@@ -940,18 +940,22 @@ def _normalize_question_type_code(value: Any) -> str:
 
 def _should_treat_question_as_text_like(type_code: Any, option_count: int, text_input_count: int) -> bool:
     normalized = _normalize_question_type_code(type_code)
-    if normalized in ("1", "2"):
+    if normalized in ("1", "2", "9"):
         return text_input_count > 0
     if normalized in _KNOWN_NON_TEXT_QUESTION_TYPES:
         return False
     return (option_count or 0) <= 1 and text_input_count > 0
 
 
-def _should_mark_as_multi_text(type_code: Any, option_count: int, text_input_count: int, is_location: bool) -> bool:
-    if is_location or text_input_count < 2:
+def _should_mark_as_multi_text(type_code: Any, option_count: int, text_input_count: int, is_location: bool, has_gapfill: bool = False) -> bool:
+    if is_location:
         return False
     normalized = _normalize_question_type_code(type_code)
-    if normalized in ("1", "2"):
+    if normalized == "9" and has_gapfill:
+        return True
+    if text_input_count < 2:
+        return False
+    if normalized in ("1", "2", "9"):
         return True
     if normalized in _KNOWN_NON_TEXT_QUESTION_TYPES:
         return False
@@ -1021,8 +1025,9 @@ def parse_survey_questions_from_html(html: str) -> List[Dict[str, Any]]:
             if type_code == "8":
                 slider_min, slider_max, slider_step = _extract_slider_range(question_div, question_number)
             text_input_count = _count_text_inputs_in_soup(question_div)
+            has_gapfill = str(question_div.get("gapfill") or "").strip() == "1"
             is_text_like_question = _should_treat_question_as_text_like(type_code, option_count, text_input_count)
-            is_multi_text = _should_mark_as_multi_text(type_code, option_count, text_input_count, is_location)
+            is_multi_text = _should_mark_as_multi_text(type_code, option_count, text_input_count, is_location, has_gapfill)
             questions_info.append({
                 "num": question_number,
                 "title": title_text,

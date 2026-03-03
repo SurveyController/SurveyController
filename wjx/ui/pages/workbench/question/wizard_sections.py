@@ -51,6 +51,23 @@ class WizardSectionsMixin:
 
     def _build_text_section(self, idx: int, entry: QuestionEntry, card: CardWidget, card_layout: QVBoxLayout) -> None:
         self._has_content = True
+
+        # 检测是否为多项填空题
+        is_multi_text = False
+        blank_count = 1
+        if idx < len(self.info):
+            info_entry = self.info[idx]
+            text_input_count = info_entry.get("text_inputs", 0)
+            is_multi_text_flag = info_entry.get("is_multi_text", False)
+            if is_multi_text_flag or entry.question_type == "multi_text":
+                is_multi_text = True
+                blank_count = max(1, text_input_count)
+
+        # 如果是多项填空题，使用矩阵式输入界面
+        if is_multi_text:
+            self._build_multi_text_matrix_input(idx, entry, card, card_layout, blank_count)
+            return
+
         hint = BodyLabel("答案列表（随机选择一个填入）：", card)
         hint.setStyleSheet("font-size: 12px;")
         _apply_label_color(hint, "#666666", "#bfbfbf")
@@ -162,6 +179,114 @@ class WizardSectionsMixin:
         btn_row.addStretch(1)
         card_layout.addLayout(btn_row)
         self.text_edit_map[idx] = edits
+
+    def _build_multi_text_matrix_input(
+        self, idx: int, entry: QuestionEntry, card: CardWidget,
+        card_layout: QVBoxLayout, blank_count: int
+    ) -> None:
+        """为多项填空题构建矩阵式输入界面"""
+        from wjx.core.questions.types.text import MULTI_TEXT_DELIMITER
+
+        # 提示标签
+        hint = BodyLabel(f"答案列表（随机选择一组填入，共 {blank_count} 个填空）：", card)
+        hint.setStyleSheet("font-size: 12px;")
+        _apply_label_color(hint, "#666666", "#bfbfbf")
+        card_layout.addWidget(hint)
+
+        # 表头
+        header_widget = QWidget(card)
+        header_layout = QHBoxLayout(header_widget)
+        header_layout.setContentsMargins(0, 4, 0, 4)
+        header_layout.setSpacing(8)
+
+        num_spacer = QWidget(card)
+        num_spacer.setFixedWidth(24)
+        header_layout.addWidget(num_spacer)
+
+        for i in range(blank_count):
+            col_label = BodyLabel(f"填空{i+1}", card)
+            col_label.setStyleSheet("font-size: 11px; font-weight: bold;")
+            _apply_label_color(col_label, "#888888", "#a6a6a6")
+            header_layout.addWidget(col_label, 1)
+
+        del_spacer = QWidget(card)
+        del_spacer.setFixedWidth(32)
+        header_layout.addWidget(del_spacer)
+
+        card_layout.addWidget(header_widget)
+
+        # 答案行容器
+        rows_container = QWidget(card)
+        rows_layout = QVBoxLayout(rows_container)
+        rows_layout.setContentsMargins(0, 0, 0, 0)
+        rows_layout.setSpacing(4)
+        card_layout.addWidget(rows_container)
+
+        row_edits: List[List[LineEdit]] = []
+
+        texts = list(entry.texts or [DEFAULT_FILL_TEXT])
+
+        def make_add_row_func(container_layout, row_edit_list, parent_card, num_blanks):
+            def add_row(initial_values: List[str] = None):
+                if initial_values is None:
+                    initial_values = [""] * num_blanks
+
+                row_widget = QWidget(parent_card)
+                row_layout = QHBoxLayout(row_widget)
+                row_layout.setContentsMargins(0, 2, 0, 2)
+                row_layout.setSpacing(8)
+
+                num_lbl = BodyLabel(f"{len(row_edit_list) + 1}.", parent_card)
+                num_lbl.setFixedWidth(24)
+                num_lbl.setStyleSheet("font-size: 12px;")
+                _apply_label_color(num_lbl, "#888888", "#a6a6a6")
+                row_layout.addWidget(num_lbl)
+
+                edits_in_row: List[LineEdit] = []
+                for i in range(num_blanks):
+                    edit = LineEdit(parent_card)
+                    edit.setText(initial_values[i] if i < len(initial_values) else "")
+                    edit.setPlaceholderText(f"填空{i+1}")
+                    row_layout.addWidget(edit, 1)
+                    edits_in_row.append(edit)
+
+                del_btn = PushButton("×", parent_card)
+                del_btn.setFixedWidth(32)
+                row_layout.addWidget(del_btn)
+
+                container_layout.addWidget(row_widget)
+                row_edit_list.append(edits_in_row)
+
+                def remove_row():
+                    if len(row_edit_list) > 1:
+                        row_edit_list.remove(edits_in_row)
+                        row_widget.deleteLater()
+
+                del_btn.clicked.connect(remove_row)
+
+            return add_row
+
+        add_row_func = make_add_row_func(rows_layout, row_edits, card, blank_count)
+
+        for text in texts:
+            parts = text.split(MULTI_TEXT_DELIMITER) if MULTI_TEXT_DELIMITER in text else [text]
+            while len(parts) < blank_count:
+                parts.append("")
+            parts = parts[:blank_count]
+            add_row_func(parts)
+
+        btn_row = QHBoxLayout()
+        btn_row.setSpacing(8)
+        add_btn = PushButton("+ 添加答案组", card)
+        add_btn.setFixedWidth(120)
+        add_btn.clicked.connect(lambda checked=False, f=add_row_func: f(None))
+        btn_row.addWidget(add_btn)
+        btn_row.addStretch(1)
+        card_layout.addLayout(btn_row)
+
+        self.text_edit_map[idx] = row_edits
+        self.text_container_map[idx] = rows_container
+        self.text_add_btn_map[idx] = add_btn
 
     def _build_matrix_section(self, idx: int, entry: QuestionEntry, card: CardWidget,
                               card_layout: QVBoxLayout, option_texts: List[str], row_texts: List[str]) -> None:
