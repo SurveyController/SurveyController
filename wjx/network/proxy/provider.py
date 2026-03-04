@@ -53,6 +53,10 @@ class AreaProxyQualityError(RuntimeError):
     """地区代理质量差导致无法使用时抛出。"""
 
 
+class ProxyApiFatalError(RuntimeError):
+    """代理API致命错误（需要用户干预）时抛出。"""
+
+
 def set_proxy_source(source: str) -> None:
     global _current_proxy_source
     _current_proxy_source = source
@@ -362,6 +366,57 @@ def _parse_proxy_payload(text: str) -> List[str]:
     return unique
 
 
+def _extract_custom_api_error(data: Any) -> Optional[str]:
+    """从自定义代理API响应中提取致命错误（品赞API格式）"""
+    if not isinstance(data, dict):
+        return None
+    code = data.get("code")
+    if code == 0:
+        return None
+    message = str(data.get("message") or "").strip()
+    if not message:
+        return None
+
+    import re
+    FATAL_PATTERNS = [
+        (r"白名单", "请先添加当前IP到代理商白名单"),
+        (r"secret.*密匙错误", "API密钥错误，请检查配置"),
+        (r"套餐余量不足", "套餐余量不足，请充值"),
+        (r"套餐已过期", "套餐已过期，请续费"),
+        (r"套餐被禁用", "套餐已被禁用，请联系代理商"),
+        (r"身份未认证", "请先完成实名认证"),
+        (r"用户被禁用", "账号已被禁用，请联系代理商"),
+    ]
+
+    for pattern, user_msg in FATAL_PATTERNS:
+        if re.search(pattern, message, re.IGNORECASE):
+            return user_msg
+    return None
+
+
+def _extract_minute_from_url(url: str) -> Optional[int]:
+    """从URL中提取minute参数"""
+    try:
+        split = urlsplit(url)
+        for key, value in parse_qsl(split.query):
+            if key.lower() == "minute":
+                return int(value)
+    except Exception:
+        pass
+    return None
+
+
+def _check_minute_conflict(url: str) -> Optional[str]:
+    """检查URL中的minute参数是否与作答时长冲突"""
+    minute = _extract_minute_from_url(url)
+    if minute is None:
+        return "建议在API地址中添加 minute 参数（如 &minute=5）以确保代理时长足够"
+    max_seconds = _proxy_occupy_minute * 60
+    if minute * 60 < max_seconds:
+        return f"代理时长 ({minute}分钟) 小于最大作答时长 ({max_seconds}秒 ≈ {max_seconds/60:.1f}分钟)，可能导致作答过程中代理失效"
+    return None
+
+
 def test_custom_proxy_api(url: str) -> tuple[bool, str, List[str]]:
     if not url or not url.strip():
         return False, "API地址不能为空", []
@@ -379,11 +434,21 @@ def test_custom_proxy_api(url: str) -> tuple[bool, str, List[str]]:
         return False, f"HTTP错误: {e.response.status_code}", []
     except Exception as e:
         return False, f"请求失败: {e}", []
+
+    try:
+        data = json.loads(resp.text)
+        error = _extract_custom_api_error(data)
+        if error:
+            return False, error, []
+    except Exception:
+        pass
+
     try:
         proxies = _parse_proxy_payload(resp.text)
         if not proxies:
             return False, "未能从返回数据中解析出代理地址", []
-        return True, "", proxies
+        warning = _check_minute_conflict(url)
+        return True, warning or "", proxies
     except ValueError as e:
         return False, str(e), []
     except Exception as e:
@@ -494,6 +559,21 @@ def _fetch_new_proxy_batch(
         try:
             resp = http_client.get(url, timeout=10, headers=DEFAULT_HTTP_HEADERS, proxies={})
             resp.raise_for_status()
+
+            if is_custom:
+                try:
+                    payload = json.loads(resp.text)
+                    error = _extract_custom_api_error(payload)
+                    if error:
+                        log_popup_error("代理API错误", error)
+                        if stop_signal and not stop_signal.is_set():
+                            stop_signal.set()
+                        raise ProxyApiFatalError(error)
+                except (json.JSONDecodeError, ProxyApiFatalError):
+                    raise
+                except Exception:
+                    pass
+
             if current_source == PROXY_SOURCE_DEFAULT and has_area:
                 try:
                     payload = json.loads(resp.text)
@@ -507,6 +587,8 @@ def _fetch_new_proxy_batch(
             candidates.extend(parsed)
             if candidates:
                 break
+        except (ProxyApiFatalError, AreaProxyQualityError):
+            raise
         except Exception as exc:
             errors.append(str(exc))
             continue

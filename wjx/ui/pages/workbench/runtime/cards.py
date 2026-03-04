@@ -357,9 +357,15 @@ class RandomIPSettingCard(ExpandGroupSettingCard):
         self.testApiStatus.show()
 
         if success:
-            self.testApiStatus.setText("✔")
-            self.testApiStatus.setStyleSheet("color: green; font-size: 16px; font-weight: bold;")
-            logging.info(f"API检测成功，获取到 {len(proxies)} 个代理")
+            if error:
+                self.testApiStatus.setText("⚠")
+                self.testApiStatus.setStyleSheet("color: orange; font-size: 16px; font-weight: bold;")
+                logging.warning(f"API检测成功但有警告: {error}")
+                InfoBar.warning("API检测警告", error, parent=self.window(), position=InfoBarPosition.TOP, duration=5000)
+            else:
+                self.testApiStatus.setText("✔")
+                self.testApiStatus.setStyleSheet("color: green; font-size: 16px; font-weight: bold;")
+                logging.info(f"API检测成功，获取到 {len(proxies)} 个代理")
         else:
             self.testApiStatus.setText("✖")
             self.testApiStatus.setStyleSheet("color: red; font-size: 16px; font-weight: bold;")
