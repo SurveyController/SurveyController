@@ -422,7 +422,11 @@ def _sanitize_runtime_config_payload(raw: Dict[str, Any]) -> RuntimeConfig:
         bool(raw.get("random_ip_enabled") if "random_ip_enabled" in raw else raw.get("random_proxy_enabled"))
     )
     config.random_proxy_api = raw.get("random_proxy_api") or raw.get("random_proxy_api_url") or None
-    config.proxy_source = str(raw.get("proxy_source") or "default")
+    proxy_source = str(raw.get("proxy_source") or "default")
+    # 兼容性处理：将旧的 pikachu 代理源转换为 default
+    if proxy_source == "pikachu":
+        proxy_source = "default"
+    config.proxy_source = proxy_source
     config.custom_proxy_api = str(raw.get("custom_proxy_api") or "")
     raw_area_code = raw.get("proxy_area_code")
     config.proxy_area_code = None if raw_area_code is None else str(raw_area_code)

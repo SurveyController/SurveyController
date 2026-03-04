@@ -82,7 +82,6 @@ class RandomIPSettingCard(ExpandGroupSettingCard):
         source_label = BodyLabel("代理源", self._groupContainer)
         self.proxyCombo = ComboBox(self._groupContainer)
         self.proxyCombo.addItem("默认", userData="default")
-        self.proxyCombo.addItem("皮卡丘代理站 (中国大陆)", userData="pikachu")
         self.proxyCombo.addItem("自定义", userData="custom")
         self.proxyCombo.setMinimumWidth(200)
         source_row.addWidget(source_label)

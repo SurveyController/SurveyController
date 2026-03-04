@@ -1,7 +1,6 @@
 """随机 IP / 代理管理 - 获取和切换代理 IP"""
 import json
 import logging
-import random
 import re
 import threading
 import time
@@ -11,7 +10,6 @@ from typing import Any, List, Optional, Set, Tuple
 import wjx.network.http_client as http_client
 from wjx.utils.app.config import (
     DEFAULT_HTTP_HEADERS,
-    PIKACHU_PROXY_API,
     PROXY_HEALTH_CHECK_TIMEOUT,
     PROXY_HEALTH_CHECK_URL,
     PROXY_MAX_PROXIES,
@@ -102,40 +100,6 @@ def set_proxy_occupy_minute_by_answer_duration(answer_duration_range_seconds: Op
     _proxy_occupy_minute = minute
     logging.debug("已根据作答时长更新代理 minute=%s（min=%s秒, max=%s秒）", minute, min_seconds, max_seconds)
     return minute
-
-
-def _fetch_cn_http_proxies_from_pikachu() -> List[str]:
-    try:
-        resp = http_client.get(PIKACHU_PROXY_API, timeout=15, headers=DEFAULT_HTTP_HEADERS, proxies={})
-        resp.raise_for_status()
-        data = resp.json()
-    except Exception as exc:
-        raise RuntimeError(f"获取皮卡丘代理失败: {exc}")
-
-    proxy_data = data.get("data", [])
-    if isinstance(proxy_data, dict):
-        proxy_data = proxy_data.get("list", [])
-    if not isinstance(proxy_data, list):
-        proxy_data = []
-
-    cn_http_proxies: List[str] = []
-    for proxy in proxy_data:
-        if not isinstance(proxy, dict):
-            continue
-        if proxy.get("country") == "CN" and "http" in str(proxy.get("protocol", "")).lower():
-            ip = proxy.get("ip", "")
-            port = proxy.get("port", "")
-            if ip and port:
-                username = str(proxy.get("account") or proxy.get("username") or "").strip()
-                password = str(proxy.get("password") or proxy.get("pwd") or "").strip()
-                addr = f"http://{username}:{password}@{ip}:{port}" if username and password else f"http://{ip}:{port}"
-                cn_http_proxies.append(addr)
-
-    if not cn_http_proxies:
-        logging.warning("皮卡丘代理站未找到中国大陆 HTTP 代理")
-    else:
-        logging.info(f"从皮卡丘代理站获取到 {len(cn_http_proxies)} 个中国大陆 HTTP 代理")
-    return cn_http_proxies
 
 
 def _validate_proxy_api_url(api_url: Optional[str]) -> str:
@@ -515,29 +479,6 @@ def _fetch_new_proxy_batch(
 ) -> List[str]:
     current_source = get_proxy_source()
     is_custom = current_source == PROXY_SOURCE_CUSTOM or is_custom_proxy_api_active()
-
-    if current_source == PROXY_SOURCE_PIKACHU:
-        try:
-            all_proxies = _fetch_cn_http_proxies_from_pikachu()
-            if not all_proxies:
-                raise RuntimeError("皮卡丘代理站未返回任何中国大陆 HTTP 代理")
-            random.shuffle(all_proxies)
-            max_check = min(10, len(all_proxies))
-            valid_proxies: List[str] = []
-            for i, proxy in enumerate(all_proxies[:max_check]):
-                if len(valid_proxies) >= expected_count:
-                    break
-                logging.info(f"正在验证代理 ({i+1}/{max_check}): {proxy}")
-                if _proxy_is_responsive_fast(proxy):
-                    valid_proxies.append(proxy)
-                    logging.info(f"代理可用: {proxy}")
-                else:
-                    logging.info(f"代理不可用: {proxy}")
-            if not valid_proxies:
-                raise RuntimeError(f"已验证{max_check}个代理均不可用，请稍后重试或切换代理源")
-            return valid_proxies
-        except Exception as exc:
-            raise RuntimeError(f"获取皮卡丘代理失败: {exc}")
 
     if is_custom:
         if not is_custom_proxy_api_active():
