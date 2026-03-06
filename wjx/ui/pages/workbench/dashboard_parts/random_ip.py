@@ -149,18 +149,23 @@ class DashboardRandomIPMixin:
         # 三态按钮：未验证 → 已验证(可申请更多) → 二次验证(禁用)
         is_verified = RegistryManager.is_card_verified()
         is_extra = RegistryManager.is_extra_quota_verified()
+        has_used_random_ip = int(count or 0) > 0
         if is_verified and is_extra:
             self.card_btn.setEnabled(False)
             self.card_btn.setText("已解锁")
             self.card_btn.setIcon(FluentIcon.FINGERPRINT)
         elif is_verified:
-            self.card_btn.setEnabled(True)
+            self.card_btn.setEnabled(has_used_random_ip)
             self.card_btn.setText("申请更多额度")
             self.card_btn.setIcon(FluentIcon.SHOPPING_CART)
         else:
-            self.card_btn.setEnabled(True)
+            self.card_btn.setEnabled(has_used_random_ip)
             self.card_btn.setText("解锁大额IP")
             self.card_btn.setIcon(FluentIcon.FINGERPRINT)
+        if (not has_used_random_ip) and (not (is_verified and is_extra)):
+            self.card_btn.setToolTip("请先使用随机IP提交至少1次后再申请")
+        else:
+            self.card_btn.setToolTip("")
 
         if custom_api:
             self.random_ip_hint.setText("自定义接口")
@@ -316,6 +321,9 @@ class DashboardRandomIPMixin:
 
     def _on_card_code_clicked(self):
         """用户主动输入卡密解锁大额随机IP。"""
+        if RegistryManager.read_submit_count() <= 0:
+            self._toast("请先使用随机IP提交至少1次后再申请额度。", "warning", duration=2500)
+            return
         was_already_verified = RegistryManager.is_card_verified()
         dialog = CardUnlockDialog(
             self,

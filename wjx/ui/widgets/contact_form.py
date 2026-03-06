@@ -743,7 +743,7 @@ class ContactForm(StatusPollingMixin, QWidget):
                 from wjx.utils.system.registry_manager import RegistryManager
                 if RegistryManager.read_submit_count() <= 0:
                     InfoBar.warning(
-                        "", "你都还没开始用呢，咋就来申请了😡",
+                        "", "你都还没开始用随机ip呢，咋就来申请了😡",
                         parent=self, position=InfoBarPosition.TOP, duration=3000,
                     )
                     return

@@ -1,9 +1,5 @@
 """
-信效度生成核心逻辑 - 从 demo/wjx/core/statistics/psychometric.py 移植
-
-用于生成符合 Cronbach's Alpha 信度要求的问卷答案。
-核心思想：所有题目共享一个潜变量 theta，通过添加误差来生成各题答案，
-误差大小由目标 Alpha 值决定。
+信效度生成核心逻辑
 """
 import logging
 from dataclasses import dataclass
