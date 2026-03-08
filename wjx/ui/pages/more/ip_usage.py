@@ -13,7 +13,7 @@ from wjx.utils.system.registry_manager import RegistryManager
 from PySide6.QtCore import Qt, QPoint, QPointF, QDate, QDateTime, QTime, Signal, QRectF, QPropertyAnimation, QEasingCurve, Property, QTimer, QByteArray
 from typing import Any
 from PySide6.QtCharts import QChart, QLineSeries, QChartView, QValueAxis, QDateTimeAxis
-from PySide6.QtGui import QPainter, QPen, QColor
+from PySide6.QtGui import QPainter, QPen, QColor, QBrush
 from PySide6.QtWidgets import (
     QWidget,
     QVBoxLayout,
@@ -32,6 +32,7 @@ from qfluentwidgets import (
     InfoBarPosition,
     isDarkTheme,
     themeColor,
+    qconfig,
 )
 
 class ConfettiOverlay(QWidget):
@@ -457,6 +458,7 @@ class IpUsagePage(ScrollArea):
 
         self._chart_view = InteractiveChartView(self._chart, self._series, self._point_meta, self._data_points)
         self._chart_view.setRenderHint(QPainter.RenderHint.Antialiasing)
+        self._chart_view.setStyleSheet("background: transparent; border: none;")
         self._chart_view.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
         self._chart_view.setMinimumHeight(400)
 
@@ -470,7 +472,6 @@ class IpUsagePage(ScrollArea):
         layout.addStretch(1)
 
         self._loading_overlay = QWidget(self.viewport())
-        self._loading_overlay.setStyleSheet("background-color: rgba(255, 255, 255, 175);")
         overlay_layout = QVBoxLayout(self._loading_overlay)
         overlay_layout.setContentsMargins(0, 0, 0, 0)
         overlay_layout.setSpacing(8)
@@ -487,6 +488,43 @@ class IpUsagePage(ScrollArea):
         overlay_layout.addStretch(1)
         self._loading_overlay.hide()
         self._update_overlay_geometry()
+        self._apply_chart_theme()
+        qconfig.themeChanged.connect(self._apply_chart_theme)
+
+    def _apply_chart_theme(self, *args) -> None:
+        dark = isDarkTheme()
+        axis_label_color = QColor(220, 225, 235) if dark else QColor(85, 90, 100)
+        axis_line_color = QColor(255, 255, 255, 65) if dark else QColor(0, 0, 0, 65)
+        grid_color = QColor(255, 255, 255, 28) if dark else QColor(0, 0, 0, 28)
+        chart_bg_color = QColor(41, 46, 62, 225) if dark else QColor(255, 255, 255, 235)
+        plot_bg_color = QColor(26, 30, 42, 220) if dark else QColor(248, 249, 252, 245)
+
+        self._chart.setTheme(
+            QChart.ChartTheme.ChartThemeDark if dark else QChart.ChartTheme.ChartThemeLight
+        )
+        self._chart.setBackgroundRoundness(10)
+        self._chart.setBackgroundBrush(QBrush(chart_bg_color))
+        self._chart.setBackgroundPen(QPen(grid_color, 1))
+        self._chart.setPlotAreaBackgroundVisible(True)
+        self._chart.setPlotAreaBackgroundBrush(QBrush(plot_bg_color))
+        self._chart.setPlotAreaBackgroundPen(QPen(grid_color, 1))
+
+        series_pen = QPen(themeColor(), 2)
+        self._series.setPen(series_pen)
+
+        for axis in (self._axis_x, self._axis_y):
+            axis.setLabelsColor(axis_label_color)
+            axis.setGridLineColor(grid_color)
+            axis.setLinePenColor(axis_line_color)
+            if hasattr(axis, "setMinorGridLineColor"):
+                axis.setMinorGridLineColor(grid_color)
+
+        self._date_label.setStyleSheet(
+            "color: rgba(198, 205, 218, 0.78);" if dark else "color: rgba(95, 102, 114, 0.9);"
+        )
+        self._loading_overlay.setStyleSheet(
+            "background-color: rgba(16, 19, 27, 155);" if dark else "background-color: rgba(255, 255, 255, 175);"
+        )
 
     def _load_data(self):
         if self._loading:
