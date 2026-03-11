@@ -46,6 +46,7 @@ from wjx.network.proxy import (
     _format_status_payload,
     refresh_ip_counter_display,
 )
+from wjx.network.proxy.auth import get_session_snapshot
 from wjx.utils.app.runtime_paths import _get_resource_path as get_resource_path
 
 from wjx.boot import create_boot_splash, finish_boot_splash
@@ -85,7 +86,8 @@ class MainWindow(
         self._community_hint_pending = False
         self._community_hint_badge = None
         
-        self.setWindowTitle(f"问卷星速填 v{__VERSION__}")
+        self._base_window_title = f"问卷星速填 v{__VERSION__}"
+        self.setWindowTitle(self._base_window_title)
         icon_path = get_resource_path(APP_ICON_RELATIVE_PATH)
         if os.path.exists(icon_path):
             self.setWindowIcon(QIcon(icon_path))
@@ -150,12 +152,13 @@ class MainWindow(
         self._sidebar_expanded = False  # 标记侧边栏是否已展开
         self._bind_controller_signals()
         # 确保初始 adapter 也能回调随机 IP 计数
-        self.controller.adapter.update_random_ip_counter = self.dashboard.update_random_ip_counter
+        self.controller.adapter.update_random_ip_counter = self._on_random_ip_counter_update
         self.controller.on_random_ip_loading = self.dashboard.set_random_ip_loading
         try:
             self.controller.adapter._on_random_ip_loading = self.dashboard.set_random_ip_loading
         except Exception as exc:
             log_suppressed_exception("__init__: sync adapter random_ip_loading callback", exc, level=logging.WARNING)
+        self._refresh_title_random_ip_user_id()
         self._register_popups()
         self._load_saved_config()
         self._center_on_screen()
@@ -505,7 +508,35 @@ class MainWindow(
         self.controller.threadProgressUpdated.connect(self.dashboard.update_thread_progress)
         self.controller.pauseStateChanged.connect(self.dashboard.on_pause_state_changed)
         self.controller.cleanupFinished.connect(self.dashboard.on_cleanup_finished)
-        self.controller.on_ip_counter = self.dashboard.update_random_ip_counter
+        self.controller.on_ip_counter = self._on_random_ip_counter_update
+
+    def _on_random_ip_counter_update(self, count: int, limit: int, custom_api: bool) -> None:
+        try:
+            self.dashboard.update_random_ip_counter(count, limit, custom_api)
+        except Exception as exc:
+            log_suppressed_exception("_on_random_ip_counter_update dashboard", exc, level=logging.WARNING)
+        self._refresh_title_random_ip_user_id()
+
+    def _refresh_title_random_ip_user_id(self) -> None:
+        user_id = 0
+        authenticated = False
+        try:
+            snapshot = get_session_snapshot()
+            authenticated = bool(snapshot.get("authenticated"))
+            user_id = int(snapshot.get("user_id") or 0)
+        except Exception as exc:
+            log_suppressed_exception("_refresh_title_random_ip_user_id snapshot", exc, level=logging.WARNING)
+
+        suffix = f" <span style='color:#8A8A8A;'>({user_id})</span>" if authenticated and user_id > 0 else ""
+        title_label = getattr(getattr(self, "titleBar", None), "titleLabel", None)
+        if title_label is None:
+            return
+        try:
+            title_label.setTextFormat(Qt.TextFormat.RichText)
+            title_label.setText(f"{self._base_window_title}{suffix}")
+            title_label.adjustSize()
+        except Exception as exc:
+            log_suppressed_exception("_refresh_title_random_ip_user_id render", exc, level=logging.WARNING)
 
     def _register_popups(self):
         def handler(kind: str, title: str, message: str):

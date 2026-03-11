@@ -98,7 +98,7 @@ class DashboardRandomIPMixin:
             self._update_ip_cost_infobar(custom_api)
             return
         if not authenticated:
-            self.random_ip_hint.setText("未激活")
+            self.random_ip_hint.setText("--/--")
             self.random_ip_hint.setStyleSheet("color:#6b6b6b;")
             self._update_ip_low_infobar(count, limit, custom_api)
             self._update_ip_cost_infobar(custom_api)

@@ -5,7 +5,7 @@ import copy
 import logging
 import math
 import threading
-from typing import TYPE_CHECKING, Any, Callable, Dict, List, Optional, Set, Tuple
+from typing import TYPE_CHECKING, Any, Callable, Dict, List, Optional, Tuple
 
 from PySide6.QtCore import QCoreApplication
 
@@ -178,12 +178,9 @@ class RunControllerRuntimeMixin:
         ]
         if bool(getattr(config, "random_ip_enabled", False)):
             steps.append({"key": "random_ip", "label": "初始化随机IP模块"})
-        steps.extend(
-            [
-                {"key": "playwright", "label": "初始化Playwright浏览器环境"},
-                {"key": "submission", "label": "初始化提交行为模块"},
-            ]
-        )
+        if self._should_use_initialization_gate(config):
+            steps.append({"key": "playwright", "label": "初始化Playwright浏览器环境"})
+        steps.append({"key": "submission", "label": "初始化提交行为模块"})
         return steps
 
     def _find_init_step_label(self, step_key: str) -> str:
@@ -197,12 +194,14 @@ class RunControllerRuntimeMixin:
 
     def _setup_initialization_progress(self, config: RuntimeConfig) -> None:
         self._init_steps = self._build_initialization_plan(config)
-        completed: Set[str] = {"question_detection", "answering"}
-        if bool(getattr(config, "random_ip_enabled", False)):
-            completed.add("random_ip")
-        self._init_completed_steps = completed
+        self._init_completed_steps = {"question_detection", "answering"}
         self._init_current_step_key = ""
-        self._set_initialization_stage("playwright")
+        if bool(getattr(config, "random_ip_enabled", False)):
+            self._set_initialization_stage("random_ip", "初始化随机IP模块")
+        elif self._should_use_initialization_gate(config):
+            self._set_initialization_stage("playwright", "初始化Playwright浏览器环境")
+        else:
+            self._set_initialization_stage("submission", "初始化提交行为模块")
 
     def _set_initialization_stage(self, step_key: str, stage_text: str = "") -> None:
         key = str(step_key or "").strip()
@@ -253,7 +252,9 @@ class RunControllerRuntimeMixin:
         if self.stop_event.is_set():
             self._starting = False
             return
-        if not self._should_use_initialization_gate(config):
+        should_use_gate = self._should_use_initialization_gate(config)
+        requires_network_init = bool(getattr(config, "random_ip_enabled", False))
+        if not should_use_gate and not requires_network_init:
             self._start_workers_with_proxy_pool(config, proxy_pool)
             return
 
@@ -261,7 +262,8 @@ class RunControllerRuntimeMixin:
         self._starting = False
         self._initializing = True
         self._setup_initialization_progress(config)
-        self._set_initialization_stage("playwright", "初始化Playwright浏览器环境")
+        if should_use_gate and not requires_network_init:
+            self._set_initialization_stage("playwright", "初始化Playwright浏览器环境")
         self._task_ctx = None
         self.runStateChanged.emit(True)
         self._status_timer.start()
@@ -276,6 +278,64 @@ class RunControllerRuntimeMixin:
             name="InitGate",
         ).start()
 
+    def _prepare_random_ip_resources(
+        self,
+        config: RuntimeConfig,
+        gate_stop_event: threading.Event,
+    ) -> List[str]:
+        if not bool(getattr(config, "random_ip_enabled", False)):
+            return []
+
+        def _cancelled() -> bool:
+            return bool(self.stop_event.is_set() or gate_stop_event.is_set())
+
+        def _set_stage(text: str) -> None:
+            self._dispatch_to_ui_async(
+                lambda msg=str(text): (
+                    self._set_initialization_stage("random_ip", msg),
+                    self._emit_status(),
+                )
+            )
+
+        if _cancelled():
+            return []
+
+        if not is_custom_proxy_api_active():
+            if not has_authenticated_session():
+                raise RuntimeError("默认随机IP需要先领取免费试用或提交额度申请，请先完成后再试，或改用自定义代理接口")
+            _set_stage("初始化随机IP模块（同步额度）")
+            try:
+                remaining = int(get_fresh_quota_snapshot()["remaining_quota"])
+            except RandomIPAuthError as exc:
+                raise RuntimeError(format_random_ip_error(exc)) from exc
+            except Exception as exc:
+                raise RuntimeError(f"同步随机IP额度失败：{exc}") from exc
+            if remaining <= 0:
+                raise RuntimeError("随机IP剩余额度不足，请补充额度后再试，或改用自定义代理接口")
+            if _cancelled():
+                return []
+
+        _set_stage("初始化随机IP模块（预取代理）")
+        from wjx.core.services.proxy_service import prefetch_proxy_pool
+
+        proxy_source = str(getattr(config, "proxy_source", "default") or "default")
+        custom_proxy_api = str(getattr(config, "custom_proxy_api", "") or "").strip()
+        proxy_api_url = custom_proxy_api if (proxy_source == "custom" and custom_proxy_api) else get_effective_proxy_api_url()
+        proxy_pool = prefetch_proxy_pool(
+            expected_count=max(1, int(getattr(config, "threads", 1) or 1)),
+            proxy_api_url=proxy_api_url,
+            stop_signal=self.stop_event,
+        )
+        if _cancelled():
+            return []
+        try:
+            from wjx.network.proxy import refresh_ip_counter_display
+
+            self._dispatch_to_ui_async(lambda: refresh_ip_counter_display(self.adapter))
+        except Exception:
+            logging.debug("预取代理后刷新随机IP额度失败", exc_info=True)
+        return proxy_pool
+
     def _run_initialization_gate(
         self,
         config: RuntimeConfig,
@@ -285,21 +345,35 @@ class RunControllerRuntimeMixin:
         def _cancelled() -> bool:
             return bool(self.stop_event.is_set() or gate_stop_event.is_set())
 
+        effective_proxy_pool = list(proxy_pool)
+        if bool(getattr(config, "random_ip_enabled", False)):
+            try:
+                effective_proxy_pool = self._prepare_random_ip_resources(config, gate_stop_event)
+            except Exception as exc:
+                self._dispatch_to_ui_async(lambda msg=str(exc): self._finish_initialization_failure(msg))
+                return
+            if _cancelled():
+                return
+
+        if not self._should_use_initialization_gate(config):
+            self._dispatch_to_ui_async(lambda: self._start_after_init_success(config, effective_proxy_pool))
+            return
+
         first_headless = self._run_single_probe_attempt(
             config,
-            proxy_pool,
+            effective_proxy_pool,
             headless=True,
             gate_stop_event=gate_stop_event,
         )
         if first_headless is None:
             return
         if first_headless:
-            self._dispatch_to_ui_async(lambda: self._start_after_init_success(config, proxy_pool))
+            self._dispatch_to_ui_async(lambda: self._start_after_init_success(config, effective_proxy_pool))
             return
 
         second_headful = self._run_single_probe_attempt(
             config,
-            proxy_pool,
+            effective_proxy_pool,
             headless=False,
             gate_stop_event=gate_stop_event,
         )
@@ -313,14 +387,14 @@ class RunControllerRuntimeMixin:
 
         third_headless = self._run_single_probe_attempt(
             config,
-            proxy_pool,
+            effective_proxy_pool,
             headless=True,
             gate_stop_event=gate_stop_event,
         )
         if third_headless is None:
             return
         if third_headless:
-            self._dispatch_to_ui_async(lambda: self._start_after_init_success(config, proxy_pool))
+            self._dispatch_to_ui_async(lambda: self._start_after_init_success(config, effective_proxy_pool))
             return
 
         if _cancelled():
@@ -332,7 +406,7 @@ class RunControllerRuntimeMixin:
             NON_HEADLESS_FALLBACK_MAX_THREADS,
         )
         fallback_config.threads = fallback_threads
-        self._dispatch_to_ui_async(lambda: self._start_after_init_fallback(fallback_config, proxy_pool))
+        self._dispatch_to_ui_async(lambda: self._start_after_init_fallback(fallback_config, effective_proxy_pool))
 
     def _run_single_probe_attempt(
         self,
@@ -526,74 +600,7 @@ class RunControllerRuntimeMixin:
                     _tmp_ctx.questions_metadata[q_num] = q_info
         self._pending_question_ctx = _tmp_ctx
 
-        if config.random_ip_enabled:
-            if not is_custom_proxy_api_active():
-                if not has_authenticated_session():
-                    logging.warning("随机IP未激活，无法启动默认随机IP模式")
-                    self._starting = False
-                    self.runFailed.emit("默认随机IP需要先领取免费试用或提交额度申请，请先完成后再试，或改用自定义代理接口")
-                    return
-                try:
-                    remaining = int(get_fresh_quota_snapshot()["remaining_quota"])
-                except RandomIPAuthError as exc:
-                    logging.warning("启动前同步随机IP额度失败：%s", exc.detail)
-                    self._starting = False
-                    self.runFailed.emit(format_random_ip_error(exc))
-                    return
-                except Exception as exc:
-                    logging.warning("启动前同步随机IP额度失败：%s", exc, exc_info=True)
-                    self._starting = False
-                    self.runFailed.emit(f"同步随机IP额度失败：{exc}")
-                    return
-                if remaining <= 0:
-                    logging.warning("随机IP剩余额度不足，无法启动")
-                    self._starting = False
-                    self.runFailed.emit("随机IP剩余额度不足，请补充额度后再试，或改用自定义代理接口")
-                    return
-            threading.Thread(
-                target=self._prefetch_proxies_and_start,
-                args=(config,),
-                daemon=True,
-                name="ProxyPrefetch",
-            ).start()
-            return
-
         self._start_with_initialization_gate(config, [])
-
-    def _prefetch_proxies_and_start(self, config: RuntimeConfig) -> None:
-        try:
-            from wjx.core.services.proxy_service import prefetch_proxy_pool
-
-            proxy_source = str(getattr(config, "proxy_source", "default") or "default")
-            custom_proxy_api = str(getattr(config, "custom_proxy_api", "") or "").strip()
-            proxy_api_url = custom_proxy_api if (proxy_source == "custom" and custom_proxy_api) else get_effective_proxy_api_url()
-            proxy_pool = prefetch_proxy_pool(
-                expected_count=max(1, config.threads),
-                proxy_api_url=proxy_api_url,
-                stop_signal=self.stop_event,
-            )
-        except Exception as exc:
-            err_text = str(exc)
-
-            def _fail():
-                self._starting = False
-                self.runFailed.emit(err_text)
-
-            self._dispatch_to_ui_async(_fail)
-            return
-
-        def _continue_start():
-            if self.stop_event.is_set():
-                self._starting = False
-                return
-            try:
-                from wjx.network.proxy import refresh_ip_counter_display
-                refresh_ip_counter_display(self.adapter)
-            except Exception:
-                logging.debug("预取代理后刷新随机IP额度失败", exc_info=True)
-            self._start_with_initialization_gate(config, proxy_pool)
-
-        self._dispatch_to_ui_async(_continue_start)
 
     def _start_workers_with_proxy_pool(
         self,
