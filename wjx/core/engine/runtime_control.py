@@ -8,6 +8,8 @@ from wjx.core.task_context import TaskContext
 from wjx.utils.event_bus import bus as _event_bus, EVENT_TARGET_REACHED
 from wjx.utils.logging.log_utils import log_suppressed_exception
 
+FAILURE_REASON_DEVICE_QUOTA_LIMIT = "device_quota_limit"
+
 
 def _is_headless_mode(ctx: Optional[TaskContext]) -> bool:
     """当前任务是否启用无头模式。"""
@@ -22,20 +24,34 @@ def _handle_submission_failure(
     ctx: TaskContext,
     stop_signal: Optional[threading.Event],
     thread_name: Optional[str] = None,
+    *,
+    failure_reason: str = "",
+    status_text: str = "失败重试",
+    log_message: str = "",
 ) -> bool:
     """
     递增连续失败计数；当开启失败止损时超过阈值会触发停止。
     返回 True 表示已触发强制停止。
     """
+    normalized_reason = str(failure_reason or "").strip().lower()
     with ctx.lock:
         ctx.cur_fail += 1
+        if normalized_reason == FAILURE_REASON_DEVICE_QUOTA_LIMIT:
+            ctx.device_quota_fail_count = max(0, int(ctx.device_quota_fail_count or 0)) + 1
+        message = str(log_message or "").strip()
+        if message:
+            logging.warning("%s", message)
         if ctx.stop_on_fail_enabled:
-            print(f"已连续失败{ctx.cur_fail}次, 连续失败达到{int(ctx.fail_threshold)}次将强制停止")
+            logging.warning(
+                "已连续失败%s次，连续失败达到%s次将强制停止",
+                ctx.cur_fail,
+                int(ctx.fail_threshold),
+            )
         else:
-            print(f"已连续失败{ctx.cur_fail}次（失败止损已关闭）")
+            logging.warning("已连续失败%s次（失败止损已关闭）", ctx.cur_fail)
     if thread_name:
         try:
-            ctx.increment_thread_fail(thread_name, status_text="失败重试")
+            ctx.increment_thread_fail(thread_name, status_text=status_text)
         except Exception:
             logging.debug("更新线程失败计数失败", exc_info=True)
     if ctx.stop_on_fail_enabled and ctx.cur_fail >= ctx.fail_threshold:

@@ -67,6 +67,9 @@ class RandomIPSession:
 _session_lock = threading.RLock()
 _session_loaded = False
 _session = RandomIPSession()
+_refresh_singleflight_lock = threading.Lock()
+_refresh_singleflight_cond = threading.Condition(_refresh_singleflight_lock)
+_refresh_in_flight = False
 
 
 def _utc_now() -> datetime:
@@ -458,24 +461,66 @@ def _should_refresh(session: RandomIPSession, *, force: bool = False) -> bool:
     return session.expires_at <= (_utc_now() + timedelta(seconds=_TOKEN_EARLY_REFRESH_SECONDS))
 
 
-def refresh_session(*, force: bool = False) -> RandomIPSession:
-    session = _read_session()
-    if not session.has_refresh_token:
-        raise RandomIPAuthError("not_authenticated")
-    if not _should_refresh(session, force=force):
-        return session
-    response = _post_json(
-        AUTH_REFRESH_ENDPOINT,
-        json_body={"refresh_token": session.refresh_token},
-        authorized=False,
+def _session_refresh_marker(session: RandomIPSession) -> tuple[str, str, str, str]:
+    return (
+        str(session.refresh_token or ""),
+        str(session.access_token or ""),
+        _serialize_datetime(session.expires_at),
+        _serialize_datetime(session.refresh_expires_at),
     )
-    if int(getattr(response, "status_code", 0) or 0) != 200:
-        error = _extract_error_payload(response)
-        if error.detail == "invalid_refresh_token":
-            clear_session()
-        raise error
-    refreshed = _parse_session_response(response, fallback_session=session)
-    return _set_session(refreshed)
+
+
+def refresh_session(*, force: bool = False) -> RandomIPSession:
+    global _refresh_in_flight
+
+    while True:
+        session = _read_session()
+        if not session.has_refresh_token:
+            raise RandomIPAuthError("not_authenticated")
+        if not _should_refresh(session, force=force):
+            return session
+
+        refresh_marker = _session_refresh_marker(session)
+        became_refresher = False
+
+        with _refresh_singleflight_cond:
+            while _refresh_in_flight:
+                _refresh_singleflight_cond.wait()
+                latest = _read_session()
+                if _session_refresh_marker(latest) != refresh_marker:
+                    if latest.has_refresh_token:
+                        return latest
+                    raise RandomIPAuthError("not_authenticated")
+
+            latest = _read_session()
+            if _session_refresh_marker(latest) != refresh_marker:
+                if latest.has_refresh_token:
+                    return latest
+                raise RandomIPAuthError("not_authenticated")
+
+            _refresh_in_flight = True
+            became_refresher = True
+
+        if not became_refresher:
+            continue
+
+        try:
+            response = _post_json(
+                AUTH_REFRESH_ENDPOINT,
+                json_body={"refresh_token": session.refresh_token},
+                authorized=False,
+            )
+            if int(getattr(response, "status_code", 0) or 0) != 200:
+                error = _extract_error_payload(response)
+                if error.detail == "invalid_refresh_token":
+                    clear_session()
+                raise error
+            refreshed = _parse_session_response(response, fallback_session=session)
+            return _set_session(refreshed)
+        finally:
+            with _refresh_singleflight_cond:
+                _refresh_in_flight = False
+                _refresh_singleflight_cond.notify_all()
 
 
 def ensure_access_token() -> str:

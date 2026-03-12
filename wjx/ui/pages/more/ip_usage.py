@@ -14,6 +14,7 @@ from wjx.network.proxy.auth import (
 )
 from wjx.network.proxy import refresh_ip_counter_display
 from wjx.utils.logging.log_utils import log_suppressed_exception
+from wjx.utils.system.registry_manager import RegistryManager
 
 from PySide6.QtCore import Qt, QPoint, QPointF, QDate, QDateTime, QTime, Signal, QRectF, QPropertyAnimation, QEasingCurve, Property, QTimer, QByteArray
 from typing import Any
@@ -393,7 +394,7 @@ class IpUsagePage(ScrollArea):
         self._last_load_failed = False
         self._load_scheduled = False
         self._confetti_overlay: ConfettiOverlay | None = None
-        self._confetti_played = False
+        self._confetti_played = RegistryManager.is_confetti_played()
         self._confetti_pending = False
         self._bonus_claim_in_progress = False
         self._confetti_retry_timer = QTimer(self)
@@ -421,6 +422,13 @@ class IpUsagePage(ScrollArea):
             log_suppressed_exception("_dispose_confetti_overlay", exc, level=logging.WARNING)
         finally:
             self._confetti_overlay = None
+
+    def _mark_confetti_played(self, played: bool = True) -> None:
+        self._confetti_played = bool(played)
+        try:
+            RegistryManager.set_confetti_played(self._confetti_played)
+        except Exception as exc:
+            log_suppressed_exception("_mark_confetti_played", exc, level=logging.WARNING)
 
     def _build_ui(self):
         layout = QVBoxLayout(self.view)
@@ -702,8 +710,7 @@ class IpUsagePage(ScrollArea):
         self._update_overlay_geometry()
         # 首次进入页面立即触发彩带
         if self._ENABLE_CONFETTI and (not self._confetti_played) and (not self._confetti_pending):
-            self._confetti_pending = True
-            self._schedule_confetti_launch(100)
+            self._start_bonus_claim()
         if not self._load_scheduled:
             self._load_scheduled = True
             QTimer.singleShot(0, self._trigger_load_if_needed)
@@ -748,8 +755,7 @@ class IpUsagePage(ScrollArea):
             self._confetti_pending = False
             return
         self._confetti_pending = False
-        self._confetti_played = True
-        self._start_bonus_claim()
+        self._mark_confetti_played(True)
 
     def _start_bonus_claim(self) -> None:
         if self._bonus_claim_in_progress:
@@ -758,33 +764,47 @@ class IpUsagePage(ScrollArea):
         threading.Thread(target=self._claim_bonus_worker, daemon=True, name="EasterEggBonusClaim").start()
 
     def _claim_bonus_worker(self) -> None:
-        payload: dict[str, Any] = {"level": "success", "message": "🎉恭喜发现彩蛋"}
+        payload: dict[str, Any] = {"level": "success", "message": "🎉恭喜发现彩蛋", "play_confetti": True}
         try:
             if not has_authenticated_session():
-                payload = {"level": "info", "message": "🎉恭喜发现彩蛋，激活随机IP后可领取隐藏福利"}
+                payload = {"level": "info", "message": "🎉恭喜发现彩蛋，激活随机IP后可领取隐藏福利", "play_confetti": True}
             else:
                 result = claim_easter_egg_bonus()
                 claimed = bool(result.get("claimed"))
                 bonus_quota = int(result.get("bonus_quota") or 0)
+                detail = str(result.get("detail") or "").strip()
                 if claimed and bonus_quota > 0:
-                    payload = {"level": "success", "message": f"🎉恭喜发现彩蛋，额度+{bonus_quota}"}
+                    payload = {"level": "success", "message": f"🎉恭喜发现彩蛋，额度+{bonus_quota}", "play_confetti": True}
                 elif claimed:
-                    payload = {"level": "success", "message": "🎉恭喜发现彩蛋，隐藏福利已到账"}
+                    payload = {"level": "success", "message": "🎉恭喜发现彩蛋，隐藏福利已到账", "play_confetti": True}
+                elif detail in {"bonus_already_claimed", "easter_egg_already_claimed"}:
+                    payload = {"skip_infobar": True, "play_confetti": False, "mark_confetti_played": True}
                 else:
-                    payload = {"skip_infobar": True}
+                    payload = {"skip_infobar": True, "play_confetti": False}
         except RandomIPAuthError as exc:
             detail = str(exc.detail or "").strip()
             if detail in {"bonus_already_claimed", "easter_egg_already_claimed"}:
-                payload = {"skip_infobar": True}
+                payload = {"skip_infobar": True, "play_confetti": False, "mark_confetti_played": True}
             else:
-                payload = {"level": "warning", "message": format_random_ip_error(exc)}
+                payload = {"level": "warning", "message": format_random_ip_error(exc), "play_confetti": False}
         except Exception as exc:
-            payload = {"level": "warning", "message": f"领取彩蛋奖励失败：{exc}"}
+            payload = {"level": "warning", "message": f"领取彩蛋奖励失败：{exc}", "play_confetti": False}
         finally:
             self._bonusClaimFinished.emit(payload)
 
     def _on_bonus_claim_finished(self, payload: Any) -> None:
         self._bonus_claim_in_progress = False
+        if isinstance(payload, dict) and "mark_confetti_played" in payload:
+            self._mark_confetti_played(bool(payload.get("mark_confetti_played")))
+        if (
+            isinstance(payload, dict)
+            and bool(payload.get("play_confetti"))
+            and self._ENABLE_CONFETTI
+            and (not self._confetti_played)
+            and (not self._confetti_pending)
+        ):
+            self._confetti_pending = True
+            self._schedule_confetti_launch(100)
         try:
             win = self.window()
             controller = getattr(win, "controller", None) if win is not None else None

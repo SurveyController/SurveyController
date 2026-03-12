@@ -513,16 +513,34 @@ def run(
 
             # ── 3. 设备配额限制检查 ──────────────────────────────
             if _is_device_quota_limit_page(session.driver):
-                logging.warning('检测到设备已达到最大填写次数提示页，直接放弃当前浏览器实例并标记为成功。')
-                stopped = _record_successful_submission(
+                logging.warning("检测到设备已达到最大填写次数提示页，本轮按失败处理，不计入成功份数。")
+                stopped = _handle_submission_failure(
                     ctx,
                     stop_signal,
-                    gui_instance,
                     thread_name=thread_name,
+                    failure_reason="device_quota_limit",
+                    status_text="设备达到填写次数上限",
+                    log_message="设备达到填写次数上限，本轮按失败处理",
                 )
+                try:
+                    ctx.update_thread_status(
+                        thread_name,
+                        "设备达到填写次数上限",
+                        running=True,
+                    )
+                except Exception:
+                    logging.debug("更新线程状态失败：设备达到填写次数上限", exc_info=True)
                 session.dispose()
                 if stopped:
+                    logging.warning("设备达到填写次数上限且连续失败达到阈值，任务停止。")
                     break
+                if stop_signal.is_set():
+                    break
+                if ctx.random_proxy_ip_enabled:
+                    try:
+                        handle_random_ip_submission(gui_instance, stop_signal)
+                    except Exception:
+                        logging.debug("设备上限失败后处理随机IP提交流程失败", exc_info=True)
                 continue
 
             visited_urls: Set[str] = set()

@@ -36,6 +36,7 @@ if TYPE_CHECKING:
     from wjx.utils.system.cleanup_runner import CleanupRunner
 
 NON_HEADLESS_FALLBACK_MAX_THREADS = 8
+DEVICE_QUOTA_LIMIT_MESSAGE = "当前设备已达到该问卷填写次数上限，无法继续"
 
 
 class RunControllerRuntimeMixin:
@@ -248,6 +249,11 @@ class RunControllerRuntimeMixin:
             cloned.__dict__.update(dict(getattr(config, "__dict__", {})))
             return cloned
 
+    def _consume_probe_failure_message(self) -> str:
+        message = str(getattr(self, "_probe_failure_message", "") or "").strip()
+        self._probe_failure_message = ""
+        return message
+
     def _start_with_initialization_gate(self, config: RuntimeConfig, proxy_pool: List[str]) -> None:
         if self.stop_event.is_set():
             self._starting = False
@@ -346,6 +352,9 @@ class RunControllerRuntimeMixin:
         proxy_pool: List[str],
         gate_stop_event: threading.Event,
     ) -> None:
+        self._probe_failure_message = ""
+        self._probe_hit_device_quota = False
+
         def _cancelled() -> bool:
             return bool(self.stop_event.is_set() or gate_stop_event.is_set())
 
@@ -384,8 +393,12 @@ class RunControllerRuntimeMixin:
         if second_headful is None:
             return
         if not second_headful:
+            failure_message = self._consume_probe_failure_message()
             self._dispatch_to_ui_async(
-                lambda: self._finish_initialization_failure("初始化失败：无头测试失败后，有头单线程测试也失败，请检查配置后重试")
+                lambda msg=(
+                    failure_message
+                    or "初始化失败：无头测试失败后，有头单线程测试也失败，请检查配置后重试"
+                ): self._finish_initialization_failure(msg)
             )
             return
 
@@ -459,6 +472,10 @@ class RunControllerRuntimeMixin:
             logging.info("初始化门禁：%s单线程测试已取消", mode_text)
             return None
         success = int(getattr(probe_ctx, "cur_num", 0) or 0) >= 1
+        device_quota_fail_count = max(0, int(getattr(probe_ctx, "device_quota_fail_count", 0) or 0))
+        if device_quota_fail_count > 0:
+            self._probe_hit_device_quota = True
+            self._probe_failure_message = DEVICE_QUOTA_LIMIT_MESSAGE
         if gate_stop_event.is_set():
             gate_stop_event.clear()
         logging.info("初始化门禁：%s单线程测试%s", mode_text, "成功" if success else "失败")
@@ -471,6 +488,8 @@ class RunControllerRuntimeMixin:
         self._init_completed_steps = set()
         self._init_current_step_key = ""
         self._init_gate_stop_event = None
+        self._probe_hit_device_quota = False
+        self._probe_failure_message = ""
 
     def _start_after_init_success(self, config: RuntimeConfig, proxy_pool: List[str]) -> None:
         if self.stop_event.is_set():
@@ -575,6 +594,8 @@ class RunControllerRuntimeMixin:
         self._init_completed_steps = set()
         self._init_current_step_key = ""
         self._init_gate_stop_event = None
+        self._probe_hit_device_quota = False
+        self._probe_failure_message = ""
         _ad = config.answer_duration or (0, 0)
         proxy_answer_duration: Tuple[int, int] = (0, 0) if config.timed_mode_enabled else (int(_ad[0]), int(_ad[1]))
         try:
@@ -774,6 +795,7 @@ class RunControllerRuntimeMixin:
         current = getattr(ctx, "cur_num", 0)
         target = getattr(ctx, "target_num", 0)
         fail = getattr(ctx, "cur_fail", 0)
+        device_quota_fail_count = getattr(ctx, "device_quota_fail_count", 0)
         paused = False
         reason = ""
         try:
@@ -785,6 +807,8 @@ class RunControllerRuntimeMixin:
 
         status_prefix = "已暂停" if paused else "已提交"
         status = f"{status_prefix} {current}/{target} 份 | 连续失败 {fail} 次"
+        if int(device_quota_fail_count or 0) > 0:
+            status = f"{status} | 设备限制拦截 {int(device_quota_fail_count or 0)} 次"
         if paused and reason:
             status = f"{status} | {reason}"
         self.statusUpdated.emit(status, int(current), int(target or 0))
@@ -809,6 +833,7 @@ class RunControllerRuntimeMixin:
                 "target": int(target or 0),
                 "num_threads": int(num_threads or 0),
                 "per_thread_target": int(per_thread_target or 0),
+                "device_quota_fail_count": int(device_quota_fail_count or 0),
                 "initializing": False,
             }
         )

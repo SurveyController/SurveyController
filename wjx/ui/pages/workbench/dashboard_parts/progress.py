@@ -54,6 +54,7 @@ class DashboardProgressMixin:
         _last_progress: int
         _last_pause_reason: str
         _main_progress_indeterminate: bool
+        _last_device_quota_fail_count: int
 
         def _sync_start_button_state(self, running: Optional[bool] = None) -> None: ...
         def _has_question_entries(self) -> bool: ...
@@ -65,6 +66,7 @@ class DashboardProgressMixin:
         self._thread_progress_rows = {}
         self._thread_view_current = self.THREAD_VIEW_QUESTION_LIST
         self._main_progress_indeterminate = False
+        self._last_device_quota_fail_count = 0
         self._thread_clear_timer = QTimer(cast(QObject, self))
         self._thread_clear_timer.setSingleShot(True)
         self._thread_clear_timer.setInterval(4000)
@@ -222,7 +224,15 @@ class DashboardProgressMixin:
             return
 
         self._set_main_progress_indeterminate(False)
-        self.status_label.setText(text)
+        status_text = str(text or "")
+        quota_fail_count = max(0, int(getattr(self, "_last_device_quota_fail_count", 0) or 0))
+        if (
+            quota_fail_count > 0
+            and "设备限制拦截" not in status_text
+            and "设备达到填写次数上限" not in status_text
+        ):
+            status_text = f"{status_text} | 设备限制拦截 {quota_fail_count} 次"
+        self.status_label.setText(status_text)
         progress = 0
         if target > 0:
             progress = min(100, int((current / max(target, 1)) * 100))
@@ -249,6 +259,7 @@ class DashboardProgressMixin:
             if widget is not None:
                 widget.deleteLater()
         self._thread_progress_rows.clear()
+        self._last_device_quota_fail_count = 0
         self.thread_progress_hint.show()
         self.thread_progress_hint.setText("线程进度会在任务开始后显示")
 
@@ -357,6 +368,7 @@ class DashboardProgressMixin:
             return
 
         self._set_main_progress_indeterminate(False)
+        self._last_device_quota_fail_count = max(0, int(payload.get("device_quota_fail_count") or 0))
         thread_rows = payload.get("threads")
         if not isinstance(thread_rows, list):
             return
@@ -433,6 +445,7 @@ class DashboardProgressMixin:
         if running:
             self._thread_clear_timer.stop()
             self._clear_thread_progress_rows()
+            self._last_device_quota_fail_count = 0
             if self._controller_initializing():
                 self.thread_progress_hint.setText("正在初始化...")
                 self.status_label.setText("正在初始化")
@@ -465,7 +478,15 @@ class DashboardProgressMixin:
     def on_cleanup_finished(self):
         if self._show_end_toast_after_cleanup:
             self._show_end_toast_after_cleanup = False
-            self._toast("任务结束", "info", 1500)
+            quota_fail_count = max(0, int(getattr(self, "_last_device_quota_fail_count", 0) or 0))
+            if quota_fail_count > 0 and not self._completion_notified:
+                self._toast(
+                    f"任务结束，设备填写次数上限拦截 {quota_fail_count} 次",
+                    "warning",
+                    2200,
+                )
+            else:
+                self._toast("任务结束", "info", 1500)
 
     def on_pause_state_changed(self, paused: bool, reason: str = ""):
         self._last_pause_reason = str(reason or "")

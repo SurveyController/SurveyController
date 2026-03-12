@@ -125,6 +125,7 @@ class TaskContext:
     # ── 运行时计数（引擎动态更新，需加锁！） ─────────────────────────────
     cur_num: int = 0
     cur_fail: int = 0  # 全线程共享的连续失败计数，成功提交后归零
+    device_quota_fail_count: int = 0
     thread_progress: Dict[str, ThreadProgressState] = field(default_factory=dict)
     distribution_runtime_stats: Dict[str, Dict[str, Any]] = field(default_factory=dict)
     distribution_pending_by_thread: Dict[str, List[Tuple[str, int, int]]] = field(default_factory=dict)
