@@ -7,8 +7,6 @@
 desktop.ini
 push.bat
 .venv/
-Fuck-wjx API Doc.md
-ipzanAPI_doc.md
 AGENTS.md
 CLAUDE.md
 
@@ -16,7 +14,6 @@ CLAUDE.md
 /build/
 /dist/
 /Setup/
-.env
 
 # 运行环境
 __pycache__/
