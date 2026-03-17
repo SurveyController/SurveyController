@@ -42,7 +42,7 @@ def _trigger_aliyun_captcha_stop(
         stop_signal.set()
         logging.warning("智能验证命中：已设置 stop_signal，任务将立即停止")
     try:
-        if gui_instance and hasattr(gui_instance, "pause_run"):
+        if gui_instance:
             gui_instance.pause_run("触发智能验证")
             logging.warning("智能验证命中：已调用 pause_run")
     except Exception:
@@ -56,9 +56,8 @@ def _trigger_aliyun_captcha_stop(
             # 先检查当前随机IP状态和配额情况
             from wjx.network.proxy import get_random_ip_counter_snapshot_local
             from wjx.network.proxy.auth import has_authenticated_session, is_quota_exhausted
-            
-            var = getattr(gui_instance, "random_ip_enabled_var", None) if gui_instance else None
-            is_enabled = bool(var.get() if var and hasattr(var, "get") else False)
+
+            is_enabled = bool(gui_instance.is_random_ip_enabled()) if gui_instance else False
             
             # 如果已经启用随机IP，只需提示暂停
             if is_enabled:
@@ -66,8 +65,8 @@ def _trigger_aliyun_captcha_stop(
                     "检测到阿里云智能验证，为避免继续失败提交已停止所有任务。\n\n"
                     "随机 IP 已启用，建议处理完验证后重新启动任务。\n"
                 )
-                if gui_instance and hasattr(gui_instance, "_log_popup_message"):
-                    gui_instance._log_popup_message("智能验证提示", message)
+                if gui_instance:
+                    gui_instance.show_message_dialog("智能验证提示", message, level="warning")
                 else:
                     log_popup_warning("智能验证提示", message)
                 return
@@ -78,8 +77,8 @@ def _trigger_aliyun_captcha_stop(
                     "检测到阿里云智能验证，为避免继续失败提交已停止所有任务。\n\n"
                     "你当前使用的是自定义代理接口，请处理完验证后重新启动任务。"
                 )
-                if gui_instance and hasattr(gui_instance, "_log_popup_message"):
-                    gui_instance._log_popup_message("智能验证提示", message)
+                if gui_instance:
+                    gui_instance.show_message_dialog("智能验证提示", message, level="warning")
                 else:
                     log_popup_warning("智能验证提示", message)
                 return
@@ -90,8 +89,8 @@ def _trigger_aliyun_captcha_stop(
                     "默认随机IP现已需要先领取免费试用或提交额度申请。\n"
                     "请先完成试用激活或额度申请，或切换自定义代理接口后再试。"
                 )
-                if gui_instance and hasattr(gui_instance, "_log_popup_message"):
-                    gui_instance._log_popup_message("智能验证提示", message)
+                if gui_instance:
+                    gui_instance.show_message_dialog("智能验证提示", message, level="warning")
                 else:
                     log_popup_warning("智能验证提示", message)
                 return
@@ -107,8 +106,8 @@ def _trigger_aliyun_captcha_stop(
                     "建议启用随机 IP，但当前随机IP已用额度已达到上限。\n"
                     "请先补充额度后再启用随机 IP。"
                 )
-                if gui_instance and hasattr(gui_instance, "_log_popup_message"):
-                    gui_instance._log_popup_message("智能验证提示", message)
+                if gui_instance:
+                    gui_instance.show_message_dialog("智能验证提示", message, level="warning")
                 else:
                     log_popup_warning("智能验证提示", message)
                 return
@@ -120,20 +119,16 @@ def _trigger_aliyun_captcha_stop(
                 "是否立即启用随机 IP 功能？"
             )
             
-            if gui_instance and hasattr(gui_instance, "_log_popup_confirm"):
-                confirmed = bool(gui_instance._log_popup_confirm("智能验证提示", message, icon="warning"))
+            if gui_instance:
+                confirmed = bool(gui_instance.show_confirm_dialog("智能验证提示", message))
             else:
-                confirmed = bool(log_popup_confirm("智能验证提示", message, icon="warning"))
+                confirmed = bool(log_popup_confirm("智能验证提示", message))
 
             if confirmed and gui_instance:
                 try:
-                    # 设置免责声明已确认标记，避免on_random_ip_toggle再次弹窗
-                    setattr(gui_instance, "_random_ip_disclaimer_ack", True)
-                    
                     # 启用随机IP
-                    if var is not None and hasattr(var, "set"):
-                        var.set(True)
-                    
+                    gui_instance.set_random_ip_enabled(True)
+
                     # 刷新显示
                     from wjx.network.proxy import refresh_ip_counter_display
                     refresh_ip_counter_display(gui_instance)
@@ -144,22 +139,12 @@ def _trigger_aliyun_captcha_stop(
         except Exception:
             logging.warning("弹窗提示用户启用随机IP失败", exc_info=True)
 
-    dispatcher = getattr(gui_instance, "_post_to_ui_thread_async", None) if gui_instance else None
-    if not callable(dispatcher):
-        dispatcher = getattr(gui_instance, "_post_to_ui_thread", None) if gui_instance else None
-    if callable(dispatcher):
+    if gui_instance:
         try:
-            dispatcher(_notify)
+            gui_instance.dispatch_to_ui_async(_notify)
             return
         except Exception:
             logging.info("派发阿里云停止事件到主线程失败", exc_info=True)
-    root = getattr(gui_instance, "root", None) if gui_instance else None
-    if root is not None and threading.current_thread() is threading.main_thread():
-        try:
-            root.after(0, _notify)
-            return
-        except Exception:
-            logging.info("root.after 派发阿里云停止事件失败", exc_info=True)
     _notify()
 
 

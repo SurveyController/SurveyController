@@ -344,7 +344,6 @@ def brush(
             len(getattr(psycho_plan, "items", []) or []),
             float(getattr(ctx, "psycho_target_alpha", 0.85) or 0.85),
         )
-    logging.info("本轮画像：%s", persona.to_description())
     questions_per_page = detect(driver, stop_signal=stop_signal)
     headless_mode = _is_headless_mode(ctx)
     try:

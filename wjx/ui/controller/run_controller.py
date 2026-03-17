@@ -41,6 +41,8 @@ class EngineGuiAdapter:
         quota_request_handler: Optional[Callable[[], bool]] = None,
         on_ip_counter: Optional[Callable[[int, int, bool], None]] = None,
         on_random_ip_loading: Optional[Callable[[bool, str], None]] = None,
+        message_handler: Optional[Callable[[str, str, str], None]] = None,
+        confirm_handler: Optional[Callable[[str, str], bool]] = None,
         async_dispatcher: Optional[Callable[[Callable[[], None]], None]] = None,
         cleanup_runner: Optional[CleanupRunner] = None,
     ):
@@ -50,14 +52,16 @@ class EngineGuiAdapter:
         self._async_dispatcher = async_dispatcher or dispatcher
         self._stop_signal = stop_signal
         self._quota_request_handler = quota_request_handler
-        self.update_random_ip_counter = on_ip_counter
+        self._on_ip_counter = on_ip_counter
         self._on_random_ip_loading = on_random_ip_loading
+        self._message_handler = message_handler
+        self._confirm_handler = confirm_handler
         self.task_ctx: Optional[TaskContext] = None
         self._pause_event = threading.Event()
         self._pause_reason = ""
         self._cleanup_runner = cleanup_runner
 
-    def _post_to_ui_thread(self, callback: Callable[[], None]) -> None:
+    def dispatch_to_ui(self, callback: Callable[[], None]) -> None:
         try:
             self._dispatcher(callback)
         except Exception:
@@ -67,7 +71,7 @@ class EngineGuiAdapter:
             except Exception:
                 logging.info("UI 派发失败且回调直接执行失败", exc_info=True)
 
-    def _post_to_ui_thread_async(self, callback: Callable[[], None]) -> None:
+    def dispatch_to_ui_async(self, callback: Callable[[], None]) -> None:
         try:
             self._async_dispatcher(callback)
         except Exception:
@@ -96,11 +100,23 @@ class EngineGuiAdapter:
         while self.is_paused() and signal and not signal.is_set():
             signal.wait(0.25)
 
-    def force_stop_immediately(self, reason: Optional[str] = None):
-        self._stop_signal.set()
-
     def stop_run(self):
         self._stop_signal.set()
+
+    def bind_ui_callbacks(
+        self,
+        *,
+        quota_request_handler: Optional[Callable[[], bool]] = None,
+        on_ip_counter: Optional[Callable[[int, int, bool], None]] = None,
+        on_random_ip_loading: Optional[Callable[[bool, str], None]] = None,
+        message_handler: Optional[Callable[[str, str, str], None]] = None,
+        confirm_handler: Optional[Callable[[str, str], bool]] = None,
+    ) -> None:
+        self._quota_request_handler = quota_request_handler
+        self._on_ip_counter = on_ip_counter
+        self._on_random_ip_loading = on_random_ip_loading
+        self._message_handler = message_handler
+        self._confirm_handler = confirm_handler
 
     def open_quota_request_dialog(self) -> bool:
         if callable(self._quota_request_handler):
@@ -110,6 +126,19 @@ class EngineGuiAdapter:
                 logging.warning("打开额度申请入口失败", exc_info=True)
                 return False
         return False
+
+    def update_random_ip_counter(self, used: int, total: int, custom_api: bool) -> None:
+        callback = self._on_ip_counter
+        if not callable(callback):
+            return
+
+        def _apply() -> None:
+            try:
+                callback(int(used), int(total), bool(custom_api))
+            except Exception:
+                logging.info("更新随机IP计数失败", exc_info=True)
+
+        self.dispatch_to_ui_async(_apply)
 
     def set_random_ip_loading(self, loading: bool, message: str = "") -> None:
         callback = self._on_random_ip_loading
@@ -122,7 +151,29 @@ class EngineGuiAdapter:
             except Exception:
                 logging.info("更新随机IP加载状态失败", exc_info=True)
 
-        self._post_to_ui_thread_async(_apply)
+        self.dispatch_to_ui_async(_apply)
+
+    def show_message_dialog(self, title: str, message: str, *, level: str = "info") -> None:
+        callback = self._message_handler
+        if not callable(callback):
+            return
+        return callback(str(title or ""), str(message or ""), str(level or "info"))
+
+    def show_confirm_dialog(self, title: str, message: str) -> bool:
+        callback = self._confirm_handler
+        if not callable(callback):
+            return False
+        try:
+            return bool(callback(str(title or ""), str(message or "")))
+        except Exception:
+            logging.warning("显示确认对话框失败", exc_info=True)
+            return False
+
+    def set_random_ip_enabled(self, enabled: bool) -> None:
+        self.random_ip_enabled_var.set(bool(enabled))
+
+    def is_random_ip_enabled(self) -> bool:
+        return bool(self.random_ip_enabled_var.get())
 
     def cleanup_browsers(self) -> None:
         drivers = list(self.active_drivers or [])
@@ -158,7 +209,10 @@ class RunController(
         self._task_ctx: Optional[TaskContext] = None
         self._cleanup_runner = CleanupRunner()
         self.on_ip_counter: Optional[Callable[[int, int, bool], None]] = None
+        self.on_random_ip_loading: Optional[Callable[[bool, str], None]] = None
         self.quota_request_handler: Optional[Callable[[], bool]] = None
+        self.message_dialog_handler: Optional[Callable[[str, str, str], None]] = None
+        self.confirm_dialog_handler: Optional[Callable[[str, str], bool]] = None
         self._engine_adapter_cls = EngineGuiAdapter
         self.adapter = self._create_adapter(self.stop_event, random_ip_enabled=False)
         self.running = False
@@ -213,4 +267,32 @@ class RunController(
                 callback()
             except Exception:
                 logging.info("UI 回调入队失败且直接执行失败", exc_info=True)
+
+    def configure_ui_bridge(
+        self,
+        *,
+        quota_request_handler: Optional[Callable[[], bool]] = None,
+        on_ip_counter: Optional[Callable[[int, int, bool], None]] = None,
+        on_random_ip_loading: Optional[Callable[[bool, str], None]] = None,
+        message_handler: Optional[Callable[[str, str, str], None]] = None,
+        confirm_handler: Optional[Callable[[str, str], bool]] = None,
+    ) -> None:
+        self.quota_request_handler = quota_request_handler
+        self.on_ip_counter = on_ip_counter
+        self.on_random_ip_loading = on_random_ip_loading
+        self.message_dialog_handler = message_handler
+        self.confirm_dialog_handler = confirm_handler
+        self._sync_adapter_ui_bridge()
+
+    def _sync_adapter_ui_bridge(self, adapter: Optional[EngineGuiAdapter] = None) -> None:
+        target = adapter or self.adapter
+        if target is None:
+            return
+        target.bind_ui_callbacks(
+            quota_request_handler=self.quota_request_handler,
+            on_ip_counter=self.on_ip_counter,
+            on_random_ip_loading=self.on_random_ip_loading,
+            message_handler=self.message_dialog_handler,
+            confirm_handler=self.confirm_dialog_handler,
+        )
 

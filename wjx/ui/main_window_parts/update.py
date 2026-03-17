@@ -31,7 +31,8 @@ class MainWindowUpdateMixin:
         titleBar: Any
         downloadProgress: Any
         _toast: Any
-        _log_popup_confirm: Any
+        show_confirm_dialog: Any
+        show_message_dialog: Any
         close: Any
         _settings_page: Any
 
@@ -348,7 +349,7 @@ class MainWindowUpdateMixin:
         """下载完成后在主线程显示弹窗"""
         from wjx.utils.update.updater import UpdateManager
 
-        should_launch = self._log_popup_confirm(
+        should_launch = self.show_confirm_dialog(
             "更新完成",
             f"新版本已下载到:\n{downloaded_file}\n\n是否立即安装新版本？",
         )
@@ -360,14 +361,14 @@ class MainWindowUpdateMixin:
                 self.close()
             except Exception as exc:
                 logging.error("[Action Log] Failed to launch downloaded update")
-                self._log_popup_message("启动失败", f"无法启动新版本: {exc}")
+                self.show_message_dialog("启动失败", f"无法启动新版本: {exc}", level="error")
         else:
             logging.info("[Action Log] Deferred launching downloaded update")
 
     def _on_download_failed(self, error_msg: str):
         """下载失败后在主线程显示弹窗"""
         if not getattr(self, "_download_cancelled", False):
-            self._log_popup_message("更新失败", error_msg)
+            self.show_message_dialog("更新失败", error_msg, level="error")
 
     def _on_download_source_switched(self, new_source_key: str):
         """下载源切换时更新设置页面的下拉框"""

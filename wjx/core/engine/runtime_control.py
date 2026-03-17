@@ -64,7 +64,7 @@ def _handle_submission_failure(
 
 def _wait_if_paused(gui_instance: Optional[Any], stop_signal: Optional[threading.Event]) -> None:
     try:
-        if gui_instance and hasattr(gui_instance, "wait_if_paused"):
+        if gui_instance:
             gui_instance.wait_if_paused(stop_signal)
     except Exception as exc:
         log_suppressed_exception("runtime_control._wait_if_paused", exc)
@@ -88,30 +88,6 @@ def _trigger_target_reached_stop(
 
     # 通过 EventBus 通知上层
     _event_bus.emit(EVENT_TARGET_REACHED, ctx=ctx)
-
-    # 兼容旧式 gui_instance 回调（过渡期保留）
-    def _notify():
-        try:
-            if gui_instance and hasattr(gui_instance, "force_stop_immediately"):
-                gui_instance.force_stop_immediately(reason="任务完成")
-        except Exception:
-            logging.info("达到目标份数时触发强制停止失败", exc_info=True)
-
-    dispatcher = getattr(gui_instance, "_post_to_ui_thread_async", None) if gui_instance else None
-    if callable(dispatcher):
-        try:
-            dispatcher(_notify)
-            return
-        except Exception:
-            logging.info("派发任务完成事件到主线程失败", exc_info=True)
-    dispatcher = getattr(gui_instance, "_post_to_ui_thread", None) if gui_instance else None
-    if callable(dispatcher):
-        try:
-            dispatcher(_notify)
-            return
-        except Exception:
-            logging.info("派发任务完成事件到主线程失败", exc_info=True)
-    _notify()
 
 
 def _sleep_with_stop(stop_signal: Optional[threading.Event], seconds: float) -> bool:

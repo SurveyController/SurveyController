@@ -34,8 +34,8 @@ from wjx.ui.dialogs.quota_request import QuotaRequestDialog
 from wjx.ui.dialogs.contact import ContactDialog
 
 from wjx.ui.controller import RunController
+from wjx.ui.main_window_parts.dialogs import MainWindowDialogsMixin
 from wjx.ui.main_window_parts.lazy_pages import MainWindowLazyPagesMixin
-from wjx.ui.main_window_parts.popup_compat import MainWindowPopupCompatMixin
 from wjx.ui.main_window_parts.update import MainWindowUpdateMixin
 from wjx.utils.app.config import APP_ICON_RELATIVE_PATH, app_settings, get_bool_from_qsettings
 from wjx.utils.io.load_save import RuntimeConfig, get_runtime_directory
@@ -53,8 +53,8 @@ from wjx.boot import create_boot_splash, finish_boot_splash
 
 
 class MainWindow(
+    MainWindowDialogsMixin,
     MainWindowLazyPagesMixin,
-    MainWindowPopupCompatMixin,
     MainWindowUpdateMixin,
     FluentWindow,
 ):
@@ -104,13 +104,6 @@ class MainWindow(
         self._boot_splash = create_boot_splash(self)
 
         self.controller = RunController(self)
-        self.controller.on_ip_counter = None  # will be set after dashboard creation
-        # 额度申请入口桥接，供随机IP链路触发申请弹窗。
-        self.controller.quota_request_handler = self._open_quota_request_dialog
-        try:
-            self.controller.adapter._quota_request_handler = self._open_quota_request_dialog
-        except Exception as exc:
-            log_suppressed_exception("__init__: sync adapter quota request provider", exc, level=logging.WARNING)
         # 立即初始化关键页面
         self.runtime_page = RuntimePage(self.controller, self)
         self.question_page = QuestionPage(self)
@@ -151,13 +144,13 @@ class MainWindow(
         QTimer.singleShot(0, self._setup_sidebar_state)
         self._sidebar_expanded = False  # 标记侧边栏是否已展开
         self._bind_controller_signals()
-        # 确保初始 adapter 也能回调随机 IP 计数
-        self.controller.adapter.update_random_ip_counter = self._on_random_ip_counter_update
-        self.controller.on_random_ip_loading = self.dashboard.set_random_ip_loading
-        try:
-            self.controller.adapter._on_random_ip_loading = self.dashboard.set_random_ip_loading
-        except Exception as exc:
-            log_suppressed_exception("__init__: sync adapter random_ip_loading callback", exc, level=logging.WARNING)
+        self.controller.configure_ui_bridge(
+            quota_request_handler=self._open_quota_request_dialog,
+            on_ip_counter=self._on_random_ip_counter_update,
+            on_random_ip_loading=self.dashboard.set_random_ip_loading,
+            message_handler=self._show_dialog_message,
+            confirm_handler=self.show_confirm_dialog,
+        )
         self._refresh_title_random_ip_user_id()
         self._register_popups()
         self._load_saved_config()
@@ -465,6 +458,9 @@ class MainWindow(
         dlg = ContactDialog(self, default_type=default_type, status_fetcher=get_status, status_formatter=_format_status_payload)
         dlg.form.quotaRequestSucceeded.connect(self._on_quota_request_sent)
         return dlg.exec() == QDialog.DialogCode.Accepted
+
+    def _show_dialog_message(self, title: str, message: str, level: str = "info") -> None:
+        self.show_message_dialog(title, message, level=level)
 
     def _center_on_screen(self):
         """窗口居中显示，适配多显示器与缩放。"""

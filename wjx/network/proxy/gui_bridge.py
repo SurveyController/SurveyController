@@ -43,12 +43,9 @@ _INCOMPLETE_SESSION_RETRY_LATER_DETAILS = {
 
 def _apply_counter_snapshot_to_gui(gui: Any, *, used: int, total: int, custom_api: bool = False) -> None:
     def _apply() -> None:
-        handler = getattr(gui, "update_random_ip_counter", None)
-        if not callable(handler):
-            return
         safe_used = max(0, int(used or 0))
         safe_total = max(0, int(total or 0))
-        handler(safe_used, safe_total, bool(custom_api))
+        gui.update_random_ip_counter(safe_used, safe_total, bool(custom_api))
         if not custom_api and safe_total > 0 and safe_used >= safe_total:
             _set_random_ip_enabled(gui, False)
 
@@ -58,11 +55,8 @@ def _apply_counter_snapshot_to_gui(gui: Any, *, used: int, total: int, custom_ap
 def _set_random_ip_loading(gui: Any, loading: bool, message: str = "") -> None:
     if gui is None:
         return
-    handler = getattr(gui, "set_random_ip_loading", None)
-    if not callable(handler):
-        return
     try:
-        handler(bool(loading), str(message or ""))
+        gui.set_random_ip_loading(bool(loading), str(message or ""))
     except Exception:
         logging.info("更新随机IP加载提示失败", exc_info=True)
 
@@ -113,10 +107,12 @@ def _run_with_loading_dialog(
 
 
 def _invoke_popup(gui: Any, kind: str, title: str, message: str) -> Any:
-    gui_handler = getattr(gui, f"_log_popup_{kind}", None) if gui is not None else None
-    if callable(gui_handler):
+    if gui is not None:
         try:
-            return gui_handler(title, message)
+            if kind == "confirm":
+                return gui.show_confirm_dialog(title, message)
+            gui.show_message_dialog(title, message, level=kind)
+            return None
         except Exception:
             logging.info("GUI popup handler failed; falling back to global handler", exc_info=True)
     popup_map = {"info": log_popup_info, "warning": log_popup_warning, "error": log_popup_error, "confirm": log_popup_confirm}
@@ -127,33 +123,20 @@ def _invoke_popup(gui: Any, kind: str, title: str, message: str) -> Any:
 def _set_random_ip_enabled(gui: Any, enabled: bool) -> None:
     if gui is None:
         return
-    var = getattr(gui, "random_ip_enabled_var", None)
-    if var and hasattr(var, "set"):
-        try:
-            var.set(bool(enabled))
-        except Exception:
-            logging.info("无法更新随机IP开关状态", exc_info=True)
+    try:
+        gui.set_random_ip_enabled(bool(enabled))
+    except Exception:
+        logging.info("无法更新随机IP开关状态", exc_info=True)
 
 
 def _schedule_on_gui_thread(gui: Any, callback: Callable[[], None]) -> None:
     if gui is None:
         callback()
         return
-    for attr in ("_post_to_ui_thread_async", "_post_to_ui_thread"):
-        dispatcher = getattr(gui, attr, None)
-        if callable(dispatcher):
-            try:
-                if attr == "_post_to_ui_thread_async":
-                    dispatcher(callback)
-                else:
-                    threading.Thread(target=dispatcher, args=(callback,), daemon=True).start()
-                return
-            except Exception:
-                logging.info("派发到 GUI 线程失败", exc_info=True)
     try:
-        callback()
+        gui.dispatch_to_ui_async(callback)
     except Exception:
-        logging.info("执行回调失败", exc_info=True)
+        logging.info("派发到 GUI 线程失败", exc_info=True)
 
 
 def _should_retry_incomplete_session_later(exc: BaseException) -> bool:
@@ -170,8 +153,6 @@ def _should_retry_incomplete_session_later(exc: BaseException) -> bool:
 
 
 def confirm_random_ip_usage(gui: Any) -> bool:
-    if gui is not None:
-        setattr(gui, "_random_ip_disclaimer_ack", True)
     return True
 
 
@@ -210,16 +191,10 @@ def _build_counter_snapshot() -> tuple[int, int]:
 
 
 def _open_quota_request_dialog(gui: Any, default_type: str = "额度申请") -> bool:
-    handler = getattr(gui, "_open_contact_dialog", None) if gui is not None else None
-    if callable(handler):
+    _ = default_type
+    if gui is not None:
         try:
-            return bool(handler(default_type))
-        except Exception as exc:
-            log_suppressed_exception("_open_quota_request_dialog passthrough", exc)
-    adapter_handler = getattr(gui, "open_quota_request_dialog", None) if gui is not None else None
-    if callable(adapter_handler):
-        try:
-            return bool(adapter_handler())
+            return bool(gui.open_quota_request_dialog())
         except Exception as exc:
             log_suppressed_exception("_open_quota_request_dialog adapter open_quota_request_dialog", exc)
     _invoke_popup(gui, "warning", "需要申请额度", "请在“联系开发者”中提交随机IP额度申请。")
@@ -232,8 +207,7 @@ def on_random_ip_toggle(gui: Any) -> None:
 
     if gui is None:
         return
-    var = getattr(gui, "random_ip_enabled_var", None)
-    enabled = bool(var.get() if var and hasattr(var, "get") else False)
+    enabled = bool(gui.is_random_ip_enabled())
     if not enabled:
         return
     if is_custom_proxy_api_active():

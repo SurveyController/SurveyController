@@ -383,13 +383,13 @@ class DashboardPage(
         self.qr_btn.clicked.connect(self._on_qr_clicked)
         self._bind_progress_events()
         self.thread_view_seg.currentItemChanged.connect(self._on_thread_view_changed)
-        self.target_spin.valueChanged.connect(lambda v: self.runtime_page.target_spin.setValue(int(v)))
-        self.thread_spin.valueChanged.connect(lambda v: self.runtime_page.thread_spin.setValue(int(v)))
+        self.target_spin.valueChanged.connect(lambda v: self.runtime_page.target_card.spinBox.setValue(int(v)))
+        self.thread_spin.valueChanged.connect(lambda v: self.runtime_page.thread_card.spinBox.setValue(int(v)))
         self.random_ip_cb.stateChanged.connect(self._on_random_ip_toggled)
         self.card_btn.clicked.connect(self._on_request_quota_clicked)
         self.more_settings_btn.clicked.connect(self._go_to_runtime_page)
         self.runtime_page.answer_card.valueChanged.connect(lambda _v: self._refresh_ip_cost_infobar())
-        self.runtime_page.timed_switch.checkedChanged.connect(lambda _v: self._refresh_ip_cost_infobar())
+        self.runtime_page.timed_card.switchButton.checkedChanged.connect(lambda _v: self._refresh_ip_cost_infobar())
         # 监听剪贴板变化，自动处理粘贴的图片
         from PySide6.QtWidgets import QApplication
         clipboard = QApplication.clipboard()

@@ -181,7 +181,7 @@ class DashboardEntriesMixin:
             self._toast("请先解析问卷或手动添加题目", "warning")
             return False
         title = survey_title if survey_title is not None else self._survey_title
-        reliability_mode_enabled = getattr(self.runtime_page.reliability_mode_switch, "isChecked", lambda: True)()
+        reliability_mode_enabled = self.runtime_page.reliability_card.switchButton.isChecked()
         try:
             ai_master_enabled = self.runtime_page.ai_section.ai_enabled_card.isChecked()
         except Exception:

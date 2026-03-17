@@ -65,13 +65,16 @@ class RunControllerRuntimeMixin:
         adapter = adapter_cls(
             self._dispatch_to_ui,
             stop_signal,
-            quota_request_handler=getattr(self, "quota_request_handler", None),
-            on_ip_counter=getattr(self, "on_ip_counter", None),
-            on_random_ip_loading=getattr(self, "on_random_ip_loading", None),
+            quota_request_handler=self.quota_request_handler,
+            on_ip_counter=self.on_ip_counter,
+            on_random_ip_loading=self.on_random_ip_loading,
+            message_handler=self.message_dialog_handler,
+            confirm_handler=self.confirm_dialog_handler,
             async_dispatcher=self._dispatch_to_ui_async,
             cleanup_runner=self._cleanup_runner,
         )
         adapter.random_ip_enabled_var.set(bool(random_ip_enabled))
+        self._sync_adapter_ui_bridge(adapter)
         return adapter
 
     def _dispatch_to_ui(self, callback: Callable[[], None]):
@@ -519,7 +522,7 @@ class RunControllerRuntimeMixin:
             finally:
                 setattr(runtime_page, suppress_flag_name, old_suppress)
             try:
-                runtime_page.thread_spin.setValue(int(effective_threads))
+                runtime_page.thread_card.spinBox.setValue(int(effective_threads))
             except Exception:
                 logging.info("降级到有头模式后同步并发数失败", exc_info=True)
 

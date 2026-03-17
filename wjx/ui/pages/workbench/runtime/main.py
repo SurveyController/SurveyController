@@ -150,26 +150,16 @@ class RuntimePage(ScrollArea):
 
         layout.addStretch(1)
 
-        # 兼容旧代码的属性别名
-        self.target_spin = self.target_card.spinBox
-        self.thread_spin = self.thread_card.spinBox
-        self.reliability_mode_switch = self.reliability_card.switchButton
-        self.timed_switch = self.timed_card.switchButton
-        self.random_ip_switch = self.random_ip_card.switchButton
-        self.random_ua_switch = self.random_ua_card.switchButton
-        self.proxy_source_combo = self.random_ip_card.proxyCombo
-        self.custom_api_edit = self.random_ip_card.customApiEdit
-
     def _bind_events(self):
-        self.target_spin.valueChanged.connect(self._sync_target_to_dashboard)
-        self.thread_spin.valueChanged.connect(self._sync_threads_to_dashboard)
-        self.random_ip_switch.checkedChanged.connect(self._on_random_ip_toggled)
-        self.random_ua_switch.checkedChanged.connect(self._on_random_ua_toggled)
+        self.target_card.spinBox.valueChanged.connect(self._sync_target_to_dashboard)
+        self.thread_card.spinBox.valueChanged.connect(self._sync_threads_to_dashboard)
+        self.random_ip_card.switchButton.checkedChanged.connect(self._on_random_ip_toggled)
+        self.random_ua_card.switchButton.checkedChanged.connect(self._on_random_ua_toggled)
         self.headless_card.switchButton.checkedChanged.connect(self._on_headless_toggled)
-        self.timed_switch.checkedChanged.connect(self._sync_timed_mode)
+        self.timed_card.switchButton.checkedChanged.connect(self._sync_timed_mode)
         self.timed_card.helpButton.clicked.connect(self._show_timed_mode_help)
-        self.proxy_source_combo.currentIndexChanged.connect(self._on_proxy_source_changed)
-        self.reliability_mode_switch.checkedChanged.connect(self._on_reliability_mode_toggled)
+        self.random_ip_card.proxyCombo.currentIndexChanged.connect(self._on_proxy_source_changed)
+        self.reliability_card.switchButton.checkedChanged.connect(self._on_reliability_mode_toggled)
 
     def focus_answer_duration_setting(self):
         """跳转并聚焦到“作答时长”设置项。"""
@@ -204,12 +194,12 @@ class RuntimePage(ScrollArea):
 
     def _apply_thread_limit_by_headless(self, headless_enabled: bool) -> bool:
         max_threads = self._resolve_thread_max(bool(headless_enabled))
-        previous_value = int(self.thread_spin.value())
+        previous_value = int(self.thread_card.spinBox.value())
         clamped = previous_value > max_threads
 
-        self.thread_spin.setRange(self.MIN_THREADS, max_threads)
+        self.thread_card.spinBox.setRange(self.MIN_THREADS, max_threads)
         if clamped:
-            self.thread_spin.setValue(max_threads)
+            self.thread_card.spinBox.setValue(max_threads)
 
         main_win = self.window()
         dashboard = getattr(main_win, "dashboard", None)
@@ -279,11 +269,11 @@ class RuntimePage(ScrollArea):
         main_win = self.window()
         dashboard = getattr(main_win, "dashboard", None)
         if dashboard is not None:
-            self.random_ip_switch.blockSignals(True)
+            self.random_ip_card.switchButton.blockSignals(True)
             try:
                 dashboard._on_random_ip_toggled(2 if enabled else 0)
             finally:
-                self.random_ip_switch.blockSignals(False)
+                self.random_ip_card.switchButton.blockSignals(False)
 
     def _on_random_ua_toggled(self, enabled: bool):
         main_win = self.window()
@@ -296,14 +286,14 @@ class RuntimePage(ScrollArea):
 
     def _on_proxy_source_changed(self):
         """代理源选择变化时更新设置"""
-        idx = self.proxy_source_combo.currentIndex()
-        source = str(self.proxy_source_combo.itemData(idx)) if idx >= 0 else "default"
+        idx = self.random_ip_card.proxyCombo.currentIndex()
+        source = str(self.random_ip_card.proxyCombo.itemData(idx)) if idx >= 0 else "default"
         if not source or source == "None":
             source = "default"
         try:
             from wjx.network.proxy import set_proxy_source, set_proxy_api_override
             if source == "custom":
-                api_url = self.custom_api_edit.text().strip()
+                api_url = self.random_ip_card.customApiEdit.text().strip()
                 set_proxy_api_override(api_url if api_url else None)
             set_proxy_source(source)
         except Exception as exc:
@@ -330,20 +320,20 @@ class RuntimePage(ScrollArea):
             log_suppressed_exception("_on_reliability_mode_toggled: reliability_card._sync_enabled", exc, level=logging.INFO)
 
     def update_config(self, cfg: RuntimeConfig):
-        cfg.target = max(1, self.target_spin.value())
-        cfg.threads = max(1, self.thread_spin.value())
+        cfg.target = max(1, self.target_card.spinBox.value())
+        cfg.threads = max(1, self.thread_card.spinBox.value())
         cfg.browser_preference = []  # 固定使用默认顺序：Edge → Chrome → Chromium
         interval_min, interval_max = self.interval_card.getRange()
         cfg.submit_interval = (interval_min, interval_max)
         answer_min, answer_max = self.answer_card.getRange()
         cfg.answer_duration = (answer_min, answer_max)
-        cfg.timed_mode_enabled = self.timed_switch.isChecked()
-        cfg.random_ip_enabled = self.random_ip_switch.isChecked()
-        cfg.random_ua_enabled = self.random_ua_switch.isChecked()
+        cfg.timed_mode_enabled = self.timed_card.switchButton.isChecked()
+        cfg.random_ip_enabled = self.random_ip_card.switchButton.isChecked()
+        cfg.random_ua_enabled = self.random_ua_card.switchButton.isChecked()
         cfg.random_ua_ratios = self.random_ua_card.getRatios() if cfg.random_ua_enabled else {"wechat": 33, "mobile": 33, "pc": 34}
         cfg.fail_stop_enabled = True
         cfg.pause_on_aliyun_captcha = True
-        cfg.reliability_mode_enabled = self.reliability_mode_switch.isChecked()
+        cfg.reliability_mode_enabled = self.reliability_card.switchButton.isChecked()
         cfg.reliability_priority_mode = self.reliability_card.get_priority_mode()
         try:
             cfg.psycho_target_alpha = self.reliability_card.get_alpha()
@@ -351,12 +341,12 @@ class RuntimePage(ScrollArea):
             log_suppressed_exception("update_config: reliability_card.get_alpha()", exc, level=logging.INFO)
         cfg.headless_mode = self.headless_card.switchButton.isChecked()
         try:
-            idx = self.proxy_source_combo.currentIndex()
-            source = str(self.proxy_source_combo.itemData(idx)) if idx >= 0 else "default"
+            idx = self.random_ip_card.proxyCombo.currentIndex()
+            source = str(self.random_ip_card.proxyCombo.itemData(idx)) if idx >= 0 else "default"
             if not source or source == "None":
                 source = "default"
             cfg.proxy_source = source
-            cfg.custom_proxy_api = self.custom_api_edit.text().strip() if source == "custom" else ""
+            cfg.custom_proxy_api = self.random_ip_card.customApiEdit.text().strip() if source == "custom" else ""
             cfg.proxy_area_code = self.random_ip_card.get_area_code()
         except Exception:
             cfg.proxy_source = "default"
@@ -365,8 +355,8 @@ class RuntimePage(ScrollArea):
         self.ai_section.update_config(cfg)
 
     def apply_config(self, cfg: RuntimeConfig):
-        self.target_spin.setValue(max(1, cfg.target))
-        self.thread_spin.setValue(max(1, cfg.threads))
+        self.target_card.spinBox.setValue(max(1, cfg.target))
+        self.thread_card.spinBox.setValue(max(1, cfg.threads))
 
         interval_min = max(0, cfg.submit_interval[0])
         interval_max = max(interval_min, cfg.submit_interval[1])
@@ -376,14 +366,14 @@ class RuntimePage(ScrollArea):
         answer_max = max(answer_min, cfg.answer_duration[1])
         self.answer_card.setRange(answer_min, answer_max)
 
-        self.timed_switch.setChecked(cfg.timed_mode_enabled)
+        self.timed_card.switchButton.setChecked(cfg.timed_mode_enabled)
         self._sync_timed_mode(cfg.timed_mode_enabled)
 
-        self.random_ip_switch.blockSignals(True)
-        self.random_ip_switch.setChecked(cfg.random_ip_enabled)
-        self.random_ip_switch.blockSignals(False)
+        self.random_ip_card.switchButton.blockSignals(True)
+        self.random_ip_card.switchButton.setChecked(cfg.random_ip_enabled)
+        self.random_ip_card.switchButton.blockSignals(False)
         self.random_ip_card._sync_ip_enabled(cfg.random_ip_enabled)
-        self.random_ua_switch.setChecked(cfg.random_ua_enabled)
+        self.random_ua_card.switchButton.setChecked(cfg.random_ua_enabled)
 
         # 应用UA占比配置
         try:
@@ -396,14 +386,14 @@ class RuntimePage(ScrollArea):
             log_suppressed_exception("apply_config: self.random_ua_card.setRatios(ratios)", exc, level=logging.WARNING)
             self.random_ua_card.setRatios({"wechat": 33, "mobile": 33, "pc": 34})
 
-        self._sync_random_ua(self.random_ua_switch.isChecked())
-        self.reliability_mode_switch.setChecked(getattr(cfg, "reliability_mode_enabled", True))
+        self._sync_random_ua(self.random_ua_card.switchButton.isChecked())
+        self.reliability_card.switchButton.setChecked(getattr(cfg, "reliability_mode_enabled", True))
         try:
             self.reliability_card.set_alpha(getattr(cfg, "psycho_target_alpha", 0.85))
             self.reliability_card.set_priority_mode(
                 getattr(cfg, "reliability_priority_mode", ReliabilitySettingCard.PRIORITY_RELIABILITY_FIRST)
             )
-            self.reliability_card._sync_enabled(self.reliability_mode_switch.isChecked())
+            self.reliability_card._sync_enabled(self.reliability_card.switchButton.isChecked())
         except Exception as exc:
             log_suppressed_exception("apply_config: reliability_card.set_alpha", exc, level=logging.INFO)
 
@@ -417,10 +407,10 @@ class RuntimePage(ScrollArea):
         try:
             proxy_source = getattr(cfg, "proxy_source", "default")
             custom_api = getattr(cfg, "custom_proxy_api", "")
-            idx = self.proxy_source_combo.findData(proxy_source)
+            idx = self.random_ip_card.proxyCombo.findData(proxy_source)
             if idx >= 0:
-                self.proxy_source_combo.setCurrentIndex(idx)
-            self.custom_api_edit.setText(custom_api)
+                self.random_ip_card.proxyCombo.setCurrentIndex(idx)
+            self.random_ip_card.customApiEdit.setText(custom_api)
             self.random_ip_card.customApiRow.setVisible(proxy_source == "custom")
             self.random_ip_card.proxyTrialLink.setVisible(proxy_source == "custom")
             from wjx.network.proxy import set_proxy_source, set_proxy_api_override

@@ -61,9 +61,9 @@ class DashboardRandomIPMixin:
     def _set_runtime_ip_switch(self, enabled: bool) -> None:
         """设置运行时页面的随机IP开关，并同步展开区域的启用状态（绕过信号阻塞）。"""
         try:
-            self.runtime_page.random_ip_switch.blockSignals(True)
-            self.runtime_page.random_ip_switch.setChecked(enabled)
-            self.runtime_page.random_ip_switch.blockSignals(False)
+            self.runtime_page.random_ip_card.switchButton.blockSignals(True)
+            self.runtime_page.random_ip_card.switchButton.setChecked(enabled)
+            self.runtime_page.random_ip_card.switchButton.blockSignals(False)
             self.runtime_page.random_ip_card._sync_ip_enabled(enabled)
         except Exception as exc:
             log_suppressed_exception("_set_runtime_ip_switch", exc, level=logging.WARNING)
@@ -169,7 +169,7 @@ class DashboardRandomIPMixin:
             return
 
         try:
-            timed_enabled = bool(self.runtime_page.timed_switch.isChecked())
+            timed_enabled = bool(self.runtime_page.timed_card.switchButton.isChecked())
         except Exception:
             timed_enabled = False
         if timed_enabled:

@@ -49,7 +49,7 @@ wjx/
 │   └── services/          # 核心服务层（area_service/proxy_service/survey_service）
 ├── ui/                    # 界面层
 │   ├── main_window.py     # 主窗口编排
-│   ├── main_window_parts/ # 主窗口拆分模块（lazy_pages/popup_compat/update）
+│   ├── main_window_parts/ # 主窗口拆分模块（dialogs/lazy_pages/update）
 │   ├── controller/        # 运行控制器入口（run_controller.py）与拆分模块（run_controller_parts/）
 │   ├── dialogs/           # 对话框（quota_request/contact/terms_of_service）
 │   ├── helpers/           # 界面辅助逻辑（ai_fill/image_attachments）

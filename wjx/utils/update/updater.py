@@ -429,7 +429,7 @@ def show_update_notification(gui) -> None:
         f"是否要立即下载更新？"
     )
 
-    if gui._log_popup_confirm("检查到更新", msg):
+    if gui.show_confirm_dialog("检查到更新", msg):
         logging.info("[Action Log] User accepted update notification")
         perform_update(gui)
     else:
@@ -448,16 +448,16 @@ def check_for_updates(gui=None) -> Optional[Dict[str, Any]]:
             # 使用与启动时检查更新相同的弹窗样式
             show_update_notification(gui)
         elif status == "latest":
-            gui._log_popup_message("检查更新", f"当前已是最新版本 v{__VERSION__}")
+            gui.show_message_dialog("检查更新", f"当前已是最新版本 v{__VERSION__}")
         elif status == "preview":
             latest = update_info.get("latest_version", "?")
-            gui._log_popup_message("检查更新", f"当前版本 v{__VERSION__} 高于远程最新版 v{latest}，属于预览/开发版本")
+            gui.show_message_dialog("检查更新", f"当前版本 v{__VERSION__} 高于远程最新版 v{latest}，属于预览/开发版本")
         else:
-            gui._log_popup_message("检查更新失败", "无法连接到更新服务器，请检查网络连接后重试")
+            gui.show_message_dialog("检查更新失败", "无法连接到更新服务器，请检查网络连接后重试", level="error")
         return update_info
     except Exception as exc:
         if gui:
-            gui._log_popup_message("检查更新失败", f"错误: {str(exc)}")
+            gui.show_message_dialog("检查更新失败", f"错误: {str(exc)}", level="error")
         else:
             logging.error(f"检查更新失败: {exc}")
         return None
@@ -532,5 +532,4 @@ def perform_update(gui, *, on_progress: Optional[Callable[[int, int, float], Non
                     gui.downloadFailed.emit(f"更新过程出错: {str(exc)}")
 
     Thread(target=do_update, daemon=True).start()
-
 

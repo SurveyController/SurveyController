@@ -1,4 +1,4 @@
-"""MainWindow 弹窗与线程调度兼容层。"""
+"""MainWindow 对话框与线程安全弹窗方法。"""
 from __future__ import annotations
 
 import logging
@@ -9,15 +9,15 @@ from PySide6.QtCore import QCoreApplication, QThread, QTimer
 from qfluentwidgets import InfoBar, InfoBarPosition, MessageBox
 
 
-class MainWindowPopupCompatMixin:
-    """兼容历史弹窗接口，支持跨线程调用。"""
+class MainWindowDialogsMixin:
+    """为主窗口提供线程安全的消息提示与确认对话框。"""
 
     def _dispatch_to_ui(self, func):
         if self.thread() == QThread.currentThread():  # type: ignore[attr-defined]
             return func()
-        # 若未启动 Qt 事件循环，直接执行以避免死锁
         if QCoreApplication.instance() is None:
             return func()
+
         done = threading.Event()
         result: Dict[str, Any] = {}
 
@@ -45,8 +45,8 @@ class MainWindowPopupCompatMixin:
         else:
             InfoBar.info("", text, parent=self, position=InfoBarPosition.TOP, duration=duration)
 
-    def _log_popup_confirm(self, title: str, message: str, *_args, **_kwargs) -> bool:
-        """显示确认对话框，返回用户是否确认（线程安全）。"""
+    def show_confirm_dialog(self, title: str, message: str) -> bool:
+        """显示确认对话框，返回用户是否确认。"""
 
         def _show():
             box = MessageBox(title, message, self)
@@ -56,8 +56,9 @@ class MainWindowPopupCompatMixin:
 
         return bool(self._dispatch_to_ui(_show))
 
-    def _log_popup_message(self, title: str, message: str, *_args, **_kwargs):
-        """显示消息对话框（线程安全）。"""
+    def show_message_dialog(self, title: str, message: str, *, level: str = "info") -> None:
+        """显示消息对话框。level 仅用于日志/调用语义，不影响窗口样式。"""
+        _ = level
 
         def _show():
             box = MessageBox(title, message, self)
@@ -66,4 +67,3 @@ class MainWindowPopupCompatMixin:
             box.exec()
 
         self._dispatch_to_ui(_show)
-
