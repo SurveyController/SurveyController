@@ -35,11 +35,31 @@ from wjx.core.questions.consistency import reset_consistency_context
 from wjx.core.questions.tendency import reset_tendency
 from wjx.core.psychometrics import build_psychometric_plan
 from wjx.core.survey.parser import _should_treat_question_as_text_like
+from wjx.core.ai.runtime import extract_question_title_from_dom
 from wjx.network.browser import BrowserDriver, By, NoSuchElementException
 from wjx.utils.app.config import HEADLESS_PAGE_BUFFER_DELAY, HEADLESS_PAGE_CLICK_DELAY
 
 
 _PSYCHO_BIAS_CHOICES = {"left", "center", "right"}
+
+
+def _question_title_for_log(driver: BrowserDriver, question_num: int, question_div) -> str:
+    try:
+        title = extract_question_title_from_dom(driver, question_num)
+    except Exception:
+        title = ""
+    if title:
+        return title
+    if question_div is None:
+        return ""
+    try:
+        raw_text = str(question_div.text or "").strip()
+    except Exception:
+        raw_text = ""
+    if not raw_text:
+        return ""
+    compact = " ".join(raw_text.split())
+    return compact[:60] + "..." if len(compact) > 60 else compact
 
 
 def _resolve_option_count(probability_config: Any, metadata_fallback: int, default_value: int = 5) -> int:
@@ -426,11 +446,19 @@ def brush(
                 logging.info("跳过第%d题（type 属性为空）", current_question_number)
                 continue
             if _driver_question_looks_like_description(question_div, question_type):
-                logging.info("跳过第%d题（说明页/阅读材料，type=%s）", current_question_number, question_type)
+                title = _question_title_for_log(driver, current_question_number, question_div)
+                if title:
+                    logging.info("跳过第%d题（说明页/阅读材料，type=%s，标题=%s）", current_question_number, question_type, title)
+                else:
+                    logging.info("跳过第%d题（说明页/阅读材料，type=%s）", current_question_number, question_type)
                 continue
 
             if not question_visible:
-                logging.info("跳过第%d题（未显示，type=%s）", current_question_number, question_type)
+                title = _question_title_for_log(driver, current_question_number, question_div)
+                if title:
+                    logging.info("跳过第%d题（未显示，type=%s，标题=%s）", current_question_number, question_type, title)
+                else:
+                    logging.info("跳过第%d题（未显示，type=%s）", current_question_number, question_type)
                 continue
 
             # 通过配置映射表查找当前题号在对应题型概率列表中的正确索引

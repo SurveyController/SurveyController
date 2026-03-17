@@ -19,6 +19,22 @@ from wjx.core.persona.context import record_answer
 MULTI_TEXT_DELIMITER = "||"
 
 
+def _preview_text_answer(value: Optional[Any], limit: int = 80) -> str:
+    text = "" if value is None else str(value).strip()
+    if not text:
+        return DEFAULT_FILL_TEXT
+    compact = " ".join(text.split())
+    if len(compact) <= limit:
+        return compact
+    return f"{compact[:limit]}..."
+
+
+def _log_text_answer(current: int, title: str, source: str, selected_answer: Optional[Any]) -> None:
+    title_text = str(title or "").strip() or f"第{current}题"
+    preview = _preview_text_answer(selected_answer)
+    logging.info("第%d题填空已作答：来源=%s 标题=%s 答案=%s", current, source, title_text, preview)
+
+
 def fill_text_question_input(driver: BrowserDriver, element, value: Optional[Any]) -> None:
     """填充单/多行文本题"""
 
@@ -347,6 +363,7 @@ def text(
         except AIRuntimeError as exc:
             raise AIRuntimeError(f"第{current}题 AI 生成失败：{exc}") from exc
         _handle_single_text(driver, current, selected_answer)
+        _log_text_answer(current, title or fallback_title, "AI", selected_answer)
         record_answer(current, "text", text_answer=selected_answer)
         return
 
@@ -358,6 +375,7 @@ def text(
         except AIRuntimeError as exc:
             raise AIRuntimeError(f"第{current}题 AI 生成失败：{exc}") from exc
         _handle_multi_text(driver, current, selected_answer)
+        _log_text_answer(current, title or fallback_title, "AI", selected_answer)
         record_answer(current, "text", text_answer=selected_answer)
         return
 
@@ -373,10 +391,12 @@ def text(
             blank_ai_flags = multi_text_blank_ai_flags[index]
         title = resolve_question_title_for_ai(driver, current, fallback_title) if blank_ai_flags and any(blank_ai_flags) else ""
         _handle_multi_text(driver, current, selected_answer, blank_modes, blank_ai_flags, title)
+        _log_text_answer(current, title or fallback_title, "配置", selected_answer)
         record_answer(current, "text", text_answer=selected_answer)
         return
 
     _handle_single_text(driver, current, selected_answer)
+    _log_text_answer(current, fallback_title, "配置", selected_answer)
     # 记录统计数据
     record_answer(current, "text", text_answer=selected_answer)
 
