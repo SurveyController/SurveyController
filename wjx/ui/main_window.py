@@ -30,7 +30,6 @@ from wjx.ui.pages.workbench.runtime import RuntimePage
 from wjx.ui.pages.workbench.question import QuestionPage
 from wjx.ui.pages.workbench.answer_rules import AnswerRulesPage
 
-from wjx.ui.dialogs.quota_request import QuotaRequestDialog
 from wjx.ui.dialogs.contact import ContactDialog
 
 from wjx.ui.controller import RunController
@@ -145,7 +144,7 @@ class MainWindow(
         self._sidebar_expanded = False  # 标记侧边栏是否已展开
         self._bind_controller_signals()
         self.controller.configure_ui_bridge(
-            quota_request_handler=self._open_quota_request_dialog,
+            quota_request_form_opener=self._open_quota_request_form,
             on_ip_counter=self._on_random_ip_counter_update,
             on_random_ip_loading=self.dashboard.set_random_ip_loading,
             message_handler=self._show_dialog_message,
@@ -602,14 +601,8 @@ class MainWindow(
             return
         self.dashboard._open_wizard_after_parse = False
 
-    def _open_quota_request_dialog(self) -> bool:
-        dialog = QuotaRequestDialog(
-            self,
-            status_fetcher=get_status,
-            status_formatter=_format_status_payload,
-            contact_handler=lambda: self._open_contact_dialog(default_type="额度申请"),
-        )
-        return dialog.exec() == QDialog.DialogCode.Accepted
+    def _open_quota_request_form(self) -> bool:
+        return self._open_contact_dialog(default_type="额度申请")
 
 
 def create_window() -> MainWindow:

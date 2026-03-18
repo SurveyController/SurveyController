@@ -6,7 +6,6 @@ from importlib import import_module
 from typing import Any
 
 _EXPORTS = {
-    "QuotaRequestDialog": "wjx.ui.dialogs.quota_request",
     "ContactDialog": "wjx.ui.dialogs.contact",
     "TermsOfServiceDialog": "wjx.ui.dialogs.terms_of_service",
 }

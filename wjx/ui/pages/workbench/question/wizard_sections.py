@@ -482,6 +482,17 @@ class WizardSectionsMixin:
         self.multi_text_blank_radio_groups[idx] = blank_radio_groups
         self.multi_text_blank_ai_checkboxes[idx] = blank_ai_checkboxes
 
+        # 控制「添加答案组」按钮：所有填空都启用AI时禁用该按钮（答案列表无用）
+        def update_add_btn_state():
+            all_ai = all(blank_ai_checkboxes[i].isChecked() for i in range(blank_count))
+            add_btn.setEnabled(not all_ai)
+
+        for _ai_cb in blank_ai_checkboxes:
+            _ai_cb.toggled.connect(lambda _checked, f=update_add_btn_state: f())
+
+        # 初始化按钮状态
+        update_add_btn_state()
+
     def _build_matrix_section(self, idx: int, entry: QuestionEntry, card: CardWidget,
                               card_layout: QVBoxLayout, option_texts: List[str], row_texts: List[str]) -> None:
         self._has_content = True

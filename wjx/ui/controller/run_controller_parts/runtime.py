@@ -65,7 +65,7 @@ class RunControllerRuntimeMixin:
         adapter = adapter_cls(
             self._dispatch_to_ui,
             stop_signal,
-            quota_request_handler=self.quota_request_handler,
+            quota_request_form_opener=self.quota_request_form_opener,
             on_ip_counter=self.on_ip_counter,
             on_random_ip_loading=self.on_random_ip_loading,
             message_handler=self.message_dialog_handler,

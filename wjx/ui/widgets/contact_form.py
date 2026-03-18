@@ -1,9 +1,11 @@
 """联系开发者表单组件，可嵌入页面或对话框。"""
+import logging
 import re
 import threading
 from datetime import datetime
-from typing import Optional, Callable, cast
-import logging
+from decimal import Decimal, InvalidOperation
+from typing import Optional, Callable, cast, Any
+
 from wjx.utils.logging.log_utils import log_suppressed_exception
 
 
@@ -15,11 +17,13 @@ from PySide6.QtWidgets import (
     QHBoxLayout,
     QFileDialog,
     QLabel,
+    QSizePolicy,
 )
 from qfluentwidgets import (
     BodyLabel,
     LineEdit,
     ComboBox,
+    EditableComboBox,
     CheckBox,
     PushButton,
     PrimaryPushButton,
@@ -42,6 +46,9 @@ from wjx.utils.app.config import CONTACT_API_URL, EMAIL_VERIFY_ENDPOINT
 from wjx.utils.app.version import __VERSION__
 
 REQUEST_MESSAGE_TYPE = "额度申请"
+DONATION_AMOUNT_OPTIONS = ["8.88", "10.24", "11.45", "20.26", "50", "78.91"]
+DONATION_AMOUNT_BLOCK_MESSAGE = "该金额下开发者已亏本💔"
+MAX_REQUEST_QUOTA = 19999
 
 
 class PasteOnlyLineEdit(LineEdit):
@@ -136,6 +143,7 @@ class ContactForm(StatusPollingMixin, QWidget):
         self._manage_polling = manage_polling
         self._random_ip_user_id: int = 0
         self._random_ip_session_incomplete: bool = False
+        self._last_valid_quantity_text: str = ""
 
         wrapper = QVBoxLayout(self)
         wrapper.setContentsMargins(0, 0, 0, 0)
@@ -195,44 +203,70 @@ class ContactForm(StatusPollingMixin, QWidget):
 
         # 4. 额度申请参数
         self.amount_row = QHBoxLayout()
-        self.amount_label = BodyLabel("捐(施)助(舍)金额：￥", self)
-        self.amount_edit = LineEdit(self)
-        self.amount_edit.setPlaceholderText("🙏😭🙏")
+        self.amount_label = BodyLabel("赞助金额：￥", self)
+        self.amount_edit = EditableComboBox(self)
+        self.amount_edit.setPlaceholderText("😔")
         self.amount_edit.setMaximumWidth(100)
         validator = QDoubleValidator(0.01, 9999.99, 2, self)
         validator.setNotation(QDoubleValidator.Notation.StandardNotation)
+        for amount in DONATION_AMOUNT_OPTIONS:
+            self.amount_edit.addItem(amount)
+        self.amount_edit.setText("11.45")
         self.amount_edit.setValidator(validator)
-        self.amount_edit.textChanged.connect(self._on_amount_changed)
+        self.amount_edit.currentTextChanged.connect(self._on_amount_changed)
         self.amount_edit.editingFinished.connect(self._on_amount_editing_finished)
         self.amount_edit.installEventFilter(self)
 
         self.quantity_label = BodyLabel("需求额度：", self)
         self.quantity_edit = LineEdit(self)
-        self.quantity_edit.setPlaceholderText("1~9999")
-        self.quantity_edit.setMaximumWidth(110)
-        self.quantity_edit.setValidator(QIntValidator(1, 9999, self))
+        self.quantity_edit.setPlaceholderText("按需填写")
+        self.quantity_edit.setMaximumWidth(90)
+        self.quantity_edit.setMaxLength(len(str(MAX_REQUEST_QUOTA)))
+        self.quantity_edit.setValidator(QIntValidator(1, 19999, self))
         self.quantity_edit.textChanged.connect(self._on_quantity_changed)
 
-        self.urgency_label = BodyLabel("紧急程度：", self)
+        self.urgency_label = BodyLabel("问卷紧急程度：", self)
         self.urgency_combo = ComboBox(self)
-        self.urgency_combo.setMaximumWidth(100)
-        for urgency in ["低", "中", "高", "紧急"]:
+        self.urgency_combo.setMaximumWidth(140)
+        for urgency in ["低（一个月后）", "中（本月内）", "高（本周内）", "紧急（两天内）"]:
             self.urgency_combo.addItem(urgency, urgency)
-        urgency_default_index = self.urgency_combo.findText("中")
+        urgency_default_index = self.urgency_combo.findText("中（本月内）")
         if urgency_default_index >= 0:
             self.urgency_combo.setCurrentIndex(urgency_default_index)
         self.urgency_combo.currentIndexChanged.connect(lambda _: self._on_urgency_changed())
 
-        self.amount_row.addWidget(self.amount_label)
-        self.amount_row.addWidget(self.amount_edit)
-        self.amount_row.addSpacing(16)
         self.amount_row.addWidget(self.quantity_label)
         self.amount_row.addWidget(self.quantity_edit)
+        self.amount_row.addSpacing(16)
+        self.amount_row.addWidget(self.amount_label)
+        self.amount_row.addWidget(self.amount_edit)
         self.amount_row.addSpacing(16)
         self.amount_row.addWidget(self.urgency_label)
         self.amount_row.addWidget(self.urgency_combo)
         self.amount_row.addStretch(1)
         form_layout.addLayout(self.amount_row)
+
+        self.amount_rule_hint = QWidget(self)
+        self.amount_rule_hint.setObjectName("amountRuleHint")
+        self.amount_rule_hint.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
+        self.amount_rule_hint.setStyleSheet(
+            "#amountRuleHint {"
+            "background-color: #FFF4CE;"
+            "border: 1px solid #F2D58A;"
+            "border-radius: 8px;"
+            "}"
+        )
+        amount_rule_hint_layout = QHBoxLayout(self.amount_rule_hint)
+        amount_rule_hint_layout.setContentsMargins(12, 8, 12, 8)
+        amount_rule_hint_layout.setSpacing(8)
+        self.amount_rule_hint_icon = IconWidget(FluentIcon.INFO, self.amount_rule_hint)
+        self.amount_rule_hint_icon.setIcon(FluentIcon.INFO)
+        self.amount_rule_hint_icon.setStyleSheet("color: #B57A00;")
+        self.amount_rule_hint_text = BodyLabel(DONATION_AMOUNT_BLOCK_MESSAGE, self.amount_rule_hint)
+        self.amount_rule_hint_text.setStyleSheet("color: #7A5200;")
+        amount_rule_hint_layout.addWidget(self.amount_rule_hint_icon)
+        amount_rule_hint_layout.addWidget(self.amount_rule_hint_text, 1)
+        form_layout.addWidget(self.amount_rule_hint)
 
         self.amount_label.hide()
         self.amount_edit.hide()
@@ -240,6 +274,7 @@ class ContactForm(StatusPollingMixin, QWidget):
         self.quantity_edit.hide()
         self.urgency_label.hide()
         self.urgency_combo.hide()
+        self.amount_rule_hint.hide()
 
         # 第二部分：消息内容
         msg_layout = QVBoxLayout()
@@ -299,8 +334,12 @@ class ContactForm(StatusPollingMixin, QWidget):
 
         # 捐助复选框行
         donated_row = QHBoxLayout()
-        self.donated_cb = CheckBox("我已完成捐助", self)
+        donated_row.setSpacing(8)
+        self.donated_cb = CheckBox("我已完成捐助，且确认随机ip可用", self)
+        self.open_donate_btn = PushButton(FluentIcon.HEART, "去捐助", self)
+        self.open_donate_btn.setToolTip("打开捐助页面")
         donated_row.addStretch(1)
+        donated_row.addWidget(self.open_donate_btn)
         donated_row.addWidget(self.donated_cb)
         wrapper.addLayout(donated_row)
 
@@ -342,6 +381,9 @@ class ContactForm(StatusPollingMixin, QWidget):
         wrapper.addLayout(bottom_layout)
 
         self.type_combo.currentIndexChanged.connect(lambda _: self._on_type_changed())
+        self.donated_cb.installEventFilter(self)
+        self.donated_cb.toggled.connect(lambda _: self._update_send_button_state())
+        self.open_donate_btn.clicked.connect(self._open_donate_page)
         QTimer.singleShot(0, self._on_type_changed)
         if default_type:
             idx = self.type_combo.findText(default_type)
@@ -358,11 +400,28 @@ class ContactForm(StatusPollingMixin, QWidget):
 
     def eventFilter(self, watched, event):
         message_edit = getattr(self, "message_edit", None)
+        donated_cb = getattr(self, "donated_cb", None)
         if message_edit is not None and watched is message_edit and event.type() == QEvent.Type.KeyPress:
             key_event = cast(QKeyEvent, event)
             if key_event.matches(QKeySequence.StandardKey.Paste):
                 if self._handle_clipboard_image():
                     return True
+        if donated_cb is not None and watched is donated_cb:
+            block_reason = self._get_donation_check_block_reason()
+            if block_reason and not donated_cb.isChecked():
+                if event.type() == QEvent.Type.MouseButtonPress:
+                    InfoBar.warning("", block_reason, parent=self, position=InfoBarPosition.TOP, duration=2600)
+                    return True
+                if event.type() == QEvent.Type.KeyPress:
+                    key_event = cast(QKeyEvent, event)
+                    if key_event.key() in (
+                        Qt.Key.Key_Space,
+                        Qt.Key.Key_Return,
+                        Qt.Key.Key_Enter,
+                        Qt.Key.Key_Select,
+                    ):
+                        InfoBar.warning("", block_reason, parent=self, position=InfoBarPosition.TOP, duration=2600)
+                        return True
         if watched is self.amount_edit and event.type() == QEvent.Type.FocusOut:
             self._normalize_amount_if_needed()
         return super().eventFilter(watched, event)
@@ -423,6 +482,8 @@ class ContactForm(StatusPollingMixin, QWidget):
                     pass
         except Exception as exc:
             log_suppressed_exception("_close_all_infobars", exc, level=logging.WARNING)
+        finally:
+            self.amount_rule_hint.hide()
 
     def refresh_random_ip_user_id_hint(self) -> None:
         """刷新消息框下方的随机IP账号提示。"""
@@ -443,7 +504,41 @@ class ContactForm(StatusPollingMixin, QWidget):
             self.random_ip_user_id_label.show()
         else:
             self.random_ip_user_id_label.hide()
+        self._update_send_button_state()
 
+    def _get_donation_check_block_reason(self) -> str:
+        current_type = self.type_combo.currentText() or ""
+        if current_type != REQUEST_MESSAGE_TYPE:
+            return ""
+        if self._random_ip_user_id > 0:
+            return ""
+        if self._random_ip_session_incomplete:
+            return "当前随机IP账号状态异常，暂时还不能勾选。请先重新领取试用，确认随机IP恢复可用后再申请。"
+        return "你还没有成功使用过随机IP，暂时不能勾选。请先启用并实际跑通一次随机IP，确认能正常用，再来申请。"
+
+    def _open_donate_page(self) -> None:
+        widget: Optional[QWidget] = self
+        while widget is not None:
+            if hasattr(widget, "_get_donate_page") and hasattr(widget, "_switch_to_more_page"):
+                try:
+                    host = cast(Any, widget)
+                    donate_page = host._get_donate_page()
+                    host._switch_to_more_page(donate_page)
+                    top_level = self.window()
+                    if top_level is not None and top_level is not widget:
+                        top_level.close()
+                    return
+                except Exception as exc:
+                    log_suppressed_exception("_open_donate_page", exc, level=logging.WARNING)
+                    break
+            widget = widget.parentWidget()
+        InfoBar.warning(
+            "",
+            "暂时打不开捐助页，请从“更多 -> 捐助”进入",
+            parent=self,
+            position=InfoBarPosition.TOP,
+            duration=2500,
+        )
 
     def start_status_polling(self):
         if self._polling_started:
@@ -581,6 +676,35 @@ class ContactForm(StatusPollingMixin, QWidget):
             self.email_edit.setPlaceholderText("name@example.com")
             self.message_label.setText("消息内容：")
             self.message_edit.setPlaceholderText("请详细描述您的问题、需求或留言…")
+            self._close_amount_rule_infobar()
+        self._refresh_amount_options()
+        self._sync_amount_rule_warning()
+        self._update_send_button_state()
+
+    def _update_send_button_state(self) -> None:
+        if not hasattr(self, "send_btn"):
+            return
+        if self.send_spinner.isVisible():
+            self.send_btn.setEnabled(False)
+            self.send_btn.setToolTip("")
+            return
+
+        current_type = self.type_combo.currentText() or ""
+        require_donation_check = current_type == REQUEST_MESSAGE_TYPE
+        block_reason = self._get_donation_check_block_reason()
+        can_send = (not require_donation_check) or self.donated_cb.isChecked()
+        self.send_btn.setEnabled(can_send)
+        if require_donation_check and block_reason:
+            self.donated_cb.setToolTip(block_reason)
+        else:
+            self.donated_cb.setToolTip("")
+        if require_donation_check and not can_send:
+            if block_reason:
+                self.send_btn.setToolTip(block_reason)
+            else:
+                self.send_btn.setToolTip("请先勾选“我已完成捐助，且确认随机ip可用”后再发送申请")
+        else:
+            self.send_btn.setToolTip("")
 
     def _set_verify_code_sending(self, sending: bool):
         self._verify_code_sending = sending
@@ -688,12 +812,13 @@ class ContactForm(StatusPollingMixin, QWidget):
         InfoBar.error("", ui_msg, parent=self, position=InfoBarPosition.TOP, duration=2500)
 
     def _on_amount_changed(self, text: str):
-        """金额输入框文本改变时预留钩子。"""
-        return
+        """金额输入变化时同步金额规则提示。"""
+        _ = text
+        self._sync_amount_rule_warning()
 
     def _normalize_amount_if_needed(self) -> None:
         """将 0 自动纠正为 0.01，避免提交无效金额。"""
-        text = (self.amount_edit.text() or "").strip()
+        text = (self.amount_edit.currentText() or "").strip()
         if not text:
             return
         try:
@@ -705,10 +830,26 @@ class ContactForm(StatusPollingMixin, QWidget):
 
     def _on_amount_editing_finished(self):
         self._normalize_amount_if_needed()
+        self._sync_amount_rule_warning()
 
     def _on_quantity_changed(self, text: str):
-        """申请额度输入框文本改变时预留钩子。"""
-        return
+        """申请额度变化时刷新赞助金额选项。"""
+        normalized_text = (text or "").strip()
+        if not normalized_text:
+            self._last_valid_quantity_text = ""
+        elif normalized_text.isdigit():
+            quantity = int(normalized_text)
+            if quantity <= MAX_REQUEST_QUOTA:
+                self._last_valid_quantity_text = normalized_text
+            else:
+                self.quantity_edit.blockSignals(True)
+                try:
+                    self.quantity_edit.setText(self._last_valid_quantity_text)
+                finally:
+                    self.quantity_edit.blockSignals(False)
+                return
+        self._refresh_amount_options()
+        self._sync_amount_rule_warning()
 
     def _on_urgency_changed(self):
         """紧急程度改变时预留钩子。"""
@@ -749,24 +890,29 @@ class ContactForm(StatusPollingMixin, QWidget):
         request_quota_text = ""
         request_urgency_text = ""
         if mtype == REQUEST_MESSAGE_TYPE:
+            if not self.donated_cb.isChecked():
+                InfoBar.warning("", "请先勾选“我已完成捐助”后再发送申请", parent=self, position=InfoBarPosition.TOP, duration=2000)
+                self._update_send_button_state()
+                return
             self._normalize_amount_if_needed()
-            amount_text = (self.amount_edit.text() or "").strip()
+            amount_text = (self.amount_edit.currentText() or "").strip()
             quantity_text = (self.quantity_edit.text() or "").strip()
             verify_code = (self.verify_code_edit.text() or "").strip()
             request_amount_text = amount_text
             request_quota_text = quantity_text
             request_urgency_text = (self.urgency_combo.currentText() or "").strip()
-            if not amount_text:
-                InfoBar.warning("", "请输入捐助金额", parent=self, position=InfoBarPosition.TOP, duration=2000)
-                return
             if not quantity_text:
                 InfoBar.warning("", "请输入申请额度", parent=self, position=InfoBarPosition.TOP, duration=2000)
                 return
             if not quantity_text.isdigit() or int(quantity_text) <= 0:
                 InfoBar.warning("", "申请额度必须为正整数", parent=self, position=InfoBarPosition.TOP, duration=2000)
                 return
-            if int(quantity_text) > 9999:
-                InfoBar.warning("", "申请额度不能超过 9999", parent=self, position=InfoBarPosition.TOP, duration=2000)
+            if int(quantity_text) > MAX_REQUEST_QUOTA:
+                InfoBar.warning("", f"申请额度不能超过 {MAX_REQUEST_QUOTA}", parent=self, position=InfoBarPosition.TOP, duration=2000)
+                return
+            if amount_text and not self._is_amount_allowed(amount_text, quantity_text):
+                self._show_amount_rule_infobar()
+                InfoBar.warning("", DONATION_AMOUNT_BLOCK_MESSAGE, parent=self, position=InfoBarPosition.TOP, duration=2200)
                 return
             if not self._verify_code_requested:
                 InfoBar.warning("", "请先点击发送验证码", parent=self, position=InfoBarPosition.TOP, duration=2000)
@@ -809,7 +955,7 @@ class ContactForm(StatusPollingMixin, QWidget):
         if mtype == REQUEST_MESSAGE_TYPE:
             confirm_email_box = MessageBox(
                 "确认邮箱地址",
-                f"当前输入的邮箱地址是：{email}\n\n申请提交后，开发者会根据随机IP用户ID人工处理额度，请确认该邮箱可以正常接收回复。",
+                f"当前输入的邮箱地址是：{email}\n\n申请提交后，开发者会根据随机IP用户ID人工处理额度，请确认该邮箱可以正常接收回复。支持金额是可选信息，不填写也可以直接申请。",
                 self.window() or self,
             )
             confirm_email_box.yesButton.setText("确认发送")
@@ -838,7 +984,7 @@ class ContactForm(StatusPollingMixin, QWidget):
         elif self._random_ip_session_incomplete:
             full_message += "随机IP账号状态：异常（未读取到有效用户ID）\n"
         if mtype == REQUEST_MESSAGE_TYPE:
-            full_message += f"捐助金额：￥{request_amount_text}\n"
+            full_message += f"支持金额：{'￥' + request_amount_text if request_amount_text else '未填写'}\n"
             full_message += f"申请额度：{request_quota_text}\n"
             full_message += f"紧急程度：{request_urgency_text or '中'}\n"
             full_message += f"补充说明：{message}"
@@ -857,6 +1003,7 @@ class ContactForm(StatusPollingMixin, QWidget):
         self.send_btn.setEnabled(False)
         self.send_btn.setText("发送中...")
         self.send_spinner.show()
+        self._update_send_button_state()
 
         self._current_message_type = mtype
 
@@ -896,8 +1043,8 @@ class ContactForm(StatusPollingMixin, QWidget):
     def _on_send_finished(self, success: bool, error_msg: str):
         """发送完成回调（在主线程执行）"""
         self.send_spinner.hide()
-        self.send_btn.setEnabled(True)
         self.send_btn.setText("发送")
+        self._update_send_button_state()
 
         if success:
             current_type = getattr(self, "_current_message_type", "")
@@ -911,7 +1058,8 @@ class ContactForm(StatusPollingMixin, QWidget):
             if current_type == REQUEST_MESSAGE_TYPE:
                 self.quotaRequestSucceeded.emit()
             if self._auto_clear_on_success:
-                self.amount_edit.clear()
+                self._close_amount_rule_infobar()
+                self.amount_edit.setText("")
                 self.quantity_edit.clear()
                 self.verify_code_edit.clear()
                 self._verify_code_requested = False
@@ -936,4 +1084,74 @@ class ContactForm(StatusPollingMixin, QWidget):
         if isinstance(win, QWidget) and hasattr(win, "controller"):
             return win
         return None
+
+    def _parse_quantity_value(self, text: Optional[str] = None) -> int:
+        raw_text = (self.quantity_edit.text() if text is None else text) or ""
+        raw_text = raw_text.strip()
+        if not raw_text.isdigit():
+            return 0
+        return int(raw_text)
+
+    def _normalize_amount_text(self, text: str) -> str:
+        raw_text = (text or "").strip()
+        if not raw_text:
+            return ""
+        try:
+            normalized = Decimal(raw_text)
+        except (InvalidOperation, ValueError):
+            return raw_text
+        return format(normalized.normalize(), "f").rstrip("0").rstrip(".") or "0"
+
+    def _get_allowed_amount_options(self, quantity: int) -> list[str]:
+        hidden_amounts: set[str] = set()
+        if quantity > 3000:
+            hidden_amounts.update({"8.88", "10.24"})
+        if quantity > 5000:
+            hidden_amounts.add("11.45")
+        if quantity > 10000:
+            hidden_amounts.add("20.26")
+        return [amount for amount in DONATION_AMOUNT_OPTIONS if amount not in hidden_amounts]
+
+    def _is_amount_allowed(self, amount_text: str, quantity_text: Optional[str] = None) -> bool:
+        normalized_amount = self._normalize_amount_text(amount_text)
+        if not normalized_amount:
+            return True
+
+        quantity = self._parse_quantity_value(quantity_text)
+        allowed_amounts = {self._normalize_amount_text(amount) for amount in self._get_allowed_amount_options(quantity)}
+        blocked_preset_amounts = {self._normalize_amount_text(amount) for amount in DONATION_AMOUNT_OPTIONS} - allowed_amounts
+
+        if normalized_amount in blocked_preset_amounts:
+            return False
+        return True
+
+    def _refresh_amount_options(self) -> None:
+        current_text = (self.amount_edit.currentText() or "").strip()
+        allowed_amounts = self._get_allowed_amount_options(self._parse_quantity_value())
+
+        previous_block_state = self.amount_edit.blockSignals(True)
+        try:
+            self.amount_edit.clear()
+            for amount in allowed_amounts:
+                self.amount_edit.addItem(amount)
+            self.amount_edit.setText(current_text)
+        finally:
+            self.amount_edit.blockSignals(previous_block_state)
+
+    def _show_amount_rule_infobar(self) -> None:
+        self.amount_rule_hint.show()
+
+    def _close_amount_rule_infobar(self) -> None:
+        self.amount_rule_hint.hide()
+
+    def _sync_amount_rule_warning(self) -> None:
+        current_type = self.type_combo.currentText() or ""
+        amount_text = (self.amount_edit.currentText() or "").strip()
+        if current_type != REQUEST_MESSAGE_TYPE or not amount_text:
+            self._close_amount_rule_infobar()
+            return
+        if self._is_amount_allowed(amount_text):
+            self._close_amount_rule_infobar()
+            return
+        self._show_amount_rule_infobar()
 

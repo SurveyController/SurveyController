@@ -190,17 +190,6 @@ def _build_counter_snapshot() -> tuple[int, int]:
     return int(count), int(limit)
 
 
-def _open_quota_request_dialog(gui: Any, default_type: str = "额度申请") -> bool:
-    _ = default_type
-    if gui is not None:
-        try:
-            return bool(gui.open_quota_request_dialog())
-        except Exception as exc:
-            log_suppressed_exception("_open_quota_request_dialog adapter open_quota_request_dialog", exc)
-    _invoke_popup(gui, "warning", "需要申请额度", "请在“联系开发者”中提交随机IP额度申请。")
-    return False
-
-
 def on_random_ip_toggle(gui: Any) -> None:
     global _counter_refresh_cache
     from wjx.network.proxy.source import is_custom_proxy_api_active
@@ -308,27 +297,18 @@ def show_random_ip_activation_dialog(gui: Any = None) -> bool:
     if not should_fallback_to_card:
         return False
 
-    return show_quota_request_dialog(gui, require_confirm=False)
+    return _invoke_quota_request_form(gui)
 
 
-def show_quota_request_dialog(gui: Any = None, *, require_confirm: bool = True) -> bool:
-    snapshot = get_session_snapshot()
-    user_id = int(snapshot.get("user_id") or 0)
-    session_incomplete = bool(snapshot.get("session_incomplete"))
-    if user_id <= 0:
-        prompt = "暂时还不能申请额度。请先小测试一两份，确认能正常提交成功后，再来申请额度。"
-        if session_incomplete:
-            prompt = "当前本机只剩旧版随机IP登录残留，服务端又已经停用了 token 续签，所以现在读不到有效用户ID。先重新领取试用；如果还是不行，再联系开发者处理。"
-        _invoke_popup(gui, "warning", "暂时不能申请额度", prompt)
+def _invoke_quota_request_form(gui: Any) -> bool:
+    if gui is None:
         return False
-    if require_confirm:
-        prompt = (
-            "默认随机IP现已改为账号额度模式。\n\n"
-            "若免费试用已用完，请提交额度申请；开发者会根据你的随机IP用户ID人工补充额度。"
-        )
-        if not _invoke_popup(gui, "confirm", "申请随机IP额度", prompt):
-            return False
-    return _open_quota_request_dialog(gui, "额度申请")
+    try:
+        return bool(gui.open_quota_request_form())
+    except Exception as exc:
+        log_suppressed_exception("_invoke_quota_request_form", exc)
+        _invoke_popup(gui, "warning", "需要申请额度", "请在“联系开发者”中提交随机IP额度申请。")
+        return False
 
 
 def refresh_ip_counter_display(gui: Any) -> None:

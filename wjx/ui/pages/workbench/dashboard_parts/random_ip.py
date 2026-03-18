@@ -4,7 +4,6 @@ from __future__ import annotations
 import logging
 import threading
 from typing import TYPE_CHECKING, Any, Optional
-from PySide6.QtWidgets import QDialog
 from qfluentwidgets import FluentIcon
 
 from wjx.network.proxy.auth import (
@@ -23,7 +22,6 @@ from wjx.network.proxy import (
     on_random_ip_toggle,
     refresh_ip_counter_display,
 )
-from wjx.ui.dialogs.quota_request import QuotaRequestDialog
 from wjx.ui.dialogs.contact import ContactDialog
 from wjx.utils.logging.log_utils import log_suppressed_exception
 
@@ -232,14 +230,8 @@ class DashboardRandomIPMixin:
         dlg.exec()
 
     def _on_request_quota_clicked(self):
-        """用户主动打开额度申请说明窗。"""
-        dialog = QuotaRequestDialog(
-            self,
-            status_fetcher=get_status,
-            status_formatter=_format_status_payload,
-            contact_handler=lambda: self._open_contact_dialog(default_type="额度申请"),
-        )
-        if dialog.exec() == QDialog.DialogCode.Accepted:
+        """用户主动打开额度申请表单。"""
+        if self._open_contact_dialog(default_type="额度申请"):
             refresh_ip_counter_display(self.controller.adapter)
 
     def _on_ip_low_infobar_closed(self):

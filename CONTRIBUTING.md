@@ -52,7 +52,7 @@ wjx/
 │   ├── main_window.py     # 主窗口编排
 │   ├── main_window_parts/ # 主窗口拆分模块（dialogs/lazy_pages/update）
 │   ├── controller/        # 运行控制器入口（run_controller.py）与拆分模块（run_controller_parts/）
-│   ├── dialogs/           # 对话框（quota_request/contact/terms_of_service）
+│   ├── dialogs/           # 对话框（contact/terms_of_service）
 │   ├── helpers/           # 界面辅助逻辑（ai_fill/image_attachments）
 │   ├── workers/           # 后台任务（ai_test_worker/update_worker）
 │   ├── widgets/           # 通用 UI 组件（setting_cards/config_drawer/contact_form/full_width_infobar/log_highlighter/no_wheel/ratio_slider/status_polling_mixin/status_worker/time_range_slider）

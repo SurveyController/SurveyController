@@ -38,7 +38,7 @@ class EngineGuiAdapter:
         self,
         dispatcher: Callable[[Callable[[], None]], None],
         stop_signal: threading.Event,
-        quota_request_handler: Optional[Callable[[], bool]] = None,
+        quota_request_form_opener: Optional[Callable[[], bool]] = None,
         on_ip_counter: Optional[Callable[[int, int, bool], None]] = None,
         on_random_ip_loading: Optional[Callable[[bool, str], None]] = None,
         message_handler: Optional[Callable[[str, str, str], None]] = None,
@@ -51,7 +51,7 @@ class EngineGuiAdapter:
         self._dispatcher = dispatcher
         self._async_dispatcher = async_dispatcher or dispatcher
         self._stop_signal = stop_signal
-        self._quota_request_handler = quota_request_handler
+        self._quota_request_form_opener = quota_request_form_opener
         self._on_ip_counter = on_ip_counter
         self._on_random_ip_loading = on_random_ip_loading
         self._message_handler = message_handler
@@ -106,24 +106,24 @@ class EngineGuiAdapter:
     def bind_ui_callbacks(
         self,
         *,
-        quota_request_handler: Optional[Callable[[], bool]] = None,
+        quota_request_form_opener: Optional[Callable[[], bool]] = None,
         on_ip_counter: Optional[Callable[[int, int, bool], None]] = None,
         on_random_ip_loading: Optional[Callable[[bool, str], None]] = None,
         message_handler: Optional[Callable[[str, str, str], None]] = None,
         confirm_handler: Optional[Callable[[str, str], bool]] = None,
     ) -> None:
-        self._quota_request_handler = quota_request_handler
+        self._quota_request_form_opener = quota_request_form_opener
         self._on_ip_counter = on_ip_counter
         self._on_random_ip_loading = on_random_ip_loading
         self._message_handler = message_handler
         self._confirm_handler = confirm_handler
 
-    def open_quota_request_dialog(self) -> bool:
-        if callable(self._quota_request_handler):
+    def open_quota_request_form(self) -> bool:
+        if callable(self._quota_request_form_opener):
             try:
-                return bool(self._quota_request_handler())
+                return bool(self._quota_request_form_opener())
             except Exception:
-                logging.warning("打开额度申请入口失败", exc_info=True)
+                logging.warning("打开额度申请表单失败", exc_info=True)
                 return False
         return False
 
@@ -210,7 +210,7 @@ class RunController(
         self._cleanup_runner = CleanupRunner()
         self.on_ip_counter: Optional[Callable[[int, int, bool], None]] = None
         self.on_random_ip_loading: Optional[Callable[[bool, str], None]] = None
-        self.quota_request_handler: Optional[Callable[[], bool]] = None
+        self.quota_request_form_opener: Optional[Callable[[], bool]] = None
         self.message_dialog_handler: Optional[Callable[[str, str, str], None]] = None
         self.confirm_dialog_handler: Optional[Callable[[str, str], bool]] = None
         self._engine_adapter_cls = EngineGuiAdapter
@@ -271,13 +271,13 @@ class RunController(
     def configure_ui_bridge(
         self,
         *,
-        quota_request_handler: Optional[Callable[[], bool]] = None,
+        quota_request_form_opener: Optional[Callable[[], bool]] = None,
         on_ip_counter: Optional[Callable[[int, int, bool], None]] = None,
         on_random_ip_loading: Optional[Callable[[bool, str], None]] = None,
         message_handler: Optional[Callable[[str, str, str], None]] = None,
         confirm_handler: Optional[Callable[[str, str], bool]] = None,
     ) -> None:
-        self.quota_request_handler = quota_request_handler
+        self.quota_request_form_opener = quota_request_form_opener
         self.on_ip_counter = on_ip_counter
         self.on_random_ip_loading = on_random_ip_loading
         self.message_dialog_handler = message_handler
@@ -289,7 +289,7 @@ class RunController(
         if target is None:
             return
         target.bind_ui_callbacks(
-            quota_request_handler=self.quota_request_handler,
+            quota_request_form_opener=self.quota_request_form_opener,
             on_ip_counter=self.on_ip_counter,
             on_random_ip_loading=self.on_random_ip_loading,
             message_handler=self.message_dialog_handler,

@@ -44,7 +44,6 @@ from wjx.network.proxy.gui_bridge import (
     handle_random_ip_submission,
     on_random_ip_toggle,
     refresh_ip_counter_display,
-    show_quota_request_dialog,
     show_random_ip_activation_dialog,
 )
 
@@ -81,7 +80,6 @@ __all__ = [
     "set_proxy_area_code",
     "set_proxy_occupy_minute_by_answer_duration",
     "set_proxy_source",
-    "show_quota_request_dialog",
     "show_random_ip_activation_dialog",
     "test_custom_proxy_api",
 ]
