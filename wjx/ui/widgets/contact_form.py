@@ -120,6 +120,7 @@ class ContactForm(StatusPollingMixin, QWidget):
         self,
         parent: Optional[QWidget] = None,
         default_type: str = "报错反馈",
+        lock_message_type: bool = False,
         status_fetcher: Optional[Callable] = None,
         status_formatter: Optional[Callable] = None,
         show_cancel_button: bool = False,
@@ -141,6 +142,7 @@ class ContactForm(StatusPollingMixin, QWidget):
         self._polling_started = False
         self._auto_clear_on_success = auto_clear_on_success
         self._manage_polling = manage_polling
+        self._lock_message_type = lock_message_type
         self._random_ip_user_id: int = 0
         self._random_ip_session_incomplete: bool = False
         self._last_valid_quantity_text: str = ""
@@ -161,12 +163,15 @@ class ContactForm(StatusPollingMixin, QWidget):
         self.type_label_static = BodyLabel("消息类型：", self)
         self.type_label_static.setFixedWidth(LABEL_WIDTH)
         self.type_combo = ComboBox(self)
+        self.type_locked_label = BodyLabel("", self)
+        self.type_locked_label.setMinimumWidth(160)
         self.base_options = ["报错反馈", REQUEST_MESSAGE_TYPE, "新功能建议", "纯聊天"]
         for item in self.base_options:
             self.type_combo.addItem(item, item)
         self.type_combo.setMinimumWidth(160)
         type_row.addWidget(self.type_label_static)
         type_row.addWidget(self.type_combo)
+        type_row.addWidget(self.type_locked_label)
         type_row.addStretch(1)
         form_layout.addLayout(type_row)
 
@@ -389,6 +394,7 @@ class ContactForm(StatusPollingMixin, QWidget):
             idx = self.type_combo.findText(default_type)
             if idx >= 0:
                 self.type_combo.setCurrentIndex(idx)
+        self._sync_message_type_lock_state()
 
         self.send_btn.clicked.connect(self._on_send_clicked)
         self.send_verify_btn.clicked.connect(self._on_send_verify_clicked)
@@ -644,6 +650,7 @@ class ContactForm(StatusPollingMixin, QWidget):
 
     def _on_type_changed(self):
         current_type = self.type_combo.currentText()
+        self._sync_message_type_lock_state()
 
         # 控制额度申请参数显示/隐藏
         if current_type == REQUEST_MESSAGE_TYPE:
@@ -656,8 +663,8 @@ class ContactForm(StatusPollingMixin, QWidget):
             self.verify_code_edit.show()
             self.send_verify_btn.show()
             self.email_edit.setPlaceholderText("name@example.com")
-            self.message_label.setText("补充说明：")
-            self.message_edit.setPlaceholderText("请简单说明你的使用场景、需要的额度和紧急情况…")
+            self.message_label.setText("补充说明（选填）：")
+            self.message_edit.setPlaceholderText("请简单说明你的问卷紧急情况或使用场景...\n以及...是大学生吗（？")
         else:
             self.amount_label.hide()
             self.amount_edit.hide()
@@ -680,6 +687,13 @@ class ContactForm(StatusPollingMixin, QWidget):
         self._refresh_amount_options()
         self._sync_amount_rule_warning()
         self._update_send_button_state()
+
+    def _sync_message_type_lock_state(self) -> None:
+        current_type = self.type_combo.currentText() or ""
+        self.type_locked_label.setText(current_type)
+        self.type_combo.setVisible(not self._lock_message_type)
+        self.type_combo.setEnabled(not self._lock_message_type)
+        self.type_locked_label.setVisible(self._lock_message_type)
 
     def _update_send_button_state(self) -> None:
         if not hasattr(self, "send_btn"):

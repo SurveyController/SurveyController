@@ -53,8 +53,8 @@ class AIPromptSettingCard(ExpandGroupSettingCard):
 
         self.promptEdit = PlainTextEdit(self._group_container)
         self.promptEdit.setPlaceholderText("留空使用默认提示词...")
-        self.promptEdit.setMinimumHeight(132)
-        self.promptEdit.setMaximumHeight(180)
+        self.promptEdit.setMinimumHeight(180)
+        self.promptEdit.setMaximumHeight(230)
         self.promptEdit.setPlainText(prompt_text or DEFAULT_SYSTEM_PROMPT)
 
         layout.addWidget(self.promptEdit)
@@ -339,6 +339,7 @@ class RuntimeAISection(QObject):
         idx = self.ai_provider_combo.currentIndex()
         provider_key = str(self.ai_provider_combo.itemData(idx)) if idx >= 0 else "deepseek"
         is_custom = provider_key == "custom"
+        self.ai_privacy_bar.setVisible(not is_free_mode)
         self.ai_provider_card.setVisible(not is_free_mode)
         self.ai_apikey_card.setVisible(not is_free_mode)
         self.ai_model_card.setVisible(not is_free_mode)

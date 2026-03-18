@@ -453,8 +453,14 @@ class MainWindow(
         if current_widget and current_widget.objectName() == "community":
             self._set_community_hint_pending(False)
 
-    def _open_contact_dialog(self, default_type: str = "报错反馈"):
-        dlg = ContactDialog(self, default_type=default_type, status_fetcher=get_status, status_formatter=_format_status_payload)
+    def _open_contact_dialog(self, default_type: str = "报错反馈", lock_message_type: bool = False):
+        dlg = ContactDialog(
+            self,
+            default_type=default_type,
+            lock_message_type=lock_message_type,
+            status_fetcher=get_status,
+            status_formatter=_format_status_payload,
+        )
         dlg.form.quotaRequestSucceeded.connect(self._on_quota_request_sent)
         return dlg.exec() == QDialog.DialogCode.Accepted
 
@@ -602,7 +608,7 @@ class MainWindow(
         self.dashboard._open_wizard_after_parse = False
 
     def _open_quota_request_form(self) -> bool:
-        return self._open_contact_dialog(default_type="额度申请")
+        return self._open_contact_dialog(default_type="额度申请", lock_message_type=True)
 
 
 def create_window() -> MainWindow:

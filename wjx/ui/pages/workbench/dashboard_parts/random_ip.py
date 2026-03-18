@@ -218,20 +218,26 @@ class DashboardRandomIPMixin:
         self._set_runtime_ip_switch(enabled)
         refresh_ip_counter_display(self.controller.adapter)
 
-    def _open_contact_dialog(self, default_type: str = "报错反馈"):
+    def _open_contact_dialog(self, default_type: str = "报错反馈", lock_message_type: bool = False):
         """打开联系对话框"""
         win = self.window()
         if hasattr(win, "_open_contact_dialog"):
             try:
-                return win._open_contact_dialog(default_type)  # type: ignore[union-attr]
+                return win._open_contact_dialog(default_type, lock_message_type)  # type: ignore[union-attr]
             except Exception as exc:
                 log_suppressed_exception("_open_contact_dialog passthrough", exc, level=logging.WARNING)
-        dlg = ContactDialog(self, default_type=default_type, status_fetcher=get_status, status_formatter=_format_status_payload)
+        dlg = ContactDialog(
+            self,
+            default_type=default_type,
+            lock_message_type=lock_message_type,
+            status_fetcher=get_status,
+            status_formatter=_format_status_payload,
+        )
         dlg.exec()
 
     def _on_request_quota_clicked(self):
         """用户主动打开额度申请表单。"""
-        if self._open_contact_dialog(default_type="额度申请"):
+        if self._open_contact_dialog(default_type="额度申请", lock_message_type=True):
             refresh_ip_counter_display(self.controller.adapter)
 
     def _on_ip_low_infobar_closed(self):

@@ -8,7 +8,14 @@ from wjx.ui.widgets.contact_form import ContactForm
 class ContactDialog(QDialog):
     """联系开发者（Qt 版本）。包装 ContactForm，保留原有对话框入口。"""
 
-    def __init__(self, parent=None, default_type: str = "报错反馈", status_fetcher=None, status_formatter=None):
+    def __init__(
+        self,
+        parent=None,
+        default_type: str = "报错反馈",
+        lock_message_type: bool = False,
+        status_fetcher=None,
+        status_formatter=None,
+    ):
         super().__init__(parent)
         self.setAttribute(Qt.WidgetAttribute.WA_QuitOnClose, False)
         self.setWindowTitle("联系开发者")
@@ -21,6 +28,7 @@ class ContactDialog(QDialog):
         self.form = ContactForm(
             self,
             default_type=default_type,
+            lock_message_type=lock_message_type,
             status_fetcher=status_fetcher,
             status_formatter=status_formatter,
             show_cancel_button=True,
