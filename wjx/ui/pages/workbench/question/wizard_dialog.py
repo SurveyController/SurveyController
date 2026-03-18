@@ -112,7 +112,14 @@ class QuestionWizardDialog(WizardSectionsMixin, QDialog):
             max_int = min_int + 1
         return (min_int, max_int)
 
-    def __init__(self, entries: List[QuestionEntry], info: List[Dict[str, Any]], survey_title: Optional[str] = None, parent=None, reliability_mode_enabled: bool = True, ai_master_enabled: bool = True):
+    def __init__(
+        self,
+        entries: List[QuestionEntry],
+        info: List[Dict[str, Any]],
+        survey_title: Optional[str] = None,
+        parent=None,
+        reliability_mode_enabled: bool = True,
+    ):
         super().__init__(parent)
         window_title = "配置向导"
         if survey_title:
@@ -122,7 +129,6 @@ class QuestionWizardDialog(WizardSectionsMixin, QDialog):
         self.entries = entries
         self.info = info or []
         self.reliability_mode_enabled = reliability_mode_enabled
-        self.ai_master_enabled = ai_master_enabled
         self.slider_map: Dict[int, List[NoWheelSlider]] = {}
         self.matrix_row_slider_map: Dict[int, List[List[NoWheelSlider]]] = {}
         self.text_edit_map: Dict[int, QuestionWizardDialog.TextEditsValue] = {}

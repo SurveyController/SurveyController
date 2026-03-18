@@ -1,28 +1,19 @@
 """AI 自动填充辅助 - 检查 AI 配置就绪状态"""
 from qfluentwidgets import InfoBar, InfoBarPosition
 
-from wjx.utils.integrations.ai_service import get_ai_settings
+from wjx.utils.integrations.ai_service import get_ai_readiness_error
 
 
 def ensure_ai_ready(parent) -> bool:
     """检查 AI 配置是否可用，不可用时给出提示。"""
-    ai_config = get_ai_settings()
-    if not ai_config.get("enabled"):
+    readiness_error = get_ai_readiness_error()
+    if readiness_error:
         InfoBar.warning(
             "",
-            "请先到“运行参数”页启用 AI 填空助手",
+            f"请先到“运行参数”页补全 AI 配置：{readiness_error}",
             parent=parent,
             position=InfoBarPosition.TOP,
-            duration=3000,
-        )
-        return False
-    if not ai_config.get("api_key"):
-        InfoBar.warning(
-            "",
-            "请先到“运行参数”页配置 API Key",
-            parent=parent,
-            position=InfoBarPosition.TOP,
-            duration=3000,
+            duration=3500,
         )
         return False
     return True

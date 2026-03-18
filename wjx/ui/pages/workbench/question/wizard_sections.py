@@ -64,7 +64,6 @@ class WizardSectionsMixin:
     text_edit_map: Dict[int, Any]
     info: List[Any]
     reliability_mode_enabled: bool
-    ai_master_enabled: bool
     matrix_row_slider_map: Dict[int, Any]
     matrix_reverse_check_map: Dict[int, Any]
     reverse_check_map: Dict[int, Any]
@@ -240,14 +239,8 @@ class WizardSectionsMixin:
             )
 
             ai_cb = CheckBox("启用 AI", card)
-            ai_master_on = getattr(self, "ai_master_enabled", True)
-            if not ai_master_on:
-                ai_cb.setToolTip('请先在运行参数页开启"启用 AI 填空"总开关')
-                ai_cb.setEnabled(False)
-                ai_cb.setChecked(False)
-            else:
-                ai_cb.setToolTip("运行时每次填空都会调用 AI")
-                ai_cb.setChecked(bool(getattr(entry, "ai_enabled", False)))
+            ai_cb.setToolTip("运行时每次填空都会调用 AI")
+            ai_cb.setChecked(bool(getattr(entry, "ai_enabled", False)))
             ai_cb.toggled.connect(lambda checked, i=idx: self._on_entry_ai_toggled(i, checked))
             btn_row.addWidget(ai_cb)
             self.ai_check_map[idx] = ai_cb
@@ -398,8 +391,6 @@ class WizardSectionsMixin:
         while len(saved_ai_flags) < blank_count:
             saved_ai_flags.append(False)
 
-        ai_master_on = getattr(self, "ai_master_enabled", True)
-
         for blank_idx in range(blank_count):
             blank_row = QHBoxLayout()
             blank_row.setSpacing(8)
@@ -434,11 +425,8 @@ class WizardSectionsMixin:
 
             # 每个填空项的AI复选框
             ai_cb = CheckBox("启用AI", card)
-            if not ai_master_on:
-                ai_cb.setEnabled(False)
-                ai_cb.setChecked(False)
-            else:
-                ai_cb.setChecked(saved_ai_flags[blank_idx] if blank_idx < len(saved_ai_flags) else False)
+            ai_cb.setToolTip("运行时每次填空都会调用 AI")
+            ai_cb.setChecked(saved_ai_flags[blank_idx] if blank_idx < len(saved_ai_flags) else False)
             blank_row.addWidget(ai_cb)
             blank_ai_checkboxes.append(ai_cb)
 
@@ -456,7 +444,7 @@ class WizardSectionsMixin:
             def make_sync_func(col_idx, radios, ai_checkbox, edits_list):
                 def sync_column_state():
                     mode_id = radios["list"].group().checkedId()
-                    ai_enabled = ai_checkbox.isChecked() if ai_master_on else False
+                    ai_enabled = ai_checkbox.isChecked()
                     use_list = (mode_id == 0 and not ai_enabled)
 
                     # 禁用/启用该列的所有输入框
@@ -478,7 +466,9 @@ class WizardSectionsMixin:
 
             sync_func = make_sync_func(blank_idx, blank_mode_radios[-1], ai_cb, row_edits)
             radio_group.buttonClicked.connect(lambda checked=False, f=sync_func: f())
-            ai_cb.toggled.connect(lambda checked, f=sync_func: f())
+            ai_cb.toggled.connect(
+                lambda checked, cb=ai_cb, f=sync_func: self._on_multi_text_blank_ai_toggled(cb, checked, f)
+            )
             # 初始化状态
             sync_func()
 
@@ -932,6 +922,7 @@ class WizardSectionsMixin:
         ai_cb = self.ai_check_map.get(idx)
         if random_mode != _TEXT_RANDOM_NONE:
             if ai_cb:
+                ai_cb.setToolTip("随机姓名/随机手机号与 AI 填空不能同时启用")
                 ai_cb.blockSignals(True)
                 ai_cb.setChecked(False)
                 ai_cb.blockSignals(False)
@@ -939,12 +930,9 @@ class WizardSectionsMixin:
             self._set_text_answer_enabled(idx, False)
             return
         if ai_cb:
-            ai_master_on = getattr(self, "ai_master_enabled", True)
-            ai_cb.setEnabled(ai_master_on)
-            if ai_master_on:
-                self._set_text_answer_enabled(idx, not ai_cb.isChecked())
-            else:
-                self._set_text_answer_enabled(idx, True)
+            ai_cb.setToolTip("运行时每次填空都会调用 AI")
+            ai_cb.setEnabled(True)
+            self._set_text_answer_enabled(idx, not ai_cb.isChecked())
             return
         self._set_text_answer_enabled(idx, True)
 
@@ -983,12 +971,26 @@ class WizardSectionsMixin:
                 cb.setEnabled(False)
             self._set_text_answer_enabled(idx, False)
             return
-        if checked and not ensure_ai_ready(cast(QWidget, self).window() or cast(QWidget, self)):
+        if checked and not self._ensure_ai_checkbox_ready(self.ai_check_map.get(idx)):
             cb = self.ai_check_map.get(idx)
             if cb:
-                cb.blockSignals(True)
-                cb.setChecked(False)
-                cb.blockSignals(False)
+                cb.setEnabled(True)
             self._set_text_answer_enabled(idx, True)
             return
         self._set_text_answer_enabled(idx, not checked)
+
+    def _ensure_ai_checkbox_ready(self, checkbox: Any) -> bool:
+        if checkbox is None:
+            return False
+        if ensure_ai_ready(cast(QWidget, self).window() or cast(QWidget, self)):
+            return True
+        checkbox.blockSignals(True)
+        checkbox.setChecked(False)
+        checkbox.blockSignals(False)
+        return False
+
+    def _on_multi_text_blank_ai_toggled(self, checkbox: Any, checked: bool, sync_func: Any) -> None:
+        if checked and not self._ensure_ai_checkbox_ready(checkbox):
+            sync_func()
+            return
+        sync_func()

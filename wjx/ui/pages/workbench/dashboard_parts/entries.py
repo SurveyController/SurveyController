@@ -182,11 +182,7 @@ class DashboardEntriesMixin:
             return False
         title = survey_title if survey_title is not None else self._survey_title
         reliability_mode_enabled = self.runtime_page.reliability_card.switchButton.isChecked()
-        try:
-            ai_master_enabled = self.runtime_page.ai_section.ai_enabled_card.isChecked()
-        except Exception:
-            ai_master_enabled = True
-        dlg = QuestionWizardDialog(entries, info, title, self, reliability_mode_enabled=reliability_mode_enabled, ai_master_enabled=ai_master_enabled)
+        dlg = QuestionWizardDialog(entries, info, title, self, reliability_mode_enabled=reliability_mode_enabled)
         if dlg.exec() == QDialog.DialogCode.Accepted:
             self._apply_wizard_results(entries, dlg)
             return True

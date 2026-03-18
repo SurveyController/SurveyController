@@ -26,7 +26,6 @@ from qfluentwidgets import (
 
 from wjx.ui.widgets.full_width_infobar import FullWidthInfoBar
 from wjx.ui.workers.ai_test_worker import AITestWorker
-from wjx.ui.widgets.setting_cards import SwitchSettingCard
 from wjx.utils.integrations.ai_service import (
     AI_PROVIDERS,
     DEFAULT_SYSTEM_PROMPT,
@@ -72,6 +71,11 @@ class AIPromptSettingCard(ExpandGroupSettingCard):
 
 class RuntimeAISection(QObject):
 
+    _AI_MODES = {
+        "free": "限时免费",
+        "provider": "自定义服务商",
+    }
+
     _PROVIDER_DOCS = {
         "deepseek": "https://api-docs.deepseek.com/zh-cn/",
         "qwen": "https://help.aliyun.com/zh/model-studio/get-api-key",
@@ -95,6 +99,10 @@ class RuntimeAISection(QObject):
         self._update_ai_visibility()
 
     def _build_ui(self, ai_config):
+        saved_mode = str(ai_config.get("ai_mode") or "free").strip().lower()
+        if saved_mode not in self._AI_MODES:
+            saved_mode = "free"
+
         self.ai_privacy_bar = FullWidthInfoBar(
             InfoBarIcon.SUCCESS,
             "隐私声明：不会上传 API Key 等隐私信息，所有配置仅保存在本地。",
@@ -111,14 +119,22 @@ class RuntimeAISection(QObject):
         self.ai_privacy_bar.contentLabel.setVisible(False)
         self.group.addSettingCard(self.ai_privacy_bar)
 
-        self.ai_enabled_card = SwitchSettingCard(
+        self.ai_mode_card = SettingCard(
             FluentIcon.ROBOT,
-            "启用 AI 填空",
-            "开启后可使用 AI 自动生成填空题答案",
-            parent=self.group,
+            "AI 模式",
+            "限时免费至2026-06-30截止；自定义服务商沿用自己拥有的API Key",
+            self.group,
         )
-        self.ai_enabled_card.setChecked(bool(ai_config.get("enabled")))
-        self.group.addSettingCard(self.ai_enabled_card)
+        self.ai_mode_combo = ComboBox(self.ai_mode_card)
+        self.ai_mode_combo.setMinimumWidth(200)
+        for key, label in self._AI_MODES.items():
+            self.ai_mode_combo.addItem(label, userData=key)
+        mode_idx = self.ai_mode_combo.findData(saved_mode)
+        if mode_idx >= 0:
+            self.ai_mode_combo.setCurrentIndex(mode_idx)
+        self.ai_mode_card.hBoxLayout.addWidget(self.ai_mode_combo, 0, Qt.AlignmentFlag.AlignRight)
+        self.ai_mode_card.hBoxLayout.addSpacing(16)
+        self.group.addSettingCard(self.ai_mode_card)
 
         self.ai_provider_card = SettingCard(
             FluentIcon.CLOUD,
@@ -223,7 +239,7 @@ class RuntimeAISection(QObject):
         layout.addWidget(self.group)
 
     def _bind_events(self):
-        self.ai_enabled_card.switchButton.checkedChanged.connect(self._on_ai_enabled_toggled)
+        self.ai_mode_combo.currentIndexChanged.connect(self._on_ai_mode_changed)
         self.ai_provider_combo.currentIndexChanged.connect(self._on_ai_provider_changed)
         self.ai_apikey_edit.editingFinished.connect(self._on_ai_apikey_changed)
         self.ai_baseurl_edit.editingFinished.connect(self._on_ai_baseurl_changed)
@@ -233,7 +249,7 @@ class RuntimeAISection(QObject):
         self.ai_prompt_card.promptEdit.textChanged.connect(self._on_ai_prompt_changed)
 
     def update_config(self, cfg: RuntimeConfig):
-        cfg.ai_enabled = bool(self.ai_enabled_card.switchButton.isChecked())
+        cfg.ai_mode = self._get_current_ai_mode()
         idx = self.ai_provider_combo.currentIndex()
         cfg.ai_provider = str(self.ai_provider_combo.itemData(idx)) if idx >= 0 else "deepseek"
         cfg.ai_api_key = self.ai_apikey_edit.text().strip()
@@ -247,10 +263,27 @@ class RuntimeAISection(QObject):
 
     def _set_ai_controls_blocked(self, blocked: bool):
         try:
-            self.ai_enabled_card.switchButton.blockSignals(blocked)
+            self.ai_mode_combo.blockSignals(blocked)
             self.ai_provider_combo.blockSignals(blocked)
         except Exception as exc:
-            log_suppressed_exception("_set_ai_controls_blocked: self.ai_enabled_card.switchButton.blockSignals(blocked)", exc, level=logging.WARNING)
+            log_suppressed_exception("_set_ai_controls_blocked: combo controls blockSignals(blocked)", exc, level=logging.WARNING)
+
+    def _save_ai_settings(self, **kwargs):
+        """兼容并行改造场景：若后端暂未支持 ai_mode，先降级保存其余字段。"""
+        try:
+            save_ai_settings(**kwargs)
+            return
+        except TypeError:
+            if "ai_mode" not in kwargs:
+                raise
+        downgraded = dict(kwargs)
+        downgraded.pop("ai_mode", None)
+        save_ai_settings(**downgraded)
+
+    def _get_current_ai_mode(self) -> str:
+        idx = self.ai_mode_combo.currentIndex()
+        mode = str(self.ai_mode_combo.itemData(idx)) if idx >= 0 else "free"
+        return mode if mode in self._AI_MODES else "free"
 
     def _set_ai_test_loading(self, loading: bool):
         self.ai_test_spinner.setVisible(loading)
@@ -300,11 +333,18 @@ class RuntimeAISection(QObject):
         self._current_infobar = bar
 
     def _update_ai_visibility(self):
-        """根据选择的提供商更新 AI 配置项的可见性和推荐模型"""
+        """根据当前模式与提供商更新 AI 配置项的可见性和推荐模型"""
+        ai_mode = self._get_current_ai_mode()
+        is_free_mode = ai_mode == "free"
         idx = self.ai_provider_combo.currentIndex()
         provider_key = str(self.ai_provider_combo.itemData(idx)) if idx >= 0 else "deepseek"
         is_custom = provider_key == "custom"
-        self.ai_baseurl_card.setVisible(is_custom)
+        self.ai_provider_card.setVisible(not is_free_mode)
+        self.ai_apikey_card.setVisible(not is_free_mode)
+        self.ai_model_card.setVisible(not is_free_mode)
+        self.ai_baseurl_card.setVisible((not is_free_mode) and is_custom)
+        if is_free_mode:
+            return
         
         # 更新推荐模型列表
         provider_config = AI_PROVIDERS.get(provider_key, {})
@@ -319,7 +359,7 @@ class RuntimeAISection(QObject):
             # 自定义模式：切换时清空（除非是初始化加载）
             if not self._ai_loading:
                 self.ai_model_edit.setText("")
-                save_ai_settings(model="")
+                self._save_ai_settings(model="")
         else:
             # 非自定义模式：清空并填充推荐模型
             self.ai_model_combo.clear()
@@ -332,7 +372,7 @@ class RuntimeAISection(QObject):
             # 切换服务商时使用新的默认模型（除非是初始化加载）
             if not self._ai_loading:
                 self.ai_model_combo.setText(default_model)
-                save_ai_settings(model=default_model)
+                self._save_ai_settings(model=default_model)
         
         self._update_ai_doc_link(provider_key)
 
@@ -340,7 +380,7 @@ class RuntimeAISection(QObject):
         ai_config_present = getattr(cfg, "_ai_config_present", False)
         if not ai_config_present:
             ai_config = get_ai_settings()
-            cfg.ai_enabled = bool(ai_config.get("enabled"))
+            cfg.ai_mode = str(ai_config.get("ai_mode") or "free")
             cfg.ai_provider = str(ai_config.get("provider") or "deepseek")
             cfg.ai_api_key = str(ai_config.get("api_key") or "")
             cfg.ai_base_url = str(ai_config.get("base_url") or "")
@@ -349,6 +389,10 @@ class RuntimeAISection(QObject):
             cfg.ai_system_prompt = str(ai_config.get("system_prompt") or DEFAULT_SYSTEM_PROMPT)
         if not getattr(cfg, "ai_provider", ""):
             cfg.ai_provider = "deepseek"
+        if not getattr(cfg, "ai_mode", ""):
+            cfg.ai_mode = "free"
+        if cfg.ai_mode not in self._AI_MODES:
+            cfg.ai_mode = "free"
         if not getattr(cfg, "ai_api_protocol", ""):
             cfg.ai_api_protocol = "auto"
         if not getattr(cfg, "ai_system_prompt", ""):
@@ -356,7 +400,8 @@ class RuntimeAISection(QObject):
 
         self._ai_loading = True
         self._set_ai_controls_blocked(True)
-        self.ai_enabled_card.switchButton.setChecked(bool(cfg.ai_enabled))
+        mode_idx = self.ai_mode_combo.findData(cfg.ai_mode)
+        self.ai_mode_combo.setCurrentIndex(mode_idx if mode_idx >= 0 else 0)
         idx = self.ai_provider_combo.findData(cfg.ai_provider)
         if idx >= 0:
             self.ai_provider_combo.setCurrentIndex(idx)
@@ -365,17 +410,16 @@ class RuntimeAISection(QObject):
         self.ai_apikey_edit.setText(cfg.ai_api_key or "")
         self.ai_baseurl_edit.setText(cfg.ai_base_url or "")
         current_model = (cfg.ai_model or "").strip()
-        if current_model:
-            self.ai_model_combo.setText(current_model)
-            self.ai_model_edit.setText(current_model)
+        self.ai_model_combo.setText(current_model)
+        self.ai_model_edit.setText(current_model)
         self._ai_system_prompt = cfg.ai_system_prompt or DEFAULT_SYSTEM_PROMPT
         self.ai_prompt_card.set_prompt_text(self._ai_system_prompt)
         self._update_ai_visibility()
         self._set_ai_controls_blocked(False)
         self._ai_loading = False
 
-        save_ai_settings(
-            enabled=bool(cfg.ai_enabled),
+        self._save_ai_settings(
+            ai_mode=cfg.ai_mode,
             provider=cfg.ai_provider,
             api_key=cfg.ai_api_key or "",
             base_url=cfg.ai_base_url or "",
@@ -384,25 +428,13 @@ class RuntimeAISection(QObject):
             system_prompt=self._ai_system_prompt,
         )
 
-    def _on_ai_enabled_toggled(self, checked: bool):
-        """AI 功能开关切换"""
+    def _on_ai_mode_changed(self):
+        """AI 模式变化"""
         if self._ai_loading:
             return
-        if checked and not self.ai_apikey_edit.text().strip():
-            # 没有填写 API Key，阻止开启并提示
-            self._ai_loading = True
-            self.ai_enabled_card.switchButton.setChecked(False)
-            self._ai_loading = False
-            # 获取当前服务商的文档链接
-            idx = self.ai_provider_combo.currentIndex()
-            provider_key = str(self.ai_provider_combo.itemData(idx)) if idx >= 0 else "deepseek"
-            doc_url = self._PROVIDER_DOCS.get(provider_key, "")
-            self._show_ai_infobar_with_link(
-                "请先填写 API Key，获取方法请查阅服务商 API 文档",
-                doc_url,
-            )
-            return
-        save_ai_settings(enabled=checked)
+        ai_mode = self._get_current_ai_mode()
+        self._save_ai_settings(ai_mode=ai_mode)
+        self._update_ai_visibility()
 
     def _on_ai_provider_changed(self):
         """AI 提供商选择变化"""
@@ -410,7 +442,7 @@ class RuntimeAISection(QObject):
             return
         idx = self.ai_provider_combo.currentIndex()
         provider_key = str(self.ai_provider_combo.itemData(idx)) if idx >= 0 else "deepseek"
-        save_ai_settings(provider=provider_key)
+        self._save_ai_settings(provider=provider_key)
         self._update_ai_visibility()
 
     def _update_ai_doc_link(self, provider_key: str):
@@ -429,25 +461,25 @@ class RuntimeAISection(QObject):
         """API Key 变化"""
         if self._ai_loading:
             return
-        save_ai_settings(api_key=self.ai_apikey_edit.text())
+        self._save_ai_settings(api_key=self.ai_apikey_edit.text())
 
     def _on_ai_baseurl_changed(self):
         """Base URL 变化"""
         if self._ai_loading:
             return
-        save_ai_settings(base_url=self.ai_baseurl_edit.text())
+        self._save_ai_settings(base_url=self.ai_baseurl_edit.text())
 
     def _on_ai_model_changed(self, text: str):
         """模型变化（EditableComboBox）"""
         if self._ai_loading:
             return
-        save_ai_settings(model=text.strip())
+        self._save_ai_settings(model=text.strip())
 
     def _on_ai_model_edit_changed(self):
         """模型变化（LineEdit - 自定义模式）"""
         if self._ai_loading:
             return
-        save_ai_settings(model=self.ai_model_edit.text().strip())
+        self._save_ai_settings(model=self.ai_model_edit.text().strip())
 
     def _get_current_model_value(self) -> str:
         """获取当前模型值"""
@@ -460,7 +492,7 @@ class RuntimeAISection(QObject):
         if self._ai_loading:
             return
         self._ai_system_prompt = self.ai_prompt_card.prompt_text()
-        save_ai_settings(system_prompt=self._ai_system_prompt)
+        self._save_ai_settings(system_prompt=self._ai_system_prompt)
 
     def _on_ai_test_clicked(self):
         """测试 AI 连接"""
@@ -468,8 +500,8 @@ class RuntimeAISection(QObject):
             return
         if self._ai_test_thread is not None and self._ai_test_thread.isRunning():
             return
-        save_ai_settings(
-            enabled=True,
+        self._save_ai_settings(
+            ai_mode=self._get_current_ai_mode(),
             api_key=self.ai_apikey_edit.text(),
             base_url=self.ai_baseurl_edit.text(),
             api_protocol="auto",
@@ -496,7 +528,6 @@ class RuntimeAISection(QObject):
         else:
             logging.error("AI 连接测试失败: %s", message)
             self._show_ai_infobar(message, success=False, duration=5000)
-        save_ai_settings(enabled=self.ai_enabled_card.switchButton.isChecked())
 
     def _on_ai_test_thread_finished(self):
         self._ai_test_thread = None

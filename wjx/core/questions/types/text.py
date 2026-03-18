@@ -15,7 +15,7 @@ from wjx.core.questions.utils import (
 from wjx.core.ai.runtime import AIRuntimeError, generate_ai_answer, resolve_question_title_for_ai
 from wjx.core.persona.context import record_answer
 
-# 多项填空题分隔符
+# 多项填空题分隔符（仅用于旧配置/自定义文本的兜底解析）
 MULTI_TEXT_DELIMITER = "||"
 
 
@@ -258,6 +258,17 @@ def infer_text_entry_type(driver: BrowserDriver, question_number: int) -> tuple:
     return "text", [DEFAULT_FILL_TEXT]
 
 
+def resolve_multi_blank_count(driver: BrowserDriver, question_number: int) -> int:
+    """估算当前多项填空题空位数量。"""
+    try:
+        question_div = driver.find_element(By.CSS_SELECTOR, f"#div{question_number}")
+    except Exception:
+        question_div = None
+    prefixed_count = count_prefixed_text_inputs(driver, question_number, question_div)
+    visible_count = count_visible_text_inputs(question_div) if question_div is not None else 0
+    return max(1, prefixed_count, visible_count)
+
+
 def driver_question_is_location(question_div) -> bool:
     """检测是否为位置题"""
     if question_div is None:
@@ -359,9 +370,15 @@ def text(
     if entry_kind == "text" and ai_enabled:
         try:
             title = resolve_question_title_for_ai(driver, current, fallback_title)
-            selected_answer = generate_ai_answer(title)
+            selected_answer = generate_ai_answer(
+                title,
+                question_type="fill_blank",
+                blank_count=1,
+            )
         except AIRuntimeError as exc:
             raise AIRuntimeError(f"第{current}题 AI 生成失败：{exc}") from exc
+        if isinstance(selected_answer, list):
+            selected_answer = str(selected_answer[0]).strip() if selected_answer else DEFAULT_FILL_TEXT
         _handle_single_text(driver, current, selected_answer)
         _log_text_answer(current, title or fallback_title, "AI", selected_answer)
         record_answer(current, "text", text_answer=selected_answer)
@@ -371,12 +388,21 @@ def text(
     if entry_kind == "multi_text" and ai_enabled:
         try:
             title = resolve_question_title_for_ai(driver, current, fallback_title)
-            selected_answer = generate_ai_answer(title)
+            blank_count = resolve_multi_blank_count(driver, current)
+            selected_answer = generate_ai_answer(
+                title,
+                question_type="multi_fill_blank",
+                blank_count=blank_count,
+            )
         except AIRuntimeError as exc:
             raise AIRuntimeError(f"第{current}题 AI 生成失败：{exc}") from exc
         _handle_multi_text(driver, current, selected_answer)
         _log_text_answer(current, title or fallback_title, "AI", selected_answer)
-        record_answer(current, "text", text_answer=selected_answer)
+        if isinstance(selected_answer, list):
+            record_text_answer = " | ".join(selected_answer)
+        else:
+            record_text_answer = str(selected_answer or "").strip()
+        record_answer(current, "text", text_answer=record_text_answer)
         return
 
     selected_index = weighted_index(selection_probabilities)
@@ -401,15 +427,18 @@ def text(
     record_answer(current, "text", text_answer=selected_answer)
 
 
-def _handle_multi_text(driver: BrowserDriver, current: int, selected_answer: str, blank_modes: Optional[List[str]] = None, blank_ai_flags: Optional[List[bool]] = None, title: str = "") -> None:
+def _handle_multi_text(driver: BrowserDriver, current: int, selected_answer: Any, blank_modes: Optional[List[str]] = None, blank_ai_flags: Optional[List[bool]] = None, title: str = "") -> None:
     """处理多项填空题"""
-    raw_text = "" if selected_answer is None else str(selected_answer)
-    if MULTI_TEXT_DELIMITER in raw_text:
-        parts = raw_text.split(MULTI_TEXT_DELIMITER)
-    elif "|" in raw_text:
-        parts = raw_text.split("|")
+    if isinstance(selected_answer, list):
+        parts = [str(part or "").strip() for part in selected_answer]
     else:
-        parts = [raw_text]
+        raw_text = "" if selected_answer is None else str(selected_answer)
+        if MULTI_TEXT_DELIMITER in raw_text:
+            parts = raw_text.split(MULTI_TEXT_DELIMITER)
+        elif "|" in raw_text:
+            parts = raw_text.split("|")
+        else:
+            parts = [raw_text]
     values = [part.strip() for part in parts]
 
     if not values or all(not v for v in values):
@@ -425,7 +454,15 @@ def _handle_multi_text(driver: BrowserDriver, current: int, selected_answer: str
             # AI优先
             if blank_ai_flags and idx < len(blank_ai_flags) and blank_ai_flags[idx]:
                 try:
-                    values[idx] = generate_ai_answer(title)
+                    ai_text = generate_ai_answer(
+                        title,
+                        question_type="fill_blank",
+                        blank_count=1,
+                    )
+                    if isinstance(ai_text, list):
+                        values[idx] = str(ai_text[0]).strip() if ai_text else DEFAULT_FILL_TEXT
+                    else:
+                        values[idx] = str(ai_text or "").strip() or DEFAULT_FILL_TEXT
                 except AIRuntimeError:
                     values[idx] = DEFAULT_FILL_TEXT
             # 随机模式

@@ -18,7 +18,7 @@ from wjx.network.proxy import normalize_random_ip_enabled_value
 if TYPE_CHECKING:
     from wjx.core.questions.config import QuestionEntry
 
-_CURRENT_CONFIG_SCHEMA_VERSION = 2
+_CURRENT_CONFIG_SCHEMA_VERSION = 3
 _TEXT_RANDOM_MODES = {"none", "name", "mobile"}
 
 
@@ -159,7 +159,7 @@ class RuntimeConfig:
     reliability_priority_mode: str = "reliability_first"  # reliability_first/ratio_first
     psycho_target_alpha: float = 0.85  # 心理测量计划目标 Cronbach's Alpha（0.70-0.95）
     headless_mode: bool = True
-    ai_enabled: bool = False
+    ai_mode: str = "free"
     ai_provider: str = "deepseek"
     ai_api_key: str = ""
     ai_base_url: str = ""
@@ -455,7 +455,7 @@ def _sanitize_runtime_config_payload(raw: Dict[str, Any]) -> RuntimeConfig:
                 config.answer_rules.append(normalized_rule)
 
     ai_keys = {
-        "ai_enabled",
+        "ai_mode",
         "ai_provider",
         "ai_api_key",
         "ai_base_url",
@@ -466,7 +466,9 @@ def _sanitize_runtime_config_payload(raw: Dict[str, Any]) -> RuntimeConfig:
     has_ai_keys = any(key in raw for key in ai_keys)
     config._ai_config_present = has_ai_keys
     if has_ai_keys:
-        config.ai_enabled = bool(raw.get("ai_enabled", False))
+        config.ai_mode = str(raw.get("ai_mode") or "free").strip().lower()
+        if config.ai_mode not in {"free", "provider"}:
+            config.ai_mode = "free"
         config.ai_provider = str(raw.get("ai_provider") or "deepseek")
         config.ai_api_key = str(raw.get("ai_api_key") or "")
         config.ai_base_url = str(raw.get("ai_base_url") or "")
@@ -602,6 +604,17 @@ def _migrate_v1_to_v2(payload: Dict[str, Any]) -> Dict[str, Any]:
     return migrated
 
 
+def _migrate_v2_to_v3(payload: Dict[str, Any]) -> Dict[str, Any]:
+    migrated: Dict[str, Any] = dict(payload)
+    ai_mode = str(migrated.get("ai_mode") or "free").strip().lower()
+    if ai_mode not in {"free", "provider"}:
+        ai_mode = "free"
+    migrated.pop("ai_enabled", None)
+    migrated["ai_mode"] = ai_mode
+    migrated["config_schema_version"] = 3
+    return migrated
+
+
 def _upgrade_config_payload(payload: Dict[str, Any]) -> Dict[str, Any]:
     current: Dict[str, Any] = dict(payload)
     schema_version = _coerce_schema_version(current.get("config_schema_version"))
@@ -609,6 +622,10 @@ def _upgrade_config_payload(payload: Dict[str, Any]) -> Dict[str, Any]:
     if schema_version < 2:
         current = _migrate_v1_to_v2(current)
         schema_version = 2
+
+    if schema_version < 3:
+        current = _migrate_v2_to_v3(current)
+        schema_version = 3
 
     current["config_schema_version"] = schema_version
     return current

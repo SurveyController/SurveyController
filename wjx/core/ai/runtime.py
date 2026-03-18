@@ -1,6 +1,6 @@
 """AI 运行时辅助函数 - 调用 AI 模型生成答案"""
 import re
-from typing import Optional
+from typing import Optional, Union, List
 import logging
 from wjx.utils.logging.log_utils import log_suppressed_exception
 
@@ -68,7 +68,12 @@ def resolve_question_title_for_ai(
     return title
 
 
-def generate_ai_answer(question_title: str) -> str:
+def generate_ai_answer(
+    question_title: str,
+    *,
+    question_type: str = "fill_blank",
+    blank_count: Optional[int] = None,
+) -> Union[str, List[str]]:
     cleaned = _cleanup_question_title(question_title)
     if not cleaned:
         raise AIRuntimeError("题干为空，无法调用 AI")
@@ -83,9 +88,27 @@ def generate_ai_answer(question_title: str) -> str:
         log_suppressed_exception("generate_ai_answer: from wjx.core.persona.context import build_ai_context_prompt", exc, level=logging.WARNING)
 
     try:
-        answer = generate_answer(cleaned)
+        answer = generate_answer(
+            cleaned,
+            question_type=question_type,
+            blank_count=blank_count,
+        )
     except Exception as exc:
         raise AIRuntimeError(f"AI 调用失败：{exc}") from exc
+    if question_type == "multi_fill_blank":
+        if not isinstance(answer, list):
+            if not answer or not str(answer).strip():
+                raise AIRuntimeError("AI 未返回有效答案")
+            return str(answer).strip()
+        cleaned_answers: List[str] = []
+        for item in answer:
+            text = str(item or "").strip()
+            if not text:
+                raise AIRuntimeError("AI 返回的多项填空答案包含空值")
+            cleaned_answers.append(text)
+        if not cleaned_answers:
+            raise AIRuntimeError("AI 未返回有效答案")
+        return cleaned_answers
     if not answer or not str(answer).strip():
         raise AIRuntimeError("AI 未返回有效答案")
     return str(answer).strip()
