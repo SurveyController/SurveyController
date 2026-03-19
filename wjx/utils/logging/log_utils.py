@@ -431,12 +431,21 @@ def _ensure_logs_dir(runtime_directory: str) -> str:
     return logs_dir
 
 
-def save_log_records_to_file(records: List[LogBufferEntry], runtime_directory: str) -> str:
+def save_log_records_to_file(
+    records: List[LogBufferEntry],
+    runtime_directory: str,
+    file_path: Optional[str] = None,
+) -> str:
     if not runtime_directory:
         raise ValueError("runtime_directory 不能为空")
-    logs_dir = _ensure_logs_dir(runtime_directory)
-    file_name = datetime.now().strftime("log_%Y%m%d_%H%M%S.txt")
-    file_path = os.path.join(logs_dir, file_name)
+    if file_path:
+        parent_dir = os.path.dirname(file_path)
+        if parent_dir:
+            os.makedirs(parent_dir, exist_ok=True)
+    else:
+        logs_dir = _ensure_logs_dir(runtime_directory)
+        file_name = datetime.now().strftime("log_%Y%m%d_%H%M%S.txt")
+        file_path = os.path.join(logs_dir, file_name)
     text_records = [entry.text for entry in (records or [])]
     with open(file_path, "w", encoding="utf-8") as f:
         f.write("\n".join(text_records))

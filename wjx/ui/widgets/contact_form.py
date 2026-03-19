@@ -233,7 +233,7 @@ class ContactForm(StatusPollingMixin, QWidget):
         self.urgency_label = BodyLabel("问卷紧急程度：", self)
         self.urgency_combo = ComboBox(self)
         self.urgency_combo.setMaximumWidth(140)
-        for urgency in ["低（一个月后）", "中（本月内）", "高（本周内）", "紧急（两天内）"]:
+        for urgency in ["低", "中（本月内）", "高（本周内）", "紧急（两天内）"]:
             self.urgency_combo.addItem(urgency, urgency)
         urgency_default_index = self.urgency_combo.findText("中（本月内）")
         if urgency_default_index >= 0:

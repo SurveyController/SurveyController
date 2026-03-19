@@ -28,8 +28,8 @@ from wjx.ui.widgets.full_width_infobar import FullWidthInfoBar
 from wjx.ui.workers.ai_test_worker import AITestWorker
 from wjx.utils.integrations.ai_service import (
     AI_PROVIDERS,
-    DEFAULT_SYSTEM_PROMPT,
     get_ai_settings,
+    get_default_system_prompt,
     save_ai_settings,
 )
 from wjx.utils.io.load_save import RuntimeConfig
@@ -38,13 +38,14 @@ from wjx.utils.io.load_save import RuntimeConfig
 class AIPromptSettingCard(ExpandGroupSettingCard):
     """AI 系统提示词展开卡。"""
 
-    def __init__(self, prompt_text: str, parent=None):
+    def __init__(self, prompt_text: str, default_prompt: str, parent=None):
         super().__init__(
             FluentIcon.EDIT,
             "系统提示词",
             "在此处编辑 AI 填空的系统提示词",
             parent,
         )
+        self._default_prompt = (default_prompt or "").strip() or get_default_system_prompt("provider")
 
         self._group_container = QWidget(self)
         layout = QVBoxLayout(self._group_container)
@@ -55,7 +56,7 @@ class AIPromptSettingCard(ExpandGroupSettingCard):
         self.promptEdit.setPlaceholderText("留空使用默认提示词...")
         self.promptEdit.setMinimumHeight(180)
         self.promptEdit.setMaximumHeight(230)
-        self.promptEdit.setPlainText(prompt_text or DEFAULT_SYSTEM_PROMPT)
+        self.promptEdit.setPlainText(prompt_text or self._default_prompt)
 
         layout.addWidget(self.promptEdit)
 
@@ -63,10 +64,15 @@ class AIPromptSettingCard(ExpandGroupSettingCard):
         self.setExpand(True)
 
     def prompt_text(self) -> str:
-        return self.promptEdit.toPlainText().strip() or DEFAULT_SYSTEM_PROMPT
+        return self.promptEdit.toPlainText().strip() or self._default_prompt
 
-    def set_prompt_text(self, value: str) -> None:
-        self.promptEdit.setPlainText((value or "").strip() or DEFAULT_SYSTEM_PROMPT)
+    def set_default_prompt(self, default_prompt: str) -> None:
+        self._default_prompt = (default_prompt or "").strip() or self._default_prompt
+
+    def set_prompt_text(self, value: str, default_prompt: Optional[str] = None) -> None:
+        if default_prompt is not None:
+            self.set_default_prompt(default_prompt)
+        self.promptEdit.setPlainText((value or "").strip() or self._default_prompt)
 
 
 class RuntimeAISection(QObject):
@@ -93,7 +99,11 @@ class RuntimeAISection(QObject):
         self._ai_test_worker: Optional[AITestWorker] = None
         self._current_infobar: Optional[InfoBar] = None  # 存储当前显示的InfoBar引用
         ai_config = get_ai_settings()
-        self._ai_system_prompt = ai_config.get("system_prompt") or DEFAULT_SYSTEM_PROMPT
+        initial_mode = str(ai_config.get("ai_mode") or "free").strip().lower()
+        if initial_mode not in self._AI_MODES:
+            initial_mode = "free"
+        self._last_ai_mode = initial_mode
+        self._ai_system_prompt = str(ai_config.get("system_prompt") or "").strip() or get_default_system_prompt(initial_mode)
         self._build_ui(ai_config)
         self._bind_events()
         self._update_ai_visibility()
@@ -102,6 +112,22 @@ class RuntimeAISection(QObject):
         saved_mode = str(ai_config.get("ai_mode") or "free").strip().lower()
         if saved_mode not in self._AI_MODES:
             saved_mode = "free"
+
+        self.ai_free_mode_bar = FullWidthInfoBar(
+            InfoBarIcon.INFORMATION,
+            "AI填空限时免费至2026-06-30，如有长期使用需求请自行准备API Key。",
+            "",
+            orient=Qt.Orientation.Horizontal,
+            isClosable=False,
+            duration=-1,
+            position=InfoBarPosition.NONE,
+            parent=self.group,
+        )
+        self.ai_free_mode_bar.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
+        self.ai_free_mode_bar.setMinimumWidth(0)
+        self.ai_free_mode_bar.setMaximumWidth(16777215)
+        self.ai_free_mode_bar.contentLabel.setVisible(False)
+        self.group.addSettingCard(self.ai_free_mode_bar)
 
         self.ai_privacy_bar = FullWidthInfoBar(
             InfoBarIcon.SUCCESS,
@@ -122,7 +148,7 @@ class RuntimeAISection(QObject):
         self.ai_mode_card = SettingCard(
             FluentIcon.ROBOT,
             "AI 模式",
-            "限时免费至2026-06-30截止；自定义服务商沿用自己拥有的API Key",
+            "目前仅可用于填空题、多项填空题的AI填空作答，将在后续再支持其他题型",
             self.group,
         )
         self.ai_mode_combo = ComboBox(self.ai_mode_card)
@@ -232,7 +258,11 @@ class RuntimeAISection(QObject):
             )
             self.ai_test_card.hBoxLayout.insertSpacing(insert_index + 1, 6)
 
-        self.ai_prompt_card = AIPromptSettingCard(self._ai_system_prompt, self.group)
+        self.ai_prompt_card = AIPromptSettingCard(
+            self._ai_system_prompt,
+            get_default_system_prompt(self._get_current_ai_mode()),
+            self.group,
+        )
         self.group.addSettingCard(self.ai_prompt_card)
 
     def bind_to_layout(self, layout):
@@ -256,7 +286,7 @@ class RuntimeAISection(QObject):
         cfg.ai_base_url = self.ai_baseurl_edit.text().strip()
         cfg.ai_api_protocol = "auto"
         cfg.ai_model = self._get_current_model_value()
-        cfg.ai_system_prompt = self._ai_system_prompt or DEFAULT_SYSTEM_PROMPT
+        cfg.ai_system_prompt = self._ai_system_prompt or get_default_system_prompt(cfg.ai_mode)
 
     def apply_config(self, cfg: RuntimeConfig):
         self._apply_ai_config(cfg)
@@ -339,6 +369,7 @@ class RuntimeAISection(QObject):
         idx = self.ai_provider_combo.currentIndex()
         provider_key = str(self.ai_provider_combo.itemData(idx)) if idx >= 0 else "deepseek"
         is_custom = provider_key == "custom"
+        self.ai_free_mode_bar.setVisible(is_free_mode)
         self.ai_privacy_bar.setVisible(not is_free_mode)
         self.ai_provider_card.setVisible(not is_free_mode)
         self.ai_apikey_card.setVisible(not is_free_mode)
@@ -387,7 +418,7 @@ class RuntimeAISection(QObject):
             cfg.ai_base_url = str(ai_config.get("base_url") or "")
             cfg.ai_api_protocol = str(ai_config.get("api_protocol") or "auto")
             cfg.ai_model = str(ai_config.get("model") or "")
-            cfg.ai_system_prompt = str(ai_config.get("system_prompt") or DEFAULT_SYSTEM_PROMPT)
+            cfg.ai_system_prompt = str(ai_config.get("system_prompt") or "").strip() or get_default_system_prompt(cfg.ai_mode)
         if not getattr(cfg, "ai_provider", ""):
             cfg.ai_provider = "deepseek"
         if not getattr(cfg, "ai_mode", ""):
@@ -397,7 +428,7 @@ class RuntimeAISection(QObject):
         if not getattr(cfg, "ai_api_protocol", ""):
             cfg.ai_api_protocol = "auto"
         if not getattr(cfg, "ai_system_prompt", ""):
-            cfg.ai_system_prompt = DEFAULT_SYSTEM_PROMPT
+            cfg.ai_system_prompt = get_default_system_prompt(cfg.ai_mode)
 
         self._ai_loading = True
         self._set_ai_controls_blocked(True)
@@ -413,8 +444,10 @@ class RuntimeAISection(QObject):
         current_model = (cfg.ai_model or "").strip()
         self.ai_model_combo.setText(current_model)
         self.ai_model_edit.setText(current_model)
-        self._ai_system_prompt = cfg.ai_system_prompt or DEFAULT_SYSTEM_PROMPT
-        self.ai_prompt_card.set_prompt_text(self._ai_system_prompt)
+        self._last_ai_mode = cfg.ai_mode
+        default_prompt = get_default_system_prompt(cfg.ai_mode)
+        self._ai_system_prompt = cfg.ai_system_prompt or default_prompt
+        self.ai_prompt_card.set_prompt_text(self._ai_system_prompt, default_prompt=default_prompt)
         self._update_ai_visibility()
         self._set_ai_controls_blocked(False)
         self._ai_loading = False
@@ -434,6 +467,17 @@ class RuntimeAISection(QObject):
         if self._ai_loading:
             return
         ai_mode = self._get_current_ai_mode()
+        previous_mode = getattr(self, "_last_ai_mode", "free")
+        previous_default = get_default_system_prompt(previous_mode)
+        current_prompt = str(self._ai_system_prompt or "").strip()
+        next_default = get_default_system_prompt(ai_mode)
+        if not current_prompt or current_prompt == previous_default:
+            self._ai_system_prompt = next_default
+            self.ai_prompt_card.set_prompt_text(self._ai_system_prompt, default_prompt=next_default)
+            self._save_ai_settings(system_prompt=self._ai_system_prompt)
+        else:
+            self.ai_prompt_card.set_default_prompt(next_default)
+        self._last_ai_mode = ai_mode
         self._save_ai_settings(ai_mode=ai_mode)
         self._update_ai_visibility()
 

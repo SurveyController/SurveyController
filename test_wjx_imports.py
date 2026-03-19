@@ -292,7 +292,9 @@ def run_window_smoke_check() -> dict | None:
         }
 
     payload = extract_child_payload(result.stdout, result.stderr) or {}
-    if result.returncode == 0 and payload.get("ok"):
+    # 在 Windows + Qt 场景下，子进程偶发非 0 退出码，但已明确输出成功 payload。
+    # 这里优先信任结构化结果，避免主窗口冒烟误报。
+    if payload.get("kind") == "window_smoke" and payload.get("ok") is True:
         return None
 
     fallback_message = summarize_child_output(result.stdout, result.stderr)

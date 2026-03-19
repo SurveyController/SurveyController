@@ -1,8 +1,9 @@
 """日志页面"""
 import os
 import logging
+from datetime import datetime
 from PySide6.QtCore import Qt, QTimer
-from PySide6.QtWidgets import QWidget, QVBoxLayout, QHBoxLayout, QPlainTextEdit
+from PySide6.QtWidgets import QWidget, QVBoxLayout, QHBoxLayout, QPlainTextEdit, QFileDialog
 from PySide6.QtGui import QFont, QTextCursor
 from qfluentwidgets import (
     SubtitleLabel,
@@ -251,9 +252,26 @@ class LogPage(QWidget):
 
     def save_logs(self):
         try:
+            runtime_directory = get_runtime_directory()
+            default_name = datetime.now().strftime("log_%Y%m%d_%H%M%S.txt")
+            default_path = os.path.join(runtime_directory, "logs", default_name)
+
+            selected_path, _ = QFileDialog.getSaveFileName(
+                self,
+                "保存日志",
+                default_path,
+                "文本文件 (*.txt);;所有文件 (*.*)",
+            )
+            if not selected_path:
+                return
+
+            if not os.path.splitext(selected_path)[1]:
+                selected_path += ".txt"
+
             file_path = save_log_records_to_file(
                 LOG_BUFFER_HANDLER.get_records(),
-                get_runtime_directory()
+                runtime_directory,
+                selected_path,
             )
             InfoBar.success(
                 "", f"日志已保存：{file_path}",

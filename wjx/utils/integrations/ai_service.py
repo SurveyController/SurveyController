@@ -68,7 +68,13 @@ CUSTOM_API_PROTOCOLS = {
     },
 }
 
-DEFAULT_SYSTEM_PROMPT = (
+AI_MODE_PROVIDER = "provider"
+AI_MODE_FREE = "free"
+
+FREE_QUESTION_TYPE_FILL = "fill_blank"
+FREE_QUESTION_TYPE_MULTI = "multi_fill_blank"
+
+_SYSTEM_PROMPT_BASE = (
     "你现在不是AI助手，而是一名有实际使用经验但不专业的普通用户。\n"
     "请按照“填写问卷/填空题”的方式作答，而不是进行解释或对话。\n\n"
     "回答规则：\n"
@@ -85,11 +91,22 @@ DEFAULT_SYSTEM_PROMPT = (
     "如果你的回答开始变得专业、详细或像在解释，请立即改回普通用户的随意回答风格。"
 )
 
-AI_MODE_PROVIDER = "provider"
-AI_MODE_FREE = "free"
+DEFAULT_SYSTEM_PROMPT_FREE = _SYSTEM_PROMPT_BASE
+DEFAULT_SYSTEM_PROMPT_PROVIDER = (
+    _SYSTEM_PROMPT_BASE
+    + "\n\n多项填空补充规则：\n"
+      "6. 当题目有多个空位时，按空位顺序输出一个字符串，并使用 || 分隔每个答案（示例：答案1||答案2||答案3）"
+)
+# 向后兼容：历史代码默认引用该常量时，沿用服务商模式提示词。
+DEFAULT_SYSTEM_PROMPT = DEFAULT_SYSTEM_PROMPT_PROVIDER
 
-FREE_QUESTION_TYPE_FILL = "fill_blank"
-FREE_QUESTION_TYPE_MULTI = "multi_fill_blank"
+
+def get_default_system_prompt(ai_mode: Any = AI_MODE_PROVIDER) -> str:
+    """根据模式返回默认系统提示词。"""
+    mode = str(ai_mode or AI_MODE_FREE).strip().lower()
+    if mode == AI_MODE_FREE:
+        return DEFAULT_SYSTEM_PROMPT_FREE
+    return DEFAULT_SYSTEM_PROMPT_PROVIDER
 
 _DEFAULT_AI_SETTINGS: Dict[str, Any] = {
     "ai_mode": AI_MODE_FREE,
@@ -98,7 +115,7 @@ _DEFAULT_AI_SETTINGS: Dict[str, Any] = {
     "base_url": "",
     "api_protocol": "auto",
     "model": "",
-    "system_prompt": DEFAULT_SYSTEM_PROMPT,
+    "system_prompt": DEFAULT_SYSTEM_PROMPT_FREE,
 }
 _RUNTIME_AI_SETTINGS: Optional[Dict[str, Any]] = None
 
@@ -255,6 +272,8 @@ def get_ai_settings() -> Dict[str, Any]:
     provider = str(settings.get("provider") or "deepseek").strip()
     settings["provider"] = provider if provider in AI_PROVIDERS else "deepseek"
     settings["api_protocol"] = _normalize_custom_api_protocol(settings.get("api_protocol"))
+    prompt = str(settings.get("system_prompt") or "").strip()
+    settings["system_prompt"] = prompt or get_default_system_prompt(settings["ai_mode"])
     return settings
 
 
@@ -700,7 +719,7 @@ def generate_answer(
     resolved_question_type = _normalize_free_question_type(question_type)
     resolved_blank_count = int(blank_count or 0) if blank_count is not None else None
     ai_mode = _normalize_ai_mode(config.get("ai_mode"))
-    system_prompt = config["system_prompt"] or DEFAULT_SYSTEM_PROMPT
+    system_prompt = str(config.get("system_prompt") or "").strip() or get_default_system_prompt(ai_mode)
 
     if ai_mode == AI_MODE_FREE:
         answers = _call_free_ai_api(
