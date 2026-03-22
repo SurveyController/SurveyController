@@ -17,17 +17,11 @@ def matrix(
     index: int,
     matrix_prob_config: List,
     dimension: Optional[str] = None,
-    is_reverse: Union[bool, List[bool]] = False,
     psycho_plan: Optional[Any] = None,
     question_index: Optional[int] = None,
     task_ctx: Optional[Any] = None,
 ) -> int:
-    """矩阵题处理主函数，返回更新后的索引。
-
-    is_reverse 可以是：
-    - bool：所有行统一翻转
-    - List[bool]：每行独立控制，长度不足时末尾行回退到 False
-    """
+    """矩阵题处理主函数，返回更新后的索引。"""
     rows_xpath = f'//*[@id="divRefTab{current}"]/tbody/tr'
     row_elements = driver.find_elements(By.XPATH, rows_xpath)
     matrix_row_count = sum(1 for row in row_elements if row.get_attribute("rowindex") is not None)
@@ -42,12 +36,6 @@ def matrix(
     for row_index in range(1, matrix_row_count + 1):
         raw_probabilities = matrix_prob_config[index] if index < len(matrix_prob_config) else -1
         index += 1
-
-        # 取当前行的反向标记
-        if isinstance(is_reverse, list):
-            row_is_reverse = is_reverse[row_index - 1] if row_index - 1 < len(is_reverse) else False
-        else:
-            row_is_reverse = bool(is_reverse)
 
         row_probabilities: Union[List[float], int] = -1
         if isinstance(raw_probabilities, list):
@@ -82,7 +70,6 @@ def matrix(
             len(candidate_columns),
             row_probabilities,
             dimension=dimension,
-            is_reverse=row_is_reverse,
             psycho_plan=psycho_plan,
             question_index=resolved_question_index,
             row_index=row_index - 1,

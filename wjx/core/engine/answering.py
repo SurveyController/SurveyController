@@ -143,10 +143,6 @@ def _build_psychometric_plan_for_run(ctx: TaskContext) -> Optional[Any]:
         if question_type == "matrix":
             row_count = int(question_meta.get("rows") or 0)
             if row_count <= 0:
-                reverse_flags = ctx.question_reverse_map.get(question_num)
-                if isinstance(reverse_flags, list) and reverse_flags:
-                    row_count = len(reverse_flags)
-            if row_count <= 0:
                 row_count = 1
 
             for row_idx in range(row_count):
@@ -260,7 +256,6 @@ class _QuestionDispatcher:
 
     def _handle_scale(self, driver, q_num, idx, ctx: TaskContext, question_div=None, psycho_plan=None):
         dim = ctx.question_dimension_map.get(q_num)
-        is_rev = ctx.question_reverse_map.get(q_num, False)
         if question_div is not None and _driver_question_looks_like_rating(question_div):
             _score_impl(
                 driver,
@@ -268,7 +263,6 @@ class _QuestionDispatcher:
                 idx,
                 ctx.scale_prob,
                 dimension=dim,
-                is_reverse=is_rev,
                 psycho_plan=psycho_plan,
                 question_index=q_num,
                 task_ctx=ctx,
@@ -280,7 +274,6 @@ class _QuestionDispatcher:
                 idx,
                 ctx.scale_prob,
                 dimension=dim,
-                is_reverse=is_rev,
                 psycho_plan=psycho_plan,
                 question_index=q_num,
                 task_ctx=ctx,
@@ -288,14 +281,12 @@ class _QuestionDispatcher:
 
     def _handle_matrix(self, driver, q_num, idx, ctx: TaskContext, psycho_plan=None):
         dim = ctx.question_dimension_map.get(q_num)
-        is_rev = ctx.question_reverse_map.get(q_num, False)
         return _matrix_impl(
             driver,
             q_num,
             idx,
             ctx.matrix_prob,
             dimension=dim,
-            is_reverse=is_rev,
             psycho_plan=psycho_plan,
             question_index=q_num,
             task_ctx=ctx,

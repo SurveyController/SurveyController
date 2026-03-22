@@ -197,8 +197,6 @@ def serialize_question_entry(entry: QuestionEntry) -> Dict[str, Any]:
         "fillable_option_indices": entry.fillable_option_indices,
         "attached_option_selects": list(getattr(entry, "attached_option_selects", []) or []),
         "is_location": getattr(entry, "is_location", False),
-        "is_reverse": bool(getattr(entry, "is_reverse", False)),
-        "row_reverse_flags": list(getattr(entry, "row_reverse_flags", []) or []),
         "psycho_bias": str(getattr(entry, "psycho_bias", "custom") or "custom"),
     }
 
@@ -289,8 +287,6 @@ def deserialize_question_entry(data: Dict[str, Any]) -> "QuestionEntry":
         fillable_option_indices=data.get("fillable_option_indices"),
         attached_option_selects=list(data.get("attached_option_selects") or []),
         is_location=bool(data.get("is_location")),
-        is_reverse=bool(data.get("is_reverse", False)),
-        row_reverse_flags=[bool(v) for v in (data.get("row_reverse_flags") or [])],
         psycho_bias=_normalize_psycho_bias(data),
     )
 

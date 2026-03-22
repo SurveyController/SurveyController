@@ -18,7 +18,6 @@ def scale(
     index: int,
     scale_prob_config: List,
     dimension: Optional[str] = None,
-    is_reverse: bool = False,
     psycho_plan: Optional[Any] = None,
     question_index: Optional[int] = None,
     task_ctx: Optional[Any] = None,
@@ -43,7 +42,6 @@ def scale(
         len(scale_options),
         probs,
         dimension=dimension,
-        is_reverse=is_reverse,
         psycho_plan=psycho_plan,
         question_index=resolved_question_index,
     )

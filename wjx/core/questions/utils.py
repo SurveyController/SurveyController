@@ -33,11 +33,16 @@ def weighted_index(probabilities: List[float]) -> int:
 
     pivot = random.random() * total
     running = 0.0
+    last_positive_index = 0
     for index, weight in enumerate(weights):
+        if weight <= 0.0:
+            continue
         running += weight
-        if pivot <= running:
+        last_positive_index = index
+        # 只允许命中正权重区间，避免 pivot == 0 时误落到前导 0 权重选项。
+        if pivot < running:
             return index
-    return len(weights) - 1
+    return last_positive_index
 
 
 def normalize_probabilities(values: List[float]) -> List[float]:

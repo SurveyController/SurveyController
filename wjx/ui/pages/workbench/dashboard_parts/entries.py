@@ -164,16 +164,6 @@ class DashboardEntriesMixin:
         for idx, flags in multi_text_blank_ai_updates.items():
             if 0 <= idx < len(entries):
                 entries[idx].multi_text_blank_ai_flags = flags
-        reverse_updates = dlg.get_reverse_results()
-        for idx, rev_val in reverse_updates.items():
-            if 0 <= idx < len(entries):
-                entry = entries[idx]
-                if isinstance(rev_val, list):
-                    entry.row_reverse_flags = [bool(v) for v in rev_val]
-                    entry.is_reverse = any(entry.row_reverse_flags)
-                else:
-                    entry.is_reverse = bool(rev_val)
-
         # 存储倾向预设
         bias_presets = dlg.get_bias_presets()
         for idx, bias in bias_presets.items():

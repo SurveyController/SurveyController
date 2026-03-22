@@ -16,7 +16,6 @@ from qfluentwidgets import (
     PrimaryPushButton,
     ComboBox,
     LineEdit,
-    CheckBox,
 )
 
 from wjx.ui.widgets.no_wheel import NoWheelSpinBox
@@ -46,7 +45,6 @@ class QuestionAddDialog(AddPreviewMixin, QDialog):
         self._ai_enabled = False
         self._option_backup: Optional[int] = None
         self._matrix_strategy = ""
-        self._is_reverse = False
 
         layout = QVBoxLayout(self)
         layout.setContentsMargins(20, 18, 20, 18)
@@ -91,18 +89,6 @@ class QuestionAddDialog(AddPreviewMixin, QDialog):
         strategy_row.addWidget(self.strategy_combo, 1)
         base_layout.addWidget(self.strategy_row_widget)
 
-        # 反向题复选框（仅量表/矩阵/评价题显示）
-        self.reverse_row_widget = QWidget(base_card)
-        reverse_row = QHBoxLayout(self.reverse_row_widget)
-        reverse_row.setContentsMargins(0, 0, 0, 0)
-        reverse_row.setSpacing(8)
-        self.reverse_check = CheckBox("反向题", base_card)
-        self.reverse_check.setToolTip("勾选后，信效度一致性约束会翻转该题的基准偏好（正向高分 → 反向低分）")
-        self.reverse_check.setChecked(False)
-        reverse_row.addWidget(self.reverse_check)
-        reverse_row.addStretch(1)
-        self.reverse_row_widget.setVisible(False)
-        base_layout.addWidget(self.reverse_row_widget)
         self.option_row_widget = QWidget(base_card)
         option_row = QHBoxLayout(self.option_row_widget)
         option_row.setContentsMargins(0, 0, 0, 0)
@@ -241,14 +227,11 @@ class QuestionAddDialog(AddPreviewMixin, QDialog):
         is_slider = q_type == "slider"
         is_matrix = q_type == "matrix"
         is_order = q_type == "order"
-        is_reverse_applicable = q_type in ("scale", "matrix", "score")
-
         self.strategy_row_widget.setVisible(not is_text and not is_matrix and not is_order)
         self.row_count_widget.setVisible(is_matrix)
         self.matrix_strategy_widget.setVisible(is_matrix)
         self.option_label.setText("列数：" if is_matrix else "选项数量：")
         self.answer_count_widget.setVisible(is_text)
-        self.reverse_row_widget.setVisible(is_reverse_applicable)
 
         if is_slider:
             if self._option_backup is None:
@@ -291,13 +274,6 @@ class QuestionAddDialog(AddPreviewMixin, QDialog):
         q_type = self._resolve_q_type()
         option_count = self._current_option_count()
         rows = self._current_row_count()
-
-        # 获取反向题标记（仅量表/矩阵/评价题有效）
-        is_reverse = bool(
-            q_type in ("scale", "matrix", "score")
-            and hasattr(self, "reverse_check")
-            and self.reverse_check.isChecked()
-        )
 
         if q_type in ("text", "multi_text"):
             self._sync_text_answers_from_edits()
@@ -344,7 +320,6 @@ class QuestionAddDialog(AddPreviewMixin, QDialog):
                     custom_weights=cast(Any, weights),
                     question_num=self._entry_index,
                     dimension=None,
-                    is_reverse=is_reverse,
                 )
             return QuestionEntry(
                 question_type=q_type,
@@ -356,7 +331,6 @@ class QuestionAddDialog(AddPreviewMixin, QDialog):
                 custom_weights=None,
                 question_num=self._entry_index,
                 dimension=None,
-                is_reverse=is_reverse,
             )
 
         strategy = self._resolve_strategy()
@@ -381,7 +355,6 @@ class QuestionAddDialog(AddPreviewMixin, QDialog):
             custom_weights=custom_weights,
             question_num=self._entry_index,
             dimension=None,
-            is_reverse=is_reverse,
         )
 
     def _on_accept(self) -> None:

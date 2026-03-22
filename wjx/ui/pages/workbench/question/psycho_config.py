@@ -3,7 +3,7 @@ from typing import List
 
 
 # 支持倾向预设的题型
-PSYCHO_SUPPORTED_TYPES = {"single", "scale", "score", "dropdown", "matrix"}
+PSYCHO_SUPPORTED_TYPES = {"scale", "score", "dropdown", "matrix"}
 
 # 倾向预设选项（用于 SegmentedWidget）
 BIAS_PRESET_CHOICES = [

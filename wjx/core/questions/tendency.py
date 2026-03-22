@@ -32,16 +32,11 @@ def reset_tendency() -> None:
 def _generate_base_ratio(
     option_count: int,
     probabilities: Union[List[float], int, None],
-    is_reverse: bool = False,
 ) -> float:
     """生成本份问卷的基准偏好比例（0.0~1.0），与具体选项数无关。
 
-    base_ratio 语义始终是"真实满意度"：0.0=极不满意，1.0=极满意。
-    对于反向题，用户配置的概率指向的是"反向选项索引"，必须翻转后才能
-    还原为真实满意度，否则会把"极其不满"的人误记成"极其满意"，
-    污染同维度后续所有正向题的作答。
-
-    画像的 satisfaction_tendency 本身已是真实满意度，无需翻转。
+    base_ratio 语义始终是当前维度的基准偏好：0.0=偏左侧选项，1.0=偏右侧选项。
+    它只根据当前题目的实际权重生成，不再额外解释题干语义方向。
     """
     if probabilities == -1 or probabilities is None:
         # 尝试从画像获取满意度倾向
@@ -59,9 +54,6 @@ def _generate_base_ratio(
     if isinstance(probabilities, list) and probabilities:
         idx = weighted_index(probabilities)
         ratio = idx / max(option_count - 1, 1)
-        # 反向题：索引越高代表越不满意，需翻转才能还原真实满意度
-        if is_reverse:
-            ratio = 1.0 - ratio
         return ratio
     return random.random()
 
@@ -185,7 +177,6 @@ def get_tendency_index(
     option_count: int,
     probabilities: Union[List[float], int, None],
     dimension: Optional[str] = None,
-    is_reverse: bool = False,
     # 可选：按心理测量计划直接取答案
     psycho_plan: Optional[Any] = None,
     question_index: Optional[int] = None,
@@ -205,9 +196,7 @@ def get_tendency_index(
 
     # 传入心理测量计划时，优先按计划取答案
     if psycho_plan is not None and question_index is not None:
-        choice = _get_psychometric_answer(
-            psycho_plan, question_index, row_index, option_count, is_reverse
-        )
+        choice = _get_psychometric_answer(psycho_plan, question_index, row_index, option_count)
         if choice is not None:
             blended_choice = _blend_psychometric_choice(choice, option_count, probabilities)
             return _finalize_choice(blended_choice, anchor=choice)
@@ -217,11 +206,9 @@ def get_tendency_index(
             question_index, row_index
         )
 
-    # 未分组 → 纯随机/纯概率，不做一致性约束，但仍需处理反向题
+    # 未分组 → 纯随机/纯概率，不做一致性约束
     if _is_ungrouped(dimension):
         result = _random_by_probabilities(option_count, probabilities)
-        if is_reverse:
-            result = (option_count - 1) - result
         return _finalize_choice(result, anchor=result)
 
     # 获取该维度的基准偏好
@@ -235,20 +222,15 @@ def get_tendency_index(
 
     if base_ratio is None:
         # 该维度首次遇到：生成归一化比例（0.0~1.0）并存入
-        # 必须透传 is_reverse，否则反向题会把"极不满意"误记成"极满意"
-        base_ratio = _generate_base_ratio(option_count, probabilities, is_reverse=is_reverse)
+        base_ratio = _generate_base_ratio(option_count, probabilities)
         bases[dimension] = base_ratio
 
     # 将归一化比例还原为当前题的绝对索引，避免不同量程题目语义错位
     base = int(round(base_ratio * (option_count - 1)))
     base = max(0, min(option_count - 1, base))
 
-    # 反向题翻转基准后再应用一致性约束
-    effective_base = base
-    if is_reverse:
-        effective_base = (option_count - 1) - base
-    selected = _apply_consistency(effective_base, option_count, probabilities)
-    return _finalize_choice(selected, anchor=effective_base)
+    selected = _apply_consistency(base, option_count, probabilities)
+    return _finalize_choice(selected, anchor=base)
 
 
 def _apply_consistency(
@@ -329,7 +311,6 @@ def _get_psychometric_answer(
     question_index: int,
     row_index: Optional[int],
     option_count: int,
-    is_reverse: bool,
 ) -> Optional[int]:
     """从潜变量计划中获取答案"""
     try:
@@ -339,10 +320,6 @@ def _get_psychometric_answer(
         
         # 确保选项索引在有效范围内
         choice = max(0, min(option_count - 1, choice))
-        
-        # 反向题翻转
-        if is_reverse:
-            choice = (option_count - 1) - choice
         
         return choice
     except Exception as exc:

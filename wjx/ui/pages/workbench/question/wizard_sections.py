@@ -15,7 +15,6 @@ from .utils import (
     _shorten_text,
     _apply_label_color,
     _bind_slider_input,
-    infer_reverse_by_option_texts,
 )
 from .psycho_config import PSYCHO_SUPPORTED_TYPES, BIAS_PRESET_CHOICES, build_bias_weights
 
@@ -65,8 +64,6 @@ class WizardSectionsMixin:
     info: List[Any]
     reliability_mode_enabled: bool
     matrix_row_slider_map: Dict[int, Any]
-    matrix_reverse_check_map: Dict[int, Any]
-    reverse_check_map: Dict[int, Any]
     entries: List[Any]
     slider_map: Dict[int, Any]
     bias_preset_map: Dict[int, Any]
@@ -563,14 +560,8 @@ class WizardSectionsMixin:
 
         matrix_weights = self._resolve_matrix_weights(entry, rows, columns)
 
-        saved_row_flags = list(getattr(entry, "row_reverse_flags", []) or [])
-        auto_reverse = infer_reverse_by_option_texts(option_texts)
-        if not saved_row_flags and (getattr(entry, "is_reverse", False) or auto_reverse):
-            saved_row_flags = [True] * rows
-
         per_row_sliders: List[List[NoWheelSlider]] = []
         per_row_values = matrix_weights if matrix_weights else [[1.0] * columns for _ in range(rows)]
-        row_reverse_cbs: List[CheckBox] = []
         for row_idx in range(rows):
             row_card = CardWidget(per_row_view)
             row_card_layout = QVBoxLayout(row_card)
@@ -604,21 +595,6 @@ class WizardSectionsMixin:
                 row_card_layout.addLayout(r_preset_row)
                 _matrix_row_preset_segs.append(r_seg)
 
-            if self.reliability_mode_enabled:
-                rev_row_layout = QHBoxLayout()
-                rev_row_layout.setContentsMargins(0, 0, 0, 2)
-                rev_cb = CheckBox("反向题请勾选此处", row_card)
-                tip = "勾选后，该行的答题倾向会翻转（正向高分 → 反向低分）"
-                if auto_reverse and not getattr(entry, "is_reverse", False):
-                    tip += "\n已根据选项文本自动推断为反向题，可手动修改。"
-                rev_cb.setToolTip(tip)
-                row_is_rev = saved_row_flags[row_idx] if row_idx < len(saved_row_flags) else False
-                rev_cb.setChecked(bool(row_is_rev))
-                rev_row_layout.addWidget(rev_cb)
-                rev_row_layout.addStretch(1)
-                row_card_layout.addLayout(rev_row_layout)
-                row_reverse_cbs.append(rev_cb)
-
             row_sliders = build_slider_rows(row_card, row_card_layout, per_row_values[row_idx])
             per_row_sliders.append(row_sliders)
 
@@ -648,8 +624,6 @@ class WizardSectionsMixin:
             per_row_layout.addWidget(row_card)
 
         self.matrix_row_slider_map[idx] = per_row_sliders
-        if self.reliability_mode_enabled and row_reverse_cbs:
-            self.matrix_reverse_check_map[idx] = row_reverse_cbs
 
         # 每行预设 ↔ 该行滑块联动
         if _matrix_row_preset_segs:
@@ -723,21 +697,6 @@ class WizardSectionsMixin:
             slider_hint.setStyleSheet("font-size: 12px;")
             _apply_label_color(slider_hint, "#666666", "#bfbfbf")
             card_layout.addWidget(slider_hint)
-
-        if self.reliability_mode_enabled and entry.question_type in ("scale", "score"):
-            rev_row = QHBoxLayout()
-            rev_row.setContentsMargins(0, 2, 0, 2)
-            rev_cb = CheckBox("反向题请勾选此处", card)
-            auto_reverse = infer_reverse_by_option_texts(option_texts)
-            tip = "勾选后，信效度一致性约束会翻转该题的基准偏好（正向高分 → 反向低分）"
-            if auto_reverse and not getattr(entry, "is_reverse", False):
-                tip += "\n已根据选项文本自动推断为反向题，可手动修改。"
-            rev_cb.setToolTip(tip)
-            rev_cb.setChecked(bool(getattr(entry, "is_reverse", False) or auto_reverse))
-            rev_row.addWidget(rev_cb)
-            rev_row.addStretch(1)
-            card_layout.addLayout(rev_row)
-            self.reverse_check_map[idx] = rev_cb
 
         options = max(1, int(entry.option_count or 1))
 

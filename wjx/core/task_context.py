@@ -82,9 +82,6 @@ class TaskContext:
     # 题号 → 维度名称（None 表示未分组，走纯随机）
     question_dimension_map: Dict[int, Optional[str]] = field(default_factory=dict)
 
-    # 题号 → 是否为反向题（scale/score 为 bool；matrix 为 List[bool]，每行一个）
-    question_reverse_map: Dict[int, Any] = field(default_factory=dict)
-
     # 题号 → 倾向预设（scale/score 为 str；matrix 为 List[str]，每行一个）
     question_psycho_bias_map: Dict[int, Any] = field(default_factory=dict)
 

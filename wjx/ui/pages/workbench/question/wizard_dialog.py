@@ -134,8 +134,6 @@ class QuestionWizardDialog(WizardSectionsMixin, QDialog):
         self.matrix_row_slider_map: Dict[int, List[List[NoWheelSlider]]] = {}
         self.text_edit_map: Dict[int, QuestionWizardDialog.TextEditsValue] = {}
         self.ai_check_map: Dict[int, CheckBox] = {}
-        self.reverse_check_map: Dict[int, CheckBox] = {}
-        self.matrix_reverse_check_map: Dict[int, List[CheckBox]] = {}
         self.text_container_map: Dict[int, QWidget] = {}
         self.text_add_btn_map: Dict[int, PushButton] = {}
         self.text_random_mode_map: Dict[int, str] = {}
@@ -598,18 +596,6 @@ class QuestionWizardDialog(WizardSectionsMixin, QDialog):
                     "weights": weights,
                 })
             result[idx] = serialized_items
-        return result
-
-    def get_reverse_results(self) -> Dict[int, Any]:
-        """获取反向题标记结果。
-        - scale/score：{idx: bool}
-        - matrix：{idx: List[bool]}（每行一个）
-        """
-        result: Dict[int, Any] = {}
-        for idx, cb in self.reverse_check_map.items():
-            result[idx] = cb.isChecked()
-        for idx, cbs in self.matrix_reverse_check_map.items():
-            result[idx] = [cb.isChecked() for cb in cbs]
         return result
 
     def get_bias_presets(self) -> Dict[int, Any]:

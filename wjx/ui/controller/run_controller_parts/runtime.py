@@ -413,7 +413,6 @@ class RunControllerRuntimeMixin:
         ctx.multiple_option_fill_texts = copy.deepcopy(pending.multiple_option_fill_texts)
         ctx.question_config_index_map = copy.deepcopy(pending.question_config_index_map)
         ctx.question_dimension_map = copy.deepcopy(pending.question_dimension_map)
-        ctx.question_reverse_map = copy.deepcopy(pending.question_reverse_map)
         ctx.question_psycho_bias_map = copy.deepcopy(pending.question_psycho_bias_map)
         ctx.questions_metadata = copy.deepcopy(pending.questions_metadata)
         if consume:

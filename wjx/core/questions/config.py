@@ -101,8 +101,6 @@ class QuestionEntry:
     attached_option_selects: List[dict] = field(default_factory=list)
     is_location: bool = False
     dimension: Optional[str] = None  # 题目所属维度（如"满意度"、"信任感"等），None 表示未分组
-    is_reverse: bool = False  # 是否为反向题（用于信效度一致性约束时翻转基准）
-    row_reverse_flags: List[bool] = field(default_factory=list)  # 矩阵题每行的反向标记（空列表时回退到 is_reverse）
     
     # 倾向预设：left/center/right/custom
     psycho_bias: str = "custom"
@@ -229,7 +227,6 @@ def configure_probabilities(
     _target.multiple_option_fill_texts = []
     _target.question_config_index_map = {}
     _target.question_dimension_map = {}
-    _target.question_reverse_map = {}
     _target.question_psycho_bias_map = {}
 
     # 各题型的当前索引,用于构建 question_config_index_map
@@ -276,12 +273,6 @@ def configure_probabilities(
             rows = max(1, entry.rows)
             _target.question_config_index_map[question_num] = ("matrix", _idx_matrix)
             _target.question_dimension_map[question_num] = _RELIABILITY_GLOBAL_DIMENSION if reliability_mode_enabled else None
-            # 矩阵题：优先用 row_reverse_flags（每行独立），否则用 is_reverse 广播到所有行
-            _row_flags = getattr(entry, "row_reverse_flags", [])
-            if _row_flags:
-                _target.question_reverse_map[question_num] = list(_row_flags)
-            else:
-                _target.question_reverse_map[question_num] = bool(getattr(entry, "is_reverse", False))
             bias_value = getattr(entry, "psycho_bias", "custom")
             if isinstance(bias_value, list):
                 _target.question_psycho_bias_map[question_num] = list(bias_value)
@@ -338,7 +329,6 @@ def configure_probabilities(
         elif entry.question_type in ("scale", "score"):
             _target.question_config_index_map[question_num] = (entry.question_type, _idx_scale)
             _target.question_dimension_map[question_num] = _RELIABILITY_GLOBAL_DIMENSION if reliability_mode_enabled else None
-            _target.question_reverse_map[question_num] = getattr(entry, "is_reverse", False)
             _target.question_psycho_bias_map[question_num] = str(getattr(entry, "psycho_bias", "custom") or "custom")
             _idx_scale += 1
             _target.scale_prob.append(_normalize_single_like_prob_config(probs, entry.option_count))
