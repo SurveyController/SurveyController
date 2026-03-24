@@ -3,9 +3,19 @@
 from __future__ import annotations
 
 from importlib import import_module
-from typing import Any, Dict, Tuple
+from typing import TYPE_CHECKING, Any, Dict, Tuple
 
 from software.app.version import __VERSION__
+
+if TYPE_CHECKING:
+    from wjx.provider.detection import detect
+    from wjx.provider.parser import (
+        PAUSED_SURVEY_ERROR_MESSAGE,
+        SurveyPausedError,
+        is_paused_survey_page,
+        parse_wjx_survey,
+    )
+    from wjx.provider.runtime import brush_wjx, fill_survey
 
 _EXPORTS: Dict[str, Tuple[str, str]] = {
     "PAUSED_SURVEY_ERROR_MESSAGE": ("wjx.provider.parser", "PAUSED_SURVEY_ERROR_MESSAGE"),
@@ -17,7 +27,16 @@ _EXPORTS: Dict[str, Tuple[str, str]] = {
     "fill_survey": ("wjx.provider.runtime", "fill_survey"),
 }
 
-__all__ = ["__VERSION__", *_EXPORTS.keys()]
+__all__ = [
+    "__VERSION__",
+    "PAUSED_SURVEY_ERROR_MESSAGE",
+    "SurveyPausedError",
+    "is_paused_survey_page",
+    "parse_wjx_survey",
+    "detect",
+    "brush_wjx",
+    "fill_survey",
+]
 
 
 def __getattr__(name: str) -> Any:
