@@ -77,7 +77,7 @@ os.environ.setdefault("WJX_IMPORT_CHECK", "1")
 try:
     from PySide6.QtWidgets import QApplication
 
-    from software.ui.main_window import create_window
+    from software.ui.shell.main_window import create_window
 
     app = QApplication.instance() or QApplication([])
     create_window()

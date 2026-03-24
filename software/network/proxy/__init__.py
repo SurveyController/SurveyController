@@ -1,8 +1,19 @@
 """随机 IP / 代理能力聚合导出。"""
 from __future__ import annotations
 
-from software.network.proxy.source import (
+from software.network.proxy.api import (
+    AreaProxyQualityError,
+    ProxyApiFatalError,
+    format_status_payload,
+    get_status,
+    test_custom_proxy_api,
+)
+from software.network.proxy.policy import (
     PROXY_SOURCE_BENEFIT,
+    ProxySettings,
+    apply_custom_proxy_api,
+    apply_proxy_area_code,
+    apply_proxy_source_settings,
     get_custom_proxy_api_override,
     get_default_proxy_area_code,
     get_effective_proxy_api_url,
@@ -10,14 +21,18 @@ from software.network.proxy.source import (
     get_proxy_minute_by_answer_seconds,
     get_proxy_occupy_minute,
     get_proxy_required_seconds_by_answer_seconds,
+    get_proxy_settings,
     get_proxy_source,
     get_proxy_upstream,
     get_quota_cost_by_minute,
+    get_random_ip_counter_snapshot_local,
+    get_random_ip_limit,
     has_custom_proxy_api_override,
     is_custom_proxy_api_active,
     is_custom_proxy_source,
     is_official_proxy_source,
     normalize_proxy_source,
+    normalize_random_ip_enabled_value,
     set_proxy_api_override,
     set_proxy_area_code,
     set_proxy_occupy_minute_by_answer_duration,
@@ -27,29 +42,11 @@ from software.network.proxy.source import (
 )
 from software.network.proxy.pool import (
     get_proxy_required_ttl_seconds,
+    prefetch_proxy_pool,
     proxy_lease_has_sufficient_ttl,
 )
-from software.network.proxy.provider import (
-    AreaProxyQualityError,
-    ProxyApiFatalError,
-    format_status_payload,
-    get_status,
-    test_custom_proxy_api,
-)
-from software.network.proxy.quota import (
-    get_random_ip_counter_snapshot_local,
-    get_random_ip_limit,
-    normalize_random_ip_enabled_value,
-)
-from software.network.proxy.settings import (
-    ProxySettings,
-    apply_custom_proxy_api,
-    apply_proxy_area_code,
-    apply_proxy_source_settings,
-    get_proxy_settings,
-)
 from software.app.config import PROXY_SOURCE_CUSTOM, PROXY_SOURCE_DEFAULT
-from software.network.proxy.auth import format_quota_value
+from software.network.proxy.session import format_quota_value
 
 __all__ = [
     "AreaProxyQualityError",
@@ -84,6 +81,7 @@ __all__ = [
     "is_official_proxy_source",
     "normalize_proxy_source",
     "normalize_random_ip_enabled_value",
+    "prefetch_proxy_pool",
     "proxy_lease_has_sufficient_ttl",
     "set_proxy_api_override",
     "set_proxy_area_code",

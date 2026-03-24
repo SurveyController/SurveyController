@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from typing import Optional
 
-from software.io.load_save import RuntimeConfig, load_config, save_config
+from software.io.config import RuntimeConfig, load_config, save_config
 
 
 class RunControllerPersistenceMixin:

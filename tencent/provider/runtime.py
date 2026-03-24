@@ -32,7 +32,7 @@ from software.core.questions.utils import (
     resolve_dynamic_text_token,
     weighted_index,
 )
-from software.core.task_context import TaskContext
+from software.core.task import TaskContext
 from software.core.modes.duration_control import simulate_answer_duration_delay
 from software.network.browser import BrowserDriver, NoSuchElementException
 from software.app.config import DEFAULT_FILL_TEXT, HEADLESS_PAGE_BUFFER_DELAY, HEADLESS_PAGE_CLICK_DELAY

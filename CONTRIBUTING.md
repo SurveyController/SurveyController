@@ -35,26 +35,38 @@
 
 ```markdown
 software/
-├── app/                   # 启动入口、版本、运行路径
+├── app/                   # 启动入口、版本、运行路径、QSettings 门面
 ├── assets/                # 程序内置资源（地区数据、协议文本等）
-├── core/                  # 平台无关共享核心
-│   ├── ai/                # AI 填空运行时
-│   ├── captcha/           # 旧验证码接口兼容层
-│   ├── config/            # 配置编解码与结构定义
-│   ├── engine/            # 核心执行引擎
+├── core/                  # 共享执行核心
+│   ├── ai/                # AI 填空共享逻辑
+│   ├── config/            # 配置结构与编解码
+│   ├── engine/            # 共享执行流程（runner/cleanup/submission 等）
 │   ├── modes/             # 作答模式与时长控制
 │   ├── persona/           # 人设与上下文生成
-│   ├── providers/         # 旧路径兼容转发层（内部应改用 software/providers）
 │   ├── psychometrics/     # 心理测量题辅助逻辑
-│   ├── questions/         # 题目配置与分布逻辑
-│   └── services/          # 共享服务（地区、代理等）
-├── integrations/          # 外部能力接入
-├── io/                    # 配置读写、二维码、Markdown 等输入输出
+│   ├── questions/         # 题目配置、分布、题型实现
+│   └── task/              # TaskContext、事件总线、线程进度模型
+├── integrations/
+│   └── ai/                # AI API 适配器
+├── io/
+│   ├── config/            # 配置读写、导入导出
+│   ├── qr/                # 二维码工具
+│   ├── markdown/          # Markdown 工具
+│   └── reports/           # 使用记录等输出
 ├── logging/               # 日志工具
-├── network/               # 浏览器与代理网络层
+├── network/
+│   ├── http/              # httpx 客户端封装
+│   ├── browser/           # 浏览器驱动
+│   └── proxy/             # 代理 API / 会话 / 策略 / 地区 / 代理池
 ├── providers/             # 平台识别、注册、分发总入口
-├── system/                # 系统资源、清理、安全存储
-├── ui/                    # 图形界面入口与页面/组件/控制器
+├── system/                # Windows/系统级能力（安全存储、注册表、进程清理）
+├── ui/
+│   ├── shell/             # 主窗口、启动页、页面装配
+│   ├── controller/        # Qt 协调器
+│   ├── helpers/           # UI 侧辅助门面
+│   ├── pages/
+│   │   └── workbench/     # dashboard/question_editor/runtime_panel/log_panel
+│   └── widgets/           # 通用组件（contact_form 已拆成包）
 └── update/                # 更新检查与升级
 
 wjx/
@@ -70,7 +82,7 @@ tencent/
 
 ## PR 流程（推荐）
 1. Fork 仓库本仓库
-2. 开发时遵守三主包边界：共享业务、GUI、平台总调度放 `software`；问卷星专属实现只放 `wjx/provider`；腾讯问卷专属实现放 `tencent/provider`；兼容目录 `software/core/providers`、`tencent/parser.py`、`tencent/runtime.py` 不再作为新代码落点
+2. 开发时遵守三主包边界：共享业务、GUI、平台总调度放 `software`；问卷星专属实现只放 `wjx/provider`；腾讯问卷专属实现放 `tencent/provider`；旧兼容入口 `tencent/parser.py`、`tencent/runtime.py` 不再作为新代码落点
 3. 自测：运行 `python test_wjx_imports.py` 检查 import 和语法错误；至少手动跑一次核心流程（启动、加载问卷、配置、开始运行），确保无报错
 4. 提交：保持清晰提交信息，必要时补充中文注释和变更说明
 5. PR 描述：写明变更目的、主要改动点、测试方式与结果，关联相关 Issue（如有）

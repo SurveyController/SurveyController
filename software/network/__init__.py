@@ -1,7 +1,7 @@
 """软件基础设施网络层导出。"""
 from __future__ import annotations
 
-from software.network import http_client
+import software.network.http as http
 from software.network.browser import (
     By,
     BrowserManager,
@@ -18,7 +18,7 @@ from software.network.browser import (
 )
 
 __all__ = [
-    "http_client",
+    "http",
     "By",
     "BrowserManager",
     "BrowserDriver",

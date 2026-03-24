@@ -5,7 +5,7 @@ from __future__ import annotations
 import threading
 from typing import Any, Optional
 
-from software.core.task_context import TaskContext
+from software.core.task import TaskContext
 from software.network.browser import BrowserDriver
 from wjx.provider.detection import detect as _wjx_detect
 

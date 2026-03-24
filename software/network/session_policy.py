@@ -2,11 +2,11 @@
 from typing import Any, Optional, Tuple
 import logging
 
-from software.core.task_context import ProxyLease, TaskContext
+from software.core.task import ProxyLease, TaskContext
 from software.network.proxy.pool import coerce_proxy_lease, mask_proxy_for_log
-from software.network.proxy.provider import fetch_proxy_batch
+from software.network.proxy.api import fetch_proxy_batch
 from software.network.proxy import get_proxy_required_ttl_seconds, proxy_lease_has_sufficient_ttl
-from software.io.load_save import _select_user_agent_from_ratios
+from software.io.config import _select_user_agent_from_ratios
 def _record_bad_proxy_and_maybe_pause(
     ctx: TaskContext,
     gui_instance: Optional[Any],

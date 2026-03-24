@@ -8,46 +8,39 @@ from threading import Thread
 from typing import Optional, Dict, Any, Callable
 import logging
 from software.logging.log_utils import log_suppressed_exception
-import software.network.http_client as http_client
+import software.network.http as http_client
 
 try:
     from packaging import version
 except ImportError:  # pragma: no cover
     version = None
 
-try:
-    from PySide6.QtCore import QSettings as _QSettings  # noqa: F401 — 仅用于可用性检查
-    _HAS_QSETTINGS = True
-except ImportError:
-    _HAS_QSETTINGS = False
-
 from software.app.version import __VERSION__, GITHUB_API_URL, GITHUB_RELEASES_URL
-from software.app.config import DOWNLOAD_SOURCES, DEFAULT_DOWNLOAD_SOURCE, app_settings
+from software.app.config import DEFAULT_DOWNLOAD_SOURCE, DOWNLOAD_SOURCES
+from software.app.settings_store import app_settings
 from software.app.runtime_paths import get_runtime_directory
 
 
 def _get_download_source() -> str:
     """获取当前选择的下载源 key。"""
-    if _HAS_QSETTINGS:
-        try:
-            settings = app_settings()
-            value = str(settings.value("download_source", DEFAULT_DOWNLOAD_SOURCE)).strip()
-            if value:
-                return value
-        except Exception as exc:
-            log_suppressed_exception("_get_download_source", exc, level=logging.WARNING)
+    try:
+        settings = app_settings()
+        value = str(settings.value("download_source", DEFAULT_DOWNLOAD_SOURCE)).strip()
+        if value:
+            return value
+    except Exception as exc:
+        log_suppressed_exception("_get_download_source", exc, level=logging.WARNING)
     return DEFAULT_DOWNLOAD_SOURCE
 
 
 def _set_download_source(source_key: str) -> None:
     """保存当前选择的下载源 key"""
-    if _HAS_QSETTINGS:
-        try:
-            settings = app_settings()
-            settings.setValue("download_source", source_key)
-            logging.info(f"已切换下载源为: {source_key}")
-        except Exception as exc:
-            log_suppressed_exception("_set_download_source", exc, level=logging.WARNING)
+    try:
+        settings = app_settings()
+        settings.setValue("download_source", source_key)
+        logging.info(f"已切换下载源为: {source_key}")
+    except Exception as exc:
+        log_suppressed_exception("_set_download_source", exc, level=logging.WARNING)
 
 
 def _get_next_download_source(current_key: str) -> Optional[str]:

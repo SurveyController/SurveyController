@@ -17,7 +17,7 @@ from software.providers.common import (
 from software.app.config import DEFAULT_FILL_TEXT
 
 if TYPE_CHECKING:
-    from software.io.load_save import RuntimeConfig
+    from software.io.config import RuntimeConfig
 
 
 def _is_wjx_domain(url_value: str) -> bool:

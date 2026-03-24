@@ -4,8 +4,7 @@ import threading
 import time
 from typing import Any, Optional
 
-from software.core.task_context import TaskContext
-from software.core.event_bus import bus as _event_bus, EVENT_TARGET_REACHED
+from software.core.task import EVENT_TARGET_REACHED, TaskContext, bus as _event_bus
 from software.logging.log_utils import log_suppressed_exception
 
 FAILURE_REASON_DEVICE_QUOTA_LIMIT = "device_quota_limit"

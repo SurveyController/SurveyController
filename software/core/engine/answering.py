@@ -5,7 +5,7 @@ import threading
 import time
 from typing import Any, Callable, Dict, List, Optional, Tuple
 
-from software.core.task_context import TaskContext
+from software.core.task import TaskContext
 from software.core.engine.dom_helpers import (
     _count_choice_inputs_driver,
     _driver_question_looks_like_description,

@@ -34,7 +34,7 @@ from software.providers.registry import (
     submission_validation_message as _provider_submission_validation_message,
     wait_for_submission_verification as _provider_wait_for_submission_verification,
 )
-from software.core.task_context import TaskContext
+from software.core.task import TaskContext
 from software.network.browser import (
     BrowserManager,
     BrowserDriver,

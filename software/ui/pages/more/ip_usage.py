@@ -6,15 +6,15 @@ import random
 import threading
 import logging
 
-from software.network.proxy.auth import (
+from software.logging.log_utils import log_suppressed_exception
+from software.system.registry_manager import RegistryManager
+from software.ui.helpers.proxy_access import (
     RandomIPAuthError,
     claim_easter_egg_bonus,
     format_quota_value,
     format_random_ip_error,
     has_authenticated_session,
 )
-from software.logging.log_utils import log_suppressed_exception
-from software.system.registry_manager import RegistryManager
 
 from PySide6.QtCore import Qt, QPoint, QPointF, QDate, QDateTime, QTime, Signal, QRectF, QPropertyAnimation, QEasingCurve, Property, QTimer, QByteArray
 from typing import Any
@@ -547,7 +547,7 @@ class IpUsagePage(ScrollArea):
 
         def _do():
             try:
-                from software.io.ip_usage_log import get_usage_summary
+                from software.io.reports import get_usage_summary
 
                 summary = get_usage_summary()
                 self._dataLoaded.emit(summary, "")

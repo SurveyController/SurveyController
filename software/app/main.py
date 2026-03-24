@@ -31,7 +31,7 @@ def main():
     app.setFont(font)
 
     # 导入并创建主窗口（主窗口内部会显示 SplashScreen）
-    from software.ui.main_window import create_window
+    from software.ui.shell.main_window import create_window
     window = create_window()
     window.show()
 

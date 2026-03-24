@@ -10,7 +10,7 @@ import traceback
 from typing import TYPE_CHECKING, Any, Dict, List, Literal, Optional, Set, Tuple
 from urllib.parse import urlparse
 
-from software.network.proxy.source import PROXY_SOURCE_CUSTOM, get_proxy_source
+from software.network.proxy.policy.source import PROXY_SOURCE_CUSTOM, get_proxy_source
 from software.network.proxy.pool import normalize_proxy_address
 from software.logging.log_utils import log_suppressed_exception
 from software.app.config import BROWSER_PREFERENCE, HEADLESS_WINDOW_SIZE, get_proxy_auth

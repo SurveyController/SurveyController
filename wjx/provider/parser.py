@@ -13,7 +13,7 @@ from wjx.provider.html_parser import (
     extract_survey_title_from_html,
     parse_survey_questions_from_html,
 )
-import software.network.http_client as http_client
+import software.network.http as http_client
 from software.app.config import DEFAULT_HTTP_HEADERS
 
 PAUSED_SURVEY_ERROR_MESSAGE = "问卷已暂停，需要前往问卷星后台重新发布"

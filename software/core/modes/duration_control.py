@@ -5,7 +5,7 @@ import threading
 import time
 from typing import Any, Optional, Tuple
 
-from software.network.proxy.source import _map_answer_seconds_to_proxy_minute
+from software.network.proxy.policy.source import _map_answer_seconds_to_proxy_minute
 from software.logging.log_utils import log_suppressed_exception
 
 _COMPLETION_MARKERS = (

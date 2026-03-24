@@ -4,8 +4,8 @@ from qfluentwidgets import ScrollArea, SubtitleLabel, CardWidget
 
 
 from software.ui.widgets.contact_form import ContactForm
-from software.network.proxy.provider import format_status_payload
 from software.app.config import STATUS_ENDPOINT
+from software.ui.helpers.proxy_access import format_status_payload
 
 
 class SupportPage(ScrollArea):

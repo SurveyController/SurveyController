@@ -11,8 +11,8 @@ from PySide6.QtCore import QCoreApplication
 
 from software.core.engine import run
 from software.core.questions.config import configure_probabilities, validate_question_config
-from software.core.task_context import TaskContext
-from software.network.proxy.auth import (
+from software.core.task import TaskContext
+from software.network.proxy.session import (
     activate_trial,
     RandomIPAuthError,
     format_random_ip_error,
@@ -32,18 +32,18 @@ from software.network.proxy import (
     is_custom_proxy_api_active,
     set_proxy_occupy_minute_by_answer_duration,
 )
-from software.network.proxy.quota import get_random_ip_counter_snapshot_local
+from software.network.proxy.policy import get_random_ip_counter_snapshot_local
 from software.app.config import STOP_FORCE_WAIT_SECONDS
-from software.core.event_bus import (
+from software.core.task import (
     bus as _event_bus,
     EVENT_TASK_STARTED,
     EVENT_TASK_STOPPED,
 )
-from software.io.load_save import RuntimeConfig
+from software.io.config import RuntimeConfig
 if TYPE_CHECKING:
     from PySide6.QtCore import QObject, QTimer
 
-    from software.system.cleanup_runner import CleanupRunner
+    from software.core.engine.cleanup import CleanupRunner
 
 NON_HEADLESS_FALLBACK_MAX_THREADS = 8
 DEVICE_QUOTA_LIMIT_MESSAGE = "当前设备已达到该问卷填写次数上限，无法继续"
@@ -576,7 +576,7 @@ class RunControllerRuntimeMixin:
                 return []
 
         _set_stage("初始化随机IP模块（预取代理）")
-        from software.core.services.proxy_service import prefetch_proxy_pool
+        from software.network.proxy.pool import prefetch_proxy_pool
 
         proxy_source = str(getattr(config, "proxy_source", "default") or "default")
         custom_proxy_api = str(getattr(config, "custom_proxy_api", "") or "").strip()

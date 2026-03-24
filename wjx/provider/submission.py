@@ -16,8 +16,7 @@ from software.core.engine.submission import (
     _page_looks_like_wjx_questionnaire,
     submit,
 )
-from software.core.event_bus import EVENT_CAPTCHA_DETECTED, bus as _event_bus
-from software.core.task_context import TaskContext
+from software.core.task import EVENT_CAPTCHA_DETECTED, TaskContext, bus as _event_bus
 from software.logging.log_utils import log_popup_confirm, log_popup_warning
 from software.network.browser import By, BrowserDriver
 
@@ -177,8 +176,8 @@ def _trigger_aliyun_captcha_stop(
             if threading.current_thread() is not threading.main_thread():
                 return
 
-            from software.network.proxy.auth import has_authenticated_session, is_quota_exhausted
-            from software.network.proxy.quota import get_random_ip_counter_snapshot_local
+            from software.network.proxy.policy import get_random_ip_counter_snapshot_local
+            from software.network.proxy.session import has_authenticated_session, is_quota_exhausted
 
             is_enabled = bool(gui_instance.is_random_ip_enabled()) if gui_instance else False
 

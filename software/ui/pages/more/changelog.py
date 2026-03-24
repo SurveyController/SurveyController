@@ -19,7 +19,7 @@ from qfluentwidgets import (
     DrillInTransitionStackedWidget,
 )
 
-from software.io.markdown_utils import strip_markdown
+from software.io.markdown import strip_markdown
 
 
 class ReleaseListItem(CardWidget):

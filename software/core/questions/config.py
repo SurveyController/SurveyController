@@ -15,7 +15,7 @@ from software.app.config import DEFAULT_FILL_TEXT, LOCATION_QUESTION_LABEL, QUES
 from software.logging.log_utils import log_suppressed_exception
 
 if TYPE_CHECKING:
-    from software.core.task_context import TaskContext
+    from software.core.task import TaskContext
 
 _TEXT_RANDOM_NAME_TOKEN = "__RANDOM_NAME__"
 _TEXT_RANDOM_MOBILE_TOKEN = "__RANDOM_MOBILE__"

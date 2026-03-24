@@ -9,9 +9,9 @@ import httpx
 
 from software.core.engine.runtime_control import _is_headless_mode, _sleep_with_stop
 from software.core.questions.utils import extract_text_from_element as _extract_text_from_element
-from software.core.task_context import TaskContext
+from software.core.task import TaskContext
 from software.network.browser import By, BrowserDriver, NoSuchElementException, TimeoutException
-import software.network.http_client as http_client
+import software.network.http as http_client
 from software.network.proxy import (
     PROXY_SOURCE_CUSTOM,
     get_proxy_required_ttl_seconds,
@@ -19,7 +19,7 @@ from software.network.proxy import (
     proxy_lease_has_sufficient_ttl,
 )
 from software.network.proxy.pool import coerce_proxy_lease, mask_proxy_for_log, normalize_proxy_address
-from software.network.proxy.provider import fetch_proxy_batch
+from software.network.proxy.api import fetch_proxy_batch
 from software.app.config import (
     HEADLESS_SUBMIT_CLICK_SETTLE_DELAY,
     HEADLESS_SUBMIT_INITIAL_DELAY,

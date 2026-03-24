@@ -6,7 +6,7 @@ from software.logging.log_utils import log_suppressed_exception
 
 
 from software.network.browser import By, BrowserDriver
-from software.integrations.ai_service import generate_answer
+from software.integrations.ai import generate_answer
 from software.app.config import _HTML_SPACE_RE
 
 
