@@ -10,6 +10,7 @@ from software.logging.log_utils import (
     save_log_records_to_file,
     dump_threads_to_file,
 )
+from software.logging.action_logger import bind_logged_action, log_action
 
 __all__ = [
     "setup_logging",
@@ -21,5 +22,7 @@ __all__ = [
     "register_popup_handler",
     "save_log_records_to_file",
     "dump_threads_to_file",
+    "bind_logged_action",
+    "log_action",
 ]
 

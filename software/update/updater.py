@@ -7,6 +7,7 @@ import time
 from threading import Thread
 from typing import Optional, Dict, Any, Callable
 import logging
+from software.logging.action_logger import log_action
 from software.logging.log_utils import log_suppressed_exception
 import software.network.http as http_client
 
@@ -397,6 +398,14 @@ def show_update_notification(gui) -> None:
         return
 
     info = gui.update_info
+    log_action(
+        "UPDATE",
+        "show_update_notification",
+        "update_dialog",
+        "update",
+        result="shown",
+        payload={"version": info.get("version", "unknown")},
+    )
     release_notes_preview = _preview_release_notes(info.get("release_notes", ""), 300)
 
     msg = (
@@ -407,10 +416,24 @@ def show_update_notification(gui) -> None:
     )
 
     if gui.show_confirm_dialog("检查到更新", msg):
-        logging.info("[Action Log] User accepted update notification")
+        log_action(
+            "UPDATE",
+            "show_update_notification",
+            "update_dialog",
+            "update",
+            result="accepted",
+            payload={"version": info.get("version", "unknown")},
+        )
         perform_update(gui)
     else:
-        logging.info("[Action Log] User declined update notification")
+        log_action(
+            "UPDATE",
+            "show_update_notification",
+            "update_dialog",
+            "update",
+            result="declined",
+            payload={"version": info.get("version", "unknown")},
+        )
 
 
 def check_for_updates(gui=None) -> Optional[Dict[str, Any]]:

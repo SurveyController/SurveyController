@@ -11,8 +11,8 @@
 - Python：3.8+
 - 安装依赖：`pip install -r requirements.txt`。
 - 从源码运行：`python SurveyController.py`。
-- 导入检测：`python test_wjx_imports.py`（扫描 `wjx/`、`software/`、`tencent/` 下所有 `.py` 文件的 `import` 是否报错）。
-- 死代码检测：`python test_wjx_deadcode.py`（基于 vulture，扫描 `wjx/`、`software/`、`tencent/` 下未引用的死代码）。
+- 导入检测：`python test_imports.py`（扫描 `wjx/`、`software/`、`tencent/` 下所有 `.py` 文件的 `import` 是否报错）。
+- 死代码检测：`python test_deadcode.py`（基于 vulture，扫描 `wjx/`、`software/`、`tencent/` 下未引用的死代码）。
 
 ## 仓库根目录
 
@@ -66,23 +66,23 @@ software/
 │   ├── helpers/           # UI 侧辅助门面
 │   │   └── qfluent_compat.py # QFluentWidgets 动画兼容补丁
 │   ├── pages/
-│   │   └── workbench/     # dashboard/question_editor（含配置向导与 preview_panel 只读预览）/runtime_panel/log_panel
+│   │   └── workbench/     # dashboard/question_editor（含单栏配置向导）/runtime_panel/log_panel
 │   └── widgets/           # 通用组件（contact_form 已拆成包）
 └── update/                # 更新检查与升级
 
-wjx/
-├── __init__.py            # 包导出入口；真正平台实现看 provider/
-└── provider/              # 问卷星专属实现（解析、检测、导航、运行时、提交）
-
 tencent/
-├── __init__.py            # 包导出入口；真正平台实现看 provider/
+├── __init__.py            # 包标记文件；真正平台实现请直接看 provider/
 └── provider/              # 腾讯问卷专属实现（解析/运行时）
+
+wjx/
+├── __init__.py            # 包标记文件；仅保留版本信息，真正平台实现请直接看 provider/
+└── provider/              # 问卷星专属实现（解析、检测、运行时、提交；导航已归并到 software/core/engine/navigation.py）
 ```
 
 ## PR 流程（推荐）
 1. Fork 仓库本仓库
-2. 开发时遵守三主包边界：共享业务、GUI、平台总调度放 `software`；问卷星专属实现只放 `wjx/provider`；腾讯问卷专属实现放 `tencent/provider`；顶层包仅做导出，不要再把实现代码塞回 `tencent/`、`wjx/` 根目录
-3. 自测：运行 `python test_wjx_imports.py` 检查 import 和语法错误；至少手动跑一次核心流程（启动、加载问卷、配置、开始运行），确保无报错
+2. 开发时遵守三主包边界：共享业务、GUI、平台总调度放 `software`；问卷星专属实现只放 `wjx/provider`；腾讯问卷专属实现放 `tencent/provider`；顶层包只保留包标记或必要元信息，不要再把实现代码塞回 `tencent/`、`wjx/` 根目录，也不要再堆包级兼容导出层
+3. 自测：运行 `python test_imports.py` 检查 import 和语法错误；至少手动跑一次核心流程（启动、加载问卷、配置、开始运行），确保无报错
 4. 提交：保持清晰提交信息，必要时补充中文注释和变更说明
 5. PR 描述：写明变更目的、主要改动点、测试方式与结果，关联相关 Issue（如有）
 
@@ -96,3 +96,5 @@ tencent/
 - 如发现违规，请邮件 `mail@hungrym0.top` 举报。
 
 欢迎提交 PR 改进问卷解析、题型支持、性能优化、界面体验等内容。谢谢！
+
+- 仓库结构补充：software/logging/action_logger.py 统一 UI、配置、导航、更新等关键操作日志封装

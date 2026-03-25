@@ -2,7 +2,7 @@
 import math
 import random
 import time
-from typing import Any, List, Optional, Union
+from typing import Any, List, Optional, Tuple, Union
 import logging
 from software.logging.log_utils import log_suppressed_exception
 
@@ -11,6 +11,7 @@ from software.network.browser import By, BrowserDriver
 from software.app.config import DEFAULT_FILL_TEXT
 
 _KNOWN_NON_TEXT_QUESTION_TYPES = {"3", "4", "5", "6", "7", "8", "11"}
+RANDOM_INT_TOKEN_PREFIX = "__RANDOM_INT__:"
 
 
 def _normalize_question_type_code(value: Any) -> str:
@@ -134,11 +135,97 @@ def generate_random_generic_text() -> str:
     return f"{base}{suffix}"
 
 
+def try_parse_random_int_range(raw: Any) -> Optional[Tuple[int, int]]:
+    """尝试解析随机整数范围，失败时返回 None。"""
+
+    def _coerce_int(value: Any) -> Optional[int]:
+        try:
+            text = str(value).strip()
+        except Exception:
+            return None
+        if not text:
+            return None
+        try:
+            return int(text)
+        except Exception:
+            return None
+
+    if isinstance(raw, dict):
+        min_value = _coerce_int(raw.get("min"))
+        max_value = _coerce_int(raw.get("max"))
+    elif isinstance(raw, (list, tuple)) and len(raw) >= 2:
+        min_value = _coerce_int(raw[0])
+        max_value = _coerce_int(raw[1])
+    else:
+        return None
+
+    if min_value is None or max_value is None:
+        return None
+    if min_value > max_value:
+        min_value, max_value = max_value, min_value
+    return min_value, max_value
+
+
+def normalize_random_int_range(raw: Any) -> Tuple[int, int]:
+    """将整数范围规整为有序的 (min, max)。"""
+    parsed = try_parse_random_int_range(raw)
+    if parsed is None:
+        raise ValueError("随机整数范围无效")
+    return parsed
+
+
+def serialize_random_int_range(raw: Any) -> List[int]:
+    """将整数范围序列化为 [min, max] 结构。"""
+    parsed = try_parse_random_int_range(raw)
+    if parsed is None:
+        return []
+    min_value, max_value = parsed
+    return [min_value, max_value]
+
+
+def describe_random_int_range(raw: Any) -> str:
+    """输出统一的整数范围描述文本。"""
+    parsed = try_parse_random_int_range(raw)
+    if parsed is None:
+        return "未设置"
+    min_value, max_value = parsed
+    return f"{min_value}-{max_value}"
+
+
+def build_random_int_token(min_value: Any, max_value: Any) -> str:
+    """构造随机整数动态令牌。"""
+    normalized_min, normalized_max = normalize_random_int_range([min_value, max_value])
+    return f"{RANDOM_INT_TOKEN_PREFIX}{normalized_min}:{normalized_max}"
+
+
+def parse_random_int_token(token: Any) -> Optional[Tuple[int, int]]:
+    """从动态令牌中提取随机整数范围。"""
+    if token is None:
+        return None
+    text = str(token).strip()
+    if not text.startswith(RANDOM_INT_TOKEN_PREFIX):
+        return None
+    payload = text[len(RANDOM_INT_TOKEN_PREFIX):]
+    parts = payload.split(":", 1)
+    if len(parts) != 2:
+        return None
+    return try_parse_random_int_range(parts)
+
+
+def generate_random_integer_text(min_value: Any, max_value: Any) -> str:
+    """生成指定闭区间内的随机整数文本。"""
+    normalized_min, normalized_max = normalize_random_int_range([min_value, max_value])
+    return str(random.randint(normalized_min, normalized_max))
+
+
 def resolve_dynamic_text_token(token: Any) -> str:
     """解析动态文本令牌"""
     if token is None:
         return DEFAULT_FILL_TEXT
     text = str(token).strip()
+    random_int_range = parse_random_int_token(text)
+    if random_int_range is not None:
+        return generate_random_integer_text(random_int_range[0], random_int_range[1])
     if text == "__RANDOM_NAME__":
         return generate_random_chinese_name()
     if text == "__RANDOM_MOBILE__":

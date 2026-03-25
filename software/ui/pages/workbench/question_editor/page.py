@@ -9,6 +9,7 @@ from qfluentwidgets import ScrollArea
 from software.core.questions.config import QuestionEntry
 
 from .add_dialog import QuestionAddDialog
+from .utils import build_entry_info_list
 
 logger = logging.getLogger(__name__)
 
@@ -22,6 +23,7 @@ class QuestionStore(QObject):
         super().__init__(parent)
         self._entries: List[QuestionEntry] = []
         self._questions_info: List[Dict[str, Any]] = []
+        self._entry_questions_info: List[Dict[str, Any]] = []
 
     @property
     def entries(self) -> List[QuestionEntry]:
@@ -31,6 +33,10 @@ class QuestionStore(QObject):
     def questions_info(self) -> List[Dict[str, Any]]:
         return self._questions_info
 
+    @property
+    def entry_questions_info(self) -> List[Dict[str, Any]]:
+        return self._entry_questions_info
+
     def set_questions(self, info: List[Dict[str, Any]], entries: List[QuestionEntry]):
         self._questions_info = info or []
         self.set_entries(entries, info)
@@ -38,14 +44,14 @@ class QuestionStore(QObject):
     def set_entries(self, entries: List[QuestionEntry], info: Optional[List[Dict[str, Any]]] = None):
         self._questions_info = info or self._questions_info
         self._entries = list(entries or [])
-        if self._questions_info:
-            for idx, entry in enumerate(self._entries):
-                if getattr(entry, "question_title", None):
-                    continue
-                if idx < len(self._questions_info):
-                    title = self._questions_info[idx].get("title")
-                    if title:
-                        entry.question_title = str(title).strip()
+        self._entry_questions_info = build_entry_info_list(self._entries, self._questions_info)
+        for idx, entry in enumerate(self._entries):
+            if getattr(entry, "question_title", None):
+                continue
+            if idx < len(self._entry_questions_info):
+                title = self._entry_questions_info[idx].get("title")
+                if title:
+                    entry.question_title = str(title).strip()
         self._refresh_data()
 
     def get_entries(self) -> List[QuestionEntry]:
@@ -55,6 +61,7 @@ class QuestionStore(QObject):
         if not entry:
             return
         self._entries.append(entry)
+        self._entry_questions_info = build_entry_info_list(self._entries, self._questions_info)
         self._refresh_data()
 
     def _refresh_data(self):
@@ -89,6 +96,10 @@ class QuestionPage(ScrollArea):
     @property
     def questions_info(self) -> List[Dict[str, Any]]:
         return self.store.questions_info
+
+    @property
+    def entry_questions_info(self) -> List[Dict[str, Any]]:
+        return self.store.entry_questions_info
 
     def get_entries(self) -> List[QuestionEntry]:
         return self.store.get_entries()

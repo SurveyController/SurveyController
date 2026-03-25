@@ -7,6 +7,7 @@ from typing import Any, Dict
 
 from PySide6.QtCore import QCoreApplication, QThread, QTimer
 from qfluentwidgets import InfoBar, InfoBarPosition, MessageBox
+from software.logging.action_logger import log_action
 
 
 class MainWindowDialogsMixin:
@@ -49,10 +50,20 @@ class MainWindowDialogsMixin:
         """显示确认对话框，返回用户是否确认。"""
 
         def _show():
+            log_action("DIALOG", "confirm", "message_box", "main_window", result="shown", detail=title)
             box = MessageBox(title, message, self)
             box.yesButton.setText("确定")
             box.cancelButton.setText("取消")
-            return bool(box.exec())
+            accepted = bool(box.exec())
+            log_action(
+                "DIALOG",
+                "confirm",
+                "message_box",
+                "main_window",
+                result="confirmed" if accepted else "cancelled",
+                detail=title,
+            )
+            return accepted
 
         return bool(self._dispatch_to_ui(_show))
 

@@ -12,7 +12,7 @@ from wjx.provider.detection import detect as _wjx_detect
 _WJX_RUNTIME_GUARD = threading.local()
 
 
-def _legacy_wjx_brush(
+def _dispatch_wjx_brush(
     driver: BrowserDriver,
     ctx: TaskContext,
     *,
@@ -42,14 +42,14 @@ def brush_wjx(
     thread_name: str,
     psycho_plan: Optional[Any],
 ) -> bool:
-    """兼容 provider 运行时签名，当前复用 legacy WJX 流程并带递归保护。"""
+    """问卷星 provider 运行时入口。"""
     if bool(getattr(_WJX_RUNTIME_GUARD, "active", False)):
         raise RuntimeError(
             "检测到 WJX runtime 与 answering 递归调用，已中止以避免死循环。"
         )
     _WJX_RUNTIME_GUARD.active = True
     try:
-        return _legacy_wjx_brush(
+        return _dispatch_wjx_brush(
             driver,
             ctx,
             stop_signal=stop_signal,

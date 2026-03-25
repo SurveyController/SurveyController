@@ -16,6 +16,7 @@ from qfluentwidgets import (
     SegmentedWidget,
     StrongBodyLabel,
 )
+from software.logging.action_logger import bind_logged_action, log_action
 
 if TYPE_CHECKING:
     from software.ui.controller import RunController
@@ -244,9 +245,33 @@ class DashboardProgressMixin:
         outer_layout.addWidget(bottom)
 
     def _bind_progress_events(self):
-        self.start_btn.clicked.connect(self._on_start_clicked)
-        self.resume_btn.clicked.connect(self._on_resume_clicked)
-        self.stop_btn.clicked.connect(lambda: self.controller.stop_run())
+        bind_logged_action(
+            self.start_btn.clicked,
+            self._on_start_clicked,
+            scope="RUN",
+            event="start_run",
+            target="start_btn",
+            page="dashboard",
+            forward_signal_args=False,
+        )
+        bind_logged_action(
+            self.resume_btn.clicked,
+            self._on_resume_clicked,
+            scope="RUN",
+            event="resume_run",
+            target="resume_btn",
+            page="dashboard",
+            forward_signal_args=False,
+        )
+        bind_logged_action(
+            self.stop_btn.clicked,
+            self.controller.stop_run,
+            scope="RUN",
+            event="stop_run",
+            target="stop_btn",
+            page="dashboard",
+            forward_signal_args=False,
+        )
 
     def update_status(self, text: str, current: int, target: int):
         if self._controller_initializing():
@@ -476,6 +501,13 @@ class DashboardProgressMixin:
     def on_run_state_changed(self, running: bool):
         self._sync_start_button_state(running=running)
         self.stop_btn.setEnabled(running)
+        log_action(
+            "RUN",
+            "run_state",
+            "controller",
+            "dashboard",
+            result="running" if running else "stopped",
+        )
         if not running:
             self.resume_btn.setEnabled(False)
             self.resume_btn.hide()
@@ -533,12 +565,21 @@ class DashboardProgressMixin:
             self.resume_btn.hide()
             return
         if paused:
+            log_action(
+                "RUN",
+                "pause_state",
+                "controller",
+                "dashboard",
+                result="paused",
+                payload={"reason": reason or "manual"},
+            )
             self._apply_progress_visual_state(True)
             self.resume_btn.show()
             self.resume_btn.setEnabled(True)
             msg = f"已暂停：{reason}" if reason else "已暂停"
             self._toast(msg, "warning", 2200)
         else:
+            log_action("RUN", "pause_state", "controller", "dashboard", result="resumed")
             self._apply_progress_visual_state(
                 self._status_requires_attention_visual(self.status_label.text())
             )
@@ -547,6 +588,7 @@ class DashboardProgressMixin:
 
     def _on_resume_clicked(self):
         if not getattr(self.controller, "running", False):
+            log_action("RUN", "resume_run", "resume_btn", "dashboard", result="blocked")
             return
         reason = str(self._last_pause_reason or "")
         if "扣费" in reason or ("代理" in reason and "连续" in reason):
@@ -558,6 +600,8 @@ class DashboardProgressMixin:
             box.yesButton.setText("继续执行")
             box.cancelButton.setText("取消")
             if not box.exec():
+                log_action("RUN", "resume_run", "resume_btn", "dashboard", result="cancelled")
                 return
         self.controller.resume_run()
+        log_action("RUN", "resume_run", "resume_btn", "dashboard", result="submitted")
 

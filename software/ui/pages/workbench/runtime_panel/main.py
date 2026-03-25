@@ -1,5 +1,6 @@
 """运行参数设置页面"""
 import logging
+from software.logging.action_logger import bind_logged_action, log_action
 from software.logging.log_utils import log_suppressed_exception
 
 
@@ -170,14 +171,71 @@ class RuntimePage(ScrollArea):
     def _bind_events(self):
         self.target_card.spinBox.valueChanged.connect(lambda value: self.controller.set_runtime_ui_state(target=int(value)))
         self.thread_card.spinBox.valueChanged.connect(lambda value: self.controller.set_runtime_ui_state(threads=int(value)))
-        self.random_ip_card.switchButton.checkedChanged.connect(self._on_random_ip_toggled)
-        self.random_ua_card.switchButton.checkedChanged.connect(self._on_random_ua_toggled)
-        self.headless_card.switchButton.checkedChanged.connect(self._on_headless_toggled)
-        self.timed_card.switchButton.checkedChanged.connect(self._on_timed_mode_toggled)
-        self.timed_card.helpButton.clicked.connect(self._show_timed_mode_help)
-        self.random_ip_card.proxyCombo.currentIndexChanged.connect(self._on_proxy_source_changed)
+        bind_logged_action(
+            self.random_ip_card.switchButton.checkedChanged,
+            self._on_random_ip_toggled,
+            scope="CONFIG",
+            event="toggle_random_ip",
+            target="random_ip_switch",
+            page="runtime",
+            payload_factory=lambda enabled: {"enabled": bool(enabled)},
+        )
+        bind_logged_action(
+            self.random_ua_card.switchButton.checkedChanged,
+            self._on_random_ua_toggled,
+            scope="CONFIG",
+            event="toggle_random_ua",
+            target="random_ua_switch",
+            page="runtime",
+            payload_factory=lambda enabled: {"enabled": bool(enabled)},
+        )
+        bind_logged_action(
+            self.headless_card.switchButton.checkedChanged,
+            self._on_headless_toggled,
+            scope="CONFIG",
+            event="toggle_headless_mode",
+            target="headless_switch",
+            page="runtime",
+            payload_factory=lambda enabled: {"enabled": bool(enabled)},
+        )
+        bind_logged_action(
+            self.timed_card.switchButton.checkedChanged,
+            self._on_timed_mode_toggled,
+            scope="CONFIG",
+            event="toggle_timed_mode",
+            target="timed_mode_switch",
+            page="runtime",
+            payload_factory=lambda enabled: {"enabled": bool(enabled)},
+        )
+        bind_logged_action(
+            self.timed_card.helpButton.clicked,
+            self._show_timed_mode_help,
+            scope="UI",
+            event="open_timed_mode_help",
+            target="timed_mode_help",
+            page="runtime",
+            forward_signal_args=False,
+        )
+        bind_logged_action(
+            self.random_ip_card.proxyCombo.currentIndexChanged,
+            self._on_proxy_source_changed,
+            scope="CONFIG",
+            event="change_proxy_source",
+            target="proxy_source_combo",
+            page="runtime",
+            payload_factory=lambda _index: {"source": self._get_selected_proxy_source()},
+            forward_signal_args=False,
+        )
         self.answer_card.valueChanged.connect(self._on_answer_duration_changed)
-        self.reliability_card.switchButton.checkedChanged.connect(self._on_reliability_mode_toggled)
+        bind_logged_action(
+            self.reliability_card.switchButton.checkedChanged,
+            self._on_reliability_mode_toggled,
+            scope="CONFIG",
+            event="toggle_reliability_mode",
+            target="reliability_switch",
+            page="runtime",
+            payload_factory=lambda enabled: {"enabled": bool(enabled)},
+        )
 
     @staticmethod
     def _normalize_proxy_source(source: str) -> str:
@@ -292,11 +350,20 @@ class RuntimePage(ScrollArea):
             headless_mode=bool(enabled),
             threads=int(self.thread_card.spinBox.value()),
         )
+        log_action(
+            "CONFIG",
+            "toggle_headless_mode",
+            "headless_switch",
+            "runtime",
+            result="changed",
+            payload={"enabled": bool(enabled), "threads": int(self.thread_card.spinBox.value()), "clamped": clamped},
+        )
         if (not enabled) and clamped and not self._suppress_headless_tip:
             self._show_headless_limit_tip()
 
     def _show_timed_mode_help(self):
         """显示定时模式说明"""
+        log_action("UI", "open_timed_mode_help", "timed_mode_help", "runtime", result="opened")
         content = (
             "启用后，程序会忽略「提交间隔」和「作答时长」设置，改为高频刷新并在开放后立即提交。\n\n"
             "典型应用场景：\n"
@@ -319,6 +386,14 @@ class RuntimePage(ScrollArea):
     def _on_random_ip_toggled(self, enabled: bool):
         """参数页随机IP开关切换时，异步执行网络校验，避免阻塞界面。"""
         if self.controller.toggle_random_ip_async(bool(enabled)):
+            log_action(
+                "CONFIG",
+                "toggle_random_ip",
+                "random_ip_switch",
+                "runtime",
+                result="validation_started",
+                payload={"enabled": bool(enabled)},
+            )
             return
 
         final_enabled = bool(self.controller.get_runtime_ui_state().get("random_ip_enabled", False))
@@ -328,9 +403,26 @@ class RuntimePage(ScrollArea):
             self.random_ip_card._sync_ip_enabled(final_enabled)
         finally:
             self.random_ip_card.switchButton.blockSignals(False)
+        log_action(
+            "CONFIG",
+            "toggle_random_ip",
+            "random_ip_switch",
+            "runtime",
+            result="changed" if final_enabled == bool(enabled) else "reverted",
+            level=logging.INFO if final_enabled == bool(enabled) else logging.WARNING,
+            payload={"requested": bool(enabled), "enabled": final_enabled},
+        )
 
     def _on_random_ua_toggled(self, enabled: bool):
         self._sync_random_ua(enabled)
+        log_action(
+            "CONFIG",
+            "toggle_random_ua",
+            "random_ua_switch",
+            "runtime",
+            result="changed",
+            payload={"enabled": bool(enabled)},
+        )
 
     def _on_proxy_source_changed(self):
         """代理源选择变化时更新设置"""
@@ -345,6 +437,14 @@ class RuntimePage(ScrollArea):
             log_suppressed_exception("_on_proxy_source_changed: apply_proxy_source_settings", exc, level=logging.WARNING)
         self._evaluate_benefit_proxy_compatibility(show_tip=(source == _PROXY_SOURCE_BENEFIT))
         self.controller.set_runtime_ui_state(proxy_source=source)
+        log_action(
+            "CONFIG",
+            "change_proxy_source",
+            "proxy_source_combo",
+            "runtime",
+            result="changed",
+            payload={"source": source},
+        )
 
     def _on_answer_duration_changed(self, _value: int):
         self._evaluate_benefit_proxy_compatibility(show_tip=True)
@@ -367,17 +467,33 @@ class RuntimePage(ScrollArea):
     def _on_timed_mode_toggled(self, enabled: bool):
         self._sync_timed_mode(bool(enabled))
         self.controller.set_runtime_ui_state(timed_mode_enabled=bool(enabled))
+        log_action(
+            "CONFIG",
+            "toggle_timed_mode",
+            "timed_mode_switch",
+            "runtime",
+            result="changed",
+            payload={"enabled": bool(enabled)},
+        )
 
     def _on_reliability_mode_toggled(self, enabled: bool):
         try:
             self.reliability_card._sync_enabled(bool(enabled))
         except Exception as exc:
             log_suppressed_exception("_on_reliability_mode_toggled: reliability_card._sync_enabled", exc, level=logging.INFO)
+        log_action(
+            "CONFIG",
+            "toggle_reliability_mode",
+            "reliability_switch",
+            "runtime",
+            result="changed",
+            payload={"enabled": bool(enabled)},
+        )
 
     def update_config(self, cfg: RuntimeConfig):
         cfg.target = max(1, self.target_card.spinBox.value())
         cfg.threads = max(1, self.thread_card.spinBox.value())
-        cfg.browser_preference = []  # 固定使用默认顺序：Edge → Chrome → Chromium
+        cfg.browser_preference = []  # 固定使用默认顺序：Edge → Chrome
         interval_min, interval_max = self.interval_card.getRange()
         cfg.submit_interval = (interval_min, interval_max)
         answer_min, answer_max = self.answer_card.getRange()

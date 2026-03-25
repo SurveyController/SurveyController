@@ -15,9 +15,6 @@ if getattr(sys, 'frozen', False):
     shiboken6_dir = os.path.join(app_dir, 'shiboken6')
     qt_dir = os.path.join(pyside6_dir, 'Qt')
     qt_libexec_dir = os.path.join(qt_dir, 'libexec')
-    qt_resources_dir = os.path.join(qt_dir, 'resources')
-    qt_webengine_locales_dir = os.path.join(qt_dir, 'translations', 'qtwebengine_locales')
-    qt_webengine_locales_fallback_dir = os.path.join(pyside6_dir, 'translations', 'qtwebengine_locales')
     # numpy 的 delvewheel 补丁在 import numpy 时才运行，时序上可能太晚
     # 在此提前注册，确保 libscipy_openblas64_ 等 DLL 能被 Windows 加载器找到
     numpy_libs_dir = os.path.join(app_dir, 'numpy.libs')
@@ -61,14 +58,3 @@ if getattr(sys, 'frozen', False):
     plugins_dir = os.path.join(pyside6_dir, 'plugins')
     if os.path.isdir(plugins_dir):
         os.environ['QT_PLUGIN_PATH'] = plugins_dir
-
-    # 5. 显式设置 Qt WebEngine 资源路径，避免打包后 helper 进程找不到资源直接暴毙
-    webengine_process_path = os.path.join(qt_libexec_dir, 'QtWebEngineProcess.exe')
-    if os.path.isfile(webengine_process_path):
-        os.environ.setdefault('QTWEBENGINEPROCESS_PATH', webengine_process_path)
-    if os.path.isdir(qt_resources_dir):
-        os.environ.setdefault('QTWEBENGINE_RESOURCES_PATH', qt_resources_dir)
-    if os.path.isdir(qt_webengine_locales_dir):
-        os.environ.setdefault('QTWEBENGINE_LOCALES_PATH', qt_webengine_locales_dir)
-    elif os.path.isdir(qt_webengine_locales_fallback_dir):
-        os.environ.setdefault('QTWEBENGINE_LOCALES_PATH', qt_webengine_locales_fallback_dir)

@@ -19,6 +19,9 @@ if TYPE_CHECKING:
     from playwright.sync_api import Browser, BrowserContext, Page, Playwright
 
 _PW_START_LOCK = threading.Lock()
+_COMMON_BROWSER_SAFE_ARGS = [
+    "--disable-gpu",
+]
 _EDGE_CLEAN_ARGS = [
     "--disable-extensions",
     "--disable-background-networking",
@@ -160,7 +163,7 @@ def _build_launch_args(
     window_position: Optional[Tuple[int, int]],
     append_no_proxy: bool,
 ) -> Dict[str, Any]:
-    launch_args: Dict[str, Any] = {"headless": headless, "args": []}
+    launch_args: Dict[str, Any] = {"headless": headless, "args": list(_COMMON_BROWSER_SAFE_ARGS)}
     if browser_name == "edge":
         launch_args["channel"] = "msedge"
         launch_args["args"].extend(_EDGE_CLEAN_ARGS)
@@ -622,7 +625,7 @@ BrowserDriver = PlaywrightDriver
 
 def list_browser_pids() -> Set[int]:
     """列出当前运行的浏览器进程 PID（仅 Windows）。"""
-    names = ("chrome.exe", "msedge.exe", "chromium.exe")
+    names = ("chrome.exe", "msedge.exe")
     pids: Set[int] = set()
     _no_window = getattr(subprocess, "CREATE_NO_WINDOW", 0x08000000)
     for name in names:

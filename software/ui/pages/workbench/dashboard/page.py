@@ -3,6 +3,7 @@ import os
 import threading
 from typing import Optional
 import logging
+from software.logging.action_logger import bind_logged_action, log_action
 from software.logging.log_utils import log_suppressed_exception
 
 
@@ -396,18 +397,74 @@ class DashboardPage(
         self._build_bottom_status_card(outer)
 
     def _bind_events(self):
-        self.parse_btn.clicked.connect(self._on_parse_clicked)
-        self.config_list_btn.clicked.connect(self._on_show_config_list)
-        self.load_cfg_btn.clicked.connect(self._on_load_config)
-        self.save_cfg_btn.clicked.connect(self._on_save_config)
-        self.qr_btn.clicked.connect(self._on_qr_clicked)
+        bind_logged_action(
+            self.parse_btn.clicked,
+            self._on_parse_clicked,
+            scope="UI",
+            event="parse_survey",
+            target="parse_btn",
+            page="dashboard",
+            forward_signal_args=False,
+        )
+        bind_logged_action(
+            self.config_list_btn.clicked,
+            self._on_show_config_list,
+            scope="UI",
+            event="open_config_list",
+            target="config_list_btn",
+            page="dashboard",
+            forward_signal_args=False,
+        )
+        bind_logged_action(
+            self.load_cfg_btn.clicked,
+            self._on_load_config,
+            scope="CONFIG",
+            event="load_config",
+            target="load_cfg_btn",
+            page="dashboard",
+            forward_signal_args=False,
+        )
+        bind_logged_action(
+            self.save_cfg_btn.clicked,
+            self._on_save_config,
+            scope="CONFIG",
+            event="save_config",
+            target="save_cfg_btn",
+            page="dashboard",
+            forward_signal_args=False,
+        )
+        bind_logged_action(
+            self.qr_btn.clicked,
+            self._on_qr_clicked,
+            scope="UI",
+            event="parse_qr_image",
+            target="qr_btn",
+            page="dashboard",
+            forward_signal_args=False,
+        )
         self._bind_progress_events()
         self.thread_view_seg.currentItemChanged.connect(self._on_thread_view_changed)
         self.target_spin.valueChanged.connect(lambda v: self.controller.set_runtime_ui_state(target=int(v)))
         self.thread_spin.valueChanged.connect(lambda v: self.controller.set_runtime_ui_state(threads=int(v)))
         self.random_ip_cb.stateChanged.connect(self._on_random_ip_toggled)
-        self.card_btn.clicked.connect(self._on_request_quota_clicked)
-        self.more_settings_btn.clicked.connect(self._go_to_runtime_page)
+        bind_logged_action(
+            self.card_btn.clicked,
+            self._on_request_quota_clicked,
+            scope="UI",
+            event="open_quota_request",
+            target="card_btn",
+            page="dashboard",
+            forward_signal_args=False,
+        )
+        bind_logged_action(
+            self.more_settings_btn.clicked,
+            self._go_to_runtime_page,
+            scope="NAV",
+            event="open_runtime_settings",
+            target="more_settings_btn",
+            page="dashboard",
+            forward_signal_args=False,
+        )
         self.controller.runtimeUiStateChanged.connect(self._apply_runtime_ui_state)
         self.controller.randomIpLoadingChanged.connect(self.set_random_ip_loading)
         # 监听剪贴板变化，自动处理粘贴的图片
@@ -455,20 +512,55 @@ class DashboardPage(
     def _on_parse_clicked(self):
         url = self.url_edit.text().strip()
         if not url:
+            log_action(
+                "UI",
+                "parse_survey",
+                "parse_btn",
+                "dashboard",
+                result="blocked",
+                level=logging.WARNING,
+                payload={"reason": "empty_url"},
+            )
             self._toast("请粘贴问卷链接", "warning")
             return
         # 第一层检测：是否为受支持的问卷平台
         if not self._is_wjx_domain(url):
+            log_action(
+                "UI",
+                "parse_survey",
+                "parse_btn",
+                "dashboard",
+                result="blocked",
+                level=logging.WARNING,
+                payload={"reason": "unsupported_platform"},
+            )
             self._toast("仅支持问卷星与腾讯问卷链接", "error")
             return
         # 第二层检测：是否为具体的问卷链接（排除问卷星投票/考试等）
         if not self._is_survey_domain(url):
+            log_action(
+                "UI",
+                "parse_survey",
+                "parse_btn",
+                "dashboard",
+                result="blocked",
+                level=logging.WARNING,
+                payload={"reason": "invalid_survey_url"},
+            )
             self._toast("链接不是可解析的公开问卷", "error")
             return
         # 使用进度消息条显示解析状态，duration=-1 表示不自动关闭
         self._toast("正在解析问卷...", "info", duration=-1, show_progress=True)
         self._open_wizard_after_parse = True
         self.controller.parse_survey(url)
+        log_action(
+            "UI",
+            "parse_survey",
+            "parse_btn",
+            "dashboard",
+            result="started",
+            payload={"provider": detect_survey_provider(url)},
+        )
 
     def _on_survey_parsed(self, info: list, title: str):
         """问卷解析成功的处理（仅负责关闭进度条和提示，向导弹出由 MainWindow 处理）"""
@@ -484,6 +576,15 @@ class DashboardPage(
         count = len(info) if info else 0
         unsupported_count = sum(1 for item in (info or []) if isinstance(item, dict) and item.get("unsupported"))
         if unsupported_count > 0:
+            log_action(
+                "UI",
+                "parse_survey",
+                "parse_btn",
+                "dashboard",
+                result="unsupported",
+                level=logging.WARNING,
+                payload={"question_count": count, "unsupported_count": unsupported_count},
+            )
             self._toast(
                 f"解析成功，已识别 {count} 个题目；其中 {unsupported_count} 题暂不支持，启动时会阻止执行",
                 "warning",
@@ -491,6 +592,15 @@ class DashboardPage(
             )
             return
         self._toast(f"解析成功，已识别 {count} 个题目", "success", duration=2500)
+
+        log_action(
+            "UI",
+            "parse_survey",
+            "parse_btn",
+            "dashboard",
+            result="success",
+            payload={"question_count": count},
+        )
 
     def _on_survey_parse_failed(self, error_msg: str):
         """问卷解析失败的处理"""
@@ -525,7 +635,17 @@ class DashboardPage(
     def _on_show_config_list(self):
         try:
             self.config_drawer.open_drawer()
+            log_action("UI", "open_config_list", "config_list_btn", "dashboard", result="opened")
         except Exception as exc:
+            log_action(
+                "UI",
+                "open_config_list",
+                "config_list_btn",
+                "dashboard",
+                result="failed",
+                level=logging.ERROR,
+                detail=exc,
+            )
             self._toast(f"无法打开配置列表：{exc}", "error")
 
     def _on_load_config(self):
@@ -534,18 +654,40 @@ class DashboardPage(
             os.makedirs(configs_dir, exist_ok=True)
         path, _ = QFileDialog.getOpenFileName(self, "载入配置", configs_dir, "JSON 文件 (*.json);;所有文件 (*.*)")
         if not path:
+            log_action("CONFIG", "load_config", "load_cfg_btn", "dashboard", result="cancelled")
             return
         self._load_config_from_path(path)
 
     def _load_config_from_path(self, path: str):
         if not path:
+            log_action("CONFIG", "load_config", "load_cfg_btn", "dashboard", result="cancelled")
             return
         if not os.path.exists(path):
+            log_action(
+                "CONFIG",
+                "load_config",
+                "load_cfg_btn",
+                "dashboard",
+                result="failed",
+                level=logging.WARNING,
+                payload={"reason": "missing_file", "file": os.path.basename(path)},
+            )
             self._toast("文件不存在，可能已被删除", "warning")
             return
         try:
             cfg = self.controller.load_saved_config(path, strict=True)
         except Exception as exc:
+            logging.error("[CONFIG] load_saved_config failed: %s", exc, exc_info=True)
+            log_action(
+                "CONFIG",
+                "load_config",
+                "load_cfg_btn",
+                "dashboard",
+                result="failed",
+                level=logging.ERROR,
+                payload={"file": os.path.basename(path)},
+                detail=exc,
+            )
             logging.error("手动载入配置失败: %s", exc, exc_info=True)
             self._toast(f"载入失败：{exc}", "error")
             return
@@ -561,6 +703,14 @@ class DashboardPage(
             log_suppressed_exception("_load_config_from_path: self.update_question_meta(...)", exc, level=logging.WARNING)
         self._sync_start_button_state()
         self.controller.refresh_random_ip_counter()
+        log_action(
+            "CONFIG",
+            "load_config",
+            "load_cfg_btn",
+            "dashboard",
+            result="success",
+            payload={"file": os.path.basename(path)},
+        )
         self._toast("已载入配置", "success")
 
     def _on_save_config(self):
@@ -576,11 +726,30 @@ class DashboardPage(
         default_path = os.path.join(configs_dir, default_name)
         path, _ = QFileDialog.getSaveFileName(self, "保存配置", default_path, "JSON 文件 (*.json);;所有文件 (*.*)")
         if not path:
+            log_action("CONFIG", "save_config", "save_cfg_btn", "dashboard", result="cancelled")
             return
         try:
             self.controller.save_current_config(path)
+            log_action(
+                "CONFIG",
+                "save_config",
+                "save_cfg_btn",
+                "dashboard",
+                result="success",
+                payload={"file": os.path.basename(path)},
+            )
             self._toast("配置已保存", "success")
         except Exception as exc:
+            log_action(
+                "CONFIG",
+                "save_config",
+                "save_cfg_btn",
+                "dashboard",
+                result="failed",
+                level=logging.ERROR,
+                payload={"file": os.path.basename(path)},
+                detail=exc,
+            )
             self._toast(f"保存失败：{exc}", "error")
 
     def _on_start_clicked(self):
@@ -588,6 +757,7 @@ class DashboardPage(
             if self._completion_notified:
                 self._pending_restart = True
                 self.controller.stop_run()
+                log_action("RUN", "restart_run", "start_btn", "dashboard", result="queued")
                 self._toast("正在重新开始，请稍候...", "info", 1200)
             return
 
@@ -596,6 +766,15 @@ class DashboardPage(
         cfg.question_entries = [deserialize_question_entry(serialize_question_entry(entry)) for entry in self.question_page.get_entries()]
         cfg.questions_info = list(self.question_page.questions_info or [])
         if not cfg.question_entries:
+            log_action(
+                "RUN",
+                "start_run",
+                "start_btn",
+                "dashboard",
+                result="blocked",
+                level=logging.WARNING,
+                payload={"reason": "no_question_entries"},
+            )
             self._toast("未配置任何题目，无法开始执行（请先在'题目配置'页添加/配置题目）", "warning")
             self._sync_start_button_state(running=False)
             return
@@ -607,6 +786,14 @@ class DashboardPage(
             self._completion_notified = False
             self.status_label.setText(f"已提交 0/{cfg.target} 份 | 提交连续失败 0 次")
         self.controller.start_run(cfg)
+        log_action(
+            "RUN",
+            "start_run",
+            "start_btn",
+            "dashboard",
+            result="started",
+            payload={"target": cfg.target, "threads": cfg.threads},
+        )
 
     def update_question_meta(self, title: str, count: int):
         self.count_label.setText(f"{count} 题")

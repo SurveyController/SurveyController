@@ -1,33 +1,4 @@
-"""问卷星平台实现。"""
+"""问卷星 provider 包标记文件。
 
-from __future__ import annotations
-
-from importlib import import_module
-from typing import Any, Dict, Tuple
-
-_EXPORTS: Dict[str, Tuple[str, str]] = {
-    "PAUSED_SURVEY_ERROR_MESSAGE": ("wjx.provider.parser", "PAUSED_SURVEY_ERROR_MESSAGE"),
-    "SurveyPausedError": ("wjx.provider.parser", "SurveyPausedError"),
-    "is_paused_survey_page": ("wjx.provider.parser", "is_paused_survey_page"),
-    "parse_wjx_survey": ("wjx.provider.parser", "parse_wjx_survey"),
-    "detect": ("wjx.provider.detection", "detect"),
-    "brush_wjx": ("wjx.provider.runtime", "brush_wjx"),
-    "fill_survey": ("wjx.provider.runtime", "fill_survey"),
-}
-
-__all__ = list(_EXPORTS.keys())
-
-
-def __getattr__(name: str) -> Any:
-    target = _EXPORTS.get(name)
-    if target is None:
-        raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
-    module_name, attr_name = target
-    module = import_module(module_name)
-    value = getattr(module, attr_name)
-    globals()[name] = value
-    return value
-
-
-def __dir__() -> list[str]:
-    return sorted(list(globals().keys()) + __all__)
+请直接从 `wjx.provider.<module>` 导入真实实现。
+"""

@@ -9,7 +9,7 @@ from typing import TYPE_CHECKING, Any, Callable, Dict, List, Optional, Tuple
 
 from PySide6.QtCore import QCoreApplication
 
-from software.core.engine import run
+from software.core.engine.runner import run
 from software.core.questions.config import configure_probabilities, validate_question_config
 from software.core.task import TaskContext
 from software.network.proxy.session import (
@@ -402,6 +402,7 @@ class RunControllerRuntimeMixin:
         ctx.text_titles = copy.deepcopy(pending.text_titles)
         ctx.multi_text_blank_modes = copy.deepcopy(pending.multi_text_blank_modes)
         ctx.multi_text_blank_ai_flags = copy.deepcopy(pending.multi_text_blank_ai_flags)
+        ctx.multi_text_blank_int_ranges = copy.deepcopy(getattr(pending, "multi_text_blank_int_ranges", []))
         ctx.single_option_fill_texts = copy.deepcopy(pending.single_option_fill_texts)
         ctx.single_attached_option_selects = copy.deepcopy(pending.single_attached_option_selects)
         ctx.droplist_option_fill_texts = copy.deepcopy(pending.droplist_option_fill_texts)

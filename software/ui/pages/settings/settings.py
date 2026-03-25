@@ -2,6 +2,7 @@
 import sys
 import subprocess
 import logging
+from software.logging.action_logger import bind_logged_action, log_action
 from software.logging.log_utils import log_suppressed_exception
 
 
@@ -148,13 +149,70 @@ class SettingsPage(ScrollArea):
         layout.addStretch(1)
 
         # 绑定事件
-        self.sidebar_card.switchButton.checkedChanged.connect(self._on_sidebar_toggled)
-        self.topmost_card.switchButton.checkedChanged.connect(self._on_topmost_toggled)
-        self.ask_save_card.switchButton.checkedChanged.connect(self._on_ask_save_on_close_toggled)
-        self.restart_card.clicked.connect(self._restart_program)
-        self.reset_ui_card.clicked.connect(self._on_reset_ui_settings)
-        self.auto_update_card.switchButton.checkedChanged.connect(self._on_auto_update_toggled)
-        self.download_source_combo.currentIndexChanged.connect(self._on_download_source_changed)
+        bind_logged_action(
+            self.sidebar_card.switchButton.checkedChanged,
+            self._on_sidebar_toggled,
+            scope="CONFIG",
+            event="toggle_sidebar_always_expand",
+            target="sidebar_switch",
+            page="settings",
+            payload_factory=lambda checked: {"enabled": bool(checked)},
+        )
+        bind_logged_action(
+            self.topmost_card.switchButton.checkedChanged,
+            self._on_topmost_toggled,
+            scope="CONFIG",
+            event="toggle_window_topmost",
+            target="topmost_switch",
+            page="settings",
+            payload_factory=lambda checked: {"enabled": bool(checked)},
+        )
+        bind_logged_action(
+            self.ask_save_card.switchButton.checkedChanged,
+            self._on_ask_save_on_close_toggled,
+            scope="CONFIG",
+            event="toggle_ask_save_on_close",
+            target="ask_save_switch",
+            page="settings",
+            payload_factory=lambda checked: {"enabled": bool(checked)},
+        )
+        bind_logged_action(
+            self.restart_card.clicked,
+            self._restart_program,
+            scope="UI",
+            event="restart_program",
+            target="restart_card",
+            page="settings",
+            forward_signal_args=False,
+        )
+        bind_logged_action(
+            self.reset_ui_card.clicked,
+            self._on_reset_ui_settings,
+            scope="CONFIG",
+            event="reset_ui_settings",
+            target="reset_ui_card",
+            page="settings",
+            forward_signal_args=False,
+        )
+        bind_logged_action(
+            self.auto_update_card.switchButton.checkedChanged,
+            self._on_auto_update_toggled,
+            scope="CONFIG",
+            event="toggle_auto_update",
+            target="auto_update_switch",
+            page="settings",
+            payload_factory=lambda checked: {"enabled": bool(checked)},
+        )
+        bind_logged_action(
+            self.download_source_combo.currentIndexChanged,
+            self._on_download_source_changed,
+            scope="CONFIG",
+            event="change_download_source",
+            target="download_source_combo",
+            page="settings",
+            payload_factory=lambda _index: {"source": self.download_source_combo.currentData()},
+            forward_signal_args=False,
+        )
 
     def _set_switch_state(self, card: SwitchSettingCard, checked: bool):
         btn = getattr(card, "switchButton", None)
@@ -168,6 +226,14 @@ class SettingsPage(ScrollArea):
         settings = app_settings()
         if persist:
             settings.setValue("sidebar_always_expand", checked)
+        log_action(
+            "CONFIG",
+            "toggle_sidebar_always_expand",
+            "sidebar_switch",
+            "settings",
+            result="changed",
+            payload={"enabled": bool(checked), "persist": persist},
+        )
         win = self.window()
         nav = getattr(win, "navigationInterface", None)
         if nav is not None:
@@ -186,6 +252,14 @@ class SettingsPage(ScrollArea):
         settings = app_settings()
         if persist:
             settings.setValue("window_topmost", checked)
+        log_action(
+            "CONFIG",
+            "toggle_window_topmost",
+            "topmost_switch",
+            "settings",
+            result="changed",
+            payload={"enabled": bool(checked), "persist": persist},
+        )
         win = self.window()
         if win:
             win.setWindowFlag(Qt.WindowType.WindowStaysOnTopHint, checked)
@@ -195,11 +269,27 @@ class SettingsPage(ScrollArea):
         settings = app_settings()
         if persist:
             settings.setValue("ask_save_on_close", checked)
+        log_action(
+            "CONFIG",
+            "toggle_ask_save_on_close",
+            "ask_save_switch",
+            "settings",
+            result="changed",
+            payload={"enabled": bool(checked), "persist": persist},
+        )
 
     def _apply_auto_update_state(self, checked: bool, persist: bool = True):
         settings = app_settings()
         if persist:
             settings.setValue("auto_check_update", checked)
+        log_action(
+            "CONFIG",
+            "toggle_auto_update",
+            "auto_update_switch",
+            "settings",
+            result="changed",
+            payload={"enabled": bool(checked), "persist": persist},
+        )
 
     def _on_sidebar_toggled(self, checked: bool):
         """侧边栏展开切换"""
@@ -215,13 +305,24 @@ class SettingsPage(ScrollArea):
         box.yesButton.setText("确定")
         box.cancelButton.setText("取消")
         if box.exec():
+            log_action("UI", "restart_program", "restart_card", "settings", result="confirmed")
             try:
                 win = self.window()
                 if hasattr(win, '_skip_save_on_close'):
                     setattr(win, '_skip_save_on_close', True)
                 subprocess.Popen([sys.executable] + sys.argv)
+                log_action("UI", "restart_program", "restart_card", "settings", result="started")
                 QApplication.quit()
             except Exception as exc:
+                log_action(
+                    "UI",
+                    "restart_program",
+                    "restart_card",
+                    "settings",
+                    result="failed",
+                    level=logging.ERROR,
+                    detail=exc,
+                )
                 InfoBar.error(
                     "",
                     f"重启失败：{exc}",
@@ -229,6 +330,9 @@ class SettingsPage(ScrollArea):
                     position=InfoBarPosition.TOP,
                     duration=3000
                 )
+
+        else:
+            log_action("UI", "restart_program", "restart_card", "settings", result="cancelled")
 
     def _on_auto_update_toggled(self, checked: bool):
         """自动检查更新开关切换"""
@@ -252,7 +356,9 @@ class SettingsPage(ScrollArea):
         box.yesButton.setText("恢复")
         box.cancelButton.setText("取消")
         if not box.exec():
+            log_action("CONFIG", "reset_ui_settings", "reset_ui_card", "settings", result="cancelled")
             return
+        log_action("CONFIG", "reset_ui_settings", "reset_ui_card", "settings", result="confirmed")
 
         settings = app_settings()
         for key in ("sidebar_always_expand", "window_topmost", "ask_save_on_close", "auto_check_update"):
@@ -278,12 +384,22 @@ class SettingsPage(ScrollArea):
             duration=2000
         )
 
+        log_action("CONFIG", "reset_ui_settings", "reset_ui_card", "settings", result="success")
+
     def _on_download_source_changed(self):
         """下载源选择变化"""
         idx = self.download_source_combo.currentIndex()
         source_key = str(self.download_source_combo.itemData(idx)) if idx >= 0 else DEFAULT_DOWNLOAD_SOURCE
         settings = app_settings()
         settings.setValue("download_source", source_key)
+        log_action(
+            "CONFIG",
+            "change_download_source",
+            "download_source_combo",
+            "settings",
+            result="changed",
+            payload={"source": source_key},
+        )
 
 
 

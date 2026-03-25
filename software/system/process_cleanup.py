@@ -4,7 +4,7 @@ from __future__ import annotations
 import subprocess
 import threading
 
-_BROWSER_PROCESS_NAMES = ("chrome.exe", "msedge.exe", "chromium.exe")
+_BROWSER_PROCESS_NAMES = ("chrome.exe", "msedge.exe")
 _NO_WINDOW = 0x08000000
 
 

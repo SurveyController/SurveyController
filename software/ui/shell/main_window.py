@@ -36,6 +36,7 @@ from software.ui.shell.main_window_parts.lifecycle import MainWindowLifecycleMix
 from software.ui.shell.main_window_parts.lazy_pages import MainWindowLazyPagesMixin
 from software.ui.shell.main_window_parts.update import MainWindowUpdateMixin
 from software.app.config import APP_ICON_RELATIVE_PATH, STATUS_ENDPOINT, app_settings, get_bool_from_qsettings
+from software.logging.action_logger import log_action
 from software.logging.log_utils import register_popup_handler
 from software.app.version import __VERSION__
 from software.network.proxy import (
@@ -123,6 +124,7 @@ class MainWindow(
         self._donate_page = None
         self._ip_usage_page = None
         self._settings_page = None
+        self._last_logged_page = ""
 
         # 设置对象名称
         self.dashboard.setObjectName("dashboard")
@@ -353,10 +355,22 @@ class MainWindow(
 
     def _on_stack_widget_changed(self, _index: int):
         current_widget = self.stackedWidget.currentWidget()
+        current_name = current_widget.objectName() if current_widget else ""
+        if current_name and current_name != self._last_logged_page:
+            log_action("NAV", "switch_page", current_name, "main_window", result="opened")
+            self._last_logged_page = current_name
         if current_widget and current_widget.objectName() == "community":
             self._set_community_hint_pending(False)
 
     def _open_contact_dialog(self, default_type: str = "报错反馈", lock_message_type: bool = False):
+        log_action(
+            "UI",
+            "open_contact_dialog",
+            "contact_dialog",
+            "main_window",
+            result="shown",
+            payload={"locked_type": bool(lock_message_type)},
+        )
         dlg = ContactDialog(
             self,
             default_type=default_type,
@@ -365,7 +379,16 @@ class MainWindow(
             status_formatter=format_status_payload,
         )
         dlg.form.quotaRequestSucceeded.connect(self._on_quota_request_sent)
-        return dlg.exec() == QDialog.DialogCode.Accepted
+        accepted = dlg.exec() == QDialog.DialogCode.Accepted
+        log_action(
+            "UI",
+            "open_contact_dialog",
+            "contact_dialog",
+            "main_window",
+            result="submitted" if accepted else "cancelled",
+            payload={"locked_type": bool(lock_message_type)},
+        )
+        return accepted
 
     def _show_dialog_message(self, title: str, message: str, level: str = "info") -> None:
         self.show_message_dialog(title, message, level=level)
@@ -418,6 +441,7 @@ class MainWindow(
         def handler(kind: str, title: str, message: str):
             def _show():
                 if kind == "confirm":
+                    return self.show_confirm_dialog(title, message)
                     box = MessageBox(title, message, self)
                     box.yesButton.setText("确定")
                     box.cancelButton.setText("取消")
@@ -441,16 +465,14 @@ class MainWindow(
         self.answer_rules_page.set_questions_info(info or [])
         if getattr(self.dashboard, "_open_wizard_after_parse", False):
             self.dashboard._open_wizard_after_parse = False
-            pending_entries = copy.deepcopy(self.controller.question_entries)
-            accepted = self.dashboard._run_question_wizard(pending_entries, info, parsed_title)
-            if accepted:
-                self.question_page.set_questions(info, pending_entries)
-                self.controller.question_entries = pending_entries
-                self.dashboard.update_question_meta(parsed_title, len(pending_entries))
-            else:
-                current_entries = self.question_page.get_entries()
-                self.dashboard.update_question_meta(parsed_title, len(current_entries))
-                self._toast("已取消自动配置，保留原有题目设置", "warning")
+            info_snapshot = copy.deepcopy(info or [])
+            QTimer.singleShot(
+                0,
+                lambda info_snapshot=info_snapshot, parsed_title=parsed_title: self._open_parse_wizard_after_parse(
+                    info_snapshot,
+                    parsed_title,
+                ),
+            )
             return
         self.question_page.set_questions(info, self.controller.question_entries)
         self.dashboard.update_question_meta(parsed_title, len(self.controller.question_entries))
@@ -465,6 +487,57 @@ class MainWindow(
 
     def _open_quota_request_form(self) -> bool:
         return self._open_contact_dialog(default_type="额度申请", lock_message_type=True)
+
+    def _open_parse_wizard_after_parse(self, info: List[Dict[str, Any]], parsed_title: str) -> None:
+        try:
+            pending_entries = copy.deepcopy(self.controller.question_entries)
+            accepted = self.dashboard._run_question_wizard(pending_entries, info, parsed_title)
+        except Exception as exc:
+            logging.exception("自动配置向导打开失败")
+            log_action(
+                "UI",
+                "open_parse_wizard",
+                "question_wizard",
+                "main_window",
+                result="failed",
+                level=logging.ERROR,
+                detail=exc,
+                payload={"question_count": len(info or [])},
+            )
+            current_entries = self.question_page.get_entries()
+            self.dashboard.update_question_meta(parsed_title, len(current_entries))
+            self.dashboard._toast(
+                "自动配置向导打开失败，已保留原有题目设置；详细原因已写入日志",
+                "error",
+                duration=4200,
+            )
+            return
+
+        if accepted:
+            self.question_page.set_questions(info, pending_entries)
+            self.controller.question_entries = pending_entries
+            self.dashboard.update_question_meta(parsed_title, len(pending_entries))
+            log_action(
+                "UI",
+                "open_parse_wizard",
+                "question_wizard",
+                "main_window",
+                result="accepted",
+                payload={"question_count": len(info or [])},
+            )
+            return
+
+        current_entries = self.question_page.get_entries()
+        self.dashboard.update_question_meta(parsed_title, len(current_entries))
+        log_action(
+            "UI",
+            "open_parse_wizard",
+            "question_wizard",
+            "main_window",
+            result="cancelled",
+            payload={"question_count": len(info or [])},
+        )
+        self._toast("已取消自动配置，保留原有题目设置", "warning")
 
 
 def create_window() -> MainWindow:

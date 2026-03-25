@@ -7,6 +7,9 @@ from software.logging.log_utils import log_suppressed_exception
 from software.network.browser import By, BrowserDriver
 from software.app.config import DEFAULT_FILL_TEXT
 from software.core.questions.utils import (
+    describe_random_int_range,
+    generate_random_integer_text,
+    try_parse_random_int_range,
     weighted_index,
     normalize_probabilities,
     resolve_dynamic_text_token,
@@ -348,6 +351,7 @@ def text(
     text_titles: Optional[List[str]] = None,
     multi_text_blank_modes: Optional[List[List[str]]] = None,
     multi_text_blank_ai_flags: Optional[List[List[bool]]] = None,
+    multi_text_blank_int_ranges: Optional[List[List[List[int]]]] = None,
 ) -> None:
     """填空题处理主函数"""
     if index < len(texts_config):
@@ -386,11 +390,14 @@ def text(
         fallback_title = str(text_titles[index] or "")
     blank_modes = None
     blank_ai_flags = None
+    blank_int_ranges = None
     if entry_kind == "multi_text":
         if multi_text_blank_modes and index < len(multi_text_blank_modes):
             blank_modes = multi_text_blank_modes[index]
         if multi_text_blank_ai_flags and index < len(multi_text_blank_ai_flags):
             blank_ai_flags = multi_text_blank_ai_flags[index]
+        if multi_text_blank_int_ranges and index < len(multi_text_blank_int_ranges):
+            blank_int_ranges = multi_text_blank_int_ranges[index]
 
     selected_index = weighted_index(selection_probabilities)
     selected_answer = resolved_candidates[selected_index] if resolved_candidates else DEFAULT_FILL_TEXT
@@ -434,6 +441,7 @@ def text(
                 selected_answer,
                 blank_modes,
                 fallback_blank_ai_flags,
+                blank_int_ranges,
                 title,
                 default_source="配置",
             )
@@ -454,6 +462,7 @@ def text(
             selected_answer,
             blank_modes,
             blank_ai_flags,
+            blank_int_ranges,
             title,
             default_source="配置",
         )
@@ -473,6 +482,7 @@ def _handle_multi_text(
     selected_answer: Any,
     blank_modes: Optional[List[str]] = None,
     blank_ai_flags: Optional[List[bool]] = None,
+    blank_int_ranges: Optional[List[List[int]]] = None,
     title: str = "",
     default_source: str = "配置",
 ) -> Tuple[List[str], List[str]]:
@@ -494,8 +504,12 @@ def _handle_multi_text(
     value_sources = [default_source] * len(values)
 
     # 处理每个填空项的随机模式和AI
-    if blank_modes or blank_ai_flags:
-        max_len = max(len(blank_modes) if blank_modes else 0, len(blank_ai_flags) if blank_ai_flags else 0)
+    if blank_modes or blank_ai_flags or blank_int_ranges:
+        max_len = max(
+            len(blank_modes) if blank_modes else 0,
+            len(blank_ai_flags) if blank_ai_flags else 0,
+            len(blank_int_ranges) if blank_int_ranges else 0,
+        )
         while len(values) < max_len:
             values.append(DEFAULT_FILL_TEXT)
             value_sources.append(default_source)
@@ -526,6 +540,15 @@ def _handle_multi_text(
                 elif mode == "mobile":
                     values[idx] = resolve_dynamic_text_token("__RANDOM_MOBILE__")
                     value_sources[idx] = "随机手机号"
+                elif mode == "integer":
+                    int_range = blank_int_ranges[idx] if blank_int_ranges and idx < len(blank_int_ranges) else []
+                    parsed_range = try_parse_random_int_range(int_range)
+                    if parsed_range is None:
+                        values[idx] = DEFAULT_FILL_TEXT
+                        value_sources[idx] = "随机整数未配置"
+                    else:
+                        values[idx] = generate_random_integer_text(parsed_range[0], parsed_range[1])
+                        value_sources[idx] = f"随机整数({describe_random_int_range(parsed_range)})"
 
     primary_inputs: List[Any] = []
     secondary_inputs: List[Any] = []

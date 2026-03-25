@@ -6,7 +6,6 @@
     constants.py      - TYPE_CHOICES、STRATEGY_CHOICES 等常量与标签函数
     utils.py          - _shorten_text、_apply_label_color、_bind_slider_input 等辅助函数
     wizard_dialog.py  - QuestionWizardDialog 配置向导弹窗
-    preview_panel.py  - SurveyPreviewPanel 向导左侧只读网页预览
     add_dialog.py     - QuestionAddDialog 新增题目弹窗
     page.py           - QuestionPage 题目配置主页面
 """
@@ -20,7 +19,6 @@ from .constants import (
 )
 from .utils import _shorten_text, _apply_label_color, _bind_slider_input
 from .wizard_dialog import QuestionWizardDialog
-from .preview_panel import SurveyPreviewPanel
 from .add_dialog import QuestionAddDialog
 from .page import QuestionPage
 
@@ -38,7 +36,6 @@ __all__ = [
     "_bind_slider_input",
     # 对话框
     "QuestionWizardDialog",
-    "SurveyPreviewPanel",
     "QuestionAddDialog",
     # 主页面
     "QuestionPage",

@@ -12,6 +12,7 @@ from software.providers.common import (
 )
 from tencent.provider.parser import parse_qq_survey
 from wjx.provider.parser import parse_wjx_survey
+from wjx.provider.runtime import brush_wjx
 
 
 def _resolve_provider(*, provider: Optional[str] = None, ctx: Any = None) -> str:
@@ -62,10 +63,8 @@ def fill_survey(
         )
 
     if resolved == SURVEY_PROVIDER_WJX:
-        from wjx.provider.runtime import fill_survey as fill_wjx_survey
-
         return bool(
-            fill_wjx_survey(
+            brush_wjx(
                 driver,
                 ctx,
                 stop_signal=stop_signal,

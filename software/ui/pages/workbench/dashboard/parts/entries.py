@@ -8,6 +8,7 @@ from PySide6.QtWidgets import QDialog, QTableWidgetItem
 from qfluentwidgets import MessageBox
 
 from software.core.questions.config import QuestionEntry
+from software.core.questions.utils import describe_random_int_range, parse_random_int_token
 from software.ui.pages.workbench.question_editor import QuestionWizardDialog, _get_entry_type_label
 from software.ui.pages.workbench.question_editor.psycho_config import PSYCHO_SUPPORTED_TYPES
 
@@ -17,6 +18,9 @@ _TEXT_RANDOM_MOBILE_TOKEN = "__RANDOM_MOBILE__"
 
 def _pretty_text_answer(value: Any) -> str:
     text = str(value or "").strip()
+    random_int_range = parse_random_int_token(text)
+    if random_int_range is not None:
+        return f"随机整数({describe_random_int_range(random_int_range)})"
     if text == _TEXT_RANDOM_NAME_TOKEN:
         return "随机姓名"
     if text == _TEXT_RANDOM_MOBILE_TOKEN:
@@ -38,6 +42,32 @@ def question_summary(entry: QuestionEntry) -> str:
                 return "答案: 随机姓名"
             if random_mode == "mobile":
                 return "答案: 随机手机号"
+            if random_mode == "integer":
+                return f"答案: 随机整数({describe_random_int_range(getattr(entry, 'text_random_int_range', []))})"
+        else:
+            blank_modes = list(getattr(entry, "multi_text_blank_modes", []) or [])
+            blank_ai_flags = list(getattr(entry, "multi_text_blank_ai_flags", []) or [])
+            blank_int_ranges = list(getattr(entry, "multi_text_blank_int_ranges", []) or [])
+            if blank_modes or blank_ai_flags:
+                config_parts: List[str] = []
+                blank_count = max(len(blank_modes), len(blank_ai_flags), len(blank_int_ranges))
+                for idx in range(blank_count):
+                    if idx < len(blank_ai_flags) and blank_ai_flags[idx]:
+                        config_parts.append(f"填空{idx + 1}: AI")
+                        continue
+                    mode = blank_modes[idx] if idx < len(blank_modes) else "none"
+                    if mode == "name":
+                        config_parts.append(f"填空{idx + 1}: 随机姓名")
+                    elif mode == "mobile":
+                        config_parts.append(f"填空{idx + 1}: 随机手机号")
+                    elif mode == "integer":
+                        int_range = blank_int_ranges[idx] if idx < len(blank_int_ranges) else []
+                        config_parts.append(f"填空{idx + 1}: 随机整数({describe_random_int_range(int_range)})")
+                if config_parts:
+                    summary = " | ".join(config_parts[:2])
+                    if len(config_parts) > 2:
+                        summary += f" (+{len(config_parts) - 2})"
+                    return summary
         texts = entry.texts or []
         if texts:
             preview = [_pretty_text_answer(text) for text in texts[:2]]
@@ -99,7 +129,10 @@ class DashboardEntriesMixin:
         self._refresh_entry_table()
 
     def _open_question_wizard(self):
-        if self._run_question_wizard(self.question_page.entries, self.question_page.questions_info):
+        if self._run_question_wizard(
+            self.question_page.entries,
+            self.question_page.entry_questions_info,
+        ):
             self._refresh_entry_table()
 
     def _edit_selected_entries(self):
@@ -108,14 +141,17 @@ class DashboardEntriesMixin:
             self._toast("请先勾选要编辑的题目", "warning")
             return
         entries = self.question_page.get_entries()
-        info = self.question_page.questions_info or []
+        info = self.question_page.entry_questions_info or []
         selected_rows = [row for row in sorted(set(selected_rows)) if 0 <= row < len(entries)]
         if not selected_rows:
             self._toast("未找到可编辑的题目", "warning")
             return
         selected_entries = [entries[row] for row in selected_rows]
         selected_info = [info[row] if row < len(info) else {} for row in selected_rows]
-        if self._run_question_wizard(selected_entries, selected_info):
+        if self._run_question_wizard(
+            selected_entries,
+            selected_info,
+        ):
             self._refresh_entry_table()
 
     def _apply_wizard_results(self, entries: List[QuestionEntry], dlg: QuestionWizardDialog) -> None:
@@ -148,6 +184,11 @@ class DashboardEntriesMixin:
             if 0 <= idx < len(entries):
                 entry = entries[idx]
                 entry.text_random_mode = str(random_mode or "none") if entry.question_type == "text" else "none"
+        text_random_int_range_updates = dlg.get_text_random_int_ranges()
+        for idx, int_range in text_random_int_range_updates.items():
+            if 0 <= idx < len(entries):
+                entry = entries[idx]
+                entry.text_random_int_range = int_range if entry.question_type == "text" else []
         ai_updates = dlg.get_ai_flags()
         for idx, enabled in ai_updates.items():
             if 0 <= idx < len(entries):
@@ -161,6 +202,10 @@ class DashboardEntriesMixin:
         for idx, modes in multi_text_blank_modes_updates.items():
             if 0 <= idx < len(entries):
                 entries[idx].multi_text_blank_modes = modes
+        multi_text_blank_int_range_updates = dlg.get_multi_text_blank_int_ranges()
+        for idx, int_ranges in multi_text_blank_int_range_updates.items():
+            if 0 <= idx < len(entries):
+                entries[idx].multi_text_blank_int_ranges = int_ranges
         multi_text_blank_ai_updates = dlg.get_multi_text_blank_ai_flags()
         for idx, flags in multi_text_blank_ai_updates.items():
             if 0 <= idx < len(entries):
@@ -171,22 +216,21 @@ class DashboardEntriesMixin:
             if 0 <= idx < len(entries):
                 entries[idx].psycho_bias = bias
 
-    def _run_question_wizard(self, entries: List[QuestionEntry], info: List[Dict[str, Any]], survey_title: Optional[str] = None) -> bool:
+    def _run_question_wizard(
+        self,
+        entries: List[QuestionEntry],
+        info: List[Dict[str, Any]],
+        survey_title: Optional[str] = None,
+    ) -> bool:
         if not entries:
             self._toast("请先解析问卷或手动添加题目", "warning")
             return False
         title = survey_title if survey_title is not None else self._survey_title
         reliability_mode_enabled = self.runtime_page.reliability_card.switchButton.isChecked()
-        survey_url = str(getattr(getattr(self.controller, "config", None), "url", "") or "").strip()
-        survey_provider = str(getattr(getattr(self.controller, "config", None), "survey_provider", "") or "").strip()
-        if not survey_provider:
-            survey_provider = str(getattr(self.controller, "survey_provider", "wjx") or "wjx")
         dlg = QuestionWizardDialog(
             entries,
             info,
             title,
-            survey_url=survey_url,
-            survey_provider=survey_provider,
             parent=self,
             reliability_mode_enabled=reliability_mode_enabled,
         )

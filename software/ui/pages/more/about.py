@@ -3,6 +3,7 @@ import threading
 import webbrowser
 from datetime import datetime
 import logging
+from software.logging.action_logger import log_action
 from software.logging.log_utils import log_suppressed_exception
 
 
@@ -251,6 +252,14 @@ class AboutPage(ScrollArea):
         self._set_update_loading(False)
         win = self.window()
         status = update_info.get("status", "unknown") if update_info else "unknown"
+        log_action(
+            "UPDATE",
+            "check_updates",
+            "update_btn",
+            "about",
+            result=status,
+            payload={"version": (update_info or {}).get("version", "unknown")},
+        )
         if status == "outdated":
             if hasattr(win, 'update_info'):
                 win.update_info = update_info  # type: ignore[union-attr]
@@ -273,6 +282,7 @@ class AboutPage(ScrollArea):
         if self._checking_update:
             return
         self._set_update_loading(True)
+        log_action("UPDATE", "check_updates", "update_btn", "about", result="started")
         
         def _do_check():
             try:

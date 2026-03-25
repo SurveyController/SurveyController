@@ -61,6 +61,7 @@ class RunControllerParsingMixin:
                 self.survey_provider = provider
                 self.surveyParsed.emit(info, title or "")
             except Exception as exc:
+                logging.exception("解析问卷流程失败，url=%r", normalized_url)
                 friendly = str(exc) or "解析失败，请稍后重试"
                 self.surveyParseFailed.emit(friendly)
 
@@ -287,6 +288,11 @@ class RunControllerParsingMixin:
                     if q_type == "text"
                     else "none"
                 )
+                text_random_int_range_from_existing = (
+                    copy.deepcopy(getattr(existing_config, "text_random_int_range", []))
+                    if q_type == "text"
+                    else []
+                )
                 multi_text_blank_modes_from_existing = (
                     copy.deepcopy(getattr(existing_config, "multi_text_blank_modes", []))
                     if q_type == "multi_text"
@@ -297,12 +303,19 @@ class RunControllerParsingMixin:
                     if q_type == "multi_text"
                     else []
                 )
+                multi_text_blank_int_ranges_from_existing = (
+                    copy.deepcopy(getattr(existing_config, "multi_text_blank_int_ranges", []))
+                    if q_type == "multi_text"
+                    else []
+                )
                 attached_selects_from_existing = copy.deepcopy(getattr(existing_config, "attached_option_selects", []) or [])
             else:
                 ai_enabled_from_existing = False
                 text_random_mode_from_existing = "none"
+                text_random_int_range_from_existing = []
                 multi_text_blank_modes_from_existing = []
                 multi_text_blank_ai_flags_from_existing = []
+                multi_text_blank_int_ranges_from_existing = []
                 attached_selects_from_existing = []
                 if q_type in ("single", "dropdown", "scale"):
                     probabilities = -1
@@ -379,7 +392,9 @@ class RunControllerParsingMixin:
                 ai_enabled=ai_enabled_from_existing if q_type in ("text", "multi_text") else False,
                 multi_text_blank_modes=multi_text_blank_modes_from_existing if q_type == "multi_text" else [],
                 multi_text_blank_ai_flags=multi_text_blank_ai_flags_from_existing if q_type == "multi_text" else [],
+                multi_text_blank_int_ranges=multi_text_blank_int_ranges_from_existing if q_type == "multi_text" else [],
                 text_random_mode=text_random_mode_from_existing if q_type == "text" else "none",
+                text_random_int_range=text_random_int_range_from_existing if q_type == "text" else [],
                 option_fill_texts=None,
                 fillable_option_indices=q.get("fillable_options"),
                 attached_option_selects=_normalize_attached_option_selects(

@@ -8,7 +8,6 @@ binaries = []
 qfw_datas, qfw_binaries, qfw_hiddenimports = collect_all('qfluentwidgets')
 
 # === PySide6 白名单：只打包实际用到的模块 ===
-# 当前项目额外用到 QtWebEngine 预览，因此要把 WebEngine 相关依赖一起带上
 import PySide6
 pyside6_dir = os.path.dirname(PySide6.__file__)
 
@@ -19,10 +18,6 @@ pyside6_root_dlls = {
     'Qt6Core.dll', 'Qt6Gui.dll', 'Qt6Widgets.dll', 'Qt6Network.dll',
     'Qt6Svg.dll', 'Qt6SvgWidgets.dll', 'Qt6Xml.dll',
     'Qt6Charts.dll',
-    'Qt6Positioning.dll', 'Qt6PrintSupport.dll',
-    'Qt6Qml.dll', 'Qt6QmlMeta.dll', 'Qt6QmlModels.dll',
-    'Qt6Quick.dll',
-    'Qt6WebChannel.dll', 'Qt6WebEngineCore.dll', 'Qt6WebEngineWidgets.dll', 'Qt6WebSockets.dll',
     # Qt6Charts.dll 的运行时依赖
     'Qt6OpenGL.dll', 'Qt6OpenGLWidgets.dll',
     'pyside6.abi3.dll',
@@ -31,9 +26,6 @@ pyside6_pyd_files = {
     'QtCore.pyd', 'QtGui.pyd', 'QtWidgets.pyd', 'QtNetwork.pyd',
     'QtSvg.pyd', 'QtSvgWidgets.pyd', 'QtXml.pyd',
     'QtCharts.pyd',
-    'QtPositioning.pyd', 'QtPrintSupport.pyd',
-    'QtQml.pyd', 'QtQuick.pyd',
-    'QtWebChannel.pyd', 'QtWebEngineCore.pyd', 'QtWebEngineWidgets.pyd', 'QtWebSockets.pyd',
 }
 
 # 收集白名单内的 PySide6 二进制文件
@@ -71,24 +63,6 @@ for plugin in required_plugins:
     if os.path.isdir(plugin_path):
         pyside_datas.append((plugin_path, os.path.join('PySide6', 'plugins', plugin)))
 
-# Qt WebEngine 运行时资源：helper 进程、资源包、语言包缺任何一个都可能直接炸
-webengine_binary_candidates = [
-    (os.path.join(pyside6_dir, 'Qt', 'libexec', 'QtWebEngineProcess.exe'), os.path.join('PySide6', 'Qt', 'libexec')),
-    (os.path.join(pyside6_dir, 'QtWebEngineProcess.exe'), 'PySide6'),
-]
-for src, dest in webengine_binary_candidates:
-    if os.path.isfile(src):
-        pyside_binaries.append((src, dest))
-
-webengine_data_candidates = [
-    (os.path.join(pyside6_dir, 'Qt', 'resources'), os.path.join('PySide6', 'Qt', 'resources')),
-    (os.path.join(pyside6_dir, 'Qt', 'translations', 'qtwebengine_locales'), os.path.join('PySide6', 'Qt', 'translations', 'qtwebengine_locales')),
-    (os.path.join(pyside6_dir, 'translations', 'qtwebengine_locales'), os.path.join('PySide6', 'translations', 'qtwebengine_locales')),
-]
-for src, dest in webengine_data_candidates:
-    if os.path.isdir(src):
-        pyside_datas.append((src, dest))
-
 # 使用相对路径，PyInstaller 会正确地将这些文件打包进 EXE
 datas = [
     ('assets', 'assets'),
@@ -108,15 +82,6 @@ pyside6_modules = [
     'PySide6.QtSvgWidgets',
     # IP 使用记录页面折线图
     'PySide6.QtCharts',
-    # 配置向导只读网页预览
-    'PySide6.QtPositioning',
-    'PySide6.QtPrintSupport',
-    'PySide6.QtQml',
-    'PySide6.QtQuick',
-    'PySide6.QtWebChannel',
-    'PySide6.QtWebEngineCore',
-    'PySide6.QtWebEngineWidgets',
-    'PySide6.QtWebSockets',
 ]
 
 # qframelesswindow 在 Windows 上需要的 pywin32 模块（经源码验证）
@@ -229,10 +194,6 @@ _pyside6_keep = {
     'Qt6Core.dll', 'Qt6Gui.dll', 'Qt6Widgets.dll', 'Qt6Network.dll',
     'Qt6Svg.dll', 'Qt6SvgWidgets.dll', 'Qt6Xml.dll',
     'Qt6Charts.dll',
-    'Qt6Positioning.dll', 'Qt6PrintSupport.dll',
-    'Qt6Qml.dll', 'Qt6QmlMeta.dll', 'Qt6QmlModels.dll',
-    'Qt6Quick.dll',
-    'Qt6WebChannel.dll', 'Qt6WebEngineCore.dll', 'Qt6WebEngineWidgets.dll', 'Qt6WebSockets.dll',
     # Qt6Charts.dll 的运行时依赖
     'Qt6OpenGL.dll', 'Qt6OpenGLWidgets.dll',
     'pyside6.abi3.dll',
@@ -240,15 +201,11 @@ _pyside6_keep = {
     'QtCore.pyd', 'QtGui.pyd', 'QtWidgets.pyd', 'QtNetwork.pyd',
     'QtSvg.pyd', 'QtSvgWidgets.pyd', 'QtXml.pyd',
     'QtCharts.pyd',
-    'QtPositioning.pyd', 'QtPrintSupport.pyd',
-    'QtQml.pyd', 'QtQuick.pyd',
-    'QtWebChannel.pyd', 'QtWebEngineCore.pyd', 'QtWebEngineWidgets.pyd', 'QtWebSockets.pyd',
 }
 
-# 多媒体相关 DLL 黑名单（项目不需要音视频处理）
+# 多媒体相关 DLL 黑名单（项目不需要音视频处理）。
 _pyside6_multimedia_dlls = {
     'swresample-4.dll', 'swscale-7.dll',
-    'opengl32sw.dll',
 }
 
 def _is_unwanted_pyside6(name):

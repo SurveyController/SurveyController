@@ -2,10 +2,12 @@
 from html import escape
 from typing import List, Dict, Any, Tuple, Optional, cast
 
-from PySide6.QtCore import Qt, QPropertyAnimation, QTimer, QEasingCurve
+from PySide6.QtCore import Qt, QPropertyAnimation, QTimer, QEasingCurve, QRegularExpression
+from PySide6.QtGui import QRegularExpressionValidator
 from PySide6.QtWidgets import QWidget, QVBoxLayout, QHBoxLayout, QButtonGroup
 from qfluentwidgets import ScrollArea, BodyLabel, CardWidget, PushButton, LineEdit, CheckBox, SegmentedWidget
 
+from software.core.questions.utils import parse_random_int_token, try_parse_random_int_range
 from software.ui.widgets.no_wheel import NoWheelSlider
 from software.core.questions.config import QuestionEntry
 from software.app.config import DEFAULT_FILL_TEXT
@@ -21,6 +23,7 @@ from .psycho_config import PSYCHO_SUPPORTED_TYPES, BIAS_PRESET_CHOICES, build_bi
 _TEXT_RANDOM_NONE = "none"
 _TEXT_RANDOM_NAME = "name"
 _TEXT_RANDOM_MOBILE = "mobile"
+_TEXT_RANDOM_INTEGER = "integer"
 _TEXT_RANDOM_NAME_TOKEN = "__RANDOM_NAME__"
 _TEXT_RANDOM_MOBILE_TOKEN = "__RANDOM_MOBILE__"
 
@@ -58,6 +61,9 @@ class WizardSectionsMixin:
     text_random_group_map: Dict[int, Any]
     text_random_name_check_map: Dict[int, Any]
     text_random_mobile_check_map: Dict[int, Any]
+    text_random_integer_check_map: Dict[int, Any]
+    text_random_int_min_edit_map: Dict[int, Any]
+    text_random_int_max_edit_map: Dict[int, Any]
     ai_check_map: Dict[int, Any]
     text_random_mode_map: Dict[int, str]
     text_edit_map: Dict[int, Any]
@@ -131,19 +137,42 @@ class WizardSectionsMixin:
         label.setText(self._build_ratio_preview_text(option_names, percentages, prefix))
         label.setToolTip("这里显示的是目标占比，实际作答会受信效度和一致性约束影响而小幅波动。")
 
+    @staticmethod
+    def _create_integer_range_edit(parent: QWidget, initial_value: Optional[int], placeholder: str) -> LineEdit:
+        edit = LineEdit(parent)
+        edit.setFixedWidth(88)
+        edit.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        edit.setPlaceholderText(placeholder)
+        edit.setValidator(QRegularExpressionValidator(QRegularExpression(r"-?\d*"), edit))
+        if initial_value is not None:
+            edit.setText(str(int(initial_value)))
+        return edit
+
+    @staticmethod
+    def _resolve_text_random_int_range(entry: QuestionEntry) -> Tuple[Optional[int], Optional[int]]:
+        raw_range = getattr(entry, "text_random_int_range", []) or []
+        if raw_range:
+            parsed = try_parse_random_int_range(raw_range)
+            if parsed is not None:
+                return parsed
+        for raw in (entry.texts or []):
+            parsed = parse_random_int_token(raw)
+            if parsed is not None:
+                return parsed
+        return None, None
+
     def _build_text_section(self, idx: int, entry: QuestionEntry, card: CardWidget, card_layout: QVBoxLayout) -> None:
         self._has_content = True
 
         # 检测是否为多项填空题
         is_multi_text = False
         blank_count = 1
-        if idx < len(self.info):
-            info_entry = self.info[idx]
-            text_input_count = info_entry.get("text_inputs", 0)
-            is_multi_text_flag = info_entry.get("is_multi_text", False)
-            if is_multi_text_flag or entry.question_type == "multi_text":
-                is_multi_text = True
-                blank_count = max(1, text_input_count)
+        info_entry = self._get_entry_info(idx)
+        text_input_count = info_entry.get("text_inputs", 0)
+        is_multi_text_flag = info_entry.get("is_multi_text", False)
+        if is_multi_text_flag or entry.question_type == "multi_text":
+            is_multi_text = True
+            blank_count = max(1, text_input_count)
 
         # 如果是多项填空题，使用矩阵式输入界面
         if is_multi_text:
@@ -215,8 +244,19 @@ class WizardSectionsMixin:
 
             random_name_cb = CheckBox("随机姓名", card)
             random_mobile_cb = CheckBox("随机手机号", card)
+            random_integer_cb = CheckBox("随机整数", card)
+            random_int_min, random_int_max = self._resolve_text_random_int_range(entry)
+            random_min_edit = self._create_integer_range_edit(card, random_int_min, "最小值")
+            random_max_edit = self._create_integer_range_edit(card, random_int_max, "最大值")
+            range_separator = BodyLabel("到", card)
+            range_separator.setStyleSheet("font-size: 12px;")
+            _apply_label_color(range_separator, "#666666", "#bfbfbf")
             random_row.addWidget(random_name_cb)
             random_row.addWidget(random_mobile_cb)
+            random_row.addWidget(random_integer_cb)
+            random_row.addWidget(random_min_edit)
+            random_row.addWidget(range_separator)
+            random_row.addWidget(random_max_edit)
             random_row.addStretch(1)
             card_layout.addLayout(random_row)
 
@@ -224,15 +264,22 @@ class WizardSectionsMixin:
             random_group.setExclusive(False)
             random_group.addButton(random_name_cb, 1)
             random_group.addButton(random_mobile_cb, 2)
+            random_group.addButton(random_integer_cb, 3)
             self.text_random_group_map[idx] = random_group
             self.text_random_name_check_map[idx] = random_name_cb
             self.text_random_mobile_check_map[idx] = random_mobile_cb
+            self.text_random_integer_check_map[idx] = random_integer_cb
+            self.text_random_int_min_edit_map[idx] = random_min_edit
+            self.text_random_int_max_edit_map[idx] = random_max_edit
 
             random_name_cb.toggled.connect(
                 lambda checked, i=idx: self._on_text_random_mode_toggled(i, _TEXT_RANDOM_NAME, checked)
             )
             random_mobile_cb.toggled.connect(
                 lambda checked, i=idx: self._on_text_random_mode_toggled(i, _TEXT_RANDOM_MOBILE, checked)
+            )
+            random_integer_cb.toggled.connect(
+                lambda checked, i=idx: self._on_text_random_mode_toggled(i, _TEXT_RANDOM_INTEGER, checked)
             )
 
             ai_cb = CheckBox("启用 AI", card)
@@ -248,6 +295,8 @@ class WizardSectionsMixin:
                 random_name_cb.setChecked(True)
             elif random_mode == _TEXT_RANDOM_MOBILE:
                 random_mobile_cb.setChecked(True)
+            elif random_mode == _TEXT_RANDOM_INTEGER:
+                random_integer_cb.setChecked(True)
             self._sync_text_section_state(idx)
         else:
             self._set_text_answer_enabled(idx, True)
@@ -374,6 +423,7 @@ class WizardSectionsMixin:
         blank_radio_groups: List[QButtonGroup] = []
         blank_mode_radios: List[Dict[str, QRadioButton]] = []
         blank_ai_checkboxes: List[CheckBox] = []
+        blank_integer_range_edits: List[Tuple[LineEdit, LineEdit]] = []
 
         # 解析现有配置
         saved_modes = getattr(entry, "multi_text_blank_modes", None) or []
@@ -387,6 +437,12 @@ class WizardSectionsMixin:
             saved_ai_flags = []
         while len(saved_ai_flags) < blank_count:
             saved_ai_flags.append(False)
+
+        saved_int_ranges = getattr(entry, "multi_text_blank_int_ranges", None) or []
+        if not isinstance(saved_int_ranges, list):
+            saved_int_ranges = []
+        while len(saved_int_ranges) < blank_count:
+            saved_int_ranges.append([])
 
         for blank_idx in range(blank_count):
             blank_row = QHBoxLayout()
@@ -403,22 +459,37 @@ class WizardSectionsMixin:
             radio_list = QRadioButton("使用答案列表", card)
             radio_name = QRadioButton("随机姓名", card)
             radio_mobile = QRadioButton("随机手机号", card)
+            radio_integer = QRadioButton("随机整数", card)
+            parsed_range = try_parse_random_int_range(saved_int_ranges[blank_idx])
+            range_min, range_max = parsed_range if parsed_range is not None else (None, None)
+            range_min_edit = self._create_integer_range_edit(card, range_min, "最小值")
+            range_max_edit = self._create_integer_range_edit(card, range_max, "最大值")
+            range_sep_label = BodyLabel("到", card)
+            range_sep_label.setStyleSheet("font-size: 12px;")
+            _apply_label_color(range_sep_label, "#666666", "#bfbfbf")
 
             radio_group.addButton(radio_list, 0)
             radio_group.addButton(radio_name, 1)
             radio_group.addButton(radio_mobile, 2)
+            radio_group.addButton(radio_integer, 3)
 
             current_mode = saved_modes[blank_idx] if blank_idx < len(saved_modes) else _TEXT_RANDOM_NONE
             if current_mode == _TEXT_RANDOM_NAME:
                 radio_name.setChecked(True)
             elif current_mode == _TEXT_RANDOM_MOBILE:
                 radio_mobile.setChecked(True)
+            elif current_mode == _TEXT_RANDOM_INTEGER:
+                radio_integer.setChecked(True)
             else:
                 radio_list.setChecked(True)
 
             blank_row.addWidget(radio_list)
             blank_row.addWidget(radio_name)
             blank_row.addWidget(radio_mobile)
+            blank_row.addWidget(radio_integer)
+            blank_row.addWidget(range_min_edit)
+            blank_row.addWidget(range_sep_label)
+            blank_row.addWidget(range_max_edit)
 
             # 每个填空项的AI复选框
             ai_cb = CheckBox("启用AI", card)
@@ -434,36 +505,48 @@ class WizardSectionsMixin:
             blank_mode_radios.append({
                 "list": radio_list,
                 "name": radio_name,
-                "mobile": radio_mobile
+                "mobile": radio_mobile,
+                "integer": radio_integer,
             })
+            blank_integer_range_edits.append((range_min_edit, range_max_edit))
 
             # 互斥逻辑：控制该列输入框的启用/禁用
-            def make_sync_func(col_idx, radios, ai_checkbox, edits_list):
+            def make_sync_func(col_idx, radios, ai_checkbox, edits_list, int_range_edits):
                 def sync_column_state():
                     mode_id = radios["list"].group().checkedId()
                     ai_enabled = ai_checkbox.isChecked()
                     use_list = (mode_id == 0 and not ai_enabled)
+                    use_integer_range = (mode_id == 3 and not ai_enabled)
 
                     # 禁用/启用该列的所有输入框
                     for row in edits_list:
                         if col_idx < len(row):
                             row[col_idx].setEnabled(use_list)
 
+                    for edit in int_range_edits:
+                        edit.setEnabled(use_integer_range)
+
                     # AI和随机模式互斥
                     if ai_enabled:
                         radios["list"].setEnabled(False)
                         radios["name"].setEnabled(False)
                         radios["mobile"].setEnabled(False)
-                        if not radios["list"].isChecked():
-                            radios["list"].setChecked(True)
+                        radios["integer"].setEnabled(False)
                     else:
                         radios["list"].setEnabled(True)
                         radios["name"].setEnabled(True)
                         radios["mobile"].setEnabled(True)
+                        radios["integer"].setEnabled(True)
 
                 return sync_column_state
 
-            sync_func = make_sync_func(blank_idx, blank_mode_radios[-1], ai_cb, row_edits)
+            sync_func = make_sync_func(
+                blank_idx,
+                blank_mode_radios[-1],
+                ai_cb,
+                row_edits,
+                blank_integer_range_edits[-1],
+            )
             radio_group.buttonClicked.connect(lambda checked=False, f=sync_func: f())
             ai_cb.toggled.connect(
                 lambda checked, cb=ai_cb, f=sync_func: self._on_multi_text_blank_ai_toggled(cb, checked, f)
@@ -476,8 +559,11 @@ class WizardSectionsMixin:
             self.multi_text_blank_radio_groups = {}
         if not hasattr(self, "multi_text_blank_ai_checkboxes"):
             self.multi_text_blank_ai_checkboxes = {}
+        if not hasattr(self, "multi_text_blank_integer_range_edits"):
+            self.multi_text_blank_integer_range_edits = {}
         self.multi_text_blank_radio_groups[idx] = blank_radio_groups
         self.multi_text_blank_ai_checkboxes[idx] = blank_ai_checkboxes
+        self.multi_text_blank_integer_range_edits[idx] = blank_integer_range_edits
 
         # 控制「添加答案组」按钮：所有填空都启用AI时禁用该按钮（答案列表无用）
         def update_add_btn_state():
@@ -493,7 +579,7 @@ class WizardSectionsMixin:
     def _build_matrix_section(self, idx: int, entry: QuestionEntry, card: CardWidget,
                               card_layout: QVBoxLayout, option_texts: List[str], row_texts: List[str]) -> None:
         self._has_content = True
-        info_rows = self.info[idx].get("rows") if idx < len(self.info) else 0
+        info_rows = self._get_entry_info(idx).get("rows", 0)
         try:
             info_rows = int(info_rows or 0)
         except Exception:
@@ -740,12 +826,12 @@ class WizardSectionsMixin:
         is_multiple = entry.question_type == "multiple"
 
         jump_map: Dict[int, int] = {}
-        if idx < len(self.info):
-            for rule in (self.info[idx].get("jump_rules") or []):
-                oi = rule.get("option_index")
-                jt = rule.get("jumpto")
-                if oi is not None and jt is not None:
-                    jump_map[oi] = jt
+        info_entry = self._get_entry_info(idx)
+        for rule in (info_entry.get("jump_rules") or []):
+            oi = rule.get("option_index")
+            jt = rule.get("jumpto")
+            if oi is not None and jt is not None:
+                jump_map[oi] = jt
 
         for opt_idx in range(options):
             opt_widget = QWidget(card)
@@ -765,7 +851,7 @@ class WizardSectionsMixin:
             text_label.setStyleSheet("font-size: 13px;")
             opt_layout.addWidget(text_label)
 
-            has_jump = bool(self.info[idx].get("has_jump")) if idx < len(self.info) else False
+            has_jump = bool(info_entry.get("has_jump"))
             if has_jump:
                 jump_container = QWidget(card)
                 jump_container.setFixedWidth(90)
@@ -879,7 +965,7 @@ class WizardSectionsMixin:
     @staticmethod
     def _resolve_text_random_mode(entry: QuestionEntry) -> str:
         mode = str(getattr(entry, "text_random_mode", _TEXT_RANDOM_NONE) or _TEXT_RANDOM_NONE).strip().lower()
-        if mode in (_TEXT_RANDOM_NAME, _TEXT_RANDOM_MOBILE):
+        if mode in (_TEXT_RANDOM_NAME, _TEXT_RANDOM_MOBILE, _TEXT_RANDOM_INTEGER):
             return mode
         for raw in (entry.texts or []):
             token = str(raw or "").strip()
@@ -887,6 +973,8 @@ class WizardSectionsMixin:
                 return _TEXT_RANDOM_NAME
             if token == _TEXT_RANDOM_MOBILE_TOKEN:
                 return _TEXT_RANDOM_MOBILE
+            if parse_random_int_token(token) is not None:
+                return _TEXT_RANDOM_INTEGER
         return _TEXT_RANDOM_NONE
 
     def _sync_text_section_state(self, idx: int) -> None:
@@ -894,18 +982,28 @@ class WizardSectionsMixin:
         ai_cb = self.ai_check_map.get(idx)
         random_name_cb = self.text_random_name_check_map.get(idx)
         random_mobile_cb = self.text_random_mobile_check_map.get(idx)
+        random_integer_cb = self.text_random_integer_check_map.get(idx)
+        random_min_edit = self.text_random_int_min_edit_map.get(idx)
+        random_max_edit = self.text_random_int_max_edit_map.get(idx)
 
         def _set_random_controls_enabled(enabled: bool, tooltip: str = "") -> None:
-            for cb in (random_name_cb, random_mobile_cb):
+            for cb in (random_name_cb, random_mobile_cb, random_integer_cb):
                 if cb is None:
                     continue
                 cb.setEnabled(enabled)
                 cb.setToolTip(tooltip)
 
+        def _set_integer_range_enabled(enabled: bool) -> None:
+            for edit in (random_min_edit, random_max_edit):
+                if edit is None:
+                    continue
+                edit.setEnabled(enabled)
+
         if random_mode != _TEXT_RANDOM_NONE:
             _set_random_controls_enabled(True)
+            _set_integer_range_enabled(random_mode == _TEXT_RANDOM_INTEGER)
             if ai_cb:
-                ai_cb.setToolTip("随机姓名/随机手机号与 AI 填空不能同时启用")
+                ai_cb.setToolTip("随机姓名、随机手机号、随机整数与 AI 填空不能同时启用")
                 ai_cb.blockSignals(True)
                 ai_cb.setChecked(False)
                 ai_cb.blockSignals(False)
@@ -916,35 +1014,42 @@ class WizardSectionsMixin:
             ai_cb.setToolTip("运行时每次填空都会调用 AI")
             ai_cb.setEnabled(True)
             if ai_cb.isChecked():
-                _set_random_controls_enabled(False, "启用 AI 时，随机姓名和随机手机号不可用")
+                _set_random_controls_enabled(False, "启用 AI 时，随机姓名、随机手机号和随机整数不可用")
+                _set_integer_range_enabled(False)
             else:
                 _set_random_controls_enabled(True)
+                _set_integer_range_enabled(False)
             self._set_text_answer_enabled(idx, not ai_cb.isChecked())
             return
         _set_random_controls_enabled(True)
+        _set_integer_range_enabled(False)
         self._set_text_answer_enabled(idx, True)
 
     def _on_text_random_mode_toggled(self, idx: int, mode: str, checked: bool) -> None:
+        name_cb = self.text_random_name_check_map.get(idx)
+        mobile_cb = self.text_random_mobile_check_map.get(idx)
+        integer_cb = self.text_random_integer_check_map.get(idx)
         if checked:
-            name_cb = self.text_random_name_check_map.get(idx)
-            mobile_cb = self.text_random_mobile_check_map.get(idx)
-            if mode == _TEXT_RANDOM_NAME and mobile_cb and mobile_cb.isChecked():
-                mobile_cb.blockSignals(True)
-                mobile_cb.setChecked(False)
-                mobile_cb.blockSignals(False)
-            if mode == _TEXT_RANDOM_MOBILE and name_cb and name_cb.isChecked():
-                name_cb.blockSignals(True)
-                name_cb.setChecked(False)
-                name_cb.blockSignals(False)
+            checkbox_map = {
+                _TEXT_RANDOM_NAME: name_cb,
+                _TEXT_RANDOM_MOBILE: mobile_cb,
+                _TEXT_RANDOM_INTEGER: integer_cb,
+            }
+            for other_mode, checkbox in checkbox_map.items():
+                if other_mode == mode or checkbox is None or not checkbox.isChecked():
+                    continue
+                checkbox.blockSignals(True)
+                checkbox.setChecked(False)
+                checkbox.blockSignals(False)
             self.text_random_mode_map[idx] = mode
         else:
             current_mode = _TEXT_RANDOM_NONE
-            name_cb = self.text_random_name_check_map.get(idx)
-            mobile_cb = self.text_random_mobile_check_map.get(idx)
             if name_cb and name_cb.isChecked():
                 current_mode = _TEXT_RANDOM_NAME
             elif mobile_cb and mobile_cb.isChecked():
                 current_mode = _TEXT_RANDOM_MOBILE
+            elif integer_cb and integer_cb.isChecked():
+                current_mode = _TEXT_RANDOM_INTEGER
             self.text_random_mode_map[idx] = current_mode
         self._sync_text_section_state(idx)
 

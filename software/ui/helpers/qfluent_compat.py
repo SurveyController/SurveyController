@@ -1,7 +1,7 @@
 """QFluentWidgets 兼容补丁。"""
 from __future__ import annotations
 
-from PySide6.QtCore import QAbstractAnimation
+from PySide6.QtCore import QAbstractAnimation, QEvent, QParallelAnimationGroup, QPropertyAnimation
 from shiboken6 import isValid
 
 
@@ -53,7 +53,13 @@ def install_qfluentwidgets_animation_guards() -> None:
 
 def _install_infobar_manager_guards(info_bar_manager_cls) -> None:
     """为 InfoBar 管理器补充已销毁对象保护，避免双重关闭时崩溃。"""
-    if getattr(info_bar_manager_cls, "_surveycontroller_remove_guard_installed", False):
+    manager_classes = {info_bar_manager_cls, *getattr(info_bar_manager_cls, "managers", {}).values()}
+    pending_classes = [
+        manager_cls
+        for manager_cls in manager_classes
+        if not getattr(manager_cls, "_surveycontroller_remove_guard_installed", False)
+    ]
+    if not pending_classes:
         return
 
     def _is_alive(obj) -> bool:
@@ -65,6 +71,8 @@ def _install_infobar_manager_guards(info_bar_manager_cls) -> None:
             return False
 
     def _prune_invalid_bars(self, parent) -> list:
+        if not _is_alive(parent):
+            return []
         if parent not in self.infoBars:
             return []
         alive = [bar for bar in list(self.infoBars[parent]) if _is_alive(bar)]
@@ -72,6 +80,58 @@ def _install_infobar_manager_guards(info_bar_manager_cls) -> None:
         if len(alive) != len(current):
             current[:] = alive
         return alive
+
+    def _safe_add(self, info_bar) -> None:
+        try:
+            parent = info_bar.parent()
+        except RuntimeError:
+            parent = None
+
+        if not parent or not _is_alive(parent) or not _is_alive(info_bar):
+            return
+
+        if parent not in self.infoBars:
+            try:
+                parent.installEventFilter(self)
+            except RuntimeError:
+                return
+            self.infoBars[parent] = []
+            self.aniGroups[parent] = QParallelAnimationGroup(self)
+
+        bars = _prune_invalid_bars(self, parent)
+        if info_bar in bars:
+            return
+
+        if bars:
+            try:
+                drop_ani = QPropertyAnimation(info_bar, b"pos")
+                drop_ani.setDuration(200)
+                self.aniGroups[parent].addAnimation(drop_ani)
+                self.dropAnis.append(drop_ani)
+                info_bar.setProperty("dropAni", drop_ani)
+            except RuntimeError:
+                pass
+
+        self.infoBars[parent].append(info_bar)
+
+        try:
+            slide_ani = self._createSlideAni(info_bar)
+            self.slideAnis.append(slide_ani)
+            info_bar.setProperty("slideAni", slide_ani)
+        except RuntimeError:
+            try:
+                self.infoBars[parent].remove(info_bar)
+            except ValueError:
+                pass
+            return
+
+        info_bar.closedSignal.connect(lambda: _safe_remove(self, info_bar))
+        info_bar.destroyed.connect(lambda *_args, p=parent: _prune_invalid_bars(self, p))
+
+        try:
+            slide_ani.start()
+        except RuntimeError:
+            pass
 
     def _safe_update_drop_ani(self, parent):
         for bar in _prune_invalid_bars(self, parent):
@@ -84,7 +144,7 @@ def _install_infobar_manager_guards(info_bar_manager_cls) -> None:
             try:
                 ani.setStartValue(bar.pos())
                 ani.setEndValue(self._pos(bar))
-            except RuntimeError:
+            except (RuntimeError, ValueError):
                 continue
 
     def _safe_remove(self, info_bar):
@@ -132,9 +192,32 @@ def _install_infobar_manager_guards(info_bar_manager_cls) -> None:
         except RuntimeError:
             pass
 
-    info_bar_manager_cls._updateDropAni = _safe_update_drop_ani
-    info_bar_manager_cls.remove = _safe_remove
-    info_bar_manager_cls._surveycontroller_remove_guard_installed = True
+    def _safe_event_filter(self, obj, e):
+        try:
+            if obj not in self.infoBars:
+                return False
+
+            if e.type() in (QEvent.Type.Resize, QEvent.Type.WindowStateChange):
+                size = e.size() if e.type() == QEvent.Type.Resize else None
+                for bar in _prune_invalid_bars(self, obj):
+                    try:
+                        bar.move(self._pos(bar, size))
+                    except (RuntimeError, ValueError):
+                        continue
+
+            return False
+        except Exception:
+            return False
+
+    for manager_cls in pending_classes:
+        manager_cls.add = _safe_add
+        manager_cls._updateDropAni = _safe_update_drop_ani
+        manager_cls.remove = _safe_remove
+        manager_cls.eventFilter = _safe_event_filter
+        manager_cls._surveycontroller_remove_guard_installed = True
+
+
+install_qfluentwidgets_animation_guards()
 
 
 __all__ = ["install_qfluentwidgets_animation_guards"]

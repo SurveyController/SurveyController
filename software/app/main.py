@@ -1,12 +1,57 @@
 """GUI 应用入口 - QApplication 初始化与主窗口启动"""
+import faulthandler
+import os
 import sys
 
 from PySide6.QtCore import qInstallMessageHandler, QtMsgType
 from PySide6.QtGui import QFont
 from PySide6.QtWidgets import QApplication
 
+from software.app.config import LOG_DIR_NAME
+from software.app.runtime_paths import get_runtime_directory
 from software.logging.log_utils import setup_logging
 from software.ui.helpers import install_qfluentwidgets_animation_guards
+
+
+_FAULT_HANDLER_STREAM = None
+
+
+def _enable_fault_handler() -> None:
+    """为原生崩溃保留最基本的线程栈信息。"""
+    global _FAULT_HANDLER_STREAM
+
+    if faulthandler.is_enabled():
+        return
+
+    try:
+        logs_dir = os.path.join(get_runtime_directory(), LOG_DIR_NAME)
+        os.makedirs(logs_dir, exist_ok=True)
+        fault_log_path = os.path.join(logs_dir, "fatal_crash.log")
+        _FAULT_HANDLER_STREAM = open(fault_log_path, "a", encoding="utf-8", buffering=1)
+        faulthandler.enable(_FAULT_HANDLER_STREAM, all_threads=True)
+    except Exception:
+        try:
+            faulthandler.enable(all_threads=True)
+        except Exception:
+            _FAULT_HANDLER_STREAM = None
+
+
+def _disable_fault_handler() -> None:
+    global _FAULT_HANDLER_STREAM
+
+    try:
+        if faulthandler.is_enabled():
+            faulthandler.disable()
+    except Exception:
+        pass
+
+    stream = _FAULT_HANDLER_STREAM
+    _FAULT_HANDLER_STREAM = None
+    if stream is not None:
+        try:
+            stream.close()
+        except Exception:
+            pass
 
 
 def _qt_message_handler(mode, context, message):
@@ -22,6 +67,7 @@ def _qt_message_handler(mode, context, message):
 
 
 def main():
+    _enable_fault_handler()
     setup_logging()
 
     qInstallMessageHandler(_qt_message_handler)
@@ -42,6 +88,7 @@ def main():
     # 优雅关闭：停止日志系统后台线程
     from software.logging.log_utils import shutdown_logging
     shutdown_logging()
+    _disable_fault_handler()
 
     sys.exit(exit_code)
 

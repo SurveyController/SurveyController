@@ -5,10 +5,15 @@ from typing import TYPE_CHECKING, Any, List, Optional, Union
 
 from software.core.questions.types.text import MULTI_TEXT_DELIMITER
 from software.core.questions.utils import (
+    build_random_int_token,
+    describe_random_int_range,
     normalize_option_fill_texts as _normalize_option_fill_texts,
     normalize_probabilities,
+    parse_random_int_token,
     normalize_single_like_prob_config as _normalize_single_like_prob_config,
     resolve_prob_config as _resolve_prob_config,
+    serialize_random_int_range,
+    try_parse_random_int_range,
 )
 from software.core.questions.strict_ratio import is_strict_custom_ratio_mode
 from software.app.config import DEFAULT_FILL_TEXT, LOCATION_QUESTION_LABEL, QUESTION_TYPE_LABELS
@@ -22,10 +27,14 @@ _TEXT_RANDOM_MOBILE_TOKEN = "__RANDOM_MOBILE__"
 _TEXT_RANDOM_NONE = "none"
 _TEXT_RANDOM_NAME = "name"
 _TEXT_RANDOM_MOBILE = "mobile"
+_TEXT_RANDOM_INTEGER = "integer"
 
 
 def _pretty_text_answer(value: Any) -> str:
     text = str(value or "").strip()
+    random_int_range = parse_random_int_token(text)
+    if random_int_range is not None:
+        return f"随机整数({describe_random_int_range(random_int_range)})"
     if text == _TEXT_RANDOM_NAME_TOKEN:
         return "随机姓名"
     if text == _TEXT_RANDOM_MOBILE_TOKEN:
@@ -99,7 +108,9 @@ class QuestionEntry:
     ai_enabled: bool = False
     multi_text_blank_modes: List[str] = field(default_factory=list)
     multi_text_blank_ai_flags: List[bool] = field(default_factory=list)
+    multi_text_blank_int_ranges: List[List[int]] = field(default_factory=list)
     text_random_mode: str = _TEXT_RANDOM_NONE
+    text_random_int_range: List[int] = field(default_factory=list)
     option_fill_texts: Optional[List[Optional[str]]] = None
     fillable_option_indices: Optional[List[int]] = None
     attached_option_selects: List[dict] = field(default_factory=list)
@@ -118,8 +129,13 @@ class QuestionEntry:
 
         if self.question_type in ("text", "multi_text"):
             text_random_mode = str(getattr(self, "text_random_mode", _TEXT_RANDOM_NONE) or _TEXT_RANDOM_NONE).strip().lower()
-            if self.question_type == "text" and text_random_mode in (_TEXT_RANDOM_NAME, _TEXT_RANDOM_MOBILE):
-                random_label = "随机姓名" if text_random_mode == _TEXT_RANDOM_NAME else "随机手机号"
+            if self.question_type == "text" and text_random_mode in (_TEXT_RANDOM_NAME, _TEXT_RANDOM_MOBILE, _TEXT_RANDOM_INTEGER):
+                if text_random_mode == _TEXT_RANDOM_NAME:
+                    random_label = "随机姓名"
+                elif text_random_mode == _TEXT_RANDOM_MOBILE:
+                    random_label = "随机手机号"
+                else:
+                    random_label = f"随机整数({describe_random_int_range(getattr(self, 'text_random_int_range', []))})"
                 return f"填空题: {random_label}"
             raw_samples = self.texts or []
             if self.question_type == "multi_text":
@@ -225,6 +241,7 @@ def configure_probabilities(
     _target.text_titles = []
     _target.multi_text_blank_modes = []
     _target.multi_text_blank_ai_flags = []
+    _target.multi_text_blank_int_ranges = []
     _target.single_option_fill_texts = []
     _target.single_attached_option_selects = []
     _target.droplist_option_fill_texts = []
@@ -393,10 +410,25 @@ def configure_probabilities(
                 if text_value:
                     normalized_values.append(text_value)
             normalized_blank_ai_flags: List[bool] = []
+            normalized_blank_int_ranges: List[List[int]] = []
             if entry.question_type == "multi_text":
                 raw_blank_ai_flags = getattr(entry, "multi_text_blank_ai_flags", []) or []
                 if isinstance(raw_blank_ai_flags, list):
                     normalized_blank_ai_flags = [bool(flag) for flag in raw_blank_ai_flags]
+                raw_blank_int_ranges = getattr(entry, "multi_text_blank_int_ranges", []) or []
+                if isinstance(raw_blank_int_ranges, list):
+                    normalized_blank_int_ranges = [
+                        serialize_random_int_range(item) for item in raw_blank_int_ranges
+                    ]
+                raw_blank_modes = getattr(entry, "multi_text_blank_modes", []) or []
+                if isinstance(raw_blank_modes, list):
+                    for blank_idx, mode in enumerate(raw_blank_modes):
+                        mode_text = str(mode or _TEXT_RANDOM_NONE).strip().lower()
+                        if mode_text != _TEXT_RANDOM_INTEGER:
+                            continue
+                        target_range = raw_blank_int_ranges[blank_idx] if blank_idx < len(raw_blank_int_ranges) else []
+                        if try_parse_random_int_range(target_range) is None:
+                            raise ValueError(f"多项填空题第{blank_idx + 1}个空位的随机整数范围未设置完整")
             if entry.question_type == "text":
                 ai_enabled = bool(getattr(entry, "ai_enabled", False))
             elif entry.question_type == "multi_text":
@@ -406,11 +438,17 @@ def configure_probabilities(
                 )
             else:
                 ai_enabled = False
-            if entry.question_type == "text" and text_random_mode in (_TEXT_RANDOM_NAME, _TEXT_RANDOM_MOBILE):
+            if entry.question_type == "text" and text_random_mode in (_TEXT_RANDOM_NAME, _TEXT_RANDOM_MOBILE, _TEXT_RANDOM_INTEGER):
                 ai_enabled = False
-                normalized_values = [
-                    _TEXT_RANDOM_NAME_TOKEN if text_random_mode == _TEXT_RANDOM_NAME else _TEXT_RANDOM_MOBILE_TOKEN
-                ]
+                if text_random_mode == _TEXT_RANDOM_NAME:
+                    normalized_values = [_TEXT_RANDOM_NAME_TOKEN]
+                elif text_random_mode == _TEXT_RANDOM_MOBILE:
+                    normalized_values = [_TEXT_RANDOM_MOBILE_TOKEN]
+                else:
+                    text_random_range = serialize_random_int_range(getattr(entry, "text_random_int_range", []))
+                    if len(text_random_range) != 2:
+                        raise ValueError("填空题随机整数范围未设置完整")
+                    normalized_values = [build_random_int_token(*text_random_range)]
             if not normalized_values:
                 if ai_enabled:
                     normalized_values = [DEFAULT_FILL_TEXT]
@@ -427,6 +465,7 @@ def configure_probabilities(
             _target.text_titles.append(str(getattr(entry, "question_title", "") or ""))
             _target.multi_text_blank_modes.append(getattr(entry, "multi_text_blank_modes", []))
             _target.multi_text_blank_ai_flags.append(normalized_blank_ai_flags)
+            _target.multi_text_blank_int_ranges.append(normalized_blank_int_ranges)
 
 
 def validate_question_config(entries: List[QuestionEntry], questions_info: Optional[List[dict]] = None) -> Optional[str]:

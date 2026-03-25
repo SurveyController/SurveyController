@@ -21,6 +21,7 @@ from qfluentwidgets import (
 
 from software.app.config import app_settings, get_bool_from_qsettings
 from software.app.version import __VERSION__
+from software.logging.action_logger import log_action
 
 
 class MainWindowUpdateMixin:
@@ -351,6 +352,7 @@ class MainWindowUpdateMixin:
     def _cancel_download(self):
         """取消下载"""
         self._download_cancelled = True
+        log_action("UPDATE", "download_update", "download_toast", "main_window", result="cancelled")
         self._close_download_toast()
         self._toast("下载已取消", "warning")
 
@@ -381,15 +383,48 @@ class MainWindowUpdateMixin:
         )
         UpdateManager.schedule_running_executable_deletion(downloaded_file)
         if should_launch:
+            log_action(
+                "UPDATE",
+                "launch_downloaded_update",
+                "downloaded_update",
+                "main_window",
+                result="confirmed",
+                payload={"file": downloaded_file},
+            )
             try:
                 subprocess.Popen([downloaded_file])
                 self._skip_save_on_close = True
+                log_action(
+                    "UPDATE",
+                    "launch_downloaded_update",
+                    "downloaded_update",
+                    "main_window",
+                    result="started",
+                    payload={"file": downloaded_file},
+                )
                 self.close()
             except Exception as exc:
-                logging.error("[Action Log] Failed to launch downloaded update")
+                logging.error("[UPDATE] failed to launch downloaded update")
+                log_action(
+                    "UPDATE",
+                    "launch_downloaded_update",
+                    "downloaded_update",
+                    "main_window",
+                    result="failed",
+                    level=logging.ERROR,
+                    payload={"file": downloaded_file},
+                    detail=exc,
+                )
                 self.show_message_dialog("启动失败", f"无法启动新版本: {exc}", level="error")
         else:
-            logging.info("[Action Log] Deferred launching downloaded update")
+            log_action(
+                "UPDATE",
+                "launch_downloaded_update",
+                "downloaded_update",
+                "main_window",
+                result="deferred",
+                payload={"file": downloaded_file},
+            )
 
     def _on_download_failed(self, error_msg: str):
         """下载失败后在主线程显示弹窗"""

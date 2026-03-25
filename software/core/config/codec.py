@@ -8,6 +8,7 @@ from typing import Any, Dict, List, Optional, Tuple
 
 from software.core.config.schema import RuntimeConfig
 from software.core.questions.consistency import normalize_rule_dict, sanitize_answer_rules
+from software.core.questions.utils import serialize_random_int_range
 from software.network.proxy import normalize_random_ip_enabled_value
 from software.providers.common import (
     SURVEY_PROVIDER_WJX,
@@ -21,7 +22,7 @@ from software.app.config import BROWSER_PREFERENCE, USER_AGENT_PRESETS
 CURRENT_CONFIG_SCHEMA_VERSION = 3
 _CURRENT_CONFIG_SCHEMA_VERSION = CURRENT_CONFIG_SCHEMA_VERSION
 _LEGACY_CONFIG_KEYS = ("random_proxy_api", "ai_enabled")
-_TEXT_RANDOM_MODES = {"none", "name", "mobile"}
+_TEXT_RANDOM_MODES = {"none", "name", "mobile", "integer"}
 
 __all__ = [
     "CURRENT_CONFIG_SCHEMA_VERSION",
@@ -123,6 +124,18 @@ def _normalize_multi_text_blank_ai_flags(raw: Any) -> List[bool]:
     return [bool(item) for item in raw]
 
 
+def _normalize_random_int_range(raw: Any) -> List[int]:
+    if raw in (None, "", []):
+        return []
+    return serialize_random_int_range(raw)
+
+
+def _normalize_multi_text_blank_int_ranges(raw: Any) -> List[List[int]]:
+    if not isinstance(raw, list):
+        return []
+    return [_normalize_random_int_range(item) for item in raw]
+
+
 def serialize_question_entry(entry) -> Dict[str, Any]:
     probabilities = entry.probabilities
     if (
@@ -147,7 +160,9 @@ def serialize_question_entry(entry) -> Dict[str, Any]:
         "ai_enabled": bool(getattr(entry, "ai_enabled", False)),
         "multi_text_blank_modes": _normalize_multi_text_blank_modes(getattr(entry, "multi_text_blank_modes", [])),
         "multi_text_blank_ai_flags": _normalize_multi_text_blank_ai_flags(getattr(entry, "multi_text_blank_ai_flags", [])),
+        "multi_text_blank_int_ranges": _normalize_multi_text_blank_int_ranges(getattr(entry, "multi_text_blank_int_ranges", [])),
         "text_random_mode": str(getattr(entry, "text_random_mode", "none") or "none"),
+        "text_random_int_range": _normalize_random_int_range(getattr(entry, "text_random_int_range", [])),
         "option_fill_texts": entry.option_fill_texts,
         "fillable_option_indices": entry.fillable_option_indices,
         "attached_option_selects": list(getattr(entry, "attached_option_selects", []) or []),
@@ -185,7 +200,9 @@ def deserialize_question_entry(data: Dict[str, Any]):
         ai_enabled=bool(data.get("ai_enabled", False)),
         multi_text_blank_modes=_normalize_multi_text_blank_modes(data.get("multi_text_blank_modes")),
         multi_text_blank_ai_flags=_normalize_multi_text_blank_ai_flags(data.get("multi_text_blank_ai_flags")),
+        multi_text_blank_int_ranges=_normalize_multi_text_blank_int_ranges(data.get("multi_text_blank_int_ranges")),
         text_random_mode=str(data.get("text_random_mode") or "none"),
+        text_random_int_range=_normalize_random_int_range(data.get("text_random_int_range")),
         option_fill_texts=data.get("option_fill_texts"),
         fillable_option_indices=data.get("fillable_option_indices"),
         attached_option_selects=list(data.get("attached_option_selects") or []),
@@ -234,7 +251,7 @@ def normalize_runtime_config_payload(raw: Dict[str, Any]) -> RuntimeConfig:
         return 0, 0
 
     def _browser_pref_list(value: Any) -> List[str]:
-        allowed = set(BROWSER_PREFERENCE) | {"edge", "chrome", "chromium"}
+        allowed = set(BROWSER_PREFERENCE) | {"edge", "chrome"}
         prefs: List[str] = []
         raw_list: List[Any] = []
         if isinstance(value, str):
