@@ -91,7 +91,9 @@ class MainWindow(
         
         self._base_window_title = f"SurveyController v{__VERSION__}"
         self.setWindowTitle(self._base_window_title)
-        icon_path = get_resource_path(APP_ICON_RELATIVE_PATH)
+        icon_path = get_resource_path(os.path.join("assets", "icon.png"))
+        if not os.path.exists(icon_path):
+            icon_path = get_resource_path(APP_ICON_RELATIVE_PATH)
         if os.path.exists(icon_path):
             self.setWindowIcon(QIcon(icon_path))
         self.setMinimumSize(900, 640)

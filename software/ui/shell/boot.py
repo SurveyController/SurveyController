@@ -6,10 +6,14 @@ __all__ = ["BootSplash", "create_boot_splash", "get_boot_splash", "finish_boot_s
 
 from typing import Optional
 
-from PySide6.QtCore import Qt, QTimer, QSize
+import os
+
+from PySide6.QtCore import Qt, QTimer, QSize, QThread
+from PySide6.QtGui import QIcon
 from PySide6.QtWidgets import QLabel, QWidget
 from qfluentwidgets import IndeterminateProgressBar, SplashScreen, isDarkTheme
 
+from software.app.runtime_paths import get_resource_path
 from software.app.version import __VERSION__
 
 
@@ -18,10 +22,11 @@ class BootSplash:
 
     def __init__(self, window: QWidget):
         self.window = window
-        self.splash_screen = SplashScreen(window.windowIcon(), window)
-        self.splash_screen.setIconSize(QSize(128, 128))
+        self._boot_icon = self._resolve_boot_icon(window)
+        self.splash_screen = SplashScreen(self._boot_icon, window)
+        self.splash_screen.setIconSize(QSize(64, 64))
         self._finish_timer: Optional[QTimer] = None
-        self._icon_size = 128
+        self._icon_size = 64
         self._scale = 1.0
 
         # 根据主题设置颜色
@@ -47,6 +52,13 @@ class BootSplash:
         self.update_layout(window.width(), window.height())
         self.splash_screen.raise_()
 
+    def _resolve_boot_icon(self, window: QWidget) -> QIcon:
+        """启动页优先使用高清 PNG 图标，避免 ico 在大尺寸下发虚发小。"""
+        icon_path = get_resource_path(os.path.join("assets", "icon.png"))
+        if os.path.exists(icon_path):
+            return QIcon(icon_path)
+        return window.windowIcon()
+
     def _apply_scale(self, width: int, height: int):
         """按窗口尺寸动态放大启动页元素，避免大窗口里内容显得过小。"""
         base_width, base_height = 1180, 780
@@ -55,7 +67,7 @@ class BootSplash:
 
         scale = min(width / base_width, height / base_height)
         self._scale = max(1.0, min(scale, 1.45))
-        self._icon_size = int(168 * self._scale)
+        self._icon_size = int(314 * self._scale)
         self.splash_screen.setIconSize(QSize(self._icon_size, self._icon_size))
 
         title_font_size = int(28 * self._scale)
@@ -113,10 +125,8 @@ class BootSplash:
 
     def finish(self):
         """隐藏启动页面并停止进度条"""
-        try:
-            self.progress_bar.stop()
-        except Exception:
-            pass
+        self._stop_finish_timer()
+        self._stop_progress_bar()
         try:
             self.splash_screen.finish()
         except Exception:
@@ -124,13 +134,29 @@ class BootSplash:
 
     def cleanup(self):
         """清理资源（在窗口关闭时调用）"""
-        # 停止延迟关闭定时器
-        if self._finish_timer:
-            self._finish_timer.stop()
-            self._finish_timer = None
-        # 停止进度条
+        self._stop_finish_timer()
+        self._stop_progress_bar()
+
+    def _stop_finish_timer(self) -> None:
+        timer = self._finish_timer
+        self._finish_timer = None
+        if timer is None:
+            return
         try:
-            self.progress_bar.stop()
+            if timer.thread() is QThread.currentThread() and timer.isActive():
+                timer.stop()
+        except Exception:
+            pass
+        try:
+            timer.deleteLater()
+        except Exception:
+            pass
+
+    def _stop_progress_bar(self) -> None:
+        """只在进度条所属线程里调用 stop，避免 Qt 跨线程停计时器告警。"""
+        try:
+            if self.progress_bar.thread() is QThread.currentThread():
+                self.progress_bar.stop()
         except Exception:
             pass
 
@@ -153,8 +179,9 @@ def get_boot_splash() -> Optional[BootSplash]:
 def finish_boot_splash(delay_ms: int = 1500):
     """延迟关闭启动画面"""
     if _boot_splash:
-        # 使用 QTimer 对象而不是 singleShot，以便在窗口关闭时可以停止
-        _boot_splash._finish_timer = QTimer()
+        # 绑定到启动页对象本身，避免应用退出时出现无主计时器的线程归属问题。
+        _boot_splash._stop_finish_timer()
+        _boot_splash._finish_timer = QTimer(_boot_splash.splash_screen)
         _boot_splash._finish_timer.setSingleShot(True)
         _boot_splash._finish_timer.timeout.connect(_boot_splash.finish)
         _boot_splash._finish_timer.start(delay_ms)
