@@ -1,12 +1,13 @@
-"""服务条款对话框"""
-from PySide6.QtCore import Qt
-from PySide6.QtWidgets import QDialog, QVBoxLayout
+"""服务条款对话框。"""
+from PySide6.QtCore import Qt, QSize
+from PySide6.QtGui import QGuiApplication
 from qfluentwidgets import (
     ScrollArea,
     BodyLabel,
     TitleLabel,
-    PrimaryPushButton,
+    MessageBoxBase,
 )
+
 from software.app.runtime_paths import get_resource_path
 
 
@@ -35,52 +36,62 @@ def _load_terms_content() -> str:
     return "\n\n".join(section for section in sections if section).strip()
 
 
-class TermsOfServiceDialog(QDialog):
-    """服务条款对话框"""
+def _resolve_dialog_size(parent) -> QSize:
+    """根据父窗口或屏幕大小，计算中等尺寸的条款弹窗。"""
+    if parent is not None and parent.width() > 0 and parent.height() > 0:
+        base_width = parent.width()
+        base_height = parent.height()
+    else:
+        screen = QGuiApplication.primaryScreen()
+        if screen is not None:
+            geometry = screen.availableGeometry()
+            base_width = geometry.width()
+            base_height = geometry.height()
+        else:
+            base_width = 1280
+            base_height = 800
+
+    width = min(1000, max(860, int(base_width * 0.78)))
+    height = min(700, max(620, int(base_height * 0.78)))
+    return QSize(width, height)
+
+
+class TermsOfServiceDialog(MessageBoxBase):
+    """服务条款弹窗，按官方推荐使用 MessageBoxBase 承载自定义内容。"""
 
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setAttribute(Qt.WidgetAttribute.WA_QuitOnClose, False)
         self.setWindowTitle("服务条款")
-        self.resize(800, 600)
 
-        main_layout = QVBoxLayout(self)
-        main_layout.setContentsMargins(24, 24, 24, 24)
-        main_layout.setSpacing(16)
+        self.titleLabel = TitleLabel("服务条款与隐私声明", self.widget)
+        self.titleLabel.setAlignment(Qt.AlignmentFlag.AlignCenter)
 
-        # 标题
-        title = TitleLabel("服务条款与隐私声明", self)
-        title.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        main_layout.addWidget(title)
+        self.scrollArea = ScrollArea(self.widget)
+        self.scrollArea.setWidgetResizable(True)
+        self.scrollArea.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
 
-        # 滚动区域显示条款内容
-        scroll = ScrollArea(self)
-        scroll.setWidgetResizable(True)
-        
-        content_widget = BodyLabel(self)
-        content_widget.setWordWrap(True)
-        content_widget.setTextInteractionFlags(
+        self.contentWidget = BodyLabel(self.widget)
+        self.contentWidget.setWordWrap(True)
+        self.contentWidget.setTextInteractionFlags(
             Qt.TextInteractionFlag.TextSelectableByMouse
         )
-        
-        content_widget.setText(_load_terms_content())
-        content_widget.setStyleSheet("""
+        self.contentWidget.setText(_load_terms_content())
+        self.contentWidget.setStyleSheet(
+            """
             BodyLabel {
                 font-family: 'Consolas', 'Courier New', monospace;
                 font-size: 15px;
                 line-height: 1.6;
                 padding: 12px;
             }
-        """)
-        
-        scroll.setWidget(content_widget)
-        main_layout.addWidget(scroll)
+            """
+        )
 
-        # 关闭按钮
-        close_btn = PrimaryPushButton("关闭", self)
-        close_btn.setFixedWidth(120)
-        close_btn.clicked.connect(self.accept)
-        
-        btn_layout = QVBoxLayout()
-        btn_layout.addWidget(close_btn, 0, Qt.AlignmentFlag.AlignCenter)
-        main_layout.addLayout(btn_layout)
+        self.scrollArea.setWidget(self.contentWidget)
+        self.viewLayout.addWidget(self.titleLabel)
+        self.viewLayout.addWidget(self.scrollArea, 1)
+
+        self.yesButton.setText("关闭")
+        self.hideCancelButton()
+        self.widget.setFixedSize(_resolve_dialog_size(parent))

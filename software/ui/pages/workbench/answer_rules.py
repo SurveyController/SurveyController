@@ -94,6 +94,8 @@ def _build_question_label(question: Dict[str, Any]) -> str:
 def _clear_layout(layout: QVBoxLayout) -> None:
     while layout.count():
         item = layout.takeAt(0)
+        if item is None:
+            continue
         widget = item.widget()
         child_layout = item.layout()
         if widget is not None:
@@ -102,6 +104,8 @@ def _clear_layout(layout: QVBoxLayout) -> None:
         if child_layout is not None:
             while child_layout.count():
                 nested = child_layout.takeAt(0)
+                if nested is None:
+                    continue
                 nested_widget = nested.widget()
                 if nested_widget is not None:
                     nested_widget.hide()
@@ -396,9 +400,10 @@ class AnswerRuleDialog(QDialog):
     def _update_row_selector(self, question_combo: ComboBox, row_widget: QWidget, row_combo: ComboBox) -> None:
         """根据选中的题目类型，显示/隐藏矩阵行选择器并填充行列表。"""
         q_num = self._get_combo_question_num(question_combo)
-        if self._is_matrix_question(q_num):
+        if q_num is not None and self._is_matrix_question(q_num):
             info = self._question_map.get(q_num) or {}
-            row_texts = info.get("row_texts") if isinstance(info.get("row_texts"), list) else []
+            raw_row_texts = info.get("row_texts")
+            row_texts: List[Any] = raw_row_texts if isinstance(raw_row_texts, list) else []
             row_combo.clear()
             row_combo.addItem("请选择行", userData=None)
             for i, text in enumerate(row_texts):
@@ -730,7 +735,8 @@ class AnswerRulesPage(ScrollArea):
             return f"第{question_num}题（题目不存在）"
         base = _build_question_label(info)
         if row_index is not None:
-            row_texts = info.get("row_texts") if isinstance(info.get("row_texts"), list) else []
+            raw_row_texts = info.get("row_texts")
+            row_texts: List[Any] = raw_row_texts if isinstance(raw_row_texts, list) else []
             if row_index < len(row_texts):
                 row_label = str(row_texts[row_index] or "").strip() or f"第{row_index + 1}行"
             else:

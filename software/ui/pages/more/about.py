@@ -192,9 +192,11 @@ class AboutPage(ScrollArea):
         contributor1_link = HyperlinkButton("https://github.com/hungryM0", "@HUNGRY_M0", self)
         contributor2_link = HyperlinkButton("https://github.com/shiahonb777", "@shiahonb777", self)
         contributor3_link = HyperlinkButton("https://github.com/BingBuLiang", "@BingBuLiang", self)
+        contributor4_link = HyperlinkButton("https://github.com/dAwn-Rebirth", "@dAwn-Rebirth", self)
         contributors_layout.addWidget(contributor1_link)
         contributors_layout.addWidget(contributor2_link)
         contributors_layout.addWidget(contributor3_link)
+        contributors_layout.addWidget(contributor4_link)
         contributors_layout.addStretch(1)
         credit_layout.addLayout(contributors_layout)
 
