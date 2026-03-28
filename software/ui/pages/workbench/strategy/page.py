@@ -14,13 +14,14 @@ from PySide6.QtWidgets import (
 )
 from qfluentwidgets import (
     BodyLabel,
+    HorizontalSeparator,
     InfoBar,
     InfoBarPosition,
     MessageBox,
-    Pivot,
     PrimaryPushButton,
     PushButton,
     ScrollArea,
+    SegmentedWidget,
     TableWidget,
 )
 
@@ -279,13 +280,20 @@ class QuestionStrategyPage(ScrollArea):
         layout.setContentsMargins(16, 16, 16, 16)
         layout.setSpacing(12)
 
-        pivot_row = QHBoxLayout()
-        self.pivot = Pivot(self.view)
-        self.pivot.addItem("rules", "条件规则")
-        self.pivot.addItem("dimensions", "维度分组")
-        pivot_row.addWidget(self.pivot)
-        pivot_row.addStretch(1)
-        layout.addLayout(pivot_row)
+        switch_row = QHBoxLayout()
+        self.segmented = SegmentedWidget(self.view)
+        self.segmented.addItem(routeKey="rules", text="条件规则")
+        self.segmented.addItem(routeKey="dimensions", text="维度分组")
+        self.segmented.setFixedHeight(52)
+        self.segmented.setItemFontSize(16)
+        self.segmented.setStyleSheet(
+            "SegmentedItem{min-width:96px; min-height:34px; padding:10px 24px;}"
+        )
+        switch_row.addWidget(self.segmented)
+        switch_row.addStretch(1)
+        layout.addLayout(switch_row)
+        self.section_separator = HorizontalSeparator(self.view)
+        layout.addWidget(self.section_separator)
 
         self.stack = QStackedWidget(self.view)
         self.rule_panel = ConditionRulePanel(self.stack)
@@ -294,13 +302,13 @@ class QuestionStrategyPage(ScrollArea):
         self.stack.addWidget(self.dimension_panel)
         layout.addWidget(self.stack, 1)
 
-        self.pivot.currentItemChanged.connect(self._on_pivot_changed)
+        self.segmented.currentItemChanged.connect(self._on_segment_changed)
         self.rule_panel.changed.connect(self.strategyChanged.emit)
         self.dimension_panel.changed.connect(self.strategyChanged.emit)
-        self.pivot.setCurrentItem("rules")
+        self.segmented.setCurrentItem("rules")
         self.stack.setCurrentWidget(self.rule_panel)
 
-    def _on_pivot_changed(self, route_key: str) -> None:
+    def _on_segment_changed(self, route_key: str) -> None:
         if route_key == "dimensions":
             self.stack.setCurrentWidget(self.dimension_panel)
             return

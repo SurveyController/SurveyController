@@ -14,18 +14,21 @@ from PySide6.QtWidgets import (
     QVBoxLayout,
     QHBoxLayout,
     QFileDialog,
+    QToolButton,
 )
 from qfluentwidgets import (
     ScrollArea,
     SubtitleLabel,
     BodyLabel,
+    ElevatedCardWidget,
     CardWidget,
     PushButton,
+    ToolButton,
     PrimaryPushButton,
     TableWidget,
     LineEdit,
-    CheckBox,
     IndeterminateProgressRing,
+    ProgressRing,
     CommandBar,
     Action,
     FluentIcon,
@@ -35,6 +38,7 @@ from qfluentwidgets import (
     HyperlinkButton,
     SegmentedWidget,
     DrillInTransitionStackedWidget,
+    TogglePushButton,
 )
 from qfluentwidgets import RoundMenu
 
@@ -168,25 +172,24 @@ class DashboardPage(
         link_layout.setContentsMargins(12, 12, 12, 12)
         link_layout.setSpacing(8)
         
-        # 标题行：左侧是标题，右侧是载入/保存按钮
+        # 顶部操作行：配置操作 + 二维码上传 + 链接输入框同一行
         title_row = QHBoxLayout()
-        title_row.addWidget(SubtitleLabel("问卷入口", self))
-        title_row.addStretch(1)
-        # 使用 QFluentWidgets 原生图标
-        self.config_list_btn = PushButton("配置列表", self, FluentIcon.MENU)
-        self.load_cfg_btn = PushButton("载入配置", self, FluentIcon.DOCUMENT)
-        self.save_cfg_btn = PushButton("保存配置", self, FluentIcon.SAVE)
-        title_row.addWidget(self.config_list_btn)
-        title_row.addWidget(self.load_cfg_btn)
-        title_row.addWidget(self.save_cfg_btn)
-        link_layout.addLayout(title_row)
-        
-        link_layout.addWidget(BodyLabel("问卷链接：", self))
-        # 创建水平布局：按钮在前，输入框在后
-        input_row = QHBoxLayout()
-        input_row.setSpacing(8)
-        self.qr_btn = PushButton("上传问卷二维码图片", self, FluentIcon.QRCODE)
-        input_row.addWidget(self.qr_btn)
+        title_row.setSpacing(8)
+        self.config_command_bar = CommandBar(self.link_card)
+        self.config_command_bar.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonTextBesideIcon)
+        self.config_list_action = Action(FluentIcon.MENU, "配置列表", self.config_command_bar)
+        self.load_cfg_action = Action(FluentIcon.DOCUMENT, "载入配置", self.config_command_bar)
+        self.save_cfg_action = Action(FluentIcon.SAVE, "保存配置", self.config_command_bar)
+        self.config_command_bar.addActions(
+            [self.config_list_action, self.load_cfg_action, self.save_cfg_action]
+        )
+        self.config_command_bar.resizeToSuitableWidth()
+        self.qr_btn = ToolButton(self)
+        self.qr_btn.setIcon(FluentIcon.QRCODE)
+        self.qr_btn.setFixedSize(36, 36)
+        self.qr_btn.setToolTip("上传问卷二维码图片")
+        install_tooltip_filter(self.qr_btn)
+        title_row.addWidget(self.qr_btn)
         self.url_edit = LineEdit(self)
         self.url_edit.setPlaceholderText("在此拖入/粘贴问卷二维码图片或输入问卷链接")
         self.url_edit.setClearButtonEnabled(True)
@@ -196,13 +199,14 @@ class DashboardPage(
         # 仅问卷链接输入框需要 qfluentwidgets 风格的"粘贴"单项菜单
         self._paste_only_menu = _PasteOnlyMenu(self)
         self.url_edit.installEventFilter(self._paste_only_menu)
-        input_row.addWidget(self.url_edit, 1)
-        link_layout.addLayout(input_row)
+        title_row.addWidget(self.url_edit, 1)
+        title_row.addWidget(self.config_command_bar)
+        link_layout.addLayout(title_row)
         
         # 只保留"自动配置问卷"按钮
         btn_row = QHBoxLayout()
         btn_row.setSpacing(8)
-        self.parse_btn = PrimaryPushButton("自动配置问卷", self)
+        self.parse_btn = PrimaryPushButton(FluentIcon.PLAY, "自动配置问卷", self)
         btn_row.addWidget(self.parse_btn)
         btn_row.addStretch(1)
         link_layout.addLayout(btn_row)
@@ -211,9 +215,8 @@ class DashboardPage(
         # 整个“问卷入口”卡片都支持粘贴/拖入二维码
         self._link_entry_widgets = (
             self.link_card,
-            self.config_list_btn,
-            self.load_cfg_btn,
-            self.save_cfg_btn,
+            self.config_command_bar,
+            *self.config_command_bar.findChildren(QToolButton),
             self.qr_btn,
             self.url_edit,
             self.parse_btn,
@@ -236,6 +239,13 @@ class DashboardPage(
         title_row.addWidget(self.more_settings_btn)
         exec_layout.addLayout(title_row)
 
+        content_row = QHBoxLayout()
+        content_row.setSpacing(16)
+
+        left_column = QVBoxLayout()
+        left_column.setContentsMargins(0, 0, 0, 0)
+        left_column.setSpacing(12)
+
         spin_row = QHBoxLayout()
         spin_row.addWidget(BodyLabel("目标份数：", self))
         self.target_spin = NoWheelSpinBox(self)
@@ -251,9 +261,11 @@ class DashboardPage(
         self.thread_spin.setMinimumHeight(36)
         spin_row.addWidget(self.thread_spin)
         spin_row.addStretch(1)
-        exec_layout.addLayout(spin_row)
+        left_column.addLayout(spin_row)
 
-        self.random_ip_cb = CheckBox("启用随机 IP 提交（在触发智能验证时开启）", self)
+        self.random_ip_cb = TogglePushButton(self)
+        self.random_ip_cb.setMinimumHeight(36)
+        self._sync_random_ip_toggle_presentation(False)
         random_ip_row = QHBoxLayout()
         random_ip_row.setSpacing(8)
         random_ip_row.addWidget(self.random_ip_cb)
@@ -267,18 +279,34 @@ class DashboardPage(
         self.random_ip_loading_label.hide()
         random_ip_row.addWidget(self.random_ip_loading_label)
         random_ip_row.addStretch(1)
-        exec_layout.addLayout(random_ip_row)
-        ip_row = QHBoxLayout()
-        ip_row.setSpacing(8)
-        ip_row.addWidget(BodyLabel("随机IP额度：", self))
-        self.random_ip_hint = BodyLabel("--/--", self)
-        ip_row.addWidget(self.random_ip_hint)
-        ip_row.addSpacing(4)
-        self.card_btn = PushButton("申请额度", self, FluentIcon.FINGERPRINT)
+        left_column.addLayout(random_ip_row)
+        left_column.addStretch(1)
+        content_row.addLayout(left_column, 1)
+
+        self.random_ip_quota_card = ElevatedCardWidget(exec_card)
+        self.random_ip_quota_card.setMinimumWidth(248)
+        quota_layout = QVBoxLayout(self.random_ip_quota_card)
+        quota_layout.setContentsMargins(20, 18, 20, 18)
+        quota_layout.setSpacing(12)
+        quota_layout.addWidget(BodyLabel("随机IP额度", self.random_ip_quota_card), 0, Qt.AlignmentFlag.AlignHCenter)
+
+        self.random_ip_usage_ring = ProgressRing(self.random_ip_quota_card)
+        self.random_ip_usage_ring.setRange(0, 100)
+        self.random_ip_usage_ring.setValue(0)
+        self.random_ip_usage_ring.setTextVisible(True)
+        self.random_ip_usage_ring.setFormat("--")
+        self.random_ip_usage_ring.setFixedSize(96, 96)
+        self.random_ip_usage_ring.setStrokeWidth(8)
+        quota_layout.addWidget(self.random_ip_usage_ring, 0, Qt.AlignmentFlag.AlignHCenter)
+
+        self.card_btn = PushButton("申请额度", self.random_ip_quota_card)
+        self.card_btn.setIcon(FluentIcon.FINGERPRINT)
         install_tooltip_filter(self.card_btn)
-        ip_row.addWidget(self.card_btn)
-        ip_row.addStretch(1)
-        exec_layout.addLayout(ip_row)
+        quota_layout.addWidget(self.card_btn, 0, Qt.AlignmentFlag.AlignHCenter)
+        quota_layout.addStretch(1)
+
+        content_row.addWidget(self.random_ip_quota_card, 0, Qt.AlignmentFlag.AlignTop)
+        exec_layout.addLayout(content_row)
 
         self._ip_cost_infobar = FullWidthInfoBar(
             icon=InfoBarIcon.WARNING,
@@ -411,7 +439,7 @@ class DashboardPage(
             forward_signal_args=False,
         )
         bind_logged_action(
-            self.config_list_btn.clicked,
+            self.config_list_action.triggered,
             self._on_show_config_list,
             scope="UI",
             event="open_config_list",
@@ -420,7 +448,7 @@ class DashboardPage(
             forward_signal_args=False,
         )
         bind_logged_action(
-            self.load_cfg_btn.clicked,
+            self.load_cfg_action.triggered,
             self._on_load_config,
             scope="CONFIG",
             event="load_config",
@@ -429,7 +457,7 @@ class DashboardPage(
             forward_signal_args=False,
         )
         bind_logged_action(
-            self.save_cfg_btn.clicked,
+            self.save_cfg_action.triggered,
             self._on_save_config,
             scope="CONFIG",
             event="save_config",
@@ -450,7 +478,7 @@ class DashboardPage(
         self.thread_view_seg.currentItemChanged.connect(self._on_thread_view_changed)
         self.target_spin.valueChanged.connect(lambda v: self.controller.set_runtime_ui_state(target=int(v)))
         self.thread_spin.valueChanged.connect(lambda v: self.controller.set_runtime_ui_state(threads=int(v)))
-        self.random_ip_cb.stateChanged.connect(self._on_random_ip_toggled)
+        self.random_ip_cb.toggled.connect(self._on_random_ip_toggled)
         bind_logged_action(
             self.card_btn.clicked,
             self._on_request_quota_clicked,
@@ -819,6 +847,7 @@ class DashboardPage(
             self.random_ip_cb.blockSignals(True)
             self.random_ip_cb.setChecked(bool(random_ip_enabled))
             self.random_ip_cb.blockSignals(False)
+            self._sync_random_ip_toggle_presentation(bool(random_ip_enabled))
 
         self._refresh_ip_cost_infobar()
 
@@ -830,6 +859,7 @@ class DashboardPage(
         self.random_ip_cb.blockSignals(True)
         self.random_ip_cb.setChecked(bool(cfg.random_ip_enabled))
         self.random_ip_cb.blockSignals(False)
+        self._sync_random_ip_toggle_presentation(bool(cfg.random_ip_enabled))
 
         try:
             self.strategy_page.set_rules(getattr(cfg, "answer_rules", []) or [])

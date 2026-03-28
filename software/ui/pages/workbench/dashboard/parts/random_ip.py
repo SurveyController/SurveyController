@@ -4,7 +4,8 @@ from __future__ import annotations
 import logging
 import threading
 from typing import TYPE_CHECKING, Any, Optional, cast
-from qfluentwidgets import FluentIcon
+from PySide6.QtGui import QColor
+from qfluentwidgets import FluentIcon, themeColor
 
 from software.ui.dialogs.contact import ContactDialog
 from software.app.config import STATUS_ENDPOINT
@@ -21,9 +22,8 @@ from software.ui.helpers.proxy_access import (
     has_unknown_local_quota,
     is_quota_exhausted,
 )
-
 if TYPE_CHECKING:
-    from qfluentwidgets import BodyLabel, CheckBox, PushButton
+    from qfluentwidgets import BodyLabel, ProgressRing, PushButton, TogglePushButton
     from software.ui.controller import RunController
     from software.ui.pages.workbench.runtime_panel import RuntimePage
     from software.ui.widgets.full_width_infobar import FullWidthInfoBar
@@ -35,8 +35,8 @@ class DashboardRandomIPMixin:
     if TYPE_CHECKING:
         # 以下属性由 DashboardPage 主类提供，此处仅用于 Pylance 类型检查
         card_btn: PushButton
-        random_ip_hint: BodyLabel
-        random_ip_cb: CheckBox
+        random_ip_usage_ring: ProgressRing
+        random_ip_cb: TogglePushButton
         random_ip_loading_ring: Any
         random_ip_loading_label: BodyLabel
         controller: RunController
@@ -57,6 +57,15 @@ class DashboardRandomIPMixin:
         def _toast(self, text: str, level: str = "info", duration: int = 2000, show_progress: bool = False) -> Any: ...
         def window(self) -> Any: ...  # 继承自 QWidget，此处仅供类型检查
 
+    def _sync_random_ip_toggle_presentation(self, enabled: bool) -> None:
+        """同步概览页随机 IP 按钮的文案和图标。"""
+        active = bool(enabled)
+        try:
+            self.random_ip_cb.setText("已启用随机ip" if active else "点击启用随机ip")
+            self.random_ip_cb.setIcon(FluentIcon.VIEW if active else FluentIcon.HIDE)
+        except Exception as exc:
+            log_suppressed_exception("_sync_random_ip_toggle_presentation", exc, level=logging.WARNING)
+
     def set_random_ip_loading(self, loading: bool, message: str = "") -> None:
         active = bool(loading)
         text = str(message or "正在处理...") if active else ""
@@ -65,6 +74,7 @@ class DashboardRandomIPMixin:
             self.random_ip_loading_label.setVisible(active)
             self.random_ip_loading_label.setText(text)
             self.random_ip_cb.setEnabled(not active)
+            self._sync_random_ip_toggle_presentation(self.random_ip_cb.isChecked())
         except Exception as exc:
             log_suppressed_exception("set_random_ip_loading dashboard", exc, level=logging.WARNING)
 
@@ -86,41 +96,73 @@ class DashboardRandomIPMixin:
             self.card_btn.setToolTip("勾选随机IP会自动尝试领取试用；试用不可用时可在这里提交额度申请")
 
         if custom_api:
-            self.random_ip_hint.setText("自定义接口")
-            self.random_ip_hint.setStyleSheet("color:#ff8c00;")
+            self._sync_random_ip_usage_ring(mode="paused", percent=0, format_text="自定义")
             self._update_ip_low_infobar(count, limit, custom_api)
             self._update_ip_cost_infobar(custom_api)
             return
         if not authenticated:
-            self.random_ip_hint.setText("--/--")
-            self.random_ip_hint.setStyleSheet("color:#6b6b6b;")
+            self._sync_random_ip_usage_ring(mode="paused", percent=0, format_text="--/--")
             self._update_ip_low_infobar(count, limit, custom_api)
             self._update_ip_cost_infobar(custom_api)
             if self.random_ip_cb.isChecked():
                 self.random_ip_cb.blockSignals(True)
                 self.random_ip_cb.setChecked(False)
                 self.random_ip_cb.blockSignals(False)
+                self._sync_random_ip_toggle_presentation(False)
                 self.controller.set_runtime_ui_state(random_ip_enabled=False)
             return
         if unknown_local_quota:
-            self.random_ip_hint.setText("待校验")
-            self.random_ip_hint.setStyleSheet("color:#D46B08;")
+            self._sync_random_ip_usage_ring(mode="paused", percent=0, format_text="待校验")
             self.card_btn.setToolTip("本机还记得随机IP账号，但当前额度状态暂时无法确认。后续真实提取代理时会自动尝试回填。")
             self._update_ip_low_infobar(count, limit, custom_api)
             self._update_ip_cost_infobar(custom_api)
             return
-        self.random_ip_hint.setText(f"{format_quota_value(used)}/{format_quota_value(total)}")
-        if quota_exhausted:
-            self.random_ip_hint.setStyleSheet("color:red;")
-        else:
-            self.random_ip_hint.setStyleSheet("color:#6b6b6b;")
+        quota_text = f"{format_quota_value(used)}/{format_quota_value(total)}"
+        percent = 0 if total <= 0 else max(0, min(int(round((used / total) * 100)), 100))
+        self._sync_random_ip_usage_ring(
+            mode="error" if quota_exhausted else "normal",
+            percent=percent,
+            format_text=quota_text,
+        )
         self._update_ip_low_infobar(count, limit, custom_api)
         self._update_ip_cost_infobar(custom_api)
         if quota_exhausted and self.random_ip_cb.isChecked():
             self.random_ip_cb.blockSignals(True)
             self.random_ip_cb.setChecked(False)
             self.random_ip_cb.blockSignals(False)
+            self._sync_random_ip_toggle_presentation(False)
             self.controller.set_runtime_ui_state(random_ip_enabled=False)
+
+    def _sync_random_ip_usage_ring(self, *, mode: str, percent: int, format_text: str) -> None:
+        try:
+            value = max(0, min(int(percent), 100))
+            self.random_ip_usage_ring.setRange(0, 100)
+            self.random_ip_usage_ring.setValue(value)
+            self.random_ip_usage_ring.setTextVisible(True)
+            self.random_ip_usage_ring.setFormat(str(format_text or "--"))
+            normalized_mode = str(mode or "").lower()
+            is_paused = normalized_mode == "paused"
+            is_error = normalized_mode == "error"
+            if not is_paused and not is_error:
+                self._apply_random_ip_usage_ring_color(value)
+            self.random_ip_usage_ring.setPaused(is_paused)
+            self.random_ip_usage_ring.setError(is_error)
+        except Exception as exc:
+            log_suppressed_exception("_sync_random_ip_usage_ring", exc, level=logging.WARNING)
+
+    def _apply_random_ip_usage_ring_color(self, percent: int) -> None:
+        try:
+            value = max(0, min(int(percent), 100))
+            if value >= 95:
+                self.random_ip_usage_ring.setCustomBarColor(QColor("#C42B1C"), QColor("#FF99A4"))
+                return
+            if value >= 80:
+                self.random_ip_usage_ring.setCustomBarColor(QColor("#C77900"), QColor("#FFB347"))
+                return
+            accent = themeColor()
+            self.random_ip_usage_ring.setCustomBarColor(accent, accent)
+        except Exception as exc:
+            log_suppressed_exception("_apply_random_ip_usage_ring_color", exc, level=logging.WARNING)
 
     @staticmethod
     def _format_duration_text(seconds: int) -> str:
@@ -206,8 +248,8 @@ class DashboardRandomIPMixin:
         except Exception as exc:
             log_suppressed_exception("_update_ip_cost_infobar", exc, level=logging.WARNING)
 
-    def _on_random_ip_toggled(self, state: int):
-        enabled = state != 0
+    def _on_random_ip_toggled(self, enabled: bool):
+        self._sync_random_ip_toggle_presentation(bool(enabled))
         if self.controller.toggle_random_ip_async(bool(enabled), adapter=self.controller.adapter):
             return
 
@@ -215,6 +257,7 @@ class DashboardRandomIPMixin:
         self.random_ip_cb.blockSignals(True)
         self.random_ip_cb.setChecked(fallback_enabled)
         self.random_ip_cb.blockSignals(False)
+        self._sync_random_ip_toggle_presentation(fallback_enabled)
 
     def _open_contact_dialog(self, default_type: str = "报错反馈", lock_message_type: bool = False):
         """打开联系对话框"""
