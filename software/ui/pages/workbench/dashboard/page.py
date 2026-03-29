@@ -42,6 +42,7 @@ from qfluentwidgets import (
 )
 from qfluentwidgets import RoundMenu
 
+from software.ui.pages.workbench.dashboard.cards import RuntimeSettingsHintCard
 from software.ui.pages.workbench.dashboard.parts.clipboard import DashboardClipboardMixin
 from software.ui.pages.workbench.dashboard.parts.entries import DashboardEntriesMixin
 from software.ui.pages.workbench.dashboard.parts.progress import DashboardProgressMixin
@@ -235,8 +236,6 @@ class DashboardPage(
         title_row = QHBoxLayout()
         title_row.addWidget(SubtitleLabel("快捷设置", self))
         title_row.addStretch(1)
-        self.more_settings_btn = HyperlinkButton(FluentIcon.SETTING, "", "更多设置请前往“运行参数”页仔细调整", self)
-        title_row.addWidget(self.more_settings_btn)
         exec_layout.addLayout(title_row)
 
         content_row = QHBoxLayout()
@@ -280,14 +279,17 @@ class DashboardPage(
         random_ip_row.addWidget(self.random_ip_loading_label)
         random_ip_row.addStretch(1)
         left_column.addLayout(random_ip_row)
-        left_column.addStretch(1)
+        self.runtime_settings_hint_card = RuntimeSettingsHintCard(exec_card)
+        left_column.addWidget(self.runtime_settings_hint_card)
         content_row.addLayout(left_column, 1)
+        content_row.setAlignment(Qt.AlignmentFlag.AlignTop)
 
         self.random_ip_quota_card = ElevatedCardWidget(exec_card)
         self.random_ip_quota_card.setMinimumWidth(248)
         quota_layout = QVBoxLayout(self.random_ip_quota_card)
-        quota_layout.setContentsMargins(20, 18, 20, 18)
-        quota_layout.setSpacing(12)
+        quota_layout.setContentsMargins(18, 14, 18, 14)
+        quota_layout.setSpacing(10)
+        quota_layout.setAlignment(Qt.AlignmentFlag.AlignTop)
         quota_layout.addWidget(BodyLabel("随机IP额度", self.random_ip_quota_card), 0, Qt.AlignmentFlag.AlignHCenter)
 
         self.random_ip_usage_ring = ProgressRing(self.random_ip_quota_card)
@@ -303,7 +305,6 @@ class DashboardPage(
         self.card_btn.setIcon(FluentIcon.FINGERPRINT)
         install_tooltip_filter(self.card_btn)
         quota_layout.addWidget(self.card_btn, 0, Qt.AlignmentFlag.AlignHCenter)
-        quota_layout.addStretch(1)
 
         content_row.addWidget(self.random_ip_quota_card, 0, Qt.AlignmentFlag.AlignTop)
         exec_layout.addLayout(content_row)
@@ -489,11 +490,11 @@ class DashboardPage(
             forward_signal_args=False,
         )
         bind_logged_action(
-            self.more_settings_btn.clicked,
+            self.runtime_settings_hint_card.openRequested,
             self._go_to_runtime_page,
             scope="NAV",
             event="open_runtime_settings",
-            target="more_settings_btn",
+            target="runtime_settings_hint_card",
             page="dashboard",
             forward_signal_args=False,
         )

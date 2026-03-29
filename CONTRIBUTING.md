@@ -67,7 +67,7 @@ software/
 │   │   ├── fluent_tooltip.py # Fluent tooltip 安装器
 │   │   └── qfluent_compat.py # QFluentWidgets 动画 / InfoBar 稳定性补丁
 │   ├── pages/
-│   │   ├── workbench/     # dashboard/question_editor（含单栏配置向导）/runtime_panel/strategy（题目策略：条件规则 + 维度分组；dimension_panel.py 负责面板装配，dimension_sections.py 负责分组区块与跨表拖拽）/log_panel
+│   │   ├── workbench/     # dashboard（page.py 负责首页骨架，cards.py 放首页专用卡片，parts/ 放首页交互拆分）/question_editor（含单栏配置向导）/runtime_panel/strategy（题目策略：条件规则 + 维度分组；dimension_panel.py 负责面板装配，dimension_sections.py 负责分组区块与跨表拖拽）/log_panel
 │   │   └── settings/      # 应用程序设置页；settings.py 负责页面骨架，group_widgets.py 放设置页专用右侧控件
 │   └── widgets/           # 通用组件（contact_form 已拆成包；旧 time_range_slider 已移除）
 └── update/                # 更新检查与升级
