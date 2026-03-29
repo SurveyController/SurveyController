@@ -16,7 +16,7 @@
 > 参考了 [Zemelee/wjx](https://github.com/Zemelee/wjx)，别忘了给大佬点个star
 
 > [!WARNING]
-> **该项目仅供 Playwright 的学习与测试使用。** 请确保拥有目标测试问卷的授权再使用,**严禁污染他人问卷数据！**
+> **该项目仅供 Playwright 的学习与测试使用。** 请确保拥有目标测试问卷的授权再使用，**严禁污染他人问卷数据！**
 
 <img width="689" height="626" alt="gui" src="/assets/gui.png" />
 
