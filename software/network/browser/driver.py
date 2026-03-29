@@ -1,6 +1,8 @@
 """浏览器驱动封装 - Playwright 浏览器实例创建与操作"""
 from __future__ import annotations
 
+import errno
+import gc
 import logging
 import random
 import subprocess
@@ -19,6 +21,7 @@ if TYPE_CHECKING:
     from playwright.sync_api import Browser, BrowserContext, Page, Playwright
 
 _PW_START_LOCK = threading.Lock()
+_PLAYWRIGHT_START_RETRY_DELAYS = (0.35, 0.8, 1.5)
 _COMMON_BROWSER_SAFE_ARGS = [
     "--disable-gpu",
 ]
@@ -54,6 +57,83 @@ def _format_exception_chain(exc: BaseException) -> str:
         current = current.__cause__ or current.__context__
         depth += 1
     return " <- ".join(parts)
+
+
+def _iter_exception_chain(exc: BaseException):
+    current: Optional[BaseException] = exc
+    depth = 0
+    while current is not None and depth < 8:
+        yield current
+        current = current.__cause__ or current.__context__
+        depth += 1
+
+
+def is_playwright_startup_environment_error(exc: BaseException) -> bool:
+    """识别 Playwright 启动前就被本机环境拦截的致命错误。"""
+    chain_text = _format_exception_chain(exc).lower()
+    if "notimplementederror" in chain_text and "create_subprocess_exec" in chain_text:
+        return True
+
+    for current in _iter_exception_chain(exc):
+        if isinstance(current, NotImplementedError):
+            return True
+        if isinstance(current, PermissionError):
+            winerror = getattr(current, "winerror", None)
+            err_no = getattr(current, "errno", None)
+            text = str(current).lower()
+            if winerror == 10013:
+                return True
+            if err_no == errno.EACCES and ("socket" in text or "套接字" in text):
+                return True
+
+    return False
+
+
+def describe_playwright_startup_error(exc: BaseException) -> str:
+    """给浏览器启动异常生成更像人话的提示。"""
+    if is_playwright_startup_environment_error(exc):
+        chain_text = _format_exception_chain(exc).lower()
+        if "notimplementederror" in chain_text:
+            return (
+                "Playwright 启动依赖的 Windows asyncio 子进程能力不可用，"
+                "浏览器底座无法拉起。通常是事件循环策略或运行环境被改坏了。"
+            )
+        return (
+            "本机环境拦截了 Playwright 创建本地套接字/事件循环（常见为 WinError 10013），"
+            "浏览器底座还没启动就被系统、安全软件或防火墙卡死了。"
+        )
+    return str(exc)
+
+
+def _start_playwright_runtime() -> Playwright:
+    """启动 Playwright；若命中已知的 Windows 启动抖动，做有限自愈重试。"""
+    sync_playwright, _ = _load_playwright_sync()
+    last_exc: Optional[Exception] = None
+    max_attempts = max(1, len(_PLAYWRIGHT_START_RETRY_DELAYS) + 1)
+
+    for attempt in range(1, max_attempts + 1):
+        try:
+            return sync_playwright().start()
+        except Exception as exc:
+            last_exc = exc
+            if not is_playwright_startup_environment_error(exc) or attempt >= max_attempts:
+                raise
+
+            wait_seconds = _PLAYWRIGHT_START_RETRY_DELAYS[attempt - 1]
+            logging.warning(
+                "[Action Log] Playwright 底座启动第 %s/%s 次失败，%.2f 秒后重试：%s",
+                attempt,
+                max_attempts,
+                wait_seconds,
+                describe_playwright_startup_error(exc),
+            )
+            # 失败时 ProactorEventLoop 可能留下半残对象，先催一次回收再重试。
+            gc.collect()
+            time.sleep(wait_seconds)
+
+    if last_exc is not None:
+        raise last_exc
+    raise RuntimeError("Playwright 底座启动失败：未知错误")
 
 
 class NoSuchElementException(Exception):
@@ -307,8 +387,7 @@ class BrowserManager:
             )
             try:
                 with _PW_START_LOCK:
-                    sync_playwright, _ = _load_playwright_sync()
-                    pw = sync_playwright().start()
+                    pw = _start_playwright_runtime()
                     browser = pw.chromium.launch(**launch_args)
                 self._playwright = pw
                 self._browser = browser
@@ -333,9 +412,14 @@ class BrowserManager:
                         pw.stop()
                     except Exception as stop_exc:
                         log_suppressed_exception("BrowserManager._launch_locked pw.stop", stop_exc, level=logging.WARNING)
+                if is_playwright_startup_environment_error(exc):
+                    break
                 continue
 
-        raise RuntimeError(f"BrowserManager 无法启动任何浏览器: {last_exc}")
+        friendly = describe_playwright_startup_error(last_exc) if last_exc is not None else "未知错误"
+        if last_exc is not None:
+            raise RuntimeError(f"BrowserManager 无法启动任何浏览器: {friendly}") from last_exc
+        raise RuntimeError(f"BrowserManager 无法启动任何浏览器: {friendly}")
 
     def _shutdown_locked(self) -> None:
         browser = self._browser
@@ -698,8 +782,7 @@ def _create_transient_driver(
                 append_no_proxy=not bool(normalized_proxy),
             )
             with _PW_START_LOCK:
-                sync_playwright, _ = _load_playwright_sync()
-                pw = sync_playwright().start()
+                pw = _start_playwright_runtime()
                 browser = pw.chromium.launch(**launch_args)
 
             context_args = _build_context_args(
@@ -737,9 +820,14 @@ def _create_transient_driver(
                     pw.stop()
                 except Exception as stop_exc:
                     log_suppressed_exception("browser_driver._create_transient_driver pw.stop", stop_exc, level=logging.WARNING)
+            if is_playwright_startup_environment_error(exc):
+                break
             continue
 
-    raise RuntimeError(f"无法启动任何浏览器: {last_exc}")
+    friendly = describe_playwright_startup_error(last_exc) if last_exc is not None else "未知错误"
+    if last_exc is not None:
+        raise RuntimeError(f"无法启动任何浏览器: {friendly}") from last_exc
+    raise RuntimeError(f"无法启动任何浏览器: {friendly}")
 
 
 def create_playwright_driver(
@@ -809,7 +897,10 @@ def create_playwright_driver(
                     last_exc = restart_exc
             break
 
-    raise RuntimeError(f"创建浏览器上下文失败: {last_exc}")
+    friendly = describe_playwright_startup_error(last_exc) if last_exc is not None else "未知错误"
+    if last_exc is not None:
+        raise RuntimeError(f"创建浏览器上下文失败: {friendly}") from last_exc
+    raise RuntimeError(f"创建浏览器上下文失败: {friendly}")
 
 
 

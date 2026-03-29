@@ -12,6 +12,8 @@ from software.network.browser.driver import (
     TimeoutException,
     create_browser_manager,
     create_playwright_driver,
+    describe_playwright_startup_error,
+    is_playwright_startup_environment_error,
     list_browser_pids,
     shutdown_browser_manager,
 )
@@ -27,6 +29,8 @@ __all__ = [
     "TimeoutException",
     "create_browser_manager",
     "create_playwright_driver",
+    "describe_playwright_startup_error",
+    "is_playwright_startup_environment_error",
     "list_browser_pids",
     "shutdown_browser_manager",
 ]

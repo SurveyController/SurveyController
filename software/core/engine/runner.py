@@ -36,6 +36,8 @@ from software.network.browser import (
     BrowserDriver,
     ProxyConnectionError,
     TimeoutException,
+    describe_playwright_startup_error,
+    is_playwright_startup_environment_error,
 )
 from software.network.proxy.pool import is_proxy_responsive
 from software.network.session_policy import (
@@ -442,8 +444,28 @@ def run(
             except Exception as exc:
                 if stop_signal.is_set():
                     break
-                logging.error(f"启动浏览器失败：{exc}")
+                friendly_error = describe_playwright_startup_error(exc)
+                logging.error("启动浏览器失败：%s", friendly_error)
+                if is_playwright_startup_environment_error(exc):
+                    logging.critical("检测到本机环境阻止 Playwright 启动，任务停止。")
+                    try:
+                        ctx.update_thread_status(thread_name, "本机环境阻止浏览器启动", running=False)
+                    except Exception:
+                        logging.info("更新线程状态失败：本机环境阻止浏览器启动", exc_info=True)
+                    if stop_signal and not stop_signal.is_set():
+                        stop_signal.set()
+                    break
                 traceback.print_exc()
+                stopped = _handle_submission_failure(
+                    ctx,
+                    stop_signal,
+                    thread_name=thread_name,
+                    failure_reason="browser_start_failed",
+                    status_text="浏览器启动失败",
+                    log_message=f"浏览器启动失败，本轮按失败处理：{friendly_error}",
+                )
+                if stopped:
+                    break
                 if stop_signal.wait(1.0):
                     break
                 continue
