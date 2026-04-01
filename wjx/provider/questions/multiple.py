@@ -251,6 +251,64 @@ def _extract_multi_limit_range_from_text(text: Optional[str]) -> Tuple[Optional[
     return min_limit, max_limit
 
 
+def _collect_multi_limit_text_fragments_from_container(driver: BrowserDriver, container: Any) -> List[str]:
+    """收集题干/提示中的限制文本，排除选项内容避免误把数字选项当成限制。"""
+    if container is None:
+        return []
+
+    fragments: List[str] = []
+    for selector in (
+        ".qtypetip",
+        ".topichtml",
+        ".field-label",
+        ".field-desc",
+        ".question-desc",
+        ".question-tip",
+        ".qtip",
+        ".qnotice",
+        ".question-hint",
+    ):
+        try:
+            elements = container.find_elements(By.CSS_SELECTOR, selector)
+        except Exception:
+            elements = []
+        for element in elements:
+            try:
+                text = str(element.text or "").strip()
+            except Exception:
+                text = ""
+            if text:
+                fragments.append(text)
+
+    try:
+        cleaned_text = driver.execute_script(
+            """
+            const root = arguments[0];
+            if (!root) return '';
+            const clone = root.cloneNode(true);
+            clone.querySelectorAll(
+                '.ui-controlgroup, ul, ol, table, textarea, select, .slider, .rangeslider, .range-slider, .errorMessage'
+            ).forEach((node) => node.remove());
+            return (clone.innerText || clone.textContent || '').trim();
+            """,
+            container,
+        )
+    except Exception:
+        cleaned_text = ""
+    if cleaned_text:
+        fragments.append(str(cleaned_text).strip())
+
+    deduped: List[str] = []
+    seen = set()
+    for fragment in fragments:
+        normalized = " ".join(str(fragment).split())
+        if not normalized or normalized in seen:
+            continue
+        seen.add(normalized)
+        deduped.append(normalized)
+    return deduped
+
+
 def _get_driver_session_key(driver: BrowserDriver) -> str:
     """获取驱动会话键"""
     session_id = getattr(driver, "session_id", None)
@@ -286,14 +344,7 @@ def detect_multiple_choice_limit_range(driver: BrowserDriver, question_number: i
                 if min_limit is not None and max_limit is not None:
                     break
         if min_limit is None or max_limit is None:
-            fragments: List[str] = []
-            for selector in (".qtypetip", ".topichtml", ".field-label"):
-                try:
-                    fragments.append(container.find_element(By.CSS_SELECTOR, selector).text)
-                except Exception:
-                    continue
-            fragments.append(container.text)
-            for fragment in fragments:
+            for fragment in _collect_multi_limit_text_fragments_from_container(driver, container):
                 cand_min, cand_max = _extract_multi_limit_range_from_text(fragment)
                 if min_limit is None and cand_min is not None:
                     min_limit = cand_min

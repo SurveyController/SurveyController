@@ -859,6 +859,69 @@ def _extract_question_title(question_div, fallback_number: int) -> str:
     return f"第{fallback_number}题"
 
 
+def _collect_multi_limit_text_fragments(question_div) -> List[str]:
+    """收集可能包含多选限制说明的文本，排除选项正文避免数字误判。"""
+    if question_div is None:
+        return []
+
+    fragments: List[str] = []
+    selectors = (
+        ".qtypetip",
+        ".topichtml",
+        ".field-label",
+        ".field-desc",
+        ".question-desc",
+        ".question-tip",
+        ".qtip",
+        ".qnotice",
+        ".question-hint",
+    )
+    for selector in selectors:
+        try:
+            elements = question_div.select(selector)
+        except Exception:
+            elements = []
+        for element in elements:
+            try:
+                text = _normalize_html_text(element.get_text(" ", strip=True))
+            except Exception:
+                text = ""
+            if text:
+                fragments.append(text)
+
+    if BeautifulSoup is not None:
+        try:
+            cloned_soup = BeautifulSoup(str(question_div), "html.parser")
+            for selector in (
+                ".ui-controlgroup",
+                "ul",
+                "ol",
+                "table",
+                "textarea",
+                "select",
+                ".slider",
+                ".rangeslider",
+                ".range-slider",
+                ".errorMessage",
+            ):
+                for element in cloned_soup.select(selector):
+                    element.decompose()
+            cleaned_text = _normalize_html_text(cloned_soup.get_text(" ", strip=True))
+            if cleaned_text:
+                fragments.append(cleaned_text)
+        except Exception:
+            pass
+
+    deduped: List[str] = []
+    seen = set()
+    for fragment in fragments:
+        if not fragment or fragment in seen:
+            continue
+        seen.add(fragment)
+        deduped.append(fragment)
+    return deduped
+
+
 def _extract_multiple_choice_limits(question_div, question_number: int) -> Tuple[Optional[int], Optional[int]]:
     """从多选题 HTML 中提取选择数量限制（最少/最多）"""
     if question_div is None:
@@ -899,20 +962,7 @@ def _extract_multiple_choice_limits(question_div, question_number: int) -> Tuple
 
         # 3. 从文本提取
         if min_limit is None or max_limit is None:
-            fragments: List[str] = []
-            for selector in (".qtypetip", ".topichtml", ".field-label"):
-                try:
-                    element = question_div.find(class_=selector.lstrip('.'))
-                    if element:
-                        fragments.append(element.get_text(" ", strip=True))
-                except Exception:
-                    continue
-            try:
-                fragments.append(question_div.get_text(" ", strip=True))
-            except Exception as exc:
-                log_suppressed_exception("_extract_multiple_choice_limits: fragments.append(question_div.get_text(\" \", strip=True))", exc, level=logging.ERROR)
-
-            for fragment in fragments:
+            for fragment in _collect_multi_limit_text_fragments(question_div):
                 cand_min, cand_max = _extract_multi_limit_range_from_text(fragment)
                 if min_limit is None and cand_min is not None:
                     min_limit = cand_min
