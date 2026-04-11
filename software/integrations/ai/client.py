@@ -118,7 +118,7 @@ _RUNTIME_AI_SETTINGS: Optional[Dict[str, Any]] = None
 _CHAT_COMPLETIONS_SUFFIX = "/chat/completions"
 _RESPONSES_SUFFIX = "/responses"
 _LEGACY_COMPLETIONS_SUFFIX = "/completions"
-_AI_REQUEST_TIMEOUT_SECONDS = 25
+_AI_REQUEST_TIMEOUT_SECONDS = 45
 
 _FREE_AI_ERROR_MESSAGES = {
     "device_id_required": "免费 AI 调用失败：缺少设备标识（X-Device-ID）",
