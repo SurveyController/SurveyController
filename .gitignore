@@ -17,14 +17,10 @@ CLAUDE.md
 
 # 运行环境
 __pycache__/
+.pytest_cache/
 *.pyc
 /configs/
 /logs/
-
-.kiro
-docx
-tests
-plans
-demo
-doc
-stats
+/worker/.dev.vars
+/worker/.env
+/worker/.wrangler/
