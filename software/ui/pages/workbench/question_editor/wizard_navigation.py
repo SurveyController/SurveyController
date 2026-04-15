@@ -1,7 +1,7 @@
 """题目配置向导导航与滚动同步。"""
 from typing import TYPE_CHECKING, Any, List, Optional, cast
 
-from PySide6.QtCore import QObject, QEasingCurve, QEvent, QPointF, QPropertyAnimation, QRectF, QSize, QTimer, Qt, QModelIndex, QPersistentModelIndex
+from PySide6.QtCore import QByteArray, QObject, QEasingCurve, QEvent, QPointF, QPropertyAnimation, QRectF, QSize, QTimer, Qt, QModelIndex, QPersistentModelIndex
 from PySide6.QtGui import QColor, QFont, QPainter, QPen
 from PySide6.QtWidgets import QAbstractItemView, QListWidget, QStyle, QStyleOptionViewItem, QWidget, QStyledItemDelegate
 from qfluentwidgets import CardWidget, VerticalPipsPager, isDarkTheme, themeColor
@@ -34,6 +34,7 @@ class WizardPipsDelegate(QStyledItemDelegate):
         option: QStyleOptionViewItem,
         index: QModelIndex | QPersistentModelIndex,
     ) -> None:
+        option_view = cast(Any, option)
         painter.save()
         painter.setRenderHints(QPainter.RenderHint.Antialiasing)
         painter.setPen(Qt.PenStyle.NoPen)
@@ -41,11 +42,11 @@ class WizardPipsDelegate(QStyledItemDelegate):
         row = index.row()
         is_hover = row == self.hoveredRow
         is_pressed = row == self.pressedRow
-        is_selected = bool(option.state & QStyle.StateFlag.State_Selected)
+        is_selected = bool(option_view.state & QStyle.StateFlag.State_Selected)
         question_number = row + 1
 
-        center_x = option.rect.right() - 9
-        center_y = option.rect.center().y()
+        center_x = option_view.rect.right() - 9
+        center_y = option_view.rect.center().y()
         accent = QColor(themeColor())
         if isDarkTheme():
             idle_color = QColor(255, 255, 255, 150)
@@ -67,7 +68,7 @@ class WizardPipsDelegate(QStyledItemDelegate):
             active_label_fill = _color_with_alpha(accent, 72)
 
         if question_number % 5 == 0:
-            badge_rect = QRectF(option.rect.x() + 1, option.rect.center().y() - 7, 14, 14)
+            badge_rect = QRectF(option_view.rect.x() + 1, option_view.rect.center().y() - 7, 14, 14)
             painter.setBrush(active_label_fill if is_selected else label_fill)
             painter.drawRoundedRect(badge_rect, 5, 5)
             painter.setPen(active_label_color if is_selected else label_color)
@@ -424,7 +425,7 @@ class WizardNavigationMixin:
         curve = QEasingCurve(QEasingCurve.Type.BezierSpline)
         curve.addCubicBezierSegment(QPointF(0.215, 0.61), QPointF(0.355, 1.0), QPointF(1.0, 1.0))
 
-        self._scroll_animation = QPropertyAnimation(scroll_bar, b"value", cast(QObject, self))
+        self._scroll_animation = QPropertyAnimation(scroll_bar, QByteArray(b"value"), cast(QObject, self))
         self._scroll_animation.setStartValue(start_value)
         self._scroll_animation.setEndValue(target_value)
         self._scroll_animation.setDuration(self._resolve_scroll_duration(start_value, target_value))

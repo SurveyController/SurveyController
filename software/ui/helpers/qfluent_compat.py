@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from typing import Any, cast
 
-from PySide6.QtCore import QAbstractAnimation, QEvent, QParallelAnimationGroup, QPropertyAnimation
+from PySide6.QtCore import QAbstractAnimation, QByteArray, QEvent, QParallelAnimationGroup, QPropertyAnimation
 from shiboken6 import isValid
 
 
@@ -108,7 +108,7 @@ def _install_infobar_manager_guards(info_bar_manager_cls) -> None:
 
         if bars:
             try:
-                drop_ani = QPropertyAnimation(info_bar, b"pos")
+                drop_ani = QPropertyAnimation(info_bar, QByteArray(b"pos"))
                 drop_ani.setDuration(200)
                 self.aniGroups[parent].addAnimation(drop_ani)
                 self.dropAnis.append(drop_ani)

@@ -8,7 +8,7 @@ import os
 from datetime import datetime
 from typing import Callable, List, Optional
 
-from PySide6.QtCore import QPoint, QEasingCurve, QPropertyAnimation, Qt
+from PySide6.QtCore import QByteArray, QPoint, QEasingCurve, QPropertyAnimation, Qt
 from PySide6.QtWidgets import QHBoxLayout, QListWidgetItem, QVBoxLayout, QWidget
 from qfluentwidgets import (
     BodyLabel,
@@ -100,7 +100,7 @@ class ConfigDrawer(QWidget):
 
         main_layout.addWidget(self.card)
 
-        self._slide_anim = QPropertyAnimation(self, b"pos", self)
+        self._slide_anim = QPropertyAnimation(self, QByteArray(b"pos"), self)
         self._slide_anim.setDuration(220)
         self._slide_anim.setEasingCurve(QEasingCurve.Type.OutCubic)
 

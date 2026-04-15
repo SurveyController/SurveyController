@@ -7,7 +7,6 @@ import argparse
 import getpass
 import json
 import os
-import py_compile
 import subprocess
 import sys
 import tempfile
@@ -242,13 +241,14 @@ def run_compile_checks(files: Iterable[Path]) -> list[dict]:
     issues: list[dict] = []
     for path in files:
         try:
-            py_compile.compile(str(path), doraise=True)
-        except py_compile.PyCompileError as exc:
+            source = path.read_bytes()
+            compile(source, str(path), "exec")
+        except (SyntaxError, ValueError, TypeError, OSError) as exc:
             issues.append(
                 {
                     "phase": "compile",
                     "path": format_path(path),
-                    "message": exc.msg.strip(),
+                    "message": str(exc).strip(),
                 }
             )
     return issues

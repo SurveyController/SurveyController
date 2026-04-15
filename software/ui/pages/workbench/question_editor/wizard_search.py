@@ -46,15 +46,18 @@ class QuestionSearchCompleterDelegate(QStyledItemDelegate):
         return document
 
     def paint(self, painter: QPainter, option: QStyleOptionViewItem, index: QModelIndex | QPersistentModelIndex) -> None:
+        option_view = cast(Any, option)
         option_copy = QStyleOptionViewItem(option)
         self.initStyleOption(option_copy, index)
-        option_copy.text = ""
+        option_copy_any = cast(Any, option_copy)
+        option_copy_any.text = ""
 
-        style = option.widget.style() if option.widget is not None else QApplication.style()
-        style.drawControl(QStyle.ControlElement.CE_ItemViewItem, option_copy, painter, option.widget)
+        widget = option_view.widget
+        style = widget.style() if widget is not None else QApplication.style()
+        style.drawControl(QStyle.ControlElement.CE_ItemViewItem, option_copy, painter, widget)
 
-        text_rect = option.rect.adjusted(12, 8, -12, -8)
-        document = self._build_document(index, text_rect.width(), bool(option.state & QStyle.StateFlag.State_Selected))
+        text_rect = option_view.rect.adjusted(12, 8, -12, -8)
+        document = self._build_document(index, text_rect.width(), bool(option_view.state & QStyle.StateFlag.State_Selected))
 
         painter.save()
         painter.translate(text_rect.topLeft())
@@ -62,7 +65,8 @@ class QuestionSearchCompleterDelegate(QStyledItemDelegate):
         painter.restore()
 
     def sizeHint(self, option: QStyleOptionViewItem, index: QModelIndex | QPersistentModelIndex) -> QSize:
-        width = option.rect.width() or 480
+        option_view = cast(Any, option)
+        width = option_view.rect.width() or 480
         document = self._build_document(index, width, False)
         return QSize(width, max(44, int(document.size().height()) + 16))
 

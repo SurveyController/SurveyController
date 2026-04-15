@@ -1,7 +1,7 @@
 """向导滑块题配置区。"""
 from typing import TYPE_CHECKING, Any, Dict, List
 
-from PySide6.QtCore import QEasingCurve, QPropertyAnimation, QTimer, Qt
+from PySide6.QtCore import QByteArray, QEasingCurve, QPropertyAnimation, QTimer, Qt
 from PySide6.QtWidgets import QButtonGroup, QHBoxLayout, QVBoxLayout, QWidget
 from qfluentwidgets import BodyLabel, CardWidget, IndicatorPosition, LineEdit, RadioButton, SegmentedWidget, SwitchButton
 
@@ -376,7 +376,7 @@ class WizardSectionsSliderMixin:
                     if old:
                         old.stop()
                     target = int(weights[si]) if si < len(weights) else 1
-                    anim = QPropertyAnimation(sl, b"value", sl)
+                    anim = QPropertyAnimation(sl, QByteArray(b"value"), sl)
                     anim.setDuration(300)
                     anim.setStartValue(sl.value())
                     anim.setEndValue(target)
