@@ -125,7 +125,7 @@ class RunControllerInitializationMixin:
                 matcher = QuestionMatcher()
                 first_sample_keys = list(samples[0].values.keys()) if samples else []
                 mapping_plan = matcher.build_mapping(first_sample_keys, survey_schema)
-                logging.info(f"列映射完成，映射了 {len(mapping_plan.mappings)} 个题目")
+                logging.info(f"列映射完成，映射了 {len(mapping_plan.items)} 个题目")
                 
                 # 4. 标准化所有样本
                 from software.io.excel.normalizer import AnswerNormalizer

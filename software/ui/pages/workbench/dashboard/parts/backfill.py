@@ -151,15 +151,39 @@ class DashboardBackfillMixin:
             # 启用预览按钮
             self.backfill_preview_btn.setEnabled(True)
             
-            InfoBar.success(
-                title="文件已选择",
-                content=f"已选择: {file_name}",
-                orient=Qt.Horizontal,
-                isClosable=True,
-                position=InfoBarPosition.TOP,
-                duration=2000,
-                parent=self,
-            )
+            # 读取 Excel 并更新目标份数
+            try:
+                from software.io.excel.reader import ExcelReader
+                reader = ExcelReader()
+                samples = reader.read(file_path)
+                sample_count = len(samples)
+                
+                # 更新目标份数
+                if hasattr(self, 'target_spin'):
+                    self.target_spin.blockSignals(True)
+                    self.target_spin.setValue(sample_count)
+                    self.target_spin.blockSignals(False)
+                
+                InfoBar.success(
+                    title="文件已选择",
+                    content=f"已选择: {file_name}，共 {sample_count} 条样本",
+                    orient=Qt.Horizontal,
+                    isClosable=True,
+                    position=InfoBarPosition.TOP,
+                    duration=3000,
+                    parent=self,
+                )
+            except Exception as e:
+                # 如果读取失败，仍然显示文件已选择，但不更新目标份数
+                InfoBar.warning(
+                    title="文件已选择",
+                    content=f"已选择: {file_name}，但无法读取样本数量: {str(e)}",
+                    orient=Qt.Horizontal,
+                    isClosable=True,
+                    position=InfoBarPosition.TOP,
+                    duration=3000,
+                    parent=self,
+                )
     
     def _on_preview_mapping(self):
         """预览映射关系。"""
