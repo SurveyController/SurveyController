@@ -15,6 +15,7 @@ from software.core.questions.utils import (
     resolve_dynamic_text_token,
     smooth_scroll_to_element,
 )
+from software.core.questions.answer_context import smart_get_text_answer
 from software.core.ai.runtime import AIRuntimeError, generate_ai_answer, resolve_question_title_for_ai
 from software.core.persona.context import record_answer
 from software.core.questions.text_shared import MULTI_TEXT_DELIMITER
@@ -397,8 +398,8 @@ def text(
         if multi_text_blank_int_ranges and index < len(multi_text_blank_int_ranges):
             blank_int_ranges = multi_text_blank_int_ranges[index]
 
-    selected_index = weighted_index(selection_probabilities)
-    selected_answer = resolved_candidates[selected_index] if resolved_candidates else DEFAULT_FILL_TEXT
+    # 使用智能选择函数：反填模式或随机模式
+    selected_answer = smart_get_text_answer(current, resolved_candidates)
 
     if entry_kind == "text" and ai_enabled:
         try:

@@ -74,6 +74,10 @@ class RunControllerInitializationMixin:
         except Exception:
             psycho_target_alpha = normalize_target_alpha(None)
 
+        # 反填模式配置
+        backfill_enabled = bool(getattr(config, "backfill_enabled", False))
+        backfill_excel_path = str(getattr(config, "backfill_excel_path", "") or "")
+
         execution_config = ExecutionConfig(
             url=config.url,
             survey_title=survey_title,
@@ -95,8 +99,60 @@ class RunControllerInitializationMixin:
             psycho_target_alpha=psycho_target_alpha,
             stop_on_fail_enabled=config.fail_stop_enabled,
             pause_on_aliyun_captcha=bool(getattr(config, "pause_on_aliyun_captcha", True)),
+            backfill_enabled=backfill_enabled,
+            backfill_excel_path=backfill_excel_path,
         )
         execution_state = ExecutionState(config=execution_config, stop_event=self.stop_event)
+        
+        # === 反填模式初始化 ===
+        if backfill_enabled and backfill_excel_path:
+            try:
+                logging.info("反填模式已启用，开始初始化...")
+                
+                # 1. 读取 Excel
+                from software.io.excel.reader import ExcelReader
+                reader = ExcelReader()
+                samples = reader.read(backfill_excel_path)
+                logging.info(f"读取 Excel 完成，共 {len(samples)} 条样本")
+                
+                # 2. 获取问卷结构
+                from software.core.backfill.survey_converter import convert_to_survey_schema
+                survey_schema = convert_to_survey_schema(self)
+                logging.info(f"问卷结构转换完成，共 {len(survey_schema.questions)} 个题目")
+                
+                # 3. 映射 Excel 列到题目
+                from software.io.excel.mapper import QuestionMatcher
+                matcher = QuestionMatcher()
+                first_sample_keys = list(samples[0].values.keys()) if samples else []
+                mapping_plan = matcher.build_mapping(first_sample_keys, survey_schema)
+                logging.info(f"列映射完成，映射了 {len(mapping_plan.mappings)} 个题目")
+                
+                # 4. 标准化所有样本
+                from software.io.excel.normalizer import AnswerNormalizer
+                from software.io.excel.validator import SampleValidator
+                normalizer = AnswerNormalizer()
+                validator = SampleValidator(normalizer)
+                validator.validate_and_normalize(samples, survey_schema, mapping_plan)
+                
+                # 统计有效样本数
+                valid_samples = [s for s in samples if s.status == "pending"]
+                logging.info(f"样本标准化完成，有效样本 {len(valid_samples)} 条")
+                
+                # 5. 创建样本分发器
+                from software.core.backfill.dispatcher import SampleDispatcher
+                dispatcher = SampleDispatcher(samples)
+                
+                # 6. 注入到执行状态
+                execution_state.sample_dispatcher = dispatcher
+                
+                # 7. 更新目标数量为有效样本数量
+                execution_config.target_num = len(valid_samples)
+                logging.info(f"反填模式初始化完成，目标数量已更新为 {len(valid_samples)}")
+                
+            except Exception as exc:
+                logging.error(f"反填模式初始化失败: {exc}", exc_info=True)
+                raise RuntimeError(f"反填模式初始化失败: {exc}") from exc
+        
         return execution_config, execution_state
     def _apply_pending_execution_config(self, config: ExecutionConfig, *, consume: bool) -> None:
         pending = self._pending_execution_config

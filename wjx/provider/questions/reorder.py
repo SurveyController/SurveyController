@@ -7,6 +7,7 @@ from typing import Any, List, Optional
 
 from software.network.browser import By, BrowserDriver
 from software.core.questions.utils import extract_text_from_element
+from software.core.questions.answer_context import smart_select_order
 from wjx.provider.questions.multiple import (
     detect_multiple_choice_limit_range,
     detect_multiple_choice_limit,
@@ -596,8 +597,8 @@ def reorder(driver: BrowserDriver, current: int) -> None:
     # ── 分支1: force_select_all ──
     if force_select_all:
         if rank_mode:
-            candidate_indices = list(range(total_options))
-            random.shuffle(candidate_indices)
+            # 使用智能排序：反填模式或随机模式
+            candidate_indices = smart_select_order(current, rank_item_texts)
             clicked_rank = 0
             for option_idx in candidate_indices:
                 clicked_rank += 1
@@ -609,8 +610,8 @@ def reorder(driver: BrowserDriver, current: int) -> None:
             return
 
         # 非 rank_mode: 使用通用 _click_item
-        candidate_indices = list(range(total_options))
-        random.shuffle(candidate_indices)
+        # 使用智能排序：反填模式或随机模式
+        candidate_indices = smart_select_order(current, rank_item_texts)
         for option_idx in candidate_indices:
             item = order_items[option_idx]
             if _is_item_selected(item):
@@ -643,9 +644,9 @@ def reorder(driver: BrowserDriver, current: int) -> None:
         if required_count is None and min_select_limit is None and max_select_limit is None:
             plan_count = total_options
         plan_count = max(1, min(int(plan_count), total_options))
-        selected_indices = list(range(total_options))
-        random.shuffle(selected_indices)
-        selected_indices = selected_indices[:plan_count]
+        # 使用智能排序：反填模式或随机模式
+        all_indices = smart_select_order(current, rank_item_texts)
+        selected_indices = all_indices[:plan_count]
         rank_map = {idx: str(pos + 1) for pos, idx in enumerate(selected_indices)}
 
         for idx, li in enumerate(order_items):
@@ -695,8 +696,8 @@ def reorder(driver: BrowserDriver, current: int) -> None:
             plan_count = total_options
         plan_count = max(1, min(int(plan_count), total_options))
 
-        click_plan = list(range(total_options))
-        random.shuffle(click_plan)
+        # 使用智能排序：反填模式或随机模式
+        click_plan = smart_select_order(current, rank_item_texts)
         click_plan = click_plan[:plan_count]
         clicked_count = 0
         for option_idx in click_plan:
@@ -709,8 +710,8 @@ def reorder(driver: BrowserDriver, current: int) -> None:
         return
 
     # ── 分支3: 普通模式 ──
-    candidate_indices = list(range(len(order_items)))
-    random.shuffle(candidate_indices)
+    # 使用智能排序：反填模式或随机模式
+    candidate_indices = smart_select_order(current, rank_item_texts)
     selected_indices = candidate_indices[:effective_limit]
 
     for option_idx in selected_indices:

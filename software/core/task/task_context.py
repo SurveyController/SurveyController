@@ -91,6 +91,10 @@ class ExecutionConfig:
     )
     pause_on_aliyun_captcha: bool = True
 
+    # 反填模式配置
+    backfill_enabled: bool = False
+    backfill_excel_path: str = ""
+
 
 @dataclass
 class ExecutionState:
@@ -123,6 +127,9 @@ class ExecutionState:
     _browser_semaphore: Optional[threading.Semaphore] = field(default=None, repr=False)
     _browser_semaphore_lock: threading.Lock = field(default_factory=threading.Lock)
     _browser_semaphore_max_instances: int = 0
+
+    # 反填模式运行时状态
+    sample_dispatcher: Optional[Any] = field(default=None, repr=False)
 
     def __getattr__(self, name: str) -> Any:
         """只读透传静态配置，避免旧的内部消费者到处改一轮。"""

@@ -37,6 +37,45 @@ class ExecutionLoop:
         self.stop_policy = RunStopPolicy(config, state, gui_instance)
         self.submission_service = SubmissionService(config, state, self.stop_policy)
 
+    def _fill_survey_with_backfill(
+        self,
+        driver,
+        sample,
+        stop_signal: threading.Event,
+        thread_name: str
+    ) -> bool:
+        """使用反填数据填写问卷。
+        
+        Args:
+            driver: 浏览器驱动
+            sample: 样本数据（包含 normalized_answers）
+            stop_signal: 停止信号
+            thread_name: 线程名称
+            
+        Returns:
+            是否填写完成
+        """
+        from software.core.backfill.answer_provider import BackfillAnswerProvider
+        from software.core.questions.answer_context import backfill_answer_context
+        
+        # 创建答案提供者
+        provider = BackfillAnswerProvider(sample.normalized_answers)
+        
+        # 使用上下文管理器
+        with backfill_answer_context(provider):
+            # 调用 provider 填写问卷
+            # 在上下文中，所有 smart_select_* 函数会自动使用反填数据
+            finished = _provider_fill_survey(
+                driver,
+                self.config,
+                self.state,
+                stop_signal=stop_signal,
+                thread_name=thread_name,
+                provider=self.config.survey_provider,
+            )
+        
+        return finished
+
     def run_thread(
         self,
         window_x_pos: int,
@@ -73,9 +112,32 @@ class ExecutionLoop:
             self.stop_policy.wait_if_paused(stop_signal)
             if stop_signal.is_set():
                 break
-            with self.state.lock:
-                if stop_signal.is_set() or (self.config.target_num > 0 and self.state.cur_num >= self.config.target_num):
+            
+            # === 检查完成条件 ===
+            if self.config.backfill_enabled:
+                # 反填模式：检查是否所有样本都已完成
+                if self.state.sample_dispatcher and self.state.sample_dispatcher.is_all_success():
+                    logging.info(f"线程 {thread_name}: 所有样本已完成，线程退出")
                     break
+            else:
+                # 随机模式：检查是否达到目标数量
+                with self.state.lock:
+                    if stop_signal.is_set() or (self.config.target_num > 0 and self.state.cur_num >= self.config.target_num):
+                        break
+            
+            # === 获取样本（仅反填模式）===
+            current_sample = None
+            if self.config.backfill_enabled:
+                if not self.state.sample_dispatcher:
+                    logging.error(f"线程 {thread_name}: 反填模式已启用但 dispatcher 未初始化")
+                    break
+                current_sample = self.state.sample_dispatcher.get_next_sample(thread_name)
+                if current_sample is None:
+                    # 没有更多样本，线程退出
+                    logging.info(f"线程 {thread_name}: 没有更多待处理样本，退出")
+                    break
+                logging.info(f"线程 {thread_name}: 获取样本 行号={current_sample.row_no}")
+
 
             if session.driver is None:
                 try:
@@ -214,19 +276,38 @@ class ExecutionLoop:
                             break
                         continue
 
-                finished = _provider_fill_survey(
-                    session.driver,
-                    self.config,
-                    self.state,
-                    stop_signal=stop_signal,
-                    thread_name=thread_name,
-                    provider=self.config.survey_provider,
-                )
+                # === 填写问卷 ===
+                if self.config.backfill_enabled and current_sample:
+                    # 反填模式：使用反填答题逻辑
+                    finished = self._fill_survey_with_backfill(
+                        session.driver,
+                        current_sample,
+                        stop_signal,
+                        thread_name
+                    )
+                else:
+                    # 随机模式：使用原有逻辑
+                    finished = _provider_fill_survey(
+                        session.driver,
+                        self.config,
+                        self.state,
+                        stop_signal=stop_signal,
+                        thread_name=thread_name,
+                        provider=self.config.survey_provider,
+                    )
+                
                 if stop_signal.is_set() or not finished:
                     try:
                         self.state.release_joint_sample(thread_name)
                     except Exception:
                         logging.info("释放联合信效度样本槽位失败", exc_info=True)
+                    # 反填模式：标记样本失败
+                    if self.config.backfill_enabled and current_sample:
+                        self.state.sample_dispatcher.mark_sample_failed(
+                            current_sample.row_no,
+                            "填写未完成",
+                            retry=True
+                        )
                     continue
 
                 outcome = self.submission_service.finalize_after_submit(
@@ -236,6 +317,10 @@ class ExecutionLoop:
                     thread_name=thread_name,
                 )
                 if outcome.status == "success":
+                    # 反填模式：标记样本成功
+                    if self.config.backfill_enabled and current_sample:
+                        self.state.sample_dispatcher.mark_sample_success(current_sample.row_no)
+                        logging.info(f"样本 {current_sample.row_no} 提交成功")
                     session.dispose()
                     if outcome.should_stop:
                         break
@@ -244,13 +329,34 @@ class ExecutionLoop:
                         self.state.release_joint_sample(thread_name)
                     except Exception:
                         logging.info("释放联合信效度样本槽位失败", exc_info=True)
+                    # 反填模式：标记样本失败
+                    if self.config.backfill_enabled and current_sample:
+                        self.state.sample_dispatcher.mark_sample_failed(
+                            current_sample.row_no,
+                            "提交中止",
+                            retry=False
+                        )
                     break
                 else:
+                    # 反填模式：标记样本失败，允许重试
+                    if self.config.backfill_enabled and current_sample:
+                        self.state.sample_dispatcher.mark_sample_failed(
+                            current_sample.row_no,
+                            "提交失败",
+                            retry=True
+                        )
                     driver_had_error = True
 
             except AIRuntimeError as exc:
                 driver_had_error = True
                 logging.error("AI 填空失败，已停止任务：%s", exc, exc_info=True)
+                # 反填模式：标记样本失败
+                if self.config.backfill_enabled and current_sample:
+                    self.state.sample_dispatcher.mark_sample_failed(
+                        current_sample.row_no,
+                        f"AI填空失败: {exc}",
+                        retry=False
+                    )
                 if not stop_signal.is_set():
                     stop_signal.set()
                 break
@@ -261,6 +367,13 @@ class ExecutionLoop:
                 logging.warning("提取到的代理质量过低，自动弃用更换下一个")
                 if session.proxy_address:
                     _discard_unresponsive_proxy(self.state, session.proxy_address)
+                # 反填模式：标记样本失败，允许重试
+                if self.config.backfill_enabled and current_sample:
+                    self.state.sample_dispatcher.mark_sample_failed(
+                        current_sample.row_no,
+                        "代理连接失败",
+                        retry=True
+                    )
                 if self.config.random_proxy_ip_enabled and session.proxy_address:
                     if _record_bad_proxy_and_maybe_pause(self.state, self.gui_instance):
                         break
@@ -282,6 +395,13 @@ class ExecutionLoop:
                 if stop_signal.is_set():
                     break
                 traceback.print_exc()
+                # 反填模式：标记样本失败，允许重试
+                if self.config.backfill_enabled and current_sample:
+                    self.state.sample_dispatcher.mark_sample_failed(
+                        current_sample.row_no,
+                        "未知异常",
+                        retry=True
+                    )
                 if self.stop_policy.record_failure(
                     stop_signal,
                     thread_name=thread_name,

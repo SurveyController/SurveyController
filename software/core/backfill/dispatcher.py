@@ -141,3 +141,121 @@ class SampleDispatcher:
         """
         with self.lock:
             return all(s.status in ("success", "failed") for s in self.samples)
+    
+    def is_all_success(self) -> bool:
+        """检查是否所有样本都已成功（线程安全）。
+        
+        Returns:
+            如果所有样本都是 success 状态返回 True
+        """
+        with self.lock:
+            return all(s.status == "success" for s in self.samples)
+    
+    def get_next_sample(self, thread_name: str) -> Optional[SampleRow]:
+        """获取下一个待处理样本（线程安全）。
+        
+        这是 next_sample() 的别名方法，提供更明确的命名。
+        
+        Args:
+            thread_name: 线程名称（用于日志记录）
+            
+        Returns:
+            待处理的样本，如果没有则返回 None
+            
+        Note:
+            此方法会自动将样本状态从 "pending" 改为 "running"
+        """
+        return self.next_sample()
+    
+    def mark_sample_success(self, row_no: int):
+        """根据行号标记样本成功（线程安全）。
+        
+        Args:
+            row_no: 样本行号
+            
+        Raises:
+            ValueError: 如果找不到对应行号的样本
+        """
+        with self.lock:
+            for sample in self.samples:
+                if sample.row_no == row_no:
+                    sample.status = "success"
+                    sample.error = None
+                    return
+            raise ValueError(f"未找到行号为 {row_no} 的样本")
+    
+    def mark_sample_failed(self, row_no: int, error: str, retry: bool = True):
+        """根据行号标记样本失败（线程安全）。
+        
+        Args:
+            row_no: 样本行号
+            error: 错误信息
+            retry: 是否允许重试（如果为 True，状态改为 pending；否则为 failed）
+            
+        Raises:
+            ValueError: 如果找不到对应行号的样本
+        """
+        with self.lock:
+            for sample in self.samples:
+                if sample.row_no == row_no:
+                    sample.error = error
+                    sample.status = "pending" if retry else "failed"
+                    return
+            raise ValueError(f"未找到行号为 {row_no} 的样本")
+    
+    def get_sample_by_row_no(self, row_no: int) -> Optional[SampleRow]:
+        """根据行号获取样本（线程安全）。
+        
+        Args:
+            row_no: 样本行号
+            
+        Returns:
+            样本对象，如果未找到则返回 None
+        """
+        with self.lock:
+            for sample in self.samples:
+                if sample.row_no == row_no:
+                    return sample
+        return None
+    
+    def get_summary(self) -> dict:
+        """获取详细的统计摘要（线程安全）。
+        
+        Returns:
+            统计摘要字典，包含：
+            - total: 总样本数
+            - pending: 待处理数
+            - running: 运行中数
+            - success: 成功数
+            - failed: 失败数
+            - progress: 进度百分比（0-100）
+            - success_rate: 成功率（0-100）
+            - failed_samples: 失败样本的行号列表
+        """
+        with self.lock:
+            # 直接计算统计信息，避免调用 get_stats() 导致死锁
+            pending = sum(1 for s in self.samples if s.status == "pending")
+            running = sum(1 for s in self.samples if s.status == "running")
+            success = sum(1 for s in self.samples if s.status == "success")
+            failed = sum(1 for s in self.samples if s.status == "failed")
+            
+            # 计算进度（成功 + 失败）/ 总数
+            completed = success + failed
+            progress = (completed / self._total * 100) if self._total > 0 else 0
+            
+            # 计算成功率
+            success_rate = (success / completed * 100) if completed > 0 else 0
+            
+            # 获取失败样本的行号
+            failed_row_nos = [s.row_no for s in self.samples if s.status == "failed"]
+            
+            return {
+                "total": self._total,
+                "pending": pending,
+                "running": running,
+                "success": success,
+                "failed": failed,
+                "progress": round(progress, 2),
+                "success_rate": round(success_rate, 2),
+                "failed_samples": failed_row_nos,
+            }

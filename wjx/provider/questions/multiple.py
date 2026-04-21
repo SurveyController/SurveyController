@@ -16,6 +16,7 @@ from software.core.questions.utils import (
     fill_option_additional_text,
     resolve_option_fill_text_from_config,
 )
+from software.core.questions.answer_context import smart_select_multiple_options
 from software.network.browser import BrowserDriver
 
 from .multiple_dom import (
@@ -262,9 +263,7 @@ def multiple(
         record_answer(current, "multiple", selected_indices=confirmed_indices, selected_texts=selected_texts)
         return
 
-    selection_mask: List[int] = []
-    attempts = 0
-    max_attempts = 32
+    # ── 普通模式（非严格配比）──
     positive_indices = [i for i, p in enumerate(selection_probabilities) if p > 0]
     if not positive_indices and not required_indices:
         if current not in _WARNED_PROB_MISMATCH:
@@ -274,19 +273,11 @@ def multiple(
                 current,
             )
         return
-    if positive_indices:
-        while sum(selection_mask) == 0 and attempts < max_attempts:
-            selection_mask = [1 if random.random() < (prob / 100.0) else 0 for prob in selection_probabilities]
-            attempts += 1
-        if sum(selection_mask) == 0:
-            # 32次尝试都没选中任何选项，从正概率选项中随机选一个
-            selection_mask = [0] * len(option_elements)
-            selection_mask[random.choice(positive_indices)] = 1
-    selected_indices = [
-        idx
-        for idx, selected in enumerate(selection_mask)
-        if selected == 1 and selection_probabilities[idx] > 0
-    ]
+    
+    # 使用智能选择函数：反填模式或随机模式
+    selected_indices = smart_select_multiple_options(current, option_texts, selection_probabilities)
+    
+    # 应用规则约束
     selected_indices = _apply_rule_constraints(
         selected_indices,
         len(option_elements),

@@ -23,6 +23,7 @@ from software.core.questions.utils import (
     extract_text_from_element,
     smooth_scroll_to_element,
 )
+from software.core.questions.answer_context import smart_select_option
 from software.app.config import DEFAULT_FILL_TEXT
 from wjx.provider.html_parser_common import _is_select_placeholder_option
 
@@ -451,7 +452,8 @@ def single(
             current,
         )
         probabilities = enforce_reference_rank_order(probabilities, strict_reference)
-    target_index = weighted_index(probabilities)
+    # 使用智能选择函数：反填模式或随机模式
+    target_index = smart_select_option(current, option_texts, probabilities)
     selected_option = target_index + 1
     target_elem = option_elements[target_index] if target_index < len(option_elements) else None
     if not target_elem:
