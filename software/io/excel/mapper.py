@@ -193,7 +193,7 @@ class QuestionMatcher:
                     survey_index=matched.index,
                     survey_title=matched.title,
                     confidence=confidence,
-                    mode=mode,
+                    mode=mode or "by_title_fuzzy",
                 )
             )
 

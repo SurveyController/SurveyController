@@ -48,6 +48,8 @@ class ExcelWriter:
         # 创建工作簿
         wb = Workbook()
         ws = wb.active
+        if ws is None:
+            raise RuntimeError("无法创建工作表")
         ws.title = "未完成样本"
         
         # 获取列名（从第一个样本）
@@ -59,6 +61,9 @@ class ExcelWriter:
             col_names.append("状态")
         if include_error:
             col_names.append("错误信息")
+        
+        # 导入样式类
+        from openpyxl.styles import Font, PatternFill
         
         # 写入表头
         header_font = Font(bold=True)
@@ -96,7 +101,13 @@ class ExcelWriter:
         # 自动调整列宽
         for column in ws.columns:
             max_length = 0
-            column_letter = column[0].column_letter
+            # 获取列字母（跳过合并单元格）
+            first_cell = column[0]
+            if hasattr(first_cell, 'column_letter'):
+                column_letter = first_cell.column_letter
+            else:
+                continue
+            
             for cell in column:
                 try:
                     if cell.value:

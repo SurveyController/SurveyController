@@ -309,7 +309,7 @@ class ExecutionLoop:
                     except Exception:
                         logging.info("释放联合信效度样本槽位失败", exc_info=True)
                     # 反填模式：标记样本失败
-                    if self.config.backfill_enabled and current_sample:
+                    if self.config.backfill_enabled and current_sample and self.state.sample_dispatcher:
                         self.state.sample_dispatcher.mark_sample_failed(
                             current_sample.row_no,
                             "填写未完成",
@@ -325,7 +325,7 @@ class ExecutionLoop:
                 )
                 if outcome.status == "success":
                     # 反填模式：标记样本成功
-                    if self.config.backfill_enabled and current_sample:
+                    if self.config.backfill_enabled and current_sample and self.state.sample_dispatcher:
                         self.state.sample_dispatcher.mark_sample_success(current_sample.row_no)
                         logging.info(f"样本 {current_sample.row_no} 提交成功")
                     session.dispose()
@@ -337,7 +337,7 @@ class ExecutionLoop:
                     except Exception:
                         logging.info("释放联合信效度样本槽位失败", exc_info=True)
                     # 反填模式：标记样本失败
-                    if self.config.backfill_enabled and current_sample:
+                    if self.config.backfill_enabled and current_sample and self.state.sample_dispatcher:
                         self.state.sample_dispatcher.mark_sample_failed(
                             current_sample.row_no,
                             "提交中止",
@@ -346,7 +346,7 @@ class ExecutionLoop:
                     break
                 else:
                     # 反填模式：标记样本失败，允许重试
-                    if self.config.backfill_enabled and current_sample:
+                    if self.config.backfill_enabled and current_sample and self.state.sample_dispatcher:
                         self.state.sample_dispatcher.mark_sample_failed(
                             current_sample.row_no,
                             "提交失败",
@@ -358,7 +358,7 @@ class ExecutionLoop:
                 driver_had_error = True
                 logging.error("AI 填空失败，已停止任务：%s", exc, exc_info=True)
                 # 反填模式：标记样本失败
-                if self.config.backfill_enabled and current_sample:
+                if self.config.backfill_enabled and current_sample and self.state.sample_dispatcher:
                     self.state.sample_dispatcher.mark_sample_failed(
                         current_sample.row_no,
                         f"AI填空失败: {exc}",
@@ -375,7 +375,7 @@ class ExecutionLoop:
                 if session.proxy_address:
                     _discard_unresponsive_proxy(self.state, session.proxy_address)
                 # 反填模式：标记样本失败，允许重试
-                if self.config.backfill_enabled and current_sample:
+                if self.config.backfill_enabled and current_sample and self.state.sample_dispatcher:
                     self.state.sample_dispatcher.mark_sample_failed(
                         current_sample.row_no,
                         "代理连接失败",
@@ -403,7 +403,7 @@ class ExecutionLoop:
                     break
                 traceback.print_exc()
                 # 反填模式：标记样本失败，允许重试
-                if self.config.backfill_enabled and current_sample:
+                if self.config.backfill_enabled and current_sample and self.state.sample_dispatcher:
                     self.state.sample_dispatcher.mark_sample_failed(
                         current_sample.row_no,
                         "未知异常",
