@@ -12,6 +12,7 @@ software/io/excel/
 ├── mapper.py            # 题目映射器
 ├── normalizer.py        # 答案标准化器
 ├── validator.py         # 样本校验器
+├── writer.py            # Excel 文件写入器
 └── README.md            # 本文档
 ```
 
@@ -41,13 +42,18 @@ samples = reader.read("data.xlsx")
 1. **题号匹配**（置信度 1.0）：Q1、1、、1. 等
 2. **标题精确匹配**（置信度 0.98）：标准化后完全一致
 3. **模糊匹配**（置信度 ≥ 0.9）：相似度 ≥ 90%
-4. **否则报错**：不猜测，直接阻止执行
+4. **否则跳过或报错**：根据 `skip_unmatchable` 参数决定
 
 ```python
 from software.io.excel import QuestionMatcher
 
 matcher = QuestionMatcher(fuzzy_threshold=90.0)
+
+# 默认跳过无法匹配的列（推荐）
 plan = matcher.build_mapping(excel_columns, survey_schema)
+
+# 或者严格模式：无法匹配时报错
+plan = matcher.build_mapping(excel_columns, survey_schema, skip_unmatchable=False)
 
 # plan.items: list[MappingItem]
 # 每个 MappingItem 包含：
@@ -57,6 +63,14 @@ plan = matcher.build_mapping(excel_columns, survey_schema)
 # - confidence: 匹配置信度
 ```
 
+**自动跳过的列**：
+- 序号、编号、ID、No、Number
+- 时间、Time、日期、Date
+- 来源、Source、渠道、Channel
+- IP、地址、Address
+- 总分、得分、Score、Total
+- 状态、Status
+
 ### 3. AnswerNormalizer - 答案标准化
 
 按优先级标准化答案：
@@ -65,8 +79,10 @@ plan = matcher.build_mapping(excel_columns, survey_schema)
 2. **别名表匹配**（选项自定义别名）
 3. **全局别名映射**（内置常见别名）
 4. **量表数值映射**（7 级 / 5 级量表）
-5. **模糊匹配**（相似度 ≥ 90%）
-6. **否则报错**
+5. **子串匹配**（处理带分隔符的选项，如"A-选项A"）
+6. **前缀匹配**（处理被截断的选项，至少 5 个字符）
+7. **模糊匹配**（相似度 ≥ 90%）
+8. **否则报错**
 
 ```python
 from software.io.excel import AnswerNormalizer
@@ -76,10 +92,17 @@ answer = normalizer.normalize_answer(question, raw_value)
 
 # 支持的题型：
 # - single_choice: 单选题
-# - multi_choice: 多选题（逗号、分号、顿号分隔）
+# - multi_choice: 多选题（支持 ┋、;、；、,、，分隔）
 # - scale: 量表题
 # - text: 文本题
+# - order: 排序题（支持 →、> 分隔）
 ```
+
+**特殊格式处理**：
+- `"其他〖空〗"` → 提取 `"其他"`（处理填空题的空值）
+- `"A-选项A"` → 匹配 `"A"` 或 `"选项A"`（子串匹配）
+- `"非常同意！"` → 匹配 `"非常同意"`（模糊匹配）
+- `"非常"` → 匹配 `"非常同意"`（前缀匹配，至少 5 字符）
 
 #### 内置别名
 
@@ -136,6 +159,39 @@ summary = validator.get_validation_summary(samples)
 # }
 ```
 
+### 5. ExcelWriter - Excel 文件写入
+
+导出样本数据到 Excel 文件，支持导出未完成样本和解析失败样本。
+
+```python
+from software.io.excel.writer import ExcelWriter
+
+writer = ExcelWriter()
+
+# 方式 1：导出未完成样本（失败 + 待处理）
+output_path = writer.export_failed_samples(samples, "data.xlsx")
+# 输出：data_未完成.xlsx
+
+# 方式 2：导出解析失败样本（验证错误）
+output_path = writer.export_validation_failed_samples(samples, "data.xlsx")
+# 输出：data_解析失败.xlsx
+
+# 方式 3：自定义导出
+writer.write_samples(
+    samples,
+    "output.xlsx",
+    include_status=True,   # 包含状态列
+    include_error=True,    # 包含错误信息列
+)
+```
+
+**导出功能**：
+- 自动添加状态列（待处理、处理中、成功、失败）
+- 自动添加错误信息列
+- 根据状态设置单元格颜色（失败=红色、待处理=黄色）
+- 自动调整列宽
+- 支持断点续传（导出未完成样本后可重新导入）
+
 ## 数据结构
 
 ### SurveySchema - 问卷结构
@@ -178,7 +234,7 @@ sample = SampleRow(
 
 ## 使用示例
 
-完整工作流程：
+### 完整工作流程
 
 ```python
 from software.io.excel import (
@@ -187,6 +243,7 @@ from software.io.excel import (
     AnswerNormalizer,
     SampleValidator,
 )
+from software.io.excel.writer import ExcelWriter
 
 # 1. 读取 Excel
 reader = ExcelReader()
@@ -207,6 +264,26 @@ success_samples = [s for s in samples if s.status == "pending"]
 failed_samples = [s for s in samples if s.status == "failed"]
 
 print(f"成功: {len(success_samples)}, 失败: {len(failed_samples)}")
+
+# 5. 导出未完成样本（可选）
+if failed_samples:
+    writer = ExcelWriter()
+    output_path = writer.export_failed_samples(samples, "data.xlsx")
+    print(f"已导出未完成样本到: {output_path}")
+```
+
+### 断点续传示例
+
+```python
+# 第一次执行
+samples = reader.read("data.xlsx")
+# ... 处理部分样本 ...
+writer.export_failed_samples(samples, "data.xlsx")
+# 输出：data_未完成.xlsx
+
+# 第二次执行（使用未完成样本）
+samples = reader.read("data_未完成.xlsx")
+# ... 继续处理 ...
 ```
 
 ## 测试
