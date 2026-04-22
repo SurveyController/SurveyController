@@ -3,15 +3,12 @@
   <h1>SurveyController</h1>
   
   [![GitHub Stars](https://img.shields.io/github/stars/hungryM0/SurveyController?style=flat&logo=github&color=yellow)](https://github.com/hungryM0/SurveyController/stargazers)
-  [![GitHub Forks](https://img.shields.io/github/forks/hungryM0/SurveyController?style=flat&logo=github)](https://github.com/hungryM0/SurveyController/network/members)
   [![Contributors](https://img.shields.io/github/contributors/hungryM0/SurveyController?style=flat&logo=github)](https://github.com/hungryM0/SurveyController/graphs/contributors)
-  [![License](https://img.shields.io/github/license/hungryM0/SurveyController?style=flat&color=orange)](./LICENSE)
-  [![Issues](https://img.shields.io/github/issues/hungryM0/SurveyController?style=flat&logo=github)](https://github.com/hungryM0/SurveyController/issues)
-
-  
   [![GitHub Release](https://img.shields.io/github/v/release/hungryM0/SurveyController?style=flat&logo=github&color=blue)](https://github.com/hungryM0/SurveyController/releases/latest)
   [![Status](https://status.hungrym0.top/api/badge/12/status)](https://status.hungrym0.top/status/surveycontroller)
-  [![Downloads](https://img.shields.io/github/downloads/hungryM0/SurveyController/total?style=flat&logo=github&color=green)](https://github.com/hungryM0/SurveyController/releases)
+  [![Downloads](https://img.shields.io/github/downloads/hungryM0/SurveyController/total?style=flat&logo=github&color=green)]
+  [![License](https://img.shields.io/github/license/hungryM0/SurveyController?style=flat&color=orange)](./LICENSE)
+  [![Issues](https://img.shields.io/github/issues/hungryM0/SurveyController?style=flat&logo=github)](https://github.com/hungryM0/SurveyController/issues)
   [![Python](https://img.shields.io/badge/Python-3.11+-3776AB?style=flat&logo=python&logoColor=white)](https://www.python.org/)
 
   <p><strong>一站式问卷自动化处理程序，适配问卷星与腾讯问卷平台</strong></p>
