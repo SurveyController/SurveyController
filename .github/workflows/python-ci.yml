@@ -42,3 +42,7 @@ jobs:
       - name: Run main window smoke check
         if: ${{ github.event_name != 'push' }}
         run: python -m CI.python_checks.window_smoke_check
+
+      - name: Run live survey parser regression tests
+        if: ${{ github.event_name != 'push' }}
+        run: python -m unittest CI.test_live_survey_parsers -v

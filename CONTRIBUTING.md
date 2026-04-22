@@ -17,6 +17,7 @@
 - 从源码运行：`python SurveyController.py`。
 - Python CI 快检：`python CI/python_ci.py`（编译 + Ruff + Pyright）。
 - Python CI 全检：`python CI/python_ci.py --full`（在快检基础上再跑模块导入与主窗口冒烟）。
+- 真实问卷解析回归：`python -m unittest CI.test_live_survey_parsers -v`（读取 `configs/debug.json` 与 `configs/腾讯问卷.json` 的 URL，校验问卷星/腾讯解析结果）。
 
 ## 仓库根目录
 
@@ -41,6 +42,7 @@
 ├── rthook_pyside6.py     # PySide6 打包钩子
 ├── CI/                   # CI 与自动化辅助目录
 │   ├── python_ci.py      # Python CI 聚合入口；默认快检编译/Ruff/Pyright，`--full` 再补模块导入与主窗口冒烟
+│   ├── test_live_survey_parsers.py # 真实问卷链接解析回归测试；读取 configs/debug.json 与 configs/腾讯问卷.json 的 URL 校验问卷星/腾讯解析结果
 │   ├── __init__.py       # CI Python 包标记
 │   ├── python_checks/    # Python CI 拆分脚本目录；common.py 为共享能力，compile/ruff/pyright/import/window 脚本按职责独立执行
 │   └── worker/           # Cloudflare Worker 相关配置；wrangler.toml 指向 src/index.js 单入口，消息解析/Telegram/GitHub 拆到 src/request.js、src/telegram.js、src/github.js；不保留旧 worker.js 转发层
@@ -106,7 +108,7 @@ wjx/
    - **问卷星专属** → `wjx/provider/`（平台特定的解析、导航、提交和题型执行）
    - **腾讯问卷专属** → `tencent/provider/`（平台特定的解析、导航、提交和运行逻辑）
    - **顶层包** → 仅保留包标记文件，不要把实现代码再塞回 `tencent/`、`wjx/` 目录
-3. 自测：先运行 `python CI/python_ci.py` 做编译/Ruff/Pyright 快检；涉及导入链或窗口启动时再运行 `python CI/python_ci.py --full`；至少手动跑一次核心流程（启动APP、加载问卷、配置参数、开始执行），确保无报错
+3. 自测：先运行 `python CI/python_ci.py` 做编译/Ruff/Pyright 快检；涉及导入链或窗口启动时再运行 `python CI/python_ci.py --full`；涉及真实问卷解析变更时再运行 `python -m unittest CI.test_live_survey_parsers -v`；至少手动跑一次核心流程（启动APP、加载问卷、配置参数、开始执行），确保无报错
 4. 提交：保持清晰提交信息，必要时补充中文注释和变更说明
 5. PR 描述：写明变更目的、主要改动点、测试方式与结果，关联相关 Issue（如有）
 
