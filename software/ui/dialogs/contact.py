@@ -48,14 +48,24 @@ class ContactDialog(QDialog):
         QTimer.singleShot(2800, self.accept)
 
     def closeEvent(self, arg__1):
+        if self.form.has_pending_async_work():
+            self.form.show_pending_async_warning()
+            arg__1.ignore()
+            return
         self.form.stop_status_polling()
         super().closeEvent(arg__1)
 
     def reject(self):
+        if self.form.has_pending_async_work():
+            self.form.show_pending_async_warning()
+            return
         self.form.stop_status_polling()
         super().reject()
 
     def accept(self):
+        if self.form.has_pending_async_work():
+            self.form.show_pending_async_warning()
+            return
         self.form.stop_status_polling()
         super().accept()
 

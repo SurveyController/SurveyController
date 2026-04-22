@@ -74,12 +74,13 @@ class ContactForm(
         manage_polling: bool = True,
     ):
         super().__init__(parent)
-        self._sendFinished.connect(self._on_send_finished)
-        self._verifyCodeFinished.connect(self._on_verify_code_finished)
+        self._sendFinished.connect(self._on_send_finished, Qt.ConnectionType.QueuedConnection)
+        self._verifyCodeFinished.connect(self._on_verify_code_finished, Qt.ConnectionType.QueuedConnection)
         self._init_status_polling(status_endpoint, status_formatter)
         self._attachments = ImageAttachmentManager(max_count=3, max_size_bytes=10 * 1024 * 1024)
         self._current_message_type: str = ""
         self._current_has_email: bool = False
+        self._send_in_progress: bool = False
         self._verify_code_requested: bool = False
         self._verify_code_requested_email: str = ""
         self._verify_code_sending: bool = False
@@ -454,20 +455,16 @@ class ContactForm(
         super().hideEvent(event)
 
     def closeEvent(self, event):
-        """关闭事件：停止轮询、关闭所有 InfoBar 并断开信号"""
+        """关闭事件：停止轮询并清理界面状态。"""
+        if self.has_pending_async_work():
+            event.ignore()
+            self.show_pending_async_warning()
+            return
         self.stop_status_polling()
         self._stop_cooldown()
 
         # 关闭所有可能存在的 InfoBar，避免其内部线程导致崩溃
         self._close_all_infobars()
-
-        # 断开所有信号连接以避免回调析构警告
-        try:
-            self._sendFinished.disconnect()
-            self._verifyCodeFinished.disconnect()
-            self._statusLoaded.disconnect()
-        except Exception as exc:
-            log_suppressed_exception("closeEvent: disconnect signals", exc, level=logging.WARNING)
         super().closeEvent(event)
 
     def __del__(self):
@@ -492,6 +489,18 @@ class ContactForm(
             log_suppressed_exception("_close_all_infobars", exc, level=logging.WARNING)
         finally:
             self.amount_rule_hint.hide()
+
+    def has_pending_async_work(self) -> bool:
+        return bool(self._send_in_progress or self._verify_code_sending)
+
+    def show_pending_async_warning(self) -> None:
+        if self._send_in_progress:
+            message = "正在发送反馈，请等待完成后再关闭"
+        elif self._verify_code_sending:
+            message = "正在发送验证码，请等待完成后再关闭"
+        else:
+            return
+        InfoBar.warning("", message, parent=self, position=InfoBarPosition.TOP, duration=2500)
 
     def refresh_random_ip_user_id_hint(self) -> None:
         """刷新消息框下方的随机IP账号提示。"""

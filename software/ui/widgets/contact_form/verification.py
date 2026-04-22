@@ -4,7 +4,7 @@ from __future__ import annotations
 import threading
 from typing import TYPE_CHECKING, Any, cast
 
-from PySide6.QtCore import QObject, QTimer
+from PySide6.QtCore import QObject, QTimer, Slot
 from qfluentwidgets import InfoBar, InfoBarPosition
 
 from software.app.config import EMAIL_VERIFY_ENDPOINT
@@ -104,6 +104,7 @@ class ContactFormVerificationMixin:
                 self._verifyCodeFinished.emit(False, f"发送失败：{exc}", email)
 
         threading.Thread(target=_send_verify, daemon=True).start()
+    @Slot(bool, str, str)
     def _on_verify_code_finished(self, success: bool, error_msg: str, email: str):
         self._set_verify_code_sending(False)
 

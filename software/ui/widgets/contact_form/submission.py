@@ -10,7 +10,7 @@ from datetime import datetime
 from decimal import Decimal
 from typing import TYPE_CHECKING, Any, Optional, cast
 
-from PySide6.QtCore import QTimer
+from PySide6.QtCore import QTimer, Slot
 from PySide6.QtWidgets import QWidget
 from qfluentwidgets import InfoBar, InfoBarPosition, MessageBox
 
@@ -97,6 +97,7 @@ class ContactFormSubmissionMixin:
         _random_ip_user_id: int
         _current_has_email: bool
         _current_message_type: str
+        _send_in_progress: bool
         _verify_code_requested: bool
         _verify_code_requested_email: str
         _auto_clear_on_success: bool
@@ -134,6 +135,16 @@ class ContactFormSubmissionMixin:
         with open(path, "rb") as file:
             return file.read()
 
+    @staticmethod
+    def _remove_temp_file(path: str) -> None:
+        if not path:
+            return
+        try:
+            if os.path.exists(path):
+                os.remove(path)
+        except Exception as exc:
+            log_suppressed_exception(f"_remove_temp_file: {path}", exc, level=logging.WARNING)
+
     def _export_bug_report_config_snapshot(self) -> tuple[str, tuple[str, bytes, str]]:
         provider = getattr(self, "_config_snapshot_provider", None)
         if not callable(provider):
@@ -148,17 +159,23 @@ class ContactFormSubmissionMixin:
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         file_name = f"bug_report_config_{timestamp}.json"
         path = os.path.join(tempfile.gettempdir(), file_name)
-        save_config(config_snapshot, path)
-        self._pending_temp_attachment_paths.append(path)
-        return "配置快照", (file_name, self._read_file_bytes(path), "application/json")
+        try:
+            save_config(config_snapshot, path)
+            data = self._read_file_bytes(path)
+        finally:
+            self._remove_temp_file(path)
+        return "配置快照", (file_name, data, "application/json")
 
     def _export_bug_report_log_snapshot(self) -> tuple[str, tuple[str, bytes, str]]:
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         file_name = f"bug_report_log_{timestamp}.txt"
         path = os.path.join(tempfile.gettempdir(), file_name)
-        save_log_records_to_file(LOG_BUFFER_HANDLER.get_records(), get_runtime_directory(), path)
-        self._pending_temp_attachment_paths.append(path)
-        return "日志快照", (file_name, self._read_file_bytes(path), "text/plain")
+        try:
+            save_log_records_to_file(LOG_BUFFER_HANDLER.get_records(), get_runtime_directory(), path)
+            data = self._read_file_bytes(path)
+        finally:
+            self._remove_temp_file(path)
+        return "日志快照", (file_name, data, "text/plain")
 
     @staticmethod
     def _fatal_crash_log_payload() -> Optional[tuple[str, tuple[str, bytes, str]]]:
@@ -357,6 +374,7 @@ class ContactFormSubmissionMixin:
         self.send_btn.setEnabled(False)
         self.send_btn.setText("发送中...")
         self.send_spinner.show()
+        self._send_in_progress = True
         self._update_send_button_state()
 
         self._current_message_type = mtype
@@ -377,8 +395,6 @@ class ContactFormSubmissionMixin:
                     self._sendFinished.emit(False, f"发送失败：{resp.status_code}")
             except Exception as exc:
                 self._sendFinished.emit(False, f"发送失败：{exc}")
-            finally:
-                self._cleanup_pending_temp_files()
 
         threading.Thread(target=_send, daemon=True).start()
     def _clear_email_selection(self):
@@ -393,8 +409,10 @@ class ContactFormSubmissionMixin:
             self.send_btn.setFocus()
         except (RuntimeError, AttributeError) as exc:
             log_suppressed_exception("_focus_send_button: self.send_btn.setFocus()", exc, level=logging.WARNING)
+    @Slot(bool, str)
     def _on_send_finished(self, success: bool, error_msg: str):
         """发送完成回调（在主线程执行）"""
+        self._send_in_progress = False
         self.send_spinner.hide()
         self.send_btn.setText("发送")
         self._update_send_button_state()
