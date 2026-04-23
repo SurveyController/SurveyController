@@ -185,7 +185,7 @@ def _trigger_aliyun_captcha_stop(
             if is_enabled:
                 message = (
                     "检测到问卷星阿里云智能验证，为避免继续失败提交已停止所有任务。\n\n"
-                    "随机 IP 已启用，建议处理完验证后重新启动任务。"
+                    "请尝试重新启动任务。"
                 )
                 if gui_instance:
                     gui_instance.show_message_dialog("智能验证提示", message, level="warning")
@@ -197,7 +197,7 @@ def _trigger_aliyun_captcha_stop(
             if custom_api:
                 message = (
                     "检测到问卷星阿里云智能验证，为避免继续失败提交已停止所有任务。\n\n"
-                    "你当前使用的是自定义代理接口，请处理完验证后重新启动任务。"
+                    "你当前使用的是自定义代理接口，请自行排查解决后重新启动任务。"
                 )
                 if gui_instance:
                     gui_instance.show_message_dialog("智能验证提示", message, level="warning")
@@ -227,7 +227,7 @@ def _trigger_aliyun_captcha_stop(
             if quota_exceeded:
                 message = (
                     "检测到问卷星阿里云智能验证，为避免继续失败提交已停止所有任务。\n\n"
-                    "建议启用随机 IP，但当前随机 IP 已用额度达到上限。\n"
+                    "启用随机 IP 可以解决该问题，但当前使用额度达到上限。\n"
                     "请先补充额度后再启用随机 IP。"
                 )
                 if gui_instance:
@@ -238,7 +238,7 @@ def _trigger_aliyun_captcha_stop(
 
             message = (
                 "检测到问卷星阿里云智能验证，为避免继续失败提交已停止所有任务。\n\n"
-                "建议启用随机 IP 后重新启动任务。\n"
+                "启用随机 IP 能够解决这个问题。\n"
                 "是否立即启用随机 IP 功能？"
             )
             if gui_instance:

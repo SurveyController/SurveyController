@@ -14,6 +14,11 @@ class AIRuntimeError(RuntimeError):
     """AI 填空运行时错误（需要终止任务）。"""
 
 
+def is_free_ai_runtime_error(error: object) -> bool:
+    text = str(error or "").strip()
+    return "免费 AI" in text or "免费AI" in text
+
+
 
 
 def _normalize_text(value: Optional[str]) -> str:

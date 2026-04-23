@@ -27,6 +27,7 @@ class RunControllerRuntimeMixin(
         pauseStateChanged: Any
         cleanupFinished: Any
         quickBugReportSuggested: Any
+        freeAiUnstableSuggested: Any
         _status_timer: QTimer
         _cleanup_runner: CleanupRunner
         quota_request_form_opener: Optional[Callable[[], bool]]
@@ -34,6 +35,8 @@ class RunControllerRuntimeMixin(
         on_random_ip_loading: Optional[Callable[[bool, str], None]]
         message_dialog_handler: Optional[Callable[[str, str, str], None]]
         confirm_dialog_handler: Optional[Callable[[str, str], bool]]
+        custom_confirm_dialog_handler: Optional[Callable[[str, str, str, str], bool]]
+        startupHintEmitted: Any
 
         def _dispatch_to_ui_async(self, callback: Callable[[], Any]) -> None: ...
         def parent(self) -> QObject: ...

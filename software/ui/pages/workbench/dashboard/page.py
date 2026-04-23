@@ -86,6 +86,7 @@ class DashboardPage(
     """主页：左侧配置 + 底部状态，不再包含日志。"""
 
     _ipBalanceChecked = Signal(float)  # 发送剩余IP数信号
+    _randomIpHeartbeatUpdated = Signal(object)  # 发送随机IP服务状态信号
 
     def __init__(
         self,
@@ -119,6 +120,8 @@ class DashboardPage(
         self._ip_balance_fetching = False
         self._last_ip_balance_fetch_ts = 0.0
         self._ip_balance_fetch_interval_sec = 30.0
+        self._random_ip_status_fetch_lock = threading.Lock()
+        self._random_ip_status_fetching = False
         self._clipboard_parse_ticket = 0
         self._init_progress_state()
         self._build_ui()
@@ -127,6 +130,7 @@ class DashboardPage(
         self._apply_runtime_ui_state(self.controller.get_runtime_ui_state())
         self._sync_start_button_state()
         self._refresh_ip_cost_infobar()
+        self._init_random_ip_status_refresh()
 
     def _build_ui(self):
         outer = QVBoxLayout(self)
@@ -283,9 +287,22 @@ class DashboardPage(
         self.random_ip_quota_card.setMinimumWidth(248)
         quota_layout = QVBoxLayout(self.random_ip_quota_card)
         quota_layout.setContentsMargins(18, 14, 18, 14)
-        quota_layout.setSpacing(10)
+        quota_layout.setSpacing(8)
         quota_layout.setAlignment(Qt.AlignmentFlag.AlignTop)
-        quota_layout.addWidget(BodyLabel("随机IP额度", self.random_ip_quota_card), 0, Qt.AlignmentFlag.AlignHCenter)
+        quota_title_label = BodyLabel("随机IP额度", self.random_ip_quota_card)
+        quota_layout.addWidget(quota_title_label, 0, Qt.AlignmentFlag.AlignHCenter)
+
+        self.random_ip_status_row = QWidget(self.random_ip_quota_card)
+        random_ip_status_layout = QHBoxLayout(self.random_ip_status_row)
+        random_ip_status_layout.setContentsMargins(0, 0, 0, 0)
+        random_ip_status_layout.setSpacing(6)
+        self.random_ip_status_dot = QWidget(self.random_ip_status_row)
+        self.random_ip_status_dot.setFixedSize(10, 10)
+        self.random_ip_status_label = BodyLabel("服务状态检查中", self.random_ip_status_row)
+        self.random_ip_status_label.setStyleSheet("color: #6b6b6b; font-size: 12px;")
+        random_ip_status_layout.addWidget(self.random_ip_status_dot, 0, Qt.AlignmentFlag.AlignVCenter)
+        random_ip_status_layout.addWidget(self.random_ip_status_label, 0, Qt.AlignmentFlag.AlignVCenter)
+        quota_layout.addWidget(self.random_ip_status_row, 0, Qt.AlignmentFlag.AlignHCenter)
 
         self.random_ip_usage_ring = ProgressRing(self.random_ip_quota_card)
         self.random_ip_usage_ring.setRange(0, 100)
@@ -519,6 +536,7 @@ class DashboardPage(
             self.strategy_page.strategyChanged.connect(self._on_strategy_page_changed)
         except Exception as exc:
             log_suppressed_exception("_bind_events: self.strategy_page.strategyChanged.connect(self._on_strategy_page_changed)", exc, level=logging.WARNING)
+        self._randomIpHeartbeatUpdated.connect(self._apply_random_ip_heartbeat_status)
 
     def resizeEvent(self, event):
         super().resizeEvent(event)

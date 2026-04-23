@@ -45,6 +45,7 @@
 │   ├── unit_tests/
 │   │   ├── __init__.py
 │   │   ├── engine/
+│   │   │   └── test_runtime_init_gate.py
 │   │   └── psychometrics/
 │   └── worker/
 │       ├── wrangler.toml
@@ -62,6 +63,7 @@
 │   ├── __init__.py
 │   ├── app/
 │   │   ├── __init__.py
+│   │   ├── browser_probe.py
 │   │   ├── config.py
 │   │   ├── main.py
 │   │   ├── runtime_paths.py
@@ -167,8 +169,12 @@
    - 共享代码进入 `software/`。
    - 平台专属逻辑进入对应的 `provider/` 子目录。
    - 保持顶层包（`wjx/`、`tencent/`）简洁，仅保留包标记。
-3. **自测**：建议至少手动跑一次核心流程。
-4. **提交**：PR 描述请写明改动目的、测试结果，如果有的话关联相关 Issue。
+3. **自测**：
+   - 先运行 `python CI/python_ci.py` 做快检，覆盖编译、Ruff、Pyright 和离线单测。
+   - 涉及导入链、主窗口启动链或打包前回归时，再运行 `python CI/python_ci.py --full` 做模块导入和主窗口冒烟全检。
+   - 涉及真实问卷解析逻辑时，再运行 `python -m unittest CI.live_tests.test_survey_parsers -v`。
+   - 最少手动跑一次受影响的核心流程，并在 PR 里写清楚结果。
+4. **提交**：PR 描述请写明改动目的、测试结果，如果有的话关联相关 Issue；如果碰到初始化门禁相关改动，请说明是否影响浏览器快检子进程与启动提示。
 
 ## 开发规范
 - **模块化**：按职责拆分文件，避免“巨型文件”；新功能应放入对应的子目录。

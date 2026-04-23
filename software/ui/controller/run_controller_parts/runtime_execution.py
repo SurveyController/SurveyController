@@ -31,11 +31,13 @@ class RunControllerExecutionMixin:
         pauseStateChanged: Any
         cleanupFinished: Any
         quickBugReportSuggested: Any
+        freeAiUnstableSuggested: Any
         quota_request_form_opener: Optional[Callable[[], bool]]
         on_ip_counter: Optional[Callable[[float, float, bool], None]]
         on_random_ip_loading: Optional[Callable[[bool, str], None]]
         message_dialog_handler: Optional[Callable[[str, str, str], None]]
         confirm_dialog_handler: Optional[Callable[[str, str], bool]]
+        custom_confirm_dialog_handler: Optional[Callable[[str, str, str, str], bool]]
         stop_event: threading.Event
         worker_threads: List[threading.Thread]
         adapter: Any
@@ -60,6 +62,7 @@ class RunControllerExecutionMixin:
         _execution_state: Optional[ExecutionState]
         _quick_feedback_prompt_emitted: bool
         _sleep_blocker: Any
+        _startup_service_warnings: List[str]
         survey_provider: str
         question_entries: List[Any]
         questions_info: List[Dict[str, Any]]
@@ -72,6 +75,7 @@ class RunControllerExecutionMixin:
         def toggle_random_ip(self, enabled: bool, *, adapter: Optional[Any] = None) -> bool: ...
         def handle_random_ip_submission(self, *, stop_signal: Optional[threading.Event], adapter: Optional[Any] = None) -> None: ...
         def _start_with_initialization_gate(self, config: RuntimeConfig, proxy_pool: List[ProxyLease]) -> None: ...
+        def _start_startup_status_check(self, config: RuntimeConfig) -> None: ...
         def _prepare_engine_state(self, config: RuntimeConfig, proxy_pool: List[ProxyLease]) -> tuple[ExecutionConfig, ExecutionState]: ...
         def _apply_pending_execution_config(self, config: ExecutionConfig, *, consume: bool) -> None: ...
         def _reset_initialization_state(self) -> None: ...
@@ -196,6 +200,7 @@ class RunControllerExecutionMixin:
         self._init_gate_stop_event = None
         self._probe_hit_device_quota = False
         self._probe_failure_message = ""
+        self._startup_service_warnings = []
         _ad = config.answer_duration or (0, 0)
         proxy_answer_duration: Tuple[int, int] = (0, 0) if config.timed_mode_enabled else (int(_ad[0]), int(_ad[1]))
         try:
@@ -225,6 +230,7 @@ class RunControllerExecutionMixin:
                 if q_num:
                     pending_config.questions_metadata[q_num] = q_info
         self._pending_execution_config = pending_config
+        self._start_startup_status_check(config)
 
         self._start_with_initialization_gate(config, [])
     def _start_workers_with_proxy_pool(
@@ -435,6 +441,10 @@ class RunControllerExecutionMixin:
         category = str(category or "").strip()
         failure_reason = str(failure_reason or "").strip()
         if not category:
+            return
+        if category == "free_ai_unstable":
+            self._quick_feedback_prompt_emitted = True
+            self.freeAiUnstableSuggested.emit()
             return
         if category in {"target_reached", "user_stopped", "submission_verification"}:
             return

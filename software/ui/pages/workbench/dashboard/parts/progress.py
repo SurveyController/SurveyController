@@ -418,18 +418,8 @@ class DashboardProgressMixin:
             self._set_main_progress_indeterminate(True)
             if self._thread_progress_rows:
                 self._clear_thread_progress_rows()
-            init_logs = payload.get("initialization_logs")
-            lines = []
-            if isinstance(init_logs, list):
-                for item in init_logs:
-                    text = str(item or "").strip()
-                    if text:
-                        lines.append(text)
             self.thread_progress_hint.show()
-            if lines:
-                self.thread_progress_hint.setText("\n".join(lines))
-            else:
-                self.thread_progress_hint.setText(str(payload.get("initializing_text") or "正在初始化..."))
+            self.thread_progress_hint.setText("线程进度会在任务开始后显示")
             return
 
         self._set_main_progress_indeterminate(False)
@@ -448,6 +438,8 @@ class DashboardProgressMixin:
             return
 
         self.thread_progress_hint.hide()
+        if running_now and getattr(self, "_thread_view_current", self.THREAD_VIEW_QUESTION_LIST) != self.THREAD_VIEW_PROGRESS:
+            self._set_thread_view(self.THREAD_VIEW_PROGRESS)
         target = max(0, int(payload.get("target") or 0))
         num_threads = max(1, int(payload.get("num_threads") or 1))
         per_thread_target = max(0, int(payload.get("per_thread_target") or 0))
@@ -523,14 +515,13 @@ class DashboardProgressMixin:
             self._last_device_quota_fail_count = 0
             self._apply_progress_visual_state(False)
             if self._controller_initializing():
-                self.thread_progress_hint.setText("正在初始化...")
                 self.status_label.setText("正在初始化")
                 self._set_main_progress_indeterminate(True)
                 self.progress_pct.setText("...")
             else:
                 self.thread_progress_hint.setText("正在准备线程进度...")
                 self._set_main_progress_indeterminate(False)
-            self._set_thread_view(self.THREAD_VIEW_PROGRESS)
+                self._set_thread_view(self.THREAD_VIEW_PROGRESS)
             self._completion_notified = False
             self.start_btn.setText("执行中...")
             self.start_btn.setEnabled(False)

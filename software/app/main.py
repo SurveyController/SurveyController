@@ -68,6 +68,13 @@ def _qt_message_handler(mode, context, message):
 
 
 def main():
+    if len(sys.argv) >= 2 and sys.argv[1] == "--sc-browser-probe":
+        from software.app.browser_probe import run_browser_probe_cli_from_argv
+
+        special_exit_code = run_browser_probe_cli_from_argv(sys.argv[1:])
+        if special_exit_code is not None:
+            sys.exit(int(special_exit_code))
+
     _enable_fault_handler()
     setup_logging()
 

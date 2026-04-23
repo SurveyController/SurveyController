@@ -10,7 +10,7 @@ from typing import Any
 
 import software.core.modes.timed_mode as timed_mode
 from software.app.config import BROWSER_PREFERENCE
-from software.core.ai.runtime import AIRuntimeError
+from software.core.ai.runtime import AIRuntimeError, is_free_ai_runtime_error
 from software.core.engine.browser_session_service import BrowserSessionService
 from software.core.engine.failure_reason import FailureReason
 from software.core.engine.provider_common import ensure_joint_psychometric_answer_plan
@@ -256,10 +256,12 @@ class ExecutionLoop:
             except AIRuntimeError as exc:
                 driver_had_error = True
                 logging.error("AI 填空失败，已停止任务：%s", exc, exc_info=True)
+                stop_category = "free_ai_unstable" if is_free_ai_runtime_error(exc) else "ai_runtime"
+                stop_message = "目前免费AI不稳定，请稍后再试" if stop_category == "free_ai_unstable" else str(exc)
                 self.state.mark_terminal_stop(
-                    "ai_runtime",
+                    stop_category,
                     failure_reason=FailureReason.FILL_FAILED.value,
-                    message=str(exc),
+                    message=stop_message,
                 )
                 if not stop_signal.is_set():
                     stop_signal.set()

@@ -163,6 +163,7 @@ class MainWindow(
             on_ip_counter=self._on_random_ip_counter_update,
             message_handler=self._show_dialog_message,
             confirm_handler=self.show_confirm_dialog,
+            custom_confirm_handler=self.show_custom_confirm_dialog_ui,
         )
         self._refresh_title_random_ip_user_id()
         self._register_popups()
@@ -476,6 +477,9 @@ class MainWindow(
         if confirmed:
             self._open_contact_dialog(default_type="报错反馈", lock_message_type=True)
 
+    def _notify_free_ai_unstable(self) -> None:
+        self._toast("目前免费AI不稳定，请稍后再试", "warning", duration=3500)
+
     def _center_on_screen(self):
         """窗口居中显示，适配多显示器与缩放。"""
         try:
@@ -525,6 +529,11 @@ class MainWindow(
         self.controller.pauseStateChanged.connect(self.dashboard.on_pause_state_changed)
         self.controller.cleanupFinished.connect(self.dashboard.on_cleanup_finished)
         self.controller.quickBugReportSuggested.connect(self._prompt_quick_bug_report)
+        self.controller.freeAiUnstableSuggested.connect(self._notify_free_ai_unstable)
+        self.controller.startupHintEmitted.connect(
+            lambda message, level, duration: self._toast(str(message), str(level), int(duration)),
+            Qt.ConnectionType.QueuedConnection,
+        )
         self.controller.on_ip_counter = self._on_random_ip_counter_update
 
     def _register_popups(self):

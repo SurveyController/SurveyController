@@ -1,4 +1,4 @@
-"""RunController 初始化闸门与预探测逻辑。"""
+"""RunController 轻量初始化门禁与启动提示逻辑。"""
 from __future__ import annotations
 
 import copy
@@ -6,22 +6,72 @@ import logging
 import threading
 from typing import TYPE_CHECKING, Any, Dict, List, Optional
 
-from software.core.engine.runner import run
+from software.app.browser_probe import BrowserProbeResult, run_browser_probe_subprocess
+from software.app.config import DEFAULT_HTTP_HEADERS
 from software.core.psychometrics.psychometric import normalize_target_alpha
 from software.core.task import ExecutionConfig, ExecutionState, ProxyLease
+from software.integrations.ai.client import AI_MODE_FREE, get_ai_settings
 from software.io.config import RuntimeConfig
-from software.network.proxy import get_effective_proxy_api_url, is_custom_proxy_api_active
-from software.network.proxy.session import (
-    RandomIPAuthError,
-    format_random_ip_error,
-    get_fresh_quota_snapshot,
-    get_session_snapshot,
-    has_authenticated_session,
-    has_unknown_local_quota,
-    is_quota_exhausted,
+import software.network.http as http_client
+
+from .runtime_constants import (
+    BROWSER_PROBE_TIMEOUT_SECONDS,
+    STARTUP_HINT_DURATION_MS,
+    STARTUP_STATUS_TIMEOUT_SECONDS,
+    STATUS_MONITOR_FREE_AI,
+    STATUS_MONITOR_RANDOM_IP,
+    STATUS_PAGE_BASE_URL,
+    STATUS_PAGE_SLUG,
 )
 
-from .runtime_constants import DEVICE_QUOTA_LIMIT_MESSAGE, NON_HEADLESS_FALLBACK_MAX_THREADS
+
+def _parse_status_page_monitor_names(payload: Dict[str, Any]) -> Dict[int, str]:
+    names: Dict[int, str] = {}
+    for group in list(payload.get("publicGroupList") or []):
+        monitor_list = group.get("monitorList") or []
+        if not isinstance(monitor_list, list):
+            continue
+        for monitor in monitor_list:
+            try:
+                monitor_id = int(monitor.get("id"))
+            except Exception:
+                continue
+            monitor_name = str(monitor.get("name") or "").strip()
+            if monitor_name:
+                names[monitor_id] = monitor_name
+    return names
+
+
+def _extract_startup_service_warnings(
+    heartbeat_payload: Dict[str, Any],
+    monitor_targets: Dict[int, str],
+    monitor_names: Optional[Dict[int, str]] = None,
+) -> List[str]:
+    warnings: List[str] = []
+    heartbeat_map = heartbeat_payload.get("heartbeatList") or {}
+    names = dict(monitor_names or {})
+
+    for monitor_id, fallback_name in monitor_targets.items():
+        heartbeat_list = heartbeat_map.get(str(monitor_id)) or heartbeat_map.get(monitor_id) or []
+        latest = heartbeat_list[-1] if isinstance(heartbeat_list, list) and heartbeat_list else {}
+        try:
+            raw_status = latest.get("status")
+            status = int(0 if raw_status is None else raw_status)
+        except Exception:
+            status = 0
+        if status == 1:
+            continue
+        service_name = str(names.get(int(monitor_id)) or fallback_name or f"服务 {monitor_id}").strip()
+        detail = str(latest.get("msg") or "").strip()
+        time_text = str(latest.get("time") or "").strip()
+        suffix_parts: List[str] = []
+        if detail:
+            suffix_parts.append(detail)
+        if time_text:
+            suffix_parts.append(f"最近时间：{time_text}")
+        suffix = f"（{'；'.join(suffix_parts)}）" if suffix_parts else ""
+        warnings.append(f"{service_name} 当前状态异常{suffix}")
+    return warnings
 
 
 class RunControllerInitializationMixin:
@@ -36,19 +86,23 @@ class RunControllerInitializationMixin:
         _status_timer: Any
         _execution_state: Optional[ExecutionState]
         _pending_execution_config: Optional[ExecutionConfig]
-        _probe_hit_device_quota: bool
-        _probe_failure_message: str
         _init_stage_text: str
         _init_steps: List[Dict[str, str]]
         _init_completed_steps: set[str]
         _init_current_step_key: str
         _init_gate_stop_event: Optional[threading.Event]
         _init_gate_thread: Optional[threading.Thread]
+        _startup_status_check_lock: threading.Lock
+        _startup_status_check_active: bool
+        _startup_service_warnings: List[str]
         survey_title: str
+        custom_confirm_dialog_handler: Optional[Any]
+        confirm_dialog_handler: Optional[Any]
         runStateChanged: Any
         statusUpdated: Any
         threadProgressUpdated: Any
         runFailed: Any
+        startupHintEmitted: Any
 
         def _start_workers_with_proxy_pool(
             self,
@@ -59,10 +113,6 @@ class RunControllerInitializationMixin:
         ) -> None: ...
         def _emit_status(self) -> None: ...
         def _dispatch_to_ui_async(self, callback: Any) -> None: ...
-        def _validate_benefit_proxy_compatibility(self, config: RuntimeConfig) -> None: ...
-        def refresh_random_ip_counter(self, *, adapter: Optional[Any] = None, async_mode: bool = True) -> None: ...
-        def _create_adapter(self, stop_signal: threading.Event, *, random_ip_enabled: bool = False) -> Any: ...
-        def set_runtime_ui_state(self, emit: bool = True, **updates: Any) -> Dict[str, Any]: ...
 
     def _prepare_engine_state(self, config: RuntimeConfig, proxy_pool: List[ProxyLease]) -> tuple[ExecutionConfig, ExecutionState]:
         """构建本次任务的 ExecutionConfig 与 ExecutionState。"""
@@ -99,6 +149,7 @@ class RunControllerInitializationMixin:
         )
         execution_state = ExecutionState(config=execution_config, stop_event=self.stop_event)
         return execution_config, execution_state
+
     def _apply_pending_execution_config(self, config: ExecutionConfig, *, consume: bool) -> None:
         pending = self._pending_execution_config
         if pending is None:
@@ -129,21 +180,17 @@ class RunControllerInitializationMixin:
         config.survey_provider = str(getattr(pending, "survey_provider", getattr(config, "survey_provider", "wjx")) or "wjx")
         if consume:
             self._pending_execution_config = None
+
     def _should_use_initialization_gate(self, config: RuntimeConfig) -> bool:
         headless_mode = bool(getattr(config, "headless_mode", False))
         thread_count = max(1, int(getattr(config, "threads", 1) or 1))
         return headless_mode and thread_count > 1
+
     def _build_initialization_plan(self, config: RuntimeConfig) -> List[Dict[str, str]]:
-        steps: List[Dict[str, str]] = [
-            {"key": "question_detection", "label": "初始化题目检测模块"},
-            {"key": "answering", "label": "初始化答题模块"},
-        ]
-        if bool(getattr(config, "random_ip_enabled", False)):
-            steps.append({"key": "random_ip", "label": "初始化随机IP模块"})
-        if self._should_use_initialization_gate(config):
-            steps.append({"key": "playwright", "label": "初始化Playwright浏览器环境"})
-        steps.append({"key": "submission", "label": "初始化提交行为模块"})
-        return steps
+        if not self._should_use_initialization_gate(config):
+            return []
+        return [{"key": "playwright", "label": "初始化浏览器环境（快速检查）"}]
+
     def _find_init_step_label(self, step_key: str) -> str:
         key = str(step_key or "").strip()
         if not key:
@@ -152,16 +199,13 @@ class RunControllerInitializationMixin:
             if str(item.get("key") or "") == key:
                 return str(item.get("label") or "")
         return ""
+
     def _setup_initialization_progress(self, config: RuntimeConfig) -> None:
         self._init_steps = self._build_initialization_plan(config)
-        self._init_completed_steps = {"question_detection", "answering"}
+        self._init_completed_steps = set()
         self._init_current_step_key = ""
-        if bool(getattr(config, "random_ip_enabled", False)):
-            self._set_initialization_stage("random_ip", "初始化随机IP模块")
-        elif self._should_use_initialization_gate(config):
-            self._set_initialization_stage("playwright", "初始化Playwright浏览器环境")
-        else:
-            self._set_initialization_stage("submission", "初始化提交行为模块")
+        self._set_initialization_stage("playwright", "初始化浏览器环境（快速检查）")
+
     def _set_initialization_stage(self, step_key: str, stage_text: str = "") -> None:
         key = str(step_key or "").strip()
         prev = str(getattr(self, "_init_current_step_key", "") or "")
@@ -174,6 +218,7 @@ class RunControllerInitializationMixin:
         self._init_current_step_key = key
         label = self._find_init_step_label(key)
         self._init_stage_text = str(stage_text or label or "正在初始化")
+
     def _build_initialization_logs(self) -> List[str]:
         steps = list(getattr(self, "_init_steps", []) or [])
         if not steps:
@@ -192,49 +237,96 @@ class RunControllerInitializationMixin:
                 lines.append(f"[√] {label}")
             elif key and key == current:
                 lines.append(f"[>] {label}")
-            else:
-                lines.append(f"[ ] {label}")
         return lines
-    def _clone_runtime_config_for_gate(self, config: RuntimeConfig) -> RuntimeConfig:
-        """为初始化门禁创建轻量配置副本，避免深拷贝 UI 对象。"""
+
+    def _start_startup_status_check(self, config: RuntimeConfig) -> None:
+        monitor_targets = self._resolve_startup_status_targets(config)
+        with self._startup_status_check_lock:
+            self._startup_service_warnings = []
+            if not monitor_targets:
+                self._startup_status_check_active = False
+                return
+            if self._startup_status_check_active:
+                return
+            self._startup_status_check_active = True
+
+        threading.Thread(
+            target=self._run_startup_status_check,
+            args=(monitor_targets,),
+            daemon=True,
+            name="StartupStatusHint",
+        ).start()
+
+    def _resolve_startup_status_targets(self, config: RuntimeConfig) -> Dict[int, str]:
+        targets: Dict[int, str] = {}
+        if bool(getattr(config, "random_ip_enabled", False)):
+            targets[STATUS_MONITOR_RANDOM_IP] = "随机IP提取"
         try:
-            return copy.copy(config)
+            ai_mode = str(get_ai_settings().get("ai_mode") or "").strip().lower()
         except Exception:
-            cloned = RuntimeConfig()
-            cloned.__dict__.update(dict(getattr(config, "__dict__", {})))
-            return cloned
-    def _resolve_random_ip_proxy_target_count(self, config: RuntimeConfig) -> int:
-        threads = max(1, int(getattr(config, "threads", 1) or 1))
-        target = max(1, int(getattr(config, "target", 1) or 1))
-        return min(threads, target)
-    def _resolve_random_ip_init_prefetch_count(self, config: RuntimeConfig) -> int:
-        if self._should_use_initialization_gate(config):
-            return 1
-        return self._resolve_random_ip_proxy_target_count(config)
-    def _resolve_proxy_api_url_for_config(self, config: RuntimeConfig) -> str:
-        proxy_source = str(getattr(config, "proxy_source", "default") or "default")
-        custom_proxy_api = str(getattr(config, "custom_proxy_api", "") or "").strip()
-        return custom_proxy_api if (proxy_source == "custom" and custom_proxy_api) else get_effective_proxy_api_url()
-    def _consume_probe_failure_message(self) -> str:
-        message = str(getattr(self, "_probe_failure_message", "") or "").strip()
-        self._probe_failure_message = ""
-        return message
+            ai_mode = ""
+        if ai_mode == AI_MODE_FREE:
+            targets[STATUS_MONITOR_FREE_AI] = "免费AI填空"
+        return targets
+
+    def _run_startup_status_check(self, monitor_targets: Dict[int, str]) -> None:
+        warnings: List[str] = []
+        try:
+            warnings = self._fetch_startup_service_warnings(monitor_targets)
+        except Exception:
+            logging.info("启动服务提示检查失败，已忽略", exc_info=True)
+        finally:
+            with self._startup_status_check_lock:
+                self._startup_service_warnings = list(warnings)
+                self._startup_status_check_active = False
+
+        for warning in warnings:
+            self.startupHintEmitted.emit(str(warning), "warning", int(STARTUP_HINT_DURATION_MS))
+
+    def _fetch_startup_service_warnings(self, monitor_targets: Dict[int, str]) -> List[str]:
+        page_url = f"{STATUS_PAGE_BASE_URL}/api/status-page/{STATUS_PAGE_SLUG}"
+        heartbeat_url = f"{STATUS_PAGE_BASE_URL}/api/status-page/heartbeat/{STATUS_PAGE_SLUG}"
+        monitor_names: Dict[int, str] = {}
+        try:
+            response = http_client.get(
+                page_url,
+                timeout=STARTUP_STATUS_TIMEOUT_SECONDS,
+                headers=DEFAULT_HTTP_HEADERS,
+                proxies={},
+            )
+            monitor_names = _parse_status_page_monitor_names(response.json())
+        except Exception:
+            logging.info("读取状态页配置失败，启动时忽略服务提示", exc_info=True)
+
+        try:
+            response = http_client.get(
+                heartbeat_url,
+                timeout=STARTUP_STATUS_TIMEOUT_SECONDS,
+                headers=DEFAULT_HTTP_HEADERS,
+                proxies={},
+            )
+            return _extract_startup_service_warnings(response.json(), monitor_targets, monitor_names)
+        except Exception:
+            logging.info("读取状态页心跳失败，启动时忽略服务提示", exc_info=True)
+            return []
+
+    def _snapshot_startup_service_warnings(self) -> List[str]:
+        with self._startup_status_check_lock:
+            return list(self._startup_service_warnings or [])
+
     def _start_with_initialization_gate(self, config: RuntimeConfig, proxy_pool: List[ProxyLease]) -> None:
         if self.stop_event.is_set():
             self._starting = False
             return
-        should_use_gate = self._should_use_initialization_gate(config)
-        requires_network_init = bool(getattr(config, "random_ip_enabled", False))
-        if not should_use_gate and not requires_network_init:
-            self._start_workers_with_proxy_pool(config, proxy_pool)
+
+        if not self._should_use_initialization_gate(config):
+            self._start_workers_with_proxy_pool(config, list(proxy_pool))
             return
 
         self.running = True
         self._starting = False
         self._initializing = True
         self._setup_initialization_progress(config)
-        if should_use_gate and not requires_network_init:
-            self._set_initialization_stage("playwright", "初始化Playwright浏览器环境")
         self._execution_state = None
         self.runStateChanged.emit(True)
         self._status_timer.start()
@@ -250,285 +342,107 @@ class RunControllerInitializationMixin:
         )
         self._init_gate_thread = gate_thread
         gate_thread.start()
-    def _prepare_random_ip_resources(
-        self,
-        config: RuntimeConfig,
-        gate_stop_event: threading.Event,
-        *,
-        expected_count: Optional[int] = None,
-    ) -> List[ProxyLease]:
-        if not bool(getattr(config, "random_ip_enabled", False)):
-            return []
 
-        def _cancelled() -> bool:
-            return bool(self.stop_event.is_set() or gate_stop_event.is_set())
-
-        def _set_stage(text: str) -> None:
-            def _update_stage(msg: str = str(text)) -> None:
-                self._set_initialization_stage("random_ip", msg)
-                self._emit_status()
-
-            self._dispatch_to_ui_async(_update_stage)
-
-        if _cancelled():
-            return []
-
-        self._validate_benefit_proxy_compatibility(config)
-
-        if not is_custom_proxy_api_active():
-            if not has_authenticated_session():
-                raise RuntimeError("默认随机IP需要先领取免费试用或提交额度申请，请先完成后再试，或改用自定义代理接口")
-            _set_stage("初始化随机IP模块（检查本地额度缓存）")
-            try:
-                snapshot = get_fresh_quota_snapshot()
-            except RandomIPAuthError as exc:
-                raise RuntimeError(format_random_ip_error(exc)) from exc
-            except Exception as exc:
-                raise RuntimeError(f"读取随机IP本地额度缓存失败：{exc}") from exc
-            session_snapshot = get_session_snapshot()
-            if is_quota_exhausted({**snapshot, "authenticated": True}) and not has_unknown_local_quota(session_snapshot):
-                raise RuntimeError("随机IP已用额度已达到上限，请补充额度后再试，或改用自定义代理接口")
-            if has_unknown_local_quota(session_snapshot):
-                logging.warning("检测到随机IP本地额度状态未知：账号已存在，但当前额度仍待校验；继续预取代理以触发真实额度回填")
-            if _cancelled():
-                return []
-
-        _set_stage("初始化随机IP模块（预取代理）")
-        from software.network.proxy.pool import prefetch_proxy_pool
-
-        proxy_api_url = self._resolve_proxy_api_url_for_config(config)
-        initial_proxy_count = max(
-            1,
-            int(
-                self._resolve_random_ip_init_prefetch_count(config)
-                if expected_count is None
-                else expected_count
-            ),
-        )
-        proxy_pool = prefetch_proxy_pool(
-            expected_count=initial_proxy_count,
-            proxy_api_url=proxy_api_url,
-            stop_signal=self.stop_event,
-        )
-        if _cancelled():
-            return []
-        try:
-            self._dispatch_to_ui_async(lambda: self.refresh_random_ip_counter(adapter=self.adapter))
-        except Exception:
-            logging.info("预取代理后刷新随机IP额度失败", exc_info=True)
-        return proxy_pool
-    def _top_up_random_ip_resources_for_run(
-        self,
-        config: RuntimeConfig,
-        proxy_pool: List[ProxyLease],
-        gate_stop_event: threading.Event,
-    ) -> List[ProxyLease]:
-        if not bool(getattr(config, "random_ip_enabled", False)):
-            return list(proxy_pool)
-
-        desired_count = self._resolve_random_ip_proxy_target_count(config)
-        existing_pool = list(proxy_pool)
-        missing_count = max(0, int(desired_count) - len(existing_pool))
-        if missing_count <= 0:
-            return existing_pool
-
-        if self.stop_event.is_set() or gate_stop_event.is_set():
-            return existing_pool
-
-        def _update_stage_for_top_up() -> None:
-            self._set_initialization_stage("random_ip", "初始化随机IP模块（补齐正式运行代理）")
-            self._emit_status()
-
-        self._dispatch_to_ui_async(_update_stage_for_top_up)
-
-        from software.network.proxy.pool import prefetch_proxy_pool
-
-        fetched = prefetch_proxy_pool(
-            expected_count=missing_count,
-            proxy_api_url=self._resolve_proxy_api_url_for_config(config),
-            stop_signal=self.stop_event,
-        )
-        if self.stop_event.is_set() or gate_stop_event.is_set():
-            return existing_pool
-        combined_pool = existing_pool + list(fetched or [])
-        try:
-            self._dispatch_to_ui_async(lambda: self.refresh_random_ip_counter(adapter=self.adapter))
-        except Exception:
-            logging.info("补齐正式运行代理后刷新随机IP额度失败", exc_info=True)
-        return combined_pool
     def _run_initialization_gate(
         self,
         config: RuntimeConfig,
         proxy_pool: List[ProxyLease],
         gate_stop_event: threading.Event,
     ) -> None:
-        self._probe_failure_message = ""
-        self._probe_hit_device_quota = False
-
-        def _cancelled() -> bool:
-            return bool(self.stop_event.is_set() or gate_stop_event.is_set())
-
-        effective_proxy_pool = list(proxy_pool)
-        if bool(getattr(config, "random_ip_enabled", False)):
-            try:
-                effective_proxy_pool = self._prepare_random_ip_resources(
-                    config,
-                    gate_stop_event,
-                    expected_count=self._resolve_random_ip_init_prefetch_count(config),
-                )
-            except Exception as exc:
-                self._dispatch_to_ui_async(lambda msg=str(exc): self._finish_initialization_failure(msg))
-                return
-            if _cancelled():
-                return
-
-        if not self._should_use_initialization_gate(config):
-            self._dispatch_to_ui_async(lambda: self._start_after_init_success(config, effective_proxy_pool))
+        if self.stop_event.is_set() or gate_stop_event.is_set():
             return
 
-        first_headless = self._run_single_probe_attempt(
-            config,
-            effective_proxy_pool,
-            headless=True,
-            gate_stop_event=gate_stop_event,
-        )
-        if first_headless is None:
-            return
-        if first_headless:
-            if bool(getattr(config, "random_ip_enabled", False)):
-                try:
-                    effective_proxy_pool = self._top_up_random_ip_resources_for_run(
-                        config,
-                        effective_proxy_pool,
-                        gate_stop_event,
-                    )
-                except Exception as exc:
-                    self._dispatch_to_ui_async(lambda msg=str(exc): self._finish_initialization_failure(msg))
-                    return
-                if _cancelled():
-                    return
-            self._dispatch_to_ui_async(lambda: self._start_after_init_success(config, effective_proxy_pool))
-            return
-
-        second_headful = self._run_single_probe_attempt(
-            config,
-            effective_proxy_pool,
-            headless=False,
-            gate_stop_event=gate_stop_event,
-        )
-        if second_headful is None:
-            return
-        if not second_headful:
-            failure_message = self._consume_probe_failure_message()
-            self._dispatch_to_ui_async(
-                lambda msg=(
-                    failure_message
-                    or "初始化失败：无头测试失败后，有头单线程测试也失败，请检查配置后重试"
-                ): self._finish_initialization_failure(msg)
+        try:
+            probe_result = run_browser_probe_subprocess(
+                headless=bool(getattr(config, "headless_mode", False)),
+                browser_preference=list(getattr(config, "browser_preference", []) or []),
+                timeout_seconds=BROWSER_PROBE_TIMEOUT_SECONDS,
+                cancel_event=gate_stop_event,
             )
+        except Exception as exc:
+            logging.error("浏览器快速检查执行失败", exc_info=True)
+            probe_result = BrowserProbeResult(
+                ok=False,
+                error_kind="probe_failed",
+                message=f"浏览器环境快速检查失败：{exc}",
+            )
+
+        if self.stop_event.is_set() or gate_stop_event.is_set() or probe_result.error_kind == "cancelled":
             return
 
-        third_headless = self._run_single_probe_attempt(
-            config,
-            effective_proxy_pool,
-            headless=True,
-            gate_stop_event=gate_stop_event,
-        )
-        if third_headless is None:
-            return
-        if third_headless:
-            if bool(getattr(config, "random_ip_enabled", False)):
-                try:
-                    effective_proxy_pool = self._top_up_random_ip_resources_for_run(
-                        config,
-                        effective_proxy_pool,
-                        gate_stop_event,
-                    )
-                except Exception as exc:
-                    self._dispatch_to_ui_async(lambda msg=str(exc): self._finish_initialization_failure(msg))
-                    return
-                if _cancelled():
-                    return
-            self._dispatch_to_ui_async(lambda: self._start_after_init_success(config, effective_proxy_pool))
+        if probe_result.ok:
+            self._dispatch_to_ui_async(lambda: self._start_after_init_success(config, list(proxy_pool)))
             return
 
-        if _cancelled():
-            return
-        fallback_config = self._clone_runtime_config_for_gate(config)
-        fallback_config.headless_mode = False
-        fallback_threads = min(
-            max(1, int(getattr(config, "threads", 1) or 1)),
-            NON_HEADLESS_FALLBACK_MAX_THREADS,
+        self._dispatch_to_ui_async(
+            lambda result=probe_result, run_config=config, pool=list(proxy_pool): self._handle_browser_probe_failure(
+                run_config,
+                pool,
+                result,
+            )
         )
-        fallback_config.threads = fallback_threads
-        if bool(getattr(config, "random_ip_enabled", False)):
-            try:
-                effective_proxy_pool = self._top_up_random_ip_resources_for_run(
-                    fallback_config,
-                    effective_proxy_pool,
-                    gate_stop_event,
-                )
-            except Exception as exc:
-                self._dispatch_to_ui_async(lambda msg=str(exc): self._finish_initialization_failure(msg))
-                return
-            if _cancelled():
-                return
-        self._dispatch_to_ui_async(lambda: self._start_after_init_fallback(fallback_config, effective_proxy_pool))
-    def _run_single_probe_attempt(
+
+    def _build_browser_probe_failure_message(self, result: BrowserProbeResult) -> str:
+        lines = [
+            "浏览器环境快速检查没有通过。",
+            "",
+            f"失败原因：{str(result.message or '未知错误')}",
+        ]
+        if int(result.elapsed_ms or 0) > 0:
+            lines.append(f"检查耗时：{int(result.elapsed_ms)} ms")
+        if str(result.browser or "").strip():
+            lines.append(f"已尝试浏览器：{str(result.browser).strip()}")
+        warnings = self._snapshot_startup_service_warnings()
+        if warnings:
+            lines.append("")
+            lines.append("另外，当前相关服务也有异常提示：")
+            for item in warnings:
+                lines.append(f"- {item}")
+        lines.append("")
+        lines.append("你可以停止启动，避免直接硬跑；如果你想继续试，也可以仍按原配置继续。")
+        return "\n".join(lines)
+
+    def _handle_browser_probe_failure(
         self,
         config: RuntimeConfig,
         proxy_pool: List[ProxyLease],
-        *,
-        headless: bool,
-        gate_stop_event: threading.Event,
-    ) -> Optional[bool]:
-        if self.stop_event.is_set() or gate_stop_event.is_set():
-            return None
-
-        mode_text = "无头" if headless else "有头"
-        logging.info("初始化门禁：开始%s单线程测试", mode_text)
-        def _init_stage() -> None:
-            self._set_initialization_stage("playwright", f"初始化Playwright浏览器环境（{mode_text}预检）")
-            self._emit_status()
-        self._dispatch_to_ui_async(_init_stage)
-        probe_config = self._clone_runtime_config_for_gate(config)
-        probe_config.headless_mode = bool(headless)
-        probe_config.threads = 1
-        probe_config.target = 1
-        # 门禁探测只用于验证流程可用性，不应消耗作答时长等待。
-        probe_config.answer_duration = (0, 0)
-
-        probe_execution_config, probe_state = self._prepare_engine_state(probe_config, list(proxy_pool))
-        probe_state.stop_event = gate_stop_event
-        probe_state.ensure_worker_threads(1)
-        self._apply_pending_execution_config(probe_execution_config, consume=False)
-        probe_adapter = self._create_adapter(gate_stop_event, random_ip_enabled=probe_config.random_ip_enabled)
-        probe_adapter.execution_state = probe_state
-
-        try:
-            run(50, 50, gate_stop_event, probe_adapter, config=probe_execution_config, state=probe_state)
-        except Exception:
-            logging.error("初始化门禁：%s单线程测试发生异常", mode_text, exc_info=True)
-        finally:
-            try:
-                probe_adapter.cleanup_browsers()
-            except Exception:
-                logging.info("初始化门禁清理浏览器失败", exc_info=True)
-
-        # run() 在目标达成时会主动 set(stop_signal)，这里的 gate_stop_event 同时承担“外部取消”与“探测内部停止”两种语义。
-        # 仅当全局 stop_event 被置位时才视为用户取消；否则按探测结果继续流程。
+        result: BrowserProbeResult,
+    ) -> None:
         if self.stop_event.is_set():
-            logging.info("初始化门禁：%s单线程测试已取消", mode_text)
-            return None
-        success = int(getattr(probe_state, "cur_num", 0) or 0) >= 1
-        device_quota_fail_count = max(0, int(getattr(probe_state, "device_quota_fail_count", 0) or 0))
-        if device_quota_fail_count > 0:
-            self._probe_hit_device_quota = True
-            self._probe_failure_message = DEVICE_QUOTA_LIMIT_MESSAGE
-        if gate_stop_event.is_set():
-            gate_stop_event.clear()
-        logging.info("初始化门禁：%s单线程测试%s", mode_text, "成功" if success else "失败")
-        return success
+            self._cancel_initialization_startup()
+            return
+
+        message = self._build_browser_probe_failure_message(result)
+        continue_run = False
+        fallback_handler = None
+        handler = getattr(self, "custom_confirm_dialog_handler", None)
+        if callable(handler):
+            try:
+                continue_run = bool(
+                    handler(
+                        "浏览器环境快速检查失败",
+                        message,
+                        "仍按原配置继续",
+                        "停止启动",
+                    )
+                )
+            except Exception:
+                logging.warning("显示浏览器快检失败确认框失败", exc_info=True)
+        else:
+            fallback_handler = getattr(self, "confirm_dialog_handler", None)
+            if not callable(fallback_handler):
+                fallback_handler = None
+        if not continue_run and fallback_handler is not None:
+            try:
+                continue_run = bool(fallback_handler("浏览器环境快速检查失败", message))
+            except Exception:
+                logging.warning("显示默认确认框失败", exc_info=True)
+
+        if continue_run:
+            self._start_after_init_success(config, proxy_pool)
+            return
+        self._cancel_initialization_startup()
+
     def _reset_initialization_state(self) -> None:
         self._initializing = False
         self._init_stage_text = ""
@@ -536,37 +450,35 @@ class RunControllerInitializationMixin:
         self._init_completed_steps = set()
         self._init_current_step_key = ""
         self._init_gate_stop_event = None
-        self._probe_hit_device_quota = False
-        self._probe_failure_message = ""
+
     def _start_after_init_success(self, config: RuntimeConfig, proxy_pool: List[ProxyLease]) -> None:
         if self.stop_event.is_set():
             self._reset_initialization_state()
             return
-        self._set_initialization_stage("submission", "初始化提交行为模块")
-        self._emit_status()
         self._reset_initialization_state()
         self._start_workers_with_proxy_pool(config, proxy_pool, emit_run_state=False)
-    def _apply_headless_fallback_to_ui(self, effective_threads: int) -> None:
-        try:
-            self.set_runtime_ui_state(
-                headless_mode=False,
-                threads=int(effective_threads),
-            )
-        except Exception:
-            logging.info("降级到有头模式后同步共享运行状态失败", exc_info=True)
-    def _start_after_init_fallback(self, config: RuntimeConfig, proxy_pool: List[ProxyLease]) -> None:
-        if self.stop_event.is_set():
-            self._reset_initialization_state()
-            return
 
-        effective_threads = max(1, int(getattr(config, "threads", 1) or 1))
-        self._apply_headless_fallback_to_ui(effective_threads)
-        self.config.headless_mode = False
-        self.config.threads = effective_threads
-        self._set_initialization_stage("submission", "初始化提交行为模块")
-        self._emit_status()
+    def _cancel_initialization_startup(self) -> None:
         self._reset_initialization_state()
-        self._start_workers_with_proxy_pool(config, proxy_pool, emit_run_state=False)
+        self._starting = False
+        self._status_timer.stop()
+        was_running = bool(self.running)
+        self.running = False
+        self.worker_threads = []
+        self._execution_state = None
+        if was_running:
+            self.runStateChanged.emit(False)
+        self.statusUpdated.emit("已取消启动", 0, 0)
+        self.threadProgressUpdated.emit(
+            {
+                "threads": [],
+                "target": 0,
+                "num_threads": 0,
+                "per_thread_target": 0,
+                "initializing": False,
+            }
+        )
+
     def _finish_initialization_failure(self, message: str) -> None:
         if self.stop_event.is_set() and not self.running:
             self._reset_initialization_state()

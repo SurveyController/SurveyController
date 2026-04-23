@@ -223,8 +223,10 @@ class RunController(
     pauseStateChanged = Signal(bool, str)
     cleanupFinished = Signal()
     quickBugReportSuggested = Signal()
+    freeAiUnstableSuggested = Signal()
     runtimeUiStateChanged = Signal(dict)
     randomIpLoadingChanged = Signal(bool, str)
+    startupHintEmitted = Signal(str, str, int)
     _uiCallbackQueued = Signal()
 
     def __init__(self, parent=None):
@@ -245,6 +247,7 @@ class RunController(
         self.quota_request_form_opener: Optional[Callable[[], bool]] = None
         self.message_dialog_handler: Optional[Callable[[str, str, str], None]] = None
         self.confirm_dialog_handler: Optional[Callable[[str, str], bool]] = None
+        self.custom_confirm_dialog_handler: Optional[Callable[[str, str, str, str], bool]] = None
         self._engine_adapter_cls = EngineGuiAdapter
         self.adapter = self._create_adapter(self.stop_event, random_ip_enabled=False)
         self._sleep_blocker = SystemSleepBlocker()
@@ -272,6 +275,9 @@ class RunController(
         self._random_ip_server_sync_lock = threading.Lock()
         self._random_ip_server_sync_active = False
         self._random_ip_last_server_sync_at = 0.0
+        self._startup_status_check_lock = threading.Lock()
+        self._startup_status_check_active = False
+        self._startup_service_warnings: List[str] = []
         self._uiCallbackQueued.connect(self._drain_ui_callbacks)
 
     def is_initializing(self) -> bool:
@@ -325,12 +331,14 @@ class RunController(
         on_random_ip_loading: Optional[Callable[[bool, str], None]] = None,
         message_handler: Optional[Callable[[str, str, str], None]] = None,
         confirm_handler: Optional[Callable[[str, str], bool]] = None,
+        custom_confirm_handler: Optional[Callable[[str, str, str, str], bool]] = None,
     ) -> None:
         self.quota_request_form_opener = quota_request_form_opener
         self.on_ip_counter = on_ip_counter
         self.on_random_ip_loading = on_random_ip_loading
         self.message_dialog_handler = message_handler
         self.confirm_dialog_handler = confirm_handler
+        self.custom_confirm_dialog_handler = custom_confirm_handler
         self._sync_adapter_ui_bridge()
 
     @staticmethod

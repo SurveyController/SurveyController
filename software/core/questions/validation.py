@@ -72,11 +72,9 @@ def validate_question_config(entries: List[QuestionEntry], questions_info: Optio
 
         if question_type == "multiple":
             multi_min_limit: Optional[int] = None
-            multi_max_limit: Optional[int] = None
             question_info = question_info_map.get(normalized_question_num)
             if question_info:
                 multi_min_limit = question_info.get("multi_min_limit")
-                multi_max_limit = question_info.get("multi_max_limit")
 
             probs = getattr(entry, "custom_weights", None) or getattr(entry, "probabilities", None)
             if isinstance(probs, list):
@@ -101,13 +99,10 @@ def validate_question_config(entries: List[QuestionEntry], questions_info: Optio
                         f"  - 但只有 {positive_count} 个选项的概率大于 0%\n"
                         f"  - 请至少将 {multi_min_limit} 个选项的概率设为大于 0%"
                     )
-                if multi_max_limit is not None and multi_max_limit > 0 and positive_count > multi_max_limit:
-                    errors.append(
-                        f"第 {question_num} 题（多选题）配置冲突：\n"
-                        f"  - 题目最多允许选择 {multi_max_limit} 项\n"
-                        f"  - 但当前有 {positive_count} 个选项的概率大于 0%\n"
-                        "  - 请把多余选项的概率改为 0%"
-                    )
+                # 多选题的概率表示“候选命中概率”，不是“本次一定同时勾选”。
+                # 运行时会在抽样后按题目最大可选数量自动收口，因此不能因为
+                # 正概率选项数超过题目上限就提前拦截启动，否则像“4个候选项，
+                # 题目最多选3项”这种正常配置会被误杀。
 
         configured_weights = _pick_config_weights(entry)
         if question_type in ("single", "dropdown", "scale", "score") and isinstance(configured_weights, list):
