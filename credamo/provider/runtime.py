@@ -19,6 +19,10 @@ from software.core.task import ExecutionConfig, ExecutionState
 from software.network.browser import BrowserDriver
 
 
+_CREDAMO_DYNAMIC_WAIT_TIMEOUT_MS = 20000
+_CREDAMO_DYNAMIC_WAIT_POLL_SECONDS = 0.5
+
+
 def _page(driver: BrowserDriver) -> Any:
     return getattr(driver, "page")
 
@@ -67,6 +71,31 @@ def _question_roots(page: Any) -> List[Any]:
             roots.dispose()
         except Exception:
             pass
+
+
+def _wait_for_question_roots(
+    page: Any,
+    stop_signal: Optional[threading.Event],
+    *,
+    timeout_ms: int = _CREDAMO_DYNAMIC_WAIT_TIMEOUT_MS,
+) -> List[Any]:
+    deadline = time.monotonic() + max(0.0, timeout_ms / 1000)
+    last_roots: List[Any] = []
+    while not _abort_requested(stop_signal):
+        try:
+            last_roots = _question_roots(page)
+        except Exception:
+            logging.info("Credamo 等待题目加载时读取页面失败", exc_info=True)
+            last_roots = []
+        if last_roots:
+            return last_roots
+        if time.monotonic() >= deadline:
+            return last_roots
+        if stop_signal is not None:
+            stop_signal.wait(_CREDAMO_DYNAMIC_WAIT_POLL_SECONDS)
+        else:
+            time.sleep(_CREDAMO_DYNAMIC_WAIT_POLL_SECONDS)
+    return last_roots
 
 
 def _click_element(page: Any, element: Any) -> bool:
@@ -161,7 +190,7 @@ def _answer_text(root: Any, text_config: Any) -> bool:
     return changed
 
 
-def _click_submit(page: Any) -> bool:
+def _click_submit_once(page: Any) -> bool:
     selectors = [
         "button:has-text('提交')",
         "button:has-text('完成')",
@@ -207,6 +236,25 @@ def _click_submit(page: Any) -> bool:
         return False
 
 
+def _click_submit(
+    page: Any,
+    stop_signal: Optional[threading.Event] = None,
+    *,
+    timeout_ms: int = _CREDAMO_DYNAMIC_WAIT_TIMEOUT_MS,
+) -> bool:
+    deadline = time.monotonic() + max(0.0, timeout_ms / 1000)
+    while not _abort_requested(stop_signal):
+        if _click_submit_once(page):
+            return True
+        if time.monotonic() >= deadline:
+            return False
+        if stop_signal is not None:
+            stop_signal.wait(_CREDAMO_DYNAMIC_WAIT_POLL_SECONDS)
+        else:
+            time.sleep(_CREDAMO_DYNAMIC_WAIT_POLL_SECONDS)
+    return False
+
+
 def brush_credamo(
     driver: BrowserDriver,
     config: ExecutionConfig,
@@ -219,7 +267,7 @@ def brush_credamo(
     del psycho_plan
     active_stop = stop_signal or state.stop_event
     page = _page(driver)
-    roots = _question_roots(page)
+    roots = _wait_for_question_roots(page, active_stop)
     total_steps = len(roots)
     try:
         state.update_thread_step(thread_name, 0, total_steps, status_text="答题中", running=True)
@@ -266,11 +314,10 @@ def brush_credamo(
         state.update_thread_status(thread_name, "提交中", running=True)
     except Exception:
         logging.info("更新 Credamo 线程状态失败：提交中", exc_info=True)
-    if not _click_submit(page):
+    if not _click_submit(page, active_stop):
         raise RuntimeError("Credamo 提交按钮未找到")
     try:
         state.update_thread_status(thread_name, "等待结果确认", running=True)
     except Exception:
         logging.info("更新 Credamo 线程状态失败：等待结果确认", exc_info=True)
     return True
-

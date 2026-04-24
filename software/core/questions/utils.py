@@ -6,7 +6,7 @@ import random
 import time
 from datetime import date, timedelta
 from functools import lru_cache
-from typing import Any, List, Optional, Tuple, Union
+from typing import Any, List, Optional, Sequence, Tuple, Union
 import logging
 from software.logging.log_utils import log_suppressed_exception
 
@@ -352,7 +352,7 @@ def extract_text_from_element(element) -> str:
     return text
 
 
-def get_fill_text_from_config(fill_entries: Optional[List[Optional[str]]], option_index: int) -> Optional[str]:
+def get_fill_text_from_config(fill_entries: Optional[Sequence[Optional[str]]], option_index: int) -> Optional[str]:
     """从配置获取填充文本"""
     if not fill_entries or option_index < 0 or option_index >= len(fill_entries):
         return None
@@ -364,7 +364,7 @@ def get_fill_text_from_config(fill_entries: Optional[List[Optional[str]]], optio
 
 
 def resolve_option_fill_text_from_config(
-    fill_entries: Optional[List[Optional[str]]],
+    fill_entries: Optional[Sequence[Optional[str]]],
     option_index: int,
     *,
     driver: Optional[BrowserDriver] = None,

@@ -11,7 +11,7 @@
   [![Python](https://img.shields.io/badge/Python-3.11+-3776AB?style=flat&logo=python&logoColor=white)](https://www.python.org/)
   [![License](https://img.shields.io/github/license/hungryM0/SurveyController?style=flat&color=orange)](./LICENSE)
 
-  <p><strong>一站式问卷自动化处理程序，适配问卷星与腾讯问卷平台</strong></p>
+  <p><strong>一站式问卷自动化处理程序，适配问卷星、腾讯问卷、Credamo见数平台</strong></p>
   <p><strong>支持指定ip填写地区、信度系数、作答时长与分布比例。</strong></p>
 
 > 参考了 [Zemelee/wjx](https://github.com/Zemelee/wjx)，别忘了给这位大佬点个star
@@ -27,9 +27,9 @@
 
 ## 主要特性
 
-1. **多平台支持** - 同时支持问卷星和腾讯问卷，一套工具搞定两个平台
+1. **多平台支持** - 同时支持问卷星、腾讯问卷、Credamo见数平台，一套工具搞定三个平台
 2. **Fluent 界面** - 无需编写代码，通过可视化UI完成所有操作
-3. **支持二维码解析** - 上传问卷二维码图片自动转链接（支持问卷星平台）
+3. **支持二维码解析** - 上传问卷二维码图片自动转链接（支持问卷星、见数链接平台）
 4. **定制答案配置** - 支持自定义各选项权重与多选题命中概率分布
 5. **指定ip设置** - 支持随机IP或指定特定地区IP提交
 6. **配置导入导出** - 保存配置文件便于后续复用，跨设备同步

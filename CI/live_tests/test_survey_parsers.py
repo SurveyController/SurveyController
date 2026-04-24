@@ -3,14 +3,19 @@
 
 from __future__ import annotations
 
+import json
 import unittest
+from pathlib import Path
 from typing import Any, Dict, Tuple
 
+from credamo.provider.parser import parse_credamo_survey
 from tencent.provider.parser import parse_qq_survey
 from wjx.provider.parser import parse_wjx_survey
 
 WJX_SURVEY_URL = "https://v.wjx.cn/vm/tgRSrWd.aspx"
 QQ_SURVEY_URL = "https://wj.qq.com/s2/26070328/fa89/"
+_ROOT_DIR = Path(__file__).resolve().parents[2]
+_CREDAMO_CONFIG_PATH = _ROOT_DIR / "configs" / "credamo.json"
 
 
 def _question_by_num(questions: list[dict], question_num: int) -> dict:
@@ -18,6 +23,21 @@ def _question_by_num(questions: list[dict], question_num: int) -> dict:
         if int(item.get("num") or 0) == int(question_num):
             return item
     raise AssertionError(f"未找到第 {question_num} 题")
+
+
+def _load_credamo_live_config() -> Dict[str, Any]:
+    if not _CREDAMO_CONFIG_PATH.is_file():
+        raise unittest.SkipTest(f"未找到见数真实配置：{_CREDAMO_CONFIG_PATH}")
+
+    data = json.loads(_CREDAMO_CONFIG_PATH.read_text(encoding="utf-8"))
+    if not isinstance(data, dict):
+        raise unittest.SkipTest(f"见数真实配置格式不对：{_CREDAMO_CONFIG_PATH}")
+
+    url = str(data.get("url") or "").strip()
+    if not url:
+        raise unittest.SkipTest(f"见数真实配置缺少 url：{_CREDAMO_CONFIG_PATH}")
+
+    return data
 
 
 class LiveSurveyParserRegressionTests(unittest.TestCase):
@@ -146,6 +166,44 @@ class LiveSurveyParserRegressionTests(unittest.TestCase):
         self.assertEqual(q16["provider_type"], "nps")
         self.assertEqual(q16["options"], 11)
         self.assertEqual(q16["page"], 2)
+
+    def test_credamo_live_parser_regression(self) -> None:
+        config = _load_credamo_live_config()
+        questions, title = self._run_with_retry(parse_credamo_survey, str(config["url"]), attempts=2)
+
+        expected_title = str(config.get("survey_title") or "").strip()
+        if expected_title:
+            self.assertEqual(title, expected_title)
+        self.assertGreaterEqual(len(questions), 4)
+
+        expected_questions = config.get("questions_info") or []
+        if not isinstance(expected_questions, list) or len(expected_questions) < 4:
+            raise unittest.SkipTest("见数真实配置缺少足够的 questions_info，无法做回归比对")
+
+        stable_fields = (
+            "num",
+            "type_code",
+            "provider_type",
+            "options",
+            "text_inputs",
+            "is_text_like",
+            "is_multi_text",
+            "required",
+            "provider_page_id",
+        )
+        for index, expected in enumerate(expected_questions[:4]):
+            actual = questions[index]
+            for field_name in stable_fields:
+                self.assertEqual(
+                    actual.get(field_name),
+                    expected.get(field_name),
+                    msg=f"见数第 {index + 1} 个题块字段 {field_name} 不一致",
+                )
+            self.assertEqual(
+                actual.get("option_texts") or [],
+                expected.get("option_texts") or [],
+                msg=f"见数第 {index + 1} 个题块选项文本不一致",
+            )
 
 
 if __name__ == "__main__":
