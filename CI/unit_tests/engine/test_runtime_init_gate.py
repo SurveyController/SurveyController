@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import unittest
-from unittest.mock import patch
+from threading import Event
 
 from software.app.browser_probe import _parse_probe_stdout, run_browser_probe_subprocess
 from software.core.questions.validation import validate_question_config
@@ -15,7 +15,45 @@ from software.ui.controller.run_controller_parts.runtime_init_gate import (
 
 
 class _DummyInitGate(RunControllerInitializationMixin):
-    pass
+    def __init__(self) -> None:
+        self._initializing = True
+        self._starting = True
+        self.running = True
+        self.worker_threads = [object()]
+        self._execution_state = object()
+        self._init_stage_text = "正在初始化"
+        self._init_steps = [{"key": "playwright", "label": "初始化浏览器环境（快速检查）"}]
+        self._init_completed_steps = {"playwright"}
+        self._init_current_step_key = "playwright"
+        self._init_gate_stop_event = Event()
+        self._status_timer = _FakeTimer()
+        self.run_state_events: list[bool] = []
+        self.status_events: list[tuple[str, int, int]] = []
+        self.thread_progress_events: list[dict] = []
+        self.run_failed_events: list[str] = []
+        self.runStateChanged = _FakeSignal(self.run_state_events)
+        self.statusUpdated = _FakeSignal(self.status_events)
+        self.threadProgressUpdated = _FakeSignal(self.thread_progress_events)
+        self.runFailed = _FakeSignal(self.run_failed_events)
+
+
+class _FakeSignal:
+    def __init__(self, events: list) -> None:
+        self.events = events
+
+    def emit(self, *args) -> None:
+        if len(args) == 1:
+            self.events.append(args[0])
+        else:
+            self.events.append(args)
+
+
+class _FakeTimer:
+    def __init__(self) -> None:
+        self.stopped = False
+
+    def stop(self) -> None:
+        self.stopped = True
 
 
 class _FakeProbeProcess:
@@ -64,6 +102,28 @@ class RuntimeInitGateTests(unittest.TestCase):
 
         config.threads = 1
         self.assertEqual(self.mixin._build_initialization_plan(config), [])
+
+    def test_cancel_initialization_resets_ui_to_idle_state(self) -> None:
+        self.mixin._cancel_initialization_startup()
+
+        self.assertFalse(self.mixin.running)
+        self.assertFalse(self.mixin._starting)
+        self.assertFalse(self.mixin._initializing)
+        self.assertEqual(self.mixin.worker_threads, [])
+        self.assertIsNone(self.mixin._execution_state)
+        self.assertTrue(self.mixin._status_timer.stopped)
+        self.assertEqual(self.mixin.run_state_events, [False])
+        self.assertEqual(self.mixin.status_events, [("已取消启动", 0, 0)])
+        self.assertEqual(
+            self.mixin.thread_progress_events[-1],
+            {
+                "threads": [],
+                "target": 0,
+                "num_threads": 0,
+                "per_thread_target": 0,
+                "initializing": False,
+            },
+        )
 
     def test_parse_status_page_monitor_names_reads_public_group_monitors(self) -> None:
         payload = {
@@ -118,12 +178,18 @@ class RuntimeInitGateTests(unittest.TestCase):
             b"{\"ok\":true,\"browser\":\"edge\",\"error_kind\":\"\",\"message\":\"ok\",\"elapsed_ms\":15}\n",
             b"\xff\xfe",
         )
-        with patch("software.app.browser_probe.subprocess.Popen", return_value=fake_process):
+        import software.app.browser_probe as browser_probe
+
+        original_popen = browser_probe.subprocess.Popen
+        browser_probe.subprocess.Popen = lambda *args, **kwargs: fake_process
+        try:
             result = run_browser_probe_subprocess(
                 headless=True,
                 browser_preference=["edge"],
                 timeout_seconds=1,
             )
+        finally:
+            browser_probe.subprocess.Popen = original_popen
 
         self.assertTrue(result.ok)
         self.assertEqual(result.browser, "edge")

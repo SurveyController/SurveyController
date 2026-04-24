@@ -451,6 +451,27 @@ class RunControllerInitializationMixin:
         self._init_current_step_key = ""
         self._init_gate_stop_event = None
 
+    def _finish_initialization_idle_state(self, status_text: str) -> None:
+        was_running = bool(self.running)
+        self._reset_initialization_state()
+        self._starting = False
+        self._status_timer.stop()
+        self.running = False
+        self.worker_threads = []
+        self._execution_state = None
+        if was_running:
+            self.runStateChanged.emit(False)
+        self.statusUpdated.emit(str(status_text or "已停止"), 0, 0)
+        self.threadProgressUpdated.emit(
+            {
+                "threads": [],
+                "target": 0,
+                "num_threads": 0,
+                "per_thread_target": 0,
+                "initializing": False,
+            }
+        )
+
     def _start_after_init_success(self, config: RuntimeConfig, proxy_pool: List[ProxyLease]) -> None:
         if self.stop_event.is_set():
             self._reset_initialization_state()
@@ -459,47 +480,11 @@ class RunControllerInitializationMixin:
         self._start_workers_with_proxy_pool(config, proxy_pool, emit_run_state=False)
 
     def _cancel_initialization_startup(self) -> None:
-        self._reset_initialization_state()
-        self._starting = False
-        self._status_timer.stop()
-        was_running = bool(self.running)
-        self.running = False
-        self.worker_threads = []
-        self._execution_state = None
-        if was_running:
-            self.runStateChanged.emit(False)
-        self.statusUpdated.emit("已取消启动", 0, 0)
-        self.threadProgressUpdated.emit(
-            {
-                "threads": [],
-                "target": 0,
-                "num_threads": 0,
-                "per_thread_target": 0,
-                "initializing": False,
-            }
-        )
+        self._finish_initialization_idle_state("已取消启动")
 
     def _finish_initialization_failure(self, message: str) -> None:
         if self.stop_event.is_set() and not self.running:
-            self._reset_initialization_state()
+            self._finish_initialization_idle_state("已取消启动")
             return
-        self._reset_initialization_state()
-        self._starting = False
-        self._status_timer.stop()
-        was_running = bool(self.running)
-        self.running = False
-        self.worker_threads = []
-        self._execution_state = None
-        if was_running:
-            self.runStateChanged.emit(False)
-        self.statusUpdated.emit("初始化失败", 0, 0)
-        self.threadProgressUpdated.emit(
-            {
-                "threads": [],
-                "target": 0,
-                "num_threads": 0,
-                "per_thread_target": 0,
-                "initializing": False,
-            }
-        )
+        self._finish_initialization_idle_state("初始化失败")
         self.runFailed.emit(str(message or "初始化失败"))
