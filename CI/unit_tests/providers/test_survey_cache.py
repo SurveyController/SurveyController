@@ -39,6 +39,22 @@ class SurveyCacheTests(unittest.TestCase):
             self.assertEqual(second.questions[0]["title"], "旧题目")
             self.assertTrue(os.path.isdir(os.path.join(temp_dir, "configs", "survey_cache")))
 
+    def test_credamo_url_fragment_is_preserved_for_parser(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            seen_urls: list[str] = []
+            original_runtime_directory = self._patch_runtime_directory(temp_dir)
+
+            def parser(url: str):
+                seen_urls.append(url)
+                return build_survey_definition("credamo", "见数标题", [{"num": 1, "title": "见数题目", "type_code": "3"}])
+
+            try:
+                parse_survey_with_cache("https://www.credamo.com/answer.html#/s/Bvyyaaano/", parser)
+            finally:
+                survey_cache.get_runtime_directory = original_runtime_directory
+
+            self.assertEqual(seen_urls, ["https://www.credamo.com/answer.html#/s/Bvyyaaano/"])
+
     def test_changed_fingerprint_refreshes_cache(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             fingerprints = ["old", "new", "new"]

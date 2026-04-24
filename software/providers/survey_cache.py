@@ -53,7 +53,7 @@ def _normalize_cache_url(url: str) -> str:
         if not key.startswith("_")
     ]
     query = urlencode(sorted(query_items), doseq=True)
-    return urlunsplit((scheme, netloc, path, query, ""))
+    return urlunsplit((scheme, netloc, path, query, parsed.fragment or ""))
 
 
 def _cache_key(url: str) -> str:
