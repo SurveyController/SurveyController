@@ -9,7 +9,7 @@ from software.core.questions.config import QuestionEntry
 from software.ui.widgets.no_wheel import NoWheelSlider
 
 from .psycho_config import BIAS_PRESET_CHOICES, PSYCHO_SUPPORTED_TYPES, build_bias_weights
-from .utils import _apply_label_color, _bind_slider_input, _shorten_text
+from .utils import _apply_label_color, _bind_slider_input, _configure_wrapped_text_label, _shorten_text
 
 
 class WizardSectionsMatrixMixin:
@@ -71,8 +71,8 @@ class WizardSectionsMatrixMixin:
                 opt_layout.setSpacing(12)
 
                 opt_text = option_texts[col_idx] if col_idx < len(option_texts) else f"列 {col_idx + 1}"
-                text_label = BodyLabel(_shorten_text(opt_text, 50), parent_widget)
-                text_label.setFixedWidth(160)
+                text_label = BodyLabel(opt_text, parent_widget)
+                _configure_wrapped_text_label(text_label, 160)
                 text_label.setStyleSheet("font-size: 13px;")
                 opt_layout.addWidget(text_label)
 
@@ -216,7 +216,8 @@ class WizardSectionsMatrixMixin:
             list_layout.setContentsMargins(0, 6, 0, 0)
             list_layout.setSpacing(4)
             for opt_idx, opt_text in enumerate(option_texts, 1):
-                item = BodyLabel(f"{opt_idx}. {_shorten_text(opt_text, 60)}", card)
+                item = BodyLabel(f"{opt_idx}. {opt_text}", card)
+                item.setWordWrap(True)
                 item.setStyleSheet("font-size: 12px;")
                 _apply_label_color(item, "#666666", "#c8c8c8")
                 list_layout.addWidget(item)

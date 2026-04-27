@@ -121,6 +121,72 @@ def _single_option_has_free_text_input(target_elem: Any) -> bool:
     return False
 
 
+def _single_option_free_text_input_is_required(driver: BrowserDriver, target_elem: Any) -> bool:
+    """判断单选项里的附加输入框是否必填，仅检查选项自身区域，避免把题目标题红星误算进来。"""
+    if target_elem is None:
+        return False
+    try:
+        return bool(driver.execute_script(
+            """
+            const root = arguments[0];
+            if (!root) return false;
+            const isVisible = (el) => {
+                if (!el) return false;
+                const style = window.getComputedStyle(el);
+                if (!style) return false;
+                if (style.display === 'none' || style.visibility === 'hidden' || style.opacity === '0') return false;
+                const rect = el.getBoundingClientRect();
+                return rect.width > 0 && rect.height > 0;
+            };
+            const isTextLikeInput = (el) => {
+                if (!el) return false;
+                const tag = String(el.tagName || '').toLowerCase();
+                if (tag === 'textarea') return true;
+                if (tag !== 'input') return false;
+                const type = String(el.getAttribute('type') || '').toLowerCase();
+                return !type || ['text', 'search', 'tel', 'number'].includes(type);
+            };
+            const inputs = Array.from(root.querySelectorAll("input, textarea")).filter((el) => {
+                if (!isTextLikeInput(el) || !isVisible(el)) return false;
+                const type = String(el.getAttribute('type') || '').toLowerCase();
+                if (type === 'hidden') return false;
+                const cls = String(el.getAttribute('class') || '').toLowerCase();
+                return !cls.includes('cusomselect') && !cls.includes('customselect');
+            });
+            if (!inputs.length) return false;
+            for (const input of inputs) {
+                if (input.required || input.getAttribute('aria-required') === 'true') return true;
+                const markerNodes = [
+                    input.previousElementSibling,
+                    input.nextElementSibling,
+                    input.parentElement,
+                    input.closest('label'),
+                    input.closest('.ui-input-text'),
+                    input.closest('.ui-other'),
+                    input.closest('.onleft'),
+                    root,
+                ].filter(Boolean);
+                for (const node of markerNodes) {
+                    const text = String(node.textContent || '').replace(/\\s+/g, ' ').trim();
+                    if (!text) continue;
+                    if (/^(\\*|\\*\\s*必填|必填)/.test(text)) return true;
+                    if (/[（(]\\s*必填\\s*[)）]/.test(text)) return true;
+                    if (/红星/.test(text)) return true;
+                }
+                const requiredMarker = input.closest('.ui-other, .onleft, label, .ui-input-text, div')?.querySelector?.(
+                    '.req, .required, .must, .star, .red, .wjxreq'
+                );
+                if (requiredMarker && isVisible(requiredMarker)) return true;
+            }
+            return false;
+            """,
+            target_elem,
+        ))
+    except Exception as exc:
+        log_suppressed_exception("single: detect required free text input", exc, level=logging.ERROR)
+        return False
+
+
 def _click_single_option(driver: BrowserDriver, current: int, selected_option: int, target_elem: Any) -> bool:
     """稳健点击单选项：点击后必须验收是否真正选中。"""
     click_candidates: List[Any] = []
@@ -473,14 +539,22 @@ def single(
         question_number=current,
         option_text=option_texts[target_index] if target_index < len(option_texts) else "",
     )
+    free_text_required = has_free_text_input and _single_option_free_text_input_is_required(driver, target_elem)
     if not fill_value and has_free_text_input:
-        fill_value = DEFAULT_FILL_TEXT
-        logging.info(
-            "单选题第%s题第%s项检测到附加填空但未配置文本，已自动使用默认值“%s”。",
-            current,
-            selected_option,
-            DEFAULT_FILL_TEXT,
-        )
+        if free_text_required:
+            fill_value = DEFAULT_FILL_TEXT
+            logging.info(
+                "单选题第%s题第%s项检测到必填附加填空但未配置文本，已自动使用默认值“%s”。",
+                current,
+                selected_option,
+                DEFAULT_FILL_TEXT,
+            )
+        else:
+            logging.info(
+                "单选题第%s题第%s项附加填空不是必填，且未配置文本，本次保持留空。",
+                current,
+                selected_option,
+            )
     attached_selects_config = (
         single_attached_selects_config[index]
         if single_attached_selects_config and index < len(single_attached_selects_config)

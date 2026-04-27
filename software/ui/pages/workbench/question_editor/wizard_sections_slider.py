@@ -10,7 +10,7 @@ from software.ui.helpers.fluent_tooltip import install_tooltip_filters
 from software.ui.widgets.no_wheel import NoWheelSlider
 
 from .psycho_config import BIAS_PRESET_CHOICES, PSYCHO_SUPPORTED_TYPES, build_bias_weights
-from .utils import _apply_label_color, _bind_slider_input, _shorten_text
+from .utils import _apply_label_color, _bind_slider_input, _configure_wrapped_text_label
 from .wizard_sections_common import (
     _TEXT_RANDOM_ID_CARD,
     _TEXT_RANDOM_INTEGER,
@@ -123,13 +123,6 @@ class WizardSectionsSliderMixin:
             if oi is not None and jt is not None:
                 jump_map[oi] = jt
 
-        if fillable_option_indices:
-            fill_hint = BodyLabel("命中带附加输入框的选项时，可以提交固定文本、随机值，或临时调用 AI 生成内容。", card)
-            fill_hint.setWordWrap(True)
-            fill_hint.setStyleSheet("font-size: 12px;")
-            _apply_label_color(fill_hint, "#666666", "#bfbfbf")
-            card_layout.addWidget(fill_hint)
-
         for opt_idx in range(options):
             opt_widget = QWidget(card)
             opt_layout = QHBoxLayout(opt_widget)
@@ -143,8 +136,8 @@ class WizardSectionsSliderMixin:
             opt_layout.addWidget(num_label)
 
             opt_text = option_texts[opt_idx] if opt_idx < len(option_texts) else "选项"
-            text_label = BodyLabel(_shorten_text(opt_text, 50), card)
-            text_label.setFixedWidth(160)
+            text_label = BodyLabel(opt_text, card)
+            _configure_wrapped_text_label(text_label, 160)
             text_label.setStyleSheet("font-size: 13px;")
             opt_layout.addWidget(text_label)
 
@@ -216,7 +209,7 @@ class WizardSectionsSliderMixin:
                 if existing_fill:
                     fill_edit.setText(existing_fill)
                 if entry.question_type == "single":
-                    fill_edit.setPlaceholderText("例如：无；留空时运行会自动按默认值处理")
+                    fill_edit.setPlaceholderText("例如：无；留空时仅必填输入框会自动补默认值")
                 else:
                     fill_edit.setPlaceholderText("输入命中该选项时要填写的内容")
                 fill_layout.addWidget(fill_edit, 1)
@@ -353,7 +346,7 @@ class WizardSectionsSliderMixin:
                     ratio_preview_label,
                     sliders,
                     option_texts,
-                    "目标占比（实际会小幅波动）：",
+                    "预计占比（仅供参考）：",
                 )
 
             for slider in sliders:

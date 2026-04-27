@@ -1,8 +1,9 @@
 """UI 辅助函数"""
 from typing import Any, Dict, List, Optional, Tuple
 
+from PySide6.QtCore import Qt
 from PySide6.QtGui import QColor, QIntValidator
-from PySide6.QtWidgets import QLabel
+from PySide6.QtWidgets import QLabel, QSizePolicy
 from qfluentwidgets import LineEdit
 
 from software.core.questions.config import QuestionEntry
@@ -29,6 +30,14 @@ def _apply_label_color(label: QLabel, light: str, dark: str) -> None:
         if style and not style.endswith(";"):
             style = f"{style};"
         label.setStyleSheet(f"{style}color: {light};")
+
+
+def _configure_wrapped_text_label(label: QLabel, width: int) -> None:
+    """让固定宽度文本标签按词换行，并把内容顶对齐显示完整。"""
+    label.setWordWrap(True)
+    label.setFixedWidth(width)
+    label.setAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignTop)
+    label.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Preferred)
 
 
 def _bind_slider_input(slider: NoWheelSlider, edit: LineEdit) -> None:

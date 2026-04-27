@@ -311,7 +311,7 @@ class CommunityPage(ScrollArea):
         card, layout = self._create_grid_card("参与贡献", FluentIcon.DEVELOPER_TOOLS)
 
         desc = BodyLabel(
-            "我们接受开发、设计、测试、提供想法等任何贡献形式\n相信我们能够一起把项目做得更好。",
+            "我们接受开发、设计、测试、提供创新性想法、反馈报错等任何贡献形式\n相信我们能够一起把项目做得更好。",
             card,
         )
         desc.setWordWrap(True)
@@ -342,7 +342,7 @@ class CommunityPage(ScrollArea):
         layout.addWidget(license_label)
 
         desc = BodyLabel(
-            "在分发程序或对其进行修改并通过网络向用户提供交互服务时，必须向这些用户提供相应的完整源代码，以确保用户获得与传统分发情形同等的自由与权利",
+            "在分发程序或对其进行修改并通过网络向其他用户提供交互服务时，必须向这些用户提供相应的完整源代码，以确保用户获得与传统分发情形同等的自由与权利",
             card,
         )
         desc.setWordWrap(True)

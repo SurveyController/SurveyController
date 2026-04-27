@@ -11,7 +11,7 @@ from software.core.questions.utils import try_parse_random_int_range
 from software.ui.widgets.no_wheel import NoWheelSlider
 
 from .constants import _get_entry_type_label
-from .utils import _apply_label_color, _bind_slider_input, _shorten_text
+from .utils import _apply_label_color, _bind_slider_input, _configure_wrapped_text_label, _shorten_text
 
 
 class WizardCardsMixin:
@@ -610,8 +610,8 @@ class WizardCardsMixin:
                 _apply_label_color(num_label, "#888888", "#a6a6a6")
                 row_layout.addWidget(num_label)
 
-                text_label = BodyLabel(_shorten_text(select_text, 40), card)
-                text_label.setFixedWidth(160)
+                text_label = BodyLabel(select_text, card)
+                _configure_wrapped_text_label(text_label, 160)
                 text_label.setStyleSheet("font-size: 13px;")
                 row_layout.addWidget(text_label)
 
