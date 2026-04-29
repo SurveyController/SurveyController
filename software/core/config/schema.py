@@ -44,6 +44,10 @@ class RuntimeConfig:
     ai_api_protocol: str = "auto"
     ai_model: str = ""
     ai_system_prompt: str = ""
+    reverse_fill_enabled: bool = False
+    reverse_fill_source_path: str = ""
+    reverse_fill_format: str = "auto"
+    reverse_fill_start_row: int = 1
     answer_rules: List[Dict[str, Any]] = field(default_factory=list)
     dimension_groups: List[str] = field(default_factory=list)
     question_entries: List[QuestionEntry] = field(default_factory=list)

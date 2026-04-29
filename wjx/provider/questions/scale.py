@@ -11,6 +11,8 @@ from software.core.questions.distribution import (
 from software.core.questions.tendency import get_tendency_index
 from software.core.questions.consistency import apply_single_like_consistency
 from software.core.questions.utils import normalize_droplist_probs
+from software.core.reverse_fill.runtime import resolve_current_reverse_fill_answer
+from software.core.reverse_fill.schema import REVERSE_FILL_KIND_CHOICE
 from software.logging.log_utils import log_suppressed_exception
 
 
@@ -59,25 +61,38 @@ def scale(
     probabilities = scale_prob_config[index] if index < len(scale_prob_config) else -1
     if not scale_options:
         return
-    probs = normalize_droplist_probs(probabilities, len(scale_options))
-    probs = apply_single_like_consistency(probs, current)
     resolved_question_index = question_index if question_index is not None else current
-    probs = resolve_distribution_probabilities(
-        probs,
-        len(scale_options),
-        task_ctx,
-        resolved_question_index,
-        psycho_plan=psycho_plan,
-    )
-    selected_index = get_tendency_index(
-        len(scale_options),
-        probs,
-        dimension=dimension,
-        psycho_plan=psycho_plan,
-        question_index=resolved_question_index,
-    )
+    reverse_fill_answer = resolve_current_reverse_fill_answer(task_ctx, current)
+    forced_index: Optional[int] = None
+    if reverse_fill_answer is not None and reverse_fill_answer.kind == REVERSE_FILL_KIND_CHOICE:
+        try:
+            forced_index = int(reverse_fill_answer.choice_index)
+        except Exception:
+            forced_index = None
+
+    if forced_index is None:
+        probs = normalize_droplist_probs(probabilities, len(scale_options))
+        probs = apply_single_like_consistency(probs, current)
+        probs = resolve_distribution_probabilities(
+            probs,
+            len(scale_options),
+            task_ctx,
+            resolved_question_index,
+            psycho_plan=psycho_plan,
+        )
+        selected_index = get_tendency_index(
+            len(scale_options),
+            probs,
+            dimension=dimension,
+            psycho_plan=psycho_plan,
+            question_index=resolved_question_index,
+        )
+    else:
+        selected_index = forced_index
     if selected_index >= len(scale_options):
         selected_index = max(0, len(scale_options) - 1)
+    if selected_index < 0:
+        return
     target = scale_options[selected_index]
     try:
         target.click()
@@ -86,12 +101,13 @@ def scale(
             driver.execute_script("arguments[0].click();", target)
         except Exception as exc:
             log_suppressed_exception("scale: driver.execute_script(\"arguments[0].click();\", target)", exc, level=logging.ERROR)
-    record_pending_distribution_choice(
-        task_ctx,
-        resolved_question_index,
-        selected_index,
-        len(scale_options),
-    )
+    if forced_index is None:
+        record_pending_distribution_choice(
+            task_ctx,
+            resolved_question_index,
+            selected_index,
+            len(scale_options),
+        )
     # 保存本题选择，供后续题目和 AI 填空复用上下文。
     record_answer(current, "scale", selected_indices=[selected_index])
 

@@ -7,6 +7,7 @@ from software.logging.log_utils import log_suppressed_exception
 
 from software.network.browser import By, BrowserDriver
 from software.integrations.ai import generate_answer
+from software.integrations.ai.client import FreeAITimeoutError
 from software.app.config import _HTML_SPACE_RE
 
 
@@ -15,8 +16,25 @@ class AIRuntimeError(RuntimeError):
 
 
 def is_free_ai_runtime_error(error: object) -> bool:
+    if is_ai_timeout_runtime_error(error):
+        return True
     text = str(error or "").strip()
     return "免费 AI" in text or "免费AI" in text
+
+
+def is_ai_timeout_runtime_error(error: object) -> bool:
+    current = error if isinstance(error, BaseException) else None
+    visited: set[int] = set()
+    while current is not None and id(current) not in visited:
+        visited.add(id(current))
+        if isinstance(current, FreeAITimeoutError):
+            return True
+        text = str(current or "").strip().lower()
+        if "timed out" in text or "timeout" in text or "超时" in text:
+            return True
+        next_error = getattr(current, "__cause__", None) or getattr(current, "__context__", None)
+        current = next_error if isinstance(next_error, BaseException) else None
+    return False
 
 
 

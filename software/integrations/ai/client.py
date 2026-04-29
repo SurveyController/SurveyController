@@ -19,6 +19,10 @@ from software.app.config import AI_FREE_ENDPOINT, DEFAULT_HTTP_HEADERS
 
 logger = logging.getLogger(__name__)
 
+
+class FreeAITimeoutError(RuntimeError):
+    """免费 AI 在完成内部重试后仍然超时。"""
+
 # AI 服务提供商配置
 # 注意: recommended_models 仅作为 UI 快捷选择建议,用户可以自由输入任意模型名
 AI_PROVIDERS = {
@@ -481,6 +485,10 @@ def _should_retry_ai_request(exc: Exception) -> bool:
     return False
 
 
+def _is_ai_timeout_exception(exc: Exception) -> bool:
+    return isinstance(exc, (http_client.Timeout, http_client.ConnectTimeout, http_client.ReadTimeout))
+
+
 def _execute_ai_request_with_retry(request_name: str, request_func):
     last_error: Exception | None = None
     for attempt in range(1, _AI_MAX_RETRY_ATTEMPTS + 1):
@@ -641,7 +649,14 @@ def _call_free_ai_api(
             response.raise_for_status()
         return response
 
-    response = _execute_ai_request_with_retry("free_ai", _send_request)
+    try:
+        response = _execute_ai_request_with_retry("free_ai", _send_request)
+    except Exception as exc:
+        if _is_ai_timeout_exception(exc):
+            raise FreeAITimeoutError(
+                f"免费 AI 调用超时，已重试 {_AI_MAX_RETRY_ATTEMPTS} 次仍失败"
+            ) from exc
+        raise
     status_code = int(getattr(response, "status_code", 0) or 0)
     if status_code != 200:
         detail = _extract_free_error_detail(response)

@@ -10,7 +10,6 @@ from qfluentwidgets import BodyLabel, LineEdit, isDarkTheme
 from software.core.questions.config import QuestionEntry
 from software.core.questions.utils import OPTION_FILL_AI_TOKEN, parse_random_int_token, try_parse_random_int_range
 from software.ui.helpers.ai_fill import ensure_ai_ready
-from software.ui.helpers.fluent_tooltip import install_tooltip_filter
 from software.ui.widgets.no_wheel import NoWheelSlider
 
 from .utils import _shorten_text

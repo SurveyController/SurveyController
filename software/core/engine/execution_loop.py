@@ -10,7 +10,7 @@ from typing import Any
 
 import software.core.modes.timed_mode as timed_mode
 from software.app.config import BROWSER_PREFERENCE
-from software.core.ai.runtime import AIRuntimeError, is_free_ai_runtime_error
+from software.core.ai.runtime import AIRuntimeError, is_ai_timeout_runtime_error, is_free_ai_runtime_error
 from software.core.engine.browser_session_service import BrowserSessionService
 from software.core.engine.failure_reason import FailureReason
 from software.core.engine.provider_common import ensure_joint_psychometric_answer_plan
@@ -29,6 +29,7 @@ from software.providers.registry import is_device_quota_limit_page as _provider_
 
 _DEFAULT_PAGE_LOAD_TIMEOUT_MS = 20000
 _CREDAMO_PAGE_LOAD_TIMEOUT_MS = 45000
+_FREE_AI_TIMEOUT_FAIL_THRESHOLD = 5
 
 
 def _load_survey_page(driver: Any, config: ExecutionConfig) -> None:
@@ -254,6 +255,47 @@ class ExecutionLoop:
                             break
                         continue
 
+                reverse_fill_sample = self.state.acquire_reverse_fill_sample(thread_name)
+                if reverse_fill_sample.status == "waiting":
+                    logging.info("线程[%s]等待反填样本释放", thread_name)
+                    try:
+                        self.state.release_joint_sample(thread_name)
+                    except Exception:
+                        logging.info("等待反填样本时释放联合信效度样本槽位失败", exc_info=True)
+                    try:
+                        self.state.update_thread_status(thread_name, "等待反填样本", running=True)
+                    except Exception:
+                        logging.info("更新线程状态失败：等待反填样本", exc_info=True)
+                    session.dispose()
+                    if stop_signal.wait(0.2):
+                        break
+                    continue
+                if reverse_fill_sample.status == "exhausted":
+                    message = "反填样本已耗尽，剩余样本不足以完成目标份数"
+                    try:
+                        self.state.release_joint_sample(thread_name)
+                    except Exception:
+                        logging.info("反填样本耗尽时释放联合信效度样本槽位失败", exc_info=True)
+                    self.state.mark_terminal_stop(
+                        "reverse_fill_exhausted",
+                        failure_reason=FailureReason.FILL_FAILED.value,
+                        message=message,
+                    )
+                    try:
+                        self.state.update_thread_status(thread_name, "反填样本不足", running=False)
+                    except Exception:
+                        logging.info("更新线程状态失败：反填样本不足", exc_info=True)
+                    if not stop_signal.is_set():
+                        stop_signal.set()
+                    break
+                if reverse_fill_sample.status == "acquired" and reverse_fill_sample.sample is not None:
+                    logging.info(
+                        "线程[%s]已锁定反填样本：数据行=%s 工作表行=%s",
+                        thread_name,
+                        reverse_fill_sample.sample.data_row_number,
+                        reverse_fill_sample.sample.worksheet_row_number,
+                    )
+
                 finished = _provider_fill_survey(
                     session.driver,
                     self.config,
@@ -267,6 +309,10 @@ class ExecutionLoop:
                         self.state.release_joint_sample(thread_name)
                     except Exception:
                         logging.info("释放联合信效度样本槽位失败", exc_info=True)
+                    try:
+                        self.state.release_reverse_fill_sample(thread_name, requeue=True)
+                    except Exception:
+                        logging.info("释放反填样本失败", exc_info=True)
                     continue
 
                 outcome = self.submission_service.finalize_after_submit(
@@ -284,12 +330,34 @@ class ExecutionLoop:
                         self.state.release_joint_sample(thread_name)
                     except Exception:
                         logging.info("释放联合信效度样本槽位失败", exc_info=True)
+                    try:
+                        self.state.release_reverse_fill_sample(thread_name, requeue=True)
+                    except Exception:
+                        logging.info("释放反填样本失败", exc_info=True)
                     break
                 else:
                     driver_had_error = True
 
             except AIRuntimeError as exc:
                 driver_had_error = True
+                if is_ai_timeout_runtime_error(exc):
+                    logging.warning("免费 AI 调用超时，本轮丢弃并继续下一轮：%s", exc)
+                    stopped = self.stop_policy.record_failure(
+                        stop_signal,
+                        thread_name=thread_name,
+                        failure_reason=FailureReason.FILL_FAILED,
+                        status_text="免费AI超时",
+                        log_message=(
+                            f"免费AI调用超时，本轮按失败处理；连续达到 {_FREE_AI_TIMEOUT_FAIL_THRESHOLD} 次才停止：{exc}"
+                        ),
+                        threshold_override=_FREE_AI_TIMEOUT_FAIL_THRESHOLD,
+                        terminal_stop_category="free_ai_unstable",
+                        force_stop_when_threshold_reached=True,
+                    )
+                    if stopped:
+                        logging.error("免费 AI 连续超时达到阈值，任务停止：%s", exc, exc_info=True)
+                        break
+                    continue
                 logging.error("AI 填空失败，已停止任务：%s", exc, exc_info=True)
                 stop_category = "free_ai_unstable" if is_free_ai_runtime_error(exc) else "ai_runtime"
                 stop_message = "目前免费AI不稳定，请稍后再试" if stop_category == "free_ai_unstable" else str(exc)
@@ -355,6 +423,10 @@ class ExecutionLoop:
             self.state.release_joint_sample(thread_name)
         except Exception:
             logging.info("线程结束时释放联合信效度样本槽位失败", exc_info=True)
+        try:
+            self.state.release_reverse_fill_sample(thread_name, requeue=True)
+        except Exception:
+            logging.info("线程结束时释放反填样本失败", exc_info=True)
         try:
             self.state.mark_thread_finished(thread_name, status_text="已停止")
         except Exception:

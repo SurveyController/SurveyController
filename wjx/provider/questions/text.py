@@ -18,6 +18,8 @@ from software.core.questions.utils import (
 from software.core.ai.runtime import AIRuntimeError, generate_ai_answer, resolve_question_title_for_ai
 from software.core.persona.context import record_answer
 from software.core.questions.text_shared import MULTI_TEXT_DELIMITER
+from software.core.reverse_fill.runtime import resolve_current_reverse_fill_answer
+from software.core.reverse_fill.schema import REVERSE_FILL_KIND_MULTI_TEXT, REVERSE_FILL_KIND_TEXT
 
 
 def _preview_text_answer(value: Optional[Any], limit: int = 80) -> str:
@@ -339,8 +341,29 @@ def text(
     multi_text_blank_modes: Optional[List[List[str]]] = None,
     multi_text_blank_ai_flags: Optional[List[List[bool]]] = None,
     multi_text_blank_int_ranges: Optional[List[List[List[int]]]] = None,
+    task_ctx: Optional[Any] = None,
 ) -> None:
     """填空题处理主函数"""
+    reverse_fill_answer = resolve_current_reverse_fill_answer(task_ctx, current)
+    if reverse_fill_answer is not None:
+        if reverse_fill_answer.kind == REVERSE_FILL_KIND_TEXT:
+            selected_answer = str(reverse_fill_answer.text_value or "").strip() or DEFAULT_FILL_TEXT
+            _handle_single_text(driver, current, selected_answer)
+            _log_text_answer(current, "", "反填", selected_answer)
+            record_answer(current, "text", text_answer=selected_answer)
+            return
+        if reverse_fill_answer.kind == REVERSE_FILL_KIND_MULTI_TEXT:
+            selected_values = list(reverse_fill_answer.text_values or [])
+            applied_values, applied_sources = _handle_multi_text(
+                driver,
+                current,
+                selected_values,
+                default_source="反填",
+            )
+            _log_text_answer(current, "", _summarize_multi_text_sources(applied_sources), applied_values)
+            record_answer(current, "text", text_answer=" | ".join(applied_values))
+            return
+
     if index < len(texts_config):
         answer_candidates = texts_config[index]
         selection_probabilities = texts_prob_config[index] if index < len(texts_prob_config) else [1.0]

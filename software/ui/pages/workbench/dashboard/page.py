@@ -159,7 +159,7 @@ class DashboardPage(
         )
         self._ip_low_infobar.hide()
         self._ip_low_infobar.closeButton.clicked.connect(self._on_ip_low_infobar_closed)
-        self._ip_low_contact_link = HyperlinkButton(FluentIcon.LINK, "", "前往联系", self._ip_low_infobar)
+        self._ip_low_contact_link = HyperlinkButton(FluentIcon.LINK, "", "前往申请", self._ip_low_infobar)
         self._ip_low_contact_link.clicked.connect(
             lambda: self._open_contact_dialog(default_type="额度申请", lock_message_type=True)
         )

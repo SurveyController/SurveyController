@@ -1,0 +1,78 @@
+from __future__ import annotations
+
+import unittest
+
+from software.core.reverse_fill.schema import (
+    REVERSE_FILL_KIND_CHOICE,
+    ReverseFillAnswer,
+    ReverseFillSampleRow,
+    ReverseFillSpec,
+)
+from software.core.task import ExecutionConfig, ExecutionState
+
+
+class ReverseFillRuntimeStateTests(unittest.TestCase):
+    def _build_state(self) -> ExecutionState:
+        spec = ReverseFillSpec(
+            source_path="demo.xlsx",
+            selected_format="wjx_sequence",
+            detected_format="wjx_sequence",
+            start_row=1,
+            total_samples=2,
+            available_samples=2,
+            target_num=2,
+            samples=[
+                ReverseFillSampleRow(
+                    data_row_number=1,
+                    worksheet_row_number=2,
+                    answers={1: ReverseFillAnswer(question_num=1, kind=REVERSE_FILL_KIND_CHOICE, choice_index=0)},
+                ),
+                ReverseFillSampleRow(
+                    data_row_number=2,
+                    worksheet_row_number=3,
+                    answers={1: ReverseFillAnswer(question_num=1, kind=REVERSE_FILL_KIND_CHOICE, choice_index=1)},
+                ),
+            ],
+        )
+        config = ExecutionConfig(reverse_fill_spec=spec, target_num=2)
+        state = ExecutionState(config=config)
+        state.initialize_reverse_fill_runtime()
+        return state
+
+    def test_acquire_commit_and_requeue_reverse_fill_rows(self) -> None:
+        state = self._build_state()
+
+        first = state.acquire_reverse_fill_sample("Worker-1")
+        second = state.acquire_reverse_fill_sample("Worker-2")
+
+        self.assertEqual(first.status, "acquired")
+        self.assertEqual(second.status, "acquired")
+        self.assertEqual(first.sample.data_row_number, 1)
+        self.assertEqual(second.sample.data_row_number, 2)
+
+        state.commit_reverse_fill_sample("Worker-1")
+        failed_row, discarded = state.mark_reverse_fill_submission_failed("Worker-2", max_retries=1)
+        self.assertEqual(failed_row, 2)
+        self.assertFalse(discarded)
+
+        retried = state.acquire_reverse_fill_sample("Worker-2")
+        self.assertEqual(retried.status, "acquired")
+        self.assertEqual(retried.sample.data_row_number, 2)
+
+    def test_discarded_row_can_make_target_unreachable(self) -> None:
+        state = self._build_state()
+
+        state.acquire_reverse_fill_sample("Worker-1")
+        state.commit_reverse_fill_sample("Worker-1")
+        state.acquire_reverse_fill_sample("Worker-2")
+        state.mark_reverse_fill_submission_failed("Worker-2", max_retries=1)
+        state.acquire_reverse_fill_sample("Worker-2")
+        failed_row, discarded = state.mark_reverse_fill_submission_failed("Worker-2", max_retries=1)
+
+        self.assertEqual(failed_row, 2)
+        self.assertTrue(discarded)
+        self.assertTrue(state.is_reverse_fill_target_unreachable())
+
+
+if __name__ == "__main__":
+    unittest.main()

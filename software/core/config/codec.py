@@ -6,6 +6,7 @@ import random
 from dataclasses import asdict
 from typing import Any, Dict, List, Optional, Tuple
 
+from software.core.reverse_fill import REVERSE_FILL_FORMAT_AUTO, REVERSE_FILL_FORMAT_WJX_SCORE, REVERSE_FILL_FORMAT_WJX_SEQUENCE, REVERSE_FILL_FORMAT_WJX_TEXT
 from software.core.config.schema import RuntimeConfig
 from software.core.psychometrics.psychometric import normalize_target_alpha
 from software.core.questions.consistency import normalize_rule_dict, sanitize_answer_rules
@@ -20,10 +21,16 @@ from software.providers.common import (
 from software.logging.log_utils import log_suppressed_exception
 from software.app.config import BROWSER_PREFERENCE, USER_AGENT_PRESETS
 
-CURRENT_CONFIG_SCHEMA_VERSION = 4
-_SUPPORTED_LEGACY_CONFIG_SCHEMA_VERSIONS = {3}
+CURRENT_CONFIG_SCHEMA_VERSION = 5
+_SUPPORTED_LEGACY_CONFIG_SCHEMA_VERSIONS = {3, 4}
 _LEGACY_CONFIG_KEYS = ("random_proxy_api", "ai_enabled")
 _TEXT_RANDOM_MODES = {"none", "name", "mobile", "id_card", "integer"}
+_REVERSE_FILL_FORMATS = {
+    REVERSE_FILL_FORMAT_AUTO,
+    REVERSE_FILL_FORMAT_WJX_SEQUENCE,
+    REVERSE_FILL_FORMAT_WJX_SCORE,
+    REVERSE_FILL_FORMAT_WJX_TEXT,
+}
 
 __all__ = [
     "CURRENT_CONFIG_SCHEMA_VERSION",
@@ -162,6 +169,20 @@ def _normalize_dimension_groups(raw: Any) -> List[str]:
 def _migrate_config_payload_v3_to_v4(payload: Dict[str, Any]) -> Dict[str, Any]:
     migrated = dict(payload)
     migrated["dimension_groups"] = _normalize_dimension_groups(migrated.get("dimension_groups"))
+    migrated["config_schema_version"] = 4
+    return migrated
+
+
+def _migrate_config_payload_v4_to_v5(payload: Dict[str, Any]) -> Dict[str, Any]:
+    migrated = dict(payload)
+    migrated["reverse_fill_enabled"] = bool(migrated.get("reverse_fill_enabled", False))
+    migrated["reverse_fill_source_path"] = str(migrated.get("reverse_fill_source_path") or "")
+    reverse_fill_format = str(migrated.get("reverse_fill_format") or REVERSE_FILL_FORMAT_AUTO).strip().lower()
+    migrated["reverse_fill_format"] = reverse_fill_format if reverse_fill_format in _REVERSE_FILL_FORMATS else REVERSE_FILL_FORMAT_AUTO
+    try:
+        migrated["reverse_fill_start_row"] = max(1, int(migrated.get("reverse_fill_start_row") or 1))
+    except Exception:
+        migrated["reverse_fill_start_row"] = 1
     migrated["config_schema_version"] = CURRENT_CONFIG_SCHEMA_VERSION
     return migrated
 
@@ -282,6 +303,10 @@ def normalize_runtime_config_payload(raw: Dict[str, Any]) -> RuntimeConfig:
             log_suppressed_exception("_tuple_pair failure", exc, level=logging.WARNING)
         return 0, 0
 
+    def _reverse_fill_format(value: Any) -> str:
+        normalized = str(value or REVERSE_FILL_FORMAT_AUTO).strip().lower()
+        return normalized if normalized in _REVERSE_FILL_FORMATS else REVERSE_FILL_FORMAT_AUTO
+
     def _browser_pref_list(value: Any) -> List[str]:
         allowed = set(BROWSER_PREFERENCE) | {"edge", "chrome"}
         prefs: List[str] = []
@@ -345,6 +370,10 @@ def normalize_runtime_config_payload(raw: Dict[str, Any]) -> RuntimeConfig:
     config.reliability_mode_enabled = bool(raw.get("reliability_mode_enabled", True))
     config.psycho_target_alpha = normalize_target_alpha(raw.get("psycho_target_alpha"))
     config.headless_mode = _as_bool(raw.get("headless_mode", True), True)
+    config.reverse_fill_enabled = _as_bool(raw.get("reverse_fill_enabled", False), False)
+    config.reverse_fill_source_path = str(raw.get("reverse_fill_source_path") or "")
+    config.reverse_fill_format = _reverse_fill_format(raw.get("reverse_fill_format"))
+    config.reverse_fill_start_row = max(1, _as_int(raw.get("reverse_fill_start_row"), 1))
     config.answer_rules = []
     config.dimension_groups = _normalize_dimension_groups(raw.get("dimension_groups"))
     raw_rules = raw.get("answer_rules")
@@ -431,7 +460,9 @@ def _ensure_supported_config_payload(payload: Dict[str, Any], *, config_path: st
             config_path,
         )
         if schema_version == 3:
-            return _migrate_config_payload_v3_to_v4(payload)
+            return _migrate_config_payload_v4_to_v5(_migrate_config_payload_v3_to_v4(payload))
+        if schema_version == 4:
+            return _migrate_config_payload_v4_to_v5(payload)
     raise ValueError(
         f"配置文件版本不受支持（当前仅支持 schema v{CURRENT_CONFIG_SCHEMA_VERSION}，实际为 v{schema_version}）：{config_path}"
     )

@@ -24,6 +24,8 @@ from software.core.questions.utils import (
     smooth_scroll_to_element,
 )
 from software.app.config import DEFAULT_FILL_TEXT
+from software.core.reverse_fill.runtime import resolve_current_reverse_fill_answer
+from software.core.reverse_fill.schema import REVERSE_FILL_KIND_CHOICE
 from wjx.provider.html_parser_common import _is_select_placeholder_option
 
 
@@ -504,20 +506,35 @@ def single(
     option_texts = []
     for elem in option_elements:
         option_texts.append(_extract_single_option_text(elem))
+
+    reverse_fill_answer = resolve_current_reverse_fill_answer(task_ctx, current)
+    forced_index: Optional[int] = None
+    if reverse_fill_answer is not None and reverse_fill_answer.kind == REVERSE_FILL_KIND_CHOICE:
+        try:
+            forced_index = int(reverse_fill_answer.choice_index)
+        except Exception:
+            forced_index = None
+
     strict_ratio = is_strict_ratio_question(task_ctx, current)
-    if not strict_ratio:
-        probabilities = apply_persona_boost(option_texts, probabilities)
-    probabilities = apply_single_like_consistency(probabilities, current)
-    if strict_ratio:
-        strict_reference = list(probabilities)
-        probabilities = resolve_distribution_probabilities(
-            probabilities,
-            len(option_elements),
-            task_ctx,
-            current,
-        )
-        probabilities = enforce_reference_rank_order(probabilities, strict_reference)
-    target_index = weighted_index(probabilities)
+    if forced_index is None:
+        if not strict_ratio:
+            probabilities = apply_persona_boost(option_texts, probabilities)
+        probabilities = apply_single_like_consistency(probabilities, current)
+        if strict_ratio:
+            strict_reference = list(probabilities)
+            probabilities = resolve_distribution_probabilities(
+                probabilities,
+                len(option_elements),
+                task_ctx,
+                current,
+            )
+            probabilities = enforce_reference_rank_order(probabilities, strict_reference)
+        target_index = weighted_index(probabilities)
+    else:
+        if forced_index < 0 or forced_index >= len(option_elements):
+            logging.warning("单选题反填答案越界（题号%s，索引%s），已跳过。", current, forced_index)
+            return
+        target_index = forced_index
     selected_option = target_index + 1
     target_elem = option_elements[target_index] if target_index < len(option_elements) else None
     if not target_elem:
@@ -527,8 +544,13 @@ def single(
     if not clicked:
         logging.warning("单选题点击未生效（题号%s，索引%s），已跳过。", current, selected_option)
         return
-    if strict_ratio:
+    if strict_ratio and forced_index is None:
         record_pending_distribution_choice(task_ctx, current, target_index, len(option_elements))
+
+    if forced_index is not None:
+        selected_text = option_texts[target_index] if target_index < len(option_texts) else ""
+        record_answer(current, "single", selected_indices=[target_index], selected_texts=[selected_text])
+        return
 
     has_free_text_input = _single_option_has_free_text_input(target_elem)
     fill_entries = single_option_fill_texts_config[index] if index < len(single_option_fill_texts_config) else None

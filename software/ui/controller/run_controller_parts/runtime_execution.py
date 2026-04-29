@@ -13,6 +13,7 @@ from software.app.config import STOP_FORCE_WAIT_SECONDS, app_settings, get_bool_
 from software.core.engine.failure_reason import FailureReason
 from software.core.engine.runner import run
 from software.core.questions.config import configure_probabilities, validate_question_config
+from software.core.reverse_fill.validation import build_enabled_reverse_fill_spec
 from software.core.task import ExecutionConfig, ExecutionState, ProxyLease
 from software.io.config import RuntimeConfig
 from software.network.proxy import set_proxy_occupy_minute_by_answer_duration
@@ -175,6 +176,18 @@ class RunControllerExecutionMixin:
             self.runFailed.emit(f"题目配置存在冲突，无法启动：\n\n{validation_error}")
             return
 
+        reverse_fill_spec = None
+        try:
+            reverse_fill_spec = build_enabled_reverse_fill_spec(
+                config,
+                list(questions_info or []),
+                list(config.question_entries or []),
+            )
+        except Exception as exc:
+            logging.error("反填配置验证失败：%s", exc, exc_info=True)
+            self.runFailed.emit(str(exc))
+            return
+
         logging.debug("开始配置任务：目标%s份，%s个线程", config.target, config.threads)
 
         self.config = config
@@ -210,6 +223,7 @@ class RunControllerExecutionMixin:
         logging.debug("配置题目概率分布（共%s题）", len(config.question_entries))
         pending_config = ExecutionConfig()
         pending_config.survey_provider = str(getattr(config, "survey_provider", "wjx") or "wjx")
+        pending_config.reverse_fill_spec = reverse_fill_spec
         try:
             configure_probabilities(
                 config.question_entries,
@@ -242,6 +256,7 @@ class RunControllerExecutionMixin:
         execution_config, execution_state = self._prepare_engine_state(config, proxy_pool)
         execution_state.ensure_worker_threads(max(1, int(config.threads or 1)))
         self._apply_pending_execution_config(execution_config, consume=True)
+        execution_state.initialize_reverse_fill_runtime()
         self._execution_state = execution_state
         self.adapter.execution_state = execution_state
 

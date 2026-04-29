@@ -2,6 +2,7 @@ playwright
 zxing-cpp
 Pillow
 numpy==2.3.5
+openpyxl
 httpx>=0.27,<1
 packaging
 beautifulsoup4

@@ -94,6 +94,8 @@ pywin32_modules = [
 
 hiddenimports = qfw_hiddenimports + pyside6_modules + pywin32_modules + [
     'shiboken6',
+    'openpyxl',
+    'et_xmlfile',
     # 主窗口模块位于 shell 子目录，显式保留该模块打包
     'software.ui.shell.main_window',
     # 腾讯问卷 runtime 在 registry 中为延迟导入，显式保留 provider 实现

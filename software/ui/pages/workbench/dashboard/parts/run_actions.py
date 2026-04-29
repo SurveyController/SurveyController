@@ -126,6 +126,12 @@ class DashboardRunActionsMixin:
             self.strategy_page.set_dimension_groups(getattr(cfg, "dimension_groups", []) or [])
         except Exception as exc:
             log_suppressed_exception("apply_config: self.strategy_page.set_rules(...)", exc, level=logging.WARNING)
+        main_win = self.window()
+        if hasattr(main_win, "reverse_fill_page"):
+            try:
+                main_win.reverse_fill_page.apply_config(cfg)
+            except Exception as exc:
+                log_suppressed_exception("apply_config: main_win.reverse_fill_page.apply_config(cfg)", exc, level=logging.WARNING)
 
         self._refresh_entry_table()
         self._sync_start_button_state()
@@ -156,4 +162,10 @@ class DashboardRunActionsMixin:
         cfg.random_ip_enabled = self.random_ip_cb.isChecked()
         cfg.answer_rules = list(self.strategy_page.get_rules() or [])
         cfg.dimension_groups = list(self.strategy_page.get_dimension_groups() or [])
+        main_win = self.window()
+        if hasattr(main_win, "reverse_fill_page"):
+            try:
+                main_win.reverse_fill_page.update_config(cfg)
+            except Exception as exc:
+                log_suppressed_exception("_build_config: main_win.reverse_fill_page.update_config(cfg)", exc, level=logging.WARNING)
         return cfg

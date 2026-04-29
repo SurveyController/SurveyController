@@ -177,6 +177,7 @@ class RunControllerInitializationMixin:
         config.question_strict_ratio_map = copy.deepcopy(getattr(pending, "question_strict_ratio_map", {}))
         config.question_psycho_bias_map = copy.deepcopy(pending.question_psycho_bias_map)
         config.questions_metadata = copy.deepcopy(pending.questions_metadata)
+        config.reverse_fill_spec = copy.deepcopy(getattr(pending, "reverse_fill_spec", None))
         config.survey_provider = str(getattr(pending, "survey_provider", getattr(config, "survey_provider", "wjx")) or "wjx")
         if consume:
             self._pending_execution_config = None

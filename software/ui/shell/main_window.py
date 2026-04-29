@@ -24,6 +24,7 @@ from qfluentwidgets import (
 from shiboken6 import isValid
 
 from software.ui.pages.workbench.dashboard import DashboardPage
+from software.ui.pages.workbench.reverse_fill import ReverseFillPage
 from software.ui.pages.workbench.runtime_panel import RuntimePage
 from software.ui.pages.workbench.question_editor.page import QuestionPage
 from software.ui.pages.workbench.strategy import QuestionStrategyPage
@@ -49,6 +50,7 @@ from software.network.proxy import (
     format_status_payload,
 )
 from software.app.runtime_paths import get_resource_path
+from software.providers.common import detect_survey_provider
 
 from software.ui.shell.boot import create_boot_splash, finish_boot_splash
 
@@ -124,6 +126,7 @@ class MainWindow(
         self.runtime_page = RuntimePage(self.controller, self)
         self.question_page = QuestionPage(self)
         self.strategy_page = QuestionStrategyPage(self)
+        self.reverse_fill_page = ReverseFillPage(self)
         # QuestionPage 仅用作题目配置的数据载体，不作为主界面子页面展示；
         # 若不隐藏会以默认几何 (0,0,100,30) 叠在窗口左上角，造成标题栏错乱。
         self.question_page.hide()
@@ -151,6 +154,9 @@ class MainWindow(
         self.question_page.setObjectName("question")
         self.runtime_page.setObjectName("runtime")
         self.strategy_page.setObjectName("strategy")
+        self.reverse_fill_page.setObjectName("reverse_fill")
+        self.reverse_fill_page.set_open_wizard_handler(self._open_reverse_fill_wizard)
+        self.question_page.entriesChanged.connect(lambda _count: self._sync_reverse_fill_context())
 
         self._init_navigation()
         self._init_community_hint_badge_state()
@@ -166,6 +172,7 @@ class MainWindow(
             custom_confirm_handler=self.show_custom_confirm_dialog_ui,
         )
         self._refresh_title_random_ip_user_id()
+        self._sync_reverse_fill_context()
         self._register_popups()
         self._load_saved_config()
         self._start_random_ip_quota_auto_sync()
@@ -574,6 +581,7 @@ class MainWindow(
         self.strategy_page.set_dimension_groups([])
         self.strategy_page.set_entries(self.question_page.entries, self.question_page.entry_questions_info)
         self.dashboard.update_question_meta(parsed_title, len(self.controller.question_entries))
+        self._sync_reverse_fill_context()
 
     @Slot(str)
     def _on_survey_parse_failed(self, msg: str):
@@ -586,6 +594,33 @@ class MainWindow(
 
     def _open_quota_request_form(self) -> bool:
         return self._open_contact_dialog(default_type="额度申请", lock_message_type=True)
+
+    def _sync_reverse_fill_context(self) -> None:
+        try:
+            survey_provider = str(
+                getattr(self.controller, "survey_provider", "")
+                or getattr(getattr(self.controller, "config", None), "survey_provider", "")
+                or detect_survey_provider(getattr(self.dashboard, "url_edit", None).text() if hasattr(getattr(self.dashboard, "url_edit", None), "text") else "", default="")
+                or ""
+            )
+            self.reverse_fill_page.set_question_context(
+                self.question_page.questions_info,
+                self.question_page.get_entries(),
+                survey_title=getattr(self.dashboard, "_survey_title", "") or "",
+                survey_provider=survey_provider,
+            )
+        except Exception:
+            logging.info("同步反填页上下文失败", exc_info=True)
+
+    def _open_reverse_fill_wizard(self) -> None:
+        info = list(self.question_page.questions_info or [])
+        if not info:
+            self._toast("当前还没有解析出题目，无法打开配置向导。", "warning")
+            return
+        self._open_parse_wizard_after_parse(
+            copy.deepcopy(info),
+            str(getattr(self.dashboard, "_survey_title", "") or "问卷"),
+        )
 
     def _open_parse_wizard_after_parse(self, info: List[Dict[str, Any]], parsed_title: str) -> None:
         try:

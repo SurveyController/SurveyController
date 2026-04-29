@@ -13,6 +13,8 @@ from software.core.questions.distribution import (
 )
 from software.core.questions.strict_ratio import enforce_reference_rank_order, is_strict_ratio_question
 from software.core.questions.tendency import get_tendency_index
+from software.core.reverse_fill.runtime import resolve_current_reverse_fill_answer
+from software.core.reverse_fill.schema import REVERSE_FILL_KIND_MATRIX
 from software.logging.log_utils import log_suppressed_exception
 from wjx.provider.questions.slider import set_slider_value
 
@@ -286,6 +288,10 @@ def _fill_slider_matrix(
     candidate_values = _build_slider_matrix_values(driver, current, slider_inputs[0])
     resolved_question_index = question_index if question_index is not None else current
     strict_ratio_question = is_strict_ratio_question(task_ctx, resolved_question_index)
+    reverse_fill_answer = resolve_current_reverse_fill_answer(task_ctx, current)
+    forced_row_indexes: List[int] = []
+    if reverse_fill_answer is not None and reverse_fill_answer.kind == REVERSE_FILL_KIND_MATRIX:
+        forced_row_indexes = [int(value) for value in list(reverse_fill_answer.matrix_choice_indexes or [])]
     total_constraint = _read_slider_matrix_total(driver, current, slider_inputs)
     per_row_probabilities: List[Union[List[float], int]] = []
     for row_offset, _slider_input in enumerate(slider_inputs):
@@ -317,7 +323,9 @@ def _fill_slider_matrix(
     for row_offset, slider_input in enumerate(slider_inputs):
         row_probabilities = per_row_probabilities[row_offset]
         raw_probabilities = matrix_prob_config[index + row_offset] if index + row_offset < len(matrix_prob_config) else -1
-        if selected_indices is not None and row_offset < len(selected_indices):
+        if row_offset < len(forced_row_indexes):
+            selected_index = forced_row_indexes[row_offset]
+        elif selected_indices is not None and row_offset < len(selected_indices):
             selected_index = selected_indices[row_offset]
         else:
             selected_index = get_tendency_index(
@@ -328,6 +336,8 @@ def _fill_slider_matrix(
                 question_index=resolved_question_index,
                 row_index=row_offset,
             )
+        if selected_index < 0 or selected_index >= len(candidate_values):
+            continue
         selected_value = candidate_values[selected_index]
         try:
             container = slider_input.find_element(By.XPATH, "./..")
@@ -337,13 +347,14 @@ def _fill_slider_matrix(
             set_slider_value(driver, slider_input, selected_value, container=container)
         except Exception as exc:
             log_suppressed_exception("matrix._fill_slider_matrix: set_slider_value(...)", exc, level=logging.ERROR)
-        record_pending_distribution_choice(
-            task_ctx,
-            resolved_question_index,
-            selected_index,
-            len(candidate_values),
-            row_index=row_offset,
-        )
+        if row_offset >= len(forced_row_indexes):
+            record_pending_distribution_choice(
+                task_ctx,
+                resolved_question_index,
+                selected_index,
+                len(candidate_values),
+                row_index=row_offset,
+            )
         _log_matrix_row_choice(
             current,
             row_offset + 1,
@@ -392,6 +403,10 @@ def matrix(
     column_texts = _extract_matrix_column_texts(driver, current, len(candidate_columns))
     resolved_question_index = question_index if question_index is not None else current
     strict_ratio_question = is_strict_ratio_question(task_ctx, resolved_question_index)
+    reverse_fill_answer = resolve_current_reverse_fill_answer(task_ctx, current)
+    forced_row_indexes: List[int] = []
+    if reverse_fill_answer is not None and reverse_fill_answer.kind == REVERSE_FILL_KIND_MATRIX:
+        forced_row_indexes = [int(value) for value in list(reverse_fill_answer.matrix_choice_indexes or [])]
 
     for row_index in range(1, matrix_row_count + 1):
         raw_probabilities = matrix_prob_config[index] if index < len(matrix_prob_config) else -1
@@ -433,25 +448,31 @@ def matrix(
                 row_probabilities,
                 strict_reference or row_probabilities,
             )
-        selected_index = get_tendency_index(
-            len(candidate_columns),
-            row_probabilities,
-            dimension=dimension,
-            psycho_plan=psycho_plan,
-            question_index=resolved_question_index,
-            row_index=row_index - 1,
-        )
+        if row_index - 1 < len(forced_row_indexes):
+            selected_index = forced_row_indexes[row_index - 1]
+        else:
+            selected_index = get_tendency_index(
+                len(candidate_columns),
+                row_probabilities,
+                dimension=dimension,
+                psycho_plan=psycho_plan,
+                question_index=resolved_question_index,
+                row_index=row_index - 1,
+            )
+        if selected_index < 0 or selected_index >= len(candidate_columns):
+            continue
         selected_column = candidate_columns[selected_index]
         driver.find_element(
             By.CSS_SELECTOR, f"#drv{current}_{row_index} > td:nth-child({selected_column})"
         ).click()
-        record_pending_distribution_choice(
-            task_ctx,
-            resolved_question_index,
-            selected_column - 2,
-            len(candidate_columns),
-            row_index=row_index - 1,
-        )
+        if row_index - 1 >= len(forced_row_indexes):
+            record_pending_distribution_choice(
+                task_ctx,
+                resolved_question_index,
+                selected_column - 2,
+                len(candidate_columns),
+                row_index=row_index - 1,
+            )
         _log_matrix_row_choice(
             current,
             row_index,

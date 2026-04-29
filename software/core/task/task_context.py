@@ -7,6 +7,14 @@ import threading
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional, Tuple, Union
 
+from software.core.reverse_fill import (
+    ReverseFillAcquireResult,
+    ReverseFillAnswer,
+    ReverseFillRuntimeState,
+    ReverseFillSpec,
+    create_reverse_fill_runtime_state,
+)
+
 @dataclass
 class ThreadProgressState:
     """单个工作线程的运行状态快照。"""
@@ -60,6 +68,7 @@ class ExecutionConfig:
     droplist_option_fill_texts: List[Optional[List[Optional[str]]]] = field(default_factory=list)
     multiple_option_fill_texts: List[Optional[List[Optional[str]]]] = field(default_factory=list)
     answer_rules: List[Dict[str, Any]] = field(default_factory=list)
+    reverse_fill_spec: Optional[ReverseFillSpec] = None
 
     question_config_index_map: Dict[int, Tuple[str, int]] = field(default_factory=dict)
     question_dimension_map: Dict[int, Optional[str]] = field(default_factory=dict)
@@ -112,6 +121,7 @@ class ExecutionState:
 
     proxy_waiting_threads: int = 0
     proxy_in_use_by_thread: Dict[str, ProxyLease] = field(default_factory=dict)
+    reverse_fill_runtime: Optional[ReverseFillRuntimeState] = None
 
     stop_event: threading.Event = field(default_factory=threading.Event)
     lock: threading.Lock = field(default_factory=threading.Lock)
@@ -442,6 +452,122 @@ class ExecutionState:
                 return None
             self.joint_committed_sample_indexes.add(int(reserved))
             return int(reserved)
+
+    def initialize_reverse_fill_runtime(self) -> None:
+        with self.lock:
+            self.reverse_fill_runtime = create_reverse_fill_runtime_state(getattr(self.config, "reverse_fill_spec", None))
+
+    def _reverse_fill_thread_key(self, thread_name: Optional[str] = None) -> str:
+        key = str(thread_name or threading.current_thread().name or "Worker-?").strip()
+        return key or "Worker-?"
+
+    def _reverse_fill_possible_total_locked(self) -> int:
+        runtime = self.reverse_fill_runtime
+        if runtime is None:
+            return max(0, int(self.cur_num or 0))
+        return (
+            max(0, int(self.cur_num or 0))
+            + len(runtime.queued_row_numbers)
+            + len(runtime.reserved_row_by_thread)
+        )
+
+    def acquire_reverse_fill_sample(self, thread_name: Optional[str] = None) -> ReverseFillAcquireResult:
+        key = self._reverse_fill_thread_key(thread_name)
+        with self.lock:
+            runtime = self.reverse_fill_runtime
+            if runtime is None:
+                return ReverseFillAcquireResult(status="disabled", message="reverse_fill_disabled")
+            existing_row = runtime.reserved_row_by_thread.get(key)
+            if existing_row is not None:
+                sample = runtime.samples_by_row_number.get(int(existing_row))
+                if sample is not None:
+                    return ReverseFillAcquireResult(status="acquired", sample=sample, message="already_reserved")
+                runtime.reserved_row_by_thread.pop(key, None)
+            while runtime.queued_row_numbers:
+                row_number = int(runtime.queued_row_numbers.popleft())
+                sample = runtime.samples_by_row_number.get(row_number)
+                if sample is None:
+                    continue
+                runtime.reserved_row_by_thread[key] = row_number
+                return ReverseFillAcquireResult(status="acquired", sample=sample, message="reserved")
+            target_num = max(0, int(getattr(self.config, "target_num", 0) or 0))
+            if target_num > 0 and self._reverse_fill_possible_total_locked() < target_num:
+                return ReverseFillAcquireResult(status="exhausted", message="reverse_fill_target_unreachable")
+            return ReverseFillAcquireResult(status="waiting", message="reverse_fill_waiting")
+
+    def release_reverse_fill_sample(self, thread_name: Optional[str] = None, *, requeue: bool = True) -> Optional[int]:
+        key = self._reverse_fill_thread_key(thread_name)
+        with self.lock:
+            runtime = self.reverse_fill_runtime
+            if runtime is None:
+                return None
+            row_number = runtime.reserved_row_by_thread.pop(key, None)
+            if row_number is None:
+                return None
+            normalized_row = int(row_number)
+            if requeue and normalized_row not in runtime.committed_row_numbers and normalized_row not in runtime.discarded_row_numbers:
+                runtime.queued_row_numbers.appendleft(normalized_row)
+            return normalized_row
+
+    def commit_reverse_fill_sample(self, thread_name: Optional[str] = None) -> Optional[int]:
+        key = self._reverse_fill_thread_key(thread_name)
+        with self.lock:
+            runtime = self.reverse_fill_runtime
+            if runtime is None:
+                return None
+            row_number = runtime.reserved_row_by_thread.pop(key, None)
+            if row_number is None:
+                return None
+            normalized_row = int(row_number)
+            runtime.committed_row_numbers.add(normalized_row)
+            runtime.failure_count_by_row.pop(normalized_row, None)
+            return normalized_row
+
+    def mark_reverse_fill_submission_failed(self, thread_name: Optional[str] = None, *, max_retries: int = 1) -> Tuple[Optional[int], bool]:
+        key = self._reverse_fill_thread_key(thread_name)
+        with self.lock:
+            runtime = self.reverse_fill_runtime
+            if runtime is None:
+                return None, False
+            row_number = runtime.reserved_row_by_thread.pop(key, None)
+            if row_number is None:
+                return None, False
+            normalized_row = int(row_number)
+            next_count = max(0, int(runtime.failure_count_by_row.get(normalized_row, 0))) + 1
+            runtime.failure_count_by_row[normalized_row] = next_count
+            if next_count <= max(0, int(max_retries or 0)):
+                runtime.queued_row_numbers.appendleft(normalized_row)
+                return normalized_row, False
+            runtime.discarded_row_numbers.add(normalized_row)
+            return normalized_row, True
+
+    def get_reverse_fill_answer(self, question_num: int, thread_name: Optional[str] = None) -> Optional[ReverseFillAnswer]:
+        key = self._reverse_fill_thread_key(thread_name)
+        try:
+            normalized_question_num = int(question_num)
+        except Exception:
+            return None
+        with self.lock:
+            runtime = self.reverse_fill_runtime
+            if runtime is None:
+                return None
+            row_number = runtime.reserved_row_by_thread.get(key)
+            if row_number is None:
+                return None
+            sample = runtime.samples_by_row_number.get(int(row_number))
+            if sample is None:
+                return None
+            return (sample.answers or {}).get(normalized_question_num)
+
+    def is_reverse_fill_target_unreachable(self) -> bool:
+        with self.lock:
+            runtime = self.reverse_fill_runtime
+            if runtime is None:
+                return False
+            target_num = max(0, int(getattr(self.config, "target_num", 0) or 0))
+            if target_num <= 0:
+                return False
+            return self._reverse_fill_possible_total_locked() < target_num
 
     def snapshot_thread_progress(self) -> List[Dict[str, Any]]:
         with self.lock:

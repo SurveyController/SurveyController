@@ -161,9 +161,7 @@ class AdaptiveFlowLayout(QLayout):
 
         # Return used height including margins.
         margins = self.contentsMargins()
-        left = margins.left()
         top = margins.top()
-        right = margins.right()
         bottom = margins.bottom()
         used_h = (y - r.y()) + top + bottom
         return used_h

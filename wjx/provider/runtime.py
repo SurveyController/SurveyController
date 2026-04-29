@@ -17,6 +17,7 @@ from software.core.modes.duration_control import simulate_answer_duration_delay
 from software.core.engine.runtime_control import _is_headless_mode
 from software.core.questions.utils import _should_treat_question_as_text_like
 from software.core.ai.runtime import extract_question_title_from_dom
+from software.core.reverse_fill.runtime import resolve_current_reverse_fill_answer
 from software.network.browser import BrowserDriver, By, NoSuchElementException
 from software.app.config import HEADLESS_PAGE_BUFFER_DELAY, HEADLESS_PAGE_CLICK_DELAY
 from wjx.provider.detection import detect as _wjx_detect
@@ -65,6 +66,19 @@ def _question_title_for_log(driver: BrowserDriver, question_num: int, question_d
         return ""
     compact = " ".join(raw_text.split())
     return compact[:60] + "..." if len(compact) > 60 else compact
+
+
+def _should_advance_reverse_fill_index(
+    config_entry: Optional[Tuple[str, int]],
+    index_key: str,
+    config_aliases: Tuple[str, ...],
+    reverse_fill_answer: Any,
+) -> bool:
+    if reverse_fill_answer is None:
+        return True
+    if config_entry and config_entry[0] in (index_key, *config_aliases):
+        return True
+    return False
 
 
 # ---------------------------------------------------------------------------
@@ -216,6 +230,7 @@ class _QuestionDispatcher:
     ) -> Optional[bool]:
         """分发题型并填写。"""
         is_reorder = (question_type == "11") or _driver_question_looks_like_reorder(question_div)
+        reverse_fill_answer = resolve_current_reverse_fill_answer(ctx, question_num)
 
         # 排序题
         if is_reorder:
@@ -229,8 +244,22 @@ class _QuestionDispatcher:
                 print(f"第{question_num}题为位置题，暂不支持，已跳过")
                 return False
             _idx = config_entry[1] if config_entry and config_entry[0] == "text" else indices.get("text", 0)
-            _text_impl(driver, question_num, _idx, ctx.texts, ctx.texts_prob, ctx.text_entry_types, ctx.text_ai_flags, ctx.text_titles, ctx.multi_text_blank_modes, ctx.multi_text_blank_ai_flags, ctx.multi_text_blank_int_ranges)
-            indices["text"] = _idx + 1
+            _text_impl(
+                driver,
+                question_num,
+                _idx,
+                ctx.texts,
+                ctx.texts_prob,
+                ctx.text_entry_types,
+                ctx.text_ai_flags,
+                ctx.text_titles,
+                ctx.multi_text_blank_modes,
+                ctx.multi_text_blank_ai_flags,
+                ctx.multi_text_blank_int_ranges,
+                task_ctx=ctx,
+            )
+            if _should_advance_reverse_fill_index(config_entry, "text", (), reverse_fill_answer):
+                indices["text"] = _idx + 1
             return None  # 文本题内部已处理计数，返回 None
 
         # 某些问卷会把多项填空题挂在 type=9 等非文本 type 上；只要配置映射为 text 且 DOM 呈现为填空特征，
@@ -273,8 +302,10 @@ class _QuestionDispatcher:
                     ctx.multi_text_blank_modes,
                     ctx.multi_text_blank_ai_flags,
                     ctx.multi_text_blank_int_ranges,
+                    task_ctx=ctx,
                 )
-                indices["text"] = _idx + 1
+                if _should_advance_reverse_fill_index(config_entry, "text", (), reverse_fill_answer):
+                    indices["text"] = _idx + 1
                 return None
 
         # 多行滑块题：不同问卷可能挂在 type=9 / type=12 等模板上，不能继续按题号硬编码。
@@ -291,7 +322,8 @@ class _QuestionDispatcher:
             else:
                 _idx = sequential_idx
             result = self._handle_matrix(driver, question_num, _idx, ctx, psycho_plan=psycho_plan)
-            indices["matrix"] = result if isinstance(result, int) else (_idx + 1)
+            if _should_advance_reverse_fill_index(config_entry, "matrix", (), reverse_fill_answer):
+                indices["matrix"] = result if isinstance(result, int) else (_idx + 1)
             return None
 
         # 常规题型分发
@@ -330,10 +362,11 @@ class _QuestionDispatcher:
             handler_kwargs["psycho_plan"] = psycho_plan
         result = spec.handler(driver, question_num, _idx, ctx, **handler_kwargs)
 
-        if isinstance(result, int):
-            indices[index_key] = result
-        else:
-            indices[index_key] = _idx + 1
+        if _should_advance_reverse_fill_index(config_entry, index_key, spec.config_aliases, reverse_fill_answer):
+            if isinstance(result, int):
+                indices[index_key] = result
+            else:
+                indices[index_key] = _idx + 1
         return None
 
 
@@ -477,6 +510,7 @@ def brush(
                                 ctx.single_prob,
                                 ctx.single_option_fill_texts,
                                 ctx.single_attached_option_selects,
+                                task_ctx=ctx,
                             )
                             _indices["single"] += 1
                         handled = True
@@ -499,6 +533,7 @@ def brush(
                     )
 
                     if is_text_like_question:
+                        reverse_fill_answer = resolve_current_reverse_fill_answer(ctx, current_question_number)
                         _text_impl(
                             driver,
                             current_question_number,
@@ -511,8 +546,10 @@ def brush(
                             ctx.multi_text_blank_modes,
                             ctx.multi_text_blank_ai_flags,
                             ctx.multi_text_blank_int_ranges,
+                            task_ctx=ctx,
                         )
-                        _indices["text"] += 1
+                        if reverse_fill_answer is None:
+                            _indices["text"] += 1
                     else:
                         print(f"第{current_question_number}题为不支持类型(type={question_type})")
 

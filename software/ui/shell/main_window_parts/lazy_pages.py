@@ -16,6 +16,7 @@ from PySide6.QtWidgets import QWidget
 if TYPE_CHECKING:
     from PySide6.QtWidgets import QStackedWidget
     from software.ui.pages.workbench.dashboard import DashboardPage
+    from software.ui.pages.workbench.reverse_fill import ReverseFillPage
     from software.ui.pages.workbench.runtime_panel import RuntimePage
     from software.ui.pages.workbench.strategy import QuestionStrategyPage
 
@@ -28,6 +29,7 @@ class MainWindowLazyPagesMixin:
         dashboard: DashboardPage
         runtime_page: RuntimePage
         strategy_page: QuestionStrategyPage
+        reverse_fill_page: ReverseFillPage
         stackedWidget: QStackedWidget
         navigationInterface: Any  # qfluentwidgets.NavigationInterface
         addSubInterface: Any
@@ -38,6 +40,7 @@ class MainWindowLazyPagesMixin:
         self.addSubInterface(self.dashboard, FluentIcon.HOME, "概览", position=NavigationItemPosition.TOP)
         self.addSubInterface(self.runtime_page, FluentIcon.DEVELOPER_TOOLS, "运行参数", position=NavigationItemPosition.TOP)
         self.addSubInterface(self.strategy_page, FluentIcon.DICTIONARY_ADD, "题目策略", position=NavigationItemPosition.TOP)
+        self.addSubInterface(self.reverse_fill_page, FluentIcon.SYNC, "反填", position=NavigationItemPosition.TOP)
         self.navigationInterface.addItem(
             routeKey="logs",
             icon=FluentIcon.INFO,

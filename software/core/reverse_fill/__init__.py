@@ -1,0 +1,48 @@
+"""Reverse fill 轻量导出。"""
+
+from software.core.reverse_fill.runtime import create_reverse_fill_runtime_state, resolve_current_reverse_fill_answer
+from software.core.reverse_fill.schema import (
+    REVERSE_FILL_FORMAT_AUTO,
+    REVERSE_FILL_FORMAT_WJX_SCORE,
+    REVERSE_FILL_FORMAT_WJX_SEQUENCE,
+    REVERSE_FILL_FORMAT_WJX_TEXT,
+    REVERSE_FILL_KIND_CHOICE,
+    REVERSE_FILL_KIND_MATRIX,
+    REVERSE_FILL_KIND_MULTI_TEXT,
+    REVERSE_FILL_KIND_TEXT,
+    REVERSE_FILL_STATUS_BLOCKED,
+    REVERSE_FILL_STATUS_FALLBACK,
+    REVERSE_FILL_STATUS_REVERSE,
+    ReverseFillAcquireResult,
+    ReverseFillAnswer,
+    ReverseFillIssue,
+    ReverseFillQuestionPlan,
+    ReverseFillRuntimeState,
+    ReverseFillSampleRow,
+    ReverseFillSpec,
+    reverse_fill_format_label,
+)
+
+__all__ = [
+    "REVERSE_FILL_FORMAT_AUTO",
+    "REVERSE_FILL_FORMAT_WJX_SCORE",
+    "REVERSE_FILL_FORMAT_WJX_SEQUENCE",
+    "REVERSE_FILL_FORMAT_WJX_TEXT",
+    "REVERSE_FILL_KIND_CHOICE",
+    "REVERSE_FILL_KIND_MATRIX",
+    "REVERSE_FILL_KIND_MULTI_TEXT",
+    "REVERSE_FILL_KIND_TEXT",
+    "REVERSE_FILL_STATUS_BLOCKED",
+    "REVERSE_FILL_STATUS_FALLBACK",
+    "REVERSE_FILL_STATUS_REVERSE",
+    "ReverseFillAcquireResult",
+    "ReverseFillAnswer",
+    "ReverseFillIssue",
+    "ReverseFillQuestionPlan",
+    "ReverseFillRuntimeState",
+    "ReverseFillSampleRow",
+    "ReverseFillSpec",
+    "create_reverse_fill_runtime_state",
+    "resolve_current_reverse_fill_answer",
+    "reverse_fill_format_label",
+]

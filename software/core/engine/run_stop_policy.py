@@ -34,7 +34,11 @@ class RunStopPolicy:
         failure_reason: FailureReason = FailureReason.FILL_FAILED,
         status_text: str = "失败重试",
         log_message: str = "",
+        threshold_override: Optional[int] = None,
+        terminal_stop_category: str = "fail_threshold",
+        force_stop_when_threshold_reached: bool = False,
     ) -> bool:
+        stop_threshold = max(1, int(threshold_override or self.config.fail_threshold or 1))
         with self.state.lock:
             self.state.cur_fail += 1
             if failure_reason == FailureReason.DEVICE_QUOTA_LIMIT:
@@ -42,11 +46,12 @@ class RunStopPolicy:
             message = str(log_message or "").strip()
             if message:
                 logging.warning("%s", message)
-            if self.config.stop_on_fail_enabled:
+            threshold_enabled = bool(self.config.stop_on_fail_enabled or force_stop_when_threshold_reached)
+            if threshold_enabled:
                 logging.warning(
                     "已连续失败%s次，连续失败达到%s次将强制停止",
                     self.state.cur_fail,
-                    int(self.config.fail_threshold),
+                    stop_threshold,
                 )
             else:
                 logging.warning("已连续失败%s次（失败止损已关闭）", self.state.cur_fail)
@@ -56,13 +61,34 @@ class RunStopPolicy:
             except Exception:
                 logging.info("失败后释放联合信效度样本槽位失败", exc_info=True)
             try:
+                row_number, discarded = self.state.mark_reverse_fill_submission_failed(thread_name, max_retries=1)
+                if row_number is not None:
+                    if discarded:
+                        logging.warning("反填样本第%s行已连续失败 2 次，已作废。", row_number)
+                    else:
+                        logging.info("反填样本第%s行提交失败，已回队准备重试 1 次。", row_number)
+            except Exception:
+                logging.info("失败后回收反填样本失败", exc_info=True)
+            try:
                 self.state.increment_thread_fail(thread_name, status_text=status_text)
             except Exception:
                 logging.info("更新线程失败计数失败", exc_info=True)
-        if self.config.stop_on_fail_enabled and self.state.cur_fail >= self.config.fail_threshold:
+        if self.state.is_reverse_fill_target_unreachable():
+            message = "反填样本已耗尽，剩余样本不足以完成目标份数"
+            logging.critical("%s", message)
+            self.state.mark_terminal_stop(
+                "reverse_fill_exhausted",
+                failure_reason=FailureReason.FILL_FAILED.value,
+                message=message,
+            )
+            if stop_signal:
+                stop_signal.set()
+            return True
+        threshold_enabled = bool(self.config.stop_on_fail_enabled or force_stop_when_threshold_reached)
+        if threshold_enabled and self.state.cur_fail >= stop_threshold:
             logging.critical("连续失败次数过多，强制停止，请检查配置是否正确")
             self.state.mark_terminal_stop(
-                "fail_threshold",
+                terminal_stop_category,
                 failure_reason=getattr(failure_reason, "value", str(failure_reason or "")),
                 message=message or status_text,
             )
@@ -103,6 +129,10 @@ class RunStopPolicy:
                 self.state.commit_joint_sample(thread_name)
             except Exception:
                 logging.info("提交成功后核销联合信效度样本槽位失败", exc_info=True)
+            try:
+                self.state.commit_reverse_fill_sample(thread_name)
+            except Exception:
+                logging.info("提交成功后核销反填样本失败", exc_info=True)
             try:
                 self.state.commit_pending_distribution(thread_name)
             except Exception:
