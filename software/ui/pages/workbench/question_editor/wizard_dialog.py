@@ -2,7 +2,8 @@
 import copy
 from typing import Any, Dict, List, Optional, Tuple, cast
 
-from PySide6.QtCore import QPropertyAnimation, QTimer, Qt
+from PySide6.QtCore import QPropertyAnimation, QTimer, Qt, QSize
+from PySide6.QtGui import QGuiApplication, QShowEvent
 from PySide6.QtWidgets import QButtonGroup, QDialog, QHBoxLayout, QListWidget, QVBoxLayout, QWidget
 from qfluentwidgets import (
     BodyLabel,
@@ -46,6 +47,9 @@ class QuestionWizardDialog(
     QDialog,
 ):
     """配置向导：用滑块快速设置权重/概率，编辑填空题答案。"""
+    _PREFERRED_DIALOG_SIZE = QSize(1060, 820)
+    _MIN_DIALOG_SIZE = QSize(760, 560)
+
     def __init__(
         self,
         entries: List[QuestionEntry],
@@ -59,7 +63,7 @@ class QuestionWizardDialog(
         if survey_title:
             window_title = f"{window_title} - {_shorten_text(survey_title, 36)}"
         self.setWindowTitle(window_title)
-        self.resize(1060, 820)
+        self.resize(self._PREFERRED_DIALOG_SIZE)
         self.entries = entries
         raw_info = list(info or [])
         # 右侧配置卡片必须和可配置题目一一对应，不能直接拿原始解析结果按下标硬对。
@@ -107,6 +111,7 @@ class QuestionWizardDialog(
         self._search_edit: Optional[SearchLineEdit] = None
         self._search_status_label: Optional[BodyLabel] = None
         self._search_popup: Optional[QListWidget] = None
+        self._screen_change_bound = False
 
         layout = QVBoxLayout(self)
         layout.setContentsMargins(24, 20, 24, 20)
@@ -230,6 +235,75 @@ class QuestionWizardDialog(
 
         ok_btn.clicked.connect(self.accept)
         cancel_btn.clicked.connect(self.reject)
+
+    def showEvent(self, event: QShowEvent) -> None:
+        """首次显示时按当前屏幕可用区域收口，避免高缩放下越过任务栏。"""
+        super().showEvent(event)
+        self._bind_screen_change_signal()
+        QTimer.singleShot(0, self._fit_into_available_geometry)
+
+    def _bind_screen_change_signal(self) -> None:
+        if self._screen_change_bound:
+            return
+        window_handle = self.windowHandle()
+        if window_handle is None:
+            return
+        try:
+            window_handle.screenChanged.connect(lambda _screen: self._fit_into_available_geometry())
+            self._screen_change_bound = True
+        except Exception:
+            self._screen_change_bound = False
+
+    def _resolve_target_screen(self):
+        window_handle = self.windowHandle()
+        if window_handle is not None and window_handle.screen() is not None:
+            return window_handle.screen()
+
+        parent_widget = self.parentWidget()
+        if parent_widget is not None:
+            parent_window = parent_widget.window()
+            parent_screen = parent_window.screen() if parent_window is not None else None
+            if parent_screen is not None:
+                return parent_screen
+
+        return self.screen() or QGuiApplication.primaryScreen()
+
+    def _fit_into_available_geometry(self) -> None:
+        """按屏幕可用区域限制弹窗尺寸，并在当前屏幕中居中。"""
+        screen = self._resolve_target_screen()
+        if screen is None:
+            return
+
+        available = screen.availableGeometry()
+        if available.width() <= 0 or available.height() <= 0:
+            return
+
+        frame_margin_width = 32
+        frame_margin_height = 40
+        max_width = max(self._MIN_DIALOG_SIZE.width(), available.width() - frame_margin_width)
+        max_height = max(self._MIN_DIALOG_SIZE.height(), available.height() - frame_margin_height)
+
+        target_width = min(self._PREFERRED_DIALOG_SIZE.width(), max_width)
+        target_height = min(self._PREFERRED_DIALOG_SIZE.height(), max_height)
+
+        self.setMinimumSize(
+            min(self._MIN_DIALOG_SIZE.width(), target_width),
+            min(self._MIN_DIALOG_SIZE.height(), target_height),
+        )
+        self.setMaximumSize(max_width, max_height)
+
+        resized_width = min(max(self.width(), self.minimumWidth()), max_width)
+        resized_height = min(max(self.height(), self.minimumHeight()), max_height)
+
+        if resized_width != self.width() or resized_height != self.height():
+            self.resize(resized_width, resized_height)
+
+        frame = self.frameGeometry()
+        frame.moveCenter(available.center())
+        top_left = frame.topLeft()
+        top_left.setX(max(available.left(), min(top_left.x(), available.right() - frame.width() + 1)))
+        top_left.setY(max(available.top(), min(top_left.y(), available.bottom() - frame.height() + 1)))
+        self.move(top_left)
     def get_results(self) -> Dict[int, Any]:
         """获取滑块权重/概率结果"""
         result: Dict[int, Any] = {}

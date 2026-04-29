@@ -10,7 +10,7 @@ import time
 from typing import Any, List, Optional, Tuple
 
 from software.app.config import DEFAULT_FILL_TEXT
-from software.core.modes.duration_control import simulate_answer_duration_delay
+from software.core.modes.duration_control import has_configured_answer_duration, simulate_answer_duration_delay
 from software.core.questions.utils import (
     get_fill_text_from_config,
     normalize_droplist_probs,
@@ -915,6 +915,11 @@ def brush_credamo(
         if not _wait_for_page_change(page, previous_signature, active_stop):
             raise RuntimeError("Credamo 点击下一页后页面没有变化")
 
+    if has_configured_answer_duration(config.answer_duration_range_seconds):
+        try:
+            state.update_thread_status(thread_name, "等待时长中", running=True)
+        except Exception:
+            logging.info("更新 Credamo 线程状态失败：等待时长中", exc_info=True)
     if simulate_answer_duration_delay(active_stop, config.answer_duration_range_seconds):
         return False
     try:

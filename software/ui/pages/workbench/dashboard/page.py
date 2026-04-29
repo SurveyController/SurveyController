@@ -6,8 +6,8 @@ from software.logging.action_logger import bind_logged_action
 from software.logging.log_utils import log_suppressed_exception
 
 
-from PySide6.QtCore import Qt, QObject, QEvent, Signal, QUrl
-from PySide6.QtGui import QContextMenuEvent, QDesktopServices
+from PySide6.QtCore import Qt, Signal, QUrl
+from PySide6.QtGui import QDesktopServices
 from PySide6.QtWidgets import (
     QWidget,
     QVBoxLayout,
@@ -39,7 +39,6 @@ from qfluentwidgets import (
     DrillInTransitionStackedWidget,
     TogglePushButton,
 )
-from qfluentwidgets import RoundMenu
 
 from software.ui.pages.workbench.dashboard.cards import DashboardActionCard, RuntimeSettingsHintCard
 from software.ui.pages.workbench.dashboard.parts.clipboard import DashboardClipboardMixin
@@ -50,6 +49,7 @@ from software.ui.pages.workbench.dashboard.parts.random_ip import DashboardRando
 from software.ui.pages.workbench.dashboard.parts.run_actions import DashboardRunActionsMixin
 from software.ui.pages.workbench.dashboard.parts.survey_parse import DashboardSurveyParseMixin
 from software.ui.helpers.fluent_tooltip import install_tooltip_filter
+from software.ui.widgets.paste_only_menu import PasteOnlyMenu
 from software.ui.widgets.config_drawer import ConfigDrawer
 from software.ui.widgets.full_width_infobar import FullWidthInfoBar
 from software.ui.widgets.no_wheel import NoWheelSpinBox
@@ -57,21 +57,6 @@ from software.ui.controller import RunController
 from software.ui.pages.workbench.question_editor.page import QuestionPage
 from software.ui.pages.workbench.runtime_panel import RuntimePage
 from software.ui.pages.workbench.strategy import QuestionStrategyPage
-
-
-class _PasteOnlyMenu(QObject):
-    """只保留 qfluentwidgets 风格的“粘贴”菜单"""
-
-    def eventFilter(self, watched, event):
-        if event.type() == QEvent.Type.ContextMenu and isinstance(watched, LineEdit):
-            if isinstance(event, QContextMenuEvent):
-                menu = RoundMenu(parent=watched)
-                paste_action = Action(FluentIcon.PASTE, "粘贴", parent=menu)
-                paste_action.triggered.connect(watched.paste)
-                menu.addAction(paste_action)
-                menu.exec(event.globalPos())
-                return True
-        return super().eventFilter(watched, event)
 
 class DashboardPage(
     DashboardClipboardMixin,
@@ -198,7 +183,7 @@ class DashboardPage(
         self.url_edit.setAcceptDrops(True)
         self.url_edit.installEventFilter(self)
         # 仅问卷链接输入框需要 qfluentwidgets 风格的"粘贴"单项菜单
-        self._paste_only_menu = _PasteOnlyMenu(self)
+        self._paste_only_menu = PasteOnlyMenu(self)
         self.url_edit.installEventFilter(self._paste_only_menu)
         title_row.addWidget(self.url_edit, 1)
         title_row.addWidget(self.config_command_bar)

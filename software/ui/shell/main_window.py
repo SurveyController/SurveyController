@@ -126,7 +126,7 @@ class MainWindow(
         self.runtime_page = RuntimePage(self.controller, self)
         self.question_page = QuestionPage(self)
         self.strategy_page = QuestionStrategyPage(self)
-        self.reverse_fill_page = ReverseFillPage(self)
+        self.reverse_fill_page = ReverseFillPage(self.controller, self)
         # QuestionPage 仅用作题目配置的数据载体，不作为主界面子页面展示；
         # 若不隐藏会以默认几何 (0,0,100,30) 叠在窗口左上角，造成标题栏错乱。
         self.question_page.hide()
@@ -156,6 +156,8 @@ class MainWindow(
         self.strategy_page.setObjectName("strategy")
         self.reverse_fill_page.setObjectName("reverse_fill")
         self.reverse_fill_page.set_open_wizard_handler(self._open_reverse_fill_wizard)
+        self.reverse_fill_page.surveyUrlChanged.connect(self._sync_dashboard_url_from_reverse_fill)
+        self.dashboard.url_edit.textChanged.connect(self._sync_reverse_fill_url_from_dashboard)
         self.question_page.entriesChanged.connect(lambda _count: self._sync_reverse_fill_context())
 
         self._init_navigation()
@@ -565,6 +567,9 @@ class MainWindow(
     @Slot(list, str)
     def _on_survey_parsed(self, info: List[Dict[str, Any]], title: str):
         parsed_title = title or "问卷"
+        parsed_url = str(getattr(getattr(self.controller, "config", None), "url", "") or "")
+        self._sync_dashboard_url_from_reverse_fill(parsed_url)
+        self._sync_reverse_fill_url_from_dashboard(parsed_url)
         self.strategy_page.set_questions_info(info or [])
         if getattr(self.dashboard, "_open_wizard_after_parse", False):
             self.dashboard._open_wizard_after_parse = False
@@ -613,6 +618,28 @@ class MainWindow(
             )
         except Exception:
             logging.info("同步反填页上下文失败", exc_info=True)
+
+    def _sync_dashboard_url_from_reverse_fill(self, url: str) -> None:
+        text = str(url or "").strip()
+        url_edit = getattr(self.dashboard, "url_edit", None)
+        if url_edit is None or not hasattr(url_edit, "text") or not hasattr(url_edit, "setText"):
+            return
+        if str(url_edit.text() or "").strip() == text:
+            return
+        url_edit.blockSignals(True)
+        url_edit.setText(text)
+        url_edit.blockSignals(False)
+
+    def _sync_reverse_fill_url_from_dashboard(self, url: str) -> None:
+        text = str(url or "").strip()
+        url_edit = getattr(self.reverse_fill_page, "url_edit", None)
+        if url_edit is None or not hasattr(url_edit, "text") or not hasattr(url_edit, "setText"):
+            return
+        if str(url_edit.text() or "").strip() == text:
+            return
+        url_edit.blockSignals(True)
+        url_edit.setText(text)
+        url_edit.blockSignals(False)
 
     def _open_reverse_fill_wizard(self) -> None:
         info = list(self.question_page.questions_info or [])

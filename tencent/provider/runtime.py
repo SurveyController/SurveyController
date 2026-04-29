@@ -8,7 +8,7 @@ import time
 from typing import Any, Optional
 
 from software.app.config import HEADLESS_PAGE_BUFFER_DELAY, HEADLESS_PAGE_CLICK_DELAY
-from software.core.modes.duration_control import simulate_answer_duration_delay
+from software.core.modes.duration_control import has_configured_answer_duration, simulate_answer_duration_delay
 from software.core.task import ExecutionConfig, ExecutionState
 from software.network.browser import BrowserDriver, NoSuchElementException
 
@@ -33,8 +33,6 @@ from .runtime_flow import (
 from .runtime_interactions import _is_question_visible, _wait_for_question_visible
 
 __all__ = ["brush_qq"]
-
-
 def brush_qq(
     driver: BrowserDriver,
     config: ExecutionConfig,
@@ -141,6 +139,11 @@ def brush_qq(
 
         is_last_page = page_index == len(page_groups) - 1
         if is_last_page:
+            if has_configured_answer_duration(ctx.answer_duration_range_seconds):
+                try:
+                    ctx.update_thread_status(thread_name, "等待时长中", running=True)
+                except Exception:
+                    logging.info("更新线程状态失败：等待时长中", exc_info=True)
             if simulate_answer_duration_delay(active_stop, ctx.answer_duration_range_seconds):
                 try:
                     ctx.update_thread_status(thread_name, "已中断", running=False)

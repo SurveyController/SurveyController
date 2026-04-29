@@ -6,13 +6,16 @@ from __future__ import annotations
 import copy
 import logging
 import os
-from typing import Any, Callable, Dict, List, Optional, Sequence
+from typing import TYPE_CHECKING, Any, Callable, Dict, List, Optional, Sequence
 
-from PySide6.QtWidgets import QFileDialog, QHBoxLayout, QTableWidgetItem, QVBoxLayout, QWidget, QStackedWidget
+from PySide6.QtCore import Signal
+from PySide6.QtGui import QColor
+from PySide6.QtWidgets import QApplication, QFileDialog, QHBoxLayout, QTableWidgetItem, QVBoxLayout, QWidget, QStackedWidget
 from qfluentwidgets import (
     BodyLabel,
     CaptionLabel,
     FluentIcon,
+    InfoBadge,
     InfoBar,
     InfoBarPosition,
     LineEdit,
@@ -26,7 +29,8 @@ from qfluentwidgets import (
     CardWidget,
     ElevatedCardWidget,
     SegmentedWidget,
-    IconWidget
+    IconWidget,
+    ToolButton,
 )
 
 from software.core.reverse_fill.schema import (
@@ -42,8 +46,22 @@ from software.core.reverse_fill.schema import (
 )
 from software.core.reverse_fill.validation import build_reverse_fill_spec
 from software.io.config import RuntimeConfig
+from software.logging.action_logger import log_action
 from software.providers.common import SURVEY_PROVIDER_WJX, normalize_survey_provider
-from software.ui.widgets.setting_cards import ComboSettingCard, SpinBoxSettingCard, SwitchSettingCard
+from software.providers.common import (
+    SURVEY_PROVIDER_CREDAMO,
+    SURVEY_PROVIDER_QQ,
+    detect_survey_provider,
+    is_supported_survey_url,
+    is_wjx_survey_url,
+)
+from software.ui.helpers.fluent_tooltip import install_tooltip_filter
+from software.ui.pages.workbench.dashboard.parts.clipboard import DashboardClipboardMixin
+from software.ui.widgets.paste_only_menu import PasteOnlyMenu
+from software.ui.widgets.setting_cards import SwitchSettingCard
+
+if TYPE_CHECKING:
+    from software.ui.controller import RunController
 
 
 _FORMAT_CHOICES = [
@@ -60,19 +78,26 @@ _STATUS_LABELS = {
 }
 
 
-class ReverseFillPage(ScrollArea):
+class ReverseFillPage(DashboardClipboardMixin, ScrollArea):
     """独立的反填数据源管理页。"""
 
-    def __init__(self, parent=None):
+    surveyUrlChanged = Signal(str)
+
+    def __init__(self, controller: "RunController", parent=None):
         super().__init__(parent)
+        self.controller = controller
         self._questions_info: List[Dict[str, Any]] = []
         self._question_entries: List[Any] = []
         self._survey_provider: str = ""
         self._survey_title: str = ""
         self._target_num: int = 1
+        self._selected_format_value: str = REVERSE_FILL_FORMAT_AUTO
+        self._start_row_value: int = 1
         self._last_spec: Optional[ReverseFillSpec] = None
         self._last_error: str = ""
         self._open_wizard_handler: Optional[Callable[[], None]] = None
+        self._clipboard_parse_ticket = 0
+        self._parse_requested_from_reverse_fill = False
 
         self.view = QWidget(self)
         self.setWidget(self.view)
@@ -86,17 +111,73 @@ class ReverseFillPage(ScrollArea):
         self._refresh_preview()
 
     def _build_title_area(self, layout: QVBoxLayout) -> None:
-        title_label = SubtitleLabel("反填配置", self.view)
-        layout.addWidget(title_label)
-        
-        desc_label = BodyLabel(
-            "仅支持问卷星。允许从导出的原始答卷 Excel 读取数据，并优先按行进行反填回放操作。\n"
-            "不支持反填的题目（如不可逆计算题、矩阵题等）将自动回查常规配置并以随机策略运行。", 
-            self.view
+        title_row = QWidget(self.view)
+        title_row_layout = QHBoxLayout(title_row)
+        title_row_layout.setContentsMargins(0, 0, 0, 0)
+        title_row_layout.setSpacing(10)
+
+        title_label = SubtitleLabel("反填配置", title_row)
+        title_row_layout.addWidget(title_label)
+
+        self.preview_badge = InfoBadge.custom(
+            "预览",
+            QColor("#fbbf24"),
+            QColor("#f59e0b"),
+            parent=title_row,
         )
-        desc_label.setWordWrap(True)
-        layout.addWidget(desc_label)
+        title_row_layout.addWidget(self.preview_badge)
+        title_row_layout.addStretch(1)
+
+        layout.addWidget(title_row)
         layout.addSpacing(4)
+
+    def _build_survey_entry_card(self, layout: QVBoxLayout) -> None:
+        self.link_card = CardWidget(self.view)
+        self.link_card.setAcceptDrops(True)
+        link_layout = QVBoxLayout(self.link_card)
+        link_layout.setContentsMargins(12, 12, 12, 12)
+        link_layout.setSpacing(8)
+
+        title_row = QHBoxLayout()
+        title_row.setSpacing(8)
+
+        self.qr_btn = ToolButton(self.link_card)
+        self.qr_btn.setIcon(FluentIcon.QRCODE)
+        self.qr_btn.setFixedSize(36, 36)
+        self.qr_btn.setToolTip("上传问卷二维码图片")
+        install_tooltip_filter(self.qr_btn)
+        title_row.addWidget(self.qr_btn)
+
+        self.url_edit = LineEdit(self.link_card)
+        self.url_edit.setPlaceholderText("在此拖入/粘贴问卷二维码图片或输入问卷链接")
+        self.url_edit.setClearButtonEnabled(True)
+        self.url_edit.setAcceptDrops(True)
+        self.url_edit.installEventFilter(self)
+        self._paste_only_menu = PasteOnlyMenu(self)
+        self.url_edit.installEventFilter(self._paste_only_menu)
+        title_row.addWidget(self.url_edit, 1)
+
+        link_layout.addLayout(title_row)
+
+        btn_row = QHBoxLayout()
+        btn_row.setSpacing(8)
+        self.parse_btn = PrimaryPushButton(FluentIcon.PLAY, "解析问卷结构", self.link_card)
+        btn_row.addWidget(self.parse_btn)
+        btn_row.addStretch(1)
+        link_layout.addLayout(btn_row)
+
+        self._link_entry_widgets = (
+            self.link_card,
+            self.qr_btn,
+            self.url_edit,
+            self.parse_btn,
+        )
+        for widget in self._link_entry_widgets:
+            if widget is self.url_edit:
+                continue
+            widget.installEventFilter(self)
+
+        layout.addWidget(self.link_card)
 
     def _build_config_cards(self, layout: QVBoxLayout) -> None:
         config_group = SettingCardGroup("数据源管理", self.view)
@@ -108,29 +189,6 @@ class ReverseFillPage(ScrollArea):
             parent=config_group,
         )
         config_group.addSettingCard(self.enable_card)
-
-        self.format_card = ComboSettingCard(
-            FluentIcon.DOCUMENT,
-            "文件解析格式",
-            "默认能正常识别源文件结构特征，如果由于异常修改导致样表解析失误，可手动强制覆写格式。",
-            parent=config_group,
-        )
-        for value, label in _FORMAT_CHOICES:
-            self.format_card.comboBox.addItem(label, value)
-        self.format_card.comboBox.setMinimumWidth(160)
-        config_group.addSettingCard(self.format_card)
-
-        self.start_row_card = SpinBoxSettingCard(
-            FluentIcon.HISTORY,
-            "起始读取行头",
-            "首行表头会被排除忽略。此参数用于指定从数据实体的哪起算第几行开始调取填入数据（多用于异常断点续接）。",
-            min_val=1,
-            max_val=999999,
-            default=1,
-            parent=config_group,
-        )
-        self.start_row_card.setSpinBoxWidth(self.start_row_card.suggestSpinBoxWidthForDigits(6))
-        config_group.addSettingCard(self.start_row_card)
 
         layout.addWidget(config_group)
 
@@ -277,12 +335,11 @@ class ReverseFillPage(ScrollArea):
         layout.setSpacing(24)
 
         self._build_title_area(layout)
+        self._build_survey_entry_card(layout)
         self._build_config_cards(layout)
-        
         self._build_file_picker(layout)
         self._build_summary_banner(layout)
         self._build_details_tables(layout)
-        
         layout.addStretch(1)
         self.segment.setCurrentItem("mapping")
 
@@ -295,11 +352,17 @@ class ReverseFillPage(ScrollArea):
 
     def _bind_events(self) -> None:
         self.enable_card.switchButton.checkedChanged.connect(lambda _checked: self._refresh_preview())
-        self.format_card.comboBox.currentIndexChanged.connect(lambda _index: self._refresh_preview())
-        self.start_row_card.spinBox.valueChanged.connect(lambda _value: self._refresh_preview())
+        self.qr_btn.clicked.connect(self._on_qr_clicked)
+        self.parse_btn.clicked.connect(self._on_parse_clicked)
+        self.url_edit.returnPressed.connect(self._on_parse_clicked)
+        self.url_edit.textChanged.connect(self.surveyUrlChanged.emit)
         self.file_edit.editingFinished.connect(self._refresh_preview)
         self.browse_btn.clicked.connect(self._browse_excel_file)
         self.open_wizard_btn.clicked.connect(self._open_wizard)
+        clipboard = QApplication.clipboard()
+        clipboard.dataChanged.connect(self._on_clipboard_changed)
+        self.controller.surveyParsed.connect(self._on_survey_parsed)
+        self.controller.surveyParseFailed.connect(self._on_survey_parse_failed)
 
     def set_open_wizard_handler(self, handler: Optional[Callable[[], None]]) -> None:
         self._open_wizard_handler = handler
@@ -323,31 +386,39 @@ class ReverseFillPage(ScrollArea):
         cfg.reverse_fill_enabled = bool(self.enable_card.isChecked())
         cfg.reverse_fill_source_path = self.file_edit.text().strip()
         cfg.reverse_fill_format = self._selected_format()
-        cfg.reverse_fill_start_row = max(1, int(self.start_row_card.value() or 1))
+        cfg.reverse_fill_start_row = max(1, int(self._start_row_value or 1))
 
     def apply_config(self, cfg: RuntimeConfig) -> None:
         self._target_num = max(1, int(getattr(cfg, "target", 1) or 1))
         self.enable_card.blockSignals(True)
         self.enable_card.setChecked(bool(getattr(cfg, "reverse_fill_enabled", False)))
         self.enable_card.blockSignals(False)
+        self.url_edit.blockSignals(True)
+        self.url_edit.setText(str(getattr(cfg, "url", "") or ""))
+        self.url_edit.blockSignals(False)
         self.file_edit.setText(str(getattr(cfg, "reverse_fill_source_path", "") or ""))
-        self.start_row_card.spinBox.blockSignals(True)
-        self.start_row_card.setValue(max(1, int(getattr(cfg, "reverse_fill_start_row", 1) or 1)))
-        self.start_row_card.spinBox.blockSignals(False)
+        self._start_row_value = max(1, int(getattr(cfg, "reverse_fill_start_row", 1) or 1))
 
         selected_format = str(getattr(cfg, "reverse_fill_format", REVERSE_FILL_FORMAT_AUTO) or REVERSE_FILL_FORMAT_AUTO)
-        target_index = 0
-        for idx in range(self.format_card.comboBox.count()):
-            if str(self.format_card.comboBox.itemData(idx) or "") == selected_format:
-                target_index = idx
-                break
-        self.format_card.comboBox.blockSignals(True)
-        self.format_card.comboBox.setCurrentIndex(target_index)
-        self.format_card.comboBox.blockSignals(False)
+        valid_formats = {value for value, _label in _FORMAT_CHOICES}
+        self._selected_format_value = selected_format if selected_format in valid_formats else REVERSE_FILL_FORMAT_AUTO
         self._refresh_preview()
 
     def _selected_format(self) -> str:
-        return str(self.format_card.comboBox.currentData() or REVERSE_FILL_FORMAT_AUTO)
+        return str(self._selected_format_value or REVERSE_FILL_FORMAT_AUTO)
+
+    def _toast(self, message: str, level: str = "warning", duration: int = 2400) -> None:
+        parent = self.window() or self
+        if level == "error":
+            InfoBar.error("反填页提示", message, parent=parent, position=InfoBarPosition.TOP, duration=duration)
+            return
+        if level == "success":
+            InfoBar.success("反填页提示", message, parent=parent, position=InfoBarPosition.TOP, duration=duration)
+            return
+        if level == "info":
+            InfoBar.info("反填页提示", message, parent=parent, position=InfoBarPosition.TOP, duration=duration)
+            return
+        InfoBar.warning("反填页提示", message, parent=parent, position=InfoBarPosition.TOP, duration=duration)
 
     def _context_ready(self) -> bool:
         provider = normalize_survey_provider(self._survey_provider, default="")
@@ -366,15 +437,54 @@ class ReverseFillPage(ScrollArea):
         self.file_edit.setText(path)
         self._refresh_preview()
 
-    def _toast(self, message: str, level: str = "warning") -> None:
-        parent = self.window() or self
-        if level == "error":
-            InfoBar.error("配置异常拦截", message, parent=parent, position=InfoBarPosition.TOP, duration=2800)
+    def _on_parse_clicked(self) -> None:
+        url = self.url_edit.text().strip()
+        if not url:
+            self._toast("请先输入问卷链接或贴入二维码", "warning")
             return
-        if level == "success":
-            InfoBar.success("操作成功落实", message, parent=parent, position=InfoBarPosition.TOP, duration=2200)
+        if not is_supported_survey_url(url):
+            self._toast("仅支持问卷星、腾讯问卷与 Credamo 见数链接", "error", duration=3000)
             return
-        InfoBar.warning("操作指引提示", message, parent=parent, position=InfoBarPosition.TOP, duration=2400)
+        provider = detect_survey_provider(url)
+        if not (provider in {SURVEY_PROVIDER_QQ, SURVEY_PROVIDER_CREDAMO} or is_wjx_survey_url(url)):
+            self._toast("链接不是可解析的公开问卷", "error", duration=3000)
+            return
+
+        self._parse_requested_from_reverse_fill = True
+        self.surveyUrlChanged.emit(url)
+        self._toast("正在解析问卷结构...", "info", duration=-1)
+        self.controller.parse_survey(url)
+        log_action(
+            "UI",
+            "parse_survey",
+            "parse_btn",
+            "reverse_fill",
+            result="started",
+            payload={"provider": provider},
+        )
+
+    def _on_survey_parsed(self, info: list, title: str) -> None:
+        if not self._parse_requested_from_reverse_fill:
+            return
+        self._parse_requested_from_reverse_fill = False
+        unsupported_count = sum(1 for item in (info or []) if isinstance(item, dict) and item.get("unsupported"))
+        self._survey_title = str(title or "").strip()
+        self._survey_provider = normalize_survey_provider(
+            getattr(self.controller, "survey_provider", "") or detect_survey_provider(self.url_edit.text().strip(), default=""),
+            default=self._survey_provider or "",
+        )
+        self._refresh_preview()
+        if unsupported_count > 0:
+            self._toast(f"问卷已解析，发现 {unsupported_count} 道反填不能直接覆盖的题型", "warning", duration=3600)
+            return
+        self._toast("问卷已解析，可以继续选择 Excel 做反填预检", "success", duration=2600)
+
+    def _on_survey_parse_failed(self, error_msg: str) -> None:
+        if not self._parse_requested_from_reverse_fill:
+            return
+        self._parse_requested_from_reverse_fill = False
+        text = str(error_msg or "").strip() or "请确认链接有效且网络正常"
+        self._toast(f"解析失败：{text}", "error", duration=3200)
 
     def _open_wizard(self) -> None:
         if not callable(self._open_wizard_handler):
@@ -434,8 +544,6 @@ class ReverseFillPage(ScrollArea):
         context_ready = self._context_ready()
 
         controls_enabled = context_ready
-        self.format_card.comboBox.setEnabled(controls_enabled)
-        self.start_row_card.spinBox.setEnabled(controls_enabled)
         self.file_edit.setEnabled(controls_enabled)
         self.browse_btn.setEnabled(controls_enabled)
         if hasattr(self, 'open_wizard_btn'):
@@ -473,7 +581,7 @@ class ReverseFillPage(ScrollArea):
                 questions_info=self._questions_info,
                 question_entries=self._question_entries,
                 selected_format=self._selected_format(),
-                start_row=max(1, int(self.start_row_card.value() or 1)),
+                start_row=max(1, int(self._start_row_value or 1)),
                 target_num=max(0, int(self._target_num or 0)),
             )
         except Exception as exc:

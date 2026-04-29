@@ -4,9 +4,12 @@ from __future__ import annotations
 import logging
 from typing import TYPE_CHECKING, Any
 
+from PySide6.QtGui import QColor
 from qfluentwidgets import (
     Action,
     FluentIcon,
+    InfoBadge,
+    InfoBadgePosition,
     MenuAnimationType,
     NavigationItemPosition,
     RoundMenu,
@@ -41,6 +44,7 @@ class MainWindowLazyPagesMixin:
         self.addSubInterface(self.runtime_page, FluentIcon.DEVELOPER_TOOLS, "运行参数", position=NavigationItemPosition.TOP)
         self.addSubInterface(self.strategy_page, FluentIcon.DICTIONARY_ADD, "题目策略", position=NavigationItemPosition.TOP)
         self.addSubInterface(self.reverse_fill_page, FluentIcon.SYNC, "反填", position=NavigationItemPosition.TOP)
+        self._show_reverse_fill_preview_badge()
         self.navigationInterface.addItem(
             routeKey="logs",
             icon=FluentIcon.INFO,
@@ -74,6 +78,28 @@ class MainWindowLazyPagesMixin:
             position=NavigationItemPosition.BOTTOM,
         )
         self.navigationInterface.setCurrentItem(self.dashboard.objectName())
+
+    def _show_reverse_fill_preview_badge(self):
+        nav_item = self.navigationInterface.widget("reverse_fill")
+        if nav_item is None:
+            return
+
+        if getattr(self, "_reverse_fill_preview_badge", None) is not None:
+            return
+
+        try:
+            badge_parent = nav_item.parentWidget() or self.navigationInterface
+            self._reverse_fill_preview_badge = InfoBadge.custom(
+                "预览",
+                QColor("#fbbf24"),
+                QColor("#fbbf24"),
+                parent=badge_parent,
+                target=nav_item,
+                position=InfoBadgePosition.NAVIGATION_ITEM,
+            )
+            self._reverse_fill_preview_badge.show()
+        except Exception:
+            logging.info("显示反填预览徽章失败", exc_info=True)
 
     def _ensure_lazy_page_added(self, page: QWidget) -> QWidget:
         if self.stackedWidget.indexOf(page) == -1:

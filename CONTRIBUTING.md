@@ -193,7 +193,7 @@
    - 平台专属逻辑进入对应的 `provider/` 子目录。
    - 保持顶层包（`wjx/`、`tencent/`、`credamo/`）简洁，仅保留包标记；Credamo 见数没有旧共享兼容转发层，权威实现直接在 `credamo/provider/`。
 3. **自测**：
-   - 打开拉取请求先确保 CI 能够通过检查（`python CI/python_ci.py`）
+   - 打开拉取请求先确保能够通过 CI 检查（`python CI/python_ci.py`）
    - 最少手动跑一次受影响的核心流程，并在 PR 里写清楚结果。
 4. **提交**：
    - PR 描述请写明改动目的、测试结果，如果有的话关联相关 Issue。

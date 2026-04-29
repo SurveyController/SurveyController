@@ -20,6 +20,16 @@ _COMPLETION_MARKERS = (
 )
 
 
+def has_configured_answer_duration(answer_duration_range_seconds: Tuple[int, int] = (0, 0)) -> bool:
+    """是否配置了提交前作答时长等待。"""
+
+    try:
+        raw_min, raw_max = answer_duration_range_seconds
+    except Exception:
+        return False
+    return max(0, int(raw_min), int(raw_max)) > 0
+
+
 
 
 
@@ -35,7 +45,7 @@ def simulate_answer_duration_delay(
     # 先规范化到非负、且 max >= min
     min_delay = max(0, int(raw_min))
     max_delay = max(min_delay, int(raw_max))
-    if max_delay <= 0:
+    if not has_configured_answer_duration(answer_duration_range_seconds):
         return False
 
     # 如果界面只给了一个时间（min == max），在内部静默扩一段区间用于抖动

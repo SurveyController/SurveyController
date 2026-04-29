@@ -13,7 +13,7 @@ from software.core.engine.dom_helpers import (
     _driver_question_looks_like_reorder,
     _driver_question_looks_like_slider_matrix,
 )
-from software.core.modes.duration_control import simulate_answer_duration_delay
+from software.core.modes.duration_control import has_configured_answer_duration, simulate_answer_duration_delay
 from software.core.engine.runtime_control import _is_headless_mode
 from software.core.questions.utils import _should_treat_question_as_text_like
 from software.core.ai.runtime import extract_question_title_from_dom
@@ -573,6 +573,11 @@ def brush(
                 time.sleep(buffer_delay)
         is_last_page = (page_index == total_pages - 1)
         if is_last_page:
+            if has_configured_answer_duration(ctx.answer_duration_range_seconds):
+                try:
+                    ctx.update_thread_status(thread_name, "等待时长中", running=True)
+                except Exception:
+                    logging.info("更新线程状态失败：等待时长中", exc_info=True)
             if simulate_answer_duration_delay(active_stop, ctx.answer_duration_range_seconds):
                 try:
                     ctx.update_thread_status(thread_name, "已中断", running=False)
