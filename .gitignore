@@ -12,7 +12,10 @@ CLAUDE.md
 # 编译环境
 /build/
 /dist/
-/Setup/
+/Setup/*.exe
+/Setup/*.pfx
+/Setup/*.docx
+/Setup/*.pdf
 
 # 运行环境
 __pycache__/
