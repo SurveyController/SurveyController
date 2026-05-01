@@ -10,8 +10,8 @@ from typing import TYPE_CHECKING, Any, Callable, Dict, List, Optional
 from PySide6.QtCore import QCoreApplication
 
 from software.app.config import STOP_FORCE_WAIT_SECONDS, app_settings, get_bool_from_qsettings
+from software.core.engine.async_runtime import AsyncRuntimeCoordinator
 from software.core.engine.failure_reason import FailureReason
-from software.core.engine.runner import run
 from software.core.task import ExecutionConfig, ExecutionState, ProxyLease
 from software.io.config import RuntimeConfig
 from software.providers.contracts import SurveyQuestionMeta
@@ -215,7 +215,7 @@ class RunControllerExecutionMixin:
     ) -> None:
         execution_config, execution_state = self._prepare_engine_state(proxy_pool)
         worker_count = max(1, int(execution_config.num_threads or 1))
-        execution_state.ensure_worker_threads(worker_count)
+        execution_state.ensure_worker_threads(worker_count, prefix="Slot")
         execution_state.initialize_reverse_fill_runtime()
         self._execution_state = execution_state
         self.adapter.execution_state = execution_state
@@ -230,25 +230,22 @@ class RunControllerExecutionMixin:
             self.runStateChanged.emit(True)
         self._status_timer.start()
 
-        logging.debug("创建%s个工作线程", worker_count)
-        threads: List[threading.Thread] = []
-        for idx in range(worker_count):
-            x = 50 + idx * 60
-            y = 50 + idx * 60
-            t = threading.Thread(
-                target=run,
-                args=(x, y, self.stop_event, self.adapter),
-                kwargs={"config": execution_config, "state": execution_state},
-                daemon=True,
-                name=f"Worker-{idx+1}",
-            )
-            threads.append(t)
-        self.worker_threads = threads
+        logging.debug("创建异步运行协调线程，总并发=%s", worker_count)
+        coordinator = AsyncRuntimeCoordinator(
+            config=execution_config,
+            state=execution_state,
+            stop_signal=self.stop_event,
+            gui_instance=self.adapter,
+        )
+        runtime_thread = threading.Thread(
+            target=coordinator.run,
+            daemon=True,
+            name="AsyncRuntimeThread",
+        )
+        self.worker_threads = [runtime_thread]
 
-        logging.debug("启动所有工作线程")
-        for idx, t in enumerate(threads):
-            t.start()
-            logging.debug("线程 %s/%s 已启动", idx + 1, len(threads))
+        logging.debug("启动异步运行协调线程")
+        runtime_thread.start()
 
         monitor = threading.Thread(
             target=self._wait_for_threads,

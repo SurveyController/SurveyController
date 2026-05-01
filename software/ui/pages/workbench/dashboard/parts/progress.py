@@ -34,7 +34,7 @@ if TYPE_CHECKING:
 
 
 class DashboardProgressMixin:
-    """任务运行状态、总进度、线程进度面板。"""
+    """任务运行状态、总进度、会话进度面板。"""
 
     THREAD_VIEW_QUESTION_LIST = "question_list"
     THREAD_VIEW_PROGRESS = "thread_progress"
@@ -153,7 +153,7 @@ class DashboardProgressMixin:
         thread_panel_layout.setContentsMargins(0, 4, 0, 0)
         thread_panel_layout.setSpacing(6)
         thread_panel_layout.setAlignment(Qt.AlignmentFlag.AlignTop)
-        self.thread_progress_hint = BodyLabel("线程进度会在任务开始后显示", self.thread_progress_panel)
+        self.thread_progress_hint = BodyLabel("会话进度会在任务开始后显示", self.thread_progress_panel)
         self.thread_progress_hint.setWordWrap(True)
         self.thread_progress_hint.setStyleSheet("color: #6b6b6b;")
         thread_panel_layout.addWidget(self.thread_progress_hint)
@@ -332,7 +332,7 @@ class DashboardProgressMixin:
         self._thread_progress_rows.clear()
         self._last_device_quota_fail_count = 0
         self.thread_progress_hint.show()
-        self.thread_progress_hint.setText("线程进度会在任务开始后显示")
+        self.thread_progress_hint.setText("会话进度会在任务开始后显示")
 
     def _set_thread_step_busy(self, row: Dict[str, Any], busy: bool) -> None:
         step_bar = row.get("step_bar")
@@ -429,7 +429,7 @@ class DashboardProgressMixin:
             if self._thread_progress_rows:
                 self._clear_thread_progress_rows()
             self.thread_progress_hint.show()
-            self.thread_progress_hint.setText("线程进度会在任务开始后显示")
+            self.thread_progress_hint.setText("会话进度会在任务开始后显示")
             return
 
         self._set_main_progress_indeterminate(False)
@@ -444,7 +444,7 @@ class DashboardProgressMixin:
         if not thread_rows:
             if running_now:
                 self.thread_progress_hint.show()
-                self.thread_progress_hint.setText("正在等待线程状态...")
+                self.thread_progress_hint.setText("正在等待会话状态...")
             return
 
         self.thread_progress_hint.hide()
@@ -529,7 +529,7 @@ class DashboardProgressMixin:
                 self._set_main_progress_indeterminate(True)
                 self.progress_pct.setText("...")
             else:
-                self.thread_progress_hint.setText("正在准备线程进度...")
+                self.thread_progress_hint.setText("正在准备会话进度...")
                 self._set_main_progress_indeterminate(False)
                 self._set_thread_view(self.THREAD_VIEW_PROGRESS)
             self._completion_notified = False

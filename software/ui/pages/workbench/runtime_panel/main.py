@@ -95,7 +95,7 @@ class RuntimePage(ScrollArea):
             min_val=1, max_val=9999, default=10, parent=run_group
         )
         self.thread_card = SpinBoxSettingCard(
-            FluentIcon.APPLICATION, "并发浏览器", "同时开多个浏览器窗口提交问卷，启用无头模式可设置更高的并发数",
+            FluentIcon.APPLICATION, "并发会话", "控制同时运行的独立问卷会话数量，程序会自动复用更少的浏览器底座",
             min_val=self.MIN_THREADS, max_val=self.NON_HEADLESS_MAX_THREADS, default=2, parent=run_group
         )
         spin_width = self.target_card.suggestSpinBoxWidthForDigits(4)
