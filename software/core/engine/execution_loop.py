@@ -25,6 +25,7 @@ from software.network.session_policy import _discard_unresponsive_proxy, _record
 from software.providers.common import SURVEY_PROVIDER_CREDAMO, normalize_survey_provider
 from software.providers.registry import fill_survey as _provider_fill_survey
 from software.providers.registry import is_device_quota_limit_page as _provider_is_device_quota_limit_page
+from software.network.browser.owner_pool import AsyncBrowserOwner
 
 _DEFAULT_PAGE_LOAD_TIMEOUT_MS = 20000
 _CREDAMO_PAGE_LOAD_TIMEOUT_MS = 45000
@@ -65,10 +66,18 @@ def _load_survey_page(driver: Any, config: ExecutionConfig) -> None:
 class ExecutionLoop:
     """单个工作线程的执行主循环。"""
 
-    def __init__(self, config: ExecutionConfig, state: ExecutionState, gui_instance: Any = None):
+    def __init__(
+        self,
+        config: ExecutionConfig,
+        state: ExecutionState,
+        gui_instance: Any = None,
+        *,
+        browser_owner: AsyncBrowserOwner | None = None,
+    ):
         self.config = config
         self.state = state
         self.gui_instance = gui_instance
+        self.browser_owner = browser_owner
         self.stop_policy = RunStopPolicy(config, state, gui_instance)
         self.submission_service = SubmissionService(config, state, self.stop_policy)
 
@@ -407,7 +416,13 @@ class ExecutionLoop:
         timed_refresh_interval = self._resolve_timed_refresh_interval()
         base_browser_preference = list(self.config.browser_preference or BROWSER_PREFERENCE)
         preferred_browsers = list(base_browser_preference)
-        session = BrowserSessionService(self.config, self.state, self.gui_instance, thread_name)
+        session = BrowserSessionService(
+            self.config,
+            self.state,
+            self.gui_instance,
+            thread_name,
+            browser_owner=self.browser_owner,
+        )
 
         self._log_runtime_settings(timed_mode_on=timed_mode_on)
 

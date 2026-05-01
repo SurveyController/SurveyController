@@ -22,6 +22,7 @@ class ThreadProgressState:
 
     thread_name: str
     thread_index: int = 0
+    owner_id: int = 0
     success_count: int = 0
     fail_count: int = 0
     step_current: int = 0
@@ -161,7 +162,9 @@ class ExecutionState:
         text = str(thread_name or "").strip()
         if not text:
             return 0
-        if text.startswith("Worker-"):
+        for prefix in ("Worker-", "Slot-"):
+            if not text.startswith(prefix):
+                continue
             suffix = text.split("-", 1)[1].strip()
             try:
                 value = int(suffix)
@@ -184,10 +187,15 @@ class ExecutionState:
     @staticmethod
     def _format_thread_display_name(thread_name: str, thread_index: int) -> str:
         if thread_index > 0:
+            text = str(thread_name or "").strip()
+            if text.startswith("Slot-"):
+                return f"会话 {thread_index}"
             return f"线程 {thread_index}"
         text = str(thread_name or "").strip()
         if text.startswith("Worker-?"):
             return "线程 ?"
+        if text.startswith("Slot-?"):
+            return "会话 ?"
         return text or "线程 ?"
 
     def _get_or_create_thread_state_locked(self, thread_name: str) -> ThreadProgressState:
@@ -203,12 +211,13 @@ class ExecutionState:
         self.thread_progress[key] = state
         return state
 
-    def ensure_worker_threads(self, expected_count: int) -> None:
+    def ensure_worker_threads(self, expected_count: int, *, prefix: str = "Worker") -> None:
         count = max(1, int(expected_count or 1))
         now = time.time()
+        normalized_prefix = str(prefix or "Worker").strip() or "Worker"
         with self.lock:
             for idx in range(1, count + 1):
-                name = f"Worker-{idx}"
+                name = f"{normalized_prefix}-{idx}"
                 state = self.thread_progress.get(name)
                 if state is None:
                     self.thread_progress[name] = ThreadProgressState(

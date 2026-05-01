@@ -13,6 +13,7 @@ from software.core.engine.driver_factory import (
 from software.core.task import ExecutionConfig, ExecutionState
 from software.logging.log_utils import log_suppressed_exception
 from software.network.browser import BrowserDriver, BrowserManager
+from software.network.browser.owner_pool import AsyncBrowserOwner
 from software.network.proxy.pool import is_proxy_responsive
 from software.network.session_policy import (
     _discard_unresponsive_proxy,
@@ -34,13 +35,22 @@ def _resolve_runtime_window_size(config: ExecutionConfig) -> Optional[tuple[int,
 class BrowserSessionService:
     """封装单次浏览器会话的创建、注册、销毁逻辑。"""
 
-    def __init__(self, config: ExecutionConfig, state: ExecutionState, gui_instance: Any, thread_name: str):
+    def __init__(
+        self,
+        config: ExecutionConfig,
+        state: ExecutionState,
+        gui_instance: Any,
+        thread_name: str,
+        *,
+        browser_owner: Optional[AsyncBrowserOwner] = None,
+    ):
         self.config = config
         self.state = state
         self.gui_instance = gui_instance
         self.thread_name = str(thread_name or "").strip()
         self.driver: Optional[BrowserDriver] = None
         self._browser_manager: Optional[BrowserManager] = None
+        self._browser_owner = browser_owner
         self.proxy_address: Optional[str] = None
         self.sem_acquired = False
         self._browser_sem = state.get_browser_semaphore(max(1, int(config.num_threads or 1)))
@@ -101,6 +111,8 @@ class BrowserSessionService:
 
     def shutdown(self) -> None:
         self.dispose()
+        if self._browser_owner is not None:
+            return
         if self._browser_manager is not None:
             try:
                 shutdown_browser_manager(self._browser_manager)
@@ -139,21 +151,28 @@ class BrowserSessionService:
             logging.info("已获取浏览器信号量")
 
         try:
-            if self._browser_manager is None:
-                self._browser_manager = create_browser_manager(
+            if self._browser_owner is not None:
+                self.driver = self._browser_owner.open_session(
+                    proxy_address=browser_proxy_address,
+                    user_agent=ua_value,
+                )
+                active_browser = self._browser_owner.browser_name or "edge"
+            else:
+                if self._browser_manager is None:
+                    self._browser_manager = create_browser_manager(
+                        headless=self.config.headless_mode,
+                        prefer_browsers=list(preferred_browsers) if preferred_browsers else None,
+                        window_position=(window_x_pos, window_y_pos),
+                    )
+                self.driver, active_browser = create_playwright_driver(
                     headless=self.config.headless_mode,
                     prefer_browsers=list(preferred_browsers) if preferred_browsers else None,
+                    proxy_address=browser_proxy_address,
+                    user_agent=ua_value,
                     window_position=(window_x_pos, window_y_pos),
+                    manager=self._browser_manager,
+                    persistent_browser=True,
                 )
-            self.driver, active_browser = create_playwright_driver(
-                headless=self.config.headless_mode,
-                prefer_browsers=list(preferred_browsers) if preferred_browsers else None,
-                proxy_address=browser_proxy_address,
-                user_agent=ua_value,
-                window_position=(window_x_pos, window_y_pos),
-                manager=self._browser_manager,
-                persistent_browser=True,
-            )
         except Exception:
             if self.sem_acquired:
                 self._browser_sem.release()
