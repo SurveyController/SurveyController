@@ -18,7 +18,11 @@ from software.app.config import CONTACT_API_URL
 from software.app.runtime_paths import get_runtime_directory
 from software.app.version import __VERSION__
 from software.io.config import RuntimeConfig, save_config
-from software.logging.log_utils import LOG_BUFFER_HANDLER, log_suppressed_exception, save_log_records_to_file
+from software.logging.log_utils import (
+    LOG_BUFFER_HANDLER,
+    export_full_log_to_file,
+    log_suppressed_exception,
+)
 from software.ui.helpers.contact_api import format_quota_value, post as http_post
 
 from .constants import DONATION_AMOUNT_BLOCK_MESSAGE, MAX_REQUEST_QUOTA, REQUEST_MESSAGE_TYPE
@@ -181,7 +185,11 @@ class ContactFormSubmissionMixin:
         file_name = f"bug_report_log_{timestamp}.txt"
         path = os.path.join(tempfile.gettempdir(), file_name)
         try:
-            save_log_records_to_file(LOG_BUFFER_HANDLER.get_records(), get_runtime_directory(), path)
+            export_full_log_to_file(
+                get_runtime_directory(),
+                path,
+                fallback_records=LOG_BUFFER_HANDLER.get_records(),
+            )
             data = self._read_file_bytes(path)
         finally:
             self._remove_temp_file(path)

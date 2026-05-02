@@ -33,12 +33,14 @@ from software.network.browser.startup import (
 )
 
 DEFAULT_MAX_CONTEXTS_PER_BROWSER = 4
+DEFAULT_SLOTS_PER_OWNER = 2
 
 
 @dataclass(frozen=True)
 class BrowserPoolConfig:
     logical_concurrency: int
     max_contexts_per_browser: int = DEFAULT_MAX_CONTEXTS_PER_BROWSER
+    slots_per_owner: int = DEFAULT_SLOTS_PER_OWNER
     owner_count: int = 1
 
     @classmethod
@@ -47,13 +49,16 @@ class BrowserPoolConfig:
         logical_concurrency: int,
         *,
         max_contexts_per_browser: int = DEFAULT_MAX_CONTEXTS_PER_BROWSER,
+        slots_per_owner: int = DEFAULT_SLOTS_PER_OWNER,
     ) -> "BrowserPoolConfig":
         concurrency = max(1, int(logical_concurrency or 1))
         max_contexts = max(1, int(max_contexts_per_browser or 1))
-        owner_count = max(1, (concurrency + max_contexts - 1) // max_contexts)
+        normalized_slots = max(1, int(slots_per_owner or 1))
+        owner_count = max(1, (concurrency + normalized_slots - 1) // normalized_slots)
         return cls(
             logical_concurrency=concurrency,
             max_contexts_per_browser=max_contexts,
+            slots_per_owner=normalized_slots,
             owner_count=owner_count,
         )
 
@@ -441,7 +446,7 @@ class BrowserOwnerPool:
         normalized = max(0, int(slot_index or 0))
         if not self._owners:
             raise RuntimeError("BrowserOwnerPool 为空")
-        owner_index = min(len(self._owners) - 1, normalized // max(1, int(self.config.max_contexts_per_browser or 1)))
+        owner_index = min(len(self._owners) - 1, normalized // max(1, int(self.config.slots_per_owner or 1)))
         return self._owners[owner_index]
 
     def shutdown(self) -> None:
@@ -470,4 +475,5 @@ __all__ = [
     "BrowserOwnerPool",
     "BrowserPoolConfig",
     "DEFAULT_MAX_CONTEXTS_PER_BROWSER",
+    "DEFAULT_SLOTS_PER_OWNER",
 ]
