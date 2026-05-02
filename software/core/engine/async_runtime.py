@@ -13,7 +13,6 @@ from software.logging.log_utils import log_suppressed_exception
 from software.network.browser.owner_pool import (
     BrowserOwnerPool,
     BrowserPoolConfig,
-    DEFAULT_MAX_CONTEXTS_PER_BROWSER,
 )
 
 
@@ -64,23 +63,22 @@ class AsyncRuntimeCoordinator:
         except ValueError:
             pass
 
-    def _run_slot(self, slot_index: int) -> None:
+    def _run_slot(self) -> None:
         owner_pool = self.owner_pool
         if owner_pool is None:
             raise RuntimeError("owner pool 未初始化")
-        owner = owner_pool.owner_for_slot(slot_index)
         loop = ExecutionLoop(
             self.config,
             self.state,
             self.gui_instance,
-            browser_owner=owner,
+            browser_owner_pool=owner_pool,
         )
         loop.run_thread(0, 0, self.stop_signal)
 
     def run(self) -> None:
         pool_config = BrowserPoolConfig.from_concurrency(
             self.config.num_threads,
-            max_contexts_per_browser=DEFAULT_MAX_CONTEXTS_PER_BROWSER,
+            headless=bool(self.config.headless_mode),
         )
         prefer_browsers = list(self.config.browser_preference or BROWSER_PREFERENCE)
         self.owner_pool = BrowserOwnerPool(
@@ -91,10 +89,10 @@ class AsyncRuntimeCoordinator:
         )
         self._register_cleanup_target(self.owner_pool)
         logging.info(
-            "异步上下文池已启动：总并发=%s owner数=%s 每owner槽位=%s",
+            "异步上下文池已启动：总并发=%s owner数=%s 每owner上下文上限=%s",
             self.config.num_threads,
             pool_config.owner_count,
-            pool_config.max_contexts_per_browser,
+            pool_config.contexts_per_owner,
         )
 
         threads: List[threading.Thread] = []
@@ -103,7 +101,6 @@ class AsyncRuntimeCoordinator:
                 slot_no = slot_index + 1
                 thread = threading.Thread(
                     target=self._run_slot,
-                    args=(slot_index,),
                     daemon=True,
                     name=f"Slot-{slot_no}",
                 )

@@ -15,7 +15,7 @@ from software.core.engine.driver_factory import (
 from software.core.task import ExecutionConfig, ExecutionState
 from software.logging.log_utils import log_suppressed_exception
 from software.network.browser import BrowserDriver, BrowserManager
-from software.network.browser.owner_pool import AsyncBrowserOwner
+from software.network.browser.owner_pool import BrowserOwnerLease, BrowserOwnerPool
 from software.network.proxy.pool import is_proxy_responsive
 from software.network.session_policy import (
     _discard_unresponsive_proxy,
@@ -84,7 +84,7 @@ class BrowserSessionService:
         gui_instance: Any,
         thread_name: str,
         *,
-        browser_owner: Optional[AsyncBrowserOwner] = None,
+        browser_owner_pool: Optional[BrowserOwnerPool] = None,
     ):
         self.config = config
         self.state = state
@@ -92,10 +92,25 @@ class BrowserSessionService:
         self.thread_name = str(thread_name or "").strip()
         self.driver: Optional[BrowserDriver] = None
         self._browser_manager: Optional[BrowserManager] = None
-        self._browser_owner = browser_owner
+        self._browser_owner_pool = browser_owner_pool
+        self._browser_owner_lease: Optional[BrowserOwnerLease] = None
         self.proxy_address: Optional[str] = None
         self.sem_acquired = False
         self._browser_sem = state.get_browser_semaphore(max(1, int(config.num_threads or 1)))
+
+    def _update_phase(self, status_text: str) -> None:
+        if not self.thread_name:
+            return
+        try:
+            self.state.update_thread_step(
+                self.thread_name,
+                0,
+                0,
+                status_text=str(status_text or ""),
+                running=True,
+            )
+        except Exception as exc:
+            log_suppressed_exception("BrowserSessionService._update_phase", exc, level=logging.INFO)
 
     def _register_driver(self, instance: BrowserDriver) -> None:
         register = getattr(self.gui_instance, "register_cleanup_target", None)
@@ -118,6 +133,7 @@ class BrowserSessionService:
 
     def dispose(self) -> None:
         if not self.driver:
+            self._release_owner_lease()
             if self.thread_name:
                 self.state.release_proxy_in_use(self.thread_name)
                 self.proxy_address = None
@@ -133,6 +149,7 @@ class BrowserSessionService:
         if not self.driver.mark_cleanup_done():
             logging.info("浏览器实例已被其他线程清理，跳过")
             self._unregister_driver(self.driver)
+            self._release_owner_lease()
             if self.thread_name:
                 self.state.release_proxy_in_use(self.thread_name)
             self.proxy_address = None
@@ -150,6 +167,8 @@ class BrowserSessionService:
             logging.info("已关闭浏览器 context/page")
         except Exception as exc:
             log_suppressed_exception("BrowserSessionService.dispose driver.quit", exc, level=logging.WARNING)
+        finally:
+            self._release_owner_lease()
 
         if self.thread_name:
             self.state.release_proxy_in_use(self.thread_name)
@@ -165,7 +184,7 @@ class BrowserSessionService:
 
     def shutdown(self) -> None:
         self.dispose()
-        if self._browser_owner is not None:
+        if self._browser_owner_pool is not None:
             return
         if self._browser_manager is not None:
             try:
@@ -179,6 +198,16 @@ class BrowserSessionService:
     @staticmethod
     def _is_stop_requested(stop_signal: Optional[threading.Event]) -> bool:
         return bool(stop_signal is not None and stop_signal.is_set())
+
+    def _release_owner_lease(self) -> None:
+        lease = self._browser_owner_lease
+        self._browser_owner_lease = None
+        if lease is None:
+            return
+        try:
+            lease.release()
+        except Exception as exc:
+            log_suppressed_exception("BrowserSessionService._release_owner_lease", exc, level=logging.WARNING)
 
     def create_browser(
         self,
@@ -196,6 +225,8 @@ class BrowserSessionService:
             if self._is_stop_requested(stop_signal):
                 return None
 
+            if self.config.random_proxy_ip_enabled:
+                self._update_phase("获取代理")
             self.proxy_address = _select_proxy_for_session(
                 self.state,
                 self.thread_name,
@@ -230,12 +261,29 @@ class BrowserSessionService:
                 logging.info("已获取浏览器信号量")
 
             try:
-                if self._browser_owner is not None:
-                    self.driver = self._browser_owner.open_session(
+                if self._browser_owner_pool is not None:
+                    self._update_phase("等待浏览器容量")
+                    lease = self._browser_owner_pool.acquire_owner_lease(
+                        stop_signal=stop_signal,
+                        wait=True,
+                    )
+                    if lease is None:
+                        if self.sem_acquired:
+                            self._browser_sem.release()
+                            self.sem_acquired = False
+                            logging.info("等待 owner 容量时任务结束，已释放信号量")
+                        if self.thread_name:
+                            self.state.release_proxy_in_use(self.thread_name)
+                        self.proxy_address = None
+                        return None
+                    self._browser_owner_lease = lease
+                    self._update_phase("创建浏览器会话")
+                    self.driver = lease.owner.open_session(
                         proxy_address=browser_proxy_address,
                         user_agent=ua_value,
+                        lease=lease,
                     )
-                    active_browser = self._browser_owner.browser_name or "edge"
+                    active_browser = lease.owner.browser_name or "edge"
                 else:
                     if self._browser_manager is None:
                         self._browser_manager = create_browser_manager(
@@ -243,6 +291,7 @@ class BrowserSessionService:
                             prefer_browsers=list(preferred_browsers) if preferred_browsers else None,
                             window_position=(window_x_pos, window_y_pos),
                         )
+                    self._update_phase("创建浏览器会话")
                     self.driver, active_browser = create_playwright_driver(
                         headless=self.config.headless_mode,
                         prefer_browsers=list(preferred_browsers) if preferred_browsers else None,
@@ -262,7 +311,8 @@ class BrowserSessionService:
                     self.state.release_proxy_in_use(self.thread_name)
                 failed_proxy = self.proxy_address
                 self.proxy_address = None
-                if self._browser_manager is not None and self._browser_owner is None:
+                self._release_owner_lease()
+                if self._browser_manager is not None and self._browser_owner_pool is None:
                     try:
                         shutdown_browser_manager(self._browser_manager)
                     except Exception as shutdown_exc:

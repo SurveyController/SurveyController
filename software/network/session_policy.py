@@ -10,6 +10,7 @@ from software.network.proxy import get_proxy_required_ttl_seconds, proxy_lease_h
 from software.io.config import _select_user_agent_from_ratios
 
 _PROXY_WAIT_POLL_SECONDS = 0.3
+_BAD_PROXY_COOLDOWN_SECONDS = 180.0
 
 
 def _active_proxy_addresses_locked(ctx: ExecutionState, *, exclude_thread_name: str = "") -> set[str]:
@@ -32,7 +33,26 @@ def _required_proxy_ttl_seconds(ctx: ExecutionState) -> int:
     return int(get_proxy_required_ttl_seconds(getattr(ctx.config, "answer_duration_range_seconds", (0, 0))))
 
 
+def _mark_proxy_temporarily_bad(
+    ctx: ExecutionState,
+    proxy_address: str,
+    *,
+    cooldown_seconds: float = _BAD_PROXY_COOLDOWN_SECONDS,
+) -> None:
+    normalized = str(proxy_address or "").strip()
+    if not normalized:
+        return
+    ctx.mark_proxy_in_cooldown(normalized, cooldown_seconds)
+    _discard_unresponsive_proxy(ctx, normalized)
+    logging.info(
+        "代理进入冷却 %.0fs：%s",
+        float(cooldown_seconds or 0.0),
+        mask_proxy_for_log(normalized),
+    )
+
+
 def _purge_unusable_proxy_pool_locked(ctx: ExecutionState) -> None:
+    ctx._purge_expired_proxy_cooldowns_locked()
     required_ttl = _required_proxy_ttl_seconds(ctx)
     kept = []
     seen = set()
@@ -47,6 +67,10 @@ def _purge_unusable_proxy_pool_locked(ctx: ExecutionState) -> None:
             continue
         if lease.address in seen:
             removed += 1
+            continue
+        if ctx._is_proxy_in_cooldown_locked(lease.address):
+            removed += 1
+            logging.info("已移除冷却中的代理：%s", mask_proxy_for_log(lease.address))
             continue
         if not proxy_lease_has_sufficient_ttl(lease, required_ttl_seconds=required_ttl):
             removed += 1
@@ -68,6 +92,9 @@ def _pop_available_proxy_lease_locked(ctx: ExecutionState) -> Optional[ProxyLeas
             continue
         if not proxy_lease_has_sufficient_ttl(lease, required_ttl_seconds=_required_proxy_ttl_seconds(ctx)):
             logging.info("已跳过即将过期的代理：%s", mask_proxy_for_log(lease.address))
+            continue
+        if ctx._is_proxy_in_cooldown_locked(lease.address):
+            logging.info("已跳过冷却中的代理：%s", mask_proxy_for_log(lease.address))
             continue
         if lease.address in active_addresses:
             logging.info("已跳过正在被其他会话占用的代理：%s", mask_proxy_for_log(lease.address))
@@ -179,6 +206,9 @@ def _select_proxy_for_session(
                                     continue
                                 if not proxy_lease_has_sufficient_ttl(lease, required_ttl_seconds=required_ttl):
                                     logging.info("已丢弃即将过期的新代理：%s", mask_proxy_for_log(lease.address))
+                                    continue
+                                if ctx._is_proxy_in_cooldown_locked(lease.address):
+                                    logging.info("已跳过冷却中的新代理：%s", mask_proxy_for_log(lease.address))
                                     continue
                                 if selected is None:
                                     if lease.address in existing:

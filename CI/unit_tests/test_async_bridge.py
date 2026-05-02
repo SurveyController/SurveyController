@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 import threading
+import time
 import unittest
+from unittest.mock import patch
 
 from software.network.browser.async_bridge import AsyncBridgeLoopThread, AsyncObjectProxy
 
@@ -104,6 +106,35 @@ class AsyncBridgeTests(unittest.TestCase):
         with self.assertRaisesRegex(RuntimeError, "已关闭"):
             bridge.run_coroutine(coro)
         self.assertIsNone(coro.cr_frame)
+
+    def test_start_is_thread_safe_under_concurrent_calls(self) -> None:
+        bridge = AsyncBridgeLoopThread(name="BridgeConcurrentStart")
+        real_thread = threading.Thread
+        created_threads: list[str] = []
+
+        class _SlowThread(real_thread):
+            def __init__(self, *args, **kwargs) -> None:
+                created_threads.append(str(kwargs.get("name") or ""))
+                time.sleep(0.02)
+                super().__init__(*args, **kwargs)
+
+        barrier = threading.Barrier(8)
+        callers = []
+
+        def _call_start() -> None:
+            barrier.wait()
+            bridge.start()
+
+        try:
+            with patch("software.network.browser.async_bridge.threading.Thread", _SlowThread):
+                callers = [real_thread(target=_call_start, name=f"Caller-{idx}") for idx in range(8)]
+                for caller in callers:
+                    caller.start()
+                for caller in callers:
+                    caller.join(timeout=2)
+            self.assertEqual(len(created_threads), 1)
+        finally:
+            bridge.stop()
 
 
 if __name__ == "__main__":

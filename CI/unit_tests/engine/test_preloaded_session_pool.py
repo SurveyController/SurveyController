@@ -55,7 +55,7 @@ class PreloadedSessionPoolTests(unittest.TestCase):
                 state=state,
                 gui_instance=None,
                 thread_name="Slot-1",
-                browser_owner=object(),
+                browser_owner_pool=object(),
                 page_loader=_page_loader,
             )
             stop_signal = threading.Event()
@@ -78,7 +78,7 @@ class PreloadedSessionPoolTests(unittest.TestCase):
                 state=state,
                 gui_instance=None,
                 thread_name="Slot-1",
-                browser_owner=object(),
+                browser_owner_pool=object(),
                 page_loader=lambda *_args, **_kwargs: None,
             )
             stop_signal = threading.Event()
@@ -105,7 +105,7 @@ class PreloadedSessionPoolTests(unittest.TestCase):
                 state=state,
                 gui_instance=None,
                 thread_name="Slot-1",
-                browser_owner=object(),
+                browser_owner_pool=object(),
                 page_loader=lambda *_args, **_kwargs: None,
             )
             pool.warm_async(["edge"], 0, 0)

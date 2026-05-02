@@ -129,6 +129,11 @@ class BrowserStartupTests(unittest.TestCase):
         self.assertEqual(info.kind, browser_startup.BROWSER_STARTUP_ERROR_ENVIRONMENT)
         self.assertTrue(info.is_environment_error)
 
+    def test_describe_playwright_startup_error_falls_back_to_exception_type_when_message_empty(self) -> None:
+        message = browser_startup.describe_playwright_startup_error(RuntimeError())
+
+        self.assertEqual(message, "RuntimeError")
+
     def test_start_playwright_runtime_retries_known_environment_error_then_succeeds(self) -> None:
         class _FakeSyncPlaywright:
             def __init__(self) -> None:
