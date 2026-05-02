@@ -305,6 +305,29 @@ class ExecutionLoop:
             return float(min_wait)
         return float(random.uniform(min_wait, max_wait))
 
+    def _handle_proxy_unavailable(
+        self,
+        stop_signal: threading.Event,
+        *,
+        thread_name: str,
+        status_text: str,
+        log_message: str,
+    ) -> bool:
+        stopped = self.stop_policy.record_failure(
+            stop_signal,
+            thread_name=thread_name,
+            failure_reason=FailureReason.PROXY_UNAVAILABLE,
+            status_text=status_text,
+            log_message=log_message,
+        )
+        if stopped and not stop_signal.is_set():
+            stop_signal.set()
+        if stopped:
+            return True
+        if self.config.random_proxy_ip_enabled and _record_bad_proxy_and_maybe_pause(self.state, self.gui_instance):
+            return True
+        return False
+
     def _log_runtime_settings(self, *, timed_mode_on: bool) -> None:
         logging.info("目标份数: %s, 当前进度: %s/%s", self.config.target_num, self.state.cur_num, self.config.target_num)
         if timed_mode_on:
@@ -380,7 +403,14 @@ class ExecutionLoop:
             if stop_signal.is_set():
                 return preferred_browsers
             if self.config.random_proxy_ip_enabled:
-                self._update_thread_status(thread_name, "等待可用代理", running=True)
+                self._update_thread_status(thread_name, "代理不可用", running=True)
+                if self._handle_proxy_unavailable(
+                    stop_signal,
+                    thread_name=thread_name,
+                    status_text="代理不可用",
+                    log_message="当前没有可用代理，本轮按失败处理",
+                ):
+                    return preferred_browsers
                 stop_signal.wait(0.1)
                 return preferred_browsers
             stop_signal.wait(0.8)
@@ -597,7 +627,12 @@ class ExecutionLoop:
             _mark_proxy_temporarily_bad(self.state, session.proxy_address)
         if self.config.random_proxy_ip_enabled:
             self._update_thread_status(thread_name, "代理失效，切换中", running=True)
-            if _record_bad_proxy_and_maybe_pause(self.state, self.gui_instance):
+            if self._handle_proxy_unavailable(
+                stop_signal,
+                thread_name=thread_name,
+                status_text="代理不可用",
+                log_message="代理连接失败，本轮按失败处理",
+            ):
                 return True
             return False
         return self.stop_policy.record_failure(

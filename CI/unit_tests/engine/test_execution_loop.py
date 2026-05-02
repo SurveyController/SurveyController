@@ -87,6 +87,7 @@ class _FakeStopPolicy:
         self.stop_on_failure = stop_on_failure
         self.success_should_stop = success_should_stop
         self.failure_calls: list[object] = []
+        self.failure_kwargs: list[dict[str, object]] = []
         self.success_calls = 0
 
     def wait_if_paused(self, _stop_signal: threading.Event) -> None:
@@ -94,6 +95,7 @@ class _FakeStopPolicy:
 
     def record_failure(self, stop_signal: threading.Event, **kwargs):
         self.failure_calls.append(kwargs.get("failure_reason"))
+        self.failure_kwargs.append(dict(kwargs))
         if self.stop_on_failure and not stop_signal.is_set():
             stop_signal.set()
         return self.stop_on_failure
@@ -321,6 +323,69 @@ class ExecutionLoopTests(unittest.TestCase):
                 )
 
         self.assertEqual(loop.stop_policy.failure_calls, [])
+
+    def test_prepare_browser_session_records_proxy_failure_when_random_proxy_returns_none(self) -> None:
+        config = ExecutionConfig(url="https://example.com", random_proxy_ip_enabled=True)
+        state = ExecutionState(config=config)
+        stop_signal = threading.Event()
+        session = _FakeBrowserSession(driver=None)
+        session.create_browser = lambda *_args, **_kwargs: None
+        loop = ExecutionLoop(config, state)
+        loop.stop_policy = _FakeStopPolicy(stop_on_failure=False)
+
+        with _patched_attr(execution_loop_module, "_record_bad_proxy_and_maybe_pause", lambda *_args, **_kwargs: False):
+            preferred = loop._prepare_browser_session(
+                session,
+                ["edge"],
+                ["edge", "chrome"],
+                window_x_pos=0,
+                window_y_pos=0,
+                stop_signal=stop_signal,
+                thread_name="Slot-1",
+            )
+
+        self.assertEqual(preferred, ["edge"])
+        self.assertEqual(loop.stop_policy.failure_calls, [execution_loop_module.FailureReason.PROXY_UNAVAILABLE])
+        self.assertEqual(loop.stop_policy.failure_kwargs[0].get("status_text"), "代理不可用")
+        self.assertEqual(state.thread_progress["Slot-1"].status_text, "代理不可用")
+        self.assertFalse(stop_signal.is_set())
+
+    def test_handle_proxy_connection_error_records_failure_before_retrying_next_proxy(self) -> None:
+        config = ExecutionConfig(url="https://example.com", random_proxy_ip_enabled=True)
+        state = ExecutionState(config=config)
+        stop_signal = threading.Event()
+        session = SimpleNamespace(proxy_address="http://1.1.1.1:8000")
+        loop = ExecutionLoop(config, state)
+        loop.stop_policy = _FakeStopPolicy(stop_on_failure=False)
+
+        with ExitStack() as stack:
+            marked_bad: list[str] = []
+            stack.enter_context(
+                _patched_attr(
+                    execution_loop_module,
+                    "_mark_proxy_temporarily_bad",
+                    lambda _state, proxy_address: marked_bad.append(proxy_address),
+                )
+            )
+            stack.enter_context(
+                _patched_attr(
+                    execution_loop_module,
+                    "_record_bad_proxy_and_maybe_pause",
+                    lambda *_args, **_kwargs: False,
+                )
+            )
+            should_stop = loop._handle_proxy_connection_error(
+                session,
+                stop_signal,
+                thread_name="Slot-1",
+            )
+
+        self.assertFalse(should_stop)
+        self.assertEqual(marked_bad, ["http://1.1.1.1:8000"])
+        self.assertEqual(loop.stop_policy.failure_calls, [execution_loop_module.FailureReason.PROXY_UNAVAILABLE])
+        self.assertEqual(loop.stop_policy.failure_kwargs[0].get("status_text"), "代理不可用")
+        self.assertEqual(state.thread_progress["Slot-1"].status_text, "代理失效，切换中")
+        self.assertFalse(stop_signal.is_set())
 
     def test_run_thread_finishes_cleanly_when_url_is_empty(self) -> None:
         config = ExecutionConfig(url="")

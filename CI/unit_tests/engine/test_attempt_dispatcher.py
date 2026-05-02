@@ -69,6 +69,31 @@ class AttemptDispatcherTests(unittest.TestCase):
         self.assertFalse(worker.is_alive())
         self.assertTrue(completed.is_set())
 
+    def test_acquire_polling_wait_observes_stop_signal_without_close(self) -> None:
+        config = ExecutionConfig(num_threads=1)
+        state = ExecutionState(config=config)
+        stop_signal = threading.Event()
+        dispatcher = AttemptDispatcher(config, state, stop_signal)
+
+        self.assertTrue(dispatcher.acquire())
+        dispatcher.release(requeue=True, delay_seconds=5.0)
+
+        result: dict[str, bool] = {}
+
+        def _waiter() -> None:
+            result["acquired"] = dispatcher.acquire()
+
+        worker = threading.Thread(target=_waiter, daemon=True)
+        started_at = time.monotonic()
+        worker.start()
+        time.sleep(0.05)
+        stop_signal.set()
+
+        worker.join(timeout=1.0)
+        self.assertFalse(worker.is_alive())
+        self.assertFalse(result.get("acquired", True))
+        self.assertLess(time.monotonic() - started_at, 1.0)
+
 
 if __name__ == "__main__":
     unittest.main()
