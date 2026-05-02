@@ -123,6 +123,7 @@ class ExecutionState:
 
     proxy_waiting_threads: int = 0
     proxy_in_use_by_thread: Dict[str, ProxyLease] = field(default_factory=dict)
+    submit_proxy_in_use_by_thread: Dict[str, ProxyLease] = field(default_factory=dict)
     reverse_fill_runtime: Optional[ReverseFillRuntimeState] = None
 
     stop_event: threading.Event = field(default_factory=threading.Event)
@@ -244,11 +245,43 @@ class ExecutionState:
         with self.lock:
             self.proxy_in_use_by_thread[key] = lease
 
+    def mark_submit_proxy_in_use(self, thread_name: str, lease: ProxyLease) -> None:
+        key = str(thread_name or "").strip()
+        if not key or not isinstance(lease, ProxyLease):
+            return
+        with self.lock:
+            self.submit_proxy_in_use_by_thread[key] = lease
+
+    def active_proxy_addresses_locked(self, *, exclude_thread_name: str = "") -> set[str]:
+        excluded = str(exclude_thread_name or "").strip()
+        active = set()
+        for proxy_map in (self.proxy_in_use_by_thread, self.submit_proxy_in_use_by_thread):
+            for thread_name, lease in proxy_map.items():
+                if excluded and str(thread_name or "").strip() == excluded:
+                    continue
+                address = str(getattr(lease, "address", "") or "").strip()
+                if address:
+                    active.add(address)
+        return active
+
+    def snapshot_active_proxy_addresses(self, *, exclude_thread_name: str = "") -> set[str]:
+        with self.lock:
+            return self.active_proxy_addresses_locked(exclude_thread_name=exclude_thread_name)
+
+    def is_proxy_address_in_use(self, proxy_address: str, *, exclude_thread_name: str = "") -> bool:
+        normalized = str(proxy_address or "").strip()
+        if not normalized:
+            return False
+        with self.lock:
+            return normalized in self.active_proxy_addresses_locked(exclude_thread_name=exclude_thread_name)
+        return False
+
     def release_proxy_in_use(self, thread_name: str) -> Optional[ProxyLease]:
         key = str(thread_name or "").strip()
         if not key:
             return None
         with self.lock:
+            self.submit_proxy_in_use_by_thread.pop(key, None)
             return self.proxy_in_use_by_thread.pop(key, None)
 
     def update_thread_status(

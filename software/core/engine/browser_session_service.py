@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import threading
 from typing import Any, Optional
 
 from software.core.engine.driver_factory import (
@@ -122,74 +123,112 @@ class BrowserSessionService:
             finally:
                 self._browser_manager = None
 
-    def create_browser(self, preferred_browsers: list, window_x_pos: int, window_y_pos: int) -> Optional[str]:
-        self.proxy_address = _select_proxy_for_session(self.state, self.thread_name)
-        if self.config.random_proxy_ip_enabled and not self.proxy_address:
-            if _record_bad_proxy_and_maybe_pause(self.state, self.gui_instance):
+    @staticmethod
+    def _is_stop_requested(stop_signal: Optional[threading.Event]) -> bool:
+        return bool(stop_signal is not None and stop_signal.is_set())
+
+    def create_browser(
+        self,
+        preferred_browsers: list,
+        window_x_pos: int,
+        window_y_pos: int,
+        *,
+        stop_signal: Optional[threading.Event] = None,
+    ) -> Optional[str]:
+        should_wait_for_proxy = bool(self.config.random_proxy_ip_enabled and stop_signal is not None)
+
+        while True:
+            if self._is_stop_requested(stop_signal):
                 return None
 
-        if self.proxy_address and not is_proxy_responsive(self.proxy_address):
-            logging.warning("提取到的代理质量过低，自动弃用更换下一个")
-            _discard_unresponsive_proxy(self.state, self.proxy_address)
-            if self.thread_name:
-                self.state.release_proxy_in_use(self.thread_name)
-            self.proxy_address = None
-            if self.config.random_proxy_ip_enabled:
-                _record_bad_proxy_and_maybe_pause(self.state, self.gui_instance)
-            return None
+            self.proxy_address = _select_proxy_for_session(
+                self.state,
+                self.thread_name,
+                stop_signal=stop_signal,
+                wait=should_wait_for_proxy,
+            )
+            if self.config.random_proxy_ip_enabled and not self.proxy_address:
+                if should_wait_for_proxy or self._is_stop_requested(stop_signal):
+                    return None
+                if _record_bad_proxy_and_maybe_pause(self.state, self.gui_instance):
+                    return None
 
-        browser_proxy_address = self.proxy_address
-        submit_proxy_address = None
-        if self.config.headless_mode and self.proxy_address:
-            browser_proxy_address = None
+            if self.proxy_address and not is_proxy_responsive(self.proxy_address):
+                logging.warning("提取到的代理质量过低，自动弃用更换下一个")
+                _discard_unresponsive_proxy(self.state, self.proxy_address)
+                if self.thread_name:
+                    self.state.release_proxy_in_use(self.thread_name)
+                self.proxy_address = None
+                if self.config.random_proxy_ip_enabled:
+                    if should_wait_for_proxy:
+                        continue
+                    _record_bad_proxy_and_maybe_pause(self.state, self.gui_instance)
+                return None
+
+            browser_proxy_address = self.proxy_address
             submit_proxy_address = self.proxy_address
 
-        ua_value, _ = _select_user_agent_for_session(self.state)
-        if not self.sem_acquired:
-            self._browser_sem.acquire()
-            self.sem_acquired = True
-            logging.info("已获取浏览器信号量")
+            ua_value, _ = _select_user_agent_for_session(self.state)
+            if not self.sem_acquired:
+                self._browser_sem.acquire()
+                self.sem_acquired = True
+                logging.info("已获取浏览器信号量")
 
-        try:
-            if self._browser_owner is not None:
-                self.driver = self._browser_owner.open_session(
-                    proxy_address=browser_proxy_address,
-                    user_agent=ua_value,
-                )
-                active_browser = self._browser_owner.browser_name or "edge"
-            else:
-                if self._browser_manager is None:
-                    self._browser_manager = create_browser_manager(
+            try:
+                if self._browser_owner is not None:
+                    self.driver = self._browser_owner.open_session(
+                        proxy_address=browser_proxy_address,
+                        user_agent=ua_value,
+                    )
+                    active_browser = self._browser_owner.browser_name or "edge"
+                else:
+                    if self._browser_manager is None:
+                        self._browser_manager = create_browser_manager(
+                            headless=self.config.headless_mode,
+                            prefer_browsers=list(preferred_browsers) if preferred_browsers else None,
+                            window_position=(window_x_pos, window_y_pos),
+                        )
+                    self.driver, active_browser = create_playwright_driver(
                         headless=self.config.headless_mode,
                         prefer_browsers=list(preferred_browsers) if preferred_browsers else None,
+                        proxy_address=browser_proxy_address,
+                        user_agent=ua_value,
                         window_position=(window_x_pos, window_y_pos),
+                        manager=self._browser_manager,
+                        persistent_browser=True,
                     )
-                self.driver, active_browser = create_playwright_driver(
-                    headless=self.config.headless_mode,
-                    prefer_browsers=list(preferred_browsers) if preferred_browsers else None,
-                    proxy_address=browser_proxy_address,
-                    user_agent=ua_value,
-                    window_position=(window_x_pos, window_y_pos),
-                    manager=self._browser_manager,
-                    persistent_browser=True,
-                )
-        except Exception:
-            if self.sem_acquired:
-                self._browser_sem.release()
-                self.sem_acquired = False
-                logging.info("创建浏览器失败，已释放信号量")
-            if self.thread_name:
-                self.state.release_proxy_in_use(self.thread_name)
-            self.proxy_address = None
-            raise
+            except Exception as exc:
+                if self.sem_acquired:
+                    self._browser_sem.release()
+                    self.sem_acquired = False
+                    logging.info("创建浏览器失败，已释放信号量")
+                if self.thread_name:
+                    self.state.release_proxy_in_use(self.thread_name)
+                failed_proxy = self.proxy_address
+                self.proxy_address = None
+                if self.config.random_proxy_ip_enabled and isinstance(exc, Exception):
+                    message = str(exc or "")
+                    if failed_proxy and (
+                        "ERR_TUNNEL_CONNECTION_FAILED" in message
+                        or "ERR_PROXY_CONNECTION_FAILED" in message
+                        or "ERR_NO_SUPPORTED_PROXIES" in message
+                    ):
+                        logging.warning("随机IP建立浏览器会话失败，已废弃当前代理并继续等待下一只：%s", exc)
+                        _discard_unresponsive_proxy(self.state, failed_proxy)
+                        if should_wait_for_proxy:
+                            continue
+                raise
 
-        self._register_driver(self.driver)
-        setattr(self.driver, "_submit_proxy_address", submit_proxy_address)
-        runtime_window_size = _resolve_runtime_window_size(self.config)
-        if runtime_window_size is not None:
-            width, height = runtime_window_size
-            self.driver.set_window_size(width, height)
-        return active_browser
+            self._register_driver(self.driver)
+            setattr(self.driver, "_thread_name", self.thread_name)
+            setattr(self.driver, "_session_state", self.state)
+            setattr(self.driver, "_session_proxy_address", self.proxy_address)
+            setattr(self.driver, "_submit_proxy_address", submit_proxy_address)
+            runtime_window_size = _resolve_runtime_window_size(self.config)
+            if runtime_window_size is not None:
+                width, height = runtime_window_size
+                self.driver.set_window_size(width, height)
+            return active_browser
 
 
 __all__ = ["BrowserSessionService"]

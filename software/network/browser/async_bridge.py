@@ -71,9 +71,16 @@ class AsyncBridgeLoopThread:
 
     def run_coroutine(self, coro: Any) -> Any:
         if self._closed:
+            if inspect.iscoroutine(coro):
+                coro.close()
             raise RuntimeError(f"{self._name} 已关闭")
-        loop = self.loop
-        future: Future[Any] = asyncio.run_coroutine_threadsafe(coro, loop)
+        try:
+            loop = self.loop
+            future: Future[Any] = asyncio.run_coroutine_threadsafe(coro, loop)
+        except Exception:
+            if inspect.iscoroutine(coro):
+                coro.close()
+            raise
         return future.result()
 
     def call_soon(self, callback: Callable[..., Any], *args: Any) -> None:

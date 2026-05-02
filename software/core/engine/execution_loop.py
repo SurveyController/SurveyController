@@ -13,6 +13,7 @@ from software.app.config import BROWSER_PREFERENCE
 from software.core.ai.runtime import AIRuntimeError, is_ai_timeout_runtime_error, is_free_ai_runtime_error
 from software.core.engine.browser_session_service import BrowserSessionService
 from software.core.engine.failure_reason import FailureReason
+from software.core.engine.preloaded_session_pool import PreloadedBrowserSessionPool
 from software.core.engine.provider_common import ensure_joint_psychometric_answer_plan
 from software.core.engine.run_stop_policy import RunStopPolicy
 from software.core.engine.submission_service import SubmissionService
@@ -93,6 +94,13 @@ class ExecutionLoop:
         except Exception:
             logging.info("更新线程状态失败：%s", status_text, exc_info=True)
 
+    @staticmethod
+    def _reprioritize_browser_preference(active_browser: str, base_browser_preference: list[str]) -> list[str]:
+        normalized = str(active_browser or "").strip().lower()
+        if not normalized:
+            return list(base_browser_preference or [])
+        return [normalized] + [browser for browser in list(base_browser_preference or []) if browser != normalized]
+
     def _resolve_timed_refresh_interval(self) -> float:
         try:
             refresh_interval = float(
@@ -139,7 +147,12 @@ class ExecutionLoop:
 
         self._update_thread_step(thread_name, "准备浏览器")
         try:
-            active_browser = session.create_browser(preferred_browsers, window_x_pos, window_y_pos)
+            active_browser = session.create_browser(
+                preferred_browsers,
+                window_x_pos,
+                window_y_pos,
+                stop_signal=stop_signal,
+            )
         except Exception as exc:
             if stop_signal.is_set():
                 return preferred_browsers
@@ -174,17 +187,9 @@ class ExecutionLoop:
             if stop_signal.is_set():
                 return preferred_browsers
             if self.config.random_proxy_ip_enabled:
-                stopped = self.stop_policy.record_failure(
-                    stop_signal,
-                    thread_name=thread_name,
-                    failure_reason=FailureReason.PROXY_UNAVAILABLE,
-                    status_text="代理不可用",
-                    log_message="代理不可用，本轮按失败处理",
-                )
-                if stopped and not stop_signal.is_set():
-                    stop_signal.set()
-                if stopped:
-                    return preferred_browsers
+                self._update_thread_status(thread_name, "等待可用代理", running=True)
+                stop_signal.wait(0.1)
+                return preferred_browsers
             stop_signal.wait(0.8)
             return preferred_browsers
         return [active_browser] + [browser for browser in base_browser_preference if browser != active_browser]
@@ -263,7 +268,13 @@ class ExecutionLoop:
                 logging.info("设备上限失败后处理随机IP提交流程失败", exc_info=True)
         return True
 
-    def _prepare_round_context(self, stop_signal: threading.Event, *, thread_name: str, session: BrowserSessionService) -> bool:
+    def _prepare_round_context(
+        self,
+        stop_signal: threading.Event,
+        *,
+        thread_name: str,
+        session: BrowserSessionService | None,
+    ) -> bool:
         try:
             self.state.reset_pending_distribution(thread_name)
         except Exception:
@@ -290,7 +301,8 @@ class ExecutionLoop:
             except Exception:
                 logging.info("等待反填样本时释放联合信效度样本槽位失败", exc_info=True)
             self._update_thread_status(thread_name, "等待反填样本", running=True)
-            session.dispose()
+            if session is not None:
+                session.dispose()
             if stop_signal.wait(0.2):
                 return False
             return False
@@ -367,29 +379,35 @@ class ExecutionLoop:
     ) -> bool:
         if stop_signal.is_set():
             return True
-        logging.warning("提取到的代理质量过低，自动弃用更换下一个")
+        logging.warning("代理连接失败，当前会话将废弃并重新尝试")
         if session.proxy_address:
             _discard_unresponsive_proxy(self.state, session.proxy_address)
-        if self.config.random_proxy_ip_enabled and session.proxy_address:
+        if self.config.random_proxy_ip_enabled:
+            self._update_thread_status(thread_name, "代理失效，等待新代理", running=True)
             if _record_bad_proxy_and_maybe_pause(self.state, self.gui_instance):
                 return True
-            stopped = self.stop_policy.record_failure(
-                stop_signal,
-                thread_name=thread_name,
-                failure_reason=FailureReason.PROXY_UNAVAILABLE,
-                status_text="代理不可用",
-                log_message="代理质量过低，本轮按失败处理",
-            )
-            if not stopped:
-                stop_signal.wait(0.8)
-            return bool(stopped)
+            return False
         return self.stop_policy.record_failure(
             stop_signal,
             thread_name=thread_name,
             failure_reason=FailureReason.PROXY_UNAVAILABLE,
         )
 
-    def _finalize_thread(self, session: BrowserSessionService, *, thread_name: str) -> None:
+    def _should_use_preloaded_session_pool(self) -> bool:
+        return bool(
+            self.browser_owner is not None
+            and self.config.url
+            and not self.config.random_proxy_ip_enabled
+            and not self.config.timed_mode_enabled
+        )
+
+    def _finalize_thread(
+        self,
+        session: BrowserSessionService | None,
+        *,
+        thread_name: str,
+        preloaded_pool: PreloadedBrowserSessionPool | None = None,
+    ) -> None:
         try:
             self.state.release_joint_sample(thread_name)
         except Exception:
@@ -402,7 +420,179 @@ class ExecutionLoop:
             self.state.mark_thread_finished(thread_name, status_text="已停止")
         except Exception:
             logging.info("更新线程状态失败：已停止", exc_info=True)
-        session.shutdown()
+        if session is not None:
+            session.shutdown()
+        if preloaded_pool is not None:
+            preloaded_pool.shutdown()
+
+    def _run_thread_with_preloaded_pool(
+        self,
+        *,
+        window_x_pos: int,
+        window_y_pos: int,
+        stop_signal: threading.Event,
+        thread_name: str,
+        base_browser_preference: list[str],
+        preferred_browsers: list[str],
+    ) -> None:
+        pool = PreloadedBrowserSessionPool(
+            config=self.config,
+            state=self.state,
+            gui_instance=self.gui_instance,
+            thread_name=thread_name,
+            browser_owner=self.browser_owner,
+            page_loader=_load_survey_page,
+        )
+        active_session: BrowserSessionService | None = None
+        pool.warm_async(preferred_browsers, window_x_pos, window_y_pos)
+
+        while True:
+            if self._should_stop_loop(stop_signal):
+                break
+
+            lease = pool.acquire(stop_signal, wait=True)
+            active_session = lease.session
+            session_preloaded = bool(lease.preloaded and active_session is not None)
+            if active_session is None:
+                active_session = BrowserSessionService(
+                    self.config,
+                    self.state,
+                    self.gui_instance,
+                    thread_name,
+                    browser_owner=self.browser_owner,
+                )
+
+            should_refill = False
+            try:
+                preferred_browsers = self._prepare_browser_session(
+                    active_session,
+                    preferred_browsers,
+                    base_browser_preference,
+                    window_x_pos=window_x_pos,
+                    window_y_pos=window_y_pos,
+                    stop_signal=stop_signal,
+                    thread_name=thread_name,
+                )
+                if stop_signal.is_set():
+                    break
+                if active_session.driver is None:
+                    continue
+
+                if lease.browser_name:
+                    preferred_browsers = self._reprioritize_browser_preference(
+                        lease.browser_name,
+                        base_browser_preference,
+                    )
+
+                should_refill = True
+
+                if not session_preloaded and not self._load_survey_or_record_failure(
+                    active_session,
+                    stop_signal,
+                    thread_name=thread_name,
+                    timed_mode_on=False,
+                    timed_refresh_interval=0.0,
+                ):
+                    if stop_signal.is_set():
+                        should_refill = False
+                        break
+                    continue
+
+                if self._handle_device_quota_limit(active_session, stop_signal, thread_name=thread_name):
+                    active_session = None
+                    if stop_signal.is_set():
+                        should_refill = False
+                        break
+                    continue
+
+                if not self._prepare_round_context(
+                    stop_signal,
+                    thread_name=thread_name,
+                    session=active_session,
+                ):
+                    if stop_signal.is_set():
+                        should_refill = False
+                        break
+                    continue
+
+                finished = _provider_fill_survey(
+                    active_session.driver,
+                    self.config,
+                    self.state,
+                    stop_signal=stop_signal,
+                    thread_name=thread_name,
+                    provider=self.config.survey_provider,
+                )
+                if stop_signal.is_set() or not finished:
+                    self._release_round_resources(thread_name, requeue_reverse_fill=True)
+                    if stop_signal.is_set():
+                        should_refill = False
+                        break
+                    continue
+
+                outcome = self.submission_service.finalize_after_submit(
+                    active_session.driver,
+                    stop_signal=stop_signal,
+                    gui_instance=self.gui_instance,
+                    thread_name=thread_name,
+                )
+                if outcome.status == "success":
+                    if outcome.should_stop:
+                        should_refill = False
+                        break
+                elif outcome.status == "aborted":
+                    self._release_round_resources(thread_name, requeue_reverse_fill=True)
+                    should_refill = False
+                    break
+
+            except AIRuntimeError as exc:
+                if self._handle_ai_runtime_error(exc, stop_signal, thread_name=thread_name):
+                    should_refill = False
+                    break
+                continue
+            except ProxyConnectionError:
+                if self._handle_proxy_connection_error(active_session, stop_signal, thread_name=thread_name):
+                    should_refill = False
+                    break
+                continue
+            except Exception:
+                if stop_signal.is_set():
+                    should_refill = False
+                    break
+                traceback.print_exc()
+                if self.stop_policy.record_failure(
+                    stop_signal,
+                    thread_name=thread_name,
+                    failure_reason=FailureReason.FILL_FAILED,
+                ):
+                    should_refill = False
+                    break
+            finally:
+                if active_session is not None:
+                    active_session.dispose()
+                    active_session = None
+                if should_refill and not stop_signal.is_set():
+                    pool.warm_async(preferred_browsers, window_x_pos, window_y_pos)
+
+            if stop_signal.is_set():
+                break
+            min_wait, max_wait = self.config.submit_interval_range_seconds
+            if max_wait > 0:
+                try:
+                    self.state.update_thread_step(
+                        thread_name,
+                        0,
+                        0,
+                        status_text="等待提交间隔",
+                        running=True,
+                    )
+                except Exception:
+                    logging.info("更新线程状态失败：等待提交间隔", exc_info=True)
+                wait_seconds = min_wait if max_wait == min_wait else random.uniform(min_wait, max_wait)
+                if stop_signal.wait(wait_seconds):
+                    break
+
+        self._finalize_thread(active_session, thread_name=thread_name, preloaded_pool=pool)
 
     def run_thread(
         self,
@@ -416,6 +606,19 @@ class ExecutionLoop:
         timed_refresh_interval = self._resolve_timed_refresh_interval()
         base_browser_preference = list(self.config.browser_preference or BROWSER_PREFERENCE)
         preferred_browsers = list(base_browser_preference)
+        self._log_runtime_settings(timed_mode_on=timed_mode_on)
+
+        if self._should_use_preloaded_session_pool():
+            self._run_thread_with_preloaded_pool(
+                window_x_pos=window_x_pos,
+                window_y_pos=window_y_pos,
+                stop_signal=stop_signal,
+                thread_name=thread_name,
+                base_browser_preference=base_browser_preference,
+                preferred_browsers=preferred_browsers,
+            )
+            return
+
         session = BrowserSessionService(
             self.config,
             self.state,
@@ -423,8 +626,6 @@ class ExecutionLoop:
             thread_name,
             browser_owner=self.browser_owner,
         )
-
-        self._log_runtime_settings(timed_mode_on=timed_mode_on)
 
         while True:
             if self._should_stop_loop(stop_signal):

@@ -10,7 +10,11 @@ from software.app.config import BROWSER_PREFERENCE
 from software.core.engine.execution_loop import ExecutionLoop
 from software.core.task import ExecutionConfig, ExecutionState
 from software.logging.log_utils import log_suppressed_exception
-from software.network.browser.owner_pool import BrowserOwnerPool, BrowserPoolConfig
+from software.network.browser.owner_pool import (
+    BrowserOwnerPool,
+    BrowserPoolConfig,
+    DEFAULT_MAX_CONTEXTS_PER_BROWSER,
+)
 
 
 def _build_owner_window_positions(owner_count: int) -> List[tuple[int, int]]:
@@ -66,7 +70,10 @@ class AsyncRuntimeCoordinator:
         loop.run_thread(0, 0, self.stop_signal)
 
     def run(self) -> None:
-        pool_config = BrowserPoolConfig.from_concurrency(self.config.num_threads, max_contexts_per_browser=4)
+        pool_config = BrowserPoolConfig.from_concurrency(
+            self.config.num_threads,
+            max_contexts_per_browser=DEFAULT_MAX_CONTEXTS_PER_BROWSER,
+        )
         prefer_browsers = list(self.config.browser_preference or BROWSER_PREFERENCE)
         self.owner_pool = BrowserOwnerPool(
             config=pool_config,

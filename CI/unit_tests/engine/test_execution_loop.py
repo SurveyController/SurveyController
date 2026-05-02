@@ -42,6 +42,27 @@ class _FakeBrowserSession:
         self.shutdown_called += 1
 
 
+class _FakePreloadedPool:
+    last_created: "_FakePreloadedPool | None" = None
+
+    def __init__(self, *_args, **_kwargs):
+        self.warm_async_calls: list[tuple[list[str], int, int]] = []
+        self.acquire_calls = 0
+        self.shutdown_called = 0
+        self.next_lease = SimpleNamespace(session=None, browser_name="", preloaded=False)
+        _FakePreloadedPool.last_created = self
+
+    def warm_async(self, preferred_browsers, window_x_pos: int, window_y_pos: int) -> None:
+        self.warm_async_calls.append((list(preferred_browsers or []), int(window_x_pos), int(window_y_pos)))
+
+    def acquire(self, _stop_signal: threading.Event, *, wait: bool = True):
+        self.acquire_calls += 1
+        return self.next_lease
+
+    def shutdown(self) -> None:
+        self.shutdown_called += 1
+
+
 class _FakeDriver:
     def __init__(self, failures: int = 0):
         self.failures = failures
@@ -231,6 +252,114 @@ class ExecutionLoopTests(unittest.TestCase):
         self.assertEqual(loop.submission_service.calls, 1)
         self.assertEqual(session.dispose_called, 1)
         self.assertEqual(session.shutdown_called, 1)
+
+    def test_random_proxy_connection_error_retries_without_counting_business_failure(self) -> None:
+        config = ExecutionConfig(url="https://example.com", survey_provider="wjx", random_proxy_ip_enabled=True)
+        state = ExecutionState(config=config)
+        stop_signal = threading.Event()
+        session = _FakeBrowserSession(driver=object())
+        session.proxy_address = "http://1.1.1.1:8000"
+
+        with ExitStack() as stack:
+            stack.enter_context(_patched_attr(execution_loop_module, "BrowserSessionService", lambda *_args, **_kwargs: session))
+            stack.enter_context(_patched_attr(execution_loop_module, "_provider_is_device_quota_limit_page", lambda *_args, **_kwargs: False))
+            stack.enter_context(_patched_attr(execution_loop_module, "_discard_unresponsive_proxy", lambda *_args, **_kwargs: None))
+            loop = ExecutionLoop(config, state)
+            loop.stop_policy = _FakeStopPolicy(stop_on_failure=True)
+            def _proxy_failure(self, *_args, **_kwargs):
+                stop_signal.set()
+                raise execution_loop_module.ProxyConnectionError("boom")
+
+            loop._load_survey_or_record_failure = MethodType(_proxy_failure, loop)
+            loop.run_thread(0, 0, stop_signal)
+
+        self.assertTrue(stop_signal.is_set())
+        self.assertEqual(loop.stop_policy.failure_calls, [])
+        self.assertGreaterEqual(session.dispose_called, 1)
+        self.assertEqual(session.shutdown_called, 1)
+
+    def test_run_thread_uses_preloaded_session_without_reloading_page(self) -> None:
+        config = ExecutionConfig(url="https://example.com", survey_provider="wjx")
+        state = ExecutionState(config=config)
+        stop_signal = threading.Event()
+        session = _FakeBrowserSession(driver=_FakeDriver())
+        outcome = SimpleNamespace(status="success", should_stop=True)
+        _FakePreloadedPool.last_created = None
+
+        def _prepare_round_context(self, _stop_signal, *, thread_name: str, session=None) -> bool:
+            del thread_name, session
+            return True
+
+        def _unexpected_load(*_args, **_kwargs):
+            raise AssertionError("预热 session 命中时不应重新加载问卷页")
+
+        with ExitStack() as stack:
+            stack.enter_context(_patched_attr(execution_loop_module, "PreloadedBrowserSessionPool", _FakePreloadedPool))
+            stack.enter_context(_patched_attr(execution_loop_module, "_provider_is_device_quota_limit_page", lambda *_args, **_kwargs: False))
+            stack.enter_context(_patched_attr(execution_loop_module, "_provider_fill_survey", lambda *_args, **_kwargs: True))
+            loop = ExecutionLoop(config, state, browser_owner=object())
+            loop.stop_policy = _FakeStopPolicy(stop_on_failure=True, success_should_stop=True)
+            loop.submission_service = _FakeSubmissionService(outcome)
+            loop._prepare_round_context = MethodType(_prepare_round_context, loop)
+            loop._load_survey_or_record_failure = MethodType(_unexpected_load, loop)
+            pool_factory = _FakePreloadedPool
+            original_init = pool_factory.__init__
+
+            def _patched_init(self, *_args, **_kwargs):
+                original_init(self, *_args, **_kwargs)
+                self.next_lease = SimpleNamespace(session=session, browser_name="edge", preloaded=True)
+
+            pool_factory.__init__ = _patched_init
+            try:
+                loop.run_thread(0, 0, stop_signal)
+            finally:
+                pool_factory.__init__ = original_init
+            pool_instance = _FakePreloadedPool.last_created
+
+        self.assertIsNotNone(pool_instance)
+        assert pool_instance is not None
+        self.assertGreaterEqual(len(pool_instance.warm_async_calls), 1)
+        self.assertEqual(pool_instance.acquire_calls, 1)
+        self.assertEqual(pool_instance.shutdown_called, 1)
+        self.assertEqual(session.dispose_called, 1)
+        self.assertEqual(loop.submission_service.calls, 1)
+
+    def test_preloaded_path_does_not_prepare_round_context_before_page_ready(self) -> None:
+        config = ExecutionConfig(url="https://example.com", survey_provider="wjx")
+        state = ExecutionState(config=config)
+        stop_signal = threading.Event()
+        session = _FakeBrowserSession(driver=object())
+        _FakePreloadedPool.last_created = None
+        prepare_round_context_calls = 0
+
+        def _prepare_round_context(self, _stop_signal, *, thread_name: str, session=None) -> bool:
+            del self, _stop_signal, thread_name, session
+            nonlocal prepare_round_context_calls
+            prepare_round_context_calls += 1
+            return True
+
+        with ExitStack() as stack:
+            stack.enter_context(_patched_attr(execution_loop_module, "PreloadedBrowserSessionPool", _FakePreloadedPool))
+            stack.enter_context(_patched_attr(execution_loop_module, "_provider_is_device_quota_limit_page", lambda *_args, **_kwargs: False))
+            loop = ExecutionLoop(config, state, browser_owner=object())
+            loop.stop_policy = _FakeStopPolicy(stop_on_failure=True)
+            loop._prepare_round_context = MethodType(_prepare_round_context, loop)
+            pool_factory = _FakePreloadedPool
+            original_init = pool_factory.__init__
+
+            def _patched_init(self, *_args, **_kwargs):
+                original_init(self, *_args, **_kwargs)
+                self.next_lease = SimpleNamespace(session=session, browser_name="", preloaded=False)
+
+            pool_factory.__init__ = _patched_init
+            try:
+                loop.run_thread(0, 0, stop_signal)
+            finally:
+                pool_factory.__init__ = original_init
+
+        self.assertTrue(stop_signal.is_set())
+        self.assertEqual(prepare_round_context_calls, 0)
+        self.assertEqual(loop.stop_policy.failure_calls, [execution_loop_module.FailureReason.PAGE_LOAD_FAILED])
 
 
 if __name__ == "__main__":
