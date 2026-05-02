@@ -8,6 +8,8 @@ import time
 
 from software.core.task import ExecutionConfig, ExecutionState
 
+_STOP_POLL_SECONDS = 0.2
+
 
 class AttemptDispatcher:
     """维护固定数量的尝试令牌，支持延迟回队与阻塞唤醒。"""
@@ -55,6 +57,9 @@ class AttemptDispatcher:
                 timeout = None
                 if self._delayed_ready_heap:
                     timeout = max(0.0, self._delayed_ready_heap[0] - now)
+                    timeout = min(timeout, _STOP_POLL_SECONDS)
+                else:
+                    timeout = _STOP_POLL_SECONDS
                 self._condition.wait(timeout=timeout)
 
     def release(self, *, requeue: bool, delay_seconds: float = 0.0) -> None:
