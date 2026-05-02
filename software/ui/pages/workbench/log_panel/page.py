@@ -15,7 +15,11 @@ from qfluentwidgets import (
     isDarkTheme,
     qconfig,
 )
-from software.logging.log_utils import LOG_BUFFER_HANDLER, save_log_records_to_file, log_suppressed_exception
+from software.logging.log_utils import (
+    LOG_BUFFER_HANDLER,
+    export_full_log_to_file,
+    log_suppressed_exception,
+)
 from software.app.runtime_paths import get_runtime_directory
 from software.app.config import LOG_BUFFER_CAPACITY, LOG_REFRESH_INTERVAL_MS
 from software.ui.widgets.log_highlighter import LogHighlighter
@@ -241,10 +245,10 @@ class LogPage(QWidget):
             if not os.path.splitext(selected_path)[1]:
                 selected_path += ".txt"
 
-            file_path = save_log_records_to_file(
-                LOG_BUFFER_HANDLER.get_records(),
+            file_path = export_full_log_to_file(
                 runtime_directory,
                 selected_path,
+                fallback_records=LOG_BUFFER_HANDLER.get_records(),
             )
             InfoBar.success(
                 "", f"日志已保存：{file_path}",

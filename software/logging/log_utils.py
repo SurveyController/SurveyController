@@ -3,6 +3,7 @@ import logging
 import os
 import queue
 import re
+import shutil
 import sys
 import threading
 import traceback
@@ -24,6 +25,10 @@ _NOISY_LOG_PATTERNS = (
 )
 _DEDUPED_LOG_STATE: dict[str, str] = {}
 _DEDUPED_LOG_LOCK = threading.Lock()
+_SESSION_LOG_HANDLER: Optional[logging.Handler] = None
+_SESSION_LOG_PATH = ""
+_SESSION_LOG_LOCK = threading.Lock()
+_SESSION_LOG_BACKFILLED = False
 
 
 def _should_filter_noise(message: str) -> bool:
@@ -406,6 +411,67 @@ if not any(isinstance(h, LogBufferHandler) for h in _root_logger.handlers):
 _root_logger.setLevel(logging.INFO)
 
 
+def _create_session_log_file_path() -> str:
+    from software.app.runtime_paths import get_runtime_directory
+
+    logs_dir = _ensure_logs_dir(get_runtime_directory())
+    file_name = datetime.now().strftime("session_%Y%m%d_%H%M%S.log")
+    return os.path.join(logs_dir, file_name)
+
+
+def _backfill_session_log_from_buffer() -> None:
+    global _SESSION_LOG_BACKFILLED
+    if _SESSION_LOG_BACKFILLED or not _SESSION_LOG_PATH:
+        return
+    records = LOG_BUFFER_HANDLER.get_records()
+    if not records:
+        _SESSION_LOG_BACKFILLED = True
+        return
+    try:
+        with open(_SESSION_LOG_PATH, "a", encoding="utf-8") as file:
+            for entry in records:
+                text = str(getattr(entry, "text", "") or "")
+                if text:
+                    file.write(text)
+                    file.write("\n")
+        _SESSION_LOG_BACKFILLED = True
+    except Exception as exc:
+        _safe_internal_log("backfill session log from buffer failed", exc)
+
+
+def _ensure_session_log_handler(root_logger: Optional[logging.Logger] = None) -> str:
+    global _SESSION_LOG_HANDLER, _SESSION_LOG_PATH
+
+    logger = root_logger or logging.getLogger()
+    with _SESSION_LOG_LOCK:
+        if _SESSION_LOG_HANDLER is not None and _SESSION_LOG_PATH:
+            return _SESSION_LOG_PATH
+
+        session_log_path = _create_session_log_file_path()
+        handler = logging.FileHandler(session_log_path, mode="a", encoding="utf-8", delay=False)
+        handler.setFormatter(logging.Formatter(LOG_FORMAT, datefmt="%Y-%m-%d %H:%M:%S"))
+        logger.addHandler(handler)
+        _SESSION_LOG_HANDLER = handler
+        _SESSION_LOG_PATH = session_log_path
+        _backfill_session_log_from_buffer()
+        return session_log_path
+
+
+def flush_session_log_file() -> None:
+    handler = _SESSION_LOG_HANDLER
+    if handler is None:
+        return
+    with _SESSION_LOG_LOCK:
+        try:
+            handler.flush()
+        except Exception as exc:
+            _safe_internal_log("flush_session_log_file failed", exc)
+
+
+def get_current_session_log_path() -> str:
+    return str(_SESSION_LOG_PATH or "")
+
+
 def setup_logging():
     root_logger = logging.getLogger()
     if not root_logger.handlers:
@@ -413,6 +479,7 @@ def setup_logging():
     root_logger.setLevel(logging.INFO)
     if not any(isinstance(handler, LogBufferHandler) for handler in root_logger.handlers):
         root_logger.addHandler(LOG_BUFFER_HANDLER)
+    _ensure_session_log_handler(root_logger)
 
     # 第三方日志统一到 INFO，避免与项目日志分裂成两套级别策略
     logging.getLogger("urllib3").setLevel(logging.INFO)
@@ -487,6 +554,41 @@ def save_log_records_to_file(
     return file_path
 
 
+def export_full_log_to_file(
+    runtime_directory: str,
+    file_path: Optional[str] = None,
+    *,
+    fallback_records: Optional[List[LogBufferEntry]] = None,
+) -> str:
+    if not runtime_directory:
+        raise ValueError("runtime_directory 不能为空")
+    if file_path:
+        parent_dir = os.path.dirname(file_path)
+        if parent_dir:
+            os.makedirs(parent_dir, exist_ok=True)
+    else:
+        logs_dir = _ensure_logs_dir(runtime_directory)
+        file_name = datetime.now().strftime("log_%Y%m%d_%H%M%S.txt")
+        file_path = os.path.join(logs_dir, file_name)
+
+    session_log_path = get_current_session_log_path()
+    if session_log_path and os.path.isfile(session_log_path):
+        flush_session_log_file()
+        src = os.path.abspath(session_log_path)
+        dst = os.path.abspath(file_path)
+        if os.path.normcase(src) == os.path.normcase(dst):
+            return file_path
+        try:
+            with open(src, "r", encoding="utf-8") as source, open(dst, "w", encoding="utf-8") as target:
+                shutil.copyfileobj(source, target)
+            return file_path
+        except Exception as exc:
+            _safe_internal_log("export_full_log_to_file fallback to buffer failed to read session log", exc)
+
+    records = fallback_records if fallback_records is not None else LOG_BUFFER_HANDLER.get_records()
+    return save_log_records_to_file(records, runtime_directory, file_path)
+
+
 def log_popup_error(title: str, message: str, **kwargs: Any):
     """Error popup routed to the active UI handler (if any)."""
     return _dispatch_popup("error", title, message, default=False)
@@ -507,6 +609,7 @@ def shutdown_logging():
     try:
         # 1. 刷新剩余日志
         LOG_BUFFER_HANDLER.flush_remaining()
+        flush_session_log_file()
 
         # 2. 停止后台线程
         LOG_BUFFER_HANDLER.stop()

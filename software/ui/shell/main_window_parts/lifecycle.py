@@ -13,7 +13,11 @@ from software.network.proxy.session import get_session_snapshot
 from software.app.config import app_settings, get_bool_from_qsettings
 from software.app.runtime_paths import get_runtime_directory
 from software.io.config import RuntimeConfig, build_runtime_config_snapshot
-from software.logging.log_utils import LOG_BUFFER_HANDLER, log_suppressed_exception
+from software.logging.log_utils import (
+    LOG_BUFFER_HANDLER,
+    export_full_log_to_file,
+    log_suppressed_exception,
+)
 
 class MainWindowLifecycleMixin:
     """收口主窗口的保存、启动恢复、标题刷新与关闭清理。"""
@@ -98,9 +102,11 @@ class MainWindowLifecycleMixin:
         try:
             log_path = os.path.join(get_runtime_directory(), "logs", "last_session.log")
             os.makedirs(os.path.dirname(log_path), exist_ok=True)
-            records = LOG_BUFFER_HANDLER.get_records()
-            with open(log_path, "w", encoding="utf-8") as file:
-                file.write("\n".join(entry.text for entry in records))
+            export_full_log_to_file(
+                get_runtime_directory(),
+                log_path,
+                fallback_records=LOG_BUFFER_HANDLER.get_records(),
+            )
         except Exception as exc:
             logging.warning("保存日志失败: %s", exc)
 
