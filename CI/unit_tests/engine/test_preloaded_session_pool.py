@@ -26,11 +26,25 @@ class _FakeBrowserSessionService:
     def __init__(self, *_args, **_kwargs):
         self.driver = object()
         self.shutdown_called = 0
-        self.create_browser_calls: list[tuple[list[str], int, int]] = []
+        self.create_browser_calls: list[tuple[list[str], int, int, bool]] = []
         _FakeBrowserSessionService.instances.append(self)
 
-    def create_browser(self, preferred_browsers, window_x_pos: int, window_y_pos: int):
-        self.create_browser_calls.append((list(preferred_browsers or []), int(window_x_pos), int(window_y_pos)))
+    def create_browser(
+        self,
+        preferred_browsers,
+        window_x_pos: int,
+        window_y_pos: int,
+        *,
+        acquire_browser_semaphore: bool = True,
+    ):
+        self.create_browser_calls.append(
+            (
+                list(preferred_browsers or []),
+                int(window_x_pos),
+                int(window_y_pos),
+                bool(acquire_browser_semaphore),
+            )
+        )
         return "edge"
 
     def shutdown(self) -> None:
@@ -67,6 +81,7 @@ class PreloadedSessionPoolTests(unittest.TestCase):
         self.assertIsNotNone(lease.session)
         self.assertEqual(len(loaded_drivers), 1)
         self.assertIs(loaded_drivers[0], lease.session.driver)
+        self.assertEqual(lease.session.create_browser_calls, [(["edge"], 0, 0, False)])
 
     def test_shutdown_closes_unused_ready_session(self) -> None:
         config = ExecutionConfig(url="https://example.com/form")

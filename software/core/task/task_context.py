@@ -136,6 +136,7 @@ class ExecutionState:
     _target_reached_stop_triggered: bool = False
     _target_reached_stop_lock: threading.Lock = field(default_factory=threading.Lock)
     _terminal_stop_lock: threading.Lock = field(default_factory=threading.Lock)
+    _runtime_condition: threading.Condition = field(default_factory=threading.Condition, repr=False)
 
     _proxy_fetch_lock: threading.Lock = field(default_factory=threading.Lock)
     _browser_semaphore: Optional[threading.Semaphore] = field(default=None, repr=False)
@@ -296,6 +297,7 @@ class ExecutionState:
         with self.lock:
             previous_until = float(self.proxy_cooldown_until_by_address.get(normalized, 0.0) or 0.0)
             self.proxy_cooldown_until_by_address[normalized] = max(previous_until, cooldown_until)
+        self.notify_runtime_change()
 
     def active_proxy_addresses_locked(self, *, exclude_thread_name: str = "") -> set[str]:
         excluded = str(exclude_thread_name or "").strip()
@@ -321,13 +323,33 @@ class ExecutionState:
             return normalized in self.active_proxy_addresses_locked(exclude_thread_name=exclude_thread_name)
         return False
 
+    def notify_runtime_change(self) -> None:
+        with self._runtime_condition:
+            self._runtime_condition.notify_all()
+
+    def wait_for_runtime_change(
+        self,
+        *,
+        stop_signal: Optional[threading.Event] = None,
+        timeout: Optional[float] = None,
+    ) -> bool:
+        if stop_signal is not None and stop_signal.is_set():
+            return True
+        wait_timeout = None if timeout is None else max(0.0, float(timeout))
+        with self._runtime_condition:
+            self._runtime_condition.wait(timeout=wait_timeout)
+        return bool(stop_signal is not None and stop_signal.is_set())
+
     def release_proxy_in_use(self, thread_name: str) -> Optional[ProxyLease]:
         key = str(thread_name or "").strip()
         if not key:
             return None
         with self.lock:
-            self.submit_proxy_in_use_by_thread.pop(key, None)
-            return self.proxy_in_use_by_thread.pop(key, None)
+            submit_released = self.submit_proxy_in_use_by_thread.pop(key, None)
+            released = self.proxy_in_use_by_thread.pop(key, None)
+        if released is not None or submit_released is not None:
+            self.notify_runtime_change()
+        return released
 
     def update_thread_status(
         self,
@@ -415,6 +437,7 @@ class ExecutionState:
             self.terminal_stop_category = normalized_category
             self.terminal_failure_reason = normalized_failure_reason
             self.terminal_stop_message = normalized_message
+        self.notify_runtime_change()
 
     def get_terminal_stop_snapshot(self) -> Tuple[str, str, str]:
         with self._terminal_stop_lock:
@@ -521,7 +544,10 @@ class ExecutionState:
         key = str(thread_name or threading.current_thread().name or "Worker-?").strip() or "Worker-?"
         with self.lock:
             reserved = self.joint_reserved_sample_by_thread.pop(key, None)
-            return int(reserved) if reserved is not None else None
+        if reserved is not None:
+            self.notify_runtime_change()
+            return int(reserved)
+        return None
 
     def commit_joint_sample(self, thread_name: Optional[str] = None) -> Optional[int]:
         key = str(thread_name or threading.current_thread().name or "Worker-?").strip() or "Worker-?"
@@ -530,11 +556,13 @@ class ExecutionState:
             if reserved is None:
                 return None
             self.joint_committed_sample_indexes.add(int(reserved))
-            return int(reserved)
+        self.notify_runtime_change()
+        return int(reserved)
 
     def initialize_reverse_fill_runtime(self) -> None:
         with self.lock:
             self.reverse_fill_runtime = create_reverse_fill_runtime_state(getattr(self.config, "reverse_fill_spec", None))
+        self.notify_runtime_change()
 
     def _reverse_fill_thread_key(self, thread_name: Optional[str] = None) -> str:
         key = str(thread_name or threading.current_thread().name or "Worker-?").strip()
@@ -586,7 +614,8 @@ class ExecutionState:
             normalized_row = int(row_number)
             if requeue and normalized_row not in runtime.committed_row_numbers and normalized_row not in runtime.discarded_row_numbers:
                 runtime.queued_row_numbers.appendleft(normalized_row)
-            return normalized_row
+        self.notify_runtime_change()
+        return normalized_row
 
     def commit_reverse_fill_sample(self, thread_name: Optional[str] = None) -> Optional[int]:
         key = self._reverse_fill_thread_key(thread_name)
@@ -600,7 +629,8 @@ class ExecutionState:
             normalized_row = int(row_number)
             runtime.committed_row_numbers.add(normalized_row)
             runtime.failure_count_by_row.pop(normalized_row, None)
-            return normalized_row
+        self.notify_runtime_change()
+        return normalized_row
 
     def mark_reverse_fill_submission_failed(self, thread_name: Optional[str] = None, *, max_retries: int = 1) -> Tuple[Optional[int], bool]:
         key = self._reverse_fill_thread_key(thread_name)
@@ -616,9 +646,44 @@ class ExecutionState:
             runtime.failure_count_by_row[normalized_row] = next_count
             if next_count <= max(0, int(max_retries or 0)):
                 runtime.queued_row_numbers.appendleft(normalized_row)
+                self.notify_runtime_change()
                 return normalized_row, False
             runtime.discarded_row_numbers.add(normalized_row)
-            return normalized_row, True
+        self.notify_runtime_change()
+        return normalized_row, True
+
+    def wait_for_joint_sample(
+        self,
+        sample_count: int,
+        *,
+        thread_name: Optional[str] = None,
+        stop_signal: Optional[threading.Event] = None,
+        timeout_seconds: float = 0.5,
+    ) -> Optional[int]:
+        while True:
+            reserved = self.reserve_joint_sample(sample_count, thread_name=thread_name)
+            if reserved is not None:
+                return reserved
+            if stop_signal is not None and stop_signal.is_set():
+                return None
+            if self.wait_for_runtime_change(stop_signal=stop_signal, timeout=timeout_seconds):
+                return None
+
+    def wait_for_reverse_fill_sample(
+        self,
+        *,
+        thread_name: Optional[str] = None,
+        stop_signal: Optional[threading.Event] = None,
+        timeout_seconds: float = 0.5,
+    ) -> ReverseFillAcquireResult:
+        while True:
+            result = self.acquire_reverse_fill_sample(thread_name)
+            if result.status != "waiting":
+                return result
+            if stop_signal is not None and stop_signal.is_set():
+                return ReverseFillAcquireResult(status="waiting", message="stopped")
+            if self.wait_for_runtime_change(stop_signal=stop_signal, timeout=timeout_seconds):
+                return ReverseFillAcquireResult(status="waiting", message="stopped")
 
     def get_reverse_fill_answer(self, question_num: int, thread_name: Optional[str] = None) -> Optional[ReverseFillAnswer]:
         key = self._reverse_fill_thread_key(thread_name)

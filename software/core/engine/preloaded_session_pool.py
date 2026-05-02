@@ -126,6 +126,7 @@ class PreloadedBrowserSessionPool:
                     list(preferred_browsers or []),
                     int(window_x_pos or 0),
                     int(window_y_pos or 0),
+                    acquire_browser_semaphore=False,
                 )
                 or ""
             ).strip()

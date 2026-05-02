@@ -163,6 +163,23 @@ class BrowserSessionServiceTests(unittest.TestCase):
         self.assertEqual(browser_name, "edge")
         self.assertEqual(fake_driver.window_sizes, [(550, 650)])
 
+    def test_create_browser_can_skip_semaphore_for_preloaded_session(self) -> None:
+        state = _FakeState()
+        config = self._build_config(headless_mode=True)
+        fake_driver = _FakeDriver()
+        service = BrowserSessionService(config, state, gui_instance=None, thread_name="Slot-1")
+
+        with patch("software.core.engine.browser_session_service._select_proxy_for_session", return_value=None), \
+             patch("software.core.engine.browser_session_service._select_user_agent_for_session", return_value=("", "")), \
+             patch("software.core.engine.browser_session_service.create_browser_manager", return_value=object()), \
+             patch("software.core.engine.browser_session_service.create_playwright_driver", return_value=(fake_driver, "edge")):
+            browser_name = service.create_browser(["edge"], 0, 0, acquire_browser_semaphore=False)
+
+        self.assertEqual(browser_name, "edge")
+        self.assertFalse(service.sem_acquired)
+        self.assertEqual(state.semaphore.acquired, 0)
+        self.assertEqual(state.semaphore.released, 0)
+
     def test_create_browser_keeps_same_proxy_for_headless_browser_and_submit(self) -> None:
         state = _FakeState()
         config = SimpleNamespace(

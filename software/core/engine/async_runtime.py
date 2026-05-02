@@ -7,6 +7,7 @@ import threading
 from typing import Any, List, Optional
 
 from software.app.config import BROWSER_PREFERENCE
+from software.core.engine.attempt_dispatcher import AttemptDispatcher
 from software.core.engine.execution_loop import ExecutionLoop
 from software.core.task import ExecutionConfig, ExecutionState
 from software.logging.log_utils import log_suppressed_exception
@@ -40,6 +41,7 @@ class AsyncRuntimeCoordinator:
         self.gui_instance = gui_instance
         self.slot_threads: List[threading.Thread] = []
         self.owner_pool: Optional[BrowserOwnerPool] = None
+        self.dispatcher: Optional[AttemptDispatcher] = None
 
     def _register_cleanup_target(self, target: Any) -> None:
         register = getattr(self.gui_instance, "register_cleanup_target", None)
@@ -72,6 +74,7 @@ class AsyncRuntimeCoordinator:
             self.state,
             self.gui_instance,
             browser_owner_pool=owner_pool,
+            dispatcher=self.dispatcher,
         )
         loop.run_thread(0, 0, self.stop_signal)
 
@@ -87,6 +90,7 @@ class AsyncRuntimeCoordinator:
             prefer_browsers=prefer_browsers,
             window_positions=_build_owner_window_positions(pool_config.owner_count),
         )
+        self.dispatcher = AttemptDispatcher(self.config, self.state, self.stop_signal)
         self._register_cleanup_target(self.owner_pool)
         logging.info(
             "异步上下文池已启动：总并发=%s owner数=%s 每owner上下文上限=%s",
@@ -112,6 +116,10 @@ class AsyncRuntimeCoordinator:
                 thread.join()
         finally:
             self.slot_threads = []
+            dispatcher = self.dispatcher
+            self.dispatcher = None
+            if dispatcher is not None:
+                dispatcher.close()
             pool = self.owner_pool
             self.owner_pool = None
             self._unregister_cleanup_target(pool)

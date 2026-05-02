@@ -12,6 +12,7 @@ from typing import Any, Callable
 import software.core.modes.timed_mode as timed_mode
 from software.app.config import BROWSER_PREFERENCE
 from software.core.ai.runtime import AIRuntimeError, is_ai_timeout_runtime_error, is_free_ai_runtime_error
+from software.core.engine.attempt_dispatcher import AttemptDispatcher
 from software.core.engine.browser_session_service import BrowserSessionService
 from software.core.engine.failure_reason import FailureReason
 from software.core.engine.page_load_probe import (
@@ -78,10 +79,7 @@ def _exception_summary(exc: BaseException) -> str:
 
 def _looks_like_proxy_page_load_failure(exc: BaseException) -> bool:
     message = _exception_summary(exc)
-    if any(marker in message for marker in _PAGE_LOAD_PROXY_ERROR_MARKERS):
-        return True
-    lowered = message.lower()
-    return "timeout" in lowered or "timed out" in lowered
+    return any(marker in message for marker in _PAGE_LOAD_PROXY_ERROR_MARKERS)
 
 
 def _looks_like_transient_page_load_failure(exc: BaseException) -> bool:
@@ -246,9 +244,7 @@ def _load_survey_page(
                 delay_index = min(attempt_index - 1, len(_PAGE_LOAD_RETRY_DELAYS_SECONDS) - 1)
                 time.sleep(_PAGE_LOAD_RETRY_DELAYS_SECONDS[delay_index])
     if last_exc is not None:
-        if bool(getattr(config, "random_proxy_ip_enabled", False)) and (
-            _looks_like_proxy_page_load_failure(last_exc) or _looks_like_transient_page_load_failure(last_exc)
-        ):
+        if bool(getattr(config, "random_proxy_ip_enabled", False)) and _looks_like_proxy_page_load_failure(last_exc):
             raise ProxyConnectionError(_exception_summary(last_exc)) from last_exc
         raise last_exc
     raise RuntimeError("问卷加载失败")
@@ -264,11 +260,13 @@ class ExecutionLoop:
         gui_instance: Any = None,
         *,
         browser_owner_pool: BrowserOwnerPool | None = None,
+        dispatcher: AttemptDispatcher | None = None,
     ):
         self.config = config
         self.state = state
         self.gui_instance = gui_instance
         self.browser_owner_pool = browser_owner_pool
+        self.dispatcher = dispatcher
         self.stop_policy = RunStopPolicy(config, state, gui_instance)
         self.submission_service = SubmissionService(config, state, self.stop_policy)
 
@@ -301,6 +299,22 @@ class ExecutionLoop:
         if refresh_interval <= 0:
             refresh_interval = timed_mode.DEFAULT_REFRESH_INTERVAL
         return refresh_interval
+
+    def _acquire_dispatch_turn(self, thread_name: str, stop_signal: threading.Event) -> bool:
+        if stop_signal.is_set():
+            return False
+        if self.dispatcher is None:
+            self.dispatcher = AttemptDispatcher(self.config, self.state, stop_signal)
+        self._update_thread_status(thread_name, "等待调度", running=True)
+        return bool(self.dispatcher.acquire())
+
+    def _resolve_dispatch_delay_seconds(self) -> float:
+        min_wait, max_wait = self.config.submit_interval_range_seconds
+        if max_wait <= 0:
+            return 0.0
+        if max_wait == min_wait:
+            return float(min_wait)
+        return float(random.uniform(min_wait, max_wait))
 
     def _log_runtime_settings(self, *, timed_mode_on: bool) -> None:
         logging.info("目标份数: %s, 当前进度: %s/%s", self.config.target_num, self.state.cur_num, self.config.target_num)
@@ -469,62 +483,76 @@ class ExecutionLoop:
         stop_signal: threading.Event,
         *,
         thread_name: str,
-        session: BrowserSessionService | None,
+        session: BrowserSessionService | None = None,
     ) -> bool:
+        del session
         try:
             self.state.reset_pending_distribution(thread_name)
         except Exception:
             logging.info("重置本轮比例统计缓存失败", exc_info=True)
 
         joint_answer_plan = ensure_joint_psychometric_answer_plan(self.config)
+        sample_count = 0
         if joint_answer_plan is not None:
-            reserved_sample_index = self.state.reserve_joint_sample(
-                int(getattr(joint_answer_plan, "sample_count", self.config.target_num) or self.config.target_num),
-                thread_name=thread_name,
-            )
-            if reserved_sample_index is None:
-                logging.info("线程[%s]等待联合信效度样本槽位释放", thread_name)
-                self._update_thread_status(thread_name, "等待信效度配额槽位", running=True)
-                if stop_signal.wait(0.2):
-                    return False
+            sample_count = int(getattr(joint_answer_plan, "sample_count", self.config.target_num) or self.config.target_num)
+
+        while True:
+            if stop_signal.is_set():
                 return False
 
-        reverse_fill_sample = self.state.acquire_reverse_fill_sample(thread_name)
-        if reverse_fill_sample.status == "waiting":
-            logging.info("线程[%s]等待反填样本释放", thread_name)
-            try:
-                self.state.release_joint_sample(thread_name)
-            except Exception:
-                logging.info("等待反填样本时释放联合信效度样本槽位失败", exc_info=True)
-            self._update_thread_status(thread_name, "等待反填样本", running=True)
-            if session is not None:
-                session.dispose()
-            if stop_signal.wait(0.2):
+            reserved_sample_index = None
+            if sample_count > 0:
+                reserved_sample_index = self.state.reserve_joint_sample(sample_count, thread_name=thread_name)
+
+            reverse_fill_sample = self.state.acquire_reverse_fill_sample(thread_name)
+
+            if sample_count > 0 and reserved_sample_index is None:
+                if reverse_fill_sample.status == "acquired":
+                    try:
+                        self.state.release_reverse_fill_sample(thread_name, requeue=True)
+                    except Exception:
+                        logging.info("等待信效度配额时回收反填样本失败", exc_info=True)
+                self._update_thread_status(thread_name, "等待信效度配额槽位", running=True)
+                if self.state.wait_for_runtime_change(stop_signal=stop_signal, timeout=0.5):
+                    return False
+                continue
+
+            if reverse_fill_sample.status == "waiting":
+                if reserved_sample_index is not None:
+                    try:
+                        self.state.release_joint_sample(thread_name)
+                    except Exception:
+                        logging.info("等待反填样本时释放联合信效度样本槽位失败", exc_info=True)
+                self._update_thread_status(thread_name, "等待反填样本", running=True)
+                if self.state.wait_for_runtime_change(stop_signal=stop_signal, timeout=0.5):
+                    return False
+                continue
+
+            if reverse_fill_sample.status == "exhausted":
+                message = "反填样本已耗尽，剩余样本不足以完成目标份数"
+                if reserved_sample_index is not None:
+                    try:
+                        self.state.release_joint_sample(thread_name)
+                    except Exception:
+                        logging.info("反填样本耗尽时释放联合信效度样本槽位失败", exc_info=True)
+                self.state.mark_terminal_stop(
+                    "reverse_fill_exhausted",
+                    failure_reason=FailureReason.FILL_FAILED.value,
+                    message=message,
+                )
+                self._update_thread_status(thread_name, "反填样本不足", running=False)
+                if not stop_signal.is_set():
+                    stop_signal.set()
                 return False
-            return False
-        if reverse_fill_sample.status == "exhausted":
-            message = "反填样本已耗尽，剩余样本不足以完成目标份数"
-            try:
-                self.state.release_joint_sample(thread_name)
-            except Exception:
-                logging.info("反填样本耗尽时释放联合信效度样本槽位失败", exc_info=True)
-            self.state.mark_terminal_stop(
-                "reverse_fill_exhausted",
-                failure_reason=FailureReason.FILL_FAILED.value,
-                message=message,
-            )
-            self._update_thread_status(thread_name, "反填样本不足", running=False)
-            if not stop_signal.is_set():
-                stop_signal.set()
-            return False
-        if reverse_fill_sample.status == "acquired" and reverse_fill_sample.sample is not None:
-            logging.info(
-                "线程[%s]已锁定反填样本：数据行=%s 工作表行=%s",
-                thread_name,
-                reverse_fill_sample.sample.data_row_number,
-                reverse_fill_sample.sample.worksheet_row_number,
-            )
-        return True
+
+            if reverse_fill_sample.status == "acquired" and reverse_fill_sample.sample is not None:
+                logging.info(
+                    "线程[%s]已锁定反填样本：数据行=%s 工作表行=%s",
+                    thread_name,
+                    reverse_fill_sample.sample.data_row_number,
+                    reverse_fill_sample.sample.worksheet_row_number,
+                )
+            return True
 
     def _release_round_resources(self, thread_name: str, *, requeue_reverse_fill: bool) -> None:
         try:
@@ -647,21 +675,36 @@ class ExecutionLoop:
         while True:
             if self._should_stop_loop(stop_signal):
                 break
+            if not self._acquire_dispatch_turn(thread_name, stop_signal):
+                break
 
-            lease = pool.acquire(stop_signal, wait=True)
-            active_session = lease.session
-            session_preloaded = bool(lease.preloaded and active_session is not None)
-            if active_session is None:
-                active_session = BrowserSessionService(
-                    self.config,
-                    self.state,
-                    self.gui_instance,
-                    thread_name,
-                    browser_owner_pool=browser_owner_pool,
-                )
-
+            lease = None
             should_refill = False
+            should_requeue_dispatch = True
+            dispatch_delay_seconds = 0.0
             try:
+                if not self._prepare_round_context(
+                    stop_signal,
+                    thread_name=thread_name,
+                    session=None,
+                ):
+                    if stop_signal.is_set():
+                        should_requeue_dispatch = False
+                        break
+                    continue
+
+                lease = pool.acquire(stop_signal, wait=True)
+                active_session = lease.session
+                session_preloaded = bool(lease.preloaded and active_session is not None)
+                if active_session is None:
+                    active_session = BrowserSessionService(
+                        self.config,
+                        self.state,
+                        self.gui_instance,
+                        thread_name,
+                        browser_owner_pool=browser_owner_pool,
+                    )
+
                 preferred_browsers = self._prepare_browser_session(
                     active_session,
                     preferred_browsers,
@@ -674,6 +717,7 @@ class ExecutionLoop:
                 if stop_signal.is_set():
                     break
                 if active_session.driver is None:
+                    self._release_round_resources(thread_name, requeue_reverse_fill=True)
                     continue
 
                 if lease.browser_name:
@@ -693,23 +737,17 @@ class ExecutionLoop:
                 ):
                     if stop_signal.is_set():
                         should_refill = False
+                        should_requeue_dispatch = False
                         break
+                    self._release_round_resources(thread_name, requeue_reverse_fill=True)
                     continue
 
                 if self._handle_device_quota_limit(active_session, stop_signal, thread_name=thread_name):
+                    self._release_round_resources(thread_name, requeue_reverse_fill=True)
                     active_session = None
                     if stop_signal.is_set():
                         should_refill = False
-                        break
-                    continue
-
-                if not self._prepare_round_context(
-                    stop_signal,
-                    thread_name=thread_name,
-                    session=active_session,
-                ):
-                    if stop_signal.is_set():
-                        should_refill = False
+                        should_requeue_dispatch = False
                         break
                     continue
 
@@ -737,25 +775,39 @@ class ExecutionLoop:
                 if outcome.status == "success":
                     if outcome.should_stop:
                         should_refill = False
+                        should_requeue_dispatch = False
                         break
+                    dispatch_delay_seconds = self._resolve_dispatch_delay_seconds()
+                    if dispatch_delay_seconds > 0:
+                        self._update_thread_step(thread_name, "等待提交间隔")
                 elif outcome.status == "aborted":
                     self._release_round_resources(thread_name, requeue_reverse_fill=True)
                     should_refill = False
+                    should_requeue_dispatch = False
                     break
+                else:
+                    dispatch_delay_seconds = self._resolve_dispatch_delay_seconds()
+                    if dispatch_delay_seconds > 0:
+                        self._update_thread_step(thread_name, "等待提交间隔")
 
             except AIRuntimeError as exc:
                 if self._handle_ai_runtime_error(exc, stop_signal, thread_name=thread_name):
                     should_refill = False
+                    should_requeue_dispatch = False
                     break
+                self._release_round_resources(thread_name, requeue_reverse_fill=True)
                 continue
             except ProxyConnectionError:
                 if self._handle_proxy_connection_error(active_session, stop_signal, thread_name=thread_name):
                     should_refill = False
+                    should_requeue_dispatch = False
                     break
+                self._release_round_resources(thread_name, requeue_reverse_fill=True)
                 continue
             except Exception:
                 if stop_signal.is_set():
                     should_refill = False
+                    should_requeue_dispatch = False
                     break
                 traceback.print_exc()
                 if self.stop_policy.record_failure(
@@ -764,31 +816,19 @@ class ExecutionLoop:
                     failure_reason=FailureReason.FILL_FAILED,
                 ):
                     should_refill = False
+                    should_requeue_dispatch = False
                     break
+                self._release_round_resources(thread_name, requeue_reverse_fill=True)
             finally:
                 if active_session is not None:
                     active_session.dispose()
                     active_session = None
                 if should_refill and not stop_signal.is_set():
                     pool.warm_async(preferred_browsers, window_x_pos, window_y_pos)
-
-            if stop_signal.is_set():
-                break
-            min_wait, max_wait = self.config.submit_interval_range_seconds
-            if max_wait > 0:
-                try:
-                    self.state.update_thread_step(
-                        thread_name,
-                        0,
-                        0,
-                        status_text="等待提交间隔",
-                        running=True,
-                    )
-                except Exception:
-                    logging.info("更新线程状态失败：等待提交间隔", exc_info=True)
-                wait_seconds = min_wait if max_wait == min_wait else random.uniform(min_wait, max_wait)
-                if stop_signal.wait(wait_seconds):
-                    break
+                self.dispatcher.release(
+                    requeue=bool(should_requeue_dispatch and not stop_signal.is_set()),
+                    delay_seconds=dispatch_delay_seconds,
+                )
 
         self._finalize_thread(active_session, thread_name=thread_name, preloaded_pool=pool)
 
@@ -828,26 +868,39 @@ class ExecutionLoop:
         while True:
             if self._should_stop_loop(stop_signal):
                 break
-
-            preferred_browsers = self._prepare_browser_session(
-                session,
-                preferred_browsers,
-                base_browser_preference,
-                window_x_pos=window_x_pos,
-                window_y_pos=window_y_pos,
-                stop_signal=stop_signal,
-                thread_name=thread_name,
-            )
-            if stop_signal.is_set():
+            if not self._acquire_dispatch_turn(thread_name, stop_signal):
                 break
-            if session.driver is None:
-                continue
 
-            assert session.driver is not None
+            should_requeue_dispatch = True
+            dispatch_delay_seconds = 0.0
             driver_had_error = False
             try:
+                if not self._prepare_round_context(stop_signal, thread_name=thread_name, session=session):
+                    if stop_signal.is_set():
+                        should_requeue_dispatch = False
+                        break
+                    continue
+
+                preferred_browsers = self._prepare_browser_session(
+                    session,
+                    preferred_browsers,
+                    base_browser_preference,
+                    window_x_pos=window_x_pos,
+                    window_y_pos=window_y_pos,
+                    stop_signal=stop_signal,
+                    thread_name=thread_name,
+                )
+                if stop_signal.is_set():
+                    should_requeue_dispatch = False
+                    break
+                if session.driver is None:
+                    self._release_round_resources(thread_name, requeue_reverse_fill=True)
+                    continue
+
+                assert session.driver is not None
                 if not self.config.url:
                     logging.error("无法启动：问卷链接为空")
+                    should_requeue_dispatch = False
                     break
                 if not self._load_survey_or_record_failure(
                     session,
@@ -857,17 +910,16 @@ class ExecutionLoop:
                     timed_refresh_interval=timed_refresh_interval,
                 ):
                     driver_had_error = True
+                    self._release_round_resources(thread_name, requeue_reverse_fill=True)
                     if stop_signal.is_set():
+                        should_requeue_dispatch = False
                         break
                     continue
 
                 if self._handle_device_quota_limit(session, stop_signal, thread_name=thread_name):
+                    self._release_round_resources(thread_name, requeue_reverse_fill=True)
                     if stop_signal.is_set():
-                        break
-                    continue
-
-                if not self._prepare_round_context(stop_signal, thread_name=thread_name, session=session):
-                    if stop_signal.is_set():
+                        should_requeue_dispatch = False
                         break
                     continue
 
@@ -892,26 +944,39 @@ class ExecutionLoop:
                 if outcome.status == "success":
                     session.dispose()
                     if outcome.should_stop:
+                        should_requeue_dispatch = False
                         break
+                    dispatch_delay_seconds = self._resolve_dispatch_delay_seconds()
+                    if dispatch_delay_seconds > 0:
+                        self._update_thread_step(thread_name, "等待提交间隔")
                 elif outcome.status == "aborted":
                     self._release_round_resources(thread_name, requeue_reverse_fill=True)
+                    should_requeue_dispatch = False
                     break
                 else:
                     driver_had_error = True
+                    dispatch_delay_seconds = self._resolve_dispatch_delay_seconds()
+                    if dispatch_delay_seconds > 0:
+                        self._update_thread_step(thread_name, "等待提交间隔")
 
             except AIRuntimeError as exc:
                 driver_had_error = True
                 if self._handle_ai_runtime_error(exc, stop_signal, thread_name=thread_name):
+                    should_requeue_dispatch = False
                     break
+                self._release_round_resources(thread_name, requeue_reverse_fill=True)
                 continue
             except ProxyConnectionError:
                 driver_had_error = True
                 if self._handle_proxy_connection_error(session, stop_signal, thread_name=thread_name):
+                    should_requeue_dispatch = False
                     break
+                self._release_round_resources(thread_name, requeue_reverse_fill=True)
                 continue
             except Exception:
                 driver_had_error = True
                 if stop_signal.is_set():
+                    should_requeue_dispatch = False
                     break
                 traceback.print_exc()
                 if self.stop_policy.record_failure(
@@ -919,28 +984,16 @@ class ExecutionLoop:
                     thread_name=thread_name,
                     failure_reason=FailureReason.FILL_FAILED,
                 ):
+                    should_requeue_dispatch = False
                     break
+                self._release_round_resources(thread_name, requeue_reverse_fill=True)
             finally:
                 if driver_had_error:
                     session.dispose()
-
-            if stop_signal.is_set():
-                break
-            min_wait, max_wait = self.config.submit_interval_range_seconds
-            if max_wait > 0:
-                try:
-                    self.state.update_thread_step(
-                        thread_name,
-                        0,
-                        0,
-                        status_text="等待提交间隔",
-                        running=True,
-                    )
-                except Exception:
-                    logging.info("更新线程状态失败：等待提交间隔", exc_info=True)
-                wait_seconds = min_wait if max_wait == min_wait else random.uniform(min_wait, max_wait)
-                if stop_signal.wait(wait_seconds):
-                    break
+                self.dispatcher.release(
+                    requeue=bool(should_requeue_dispatch and not stop_signal.is_set()),
+                    delay_seconds=dispatch_delay_seconds,
+                )
 
         self._finalize_thread(session, thread_name=thread_name)
 
