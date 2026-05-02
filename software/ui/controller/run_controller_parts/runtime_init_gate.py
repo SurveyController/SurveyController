@@ -425,10 +425,3 @@ class RunControllerInitializationMixin:
 
     def _cancel_initialization_startup(self) -> None:
         self._finish_initialization_idle_state("已取消启动")
-
-    def _finish_initialization_failure(self, message: str) -> None:
-        if self.stop_event.is_set() and not self.running:
-            self._finish_initialization_idle_state("已取消启动")
-            return
-        self._finish_initialization_idle_state("初始化失败")
-        self.runFailed.emit(str(message or "初始化失败"))

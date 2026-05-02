@@ -143,14 +143,12 @@
 │   │   │   ├── browser_session_service.py
 │   │   │   ├── cleanup.py
 │   │   │   ├── dom_helpers.py
-│   │   │   ├── driver_factory.py
 │   │   │   ├── execution_loop.py
 │   │   │   ├── failure_reason.py
 │   │   │   ├── navigation.py
 │   │   │   ├── provider_common.py
 │   │   │   ├── run_stop_policy.py
 │   │   │   ├── runtime_control.py
-│   │   │   ├── runner.py
 │   │   │   └── submission_service.py
 │   │   ├── modes/
 │   │   │   ├── __init__.py
@@ -215,7 +213,6 @@
 │   │   ├── __init__.py
 │   │   ├── browser/
 │   │   │   ├── __init__.py
-│   │   │   ├── driver.py
 │   │   │   ├── element.py
 │   │   │   ├── exceptions.py
 │   │   │   ├── manager.py
@@ -296,8 +293,7 @@
 │   │   │   │   ├── about.py
 │   │   │   │   ├── changelog.py
 │   │   │   │   ├── donate.py
-│   │   │   │   ├── ip_usage.py
-│   │   │   │   └── support.py
+│   │   │   │   └── ip_usage.py
 │   │   │   ├── settings/
 │   │   │   │   ├── __init__.py
 │   │   │   │   └── settings.py
@@ -435,6 +431,9 @@
 ```
 
 </details>
+
+当前 `software/network/browser/__init__.py` 只保留精简后的公共出口。
+旧的 `software/network/browser/driver.py` 和 `software/core/engine/driver_factory.py` 兼容门面已移除，内部代码需要直连真实实现模块。
 
 ## PR 流程
 1. **Fork** 本仓库并创建特性分支。

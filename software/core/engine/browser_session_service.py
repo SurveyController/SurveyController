@@ -7,14 +7,15 @@ import threading
 import time
 from typing import Any, Optional
 
-from software.core.engine.driver_factory import (
+from software.network.browser.manager import (
+    BrowserManager,
     create_browser_manager,
-    create_playwright_driver,
     shutdown_browser_manager,
 )
+from software.network.browser.session import BrowserDriver
+from software.network.browser.transient import create_playwright_driver
 from software.core.task import ExecutionConfig, ExecutionState
 from software.logging.log_utils import log_suppressed_exception
-from software.network.browser import BrowserDriver, BrowserManager
 from software.network.browser.owner_pool import BrowserOwnerLease, BrowserOwnerPool
 from software.network.proxy.pool import is_proxy_responsive
 from software.network.session_policy import (

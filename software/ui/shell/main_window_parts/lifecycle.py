@@ -27,7 +27,6 @@ class MainWindowLifecycleMixin:
         _boot_splash: Any
         _contact_dialog: Any
         _log_page: Any
-        _support_page: Any
         _random_ip_quota_auto_sync_timer: Any
         _skip_save_on_close: bool
         _base_window_title: str
@@ -65,12 +64,6 @@ class MainWindowLifecycleMixin:
                 self._log_page._refresh_timer.stop()
         except Exception as exc:
             log_suppressed_exception("closeEvent: self._log_page._refresh_timer.stop()", exc)
-
-        try:
-            if self._support_page and hasattr(self._support_page, "contact_form"):
-                self._support_page.contact_form.stop_status_polling()
-        except Exception as exc:
-            log_suppressed_exception("closeEvent: self._support_page.contact_form.stop_status_polling()", exc)
 
         try:
             self._stop_update_check_worker()
