@@ -10,7 +10,7 @@ from typing import Any, Callable, Optional
 from software.core.engine.browser_session_service import BrowserSessionService
 from software.core.task import ExecutionConfig, ExecutionState
 from software.logging.log_utils import log_suppressed_exception
-from software.network.browser.owner_pool import AsyncBrowserOwner
+from software.network.browser.owner_pool import BrowserOwnerPool
 
 
 @dataclass(frozen=True)
@@ -32,14 +32,14 @@ class PreloadedBrowserSessionPool:
         state: ExecutionState,
         gui_instance: Any,
         thread_name: str,
-        browser_owner: AsyncBrowserOwner,
+        browser_owner_pool: BrowserOwnerPool,
         page_loader: Callable[[Any, ExecutionConfig], None],
     ) -> None:
         self.config = config
         self.state = state
         self.gui_instance = gui_instance
         self.thread_name = str(thread_name or "").strip() or "Slot-?"
-        self.browser_owner = browser_owner
+        self.browser_owner_pool = browser_owner_pool
         self._page_loader = page_loader
         self._condition = threading.Condition()
         self._stopped = False
@@ -117,7 +117,7 @@ class PreloadedBrowserSessionPool:
             self.state,
             self.gui_instance,
             self.thread_name,
-            browser_owner=self.browser_owner,
+            browser_owner_pool=self.browser_owner_pool,
         )
         active_browser = ""
         try:

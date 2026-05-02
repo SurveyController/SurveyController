@@ -7,13 +7,18 @@ import random
 import threading
 import time
 import traceback
-from typing import Any
+from typing import Any, Callable
 
 import software.core.modes.timed_mode as timed_mode
 from software.app.config import BROWSER_PREFERENCE
 from software.core.ai.runtime import AIRuntimeError, is_ai_timeout_runtime_error, is_free_ai_runtime_error
 from software.core.engine.browser_session_service import BrowserSessionService
 from software.core.engine.failure_reason import FailureReason
+from software.core.engine.page_load_probe import (
+    PAGE_LOAD_PROBE_ANSWERABLE,
+    PAGE_LOAD_PROBE_BUSINESS_PAGE,
+    wait_for_page_probe,
+)
 from software.core.engine.preloaded_session_pool import PreloadedBrowserSessionPool
 from software.core.engine.provider_common import ensure_joint_psychometric_answer_plan
 from software.core.engine.run_stop_policy import RunStopPolicy
@@ -23,15 +28,23 @@ from software.network.browser import (
     ProxyConnectionError,
     classify_playwright_startup_error,
 )
-from software.network.session_policy import _discard_unresponsive_proxy, _record_bad_proxy_and_maybe_pause
+from software.network.session_policy import (
+    _mark_proxy_temporarily_bad,
+    _record_bad_proxy_and_maybe_pause,
+)
 from software.providers.common import SURVEY_PROVIDER_CREDAMO, normalize_survey_provider
 from software.providers.registry import fill_survey as _provider_fill_survey
 from software.providers.registry import is_device_quota_limit_page as _provider_is_device_quota_limit_page
-from software.network.browser.owner_pool import AsyncBrowserOwner
+from software.network.browser.owner_pool import BrowserOwnerPool
 
 _DEFAULT_PAGE_LOAD_TIMEOUT_MS = 20000
 _DEFAULT_PAGE_LOAD_TIMEOUT_RETRY_MS = 35000
 _CREDAMO_PAGE_LOAD_TIMEOUT_MS = 45000
+_RANDOM_PROXY_FAST_COMMIT_TIMEOUT_MS = 8000
+_RANDOM_PROXY_FAST_PROBE_TIMEOUT_MS = 2500
+_RANDOM_PROXY_FAST_PROBE_INTERVAL_SECONDS = 0.25
+_RANDOM_PROXY_FALLBACK_DOM_TIMEOUT_MS = 6000
+_RANDOM_PROXY_FALLBACK_PROBE_TIMEOUT_MS = 1500
 _FREE_AI_TIMEOUT_FAIL_THRESHOLD = 5
 _PAGE_LOAD_RETRY_DELAYS_SECONDS = (0.4, 1.0)
 _PAGE_LOAD_PROXY_ERROR_MARKERS = (
@@ -84,19 +97,133 @@ def _build_page_load_attempts(config: ExecutionConfig) -> tuple[tuple[int, str],
             (_CREDAMO_PAGE_LOAD_TIMEOUT_MS, "domcontentloaded"),
             (_CREDAMO_PAGE_LOAD_TIMEOUT_MS, "commit"),
         )
-    if bool(getattr(config, "random_proxy_ip_enabled", False)):
-        return (
-            (_DEFAULT_PAGE_LOAD_TIMEOUT_MS, "domcontentloaded"),
-            (_DEFAULT_PAGE_LOAD_TIMEOUT_RETRY_MS, "domcontentloaded"),
-            (_DEFAULT_PAGE_LOAD_TIMEOUT_RETRY_MS, "commit"),
-        )
     return (
         (_DEFAULT_PAGE_LOAD_TIMEOUT_MS, "domcontentloaded"),
         (_DEFAULT_PAGE_LOAD_TIMEOUT_RETRY_MS, "domcontentloaded"),
     )
 
 
-def _load_survey_page(driver: Any, config: ExecutionConfig) -> None:
+def _notify_page_load_phase(phase_updater: Callable[[str], None] | None, status_text: str) -> None:
+    if not callable(phase_updater):
+        return
+    try:
+        phase_updater(str(status_text or ""))
+    except Exception:
+        logging.info("更新页面加载阶段失败：%s", status_text, exc_info=True)
+
+
+def _random_proxy_probe_succeeded(status: str) -> bool:
+    return status in {PAGE_LOAD_PROBE_ANSWERABLE, PAGE_LOAD_PROBE_BUSINESS_PAGE}
+
+
+def _load_survey_page_with_random_proxy(
+    driver: Any,
+    config: ExecutionConfig,
+    *,
+    phase_updater: Callable[[str], None] | None = None,
+) -> None:
+    provider = normalize_survey_provider(getattr(config, "survey_provider", None))
+    first_probe_detail = ""
+    last_exc: Exception | None = None
+
+    _notify_page_load_phase(phase_updater, "加载问卷")
+    logging.info(
+        "随机代理首载：快速提交导航 wait_until=commit timeout=%sms",
+        _RANDOM_PROXY_FAST_COMMIT_TIMEOUT_MS,
+    )
+    try:
+        driver.get(
+            config.url,
+            timeout=_RANDOM_PROXY_FAST_COMMIT_TIMEOUT_MS,
+            wait_until="commit",
+        )
+        _notify_page_load_phase(phase_updater, "探测页面")
+        logging.info(
+            "随机代理首载：探测页面可用性 timeout=%sms interval=%.2fs",
+            _RANDOM_PROXY_FAST_PROBE_TIMEOUT_MS,
+            _RANDOM_PROXY_FAST_PROBE_INTERVAL_SECONDS,
+        )
+        first_probe = wait_for_page_probe(
+            driver,
+            provider=provider,
+            timeout_ms=_RANDOM_PROXY_FAST_PROBE_TIMEOUT_MS,
+            poll_interval_seconds=_RANDOM_PROXY_FAST_PROBE_INTERVAL_SECONDS,
+        )
+        first_probe_detail = str(first_probe.detail or "")
+        if _random_proxy_probe_succeeded(first_probe.status):
+            logging.info("随机代理首载探测成功：status=%s detail=%s", first_probe.status, first_probe.detail or "-")
+            return
+        logging.warning(
+            "随机代理首载探测未命中可答题页面：status=%s detail=%s，转入短重载补救",
+            first_probe.status,
+            first_probe.detail or "-",
+        )
+    except Exception as exc:
+        last_exc = exc
+        logging.warning(
+            "快速提交导航失败：wait_until=commit timeout=%sms error=%s，转入短重载补救",
+            _RANDOM_PROXY_FAST_COMMIT_TIMEOUT_MS,
+            _exception_summary(exc),
+        )
+
+    _notify_page_load_phase(phase_updater, "加载问卷")
+    logging.info(
+        "随机代理首载：短重载补救 wait_until=domcontentloaded timeout=%sms",
+        _RANDOM_PROXY_FALLBACK_DOM_TIMEOUT_MS,
+    )
+    try:
+        driver.get(
+            config.url,
+            timeout=_RANDOM_PROXY_FALLBACK_DOM_TIMEOUT_MS,
+            wait_until="domcontentloaded",
+        )
+    except Exception as exc:
+        last_exc = exc
+        logging.warning(
+            "短重载补救失败：wait_until=domcontentloaded timeout=%sms error=%s",
+            _RANDOM_PROXY_FALLBACK_DOM_TIMEOUT_MS,
+            _exception_summary(exc),
+        )
+
+    _notify_page_load_phase(phase_updater, "探测页面")
+    logging.info(
+        "随机代理首载：补救后再次探测 timeout=%sms interval=%.2fs",
+        _RANDOM_PROXY_FALLBACK_PROBE_TIMEOUT_MS,
+        _RANDOM_PROXY_FAST_PROBE_INTERVAL_SECONDS,
+    )
+    second_probe = wait_for_page_probe(
+        driver,
+        provider=provider,
+        timeout_ms=_RANDOM_PROXY_FALLBACK_PROBE_TIMEOUT_MS,
+        poll_interval_seconds=_RANDOM_PROXY_FAST_PROBE_INTERVAL_SECONDS,
+    )
+    if _random_proxy_probe_succeeded(second_probe.status):
+        logging.info("随机代理补救后探测成功：status=%s detail=%s", second_probe.status, second_probe.detail or "-")
+        return
+
+    failure_detail = str(second_probe.detail or first_probe_detail or "")
+    if not failure_detail and last_exc is not None:
+        failure_detail = _exception_summary(last_exc)
+    if not failure_detail:
+        failure_detail = "页面长时间没有可答题信号"
+    logging.warning(
+        "随机代理页面探测失败，判定当前代理不可用：detail=%s",
+        failure_detail,
+    )
+    raise ProxyConnectionError(failure_detail)
+
+
+def _load_survey_page(
+    driver: Any,
+    config: ExecutionConfig,
+    *,
+    phase_updater: Callable[[str], None] | None = None,
+) -> None:
+    provider = normalize_survey_provider(getattr(config, "survey_provider", None))
+    if bool(getattr(config, "random_proxy_ip_enabled", False)) and provider != SURVEY_PROVIDER_CREDAMO:
+        _load_survey_page_with_random_proxy(driver, config, phase_updater=phase_updater)
+        return
+
     last_exc: Exception | None = None
     attempts = _build_page_load_attempts(config)
     for attempt_index, (timeout_ms, wait_until) in enumerate(attempts, start=1):
@@ -136,12 +263,12 @@ class ExecutionLoop:
         state: ExecutionState,
         gui_instance: Any = None,
         *,
-        browser_owner: AsyncBrowserOwner | None = None,
+        browser_owner_pool: BrowserOwnerPool | None = None,
     ):
         self.config = config
         self.state = state
         self.gui_instance = gui_instance
-        self.browser_owner = browser_owner
+        self.browser_owner_pool = browser_owner_pool
         self.stop_policy = RunStopPolicy(config, state, gui_instance)
         self.submission_service = SubmissionService(config, state, self.stop_policy)
 
@@ -270,7 +397,7 @@ class ExecutionLoop:
             return False
 
         self.stop_policy.wait_if_paused(stop_signal)
-        self._update_thread_status(thread_name, "加载问卷", running=True)
+        self._update_thread_step(thread_name, "加载问卷")
 
         try:
             driver = session.driver
@@ -289,7 +416,13 @@ class ExecutionLoop:
                         stop_signal.set()
                     return False
             else:
-                _load_survey_page(driver, self.config)
+                _load_survey_page(
+                    driver,
+                    self.config,
+                    phase_updater=lambda status_text: self._update_thread_step(thread_name, status_text),
+                )
+        except ProxyConnectionError:
+            raise
         except Exception as exc:
             self.stop_policy.record_failure(
                 stop_signal,
@@ -444,9 +577,9 @@ class ExecutionLoop:
             return True
         logging.warning("代理连接失败，当前会话将废弃并重新尝试")
         if session is not None and session.proxy_address:
-            _discard_unresponsive_proxy(self.state, session.proxy_address)
+            _mark_proxy_temporarily_bad(self.state, session.proxy_address)
         if self.config.random_proxy_ip_enabled:
-            self._update_thread_status(thread_name, "代理失效，等待新代理", running=True)
+            self._update_thread_status(thread_name, "代理失效，切换中", running=True)
             if _record_bad_proxy_and_maybe_pause(self.state, self.gui_instance):
                 return True
             return False
@@ -458,7 +591,7 @@ class ExecutionLoop:
 
     def _should_use_preloaded_session_pool(self) -> bool:
         return bool(
-            self.browser_owner is not None
+            self.browser_owner_pool is not None
             and self.config.url
             and not self.config.random_proxy_ip_enabled
             and not self.config.timed_mode_enabled
@@ -498,14 +631,14 @@ class ExecutionLoop:
         base_browser_preference: list[str],
         preferred_browsers: list[str],
     ) -> None:
-        browser_owner = self.browser_owner
-        assert browser_owner is not None
+        browser_owner_pool = self.browser_owner_pool
+        assert browser_owner_pool is not None
         pool = PreloadedBrowserSessionPool(
             config=self.config,
             state=self.state,
             gui_instance=self.gui_instance,
             thread_name=thread_name,
-            browser_owner=browser_owner,
+            browser_owner_pool=browser_owner_pool,
             page_loader=_load_survey_page,
         )
         active_session: BrowserSessionService | None = None
@@ -524,7 +657,7 @@ class ExecutionLoop:
                     self.state,
                     self.gui_instance,
                     thread_name,
-                    browser_owner=browser_owner,
+                    browser_owner_pool=browser_owner_pool,
                 )
 
             should_refill = False
@@ -689,7 +822,7 @@ class ExecutionLoop:
             self.state,
             self.gui_instance,
             thread_name,
-            browser_owner=self.browser_owner,
+            browser_owner_pool=self.browser_owner_pool,
         )
 
         while True:

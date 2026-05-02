@@ -1,4 +1,4 @@
-"""少量浏览器底座 + 多上下文会话池。"""
+"""少量浏览器底座 + 多上下文动态租约池。"""
 
 from __future__ import annotations
 
@@ -8,7 +8,7 @@ import random
 import threading
 import time
 from dataclasses import dataclass
-from typing import Any, List, Optional, Set, Tuple
+from typing import Any, Callable, List, Optional, Set, Tuple
 
 from software.app.config import BROWSER_PREFERENCE
 from software.logging.log_utils import log_suppressed_exception
@@ -32,35 +32,73 @@ from software.network.browser.startup import (
     is_playwright_startup_environment_error,
 )
 
-DEFAULT_MAX_CONTEXTS_PER_BROWSER = 4
-DEFAULT_SLOTS_PER_OWNER = 2
+DEFAULT_HEADED_CONTEXTS_PER_BROWSER = 4
+DEFAULT_HEADLESS_CONTEXTS_PER_BROWSER = 8
 
 
 @dataclass(frozen=True)
 class BrowserPoolConfig:
     logical_concurrency: int
-    max_contexts_per_browser: int = DEFAULT_MAX_CONTEXTS_PER_BROWSER
-    slots_per_owner: int = DEFAULT_SLOTS_PER_OWNER
-    owner_count: int = 1
+    contexts_per_owner: int
+    owner_count: int
+    headless: bool = False
 
     @classmethod
     def from_concurrency(
         cls,
         logical_concurrency: int,
         *,
-        max_contexts_per_browser: int = DEFAULT_MAX_CONTEXTS_PER_BROWSER,
-        slots_per_owner: int = DEFAULT_SLOTS_PER_OWNER,
+        headless: bool,
+        contexts_per_owner: Optional[int] = None,
     ) -> "BrowserPoolConfig":
         concurrency = max(1, int(logical_concurrency or 1))
-        max_contexts = max(1, int(max_contexts_per_browser or 1))
-        normalized_slots = max(1, int(slots_per_owner or 1))
-        owner_count = max(1, (concurrency + normalized_slots - 1) // normalized_slots)
+        default_capacity = (
+            DEFAULT_HEADLESS_CONTEXTS_PER_BROWSER
+            if bool(headless)
+            else DEFAULT_HEADED_CONTEXTS_PER_BROWSER
+        )
+        normalized_capacity = max(1, int(contexts_per_owner or default_capacity))
+        owner_count = max(1, (concurrency + normalized_capacity - 1) // normalized_capacity)
         return cls(
             logical_concurrency=concurrency,
-            max_contexts_per_browser=max_contexts,
-            slots_per_owner=normalized_slots,
+            contexts_per_owner=normalized_capacity,
             owner_count=owner_count,
+            headless=bool(headless),
         )
+
+
+class BrowserOwnerLease:
+    """一次会话占用一个 owner 容量名额，直到 session 结束。"""
+
+    def __init__(self, owner: "AsyncBrowserOwner") -> None:
+        self.owner = owner
+        self._activated = False
+        self._released = False
+        self._lock = threading.Lock()
+
+    def mark_activated(self) -> None:
+        with self._lock:
+            if self._released:
+                raise RuntimeError("BrowserOwnerLease 已释放，不能再激活")
+            if self._activated:
+                return
+            self.owner.activate_reserved_slot()
+            self._activated = True
+
+    def release(self) -> bool:
+        with self._lock:
+            if self._released:
+                return False
+            self._released = True
+            activated = self._activated
+        if not activated:
+            self.owner.release_reserved_slot()
+        return True
+
+    @property
+    def activated(self) -> bool:
+        with self._lock:
+            return bool(self._activated)
 
 
 class AsyncBrowserDriver:
@@ -185,7 +223,7 @@ class AsyncBrowserDriver:
 
 
 class AsyncBrowserOwner:
-    """每个 owner 持有一个异步 Playwright 底座，并向多个 slot 提供独立 context。"""
+    """一个浏览器底座，对外提供多个独立 context。"""
 
     def __init__(
         self,
@@ -194,7 +232,8 @@ class AsyncBrowserOwner:
         prefer_browsers: Optional[List[str]] = None,
         headless: bool = False,
         window_position: Optional[Tuple[int, int]] = None,
-        max_contexts: int = DEFAULT_MAX_CONTEXTS_PER_BROWSER,
+        max_contexts: int = DEFAULT_HEADED_CONTEXTS_PER_BROWSER,
+        capacity_notifier: Optional[Callable[[], None]] = None,
     ) -> None:
         self.owner_id = max(1, int(owner_id or 1))
         self._prefer_browsers = list(prefer_browsers or BROWSER_PREFERENCE)
@@ -210,13 +249,30 @@ class AsyncBrowserOwner:
         self._closed = False
         self._slot_lock = threading.Lock()
         self._active_slots = 0
-        self._session_open_lock = threading.Lock()
+        self._reserved_slots = 0
+        self._capacity_notifier = capacity_notifier
+        self._ensure_browser_lock: Optional[asyncio.Lock] = None
         self._cleanup_marked = False
         self._cleanup_lock = threading.Lock()
 
     @property
     def browser_name(self) -> str:
         return str(self._browser_name or "")
+
+    @property
+    def active_slots(self) -> int:
+        with self._slot_lock:
+            return int(self._active_slots or 0)
+
+    @property
+    def reserved_slots(self) -> int:
+        with self._slot_lock:
+            return int(self._reserved_slots or 0)
+
+    @property
+    def total_load(self) -> int:
+        with self._slot_lock:
+            return int(self._active_slots or 0) + int(self._reserved_slots or 0)
 
     def mark_cleanup_done(self) -> bool:
         with self._cleanup_lock:
@@ -228,17 +284,49 @@ class AsyncBrowserOwner:
     def mark_broken(self) -> None:
         self._broken = True
 
-    def acquire_slot(self) -> None:
+    def try_reserve_slot(self) -> bool:
         with self._slot_lock:
+            current_total = int(self._active_slots or 0) + int(self._reserved_slots or 0)
+            if current_total >= self._max_contexts:
+                return False
+            self._reserved_slots += 1
+            return True
+
+    def activate_reserved_slot(self) -> None:
+        with self._slot_lock:
+            if self._reserved_slots <= 0:
+                raise RuntimeError(f"owner={self.owner_id} 没有待激活的 context 预留名额")
+            self._reserved_slots -= 1
             self._active_slots += 1
 
-    def release_slot(self) -> None:
+    def release_reserved_slot(self) -> None:
+        should_notify = False
         with self._slot_lock:
-            self._active_slots = max(0, int(self._active_slots or 0) - 1)
+            if self._reserved_slots <= 0:
+                return
+            self._reserved_slots -= 1
+            should_notify = True
+        if should_notify:
+            self._notify_capacity_available()
 
-    def has_capacity(self) -> bool:
+    def release_slot(self) -> None:
+        should_notify = False
         with self._slot_lock:
-            return int(self._active_slots or 0) < self._max_contexts
+            if self._active_slots <= 0:
+                return
+            self._active_slots -= 1
+            should_notify = True
+        if should_notify:
+            self._notify_capacity_available()
+
+    def _notify_capacity_available(self) -> None:
+        callback = self._capacity_notifier
+        if callback is None:
+            return
+        try:
+            callback()
+        except Exception as exc:
+            log_suppressed_exception("AsyncBrowserOwner._notify_capacity_available", exc, level=logging.WARNING)
 
     async def _shutdown_browser_async(self) -> None:
         browser = self._browser
@@ -319,8 +407,15 @@ class AsyncBrowserOwner:
             raise RuntimeError("AsyncBrowserOwner 已关闭")
         if self._browser is not None and not self._broken:
             return self._browser, self.browser_name
-        await self._shutdown_browser_async()
-        return await self._launch_browser_async()
+        if self._ensure_browser_lock is None:
+            self._ensure_browser_lock = asyncio.Lock()
+        async with self._ensure_browser_lock:
+            if self._closed:
+                raise RuntimeError("AsyncBrowserOwner 已关闭")
+            if self._browser is not None and not self._broken:
+                return self._browser, self.browser_name
+            await self._shutdown_browser_async()
+            return await self._launch_browser_async()
 
     async def _open_session_async(
         self,
@@ -371,19 +466,14 @@ class AsyncBrowserOwner:
         *,
         proxy_address: Optional[str],
         user_agent: Optional[str],
+        lease: BrowserOwnerLease,
     ) -> AsyncBrowserDriver:
         if self._closed:
             raise RuntimeError("AsyncBrowserOwner 已关闭")
-        with self._session_open_lock:
-            self.acquire_slot()
-            try:
-                context, page, browser_name, browser_pid = self._bridge.run_coroutine(
-                    self._open_session_async(proxy_address=proxy_address, user_agent=user_agent)
-                )
-            except Exception:
-                self.release_slot()
-                raise
-
+        context, page, browser_name, browser_pid = self._bridge.run_coroutine(
+            self._open_session_async(proxy_address=proxy_address, user_agent=user_agent)
+        )
+        lease.mark_activated()
         context_proxy = AsyncObjectProxy(self._bridge, context, owner=self)
         page_proxy = AsyncObjectProxy(self._bridge, page, owner=self)
         return AsyncBrowserDriver(
@@ -411,7 +501,7 @@ class AsyncBrowserOwner:
 
 
 class BrowserOwnerPool:
-    """按总并发创建少量 browser owners，并为 slot 分配固定 owner。"""
+    """共享少量浏览器底座，按负载动态分配 session 所属 owner。"""
 
     def __init__(
         self,
@@ -422,6 +512,7 @@ class BrowserOwnerPool:
         window_positions: Optional[List[Tuple[int, int]]] = None,
     ) -> None:
         self.config = config
+        self._condition = threading.Condition()
         self._owners: List[AsyncBrowserOwner] = []
         self._closed = False
         self._cleanup_marked = False
@@ -434,7 +525,8 @@ class BrowserOwnerPool:
                     prefer_browsers=prefer_browsers,
                     headless=headless,
                     window_position=window_position,
-                    max_contexts=config.max_contexts_per_browser,
+                    max_contexts=config.contexts_per_owner,
+                    capacity_notifier=self._notify_capacity_available,
                 )
             )
 
@@ -442,17 +534,41 @@ class BrowserOwnerPool:
     def owners(self) -> List[AsyncBrowserOwner]:
         return list(self._owners)
 
-    def owner_for_slot(self, slot_index: int) -> AsyncBrowserOwner:
-        normalized = max(0, int(slot_index or 0))
-        if not self._owners:
-            raise RuntimeError("BrowserOwnerPool 为空")
-        owner_index = min(len(self._owners) - 1, normalized // max(1, int(self.config.slots_per_owner or 1)))
-        return self._owners[owner_index]
+    def _notify_capacity_available(self) -> None:
+        with self._condition:
+            self._condition.notify_all()
+
+    @staticmethod
+    def _owner_sort_key(owner: AsyncBrowserOwner) -> tuple[int, int, int, int]:
+        idle_rank = 0 if owner.total_load <= 0 else 1
+        return (idle_rank, owner.total_load, owner.active_slots, owner.owner_id)
+
+    def acquire_owner_lease(
+        self,
+        *,
+        stop_signal: Optional[threading.Event] = None,
+        wait: bool = True,
+    ) -> Optional[BrowserOwnerLease]:
+        while True:
+            if stop_signal is not None and stop_signal.is_set():
+                return None
+            with self._condition:
+                if self._closed:
+                    return None
+                candidates = sorted(self._owners, key=self._owner_sort_key)
+                for owner in candidates:
+                    if owner.try_reserve_slot():
+                        return BrowserOwnerLease(owner)
+                if not wait:
+                    return None
+                self._condition.wait(timeout=0.05)
 
     def shutdown(self) -> None:
-        if self._closed:
-            return
-        self._closed = True
+        with self._condition:
+            if self._closed:
+                return
+            self._closed = True
+            self._condition.notify_all()
         for owner in list(self._owners):
             try:
                 owner.shutdown()
@@ -472,8 +588,9 @@ class BrowserOwnerPool:
 __all__ = [
     "AsyncBrowserDriver",
     "AsyncBrowserOwner",
+    "BrowserOwnerLease",
     "BrowserOwnerPool",
     "BrowserPoolConfig",
-    "DEFAULT_MAX_CONTEXTS_PER_BROWSER",
-    "DEFAULT_SLOTS_PER_OWNER",
+    "DEFAULT_HEADED_CONTEXTS_PER_BROWSER",
+    "DEFAULT_HEADLESS_CONTEXTS_PER_BROWSER",
 ]

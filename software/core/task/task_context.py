@@ -124,6 +124,7 @@ class ExecutionState:
     proxy_waiting_threads: int = 0
     proxy_in_use_by_thread: Dict[str, ProxyLease] = field(default_factory=dict)
     submit_proxy_in_use_by_thread: Dict[str, ProxyLease] = field(default_factory=dict)
+    proxy_cooldown_until_by_address: Dict[str, float] = field(default_factory=dict)
     reverse_fill_runtime: Optional[ReverseFillRuntimeState] = None
 
     stop_event: threading.Event = field(default_factory=threading.Event)
@@ -251,6 +252,50 @@ class ExecutionState:
             return
         with self.lock:
             self.submit_proxy_in_use_by_thread[key] = lease
+
+    def _purge_expired_proxy_cooldowns_locked(self, *, now_ts: Optional[float] = None) -> None:
+        current = float(now_ts if now_ts is not None else time.time())
+        expired = [
+            address
+            for address, cooldown_until in self.proxy_cooldown_until_by_address.items()
+            if float(cooldown_until or 0.0) <= current
+        ]
+        for address in expired:
+            self.proxy_cooldown_until_by_address.pop(address, None)
+
+    def purge_expired_proxy_cooldowns(self, *, now_ts: Optional[float] = None) -> None:
+        with self.lock:
+            self._purge_expired_proxy_cooldowns_locked(now_ts=now_ts)
+
+    def _is_proxy_in_cooldown_locked(self, proxy_address: str, *, now_ts: Optional[float] = None) -> bool:
+        normalized = str(proxy_address or "").strip()
+        if not normalized:
+            return False
+        self._purge_expired_proxy_cooldowns_locked(now_ts=now_ts)
+        current = float(now_ts if now_ts is not None else time.time())
+        return float(self.proxy_cooldown_until_by_address.get(normalized, 0.0) or 0.0) > current
+
+    def is_proxy_in_cooldown(self, proxy_address: str, *, now_ts: Optional[float] = None) -> bool:
+        normalized = str(proxy_address or "").strip()
+        if not normalized:
+            return False
+        with self.lock:
+            return self._is_proxy_in_cooldown_locked(normalized, now_ts=now_ts)
+
+    def mark_proxy_in_cooldown(self, proxy_address: str, cooldown_seconds: float) -> None:
+        normalized = str(proxy_address or "").strip()
+        if not normalized:
+            return
+        try:
+            seconds = max(0.0, float(cooldown_seconds))
+        except Exception:
+            seconds = 0.0
+        if seconds <= 0:
+            return
+        cooldown_until = time.time() + seconds
+        with self.lock:
+            previous_until = float(self.proxy_cooldown_until_by_address.get(normalized, 0.0) or 0.0)
+            self.proxy_cooldown_until_by_address[normalized] = max(previous_until, cooldown_until)
 
     def active_proxy_addresses_locked(self, *, exclude_thread_name: str = "") -> set[str]:
         excluded = str(exclude_thread_name or "").strip()

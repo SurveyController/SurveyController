@@ -7,6 +7,12 @@ from types import MethodType, SimpleNamespace
 
 import software.core.engine.execution_loop as execution_loop_module
 from software.core.engine.execution_loop import ExecutionLoop, _load_survey_page
+from software.core.engine.page_load_probe import (
+    PAGE_LOAD_PROBE_ANSWERABLE,
+    PAGE_LOAD_PROBE_BUSINESS_PAGE,
+    PAGE_LOAD_PROBE_PROXY_UNUSABLE,
+    PageLoadProbeResult,
+)
 from software.core.task import ExecutionConfig, ExecutionState
 from software.network.browser import BrowserStartupErrorInfo
 
@@ -64,15 +70,16 @@ class _FakePreloadedPool:
 
 
 class _FakeDriver:
-    def __init__(self, failures: int = 0):
+    def __init__(self, failures: int = 0, failure_message: str = "goto timeout"):
         self.failures = failures
+        self.failure_message = failure_message
         self.calls: list[tuple[str, int, str]] = []
 
     def get(self, url: str, timeout: int = 20000, wait_until: str = "domcontentloaded") -> None:
         self.calls.append((url, timeout, wait_until))
         if self.failures > 0:
             self.failures -= 1
-            raise TimeoutError("goto timeout")
+            raise TimeoutError(self.failure_message)
 
 
 class _FakeStopPolicy:
@@ -146,25 +153,152 @@ class ExecutionLoopTests(unittest.TestCase):
             ],
         )
 
-    def test_load_survey_page_turns_random_proxy_timeout_into_proxy_failure(self) -> None:
+    def test_load_survey_page_random_proxy_uses_commit_probe_shortcut(self) -> None:
         config = ExecutionConfig(
             url="https://example.com",
             survey_provider="wjx",
             random_proxy_ip_enabled=True,
         )
-        driver = _FakeDriver(failures=3)
+        driver = _FakeDriver()
 
-        with self.assertRaises(execution_loop_module.ProxyConnectionError):
+        with _patched_attr(
+            execution_loop_module,
+            "wait_for_page_probe",
+            lambda *_args, **_kwargs: PageLoadProbeResult(PAGE_LOAD_PROBE_ANSWERABLE, detail="wjx_questionnaire"),
+        ):
             _load_survey_page(driver, config)
 
         self.assertEqual(
             driver.calls,
             [
-                ("https://example.com", 20000, "domcontentloaded"),
-                ("https://example.com", 35000, "domcontentloaded"),
-                ("https://example.com", 35000, "commit"),
+                ("https://example.com", 8000, "commit"),
             ],
         )
+
+    def test_load_survey_page_random_proxy_falls_back_to_domcontentloaded_after_probe_miss(self) -> None:
+        config = ExecutionConfig(
+            url="https://example.com",
+            survey_provider="wjx",
+            random_proxy_ip_enabled=True,
+        )
+        driver = _FakeDriver()
+        probe_results = iter(
+            [
+                PageLoadProbeResult(PAGE_LOAD_PROBE_PROXY_UNUSABLE, detail="blank_page", retryable=False),
+                PageLoadProbeResult(PAGE_LOAD_PROBE_ANSWERABLE, detail="wjx_dom_ready"),
+            ]
+        )
+
+        with _patched_attr(
+            execution_loop_module,
+            "wait_for_page_probe",
+            lambda *_args, **_kwargs: next(probe_results),
+        ):
+            _load_survey_page(driver, config)
+
+        self.assertEqual(
+            driver.calls,
+            [
+                ("https://example.com", 8000, "commit"),
+                ("https://example.com", 6000, "domcontentloaded"),
+            ],
+        )
+
+    def test_load_survey_page_random_proxy_raises_proxy_failure_after_two_probe_misses(self) -> None:
+        config = ExecutionConfig(
+            url="https://example.com",
+            survey_provider="wjx",
+            random_proxy_ip_enabled=True,
+        )
+        driver = _FakeDriver()
+        probe_results = iter(
+            [
+                PageLoadProbeResult(PAGE_LOAD_PROBE_PROXY_UNUSABLE, detail="blank_page", retryable=False),
+                PageLoadProbeResult(PAGE_LOAD_PROBE_PROXY_UNUSABLE, detail="proxy_error_page", retryable=False),
+            ]
+        )
+
+        with _patched_attr(
+            execution_loop_module,
+            "wait_for_page_probe",
+            lambda *_args, **_kwargs: next(probe_results),
+        ):
+            with self.assertRaises(execution_loop_module.ProxyConnectionError):
+                _load_survey_page(driver, config)
+
+        self.assertEqual(
+            driver.calls,
+            [
+                ("https://example.com", 8000, "commit"),
+                ("https://example.com", 6000, "domcontentloaded"),
+            ],
+        )
+
+    def test_load_survey_page_random_proxy_accepts_business_page_probe(self) -> None:
+        config = ExecutionConfig(
+            url="https://example.com",
+            survey_provider="wjx",
+            random_proxy_ip_enabled=True,
+        )
+        driver = _FakeDriver(failures=1)
+
+        with _patched_attr(
+            execution_loop_module,
+            "wait_for_page_probe",
+            lambda *_args, **_kwargs: PageLoadProbeResult(PAGE_LOAD_PROBE_BUSINESS_PAGE, detail="device_quota_limit"),
+        ):
+            _load_survey_page(driver, config)
+
+        self.assertEqual(
+            driver.calls,
+            [
+                ("https://example.com", 8000, "commit"),
+                ("https://example.com", 6000, "domcontentloaded"),
+            ],
+        )
+
+    def test_load_survey_or_record_failure_updates_phase_to_loading(self) -> None:
+        config = ExecutionConfig(url="https://example.com", survey_provider="wjx")
+        state = ExecutionState(config=config)
+        stop_signal = threading.Event()
+        session = SimpleNamespace(driver=object())
+        loop = ExecutionLoop(config, state)
+
+        with _patched_attr(execution_loop_module, "_load_survey_page", lambda *_args, **_kwargs: None):
+            result = loop._load_survey_or_record_failure(
+                session,
+                stop_signal,
+                thread_name="Slot-1",
+                timed_mode_on=False,
+                timed_refresh_interval=0.0,
+            )
+
+        self.assertTrue(result)
+        self.assertEqual(state.thread_progress["Slot-1"].status_text, "加载问卷")
+
+    def test_load_survey_or_record_failure_propagates_proxy_connection_error(self) -> None:
+        config = ExecutionConfig(url="https://example.com", survey_provider="wjx", random_proxy_ip_enabled=True)
+        state = ExecutionState(config=config)
+        stop_signal = threading.Event()
+        session = SimpleNamespace(driver=object())
+        loop = ExecutionLoop(config, state)
+        loop.stop_policy = _FakeStopPolicy(stop_on_failure=True)
+
+        with _patched_attr(
+            execution_loop_module,
+            "_load_survey_page",
+            lambda *_args, **_kwargs: (_ for _ in ()).throw(execution_loop_module.ProxyConnectionError("proxy dead")),
+        ):
+            with self.assertRaises(execution_loop_module.ProxyConnectionError):
+                loop._load_survey_or_record_failure(
+                    session,
+                    stop_signal,
+                    thread_name="Slot-1",
+                    timed_mode_on=False,
+                    timed_refresh_interval=0.0,
+                )
+
+        self.assertEqual(loop.stop_policy.failure_calls, [])
 
     def test_run_thread_finishes_cleanly_when_url_is_empty(self) -> None:
         config = ExecutionConfig(url="")
@@ -297,7 +431,7 @@ class ExecutionLoopTests(unittest.TestCase):
         with ExitStack() as stack:
             stack.enter_context(_patched_attr(execution_loop_module, "BrowserSessionService", lambda *_args, **_kwargs: session))
             stack.enter_context(_patched_attr(execution_loop_module, "_provider_is_device_quota_limit_page", lambda *_args, **_kwargs: False))
-            stack.enter_context(_patched_attr(execution_loop_module, "_discard_unresponsive_proxy", lambda *_args, **_kwargs: None))
+            stack.enter_context(_patched_attr(execution_loop_module, "_mark_proxy_temporarily_bad", lambda *_args, **_kwargs: None))
             loop = ExecutionLoop(config, state)
             loop.stop_policy = _FakeStopPolicy(stop_on_failure=True)
             def _proxy_failure(self, *_args, **_kwargs):
@@ -331,7 +465,7 @@ class ExecutionLoopTests(unittest.TestCase):
             stack.enter_context(_patched_attr(execution_loop_module, "PreloadedBrowserSessionPool", _FakePreloadedPool))
             stack.enter_context(_patched_attr(execution_loop_module, "_provider_is_device_quota_limit_page", lambda *_args, **_kwargs: False))
             stack.enter_context(_patched_attr(execution_loop_module, "_provider_fill_survey", lambda *_args, **_kwargs: True))
-            loop = ExecutionLoop(config, state, browser_owner=object())
+            loop = ExecutionLoop(config, state, browser_owner_pool=object())
             loop.stop_policy = _FakeStopPolicy(stop_on_failure=True, success_should_stop=True)
             loop.submission_service = _FakeSubmissionService(outcome)
             loop._prepare_round_context = MethodType(_prepare_round_context, loop)
@@ -375,7 +509,7 @@ class ExecutionLoopTests(unittest.TestCase):
         with ExitStack() as stack:
             stack.enter_context(_patched_attr(execution_loop_module, "PreloadedBrowserSessionPool", _FakePreloadedPool))
             stack.enter_context(_patched_attr(execution_loop_module, "_provider_is_device_quota_limit_page", lambda *_args, **_kwargs: False))
-            loop = ExecutionLoop(config, state, browser_owner=object())
+            loop = ExecutionLoop(config, state, browser_owner_pool=object())
             loop.stop_policy = _FakeStopPolicy(stop_on_failure=True)
             loop._prepare_round_context = MethodType(_prepare_round_context, loop)
             pool_factory = _FakePreloadedPool

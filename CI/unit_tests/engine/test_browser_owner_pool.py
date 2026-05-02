@@ -97,7 +97,7 @@ class AsyncBrowserOwnerTests(unittest.IsolatedAsyncioTestCase):
 
 
 class AsyncBrowserOwnerThreadingTests(unittest.TestCase):
-    def test_open_session_serializes_first_wave_session_creation(self) -> None:
+    def test_open_session_allows_concurrent_context_creation(self) -> None:
         class _FakeBridge:
             def __init__(self) -> None:
                 self.active = 0
@@ -122,22 +122,31 @@ class AsyncBrowserOwnerThreadingTests(unittest.TestCase):
 
         owner = SimpleNamespace(
             _closed=False,
-            _session_open_lock=threading.Lock(),
             _bridge=_FakeBridge(),
             _open_session_async=_fake_open_session_async,
-            acquire_slot=Mock(),
             release_slot=Mock(),
         )
 
+        class _FakeLease:
+            def __init__(self) -> None:
+                self.mark_activated_calls = 0
+
+            def mark_activated(self) -> None:
+                self.mark_activated_calls += 1
+
         results: list[AsyncBrowserDriver] = []
+        leases: list[_FakeLease] = []
 
         def _worker() -> None:
+            lease = _FakeLease()
             driver = AsyncBrowserOwner.open_session(
                 owner,
                 proxy_address="http://1.1.1.1:8000",
                 user_agent="UA",
+                lease=lease,
             )
             results.append(driver)
+            leases.append(lease)
 
         first = threading.Thread(target=_worker)
         second = threading.Thread(target=_worker)
@@ -147,8 +156,8 @@ class AsyncBrowserOwnerThreadingTests(unittest.TestCase):
         second.join()
 
         self.assertEqual(len(results), 2)
-        self.assertEqual(owner._bridge.max_active, 1)
-        self.assertEqual(owner.acquire_slot.call_count, 2)
+        self.assertEqual(owner._bridge.max_active, 2)
+        self.assertEqual([lease.mark_activated_calls for lease in leases], [1, 1])
         owner.release_slot.assert_not_called()
 
 
