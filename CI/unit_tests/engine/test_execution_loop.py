@@ -153,6 +153,28 @@ class ExecutionLoopTests(unittest.TestCase):
             ],
         )
 
+    def test_load_survey_page_random_proxy_timeout_is_not_marked_as_bad_proxy(self) -> None:
+        config = ExecutionConfig(
+            url="https://www.credamo.com/answer.html#/s/demo",
+            survey_provider="credamo",
+            random_proxy_ip_enabled=True,
+        )
+        driver = _FakeDriver(failures=2, failure_message="Timeout 45000ms exceeded")
+
+        with self.assertRaises(TimeoutError):
+            _load_survey_page(driver, config)
+
+    def test_load_survey_page_random_proxy_network_error_marks_bad_proxy(self) -> None:
+        config = ExecutionConfig(
+            url="https://www.credamo.com/answer.html#/s/demo",
+            survey_provider="credamo",
+            random_proxy_ip_enabled=True,
+        )
+        driver = _FakeDriver(failures=2, failure_message="net::ERR_PROXY_CONNECTION_FAILED")
+
+        with self.assertRaises(execution_loop_module.ProxyConnectionError):
+            _load_survey_page(driver, config)
+
     def test_load_survey_page_random_proxy_uses_commit_probe_shortcut(self) -> None:
         config = ExecutionConfig(
             url="https://example.com",
@@ -492,7 +514,7 @@ class ExecutionLoopTests(unittest.TestCase):
         self.assertEqual(session.dispose_called, 1)
         self.assertEqual(loop.submission_service.calls, 1)
 
-    def test_preloaded_path_does_not_prepare_round_context_before_page_ready(self) -> None:
+    def test_preloaded_path_prepares_round_context_before_page_ready(self) -> None:
         config = ExecutionConfig(url="https://example.com", survey_provider="wjx")
         state = ExecutionState(config=config)
         stop_signal = threading.Event()
@@ -526,7 +548,7 @@ class ExecutionLoopTests(unittest.TestCase):
                 pool_factory.__init__ = original_init
 
         self.assertTrue(stop_signal.is_set())
-        self.assertEqual(prepare_round_context_calls, 0)
+        self.assertEqual(prepare_round_context_calls, 1)
         self.assertEqual(loop.stop_policy.failure_calls, [execution_loop_module.FailureReason.PAGE_LOAD_FAILED])
 
 

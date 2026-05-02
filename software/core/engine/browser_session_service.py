@@ -216,6 +216,7 @@ class BrowserSessionService:
         window_y_pos: int,
         *,
         stop_signal: Optional[threading.Event] = None,
+        acquire_browser_semaphore: bool = True,
     ) -> Optional[str]:
         should_wait_for_proxy = bool(self.config.random_proxy_ip_enabled and stop_signal is not None)
         create_attempt = 0
@@ -255,7 +256,7 @@ class BrowserSessionService:
             submit_proxy_address = self.proxy_address
 
             ua_value, _ = _select_user_agent_for_session(self.state)
-            if not self.sem_acquired:
+            if acquire_browser_semaphore and not self.sem_acquired:
                 self._browser_sem.acquire()
                 self.sem_acquired = True
                 logging.info("已获取浏览器信号量")

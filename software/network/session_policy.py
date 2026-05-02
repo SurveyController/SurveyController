@@ -81,6 +81,8 @@ def _purge_unusable_proxy_pool_locked(ctx: ExecutionState) -> None:
     if removed:
         logging.info("代理池已清理无效/重复代理 %s 个", removed)
     ctx.config.proxy_ip_pool = kept
+    if removed:
+        ctx.notify_runtime_change()
 
 
 def _pop_available_proxy_lease_locked(ctx: ExecutionState) -> Optional[ProxyLease]:
@@ -141,13 +143,7 @@ def _wait_for_next_proxy_cycle(
     *,
     timeout: float = _PROXY_WAIT_POLL_SECONDS,
 ) -> bool:
-    watcher = stop_signal if stop_signal is not None else getattr(ctx, "stop_event", None)
-    if watcher is None:
-        return False
-    try:
-        return bool(watcher.wait(timeout))
-    except Exception:
-        return _should_stop_proxy_wait(ctx, stop_signal)
+    return ctx.wait_for_runtime_change(stop_signal=stop_signal, timeout=timeout)
 
 
 def _select_proxy_for_session(
@@ -221,6 +217,7 @@ def _select_proxy_for_session(
                                     continue
                                 ctx.config.proxy_ip_pool.append(lease)
                                 existing.add(lease.address)
+                            ctx.notify_runtime_change()
                         if selected is not None:
                             return _mark_proxy_in_use(ctx, thread_name, selected)
 
@@ -256,5 +253,6 @@ def _discard_unresponsive_proxy(ctx: ExecutionState, proxy_address: str) -> None
         ctx.config.proxy_ip_pool = retained
         if removed:
             logging.info(f"已移除无响应代理：{mask_proxy_for_log(proxy_address)}")
+            ctx.notify_runtime_change()
 
 
