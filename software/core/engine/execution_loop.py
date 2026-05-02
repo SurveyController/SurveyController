@@ -5,6 +5,7 @@ from __future__ import annotations
 import logging
 import random
 import threading
+import time
 import traceback
 from typing import Any
 
@@ -29,39 +30,101 @@ from software.providers.registry import is_device_quota_limit_page as _provider_
 from software.network.browser.owner_pool import AsyncBrowserOwner
 
 _DEFAULT_PAGE_LOAD_TIMEOUT_MS = 20000
+_DEFAULT_PAGE_LOAD_TIMEOUT_RETRY_MS = 35000
 _CREDAMO_PAGE_LOAD_TIMEOUT_MS = 45000
 _FREE_AI_TIMEOUT_FAIL_THRESHOLD = 5
+_PAGE_LOAD_RETRY_DELAYS_SECONDS = (0.4, 1.0)
+_PAGE_LOAD_PROXY_ERROR_MARKERS = (
+    "ERR_TUNNEL_CONNECTION_FAILED",
+    "ERR_PROXY_CONNECTION_FAILED",
+    "ERR_NO_SUPPORTED_PROXIES",
+    "ERR_CONNECTION_TIMED_OUT",
+    "ERR_TIMED_OUT",
+    "ERR_CONNECTION_RESET",
+    "ERR_CONNECTION_CLOSED",
+    "ERR_ADDRESS_UNREACHABLE",
+    "ERR_NAME_NOT_RESOLVED",
+)
+_PAGE_LOAD_TRANSIENT_MARKERS = (
+    "Timeout",
+    "timed out",
+    "ERR_ABORTED",
+    "frame was detached",
+    "Target page, context or browser has been closed",
+    "browser has been closed",
+    "has been disconnected",
+)
+
+
+def _exception_summary(exc: BaseException) -> str:
+    text = str(exc or "").strip()
+    if text:
+        return text
+    return type(exc).__name__
+
+
+def _looks_like_proxy_page_load_failure(exc: BaseException) -> bool:
+    message = _exception_summary(exc)
+    if any(marker in message for marker in _PAGE_LOAD_PROXY_ERROR_MARKERS):
+        return True
+    lowered = message.lower()
+    return "timeout" in lowered or "timed out" in lowered
+
+
+def _looks_like_transient_page_load_failure(exc: BaseException) -> bool:
+    message = _exception_summary(exc)
+    lowered = message.lower()
+    return any(marker.lower() in lowered for marker in _PAGE_LOAD_TRANSIENT_MARKERS)
+
+
+def _build_page_load_attempts(config: ExecutionConfig) -> tuple[tuple[int, str], ...]:
+    provider = normalize_survey_provider(getattr(config, "survey_provider", None))
+    if provider == SURVEY_PROVIDER_CREDAMO:
+        return (
+            (_CREDAMO_PAGE_LOAD_TIMEOUT_MS, "domcontentloaded"),
+            (_CREDAMO_PAGE_LOAD_TIMEOUT_MS, "commit"),
+        )
+    if bool(getattr(config, "random_proxy_ip_enabled", False)):
+        return (
+            (_DEFAULT_PAGE_LOAD_TIMEOUT_MS, "domcontentloaded"),
+            (_DEFAULT_PAGE_LOAD_TIMEOUT_RETRY_MS, "domcontentloaded"),
+            (_DEFAULT_PAGE_LOAD_TIMEOUT_RETRY_MS, "commit"),
+        )
+    return (
+        (_DEFAULT_PAGE_LOAD_TIMEOUT_MS, "domcontentloaded"),
+        (_DEFAULT_PAGE_LOAD_TIMEOUT_RETRY_MS, "domcontentloaded"),
+    )
 
 
 def _load_survey_page(driver: Any, config: ExecutionConfig) -> None:
-    provider = normalize_survey_provider(getattr(config, "survey_provider", None))
-    if provider != SURVEY_PROVIDER_CREDAMO:
-        driver.get(config.url, timeout=_DEFAULT_PAGE_LOAD_TIMEOUT_MS)
-        return
-
     last_exc: Exception | None = None
-    attempts = (
-        (_CREDAMO_PAGE_LOAD_TIMEOUT_MS, "domcontentloaded"),
-        (_CREDAMO_PAGE_LOAD_TIMEOUT_MS, "commit"),
-    )
+    attempts = _build_page_load_attempts(config)
     for attempt_index, (timeout_ms, wait_until) in enumerate(attempts, start=1):
         try:
             driver.get(config.url, timeout=timeout_ms, wait_until=wait_until)
             if attempt_index > 1:
-                logging.info("Credamo 问卷加载重试成功：wait_until=%s timeout=%sms", wait_until, timeout_ms)
+                logging.info("问卷加载重试成功：wait_until=%s timeout=%sms", wait_until, timeout_ms)
             return
         except Exception as exc:
             last_exc = exc
             logging.warning(
-                "Credamo 问卷加载第%s次失败：wait_until=%s timeout=%sms，准备%s",
+                "问卷加载第%s次失败：wait_until=%s timeout=%sms error=%s，准备%s",
                 attempt_index,
                 wait_until,
                 timeout_ms,
+                _exception_summary(exc),
                 "重试" if attempt_index < len(attempts) else "结束",
             )
+            if attempt_index < len(attempts):
+                delay_index = min(attempt_index - 1, len(_PAGE_LOAD_RETRY_DELAYS_SECONDS) - 1)
+                time.sleep(_PAGE_LOAD_RETRY_DELAYS_SECONDS[delay_index])
     if last_exc is not None:
+        if bool(getattr(config, "random_proxy_ip_enabled", False)) and (
+            _looks_like_proxy_page_load_failure(last_exc) or _looks_like_transient_page_load_failure(last_exc)
+        ):
+            raise ProxyConnectionError(_exception_summary(last_exc)) from last_exc
         raise last_exc
-    raise RuntimeError("Credamo 问卷加载失败")
+    raise RuntimeError("问卷加载失败")
 
 
 class ExecutionLoop:

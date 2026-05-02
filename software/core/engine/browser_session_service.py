@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 import threading
+import time
 from typing import Any, Optional
 
 from software.core.engine.driver_factory import (
@@ -24,6 +25,26 @@ from software.network.session_policy import (
 )
 
 _HEADED_RUNTIME_WINDOW_SIZE = (550, 650)
+_BROWSER_CREATE_RETRY_DELAYS_SECONDS = (0.35,)
+_PROXY_LAUNCH_ERROR_MARKERS = (
+    "ERR_TUNNEL_CONNECTION_FAILED",
+    "ERR_PROXY_CONNECTION_FAILED",
+    "ERR_NO_SUPPORTED_PROXIES",
+    "ERR_CONNECTION_CLOSED",
+    "ERR_CONNECTION_RESET",
+    "ERR_CONNECTION_TIMED_OUT",
+    "ERR_TIMED_OUT",
+    "ERR_NAME_NOT_RESOLVED",
+    "ERR_ADDRESS_UNREACHABLE",
+)
+_TRANSIENT_BROWSER_CREATE_ERROR_MARKERS = (
+    "Target page, context or browser has been closed",
+    "browser has been closed",
+    "connection closed",
+    "has been disconnected",
+    "closed unexpectedly",
+    "pipe closed",
+)
 
 
 def _resolve_runtime_window_size(config: ExecutionConfig) -> Optional[tuple[int, int]]:
@@ -31,6 +52,26 @@ def _resolve_runtime_window_size(config: ExecutionConfig) -> Optional[tuple[int,
     if bool(getattr(config, "headless_mode", False)):
         return None
     return _HEADED_RUNTIME_WINDOW_SIZE
+
+
+def _exception_summary(exc: BaseException) -> str:
+    text = str(exc or "").strip()
+    if text:
+        return text
+    return type(exc).__name__
+
+
+def _looks_like_proxy_launch_error(exc: BaseException) -> bool:
+    message = _exception_summary(exc)
+    return any(marker in message for marker in _PROXY_LAUNCH_ERROR_MARKERS)
+
+
+def _looks_like_transient_browser_create_error(exc: BaseException) -> bool:
+    message = _exception_summary(exc)
+    lowered = message.lower()
+    if any(marker.lower() in lowered for marker in _TRANSIENT_BROWSER_CREATE_ERROR_MARKERS):
+        return True
+    return type(exc).__name__ in {"TimeoutError", "CancelledError"}
 
 
 class BrowserSessionService:
@@ -136,6 +177,8 @@ class BrowserSessionService:
         stop_signal: Optional[threading.Event] = None,
     ) -> Optional[str]:
         should_wait_for_proxy = bool(self.config.random_proxy_ip_enabled and stop_signal is not None)
+        create_attempt = 0
+        max_create_attempts = 1 + len(_BROWSER_CREATE_RETRY_DELAYS_SECONDS)
 
         while True:
             if self._is_stop_requested(stop_signal):
@@ -198,6 +241,7 @@ class BrowserSessionService:
                         persistent_browser=True,
                     )
             except Exception as exc:
+                create_attempt += 1
                 if self.sem_acquired:
                     self._browser_sem.release()
                     self.sem_acquired = False
@@ -206,17 +250,47 @@ class BrowserSessionService:
                     self.state.release_proxy_in_use(self.thread_name)
                 failed_proxy = self.proxy_address
                 self.proxy_address = None
-                if self.config.random_proxy_ip_enabled and isinstance(exc, Exception):
-                    message = str(exc or "")
-                    if failed_proxy and (
-                        "ERR_TUNNEL_CONNECTION_FAILED" in message
-                        or "ERR_PROXY_CONNECTION_FAILED" in message
-                        or "ERR_NO_SUPPORTED_PROXIES" in message
-                    ):
-                        logging.warning("随机IP建立浏览器会话失败，已废弃当前代理并继续等待下一只：%s", exc)
+                if self._browser_manager is not None and self._browser_owner is None:
+                    try:
+                        shutdown_browser_manager(self._browser_manager)
+                    except Exception as shutdown_exc:
+                        log_suppressed_exception(
+                            "BrowserSessionService.create_browser shutdown broken manager",
+                            shutdown_exc,
+                            level=logging.WARNING,
+                        )
+                    finally:
+                        self._browser_manager = None
+
+                if self.config.random_proxy_ip_enabled and failed_proxy:
+                    if _looks_like_proxy_launch_error(exc) or _looks_like_transient_browser_create_error(exc):
+                        logging.warning(
+                            "随机IP建立浏览器会话失败，已废弃当前代理并继续尝试下一只：%s",
+                            _exception_summary(exc),
+                        )
                         _discard_unresponsive_proxy(self.state, failed_proxy)
                         if should_wait_for_proxy:
                             continue
+                        if create_attempt < max_create_attempts:
+                            continue
+
+                if (
+                    not self.config.random_proxy_ip_enabled
+                    and create_attempt < max_create_attempts
+                    and _looks_like_transient_browser_create_error(exc)
+                ):
+                    wait_seconds = _BROWSER_CREATE_RETRY_DELAYS_SECONDS[create_attempt - 1]
+                    logging.warning(
+                        "浏览器会话创建命中瞬时异常，%.2f 秒后重试：%s",
+                        wait_seconds,
+                        _exception_summary(exc),
+                    )
+                    if stop_signal is not None:
+                        if stop_signal.wait(wait_seconds):
+                            return None
+                    else:
+                        time.sleep(wait_seconds)
+                    continue
                 raise
 
             driver = self.driver
