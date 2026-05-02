@@ -205,6 +205,7 @@ class AsyncBrowserOwner:
         self._closed = False
         self._slot_lock = threading.Lock()
         self._active_slots = 0
+        self._session_open_lock = threading.Lock()
         self._cleanup_marked = False
         self._cleanup_lock = threading.Lock()
 
@@ -358,14 +359,15 @@ class AsyncBrowserOwner:
     ) -> AsyncBrowserDriver:
         if self._closed:
             raise RuntimeError("AsyncBrowserOwner 已关闭")
-        self.acquire_slot()
-        try:
-            context, page, browser_name, browser_pid = self._bridge.run_coroutine(
-                self._open_session_async(proxy_address=proxy_address, user_agent=user_agent)
-            )
-        except Exception:
-            self.release_slot()
-            raise
+        with self._session_open_lock:
+            self.acquire_slot()
+            try:
+                context, page, browser_name, browser_pid = self._bridge.run_coroutine(
+                    self._open_session_async(proxy_address=proxy_address, user_agent=user_agent)
+                )
+            except Exception:
+                self.release_slot()
+                raise
 
         context_proxy = AsyncObjectProxy(self._bridge, context, owner=self)
         page_proxy = AsyncObjectProxy(self._bridge, page, owner=self)
