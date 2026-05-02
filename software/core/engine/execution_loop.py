@@ -59,17 +59,6 @@ _PAGE_LOAD_PROXY_ERROR_MARKERS = (
     "ERR_ADDRESS_UNREACHABLE",
     "ERR_NAME_NOT_RESOLVED",
 )
-_PAGE_LOAD_TRANSIENT_MARKERS = (
-    "Timeout",
-    "timed out",
-    "ERR_ABORTED",
-    "frame was detached",
-    "Target page, context or browser has been closed",
-    "browser has been closed",
-    "has been disconnected",
-)
-
-
 def _exception_summary(exc: BaseException) -> str:
     text = str(exc or "").strip()
     if text:
@@ -80,12 +69,6 @@ def _exception_summary(exc: BaseException) -> str:
 def _looks_like_proxy_page_load_failure(exc: BaseException) -> bool:
     message = _exception_summary(exc)
     return any(marker in message for marker in _PAGE_LOAD_PROXY_ERROR_MARKERS)
-
-
-def _looks_like_transient_page_load_failure(exc: BaseException) -> bool:
-    message = _exception_summary(exc)
-    lowered = message.lower()
-    return any(marker.lower() in lowered for marker in _PAGE_LOAD_TRANSIENT_MARKERS)
 
 
 def _build_page_load_attempts(config: ExecutionConfig) -> tuple[tuple[int, str], ...]:
@@ -303,10 +286,16 @@ class ExecutionLoop:
     def _acquire_dispatch_turn(self, thread_name: str, stop_signal: threading.Event) -> bool:
         if stop_signal.is_set():
             return False
-        if self.dispatcher is None:
-            self.dispatcher = AttemptDispatcher(self.config, self.state, stop_signal)
+        dispatcher = self._ensure_dispatcher(stop_signal)
         self._update_thread_status(thread_name, "等待调度", running=True)
-        return bool(self.dispatcher.acquire())
+        return bool(dispatcher.acquire())
+
+    def _ensure_dispatcher(self, stop_signal: threading.Event) -> AttemptDispatcher:
+        dispatcher = self.dispatcher
+        if dispatcher is None:
+            dispatcher = AttemptDispatcher(self.config, self.state, stop_signal)
+            self.dispatcher = dispatcher
+        return dispatcher
 
     def _resolve_dispatch_delay_seconds(self) -> float:
         min_wait, max_wait = self.config.submit_interval_range_seconds
@@ -825,7 +814,7 @@ class ExecutionLoop:
                     active_session = None
                 if should_refill and not stop_signal.is_set():
                     pool.warm_async(preferred_browsers, window_x_pos, window_y_pos)
-                self.dispatcher.release(
+                self._ensure_dispatcher(stop_signal).release(
                     requeue=bool(should_requeue_dispatch and not stop_signal.is_set()),
                     delay_seconds=dispatch_delay_seconds,
                 )
@@ -990,7 +979,7 @@ class ExecutionLoop:
             finally:
                 if driver_had_error:
                     session.dispose()
-                self.dispatcher.release(
+                self._ensure_dispatcher(stop_signal).release(
                     requeue=bool(should_requeue_dispatch and not stop_signal.is_set()),
                     delay_seconds=dispatch_delay_seconds,
                 )

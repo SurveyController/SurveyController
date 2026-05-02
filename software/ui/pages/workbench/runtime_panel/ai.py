@@ -329,27 +329,6 @@ class RuntimeAISection(QObject):
             duration=duration,
         )
 
-    def _show_ai_infobar_with_link(self, message: str, url: str):
-        """显示带超链接按钮的警告 InfoBar"""
-        if self._current_infobar is not None:
-            try:
-                self._current_infobar.close()
-            except (RuntimeError, AttributeError):
-                pass
-            self._current_infobar = None
-
-        bar = InfoBar.warning(
-            "",
-            message,
-            parent=self._owner.window(),
-            position=InfoBarPosition.TOP,
-            duration=5000,
-        )
-        if url:
-            link_btn = HyperlinkButton(FluentIcon.LINK, url, "查看 API 文档", bar)
-            bar.addWidget(link_btn)
-        self._current_infobar = bar
-
     def _update_ai_visibility(self):
         """根据当前模式与提供商更新 AI 配置项的可见性和推荐模型"""
         ai_mode = self._get_current_ai_mode()

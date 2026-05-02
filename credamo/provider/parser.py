@@ -9,7 +9,7 @@ import time
 from typing import Any, Dict, List, Optional, Tuple
 
 from software.app.config import DEFAULT_FILL_TEXT
-from software.core.engine.driver_factory import create_playwright_driver
+from software.network.browser.transient import create_playwright_driver
 from software.providers.common import SURVEY_PROVIDER_CREDAMO
 
 _QUESTION_NUMBER_RE = re.compile(r"^\s*(?:Q|题目?)\s*(\d+)\b", re.IGNORECASE)
