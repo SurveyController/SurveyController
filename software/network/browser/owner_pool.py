@@ -23,6 +23,7 @@ from software.network.browser.options import (
     _build_context_args,
     _build_launch_args,
     _build_selector,
+    _is_browser_disconnected_error,
     _is_proxy_tunnel_error,
 )
 from software.network.browser.startup import (
@@ -321,15 +322,33 @@ class AsyncBrowserOwner:
         proxy_address: Optional[str],
         user_agent: Optional[str],
     ) -> tuple[Any, Any, str, Optional[int]]:
-        browser, browser_name = await self._ensure_browser_async()
+        last_exc: Optional[Exception] = None
         context_args = _build_context_args(
             headless=self._headless,
             proxy_address=proxy_address,
             user_agent=user_agent,
         )
-        context = await browser.new_context(**context_args)
-        page = await context.new_page()
-        return context, page, browser_name, self._browser_pid
+        for attempt in range(2):
+            browser, browser_name = await self._ensure_browser_async()
+            try:
+                context = await browser.new_context(**context_args)
+                page = await context.new_page()
+                return context, page, browser_name, self._browser_pid
+            except Exception as exc:
+                last_exc = exc
+                if attempt == 0 and _is_browser_disconnected_error(exc):
+                    logging.warning(
+                        "AsyncBrowserOwner 检测到底座浏览器已断开，准备重建后重试一次：owner=%s error=%s",
+                        self.owner_id,
+                        exc,
+                    )
+                    self.mark_broken()
+                    await self._shutdown_browser_async()
+                    continue
+                raise
+        if last_exc is not None:
+            raise last_exc
+        raise RuntimeError("AsyncBrowserOwner 打开浏览器会话失败：未知错误")
 
     def open_session(
         self,

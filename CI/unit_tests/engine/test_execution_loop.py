@@ -132,6 +132,40 @@ class ExecutionLoopTests(unittest.TestCase):
             ],
         )
 
+    def test_load_survey_page_retries_non_credamo_with_longer_timeout(self) -> None:
+        config = ExecutionConfig(url="https://example.com", survey_provider="wjx")
+        driver = _FakeDriver(failures=1)
+
+        _load_survey_page(driver, config)
+
+        self.assertEqual(
+            driver.calls,
+            [
+                ("https://example.com", 20000, "domcontentloaded"),
+                ("https://example.com", 35000, "domcontentloaded"),
+            ],
+        )
+
+    def test_load_survey_page_turns_random_proxy_timeout_into_proxy_failure(self) -> None:
+        config = ExecutionConfig(
+            url="https://example.com",
+            survey_provider="wjx",
+            random_proxy_ip_enabled=True,
+        )
+        driver = _FakeDriver(failures=3)
+
+        with self.assertRaises(execution_loop_module.ProxyConnectionError):
+            _load_survey_page(driver, config)
+
+        self.assertEqual(
+            driver.calls,
+            [
+                ("https://example.com", 20000, "domcontentloaded"),
+                ("https://example.com", 35000, "domcontentloaded"),
+                ("https://example.com", 35000, "commit"),
+            ],
+        )
+
     def test_run_thread_finishes_cleanly_when_url_is_empty(self) -> None:
         config = ExecutionConfig(url="")
         state = ExecutionState(config=config)
