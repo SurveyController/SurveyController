@@ -43,11 +43,19 @@ class AsyncRuntimeCoordinator:
         self.owner_pool: Optional[BrowserOwnerPool] = None
 
     def _register_cleanup_target(self, target: Any) -> None:
+        register = getattr(self.gui_instance, "register_cleanup_target", None)
+        if callable(register):
+            register(target)
+            return
         drivers = getattr(self.gui_instance, "active_drivers", None)
         if isinstance(drivers, list):
             drivers.append(target)
 
     def _unregister_cleanup_target(self, target: Any) -> None:
+        unregister = getattr(self.gui_instance, "unregister_cleanup_target", None)
+        if callable(unregister):
+            unregister(target)
+            return
         drivers = getattr(self.gui_instance, "active_drivers", None)
         if not isinstance(drivers, list):
             return

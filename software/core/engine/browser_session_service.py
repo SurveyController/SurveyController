@@ -98,10 +98,18 @@ class BrowserSessionService:
         self._browser_sem = state.get_browser_semaphore(max(1, int(config.num_threads or 1)))
 
     def _register_driver(self, instance: BrowserDriver) -> None:
+        register = getattr(self.gui_instance, "register_cleanup_target", None)
+        if callable(register):
+            register(instance)
+            return
         if self.gui_instance and hasattr(self.gui_instance, "active_drivers"):
             self.gui_instance.active_drivers.append(instance)
 
     def _unregister_driver(self, instance: BrowserDriver) -> None:
+        unregister = getattr(self.gui_instance, "unregister_cleanup_target", None)
+        if callable(unregister):
+            unregister(instance)
+            return
         if self.gui_instance and hasattr(self.gui_instance, "active_drivers"):
             try:
                 self.gui_instance.active_drivers.remove(instance)
@@ -124,6 +132,10 @@ class BrowserSessionService:
 
         if not self.driver.mark_cleanup_done():
             logging.info("浏览器实例已被其他线程清理，跳过")
+            self._unregister_driver(self.driver)
+            if self.thread_name:
+                self.state.release_proxy_in_use(self.thread_name)
+            self.proxy_address = None
             self.driver = None
             if self.sem_acquired:
                 self._browser_sem.release()

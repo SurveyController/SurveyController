@@ -55,6 +55,12 @@ class _FakeGui:
     def __init__(self) -> None:
         self.active_drivers: list[_FakeDriver] = []
 
+    def register_cleanup_target(self, target) -> None:
+        self.active_drivers.append(target)
+
+    def unregister_cleanup_target(self, target) -> None:
+        self.active_drivers.remove(target)
+
 
 class _FakeBrowserOwner:
     def __init__(self, driver: _FakeDriver, browser_name: str = "edge") -> None:
@@ -170,14 +176,20 @@ class BrowserSessionServiceTests(unittest.TestCase):
         config = self._build_config(headless_mode=True)
         fake_driver = _FakeDriver()
         fake_driver.cleanup_marked = True
-        service = BrowserSessionService(config, state, gui_instance=None, thread_name="Worker-1")
+        gui = _FakeGui()
+        gui.active_drivers.append(fake_driver)
+        service = BrowserSessionService(config, state, gui_instance=gui, thread_name="Worker-1")
         service.driver = fake_driver
+        service.proxy_address = "127.0.0.1:8888"
         service.sem_acquired = True
 
         service.dispose()
 
         self.assertIsNone(service.driver)
+        self.assertIsNone(service.proxy_address)
         self.assertEqual(fake_driver.quit_calls, 0)
+        self.assertEqual(gui.active_drivers, [])
+        self.assertEqual(state.released_threads, ["Worker-1"])
         self.assertEqual(state.semaphore.released, 1)
 
     def test_shutdown_closes_browser_manager_and_clears_reference(self) -> None:

@@ -536,8 +536,7 @@ class DashboardProgressMixin:
             self.start_btn.setText("执行中...")
             self.start_btn.setEnabled(False)
         else:
-            if self._thread_progress_rows:
-                self._thread_clear_timer.start()
+            self._thread_clear_timer.stop()
             if self._completion_notified or self._last_progress >= 100:
                 self.start_btn.setText("重新开始")
             else:

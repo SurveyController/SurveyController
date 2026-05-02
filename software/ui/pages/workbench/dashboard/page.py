@@ -2,6 +2,7 @@
 import threading
 from typing import Optional
 import logging
+from software.app.config import NON_HEADLESS_MAX_THREADS
 from software.logging.action_logger import bind_logged_action
 from software.logging.log_utils import log_suppressed_exception
 
@@ -240,7 +241,7 @@ class DashboardPage(
         spin_row.addSpacing(12)
         spin_row.addWidget(BodyLabel("并发数：", self))
         self.thread_spin = NoWheelSpinBox(self)
-        self.thread_spin.setRange(1, 8)
+        self.thread_spin.setRange(1, NON_HEADLESS_MAX_THREADS)
         self.thread_spin.setMinimumWidth(140)
         self.thread_spin.setMinimumHeight(36)
         spin_row.addWidget(self.thread_spin)

@@ -140,6 +140,31 @@ class RuntimePreparationTests(unittest.TestCase):
         self.assertEqual(artifacts.questions_info[0].provider, "qq")
         self.assertIsNot(artifacts.questions_info[0], config.questions_info[0])
 
+    def test_prepare_execution_artifacts_clamps_threads_by_headless_mode(self) -> None:
+        headless_config = self._build_config()
+        headless_config.headless_mode = True
+        headless_config.threads = 99
+
+        headed_config = self._build_config()
+        headed_config.headless_mode = False
+        headed_config.threads = 99
+
+        with (
+            patch(
+                "software.ui.controller.run_controller_parts.runtime_preparation.build_enabled_reverse_fill_spec",
+                return_value=None,
+            ),
+            patch(
+                "software.ui.controller.run_controller_parts.runtime_preparation.configure_probabilities",
+                return_value=None,
+            ),
+        ):
+            headless_artifacts = prepare_execution_artifacts(headless_config)
+            headed_artifacts = prepare_execution_artifacts(headed_config)
+
+        self.assertEqual(headless_artifacts.execution_config_template.num_threads, 36)
+        self.assertEqual(headed_artifacts.execution_config_template.num_threads, 12)
+
 
 if __name__ == "__main__":
     unittest.main()
