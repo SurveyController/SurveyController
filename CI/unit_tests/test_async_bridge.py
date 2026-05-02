@@ -93,6 +93,18 @@ class AsyncBridgeTests(unittest.TestCase):
         finally:
             bridge.stop()
 
+    def test_run_coroutine_closes_unscheduled_coroutine_when_bridge_is_closed(self) -> None:
+        bridge = AsyncBridgeLoopThread(name="BridgeClosedTest")
+        bridge.stop()
+
+        async def _sample() -> str:
+            return "ok"
+
+        coro = _sample()
+        with self.assertRaisesRegex(RuntimeError, "已关闭"):
+            bridge.run_coroutine(coro)
+        self.assertIsNone(coro.cr_frame)
+
 
 if __name__ == "__main__":
     unittest.main()

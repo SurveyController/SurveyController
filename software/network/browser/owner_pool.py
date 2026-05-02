@@ -31,15 +31,22 @@ from software.network.browser.startup import (
     is_playwright_startup_environment_error,
 )
 
+DEFAULT_MAX_CONTEXTS_PER_BROWSER = 2
+
 
 @dataclass(frozen=True)
 class BrowserPoolConfig:
     logical_concurrency: int
-    max_contexts_per_browser: int = 4
+    max_contexts_per_browser: int = DEFAULT_MAX_CONTEXTS_PER_BROWSER
     owner_count: int = 1
 
     @classmethod
-    def from_concurrency(cls, logical_concurrency: int, *, max_contexts_per_browser: int = 4) -> "BrowserPoolConfig":
+    def from_concurrency(
+        cls,
+        logical_concurrency: int,
+        *,
+        max_contexts_per_browser: int = DEFAULT_MAX_CONTEXTS_PER_BROWSER,
+    ) -> "BrowserPoolConfig":
         concurrency = max(1, int(logical_concurrency or 1))
         max_contexts = max(1, int(max_contexts_per_browser or 1))
         owner_count = max(1, (concurrency + max_contexts - 1) // max_contexts)
@@ -181,7 +188,7 @@ class AsyncBrowserOwner:
         prefer_browsers: Optional[List[str]] = None,
         headless: bool = False,
         window_position: Optional[Tuple[int, int]] = None,
-        max_contexts: int = 4,
+        max_contexts: int = DEFAULT_MAX_CONTEXTS_PER_BROWSER,
     ) -> None:
         self.owner_id = max(1, int(owner_id or 1))
         self._prefer_browsers = list(prefer_browsers or BROWSER_PREFERENCE)
@@ -431,4 +438,5 @@ __all__ = [
     "AsyncBrowserOwner",
     "BrowserOwnerPool",
     "BrowserPoolConfig",
+    "DEFAULT_MAX_CONTEXTS_PER_BROWSER",
 ]

@@ -55,6 +55,22 @@ class _FakeGui:
         self.active_drivers: list[_FakeDriver] = []
 
 
+class _FakeBrowserOwner:
+    def __init__(self, driver: _FakeDriver, browser_name: str = "edge") -> None:
+        self.driver = driver
+        self.browser_name = browser_name
+        self.open_session_calls: list[dict[str, str]] = []
+
+    def open_session(self, *, proxy_address=None, user_agent=None):
+        self.open_session_calls.append(
+            {
+                "proxy_address": proxy_address,
+                "user_agent": user_agent,
+            }
+        )
+        return self.driver
+
+
 class BrowserSessionServiceTests(unittest.TestCase):
     def _build_config(self, *, headless_mode: bool) -> SimpleNamespace:
         return SimpleNamespace(
@@ -92,6 +108,28 @@ class BrowserSessionServiceTests(unittest.TestCase):
 
         self.assertEqual(browser_name, "edge")
         self.assertEqual(fake_driver.window_sizes, [(550, 650)])
+
+    def test_create_browser_keeps_same_proxy_for_headless_browser_and_submit(self) -> None:
+        state = _FakeState()
+        config = SimpleNamespace(
+            headless_mode=True,
+            random_proxy_ip_enabled=True,
+            num_threads=1,
+        )
+        fake_driver = _FakeDriver()
+        service = BrowserSessionService(config, state, gui_instance=None, thread_name="Worker-1")
+
+        with patch("software.core.engine.browser_session_service._select_proxy_for_session", return_value="http://1.1.1.1:8000"), \
+             patch("software.core.engine.browser_session_service.is_proxy_responsive", return_value=True), \
+             patch("software.core.engine.browser_session_service._select_user_agent_for_session", return_value=("", "")), \
+             patch("software.core.engine.browser_session_service.create_browser_manager", return_value=object()), \
+             patch("software.core.engine.browser_session_service.create_playwright_driver", return_value=(fake_driver, "edge")) as create_driver_mock:
+            browser_name = service.create_browser(["edge"], 0, 0)
+
+        self.assertEqual(browser_name, "edge")
+        self.assertEqual(create_driver_mock.call_args.kwargs["proxy_address"], "http://1.1.1.1:8000")
+        self.assertEqual(getattr(fake_driver, "_submit_proxy_address", None), "http://1.1.1.1:8000")
+        self.assertEqual(getattr(fake_driver, "_thread_name", None), "Worker-1")
 
     def test_dispose_without_driver_releases_proxy_and_semaphore(self) -> None:
         state = _FakeState()
@@ -190,6 +228,37 @@ class BrowserSessionServiceTests(unittest.TestCase):
         record_bad_mock.assert_called_once()
         self.assertEqual(state.released_threads, ["Worker-1"])
 
+    def test_create_browser_retries_next_proxy_when_runtime_wait_mode_hits_bad_proxy(self) -> None:
+        state = _FakeState()
+        config = SimpleNamespace(
+            headless_mode=True,
+            random_proxy_ip_enabled=True,
+            num_threads=1,
+        )
+        fake_driver = _FakeDriver()
+        service = BrowserSessionService(config, state, gui_instance=None, thread_name="Worker-1")
+
+        with (
+            patch(
+                "software.core.engine.browser_session_service._select_proxy_for_session",
+                side_effect=["http://1.1.1.1:8000", "http://2.2.2.2:8000"],
+            ),
+            patch(
+                "software.core.engine.browser_session_service.is_proxy_responsive",
+                side_effect=[False, True],
+            ),
+            patch("software.core.engine.browser_session_service._discard_unresponsive_proxy") as discard_mock,
+            patch("software.core.engine.browser_session_service._select_user_agent_for_session", return_value=("", "")),
+            patch("software.core.engine.browser_session_service.create_browser_manager", return_value=object()),
+            patch("software.core.engine.browser_session_service.create_playwright_driver", return_value=(fake_driver, "edge")),
+        ):
+            browser_name = service.create_browser(["edge"], 0, 0, stop_signal=SimpleNamespace(is_set=lambda: False))
+
+        self.assertEqual(browser_name, "edge")
+        self.assertEqual(discard_mock.call_count, 1)
+        self.assertEqual(state.released_threads, ["Worker-1"])
+        self.assertEqual(getattr(fake_driver, "_session_proxy_address", None), "http://2.2.2.2:8000")
+
     def test_create_browser_releases_semaphore_when_driver_creation_fails(self) -> None:
         state = _FakeState()
         config = self._build_config(headless_mode=True)
@@ -207,6 +276,48 @@ class BrowserSessionServiceTests(unittest.TestCase):
         self.assertEqual(state.semaphore.released, 1)
         self.assertEqual(state.released_threads, ["Worker-1"])
         self.assertIsNone(service.proxy_address)
+
+    def test_create_browser_uses_browser_owner_open_session(self) -> None:
+        state = _FakeState()
+        config = self._build_config(headless_mode=True)
+        fake_driver = _FakeDriver()
+        owner = _FakeBrowserOwner(fake_driver, browser_name="edge")
+        service = BrowserSessionService(
+            config,
+            state,
+            gui_instance=None,
+            thread_name="Worker-1",
+            browser_owner=owner,
+        )
+
+        with patch("software.core.engine.browser_session_service._select_proxy_for_session", return_value=None), \
+             patch("software.core.engine.browser_session_service._select_user_agent_for_session", return_value=("UA", "")):
+            browser_name = service.create_browser(["edge"], 0, 0)
+
+        self.assertEqual(browser_name, "edge")
+        self.assertEqual(len(owner.open_session_calls), 1)
+        self.assertEqual(owner.open_session_calls[0]["user_agent"], "UA")
+        self.assertIs(service.driver, fake_driver)
+
+    def test_shutdown_with_browser_owner_does_not_close_browser_manager(self) -> None:
+        state = _FakeState()
+        config = self._build_config(headless_mode=True)
+        fake_driver = _FakeDriver()
+        owner = _FakeBrowserOwner(fake_driver, browser_name="edge")
+        service = BrowserSessionService(
+            config,
+            state,
+            gui_instance=None,
+            thread_name="Worker-1",
+            browser_owner=owner,
+        )
+        service.driver = fake_driver
+
+        with patch("software.core.engine.browser_session_service.shutdown_browser_manager") as shutdown_mock:
+            service.shutdown()
+
+        shutdown_mock.assert_not_called()
+        self.assertEqual(fake_driver.quit_calls, 1)
 
 
 if __name__ == "__main__":
