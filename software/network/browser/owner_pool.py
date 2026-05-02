@@ -32,7 +32,7 @@ from software.network.browser.startup import (
     is_playwright_startup_environment_error,
 )
 
-DEFAULT_MAX_CONTEXTS_PER_BROWSER = 2
+DEFAULT_MAX_CONTEXTS_PER_BROWSER = 4
 
 
 @dataclass(frozen=True)
@@ -331,12 +331,22 @@ class AsyncBrowserOwner:
         )
         for attempt in range(2):
             browser, browser_name = await self._ensure_browser_async()
+            context = None
             try:
                 context = await browser.new_context(**context_args)
                 page = await context.new_page()
                 return context, page, browser_name, self._browser_pid
             except Exception as exc:
                 last_exc = exc
+                if context is not None:
+                    try:
+                        await context.close()
+                    except Exception as close_exc:
+                        log_suppressed_exception(
+                            "AsyncBrowserOwner._open_session_async context.close after failure",
+                            close_exc,
+                            level=logging.WARNING,
+                        )
                 if attempt == 0 and _is_browser_disconnected_error(exc):
                     logging.warning(
                         "AsyncBrowserOwner 检测到底座浏览器已断开，准备重建后重试一次：owner=%s error=%s",

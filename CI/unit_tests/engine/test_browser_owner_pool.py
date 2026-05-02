@@ -10,8 +10,14 @@ from software.network.browser.owner_pool import AsyncBrowserOwner, AsyncBrowserD
 
 
 class _FakeContext:
+    def __init__(self) -> None:
+        self.close_calls = 0
+
     async def new_page(self):
         return "page-ok"
+
+    async def close(self):
+        self.close_calls += 1
 
 
 class _AlwaysClosedBrowser:
@@ -22,6 +28,19 @@ class _AlwaysClosedBrowser:
 class _HealthyBrowser:
     async def new_context(self, **_kwargs):
         return _FakeContext()
+
+
+class _BrokenPageContext(_FakeContext):
+    async def new_page(self):
+        raise RuntimeError("new_page failed")
+
+
+class _BrokenPageBrowser:
+    def __init__(self, context: _BrokenPageContext) -> None:
+        self.context = context
+
+    async def new_context(self, **_kwargs):
+        return self.context
 
 
 class AsyncBrowserOwnerTests(unittest.IsolatedAsyncioTestCase):
@@ -53,6 +72,28 @@ class AsyncBrowserOwnerTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(owner._ensure_browser_async.await_count, 2)
         owner.mark_broken.assert_called_once()
         owner._shutdown_browser_async.assert_awaited_once()
+
+    async def test_open_session_async_closes_context_when_new_page_fails(self) -> None:
+        broken_context = _BrokenPageContext()
+        owner = SimpleNamespace(
+            owner_id=1,
+            _headless=True,
+            _browser_pid=9527,
+            _ensure_browser_async=AsyncMock(return_value=(_BrokenPageBrowser(broken_context), "edge")),
+            mark_broken=Mock(),
+            _shutdown_browser_async=AsyncMock(),
+        )
+
+        with self.assertRaisesRegex(RuntimeError, "new_page failed"):
+            await AsyncBrowserOwner._open_session_async(
+                owner,
+                proxy_address="http://1.1.1.1:8000",
+                user_agent="UA",
+            )
+
+        self.assertEqual(broken_context.close_calls, 1)
+        owner.mark_broken.assert_not_called()
+        owner._shutdown_browser_async.assert_not_awaited()
 
 
 class AsyncBrowserOwnerThreadingTests(unittest.TestCase):

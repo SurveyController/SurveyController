@@ -52,6 +52,7 @@ class EngineGuiAdapter:
     ):
         self.random_ip_enabled_var = BoolVar(False)
         self.active_drivers: List[Any] = []
+        self._active_drivers_lock = threading.Lock()
         self._dispatcher = dispatcher
         self._async_dispatcher = async_dispatcher or dispatcher
         self._stop_signal = stop_signal
@@ -186,27 +187,53 @@ class EngineGuiAdapter:
     def is_random_ip_enabled(self) -> bool:
         return bool(self.random_ip_enabled_var.get())
 
+    def register_cleanup_target(self, target: Any) -> None:
+        if target is None:
+            return
+        with self._active_drivers_lock:
+            self.active_drivers.append(target)
+
+    def unregister_cleanup_target(self, target: Any) -> None:
+        if target is None:
+            return
+        with self._active_drivers_lock:
+            try:
+                self.active_drivers.remove(target)
+            except ValueError:
+                logging.info("清理目标已不存在，跳过反注册")
+
+    def _drain_cleanup_targets(self) -> List[Any]:
+        with self._active_drivers_lock:
+            if not self.active_drivers:
+                return []
+            drained = list(self.active_drivers)
+            self.active_drivers.clear()
+            return drained
+
     def cleanup_browsers(self) -> None:
-        drivers = list(self.active_drivers or [])
-        self.active_drivers.clear()
         cleaned = 0
         seen: set[int] = set()
-        for driver in drivers:
-            identifier = id(driver)
-            if identifier in seen:
-                continue
-            seen.add(identifier)
-            try:
-                mark_cleanup_done = getattr(driver, "mark_cleanup_done", None)
-                if callable(mark_cleanup_done) and not mark_cleanup_done():
+        while True:
+            drivers = self._drain_cleanup_targets()
+            if not drivers:
+                break
+            # LIFO 清理可确保先关 context/page，再关共享 browser pool。
+            for driver in reversed(drivers):
+                identifier = id(driver)
+                if identifier in seen:
                     continue
-                quit_driver = getattr(driver, "quit", None)
-                if callable(quit_driver):
-                    quit_driver()
-                    cleaned += 1
-            except Exception:
-                logging.warning("[兜底清理] 强制关闭浏览器失败", exc_info=True)
-        if drivers:
+                seen.add(identifier)
+                try:
+                    mark_cleanup_done = getattr(driver, "mark_cleanup_done", None)
+                    if callable(mark_cleanup_done) and not mark_cleanup_done():
+                        continue
+                    quit_driver = getattr(driver, "quit", None)
+                    if callable(quit_driver):
+                        quit_driver()
+                        cleaned += 1
+                except Exception:
+                    logging.warning("[兜底清理] 强制关闭浏览器失败", exc_info=True)
+        if seen:
             logging.info("[兜底清理] 已强制关闭 %d/%d 个 driver 实例", cleaned, len(seen))
 
 
