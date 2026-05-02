@@ -219,15 +219,18 @@ class BrowserSessionService:
                             continue
                 raise
 
-            self._register_driver(self.driver)
-            setattr(self.driver, "_thread_name", self.thread_name)
-            setattr(self.driver, "_session_state", self.state)
-            setattr(self.driver, "_session_proxy_address", self.proxy_address)
-            setattr(self.driver, "_submit_proxy_address", submit_proxy_address)
+            driver = self.driver
+            if driver is None:
+                raise RuntimeError("浏览器创建完成后 driver 为空")
+            self._register_driver(driver)
+            setattr(driver, "_thread_name", self.thread_name)
+            setattr(driver, "_session_state", self.state)
+            setattr(driver, "_session_proxy_address", self.proxy_address)
+            setattr(driver, "_submit_proxy_address", submit_proxy_address)
             runtime_window_size = _resolve_runtime_window_size(self.config)
             if runtime_window_size is not None:
                 width, height = runtime_window_size
-                self.driver.set_window_size(width, height)
+                driver.set_window_size(width, height)
             return active_browser
 
 

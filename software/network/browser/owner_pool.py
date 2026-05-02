@@ -8,7 +8,7 @@ import random
 import threading
 import time
 from dataclasses import dataclass
-from typing import List, Optional, Set, Tuple
+from typing import Any, List, Optional, Set, Tuple
 
 from software.app.config import BROWSER_PREFERENCE
 from software.logging.log_utils import log_suppressed_exception

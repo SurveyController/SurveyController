@@ -372,7 +372,7 @@ class ExecutionLoop:
 
     def _handle_proxy_connection_error(
         self,
-        session: BrowserSessionService,
+        session: BrowserSessionService | None,
         stop_signal: threading.Event,
         *,
         thread_name: str,
@@ -380,7 +380,7 @@ class ExecutionLoop:
         if stop_signal.is_set():
             return True
         logging.warning("代理连接失败，当前会话将废弃并重新尝试")
-        if session.proxy_address:
+        if session is not None and session.proxy_address:
             _discard_unresponsive_proxy(self.state, session.proxy_address)
         if self.config.random_proxy_ip_enabled:
             self._update_thread_status(thread_name, "代理失效，等待新代理", running=True)
@@ -435,12 +435,14 @@ class ExecutionLoop:
         base_browser_preference: list[str],
         preferred_browsers: list[str],
     ) -> None:
+        browser_owner = self.browser_owner
+        assert browser_owner is not None
         pool = PreloadedBrowserSessionPool(
             config=self.config,
             state=self.state,
             gui_instance=self.gui_instance,
             thread_name=thread_name,
-            browser_owner=self.browser_owner,
+            browser_owner=browser_owner,
             page_loader=_load_survey_page,
         )
         active_session: BrowserSessionService | None = None
@@ -459,7 +461,7 @@ class ExecutionLoop:
                     self.state,
                     self.gui_instance,
                     thread_name,
-                    browser_owner=self.browser_owner,
+                    browser_owner=browser_owner,
                 )
 
             should_refill = False

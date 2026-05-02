@@ -7,7 +7,7 @@ import random
 import subprocess
 import threading
 import time
-from typing import TYPE_CHECKING, Literal, Optional, Set
+from typing import TYPE_CHECKING, Any, Literal, Optional, Protocol, Set
 
 from software.logging.log_utils import log_suppressed_exception
 from software.network.browser.element import PlaywrightElement
@@ -19,6 +19,46 @@ from software.network.browser.subprocess_utils import build_local_text_subproces
 if TYPE_CHECKING:
     from playwright.sync_api import Browser, BrowserContext, Page, Playwright
     from software.network.browser.manager import BrowserManager
+
+
+class BrowserDriver(Protocol):
+    browser_name: str
+    session_id: str
+    browser_pid: Optional[int]
+    browser_pids: Set[int]
+
+    def find_element(self, by: str, value: str) -> Any: ...
+
+    def find_elements(self, by: str, value: str) -> list[Any]: ...
+
+    def execute_script(self, script: str, *args: Any) -> Any: ...
+
+    def get(
+        self,
+        url: str,
+        timeout: int = 20000,
+        wait_until: Literal["commit", "domcontentloaded", "load", "networkidle"] = "domcontentloaded",
+    ) -> None: ...
+
+    @property
+    def current_url(self) -> str: ...
+
+    @property
+    def page(self) -> Any: ...
+
+    @property
+    def page_source(self) -> str: ...
+
+    @property
+    def title(self) -> str: ...
+
+    def set_window_size(self, width: int, height: int) -> None: ...
+
+    def refresh(self) -> None: ...
+
+    def mark_cleanup_done(self) -> bool: ...
+
+    def quit(self) -> None: ...
 
 
 class PlaywrightDriver:
@@ -227,9 +267,5 @@ class PlaywrightDriver:
                 self._playwright.stop()
             except Exception as exc:
                 log_suppressed_exception("browser_session.PlaywrightDriver.quit playwright.stop", exc, level=logging.WARNING)
-
-
-BrowserDriver = PlaywrightDriver
-
 
 __all__ = ["BrowserDriver", "PlaywrightDriver"]

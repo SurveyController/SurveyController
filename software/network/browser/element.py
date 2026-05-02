@@ -3,18 +3,14 @@
 from __future__ import annotations
 
 import logging
-from typing import TYPE_CHECKING, Dict, Optional
+from typing import Any, Dict, Optional
 
 from software.logging.log_utils import log_suppressed_exception
 from software.network.browser.exceptions import NoSuchElementException
 from software.network.browser.options import _build_selector
 
-if TYPE_CHECKING:
-    from playwright.sync_api import Page
-
-
 class PlaywrightElement:
-    def __init__(self, handle, page: Page):
+    def __init__(self, handle, page: Any):
         self._handle = handle
         self._page = page
 
