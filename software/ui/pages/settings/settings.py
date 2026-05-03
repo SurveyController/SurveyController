@@ -449,11 +449,11 @@ class SettingsPage(ScrollArea):
 
     def _on_auto_save_log_retention_changed(self):
         idx = self.auto_save_logs_combo.currentIndex()
-        keep_count = (
-            int(self.auto_save_logs_combo.itemData(idx))
-            if idx >= 0 and self.auto_save_logs_combo.itemData(idx) is not None
-            else DEFAULT_AUTO_SAVE_LOG_RETENTION_COUNT
-        )
+        keep_count = DEFAULT_AUTO_SAVE_LOG_RETENTION_COUNT
+        if idx >= 0:
+            keep_count_data = self.auto_save_logs_combo.itemData(idx)
+            if keep_count_data is not None:
+                keep_count = int(cast(Any, keep_count_data))
         self._apply_auto_save_log_retention_count(keep_count)
 
     def _on_reset_ui_settings(self):
