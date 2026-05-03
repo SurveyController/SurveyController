@@ -1,240 +1,28 @@
 """运行控制器 - 连接 UI 与引擎的业务逻辑桥接层。"""
 from __future__ import annotations
 
-import logging
-import queue
 import threading
-from typing import Any, Callable, Dict, List, Optional, Set
+from typing import Any, Callable, Dict, List, Optional
 
-from PySide6.QtCore import QCoreApplication, QObject, QTimer, Signal, Slot
+from PySide6.QtCore import QObject, QTimer, Signal, Slot
 
+from software.core.engine.cleanup import CleanupRunner
 from software.core.questions.config import QuestionEntry
 from software.core.task import ExecutionState
+from software.io.config import RuntimeConfig
 from software.providers.contracts import SurveyQuestionMeta
+from software.system import SystemSleepBlocker
+from software.ui.controller.engine_adapter import BoolVar as _BoolVar, EngineGuiAdapter
 from software.ui.controller.run_controller_parts import (
     RunControllerParsingMixin,
     RunControllerPersistenceMixin,
     RunControllerRuntimeMixin,
 )
 from software.ui.controller.run_controller_parts.runtime_preparation import PreparedExecutionArtifacts
-from software.core.engine.cleanup import CleanupRunner
-from software.io.config import RuntimeConfig
-from software.system import SystemSleepBlocker
+from software.ui.controller.runtime_state import RunControllerRuntimeState, RuntimeUiStateStore
+from software.ui.controller.ui_dispatcher import UiCallbackDispatcher
 
-
-class BoolVar:
-    """简单的布尔状态封装，用于 UI 适配。"""
-
-    def __init__(self, value: bool = False):
-        self._value = bool(value)
-
-    def get(self) -> bool:
-        return self._value
-
-    def set(self, value: bool):
-        self._value = bool(value)
-
-
-class EngineGuiAdapter:
-    """传给引擎的 UI 适配器，负责把回调桥接回 Qt 主线程。"""
-
-    def __init__(
-        self,
-        dispatcher: Callable[[Callable[[], Any]], Any],
-        stop_signal: threading.Event,
-        quota_request_form_opener: Optional[Callable[[], bool]] = None,
-        on_ip_counter: Optional[Callable[[float, float, bool], None]] = None,
-        on_random_ip_loading: Optional[Callable[[bool, str], None]] = None,
-        message_handler: Optional[Callable[[str, str, str], None]] = None,
-        confirm_handler: Optional[Callable[[str, str], bool]] = None,
-        async_dispatcher: Optional[Callable[[Callable[[], Any]], Any]] = None,
-        cleanup_runner: Optional[CleanupRunner] = None,
-    ):
-        self.random_ip_enabled_var = BoolVar(False)
-        self.active_drivers: List[Any] = []
-        self._active_drivers_lock = threading.Lock()
-        self._dispatcher = dispatcher
-        self._async_dispatcher = async_dispatcher or dispatcher
-        self._stop_signal = stop_signal
-        self._quota_request_form_opener = quota_request_form_opener
-        self._on_ip_counter = on_ip_counter
-        self._on_random_ip_loading = on_random_ip_loading
-        self._message_handler = message_handler
-        self._confirm_handler = confirm_handler
-        self.execution_state: Optional[ExecutionState] = None
-        self._pause_event = threading.Event()
-        self._pause_reason = ""
-        self._cleanup_runner = cleanup_runner
-
-    def dispatch_to_ui(self, callback: Callable[[], Any]) -> None:
-        try:
-            self._dispatcher(callback)
-        except Exception:
-            logging.info("UI 派发失败，尝试直接执行回调", exc_info=True)
-            try:
-                callback()
-            except Exception:
-                logging.info("UI 派发失败且回调直接执行失败", exc_info=True)
-
-    def dispatch_to_ui_async(self, callback: Callable[[], Any]) -> None:
-        try:
-            self._async_dispatcher(callback)
-        except Exception:
-            logging.info("异步 UI 派发失败，尝试直接执行回调", exc_info=True)
-            try:
-                callback()
-            except Exception:
-                logging.info("异步 UI 派发失败且回调直接执行失败", exc_info=True)
-
-    def pause_run(self, reason: str = "") -> None:
-        self._pause_reason = str(reason or "已暂停")
-        self._pause_event.set()
-
-    def resume_run(self) -> None:
-        self._pause_reason = ""
-        self._pause_event.clear()
-
-    def is_paused(self) -> bool:
-        return bool(self._pause_event.is_set())
-
-    def get_pause_reason(self) -> str:
-        return self._pause_reason or ""
-
-    def wait_if_paused(self, stop_signal: Optional[threading.Event] = None) -> None:
-        signal = stop_signal or self._stop_signal
-        while self.is_paused() and signal and not signal.is_set():
-            signal.wait(0.25)
-
-    def stop_run(self):
-        self._stop_signal.set()
-
-    def bind_ui_callbacks(
-        self,
-        *,
-        quota_request_form_opener: Optional[Callable[[], bool]] = None,
-        on_ip_counter: Optional[Callable[[float, float, bool], None]] = None,
-        on_random_ip_loading: Optional[Callable[[bool, str], None]] = None,
-        message_handler: Optional[Callable[[str, str, str], None]] = None,
-        confirm_handler: Optional[Callable[[str, str], bool]] = None,
-    ) -> None:
-        self._quota_request_form_opener = quota_request_form_opener
-        self._on_ip_counter = on_ip_counter
-        self._on_random_ip_loading = on_random_ip_loading
-        self._message_handler = message_handler
-        self._confirm_handler = confirm_handler
-
-    def open_quota_request_form(self) -> bool:
-        if callable(self._quota_request_form_opener):
-            try:
-                return bool(self._dispatcher(self._quota_request_form_opener))
-            except Exception:
-                logging.warning("打开额度申请表单失败", exc_info=True)
-                return False
-        return False
-
-    def update_random_ip_counter(self, used: float, total: float, custom_api: bool) -> None:
-        callback = self._on_ip_counter
-        if not callable(callback):
-            return
-
-        def _apply() -> None:
-            try:
-                callback(float(used), float(total), bool(custom_api))
-            except Exception:
-                logging.info("更新随机IP计数失败", exc_info=True)
-
-        self.dispatch_to_ui_async(_apply)
-
-    def set_random_ip_loading(self, loading: bool, message: str = "") -> None:
-        callback = self._on_random_ip_loading
-        if not callable(callback):
-            return
-
-        def _apply() -> None:
-            try:
-                callback(bool(loading), str(message or ""))
-            except Exception:
-                logging.info("更新随机IP加载状态失败", exc_info=True)
-
-        self.dispatch_to_ui_async(_apply)
-
-    def show_message_dialog(self, title: str, message: str, *, level: str = "info") -> None:
-        callback = self._message_handler
-        if not callable(callback):
-            return
-
-        def _apply() -> None:
-            callback(str(title or ""), str(message or ""), str(level or "info"))
-
-        return self._dispatcher(_apply)
-
-    def show_confirm_dialog(self, title: str, message: str) -> bool:
-        callback = self._confirm_handler
-        if not callable(callback):
-            return False
-        try:
-            def _apply() -> bool:
-                return bool(callback(str(title or ""), str(message or "")))
-
-            return bool(self._dispatcher(_apply))
-        except Exception:
-            logging.warning("显示确认对话框失败", exc_info=True)
-            return False
-
-    def set_random_ip_enabled(self, enabled: bool) -> None:
-        self.random_ip_enabled_var.set(bool(enabled))
-
-    def is_random_ip_enabled(self) -> bool:
-        return bool(self.random_ip_enabled_var.get())
-
-    def register_cleanup_target(self, target: Any) -> None:
-        if target is None:
-            return
-        with self._active_drivers_lock:
-            self.active_drivers.append(target)
-
-    def unregister_cleanup_target(self, target: Any) -> None:
-        if target is None:
-            return
-        with self._active_drivers_lock:
-            try:
-                self.active_drivers.remove(target)
-            except ValueError:
-                logging.info("清理目标已不存在，跳过反注册")
-
-    def _drain_cleanup_targets(self) -> List[Any]:
-        with self._active_drivers_lock:
-            if not self.active_drivers:
-                return []
-            drained = list(self.active_drivers)
-            self.active_drivers.clear()
-            return drained
-
-    def cleanup_browsers(self) -> None:
-        cleaned = 0
-        seen: set[int] = set()
-        while True:
-            drivers = self._drain_cleanup_targets()
-            if not drivers:
-                break
-            # LIFO 清理可确保先关 context/page，再关共享 browser pool。
-            for driver in reversed(drivers):
-                identifier = id(driver)
-                if identifier in seen:
-                    continue
-                seen.add(identifier)
-                try:
-                    mark_cleanup_done = getattr(driver, "mark_cleanup_done", None)
-                    if callable(mark_cleanup_done) and not mark_cleanup_done():
-                        continue
-                    quit_driver = getattr(driver, "quit", None)
-                    if callable(quit_driver):
-                        quit_driver()
-                        cleaned += 1
-                except Exception:
-                    logging.warning("[兜底清理] 强制关闭浏览器失败", exc_info=True)
-        if seen:
-            logging.info("[兜底清理] 已强制关闭 %d/%d 个 driver 实例", cleaned, len(seen))
+BoolVar = _BoolVar
 
 
 class RunController(
@@ -278,27 +66,14 @@ class RunController(
         self.confirm_dialog_handler: Optional[Callable[[str, str], bool]] = None
         self.custom_confirm_dialog_handler: Optional[Callable[[str, str, str, str], bool]] = None
         self._engine_adapter_cls = EngineGuiAdapter
-        self.adapter = self._create_adapter(self.stop_event, random_ip_enabled=False)
         self._sleep_blocker = SystemSleepBlocker()
         self.running = False
-        self._paused_state = False
         self._status_timer = QTimer(self)
         self._status_timer.setInterval(600)
         self._status_timer.timeout.connect(self._emit_status)
-        self._completion_cleanup_done = False
-        self._cleanup_scheduled = False
-        self._stopped_by_stop_run = False
-        self._quick_feedback_prompt_emitted = False
-        self._starting = False
-        self._initializing = False
-        self._init_stage_text = ""
-        self._init_steps: List[Dict[str, str]] = []
-        self._init_completed_steps: Set[str] = set()
-        self._init_current_step_key = ""
-        self._init_gate_stop_event: Optional[threading.Event] = None
-        self._prepared_execution_artifacts: Optional[PreparedExecutionArtifacts] = None
-        self._runtime_ui_state: Dict[str, Any] = {}
-        self._ui_callback_queue: "queue.Queue[Callable[[], Any]]" = queue.Queue()
+        self._runtime_state = RunControllerRuntimeState()
+        self._runtime_ui_store = RuntimeUiStateStore()
+        self._ui_dispatcher = UiCallbackDispatcher(self._uiCallbackQueued.emit)
         self._random_ip_toggle_lock = threading.Lock()
         self._random_ip_toggle_active = False
         self._random_ip_server_sync_lock = threading.Lock()
@@ -306,51 +81,133 @@ class RunController(
         self._random_ip_last_server_sync_at = 0.0
         self._startup_status_check_lock = threading.Lock()
         self._startup_status_check_active = False
-        self._startup_service_warnings: List[str] = []
         self._uiCallbackQueued.connect(self._drain_ui_callbacks)
+        self.adapter = self._create_adapter(self.stop_event, random_ip_enabled=False)
+
+    @property
+    def _paused_state(self) -> bool:
+        return self._runtime_state.paused
+
+    @_paused_state.setter
+    def _paused_state(self, value: bool) -> None:
+        self._runtime_state.paused = bool(value)
+
+    @property
+    def _completion_cleanup_done(self) -> bool:
+        return self._runtime_state.completion_cleanup_done
+
+    @_completion_cleanup_done.setter
+    def _completion_cleanup_done(self, value: bool) -> None:
+        self._runtime_state.completion_cleanup_done = bool(value)
+
+    @property
+    def _cleanup_scheduled(self) -> bool:
+        return self._runtime_state.cleanup_scheduled
+
+    @_cleanup_scheduled.setter
+    def _cleanup_scheduled(self, value: bool) -> None:
+        self._runtime_state.cleanup_scheduled = bool(value)
+
+    @property
+    def _stopped_by_stop_run(self) -> bool:
+        return self._runtime_state.stopped_by_stop_run
+
+    @_stopped_by_stop_run.setter
+    def _stopped_by_stop_run(self, value: bool) -> None:
+        self._runtime_state.stopped_by_stop_run = bool(value)
+
+    @property
+    def _quick_feedback_prompt_emitted(self) -> bool:
+        return self._runtime_state.quick_feedback_prompt_emitted
+
+    @_quick_feedback_prompt_emitted.setter
+    def _quick_feedback_prompt_emitted(self, value: bool) -> None:
+        self._runtime_state.quick_feedback_prompt_emitted = bool(value)
+
+    @property
+    def _starting(self) -> bool:
+        return self._runtime_state.starting
+
+    @_starting.setter
+    def _starting(self, value: bool) -> None:
+        self._runtime_state.starting = bool(value)
+
+    @property
+    def _initializing(self) -> bool:
+        return self._runtime_state.initializing
+
+    @_initializing.setter
+    def _initializing(self, value: bool) -> None:
+        self._runtime_state.initializing = bool(value)
+
+    @property
+    def _init_stage_text(self) -> str:
+        return self._runtime_state.init_stage_text
+
+    @_init_stage_text.setter
+    def _init_stage_text(self, value: str) -> None:
+        self._runtime_state.init_stage_text = str(value or "")
+
+    @property
+    def _init_steps(self) -> List[Dict[str, str]]:
+        return self._runtime_state.init_steps
+
+    @_init_steps.setter
+    def _init_steps(self, value: List[Dict[str, str]]) -> None:
+        self._runtime_state.init_steps = list(value or [])
+
+    @property
+    def _init_completed_steps(self) -> set[str]:
+        return self._runtime_state.init_completed_steps
+
+    @_init_completed_steps.setter
+    def _init_completed_steps(self, value: set[str]) -> None:
+        self._runtime_state.init_completed_steps = set(value or set())
+
+    @property
+    def _init_current_step_key(self) -> str:
+        return self._runtime_state.init_current_step_key
+
+    @_init_current_step_key.setter
+    def _init_current_step_key(self, value: str) -> None:
+        self._runtime_state.init_current_step_key = str(value or "")
+
+    @property
+    def _init_gate_stop_event(self) -> Optional[threading.Event]:
+        return self._runtime_state.init_gate_stop_event
+
+    @_init_gate_stop_event.setter
+    def _init_gate_stop_event(self, value: Optional[threading.Event]) -> None:
+        self._runtime_state.init_gate_stop_event = value
+
+    @property
+    def _prepared_execution_artifacts(self) -> Optional[PreparedExecutionArtifacts]:
+        return self._runtime_state.prepared_execution_artifacts
+
+    @_prepared_execution_artifacts.setter
+    def _prepared_execution_artifacts(self, value: Optional[PreparedExecutionArtifacts]) -> None:
+        self._runtime_state.prepared_execution_artifacts = value
+
+    @property
+    def _startup_service_warnings(self) -> List[str]:
+        return self._runtime_state.startup_service_warnings
+
+    @_startup_service_warnings.setter
+    def _startup_service_warnings(self, value: List[str]) -> None:
+        self._runtime_state.startup_service_warnings = list(value or [])
 
     def is_initializing(self) -> bool:
         return bool(self._initializing)
 
     @Slot()
     def _drain_ui_callbacks(self) -> None:
-        while True:
-            try:
-                callback = self._ui_callback_queue.get_nowait()
-            except queue.Empty:
-                return
-            if not callable(callback):
-                continue
-            try:
-                callback()
-            except Exception:
-                logging.info("执行 UI 回调失败", exc_info=True)
+        self._ui_dispatcher.drain()
 
     def _enqueue_ui_callback(self, callback: Callable[[], Any]) -> bool:
-        try:
-            self._ui_callback_queue.put_nowait(callback)
-            self._uiCallbackQueued.emit()
-            return True
-        except Exception:
-            logging.warning("UI 回调入队失败", exc_info=True)
-            return False
+        return self._ui_dispatcher.enqueue(callback)
 
     def _dispatch_to_ui_async(self, callback: Callable[[], Any]) -> None:
-        if not callable(callback):
-            return
-        if QCoreApplication.instance() is None:
-            try:
-                callback()
-            except Exception:
-                logging.info("无 QCoreApplication 时执行回调失败", exc_info=True)
-            return
-        if threading.current_thread() is threading.main_thread():
-            try:
-                callback()
-            except Exception:
-                logging.info("主线程直接执行回调失败", exc_info=True)
-            return
-        self._enqueue_ui_callback(callback)
+        self._ui_dispatcher.dispatch_async(callback)
 
     def configure_ui_bridge(
         self,
@@ -370,50 +227,20 @@ class RunController(
         self.custom_confirm_dialog_handler = custom_confirm_handler
         self._sync_adapter_ui_bridge()
 
-    @staticmethod
-    def _normalize_runtime_ui_value(key: str, value: Any) -> Any:
-        if key in {"target", "threads"}:
-            return max(1, int(value or 1))
-        if key in {"random_ip_enabled", "headless_mode", "timed_mode_enabled"}:
-            return bool(value)
-        if key == "proxy_source":
-            normalized = str(value or "default").strip().lower()
-            return normalized if normalized in {"default", "benefit", "custom"} else "default"
-        if key == "answer_duration":
-            raw = value if isinstance(value, (list, tuple)) else (0, 0)
-            low = max(0, int(raw[0] if len(raw) >= 1 else 0))
-            high = max(low, int(raw[1] if len(raw) >= 2 else low))
-            return (low, high)
-        return value
-
     def get_runtime_ui_state(self) -> Dict[str, Any]:
-        return dict(self._runtime_ui_state)
+        return self._runtime_ui_store.get()
 
     def set_runtime_ui_state(self, emit: bool = True, **updates: Any) -> Dict[str, Any]:
-        normalized: Dict[str, Any] = {}
-        changed = False
-        for key, value in updates.items():
-            normalized_value = self._normalize_runtime_ui_value(key, value)
-            normalized[key] = normalized_value
-            if self._runtime_ui_state.get(key) != normalized_value:
-                changed = True
-        if normalized:
-            self._runtime_ui_state.update(normalized)
+        state, changed = self._runtime_ui_store.update(**updates)
         if emit and changed:
-            self.runtimeUiStateChanged.emit(dict(self._runtime_ui_state))
-        return dict(self._runtime_ui_state)
+            self.runtimeUiStateChanged.emit(dict(state))
+        return dict(state)
 
     def sync_runtime_ui_state_from_config(self, config: RuntimeConfig, *, emit: bool = True) -> Dict[str, Any]:
-        return self.set_runtime_ui_state(
-            emit=emit,
-            target=getattr(config, "target", 1),
-            threads=getattr(config, "threads", 1),
-            random_ip_enabled=getattr(config, "random_ip_enabled", False),
-            headless_mode=getattr(config, "headless_mode", True),
-            timed_mode_enabled=getattr(config, "timed_mode_enabled", False),
-            proxy_source=getattr(config, "proxy_source", "default"),
-            answer_duration=getattr(config, "answer_duration", (0, 0)),
-        )
+        state, changed = self._runtime_ui_store.sync_from_config(config)
+        if emit and changed:
+            self.runtimeUiStateChanged.emit(dict(state))
+        return dict(state)
 
     def notify_random_ip_loading(self, loading: bool, message: str = "") -> None:
         self.randomIpLoadingChanged.emit(bool(loading), str(message or ""))
@@ -446,6 +273,8 @@ class RunController(
                 try:
                     on_done(bool(final_enabled))
                 except Exception:
+                    import logging
+
                     logging.info("随机IP异步回调执行失败", exc_info=True)
             self.refresh_random_ip_counter(adapter=target_adapter)
 
@@ -454,6 +283,8 @@ class RunController(
             try:
                 final_enabled = bool(self.toggle_random_ip(bool(enabled), adapter=target_adapter))
             except Exception:
+                import logging
+
                 logging.warning("随机IP异步切换失败", exc_info=True)
                 if target_adapter is not None:
                     try:
@@ -481,6 +312,3 @@ class RunController(
             message_handler=self.message_dialog_handler,
             confirm_handler=self.confirm_dialog_handler,
         )
-
-
-

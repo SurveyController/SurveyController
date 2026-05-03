@@ -13,7 +13,6 @@ from PySide6.QtWidgets import (
     QWidget,
     QVBoxLayout,
     QHBoxLayout,
-    QToolButton,
     QSizePolicy,
 )
 from qfluentwidgets import (
@@ -23,10 +22,7 @@ from qfluentwidgets import (
     ElevatedCardWidget,
     CardWidget,
     PushButton,
-    ToolButton,
-    PrimaryPushButton,
     TableWidget,
-    LineEdit,
     IndeterminateProgressRing,
     ProgressRing,
     CommandBar,
@@ -42,15 +38,14 @@ from qfluentwidgets import (
 )
 
 from software.ui.pages.workbench.dashboard.cards import DashboardActionCard, RuntimeSettingsHintCard
-from software.ui.pages.workbench.dashboard.parts.clipboard import DashboardClipboardMixin
 from software.ui.pages.workbench.dashboard.parts.config_io import DashboardConfigIOMixin
 from software.ui.pages.workbench.dashboard.parts.entries import DashboardEntriesMixin
 from software.ui.pages.workbench.dashboard.parts.progress import DashboardProgressMixin
 from software.ui.pages.workbench.dashboard.parts.random_ip import DashboardRandomIPMixin
 from software.ui.pages.workbench.dashboard.parts.run_actions import DashboardRunActionsMixin
 from software.ui.pages.workbench.dashboard.parts.survey_parse import DashboardSurveyParseMixin
+from software.ui.pages.workbench.shared import SurveyClipboardMixin, SurveyEntryCard
 from software.ui.helpers.fluent_tooltip import install_tooltip_filter
-from software.ui.widgets.paste_only_menu import PasteOnlyMenu
 from software.ui.widgets.config_drawer import ConfigDrawer
 from software.ui.widgets.full_width_infobar import FullWidthInfoBar
 from software.ui.widgets.no_wheel import NoWheelSpinBox
@@ -60,7 +55,7 @@ from software.ui.pages.workbench.runtime_panel import RuntimePage
 from software.ui.pages.workbench.strategy import QuestionStrategyPage
 
 class DashboardPage(
-    DashboardClipboardMixin,
+    SurveyClipboardMixin,
     DashboardSurveyParseMixin,
     DashboardConfigIOMixin,
     DashboardRunActionsMixin,
@@ -152,17 +147,7 @@ class DashboardPage(
         self._ip_low_infobar.addWidget(self._ip_low_contact_link)
         layout.addWidget(self._ip_low_infobar)
 
-        self.link_card = CardWidget(self)
-        self.link_card.setAcceptDrops(True)
-        self.link_card.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
-        link_layout = QVBoxLayout(self.link_card)
-        link_layout.setContentsMargins(12, 12, 12, 12)
-        link_layout.setSpacing(8)
-
-        # 顶部操作行：配置操作 + 二维码上传 + 链接输入框同一行
-        title_row = QHBoxLayout()
-        title_row.setSpacing(8)
-        self.config_command_bar = CommandBar(self.link_card)
+        self.config_command_bar = CommandBar(self)
         self.config_command_bar.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonTextBesideIcon)
         self.config_list_action = Action(FluentIcon.MENU, "配置列表", self.config_command_bar)
         self.load_cfg_action = Action(FluentIcon.DOCUMENT, "载入配置", self.config_command_bar)
@@ -171,47 +156,19 @@ class DashboardPage(
             [self.config_list_action, self.load_cfg_action, self.save_cfg_action]
         )
         self.config_command_bar.resizeToSuitableWidth()
-        self.qr_btn = ToolButton(self)
-        self.qr_btn.setIcon(FluentIcon.QRCODE)
-        self.qr_btn.setFixedSize(36, 36)
-        self.qr_btn.setToolTip("上传问卷二维码图片")
-        install_tooltip_filter(self.qr_btn)
-        title_row.addWidget(self.qr_btn)
-        self.url_edit = LineEdit(self)
-        self.url_edit.setPlaceholderText("在此拖入/粘贴问卷二维码图片或输入问卷链接")
-        self.url_edit.setClearButtonEnabled(True)
-        # 启用拖放功能
-        self.url_edit.setAcceptDrops(True)
-        self.url_edit.installEventFilter(self)
-        # 仅问卷链接输入框需要 qfluentwidgets 风格的"粘贴"单项菜单
-        self._paste_only_menu = PasteOnlyMenu(self)
-        self.url_edit.installEventFilter(self._paste_only_menu)
-        title_row.addWidget(self.url_edit, 1)
-        title_row.addWidget(self.config_command_bar)
-        link_layout.addLayout(title_row)
-
-        # 只保留"自动配置问卷"按钮
-        btn_row = QHBoxLayout()
-        btn_row.setSpacing(8)
-        self.parse_btn = PrimaryPushButton(FluentIcon.PLAY, "自动配置问卷", self)
-        btn_row.addWidget(self.parse_btn)
-        btn_row.addStretch(1)
-        link_layout.addLayout(btn_row)
+        survey_entry = SurveyEntryCard(
+            self,
+            event_filter_owner=self,
+            trailing_widget=self.config_command_bar,
+            show_parse_button=True,
+        )
+        self.link_card = survey_entry
+        self.qr_btn = survey_entry.qr_btn
+        self.url_edit = survey_entry.url_edit
+        self.parse_btn = survey_entry.parse_btn
         layout.addWidget(self.link_card)
 
-        # 整个“问卷入口”卡片都支持粘贴/拖入二维码
-        self._link_entry_widgets = (
-            self.link_card,
-            self.config_command_bar,
-            *self.config_command_bar.findChildren(QToolButton),
-            self.qr_btn,
-            self.url_edit,
-            self.parse_btn,
-        )
-        for widget in self._link_entry_widgets:
-            if widget is self.url_edit:
-                continue
-            widget.installEventFilter(self)
+        self._link_entry_widgets = survey_entry.entry_widgets()
 
         exec_card = CardWidget(self)
         exec_layout = QVBoxLayout(exec_card)

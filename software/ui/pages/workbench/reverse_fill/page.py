@@ -32,7 +32,6 @@ from qfluentwidgets import (
     CardWidget,
     ElevatedCardWidget,
     IconWidget,
-    ToolButton,
 )
 
 from software.app.config import HEADLESS_MAX_THREADS
@@ -61,9 +60,8 @@ from software.providers.common import (
 )
 from software.providers.contracts import SurveyQuestionMeta, ensure_survey_question_metas
 from software.ui.helpers.fluent_tooltip import install_tooltip_filter
-from software.ui.pages.workbench.dashboard.parts.clipboard import DashboardClipboardMixin
+from software.ui.pages.workbench.shared import SurveyClipboardMixin, SurveyEntryCard
 from software.ui.widgets.no_wheel import NoWheelSpinBox
-from software.ui.widgets.paste_only_menu import PasteOnlyMenu
 
 if TYPE_CHECKING:
     from software.ui.controller import RunController
@@ -113,7 +111,7 @@ def _question_type_label(value: Any) -> str:
     return _QUESTION_TYPE_LABELS.get(normalized, str(value or "").strip())
 
 
-class ReverseFillPage(DashboardClipboardMixin, QWidget):
+class ReverseFillPage(SurveyClipboardMixin, QWidget):
     """独立的反填数据源页。"""
 
     surveyUrlChanged = Signal(str)
@@ -170,43 +168,15 @@ class ReverseFillPage(DashboardClipboardMixin, QWidget):
         layout.addSpacing(4)
 
     def _build_survey_entry_card(self, layout: QVBoxLayout) -> None:
-        self.link_card = CardWidget(self.view)
-        self.link_card.setAcceptDrops(True)
-        link_layout = QVBoxLayout(self.link_card)
-        link_layout.setContentsMargins(12, 12, 12, 12)
-        link_layout.setSpacing(8)
-
-        title_row = QHBoxLayout()
-        title_row.setSpacing(8)
-
-        self.qr_btn = ToolButton(self.link_card)
-        self.qr_btn.setIcon(FluentIcon.QRCODE)
-        self.qr_btn.setFixedSize(36, 36)
-        self.qr_btn.setToolTip("上传问卷二维码图片")
-        install_tooltip_filter(self.qr_btn)
-        title_row.addWidget(self.qr_btn)
-
-        self.url_edit = LineEdit(self.link_card)
-        self.url_edit.setPlaceholderText("在此拖入/粘贴问卷二维码图片或输入问卷链接")
-        self.url_edit.setClearButtonEnabled(True)
-        self.url_edit.setAcceptDrops(True)
-        self.url_edit.installEventFilter(self)
-        self._paste_only_menu = PasteOnlyMenu(self)
-        self.url_edit.installEventFilter(self._paste_only_menu)
-        title_row.addWidget(self.url_edit, 1)
-
-        link_layout.addLayout(title_row)
-
-        self._link_entry_widgets = (
-            self.link_card,
-            self.qr_btn,
-            self.url_edit,
+        survey_entry = SurveyEntryCard(
+            self.view,
+            event_filter_owner=self,
+            show_parse_button=False,
         )
-        for widget in self._link_entry_widgets:
-            if widget is self.url_edit:
-                continue
-            widget.installEventFilter(self)
-
+        self.link_card = survey_entry
+        self.qr_btn = survey_entry.qr_btn
+        self.url_edit = survey_entry.url_edit
+        self._link_entry_widgets = survey_entry.entry_widgets()
         layout.addWidget(self.link_card)
 
     def _build_file_picker(self, layout: QVBoxLayout) -> None:

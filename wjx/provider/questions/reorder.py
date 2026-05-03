@@ -414,7 +414,7 @@ def reorder(driver: BrowserDriver, current: int) -> None:
 
     def _rank_remedy_missing(click_indices: List[int]) -> None:
         """补救遗漏的排序项"""
-        for retry in range(2):
+        for _ in range(2):
             missing = []
             for i in click_indices:
                 item = _get_rank_item(i)

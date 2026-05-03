@@ -5,23 +5,26 @@ from __future__ import annotations
 import logging
 import random
 import threading
-import time
 import traceback
 from typing import Any, Callable
 
 import software.core.modes.timed_mode as timed_mode
 from software.app.config import BROWSER_PREFERENCE
-from software.core.ai.runtime import AIRuntimeError, is_ai_timeout_runtime_error, is_free_ai_runtime_error
+from software.core.ai.runtime import AIRuntimeError
 from software.core.engine.attempt_dispatcher import AttemptDispatcher
 from software.core.engine.browser_session_service import BrowserSessionService
 from software.core.engine.failure_reason import FailureReason
-from software.core.engine.page_load_probe import (
-    PAGE_LOAD_PROBE_ANSWERABLE,
-    PAGE_LOAD_PROBE_BUSINESS_PAGE,
-    wait_for_page_probe,
+from software.core.engine.page_loader import (
+    exception_summary as _page_load_exception_summary,
+    load_survey_page as _page_loader_load_survey_page,
 )
+from software.core.engine.page_load_probe import wait_for_page_probe
 from software.core.engine.preloaded_session_pool import PreloadedBrowserSessionPool
 from software.core.engine.provider_common import ensure_joint_psychometric_answer_plan
+from software.core.engine.runtime_error_handlers import (
+    handle_ai_runtime_error as _handle_ai_runtime_error_impl,
+    handle_proxy_connection_error as _handle_proxy_connection_error_impl,
+)
 from software.core.engine.run_stop_policy import RunStopPolicy
 from software.core.engine.submission_service import SubmissionService
 from software.core.task import ExecutionConfig, ExecutionState
@@ -33,165 +36,12 @@ from software.network.session_policy import (
     _mark_proxy_temporarily_bad,
     _record_bad_proxy_and_maybe_pause,
 )
-from software.providers.common import SURVEY_PROVIDER_CREDAMO, normalize_survey_provider
 from software.providers.registry import fill_survey as _provider_fill_survey
 from software.providers.registry import is_device_quota_limit_page as _provider_is_device_quota_limit_page
 from software.network.browser.owner_pool import BrowserOwnerPool
 
-_DEFAULT_PAGE_LOAD_TIMEOUT_MS = 20000
-_DEFAULT_PAGE_LOAD_TIMEOUT_RETRY_MS = 35000
-_CREDAMO_PAGE_LOAD_TIMEOUT_MS = 45000
-_RANDOM_PROXY_FAST_COMMIT_TIMEOUT_MS = 8000
-_RANDOM_PROXY_FAST_PROBE_TIMEOUT_MS = 2500
-_RANDOM_PROXY_FAST_PROBE_INTERVAL_SECONDS = 0.25
-_RANDOM_PROXY_FALLBACK_DOM_TIMEOUT_MS = 6000
-_RANDOM_PROXY_FALLBACK_PROBE_TIMEOUT_MS = 1500
-_FREE_AI_TIMEOUT_FAIL_THRESHOLD = 5
-_PAGE_LOAD_RETRY_DELAYS_SECONDS = (0.4, 1.0)
-_PAGE_LOAD_PROXY_ERROR_MARKERS = (
-    "ERR_TUNNEL_CONNECTION_FAILED",
-    "ERR_PROXY_CONNECTION_FAILED",
-    "ERR_NO_SUPPORTED_PROXIES",
-    "ERR_CONNECTION_TIMED_OUT",
-    "ERR_TIMED_OUT",
-    "ERR_CONNECTION_RESET",
-    "ERR_CONNECTION_CLOSED",
-    "ERR_ADDRESS_UNREACHABLE",
-    "ERR_NAME_NOT_RESOLVED",
-)
 def _exception_summary(exc: BaseException) -> str:
-    text = str(exc or "").strip()
-    if text:
-        return text
-    return type(exc).__name__
-
-
-def _looks_like_proxy_page_load_failure(exc: BaseException) -> bool:
-    message = _exception_summary(exc)
-    return any(marker in message for marker in _PAGE_LOAD_PROXY_ERROR_MARKERS)
-
-
-def _build_page_load_attempts(config: ExecutionConfig) -> tuple[tuple[int, str], ...]:
-    provider = normalize_survey_provider(getattr(config, "survey_provider", None))
-    if provider == SURVEY_PROVIDER_CREDAMO:
-        return (
-            (_CREDAMO_PAGE_LOAD_TIMEOUT_MS, "domcontentloaded"),
-            (_CREDAMO_PAGE_LOAD_TIMEOUT_MS, "commit"),
-        )
-    return (
-        (_DEFAULT_PAGE_LOAD_TIMEOUT_MS, "domcontentloaded"),
-        (_DEFAULT_PAGE_LOAD_TIMEOUT_RETRY_MS, "domcontentloaded"),
-    )
-
-
-def _notify_page_load_phase(phase_updater: Callable[[str], None] | None, status_text: str) -> None:
-    if not callable(phase_updater):
-        return
-    try:
-        phase_updater(str(status_text or ""))
-    except Exception:
-        logging.info("更新页面加载阶段失败：%s", status_text, exc_info=True)
-
-
-def _random_proxy_probe_succeeded(status: str) -> bool:
-    return status in {PAGE_LOAD_PROBE_ANSWERABLE, PAGE_LOAD_PROBE_BUSINESS_PAGE}
-
-
-def _load_survey_page_with_random_proxy(
-    driver: Any,
-    config: ExecutionConfig,
-    *,
-    phase_updater: Callable[[str], None] | None = None,
-) -> None:
-    provider = normalize_survey_provider(getattr(config, "survey_provider", None))
-    first_probe_detail = ""
-    last_exc: Exception | None = None
-
-    _notify_page_load_phase(phase_updater, "加载问卷")
-    logging.info(
-        "随机代理首载：快速提交导航 wait_until=commit timeout=%sms",
-        _RANDOM_PROXY_FAST_COMMIT_TIMEOUT_MS,
-    )
-    try:
-        driver.get(
-            config.url,
-            timeout=_RANDOM_PROXY_FAST_COMMIT_TIMEOUT_MS,
-            wait_until="commit",
-        )
-        _notify_page_load_phase(phase_updater, "探测页面")
-        logging.info(
-            "随机代理首载：探测页面可用性 timeout=%sms interval=%.2fs",
-            _RANDOM_PROXY_FAST_PROBE_TIMEOUT_MS,
-            _RANDOM_PROXY_FAST_PROBE_INTERVAL_SECONDS,
-        )
-        first_probe = wait_for_page_probe(
-            driver,
-            provider=provider,
-            timeout_ms=_RANDOM_PROXY_FAST_PROBE_TIMEOUT_MS,
-            poll_interval_seconds=_RANDOM_PROXY_FAST_PROBE_INTERVAL_SECONDS,
-        )
-        first_probe_detail = str(first_probe.detail or "")
-        if _random_proxy_probe_succeeded(first_probe.status):
-            logging.info("随机代理首载探测成功：status=%s detail=%s", first_probe.status, first_probe.detail or "-")
-            return
-        logging.warning(
-            "随机代理首载探测未命中可答题页面：status=%s detail=%s，转入短重载补救",
-            first_probe.status,
-            first_probe.detail or "-",
-        )
-    except Exception as exc:
-        last_exc = exc
-        logging.warning(
-            "快速提交导航失败：wait_until=commit timeout=%sms error=%s，转入短重载补救",
-            _RANDOM_PROXY_FAST_COMMIT_TIMEOUT_MS,
-            _exception_summary(exc),
-        )
-
-    _notify_page_load_phase(phase_updater, "加载问卷")
-    logging.info(
-        "随机代理首载：短重载补救 wait_until=domcontentloaded timeout=%sms",
-        _RANDOM_PROXY_FALLBACK_DOM_TIMEOUT_MS,
-    )
-    try:
-        driver.get(
-            config.url,
-            timeout=_RANDOM_PROXY_FALLBACK_DOM_TIMEOUT_MS,
-            wait_until="domcontentloaded",
-        )
-    except Exception as exc:
-        last_exc = exc
-        logging.warning(
-            "短重载补救失败：wait_until=domcontentloaded timeout=%sms error=%s",
-            _RANDOM_PROXY_FALLBACK_DOM_TIMEOUT_MS,
-            _exception_summary(exc),
-        )
-
-    _notify_page_load_phase(phase_updater, "探测页面")
-    logging.info(
-        "随机代理首载：补救后再次探测 timeout=%sms interval=%.2fs",
-        _RANDOM_PROXY_FALLBACK_PROBE_TIMEOUT_MS,
-        _RANDOM_PROXY_FAST_PROBE_INTERVAL_SECONDS,
-    )
-    second_probe = wait_for_page_probe(
-        driver,
-        provider=provider,
-        timeout_ms=_RANDOM_PROXY_FALLBACK_PROBE_TIMEOUT_MS,
-        poll_interval_seconds=_RANDOM_PROXY_FAST_PROBE_INTERVAL_SECONDS,
-    )
-    if _random_proxy_probe_succeeded(second_probe.status):
-        logging.info("随机代理补救后探测成功：status=%s detail=%s", second_probe.status, second_probe.detail or "-")
-        return
-
-    failure_detail = str(second_probe.detail or first_probe_detail or "")
-    if not failure_detail and last_exc is not None:
-        failure_detail = _exception_summary(last_exc)
-    if not failure_detail:
-        failure_detail = "页面长时间没有可答题信号"
-    logging.warning(
-        "随机代理页面探测失败，判定当前代理不可用：detail=%s",
-        failure_detail,
-    )
-    raise ProxyConnectionError(failure_detail)
+    return _page_load_exception_summary(exc)
 
 
 def _load_survey_page(
@@ -200,37 +50,12 @@ def _load_survey_page(
     *,
     phase_updater: Callable[[str], None] | None = None,
 ) -> None:
-    provider = normalize_survey_provider(getattr(config, "survey_provider", None))
-    if bool(getattr(config, "random_proxy_ip_enabled", False)) and provider != SURVEY_PROVIDER_CREDAMO:
-        _load_survey_page_with_random_proxy(driver, config, phase_updater=phase_updater)
-        return
-
-    last_exc: Exception | None = None
-    attempts = _build_page_load_attempts(config)
-    for attempt_index, (timeout_ms, wait_until) in enumerate(attempts, start=1):
-        try:
-            driver.get(config.url, timeout=timeout_ms, wait_until=wait_until)
-            if attempt_index > 1:
-                logging.info("问卷加载重试成功：wait_until=%s timeout=%sms", wait_until, timeout_ms)
-            return
-        except Exception as exc:
-            last_exc = exc
-            logging.warning(
-                "问卷加载第%s次失败：wait_until=%s timeout=%sms error=%s，准备%s",
-                attempt_index,
-                wait_until,
-                timeout_ms,
-                _exception_summary(exc),
-                "重试" if attempt_index < len(attempts) else "结束",
-            )
-            if attempt_index < len(attempts):
-                delay_index = min(attempt_index - 1, len(_PAGE_LOAD_RETRY_DELAYS_SECONDS) - 1)
-                time.sleep(_PAGE_LOAD_RETRY_DELAYS_SECONDS[delay_index])
-    if last_exc is not None:
-        if bool(getattr(config, "random_proxy_ip_enabled", False)) and _looks_like_proxy_page_load_failure(last_exc):
-            raise ProxyConnectionError(_exception_summary(last_exc)) from last_exc
-        raise last_exc
-    raise RuntimeError("问卷加载失败")
+    return _page_loader_load_survey_page(
+        driver,
+        config,
+        phase_updater=phase_updater,
+        probe_waiter=wait_for_page_probe,
+    )
 
 
 class ExecutionLoop:
@@ -588,35 +413,13 @@ class ExecutionLoop:
             logging.info("释放反填样本失败", exc_info=True)
 
     def _handle_ai_runtime_error(self, exc: AIRuntimeError, stop_signal: threading.Event, *, thread_name: str) -> bool:
-        if is_ai_timeout_runtime_error(exc):
-            logging.warning("免费 AI 调用超时，本轮丢弃并继续下一轮：%s", exc)
-            stopped = self.stop_policy.record_failure(
-                stop_signal,
-                thread_name=thread_name,
-                failure_reason=FailureReason.FILL_FAILED,
-                status_text="免费AI超时",
-                log_message=(
-                    f"免费AI调用超时，本轮按失败处理；连续达到 {_FREE_AI_TIMEOUT_FAIL_THRESHOLD} 次才停止：{exc}"
-                ),
-                threshold_override=_FREE_AI_TIMEOUT_FAIL_THRESHOLD,
-                terminal_stop_category="free_ai_unstable",
-                force_stop_when_threshold_reached=True,
-                consume_reverse_fill_attempt=False,
-            )
-            if stopped:
-                logging.error("免费 AI 连续超时达到阈值，任务停止：%s", exc, exc_info=True)
-            return bool(stopped)
-        logging.error("AI 填空失败，已停止任务：%s", exc, exc_info=True)
-        stop_category = "free_ai_unstable" if is_free_ai_runtime_error(exc) else "ai_runtime"
-        stop_message = "目前免费AI不稳定，请稍后再试" if stop_category == "free_ai_unstable" else str(exc)
-        self.state.mark_terminal_stop(
-            stop_category,
-            failure_reason=FailureReason.FILL_FAILED.value,
-            message=stop_message,
+        return _handle_ai_runtime_error_impl(
+            exc,
+            stop_signal,
+            thread_name=thread_name,
+            stop_policy=self.stop_policy,
+            state=self.state,
         )
-        if not stop_signal.is_set():
-            stop_signal.set()
-        return True
 
     def _handle_proxy_connection_error(
         self,
@@ -625,26 +428,16 @@ class ExecutionLoop:
         *,
         thread_name: str,
     ) -> bool:
-        if stop_signal.is_set():
-            return True
-        logging.warning("代理连接失败，当前会话将废弃并重新尝试")
-        if session is not None and session.proxy_address:
-            _mark_proxy_temporarily_bad(self.state, session.proxy_address)
-        if self.config.random_proxy_ip_enabled:
-            self._update_thread_status(thread_name, "代理失效，切换中", running=True)
-            if self._handle_proxy_unavailable(
-                stop_signal,
-                thread_name=thread_name,
-                status_text="代理不可用",
-                log_message="代理连接失败，本轮按失败处理",
-            ):
-                return True
-            return False
-        return self.stop_policy.record_failure(
+        return _handle_proxy_connection_error_impl(
+            session,
             stop_signal,
             thread_name=thread_name,
-            failure_reason=FailureReason.PROXY_UNAVAILABLE,
-            consume_reverse_fill_attempt=False,
+            state=self.state,
+            config=self.config,
+            stop_policy=self.stop_policy,
+            update_thread_status=lambda name, status_text: self._update_thread_status(name, status_text, running=True),
+            handle_proxy_unavailable=self._handle_proxy_unavailable,
+            mark_proxy_temporarily_bad=_mark_proxy_temporarily_bad,
         )
 
     def _should_use_preloaded_session_pool(self) -> bool:

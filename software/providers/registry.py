@@ -14,12 +14,18 @@ from software.providers.common import (
     detect_survey_provider,
     normalize_survey_provider,
 )
-from software.providers.contracts import SurveyDefinition, build_survey_definition
+from software.providers.contracts import SurveyDefinition
+from software.providers.hooks import (
+    HookTarget,
+    build_action_hook,
+    build_fill_hook,
+    build_parse_hook,
+    build_predicate_hook,
+    build_text_hook,
+    build_wait_from_predicate_hook,
+    build_wait_hook,
+)
 from software.providers.survey_cache import parse_survey_with_cache
-from credamo.provider.parser import parse_credamo_survey
-from tencent.provider.parser import parse_qq_survey
-from wjx.provider.parser import parse_wjx_survey
-
 
 def _resolve_provider(*, provider: Optional[str] = None, ctx: Any = None) -> str:
     if provider is not None:
@@ -32,240 +38,75 @@ def _resolve_provider(*, provider: Optional[str] = None, ctx: Any = None) -> str
     return SURVEY_PROVIDER_WJX
 
 
-def _build_parse_hook(provider: str, parser):
-    def _parse(url: str) -> SurveyDefinition:
-        info, title = parser(url)
-        return build_survey_definition(provider, title, info)
-
-    return _parse
-
-
-def _fill_wjx(
-    driver: Any,
-    config: ExecutionConfig,
-    state: ExecutionState,
-    *,
-    stop_signal: Any = None,
-    thread_name: str = "",
-    psycho_plan: Any = None,
-) -> bool:
-    from wjx.provider.runtime import brush_wjx
-
-    return bool(
-        brush_wjx(
-            driver,
-            config,
-            state,
-            stop_signal=stop_signal,
-            thread_name=thread_name,
-            psycho_plan=psycho_plan,
-        )
-    )
-
-
-def _fill_qq(
-    driver: Any,
-    config: ExecutionConfig,
-    state: ExecutionState,
-    *,
-    stop_signal: Any = None,
-    thread_name: str = "",
-    psycho_plan: Any = None,
-) -> bool:
-    from tencent.provider.runtime import brush_qq
-
-    return bool(
-        brush_qq(
-            driver,
-            config,
-            state,
-            stop_signal=stop_signal,
-            thread_name=thread_name,
-            psycho_plan=psycho_plan,
-        )
-    )
-
-
-def _fill_credamo(
-    driver: Any,
-    config: ExecutionConfig,
-    state: ExecutionState,
-    *,
-    stop_signal: Any = None,
-    thread_name: str = "",
-    psycho_plan: Any = None,
-) -> bool:
-    from credamo.provider.runtime import brush_credamo
-
-    return bool(
-        brush_credamo(
-            driver,
-            config,
-            state,
-            stop_signal=stop_signal,
-            thread_name=thread_name,
-            psycho_plan=psycho_plan,
-        )
-    )
-
-
-def _wjx_submission_requires_verification(driver: Any) -> bool:
-    from wjx.provider.submission import submission_requires_verification
-
-    return bool(submission_requires_verification(driver))
-
-
-def _wjx_submission_validation_message(driver: Any) -> str:
-    from wjx.provider.submission import submission_validation_message
-
-    return str(submission_validation_message(driver) or "").strip()
-
-
-def _wjx_wait_for_submission_verification(driver: Any, *, timeout: int = 3, stop_signal: Any = None) -> bool:
-    from wjx.provider.submission import wait_for_submission_verification
-
-    return bool(wait_for_submission_verification(driver, timeout=timeout, stop_signal=stop_signal))
-
-
-def _wjx_handle_submission_verification_detected(ctx: Any, gui_instance: Any, stop_signal: Any) -> None:
-    from wjx.provider.submission import handle_submission_verification_detected
-
-    handle_submission_verification_detected(ctx, gui_instance, stop_signal)
-
-
-def _wjx_consume_submission_success_signal(driver: Any) -> bool:
-    from wjx.provider.submission import consume_submission_success_signal
-
-    return bool(consume_submission_success_signal(driver))
-
-
-def _wjx_is_device_quota_limit_page(driver: Any) -> bool:
-    from wjx.provider.submission import is_device_quota_limit_page
-
-    return bool(is_device_quota_limit_page(driver))
-
-
-def _qq_is_completion_page(driver: Any) -> bool:
-    from tencent.provider.runtime_flow import qq_is_completion_page
-
-    return bool(qq_is_completion_page(driver))
-
-
-def _qq_submission_requires_verification(driver: Any) -> bool:
-    from tencent.provider.runtime_flow import qq_submission_requires_verification
-
-    return bool(qq_submission_requires_verification(driver))
-
-
-def _qq_submission_validation_message(driver: Any) -> str:
-    from tencent.provider.runtime_flow import qq_submission_validation_message
-
-    return str(qq_submission_validation_message(driver) or "").strip()
-
-
-def _qq_wait_for_submission_verification(driver: Any, *, timeout: int = 3, stop_signal: Any = None) -> bool:
-    del timeout, stop_signal
-    return _qq_submission_requires_verification(driver)
-
-
-def _qq_handle_submission_verification_detected(ctx: Any, gui_instance: Any, stop_signal: Any) -> None:
-    del ctx, gui_instance, stop_signal
-
-
-def _qq_consume_submission_success_signal(driver: Any) -> bool:
-    from tencent.provider.submission import consume_submission_success_signal
-
-    return bool(consume_submission_success_signal(driver))
-
-
-def _qq_is_device_quota_limit_page(driver: Any) -> bool:
-    from tencent.provider.submission import is_device_quota_limit_page
-
-    return bool(is_device_quota_limit_page(driver))
-
-
-def _credamo_is_completion_page(driver: Any) -> bool:
-    from credamo.provider.submission import is_completion_page
-
-    return bool(is_completion_page(driver))
-
-
-def _credamo_submission_requires_verification(driver: Any) -> bool:
-    from credamo.provider.submission import submission_requires_verification
-
-    return bool(submission_requires_verification(driver))
-
-
-def _credamo_submission_validation_message(driver: Any) -> str:
-    from credamo.provider.submission import submission_validation_message
-
-    return str(submission_validation_message(driver) or "").strip()
-
-
-def _credamo_wait_for_submission_verification(driver: Any, *, timeout: int = 3, stop_signal: Any = None) -> bool:
-    from credamo.provider.submission import wait_for_submission_verification
-
-    return bool(wait_for_submission_verification(driver, timeout=timeout, stop_signal=stop_signal))
-
-
-def _credamo_handle_submission_verification_detected(ctx: Any, gui_instance: Any, stop_signal: Any) -> None:
-    from credamo.provider.submission import handle_submission_verification_detected
-
-    handle_submission_verification_detected(ctx, gui_instance, stop_signal)
-
-
-def _credamo_consume_submission_success_signal(driver: Any) -> bool:
-    from credamo.provider.submission import consume_submission_success_signal
-
-    return bool(consume_submission_success_signal(driver))
-
-
-def _credamo_is_device_quota_limit_page(driver: Any) -> bool:
-    from credamo.provider.submission import is_device_quota_limit_page
-
-    return bool(is_device_quota_limit_page(driver))
+_WJX_PARSE: HookTarget = ("wjx.provider.parser", "parse_wjx_survey")
+_QQ_PARSE: HookTarget = ("tencent.provider.parser", "parse_qq_survey")
+_CREDAMO_PARSE: HookTarget = ("credamo.provider.parser", "parse_credamo_survey")
+
+_WJX_FILL: HookTarget = ("wjx.provider.runtime", "brush_wjx")
+_QQ_FILL: HookTarget = ("tencent.provider.runtime", "brush_qq")
+_CREDAMO_FILL: HookTarget = ("credamo.provider.runtime", "brush_credamo")
+
+_WJX_SUBMISSION_REQUIRES_VERIFICATION: HookTarget = ("wjx.provider.submission", "submission_requires_verification")
+_WJX_SUBMISSION_VALIDATION_MESSAGE: HookTarget = ("wjx.provider.submission", "submission_validation_message")
+_WJX_WAIT_FOR_SUBMISSION_VERIFICATION: HookTarget = ("wjx.provider.submission", "wait_for_submission_verification")
+_WJX_HANDLE_SUBMISSION_VERIFICATION_DETECTED: HookTarget = ("wjx.provider.submission", "handle_submission_verification_detected")
+_WJX_CONSUME_SUBMISSION_SUCCESS_SIGNAL: HookTarget = ("wjx.provider.submission", "consume_submission_success_signal")
+_WJX_IS_DEVICE_QUOTA_LIMIT_PAGE: HookTarget = ("wjx.provider.submission", "is_device_quota_limit_page")
+
+_QQ_IS_COMPLETION_PAGE: HookTarget = ("tencent.provider.runtime_flow", "qq_is_completion_page")
+_QQ_SUBMISSION_REQUIRES_VERIFICATION: HookTarget = ("tencent.provider.runtime_flow", "qq_submission_requires_verification")
+_QQ_SUBMISSION_VALIDATION_MESSAGE: HookTarget = ("tencent.provider.runtime_flow", "qq_submission_validation_message")
+_QQ_CONSUME_SUBMISSION_SUCCESS_SIGNAL: HookTarget = ("tencent.provider.submission", "consume_submission_success_signal")
+_QQ_IS_DEVICE_QUOTA_LIMIT_PAGE: HookTarget = ("tencent.provider.submission", "is_device_quota_limit_page")
+
+_CREDAMO_IS_COMPLETION_PAGE: HookTarget = ("credamo.provider.submission", "is_completion_page")
+_CREDAMO_SUBMISSION_REQUIRES_VERIFICATION: HookTarget = ("credamo.provider.submission", "submission_requires_verification")
+_CREDAMO_SUBMISSION_VALIDATION_MESSAGE: HookTarget = ("credamo.provider.submission", "submission_validation_message")
+_CREDAMO_WAIT_FOR_SUBMISSION_VERIFICATION: HookTarget = ("credamo.provider.submission", "wait_for_submission_verification")
+_CREDAMO_HANDLE_SUBMISSION_VERIFICATION_DETECTED: HookTarget = ("credamo.provider.submission", "handle_submission_verification_detected")
+_CREDAMO_CONSUME_SUBMISSION_SUCCESS_SIGNAL: HookTarget = ("credamo.provider.submission", "consume_submission_success_signal")
+_CREDAMO_IS_DEVICE_QUOTA_LIMIT_PAGE: HookTarget = ("credamo.provider.submission", "is_device_quota_limit_page")
 
 
 _PROVIDER_REGISTRY = {
     SURVEY_PROVIDER_WJX: CallableProviderAdapter(
         SURVEY_PROVIDER_WJX,
         ProviderAdapterHooks(
-            parse_survey=_build_parse_hook(SURVEY_PROVIDER_WJX, parse_wjx_survey),
-            fill_survey=_fill_wjx,
-            submission_requires_verification=_wjx_submission_requires_verification,
-            submission_validation_message=_wjx_submission_validation_message,
-            wait_for_submission_verification=_wjx_wait_for_submission_verification,
-            handle_submission_verification_detected=_wjx_handle_submission_verification_detected,
-            consume_submission_success_signal=_wjx_consume_submission_success_signal,
-            is_device_quota_limit_page=_wjx_is_device_quota_limit_page,
+            parse_survey=build_parse_hook(SURVEY_PROVIDER_WJX, _WJX_PARSE),
+            fill_survey=build_fill_hook(_WJX_FILL),
+            submission_requires_verification=build_predicate_hook(_WJX_SUBMISSION_REQUIRES_VERIFICATION),
+            submission_validation_message=build_text_hook(_WJX_SUBMISSION_VALIDATION_MESSAGE),
+            wait_for_submission_verification=build_wait_hook(_WJX_WAIT_FOR_SUBMISSION_VERIFICATION),
+            handle_submission_verification_detected=build_action_hook(_WJX_HANDLE_SUBMISSION_VERIFICATION_DETECTED),
+            consume_submission_success_signal=build_predicate_hook(_WJX_CONSUME_SUBMISSION_SUCCESS_SIGNAL),
+            is_device_quota_limit_page=build_predicate_hook(_WJX_IS_DEVICE_QUOTA_LIMIT_PAGE),
         ),
     ),
     SURVEY_PROVIDER_QQ: CallableProviderAdapter(
         SURVEY_PROVIDER_QQ,
         ProviderAdapterHooks(
-            parse_survey=_build_parse_hook(SURVEY_PROVIDER_QQ, parse_qq_survey),
-            fill_survey=_fill_qq,
-            is_completion_page=_qq_is_completion_page,
-            submission_requires_verification=_qq_submission_requires_verification,
-            submission_validation_message=_qq_submission_validation_message,
-            wait_for_submission_verification=_qq_wait_for_submission_verification,
-            handle_submission_verification_detected=_qq_handle_submission_verification_detected,
-            consume_submission_success_signal=_qq_consume_submission_success_signal,
-            is_device_quota_limit_page=_qq_is_device_quota_limit_page,
+            parse_survey=build_parse_hook(SURVEY_PROVIDER_QQ, _QQ_PARSE),
+            fill_survey=build_fill_hook(_QQ_FILL),
+            is_completion_page=build_predicate_hook(_QQ_IS_COMPLETION_PAGE),
+            submission_requires_verification=build_predicate_hook(_QQ_SUBMISSION_REQUIRES_VERIFICATION),
+            submission_validation_message=build_text_hook(_QQ_SUBMISSION_VALIDATION_MESSAGE),
+            wait_for_submission_verification=build_wait_from_predicate_hook(_QQ_SUBMISSION_REQUIRES_VERIFICATION),
+            consume_submission_success_signal=build_predicate_hook(_QQ_CONSUME_SUBMISSION_SUCCESS_SIGNAL),
+            is_device_quota_limit_page=build_predicate_hook(_QQ_IS_DEVICE_QUOTA_LIMIT_PAGE),
         ),
     ),
     SURVEY_PROVIDER_CREDAMO: CallableProviderAdapter(
         SURVEY_PROVIDER_CREDAMO,
         ProviderAdapterHooks(
-            parse_survey=_build_parse_hook(SURVEY_PROVIDER_CREDAMO, parse_credamo_survey),
-            fill_survey=_fill_credamo,
-            is_completion_page=_credamo_is_completion_page,
-            submission_requires_verification=_credamo_submission_requires_verification,
-            submission_validation_message=_credamo_submission_validation_message,
-            wait_for_submission_verification=_credamo_wait_for_submission_verification,
-            handle_submission_verification_detected=_credamo_handle_submission_verification_detected,
-            consume_submission_success_signal=_credamo_consume_submission_success_signal,
-            is_device_quota_limit_page=_credamo_is_device_quota_limit_page,
+            parse_survey=build_parse_hook(SURVEY_PROVIDER_CREDAMO, _CREDAMO_PARSE),
+            fill_survey=build_fill_hook(_CREDAMO_FILL),
+            is_completion_page=build_predicate_hook(_CREDAMO_IS_COMPLETION_PAGE),
+            submission_requires_verification=build_predicate_hook(_CREDAMO_SUBMISSION_REQUIRES_VERIFICATION),
+            submission_validation_message=build_text_hook(_CREDAMO_SUBMISSION_VALIDATION_MESSAGE),
+            wait_for_submission_verification=build_wait_hook(_CREDAMO_WAIT_FOR_SUBMISSION_VERIFICATION),
+            handle_submission_verification_detected=build_action_hook(_CREDAMO_HANDLE_SUBMISSION_VERIFICATION_DETECTED),
+            consume_submission_success_signal=build_predicate_hook(_CREDAMO_CONSUME_SUBMISSION_SUCCESS_SIGNAL),
+            is_device_quota_limit_page=build_predicate_hook(_CREDAMO_IS_DEVICE_QUOTA_LIMIT_PAGE),
         ),
     ),
 }
@@ -283,7 +124,10 @@ def _get_provider_adapter(*, provider: Optional[str] = None, ctx: Any = None, ur
 
 def parse_survey(url: str) -> SurveyDefinition:
     """解析问卷结构，返回标准化后的 SurveyDefinition。"""
-    return parse_survey_with_cache(url, lambda normalized_url: _get_provider_adapter(url=normalized_url).parse_survey(normalized_url))
+    return parse_survey_with_cache(
+        url,
+        lambda normalized_url: _get_provider_adapter(url=normalized_url).parse_survey(normalized_url),
+    )
 
 
 def fill_survey(

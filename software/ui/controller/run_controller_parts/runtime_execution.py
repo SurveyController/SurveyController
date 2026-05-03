@@ -52,8 +52,6 @@ class RunControllerExecutionMixin:
         _completion_cleanup_done: bool
         _cleanup_scheduled: bool
         _stopped_by_stop_run: bool
-        _probe_hit_device_quota: bool
-        _probe_failure_message: str
         _init_stage_text: str
         _init_steps: List[Dict[str, str]]
         _init_completed_steps: set[str]
@@ -200,8 +198,6 @@ class RunControllerExecutionMixin:
         self._init_completed_steps = set()
         self._init_current_step_key = ""
         self._init_gate_stop_event = None
-        self._probe_hit_device_quota = False
-        self._probe_failure_message = ""
         self._startup_service_warnings = []
         self._start_startup_status_check(config)
 

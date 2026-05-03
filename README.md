@@ -46,6 +46,8 @@
 
 ### 从源码运行
 
+如果你想参与测试最新功能或提交 Pull Request，可以参考以下步骤
+
 克隆、安装依赖、运行源码：
 ```bash
 git clone https://github.com/hungryM0/SurveyController.git

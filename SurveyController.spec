@@ -98,8 +98,18 @@ hiddenimports = qfw_hiddenimports + pyside6_modules + pywin32_modules + [
     'et_xmlfile',
     # 主窗口模块位于 shell 子目录，显式保留该模块打包
     'software.ui.shell.main_window',
-    # 腾讯问卷 runtime 在 registry 中为延迟导入，显式保留 provider 实现
+    # provider registry 通过字符串动态导入这些入口，PyInstaller 无法静态识别
+    # 不显式保留的话，源码能跑，打包后的 exe 会在运行时直接缺模块
+    'wjx.provider.parser',
+    'wjx.provider.runtime',
+    'wjx.provider.submission',
+    'tencent.provider.parser',
     'tencent.provider.runtime',
+    'tencent.provider.runtime_flow',
+    'tencent.provider.submission',
+    'credamo.provider.parser',
+    'credamo.provider.runtime',
+    'credamo.provider.submission',
 ]
 binaries += qfw_binaries + pyside_binaries
 

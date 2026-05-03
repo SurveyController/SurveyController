@@ -5,7 +5,6 @@ from unittest.mock import patch
 
 from software.core.questions.config import QuestionEntry
 from software.io.config import RuntimeConfig
-from software.providers.contracts import SurveyQuestionMeta
 from software.core.reverse_fill.schema import ReverseFillSpec
 from software.ui.controller.run_controller_parts.runtime_preparation import (
     PreparedExecutionArtifacts,
