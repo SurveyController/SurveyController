@@ -258,6 +258,7 @@ class ReverseFillPage(DashboardClipboardMixin, QWidget):
         layout.addWidget(self.table_panel)
 
     def _build_ui(self) -> None:
+        self.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, False)
         outer = QVBoxLayout(self)
         outer.setContentsMargins(12, 10, 12, 10)
         outer.setSpacing(10)
@@ -265,8 +266,15 @@ class ReverseFillPage(DashboardClipboardMixin, QWidget):
         self.scroll_area = ScrollArea(self)
         self.scroll_area.setWidgetResizable(True)
         self.scroll_area.enableTransparentBackground()
+        self.scroll_area.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, False)
         self.view = QWidget(self.scroll_area)
+        self.view.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, False)
+        self.view.setStyleSheet("background: transparent;")
         self.scroll_area.setWidget(self.view)
+        viewport = self.scroll_area.viewport()
+        if viewport is not None:
+            viewport.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, False)
+            viewport.setStyleSheet("background: transparent;")
 
         layout = QVBoxLayout(self.view)
         layout.setContentsMargins(32, 32, 32, 32)
