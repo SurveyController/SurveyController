@@ -52,7 +52,8 @@ InfoBeforeFile=LICENSE\before_install.txt
 InfoAfterFile=LICENSE\after_install.txt
 
 [Languages]
-Name: "chinesesimplified"; MessagesFile: "compiler:Languages\ChineseSimplified.isl"
+; 直接使用仓库内置语言文件，避免 CI 上 Inno Setup 安装不完整时缺少语言包
+Name: "chinesesimplified"; MessagesFile: ".\ChineseSimplified.isl"
 
 [InstallDelete]
 ; 覆盖安装时先清理旧版残留文件，防止新旧 DLL 路径冲突

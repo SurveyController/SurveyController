@@ -64,6 +64,8 @@
 ├── requirements.txt
 ├── rthook_pyside6.py
 ├── Setup/
+│   ├── ChineseSimplified.isl
+│   └── LICENSE/
 ├── SurveyController.py
 ├── SurveyController.spec
 ├── software/
