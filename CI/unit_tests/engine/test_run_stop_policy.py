@@ -67,6 +67,26 @@ class RunStopPolicyTests(unittest.TestCase):
         self.assertFalse(stop_signal.is_set())
         self.assertEqual(list(state.reverse_fill_runtime.queued_row_numbers), [1])
 
+    def test_record_failure_requeues_reverse_fill_row_without_consuming_attempt(self) -> None:
+        state = self._build_reverse_fill_state()
+        config = state.config
+        state.acquire_reverse_fill_sample("Worker-1")
+        policy = RunStopPolicy(config, state)
+        stop_signal = threading.Event()
+
+        stopped = policy.record_failure(
+            stop_signal,
+            thread_name="Worker-1",
+            failure_reason=FailureReason.PROXY_UNAVAILABLE,
+            consume_reverse_fill_attempt=False,
+        )
+
+        self.assertFalse(stopped)
+        self.assertFalse(stop_signal.is_set())
+        self.assertEqual(list(state.reverse_fill_runtime.queued_row_numbers), [1])
+        self.assertEqual(state.reverse_fill_runtime.failure_count_by_row, {})
+        self.assertEqual(state.reverse_fill_runtime.discarded_row_numbers, set())
+
     def test_record_success_commits_progress_and_triggers_target_stop(self) -> None:
         config = ExecutionConfig(target_num=1, random_proxy_ip_enabled=True)
         state = ExecutionState(config=config, cur_fail=2)

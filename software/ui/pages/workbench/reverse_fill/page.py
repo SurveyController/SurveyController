@@ -28,6 +28,7 @@ from qfluentwidgets import (
     StrongBodyLabel,
     SubtitleLabel,
     TableWidget,
+    TogglePushButton,
     CardWidget,
     ElevatedCardWidget,
     IconWidget,
@@ -257,8 +258,22 @@ class ReverseFillPage(DashboardClipboardMixin, QWidget):
         self.reverse_fill_threads_spin.setValue(self._reverse_fill_threads_value)
         self.reverse_fill_threads_spin.setFixedWidth(160)
         self.reverse_fill_threads_spin.setFixedHeight(36)
+        self.random_ip_cb = TogglePushButton(self.file_panel)
+        self.random_ip_cb.setMinimumHeight(36)
+        self.random_ip_cb.setMinimumWidth(150)
+        self._sync_random_ip_toggle_presentation(False)
+        self.random_ip_loading_ring = IndeterminateProgressRing(self.file_panel)
+        self.random_ip_loading_ring.setFixedSize(18, 18)
+        self.random_ip_loading_ring.setStrokeWidth(2)
+        self.random_ip_loading_ring.hide()
+        self.random_ip_loading_label = CaptionLabel("", self.file_panel)
+        self.random_ip_loading_label.hide()
         concurrency_row.addWidget(concurrency_label)
         concurrency_row.addWidget(self.reverse_fill_threads_spin)
+        concurrency_row.addSpacing(8)
+        concurrency_row.addWidget(self.random_ip_cb)
+        concurrency_row.addWidget(self.random_ip_loading_ring)
+        concurrency_row.addWidget(self.random_ip_loading_label)
         concurrency_row.addWidget(concurrency_hint, 1)
         file_layout.addLayout(concurrency_row)
 
@@ -289,7 +304,7 @@ class ReverseFillPage(DashboardClipboardMixin, QWidget):
         header_layout.setContentsMargins(24, 16, 24, 12)
         header_layout.addStretch(1)
 
-        self.open_wizard_btn = PrimaryPushButton(FluentIcon.EDIT, "配置异常题目", header_widget)
+        self.open_wizard_btn = PrimaryPushButton(FluentIcon.EDIT, "处理异常题目", header_widget)
         self.open_wizard_btn.hide()
         header_layout.addWidget(self.open_wizard_btn)
 
@@ -393,12 +408,16 @@ class ReverseFillPage(DashboardClipboardMixin, QWidget):
         self.url_edit.textChanged.connect(self.surveyUrlChanged.emit)
         self.file_edit.editingFinished.connect(self._refresh_preview)
         self.reverse_fill_threads_spin.valueChanged.connect(self._on_reverse_fill_threads_changed)
+        self.random_ip_cb.toggled.connect(self._on_random_ip_toggled)
         self.browse_btn.clicked.connect(self._browse_excel_file)
         self.open_wizard_btn.clicked.connect(self._open_wizard)
         clipboard = QApplication.clipboard()
         clipboard.dataChanged.connect(self._on_clipboard_changed)
         self.controller.surveyParsed.connect(self._on_survey_parsed)
         self.controller.surveyParseFailed.connect(self._on_survey_parse_failed)
+        self.controller.runtimeUiStateChanged.connect(self._apply_runtime_ui_state)
+        self.controller.randomIpLoadingChanged.connect(self.set_random_ip_loading)
+        self._apply_runtime_ui_state(self.controller.get_runtime_ui_state())
         self.start_btn.clicked.connect(self._on_start_clicked)
         self.resume_btn.clicked.connect(self._on_resume_clicked)
         self.stop_btn.clicked.connect(self.controller.stop_run)
@@ -510,6 +529,38 @@ class ReverseFillPage(DashboardClipboardMixin, QWidget):
     def _has_excel_source_path(self) -> bool:
         return bool(self.file_edit.text().strip())
 
+    def _sync_random_ip_toggle_presentation(self, enabled: bool) -> None:
+        active = bool(enabled)
+        self.random_ip_cb.setText("已启用随机ip" if active else "点击启用随机ip")
+        self.random_ip_cb.setIcon(FluentIcon.VIEW if active else FluentIcon.HIDE)
+
+    def _apply_runtime_ui_state(self, state: dict) -> None:
+        enabled = bool((state or {}).get("random_ip_enabled", False))
+        if bool(self.random_ip_cb.isChecked()) != enabled:
+            self.random_ip_cb.blockSignals(True)
+            self.random_ip_cb.setChecked(enabled)
+            self.random_ip_cb.blockSignals(False)
+        self._sync_random_ip_toggle_presentation(enabled)
+
+    def set_random_ip_loading(self, loading: bool, message: str = "") -> None:
+        active = bool(loading)
+        text = str(message or "正在处理...") if active else ""
+        self.random_ip_loading_ring.setVisible(active)
+        self.random_ip_loading_label.setVisible(active)
+        self.random_ip_loading_label.setText(text)
+        self.random_ip_cb.setEnabled(not active)
+        self._sync_random_ip_toggle_presentation(self.random_ip_cb.isChecked())
+
+    def _on_random_ip_toggled(self, enabled: bool) -> None:
+        self._sync_random_ip_toggle_presentation(bool(enabled))
+        if self.controller.toggle_random_ip_async(bool(enabled), adapter=self.controller.adapter):
+            return
+        fallback_enabled = bool(self.controller.get_runtime_ui_state().get("random_ip_enabled", False))
+        self.random_ip_cb.blockSignals(True)
+        self.random_ip_cb.setChecked(fallback_enabled)
+        self.random_ip_cb.blockSignals(False)
+        self._sync_random_ip_toggle_presentation(fallback_enabled)
+
     def _sync_start_button_state(self, running: Optional[bool] = None) -> None:
         if running is None:
             running = bool(getattr(self.controller, "running", False))
@@ -550,7 +601,6 @@ class ReverseFillPage(DashboardClipboardMixin, QWidget):
         self._last_progress = progress
         if int(target or 0) > 0 and int(current or 0) >= int(target or 0) and not self._completion_notified:
             self._completion_notified = True
-            self._toast("全部份数已完成", "success", duration=5000)
             self.stop_btn.setEnabled(False)
 
     def on_run_state_changed(self, running: bool) -> None:
@@ -601,6 +651,8 @@ class ReverseFillPage(DashboardClipboardMixin, QWidget):
         if dashboard is None:
             self._toast("主页尚未完成初始化，暂时不能开始执行", "error", duration=3000)
             return
+        if not self._prepare_reverse_fill_start_target(dashboard):
+            return
         should_reset = bool(getattr(dashboard, "_completion_notified", False) or getattr(dashboard, "_last_progress", 0) >= 100)
         dashboard._on_start_clicked(enable_reverse_fill=True)
         if should_reset:
@@ -608,6 +660,29 @@ class ReverseFillPage(DashboardClipboardMixin, QWidget):
             self.progress_pct.setText("0%")
             self._last_progress = 0
             self._completion_notified = False
+
+    def _prepare_reverse_fill_start_target(self, dashboard: Any) -> bool:
+        if self._last_spec is None:
+            self._refresh_preview()
+        spec = self._last_spec
+        if spec is None:
+            message = self._last_error or "反填数据还没预检成功，暂时不能启动"
+            self._toast(message, "error", duration=3200)
+            return False
+        effective_target = max(0, int(getattr(spec, "target_num", 0) or 0))
+        if effective_target <= 0:
+            self._toast("当前 Excel 没有可提交的有效行，先检查起始行和表格内容", "warning", duration=3200)
+            return False
+        target_spin = getattr(dashboard, "target_spin", None)
+        if target_spin is not None and int(target_spin.value()) != effective_target:
+            target_spin.blockSignals(True)
+            target_spin.setValue(effective_target)
+            target_spin.blockSignals(False)
+        try:
+            self.controller.set_runtime_ui_state(target=effective_target)
+        except Exception:
+            logging.debug("同步反填目标份数到运行态失败", exc_info=True)
+        return True
 
     def _on_resume_clicked(self) -> None:
         dashboard = self._main_dashboard()

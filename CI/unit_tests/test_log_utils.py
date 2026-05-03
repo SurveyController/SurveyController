@@ -10,7 +10,10 @@ import software.logging.log_utils as log_utils
 from software.logging.log_utils import (
     LogBufferEntry,
     export_full_log_to_file,
+    finalize_session_log_persistence,
+    get_auto_save_log_settings,
     log_deduped_message,
+    prune_session_log_files,
     reset_deduped_log_message,
 )
 
@@ -26,6 +29,7 @@ class LogUtilsTests(unittest.TestCase):
                 pass
         log_utils._SESSION_LOG_HANDLER = None
         log_utils._SESSION_LOG_PATH = ""
+        log_utils._DELETE_SESSION_LOG_ON_SHUTDOWN = False
 
     def test_log_deduped_message_only_logs_same_message_once(self) -> None:
         with patch("software.logging.log_utils.logging.log") as mock_log:
@@ -86,3 +90,86 @@ class LogUtilsTests(unittest.TestCase):
             self.assertEqual(exported_path, target_path)
             with open(target_path, "r", encoding="utf-8") as file:
                 self.assertEqual(file.read(), "缓冲一\n缓冲二")
+
+    def test_get_auto_save_log_settings_returns_defaults_when_values_missing(self) -> None:
+        class _StubSettings:
+            @staticmethod
+            def value(_key):
+                return None
+
+        with patch("software.logging.log_utils.app_settings", return_value=_StubSettings()):
+            enabled, keep_count = get_auto_save_log_settings()
+
+        self.assertTrue(enabled)
+        self.assertEqual(keep_count, 10)
+
+    def test_prune_session_log_files_keeps_recent_files_only(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            logs_dir = os.path.join(temp_dir, "logs")
+            os.makedirs(logs_dir, exist_ok=True)
+            retained_names = []
+            for index in range(3):
+                name = f"session_20250101_00000{index}.log"
+                path = os.path.join(logs_dir, name)
+                with open(path, "w", encoding="utf-8") as file:
+                    file.write(name)
+                os.utime(path, (100 + index, 100 + index))
+                retained_names.append(name)
+
+            removed_count = prune_session_log_files(temp_dir, 2)
+
+            self.assertEqual(removed_count, 1)
+            self.assertFalse(os.path.exists(os.path.join(logs_dir, retained_names[0])))
+            self.assertTrue(os.path.exists(os.path.join(logs_dir, retained_names[1])))
+            self.assertTrue(os.path.exists(os.path.join(logs_dir, retained_names[2])))
+
+    def test_finalize_session_log_persistence_exports_last_session_and_prunes_history_when_enabled(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            logs_dir = os.path.join(temp_dir, "logs")
+            os.makedirs(logs_dir, exist_ok=True)
+            source_path = os.path.join(logs_dir, "session_20250101_000003.log")
+            handler = logging.FileHandler(source_path, mode="a", encoding="utf-8")
+            try:
+                handler.stream.write("本次日志\n")
+                handler.flush()
+                log_utils._SESSION_LOG_HANDLER = handler
+                log_utils._SESSION_LOG_PATH = source_path
+
+                stale_paths = []
+                for index in range(2):
+                    stale_path = os.path.join(logs_dir, f"session_20250101_00000{index}.log")
+                    with open(stale_path, "w", encoding="utf-8") as file:
+                        file.write("旧日志\n")
+                    os.utime(stale_path, (100 + index, 100 + index))
+                    stale_paths.append(stale_path)
+                os.utime(source_path, (200, 200))
+
+                with patch("software.logging.log_utils.get_auto_save_log_settings", return_value=(True, 2)):
+                    finalize_session_log_persistence(temp_dir)
+
+                last_session_path = os.path.join(logs_dir, "last_session.log")
+                self.assertTrue(os.path.exists(last_session_path))
+                with open(last_session_path, "r", encoding="utf-8") as file:
+                    self.assertEqual(file.read(), "本次日志\n")
+                self.assertTrue(os.path.exists(source_path))
+                self.assertTrue(os.path.exists(stale_paths[1]))
+                self.assertFalse(os.path.exists(stale_paths[0]))
+                self.assertFalse(log_utils._DELETE_SESSION_LOG_ON_SHUTDOWN)
+            finally:
+                handler.close()
+                log_utils._SESSION_LOG_HANDLER = None
+                log_utils._SESSION_LOG_PATH = ""
+
+    def test_finalize_session_log_persistence_marks_session_for_deletion_when_disabled(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            logs_dir = os.path.join(temp_dir, "logs")
+            os.makedirs(logs_dir, exist_ok=True)
+            last_session_path = os.path.join(logs_dir, "last_session.log")
+            with open(last_session_path, "w", encoding="utf-8") as file:
+                file.write("旧的上次日志\n")
+
+            with patch("software.logging.log_utils.get_auto_save_log_settings", return_value=(False, 10)):
+                finalize_session_log_persistence(temp_dir)
+
+            self.assertFalse(os.path.exists(last_session_path))
+            self.assertTrue(log_utils._DELETE_SESSION_LOG_ON_SHUTDOWN)

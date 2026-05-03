@@ -106,6 +106,7 @@ class SubmissionServiceTests(unittest.TestCase):
         self.assertFalse(outcome.completion_detected)
         self.assertTrue(outcome.should_stop)
         stop_policy.record_failure.assert_called_once()
+        self.assertFalse(bool(stop_policy.record_failure.call_args.kwargs.get("consume_reverse_fill_attempt", True)))
 
     def test_finalize_after_submit_treats_complete_url_as_success_after_waits(self) -> None:
         config = ExecutionConfig(headless_mode=False, survey_provider="wjx")
@@ -194,6 +195,7 @@ class SubmissionServiceTests(unittest.TestCase):
         self.assertEqual(state.get_terminal_stop_snapshot()[0], "submission_verification")
         self.assertTrue(outcome.should_stop)
         handle_mock.assert_called_once()
+        self.assertFalse(bool(stop_policy.record_failure.call_args.kwargs.get("consume_reverse_fill_attempt", True)))
 
     def test_finalize_after_submit_returns_secondary_verification_outcome_after_waits(self) -> None:
         config = ExecutionConfig(headless_mode=False, survey_provider="wjx")

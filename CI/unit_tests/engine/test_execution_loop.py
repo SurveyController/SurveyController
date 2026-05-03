@@ -375,6 +375,7 @@ class ExecutionLoopTests(unittest.TestCase):
         self.assertEqual(preferred, ["edge"])
         self.assertEqual(loop.stop_policy.failure_calls, [execution_loop_module.FailureReason.PROXY_UNAVAILABLE])
         self.assertEqual(loop.stop_policy.failure_kwargs[0].get("status_text"), "代理不可用")
+        self.assertFalse(bool(loop.stop_policy.failure_kwargs[0].get("consume_reverse_fill_attempt", True)))
         self.assertEqual(state.thread_progress["Slot-1"].status_text, "代理不可用")
         self.assertFalse(stop_signal.is_set())
 
@@ -412,6 +413,7 @@ class ExecutionLoopTests(unittest.TestCase):
         self.assertEqual(marked_bad, ["http://1.1.1.1:8000"])
         self.assertEqual(loop.stop_policy.failure_calls, [execution_loop_module.FailureReason.PROXY_UNAVAILABLE])
         self.assertEqual(loop.stop_policy.failure_kwargs[0].get("status_text"), "代理不可用")
+        self.assertFalse(bool(loop.stop_policy.failure_kwargs[0].get("consume_reverse_fill_attempt", True)))
         self.assertEqual(state.thread_progress["Slot-1"].status_text, "代理失效，切换中")
         self.assertFalse(stop_signal.is_set())
 

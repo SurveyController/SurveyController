@@ -24,3 +24,25 @@ def get_bool_from_qsettings(value: Any, default: bool = False) -> bool:
         return value.lower() in {"true", "1", "yes", "on"}
     return bool(value)
 
+
+def get_int_from_qsettings(
+    value: Any,
+    default: int = 0,
+    *,
+    minimum: int | None = None,
+    maximum: int | None = None,
+) -> int:
+    """兼容字符串/浮点/非法值的整数读取，并按需裁剪范围。"""
+    try:
+        if value is None or value == "":
+            result = int(default)
+        else:
+            result = int(value)
+    except (TypeError, ValueError):
+        result = int(default)
+    if minimum is not None:
+        result = max(int(minimum), result)
+    if maximum is not None:
+        result = min(int(maximum), result)
+    return result
+

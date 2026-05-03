@@ -18,12 +18,19 @@ from typing import Dict, Optional
 from software.app.settings_store import (
     app_settings as _app_settings,
     get_bool_from_qsettings as _get_bool_from_qsettings,
+    get_int_from_qsettings as _get_int_from_qsettings,
 )
 
 app_settings = _app_settings
 get_bool_from_qsettings = _get_bool_from_qsettings
+get_int_from_qsettings = _get_int_from_qsettings
 
 NAVIGATION_TEXT_VISIBLE_SETTING_KEY = "navigation_selected_text_visible"
+AUTO_SAVE_LOGS_SETTING_KEY = "auto_save_logs"
+AUTO_SAVE_LOG_RETENTION_COUNT_SETTING_KEY = "auto_save_log_retention_count"
+DEFAULT_AUTO_SAVE_LOGS = True
+DEFAULT_AUTO_SAVE_LOG_RETENTION_COUNT = 10
+AUTO_SAVE_LOG_RETENTION_OPTIONS = (3, 5, 10, 20, 30, 50)
 
 _ENV_FILE_NAME = ".env"
 def _read_windows_env_var(key: str) -> str:

@@ -37,6 +37,8 @@ class RunStopPolicy:
         threshold_override: Optional[int] = None,
         terminal_stop_category: str = "fail_threshold",
         force_stop_when_threshold_reached: bool = False,
+        consume_reverse_fill_attempt: bool = True,
+        reverse_fill_max_retries: int = 1,
     ) -> bool:
         stop_threshold = max(1, int(threshold_override or self.config.fail_threshold or 1))
         with self.state.lock:
@@ -61,12 +63,20 @@ class RunStopPolicy:
             except Exception:
                 logging.info("失败后释放联合信效度样本槽位失败", exc_info=True)
             try:
-                row_number, discarded = self.state.mark_reverse_fill_submission_failed(thread_name, max_retries=1)
-                if row_number is not None:
-                    if discarded:
-                        logging.warning("反填样本第%s行已连续失败 2 次，已作废。", row_number)
-                    else:
-                        logging.info("反填样本第%s行提交失败，已回队准备重试 1 次。", row_number)
+                if consume_reverse_fill_attempt:
+                    row_number, discarded = self.state.mark_reverse_fill_submission_failed(
+                        thread_name,
+                        max_retries=max(0, int(reverse_fill_max_retries or 0)),
+                    )
+                    if row_number is not None:
+                        if discarded:
+                            logging.warning("反填样本第%s行已连续失败 2 次，已作废。", row_number)
+                        else:
+                            logging.info("反填样本第%s行提交失败，已回队准备重试 1 次。", row_number)
+                else:
+                    row_number = self.state.release_reverse_fill_sample(thread_name, requeue=True)
+                    if row_number is not None:
+                        logging.info("反填样本第%s行已回队，本次失败不计入样本作废次数。", row_number)
             except Exception:
                 logging.info("失败后回收反填样本失败", exc_info=True)
             try:
