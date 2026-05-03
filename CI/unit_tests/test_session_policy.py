@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import time
 import unittest
 from unittest.mock import patch
 
@@ -65,6 +66,52 @@ class SessionPolicyTests(unittest.TestCase):
         self.assertEqual(selected, usable)
         self.assertEqual(ctx.config.proxy_ip_pool, [])
 
+    def test_pop_available_proxy_lease_skips_proxy_already_used_by_other_session(self) -> None:
+        ctx = ExecutionState(config=ExecutionConfig())
+        duplicated = ProxyLease(address="http://1.1.1.1:8000")
+        usable = ProxyLease(address="http://2.2.2.2:8000")
+        ctx.config.proxy_ip_pool = [duplicated, usable]
+        ctx.proxy_in_use_by_thread = {
+            "Worker-9": ProxyLease(address="http://1.1.1.1:8000"),
+        }
+
+        with patch.object(session_policy, "get_proxy_required_ttl_seconds", return_value=0), \
+             patch.object(session_policy, "proxy_lease_has_sufficient_ttl", return_value=True):
+            selected = session_policy._pop_available_proxy_lease_locked(ctx)
+
+        self.assertEqual(selected, usable)
+        self.assertEqual(ctx.config.proxy_ip_pool, [])
+
+    def test_pop_available_proxy_lease_skips_proxy_used_by_submit_retry(self) -> None:
+        ctx = ExecutionState(config=ExecutionConfig())
+        duplicated = ProxyLease(address="http://1.1.1.1:8000")
+        usable = ProxyLease(address="http://2.2.2.2:8000")
+        ctx.config.proxy_ip_pool = [duplicated, usable]
+        ctx.submit_proxy_in_use_by_thread = {
+            "Worker-9": ProxyLease(address="http://1.1.1.1:8000"),
+        }
+
+        with patch.object(session_policy, "get_proxy_required_ttl_seconds", return_value=0), \
+             patch.object(session_policy, "proxy_lease_has_sufficient_ttl", return_value=True):
+            selected = session_policy._pop_available_proxy_lease_locked(ctx)
+
+        self.assertEqual(selected, usable)
+        self.assertEqual(ctx.config.proxy_ip_pool, [])
+
+    def test_pop_available_proxy_lease_skips_proxy_in_cooldown(self) -> None:
+        ctx = ExecutionState(config=ExecutionConfig())
+        cooled = ProxyLease(address="http://1.1.1.1:8000")
+        usable = ProxyLease(address="http://2.2.2.2:8000")
+        ctx.config.proxy_ip_pool = [cooled, usable]
+        ctx.mark_proxy_in_cooldown(cooled.address, 180.0)
+
+        with patch.object(session_policy, "get_proxy_required_ttl_seconds", return_value=0), \
+             patch.object(session_policy, "proxy_lease_has_sufficient_ttl", return_value=True):
+            selected = session_policy._pop_available_proxy_lease_locked(ctx)
+
+        self.assertEqual(selected, usable)
+        self.assertEqual(ctx.config.proxy_ip_pool, [])
+
     def test_select_proxy_for_session_returns_none_when_random_proxy_disabled(self) -> None:
         ctx = ExecutionState(config=ExecutionConfig(random_proxy_ip_enabled=False))
 
@@ -101,6 +148,59 @@ class SessionPolicyTests(unittest.TestCase):
         self.assertEqual(ctx.proxy_waiting_threads, 2)
         fetch_proxy_batch.assert_called_once()
 
+    def test_select_proxy_for_session_skips_fetched_proxy_already_used_by_other_session(self) -> None:
+        ctx = ExecutionState(config=ExecutionConfig(random_proxy_ip_enabled=True, target_num=2))
+        ctx.proxy_in_use_by_thread = {
+            "Worker-2": ProxyLease(address="http://1.1.1.1:8000", source="api"),
+        }
+
+        fetched = [
+            ProxyLease(address="http://1.1.1.1:8000", source="api"),
+            ProxyLease(address="http://2.2.2.2:8000", source="api"),
+        ]
+
+        with patch.object(session_policy, "fetch_proxy_batch", return_value=fetched), \
+             patch.object(session_policy, "get_proxy_required_ttl_seconds", return_value=0), \
+             patch.object(session_policy, "proxy_lease_has_sufficient_ttl", return_value=True):
+            selected = session_policy._select_proxy_for_session(ctx, "Worker-1")
+
+        self.assertEqual(selected, "http://2.2.2.2:8000")
+        self.assertEqual(ctx.proxy_in_use_by_thread["Worker-1"].address, "http://2.2.2.2:8000")
+
+    def test_select_proxy_for_session_skips_fetched_proxy_in_cooldown(self) -> None:
+        ctx = ExecutionState(config=ExecutionConfig(random_proxy_ip_enabled=True, target_num=2))
+        ctx.mark_proxy_in_cooldown("http://1.1.1.1:8000", 180.0)
+
+        fetched = [
+            ProxyLease(address="http://1.1.1.1:8000", source="api"),
+            ProxyLease(address="http://2.2.2.2:8000", source="api"),
+        ]
+
+        with patch.object(session_policy, "fetch_proxy_batch", return_value=fetched), \
+             patch.object(session_policy, "get_proxy_required_ttl_seconds", return_value=0), \
+             patch.object(session_policy, "proxy_lease_has_sufficient_ttl", return_value=True):
+            selected = session_policy._select_proxy_for_session(ctx, "Worker-1")
+
+        self.assertEqual(selected, "http://2.2.2.2:8000")
+        self.assertEqual(ctx.proxy_in_use_by_thread["Worker-1"].address, "http://2.2.2.2:8000")
+
+    def test_select_proxy_for_session_waits_for_new_proxy_when_runtime_requests_blocking_mode(self) -> None:
+        ctx = ExecutionState(config=ExecutionConfig(random_proxy_ip_enabled=True, target_num=1))
+
+        with (
+            patch.object(session_policy, "fetch_proxy_batch", side_effect=[[], [ProxyLease(address="http://9.9.9.9:8000", source="api")]]),
+            patch.object(session_policy, "_wait_for_next_proxy_cycle", return_value=False),
+        ):
+            selected = session_policy._select_proxy_for_session(
+                ctx,
+                "Worker-1",
+                stop_signal=ctx.stop_event,
+                wait=True,
+            )
+
+        self.assertEqual(selected, "http://9.9.9.9:8000")
+        self.assertEqual(ctx.proxy_in_use_by_thread["Worker-1"].address, "http://9.9.9.9:8000")
+
     def test_discard_unresponsive_proxy_removes_matching_proxy_from_pool(self) -> None:
         ctx = ExecutionState(config=ExecutionConfig())
         ctx.config.proxy_ip_pool = [
@@ -111,6 +211,28 @@ class SessionPolicyTests(unittest.TestCase):
         session_policy._discard_unresponsive_proxy(ctx, " http://1.1.1.1:8000 ")
 
         self.assertEqual([lease.address for lease in ctx.config.proxy_ip_pool], ["http://2.2.2.2:8000"])
+
+    def test_mark_proxy_temporarily_bad_adds_cooldown_and_discards_from_pool(self) -> None:
+        ctx = ExecutionState(config=ExecutionConfig())
+        ctx.config.proxy_ip_pool = [ProxyLease(address="http://1.1.1.1:8000")]
+
+        session_policy._mark_proxy_temporarily_bad(ctx, "http://1.1.1.1:8000", cooldown_seconds=180.0)
+
+        self.assertTrue(ctx.is_proxy_in_cooldown("http://1.1.1.1:8000"))
+        self.assertEqual(ctx.config.proxy_ip_pool, [])
+
+    def test_expired_proxy_cooldown_allows_proxy_back_into_pool(self) -> None:
+        ctx = ExecutionState(config=ExecutionConfig())
+        lease = ProxyLease(address="http://1.1.1.1:8000")
+        ctx.config.proxy_ip_pool = [lease]
+        ctx.proxy_cooldown_until_by_address[lease.address] = time.time() - 1.0
+
+        with patch.object(session_policy, "get_proxy_required_ttl_seconds", return_value=0), \
+             patch.object(session_policy, "proxy_lease_has_sufficient_ttl", return_value=True):
+            selected = session_policy._pop_available_proxy_lease_locked(ctx)
+
+        self.assertEqual(selected, lease)
+        self.assertFalse(ctx.is_proxy_in_cooldown(lease.address))
 
     def test_select_user_agent_returns_none_when_disabled(self) -> None:
         ctx = ExecutionState(config=ExecutionConfig(random_user_agent_enabled=False))

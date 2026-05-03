@@ -4,6 +4,7 @@ from __future__ import annotations
 import logging
 from typing import TYPE_CHECKING, Any
 
+from software.app.config import HEADLESS_MAX_THREADS, NON_HEADLESS_MAX_THREADS
 from software.logging.action_logger import log_action
 from software.logging.log_utils import log_suppressed_exception
 from software.io.config import RuntimeConfig, build_runtime_config_snapshot
@@ -96,7 +97,7 @@ class DashboardRunActionsMixin:
             self.target_spin.blockSignals(False)
 
         headless_enabled = bool(state.get("headless_mode", True))
-        self.thread_spin.setRange(1, 16 if headless_enabled else 8)
+        self.thread_spin.setRange(1, HEADLESS_MAX_THREADS if headless_enabled else NON_HEADLESS_MAX_THREADS)
 
         threads = state.get("threads")
         if threads is not None and int(self.thread_spin.value()) != int(threads):

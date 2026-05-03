@@ -107,15 +107,6 @@ class ContactFormInputMixin:
             self.quantity_edit.setText(normalized_text)
         finally:
             self.quantity_edit.blockSignals(False)
-    def _normalize_amount_text(self, text: str) -> str:
-        raw_text = (text or "").strip()
-        if not raw_text:
-            return ""
-        try:
-            normalized = Decimal(raw_text)
-        except (InvalidOperation, ValueError):
-            return raw_text
-        return format(normalized.normalize(), "f").rstrip("0").rstrip(".") or "0"
     def _parse_amount_value(self, text: Optional[str] = None) -> Optional[Decimal]:
         raw_text = (self.amount_edit.currentText() if text is None else text) or ""
         raw_text = raw_text.strip()

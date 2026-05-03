@@ -113,7 +113,10 @@ def describe_playwright_startup_error(exc: BaseException) -> str:
             "本机环境拦截了 Playwright 创建本地套接字/事件循环（常见为 WinError 10013），"
             "浏览器底座还没启动就被系统、安全软件或防火墙卡死了。"
         )
-    return str(exc)
+    message = str(exc or "").strip()
+    if message:
+        return message
+    return type(exc).__name__
 
 
 def classify_playwright_startup_error(exc: BaseException) -> BrowserStartupErrorInfo:

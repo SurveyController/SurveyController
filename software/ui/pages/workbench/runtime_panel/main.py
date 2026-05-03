@@ -17,6 +17,7 @@ from qfluentwidgets import (
     TeachingTipTailPosition,
 )
 
+from software.app.config import HEADLESS_MAX_THREADS, NON_HEADLESS_MAX_THREADS
 from software.ui.controller import RunController
 from software.ui.pages.workbench.runtime_panel.ai import RuntimeAISection
 from software.ui.pages.workbench.runtime_panel.cards import (
@@ -39,8 +40,8 @@ class RuntimePage(ScrollArea):
     """独立的运行参数/开关页，方便在侧边栏查看。"""
 
     MIN_THREADS = 1
-    NON_HEADLESS_MAX_THREADS = 8
-    HEADLESS_MAX_THREADS = 16
+    NON_HEADLESS_MAX_THREADS = NON_HEADLESS_MAX_THREADS
+    HEADLESS_MAX_THREADS = HEADLESS_MAX_THREADS
     SUBMIT_INTERVAL_MAX_SECONDS = 300
     ANSWER_DURATION_MAX_SECONDS = 600
 
@@ -95,7 +96,7 @@ class RuntimePage(ScrollArea):
             min_val=1, max_val=9999, default=10, parent=run_group
         )
         self.thread_card = SpinBoxSettingCard(
-            FluentIcon.APPLICATION, "并发浏览器", "同时开多个浏览器窗口提交问卷，启用无头模式可设置更高的并发数",
+            FluentIcon.APPLICATION, "并发会话", "控制同时运行的独立问卷会话数量，程序会自动复用更少的浏览器底座",
             min_val=self.MIN_THREADS, max_val=self.NON_HEADLESS_MAX_THREADS, default=2, parent=run_group
         )
         spin_width = self.target_card.suggestSpinBoxWidthForDigits(4)
@@ -490,7 +491,7 @@ class RuntimePage(ScrollArea):
 
     def update_config(self, cfg: RuntimeConfig):
         cfg.target = max(1, self.target_card.spinBox.value())
-        cfg.threads = max(1, self.thread_card.spinBox.value())
+        cfg.threads = max(self.MIN_THREADS, min(self._resolve_thread_max(self.headless_card.isChecked()), self.thread_card.spinBox.value()))
         cfg.browser_preference = []  # 固定使用默认顺序：Edge → Chrome
         cfg.submit_interval = self._card_value_as_range(self.interval_card)
         cfg.answer_duration = self._card_value_as_range(self.answer_card)
@@ -519,8 +520,6 @@ class RuntimePage(ScrollArea):
 
     def apply_config(self, cfg: RuntimeConfig):
         self.target_card.spinBox.setValue(max(1, cfg.target))
-        self.thread_card.spinBox.setValue(max(1, cfg.threads))
-
         interval_value = self._range_start_value(cfg.submit_interval)
         self.interval_card.setValue(interval_value)
 
@@ -559,6 +558,8 @@ class RuntimePage(ScrollArea):
         try:
             self.headless_card.setChecked(getattr(cfg, "headless_mode", True))
             self._apply_thread_limit_by_headless(self.headless_card.isChecked())
+            max_threads = self._resolve_thread_max(self.headless_card.isChecked())
+            self.thread_card.spinBox.setValue(max(self.MIN_THREADS, min(max_threads, int(cfg.threads or self.MIN_THREADS))))
         finally:
             self._suppress_headless_tip = False
 

@@ -13,7 +13,11 @@ from software.network.proxy.session import get_session_snapshot
 from software.app.config import app_settings, get_bool_from_qsettings
 from software.app.runtime_paths import get_runtime_directory
 from software.io.config import RuntimeConfig, build_runtime_config_snapshot
-from software.logging.log_utils import LOG_BUFFER_HANDLER, log_suppressed_exception
+from software.logging.log_utils import (
+    LOG_BUFFER_HANDLER,
+    export_full_log_to_file,
+    log_suppressed_exception,
+)
 
 class MainWindowLifecycleMixin:
     """收口主窗口的保存、启动恢复、标题刷新与关闭清理。"""
@@ -23,7 +27,6 @@ class MainWindowLifecycleMixin:
         _boot_splash: Any
         _contact_dialog: Any
         _log_page: Any
-        _support_page: Any
         _random_ip_quota_auto_sync_timer: Any
         _skip_save_on_close: bool
         _base_window_title: str
@@ -63,12 +66,6 @@ class MainWindowLifecycleMixin:
             log_suppressed_exception("closeEvent: self._log_page._refresh_timer.stop()", exc)
 
         try:
-            if self._support_page and hasattr(self._support_page, "contact_form"):
-                self._support_page.contact_form.stop_status_polling()
-        except Exception as exc:
-            log_suppressed_exception("closeEvent: self._support_page.contact_form.stop_status_polling()", exc)
-
-        try:
             self._stop_update_check_worker()
         except Exception as exc:
             log_suppressed_exception("closeEvent: self._stop_update_check_worker()", exc)
@@ -98,9 +95,11 @@ class MainWindowLifecycleMixin:
         try:
             log_path = os.path.join(get_runtime_directory(), "logs", "last_session.log")
             os.makedirs(os.path.dirname(log_path), exist_ok=True)
-            records = LOG_BUFFER_HANDLER.get_records()
-            with open(log_path, "w", encoding="utf-8") as file:
-                file.write("\n".join(entry.text for entry in records))
+            export_full_log_to_file(
+                get_runtime_directory(),
+                log_path,
+                fallback_records=LOG_BUFFER_HANDLER.get_records(),
+            )
         except Exception as exc:
             logging.warning("保存日志失败: %s", exc)
 

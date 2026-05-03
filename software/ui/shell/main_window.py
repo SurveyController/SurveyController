@@ -140,7 +140,6 @@ class MainWindow(
 
         # 延迟初始化非关键页面（懒加载）
         self._log_page = None
-        self._support_page = None
         self._community_page = None
         self._about_page = None
         self._changelog_page = None

@@ -2,6 +2,7 @@
 import threading
 from typing import Optional
 import logging
+from software.app.config import NON_HEADLESS_MAX_THREADS
 from software.logging.action_logger import bind_logged_action
 from software.logging.log_utils import log_suppressed_exception
 
@@ -240,7 +241,7 @@ class DashboardPage(
         spin_row.addSpacing(12)
         spin_row.addWidget(BodyLabel("并发数：", self))
         self.thread_spin = NoWheelSpinBox(self)
-        self.thread_spin.setRange(1, 8)
+        self.thread_spin.setRange(1, NON_HEADLESS_MAX_THREADS)
         self.thread_spin.setMinimumWidth(140)
         self.thread_spin.setMinimumHeight(36)
         spin_row.addWidget(self.thread_spin)
@@ -354,7 +355,7 @@ class DashboardPage(
         switch_row.setSpacing(8)
         self.thread_view_seg = SegmentedWidget(self)
         self.thread_view_seg.addItem(routeKey=self.THREAD_VIEW_QUESTION_LIST, text="题目清单")
-        self.thread_view_seg.addItem(routeKey=self.THREAD_VIEW_PROGRESS, text="线程进度")
+        self.thread_view_seg.addItem(routeKey=self.THREAD_VIEW_PROGRESS, text="会话进度")
         self.thread_view_seg.setCurrentItem(self.THREAD_VIEW_QUESTION_LIST)
         switch_row.addWidget(self.thread_view_seg)
         switch_row.addStretch(1)
@@ -426,7 +427,7 @@ class DashboardPage(
         progress_card_layout.setSpacing(8)
         progress_title_row = QHBoxLayout()
         progress_title_row.setSpacing(8)
-        progress_title_row.addWidget(SubtitleLabel("线程进度", self.thread_view_progress_card))
+        progress_title_row.addWidget(SubtitleLabel("会话进度", self.thread_view_progress_card))
         progress_title_row.addStretch(1)
         progress_card_layout.addLayout(progress_title_row)
         thread_progress_page = self._build_thread_progress_panel(self.thread_view_progress_card)

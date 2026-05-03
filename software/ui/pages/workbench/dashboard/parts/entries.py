@@ -156,13 +156,6 @@ class DashboardEntriesMixin:
         self.question_page._add_entry()
         self._refresh_entry_table()
 
-    def _open_question_wizard(self):
-        if self._run_question_wizard(
-            self.question_page.entries,
-            self.question_page.entry_questions_info,
-        ):
-            self._refresh_entry_table()
-
     def _edit_selected_entries(self):
         selected_rows = self._checked_rows()
         if not selected_rows:

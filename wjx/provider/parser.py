@@ -7,7 +7,7 @@ import re
 import time
 from typing import Any, Dict, List, Optional, Tuple
 
-from software.core.engine.driver_factory import create_playwright_driver
+from software.network.browser.transient import create_playwright_driver
 from software.network.browser import (
     describe_playwright_startup_error,
     is_playwright_startup_environment_error,

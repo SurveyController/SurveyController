@@ -19,16 +19,11 @@ from software.network.proxy.session import (
     load_session_for_startup,
     sync_quota_snapshot_from_server,
 )
-from software.network.proxy import get_proxy_minute_by_answer_seconds, is_custom_proxy_api_active
+from software.network.proxy import is_custom_proxy_api_active
 from software.network.proxy.policy import get_random_ip_counter_snapshot_local
 from software.logging.log_utils import log_deduped_message, reset_deduped_log_message
 
-from .runtime_constants import PROXY_SOURCE_BENEFIT
-
 _RANDOM_IP_SYNC_FAILURE_LOG_KEY = "random_ip_quota_sync_failure"
-
-if TYPE_CHECKING:
-    from software.io.config import RuntimeConfig
 
 
 class RunControllerRandomIPMixin:
@@ -37,28 +32,6 @@ class RunControllerRandomIPMixin:
 
         def notify_random_ip_loading(self, loading: bool, message: str = "") -> None: ...
 
-    def _normalize_proxy_source_value(self, source: Any) -> str:
-        normalized = str(source or "default").strip().lower()
-        return normalized if normalized in {"default", "benefit", "custom"} else "default"
-    def _resolve_answer_duration_upper_bound(self, answer_duration: Any) -> int:
-        if isinstance(answer_duration, (list, tuple)):
-            if len(answer_duration) >= 2:
-                return max(0, int(answer_duration[1] or 0))
-            if len(answer_duration) >= 1:
-                return max(0, int(answer_duration[0] or 0))
-        return 0
-    def _validate_benefit_proxy_compatibility(self, config: RuntimeConfig) -> None:
-        if not bool(getattr(config, "random_ip_enabled", False)):
-            return
-        proxy_source = self._normalize_proxy_source_value(getattr(config, "proxy_source", "default"))
-        if proxy_source != PROXY_SOURCE_BENEFIT:
-            return
-        answer_max = self._resolve_answer_duration_upper_bound(getattr(config, "answer_duration", (0, 0)))
-        minute = int(get_proxy_minute_by_answer_seconds(answer_max))
-        if minute > 1:
-            raise RuntimeError(
-                f"当前作答时长会要求 {minute} 分钟代理，但“限时福利”只支持 1 分钟。请切回“默认”代理源，或缩短作答时长后再试。"
-            )
     def _resolve_counter_snapshot_values(self, snapshot: Dict[str, Any]) -> tuple[float, float]:
         return (
             max(0.0, float(snapshot.get("used_quota") or 0.0)),

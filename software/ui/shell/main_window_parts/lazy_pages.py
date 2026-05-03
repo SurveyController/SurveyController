@@ -132,21 +132,6 @@ class MainWindowLazyPagesMixin:
             self._settings_page.setObjectName("settings")
         return self._settings_page
 
-    def _get_support_page(self):
-        """懒加载支持页面"""
-        if self._support_page is None:
-            from software.ui.pages.more.support import SupportPage
-
-            self._support_page = SupportPage(self)
-            self._support_page.setObjectName("support")
-            if self.stackedWidget.indexOf(self._support_page) == -1:
-                self.stackedWidget.addWidget(self._support_page)
-            if hasattr(self, "_on_quota_request_sent") and hasattr(self._support_page, "contact_form"):
-                if not getattr(self._support_page, "_card_badge_signal_connected", False):
-                    self._support_page.contact_form.quotaRequestSucceeded.connect(getattr(self, "_on_quota_request_sent"))
-                    setattr(self._support_page, "_card_badge_signal_connected", True)
-        return self._support_page
-
     def _get_community_page(self):
         """懒加载社区页面"""
         if self._community_page is None:
