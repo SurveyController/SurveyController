@@ -13,6 +13,16 @@ from datetime import datetime
 from typing import Any, Callable, Deque, List, Optional
 
 from software.app.config import LOG_BUFFER_CAPACITY, LOG_FORMAT, LOG_DIR_NAME
+from software.app.config import (
+    AUTO_SAVE_LOG_RETENTION_COUNT_SETTING_KEY,
+    AUTO_SAVE_LOG_RETENTION_OPTIONS,
+    AUTO_SAVE_LOGS_SETTING_KEY,
+    DEFAULT_AUTO_SAVE_LOG_RETENTION_COUNT,
+    DEFAULT_AUTO_SAVE_LOGS,
+    app_settings,
+    get_bool_from_qsettings,
+    get_int_from_qsettings,
+)
 
 
 ORIGINAL_STDOUT = sys.stdout
@@ -29,6 +39,7 @@ _SESSION_LOG_HANDLER: Optional[logging.Handler] = None
 _SESSION_LOG_PATH = ""
 _SESSION_LOG_LOCK = threading.Lock()
 _SESSION_LOG_BACKFILLED = False
+_DELETE_SESSION_LOG_ON_SHUTDOWN = False
 
 
 def _should_filter_noise(message: str) -> bool:
@@ -533,6 +544,73 @@ def _ensure_logs_dir(runtime_directory: str) -> str:
     return logs_dir
 
 
+def get_auto_save_log_settings() -> tuple[bool, int]:
+    """读取日志自动保存开关与保留份数。"""
+    settings = app_settings()
+    enabled = get_bool_from_qsettings(settings.value(AUTO_SAVE_LOGS_SETTING_KEY), DEFAULT_AUTO_SAVE_LOGS)
+    max_keep = max(AUTO_SAVE_LOG_RETENTION_OPTIONS) if AUTO_SAVE_LOG_RETENTION_OPTIONS else DEFAULT_AUTO_SAVE_LOG_RETENTION_COUNT
+    keep_count = get_int_from_qsettings(
+        settings.value(AUTO_SAVE_LOG_RETENTION_COUNT_SETTING_KEY),
+        DEFAULT_AUTO_SAVE_LOG_RETENTION_COUNT,
+        minimum=1,
+        maximum=max_keep,
+    )
+    return bool(enabled), int(keep_count)
+
+
+def prune_session_log_files(runtime_directory: str, keep_count: int) -> int:
+    """只保留最近 keep_count 份自动会话日志。"""
+    logs_dir = _ensure_logs_dir(runtime_directory)
+    keep_count = max(1, int(keep_count))
+    candidates: list[tuple[float, str]] = []
+    for name in os.listdir(logs_dir):
+        if not (name.startswith("session_") and name.endswith(".log")):
+            continue
+        path = os.path.join(logs_dir, name)
+        if not os.path.isfile(path):
+            continue
+        try:
+            candidates.append((os.path.getmtime(path), path))
+        except OSError:
+            continue
+    candidates.sort(key=lambda item: (item[0], item[1]), reverse=True)
+
+    removed = 0
+    for _mtime, path in candidates[keep_count:]:
+        try:
+            os.remove(path)
+            removed += 1
+        except OSError as exc:
+            _safe_internal_log(f"prune_session_log_files failed: {path}", exc)
+    return removed
+
+
+def finalize_session_log_persistence(runtime_directory: str) -> None:
+    """按用户设置决定是否保留本次会话日志，并清理历史文件。"""
+    global _DELETE_SESSION_LOG_ON_SHUTDOWN
+
+    enabled, keep_count = get_auto_save_log_settings()
+    logs_dir = _ensure_logs_dir(runtime_directory)
+    last_session_path = os.path.join(logs_dir, "last_session.log")
+
+    if enabled:
+        export_full_log_to_file(
+            runtime_directory,
+            last_session_path,
+            fallback_records=LOG_BUFFER_HANDLER.get_records(),
+        )
+        prune_session_log_files(runtime_directory, keep_count)
+        _DELETE_SESSION_LOG_ON_SHUTDOWN = False
+        return
+
+    _DELETE_SESSION_LOG_ON_SHUTDOWN = True
+    try:
+        if os.path.isfile(last_session_path):
+            os.remove(last_session_path)
+    except OSError as exc:
+        _safe_internal_log("finalize_session_log_persistence failed to remove last_session.log", exc)
+
+
 def save_log_records_to_file(
     records: List[LogBufferEntry],
     runtime_directory: str,
@@ -607,6 +685,7 @@ def log_popup_confirm(title: str, message: str, **kwargs: Any) -> bool:
 def shutdown_logging():
     """优雅关闭日志系统（在程序退出前调用）"""
     try:
+        session_log_path = str(_SESSION_LOG_PATH or "")
         # 1. 刷新剩余日志
         LOG_BUFFER_HANDLER.flush_remaining()
         flush_session_log_file()
@@ -626,6 +705,11 @@ def shutdown_logging():
                 root_logger.removeHandler(handler)
             except Exception:
                 pass
+        if _DELETE_SESSION_LOG_ON_SHUTDOWN and session_log_path and os.path.isfile(session_log_path):
+            try:
+                os.remove(session_log_path)
+            except OSError as exc:
+                _safe_internal_log("shutdown_logging failed to remove session log", exc)
     except Exception as exc:
         _safe_internal_log("shutdown_logging failed", exc)
 

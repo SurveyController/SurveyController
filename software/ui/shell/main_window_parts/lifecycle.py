@@ -14,8 +14,7 @@ from software.app.config import app_settings, get_bool_from_qsettings
 from software.app.runtime_paths import get_runtime_directory
 from software.io.config import RuntimeConfig, build_runtime_config_snapshot
 from software.logging.log_utils import (
-    LOG_BUFFER_HANDLER,
-    export_full_log_to_file,
+    finalize_session_log_persistence,
     log_suppressed_exception,
 )
 
@@ -93,13 +92,7 @@ class MainWindowLifecycleMixin:
 
     def _persist_last_session_log(self) -> None:
         try:
-            log_path = os.path.join(get_runtime_directory(), "logs", "last_session.log")
-            os.makedirs(os.path.dirname(log_path), exist_ok=True)
-            export_full_log_to_file(
-                get_runtime_directory(),
-                log_path,
-                fallback_records=LOG_BUFFER_HANDLER.get_records(),
-            )
+            finalize_session_log_persistence(get_runtime_directory())
         except Exception as exc:
             logging.warning("保存日志失败: %s", exc)
 

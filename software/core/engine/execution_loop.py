@@ -319,6 +319,7 @@ class ExecutionLoop:
             failure_reason=FailureReason.PROXY_UNAVAILABLE,
             status_text=status_text,
             log_message=log_message,
+            consume_reverse_fill_attempt=False,
         )
         if stopped and not stop_signal.is_set():
             stop_signal.set()
@@ -392,6 +393,7 @@ class ExecutionLoop:
                 failure_reason=FailureReason.BROWSER_START_FAILED,
                 status_text="浏览器启动失败",
                 log_message=f"浏览器启动失败，本轮按失败处理：{friendly_error}",
+                consume_reverse_fill_attempt=False,
             )
             if stopped and not stop_signal.is_set():
                 stop_signal.set()
@@ -463,6 +465,7 @@ class ExecutionLoop:
                 failure_reason=FailureReason.PAGE_LOAD_FAILED,
                 status_text="加载问卷失败",
                 log_message=f"加载问卷失败，本轮按失败处理：{exc}",
+                consume_reverse_fill_attempt=False,
             )
             return False
         return True
@@ -483,6 +486,7 @@ class ExecutionLoop:
             failure_reason=FailureReason.DEVICE_QUOTA_LIMIT,
             status_text="设备达到填写次数上限",
             log_message="设备达到填写次数上限，本轮按失败处理",
+            consume_reverse_fill_attempt=False,
         )
         if stopped and not stop_signal.is_set():
             stop_signal.set()
@@ -597,6 +601,7 @@ class ExecutionLoop:
                 threshold_override=_FREE_AI_TIMEOUT_FAIL_THRESHOLD,
                 terminal_stop_category="free_ai_unstable",
                 force_stop_when_threshold_reached=True,
+                consume_reverse_fill_attempt=False,
             )
             if stopped:
                 logging.error("免费 AI 连续超时达到阈值，任务停止：%s", exc, exc_info=True)
@@ -639,6 +644,7 @@ class ExecutionLoop:
             stop_signal,
             thread_name=thread_name,
             failure_reason=FailureReason.PROXY_UNAVAILABLE,
+            consume_reverse_fill_attempt=False,
         )
 
     def _should_use_preloaded_session_pool(self) -> bool:
@@ -838,6 +844,7 @@ class ExecutionLoop:
                     stop_signal,
                     thread_name=thread_name,
                     failure_reason=FailureReason.FILL_FAILED,
+                    consume_reverse_fill_attempt=False,
                 ):
                     should_refill = False
                     should_requeue_dispatch = False
@@ -1007,6 +1014,7 @@ class ExecutionLoop:
                     stop_signal,
                     thread_name=thread_name,
                     failure_reason=FailureReason.FILL_FAILED,
+                    consume_reverse_fill_attempt=False,
                 ):
                     should_requeue_dispatch = False
                     break

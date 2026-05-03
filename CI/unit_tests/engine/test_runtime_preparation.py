@@ -6,6 +6,7 @@ from unittest.mock import patch
 from software.core.questions.config import QuestionEntry
 from software.io.config import RuntimeConfig
 from software.providers.contracts import SurveyQuestionMeta
+from software.core.reverse_fill.schema import ReverseFillSpec
 from software.ui.controller.run_controller_parts.runtime_preparation import (
     PreparedExecutionArtifacts,
     RuntimePreparationError,
@@ -164,6 +165,36 @@ class RuntimePreparationTests(unittest.TestCase):
 
         self.assertEqual(headless_artifacts.execution_config_template.num_threads, 36)
         self.assertEqual(headed_artifacts.execution_config_template.num_threads, 12)
+
+    def test_prepare_execution_artifacts_uses_reverse_fill_sample_count_and_threads(self) -> None:
+        config = self._build_config()
+        config.target = 2
+        config.threads = 8
+        config.reverse_fill_threads = 3
+        reverse_fill_spec = ReverseFillSpec(
+            source_path="D:/demo.xlsx",
+            selected_format="wjx_sequence",
+            detected_format="wjx_sequence",
+            start_row=1,
+            total_samples=9,
+            available_samples=9,
+            target_num=9,
+        )
+
+        with (
+            patch(
+                "software.ui.controller.run_controller_parts.runtime_preparation.build_enabled_reverse_fill_spec",
+                return_value=reverse_fill_spec,
+            ),
+            patch(
+                "software.ui.controller.run_controller_parts.runtime_preparation.configure_probabilities",
+                return_value=None,
+            ),
+        ):
+            artifacts = prepare_execution_artifacts(config)
+
+        self.assertEqual(artifacts.execution_config_template.target_num, 9)
+        self.assertEqual(artifacts.execution_config_template.num_threads, 3)
 
 
 if __name__ == "__main__":

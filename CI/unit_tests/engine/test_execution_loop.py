@@ -4,6 +4,7 @@ import threading
 import unittest
 from contextlib import ExitStack, contextmanager
 from types import MethodType, SimpleNamespace
+from unittest.mock import MagicMock
 
 import software.core.engine.execution_loop as execution_loop_module
 from software.core.engine.execution_loop import ExecutionLoop, _load_survey_page
@@ -12,6 +13,12 @@ from software.core.engine.page_load_probe import (
     PAGE_LOAD_PROBE_BUSINESS_PAGE,
     PAGE_LOAD_PROBE_PROXY_UNUSABLE,
     PageLoadProbeResult,
+)
+from software.core.reverse_fill.schema import (
+    REVERSE_FILL_KIND_CHOICE,
+    ReverseFillAnswer,
+    ReverseFillSampleRow,
+    ReverseFillSpec,
 )
 from software.core.task import ExecutionConfig, ExecutionState
 from software.network.browser import BrowserStartupErrorInfo
@@ -119,6 +126,27 @@ class _FakeSubmissionService:
 
 
 class ExecutionLoopTests(unittest.TestCase):
+    def _build_reverse_fill_state(self, *, target_num: int = 1) -> ExecutionState:
+        spec = ReverseFillSpec(
+            source_path="demo.xlsx",
+            selected_format="wjx_sequence",
+            detected_format="wjx_sequence",
+            start_row=1,
+            total_samples=1,
+            available_samples=1,
+            target_num=target_num,
+            samples=[
+                ReverseFillSampleRow(
+                    data_row_number=1,
+                    worksheet_row_number=2,
+                    answers={1: ReverseFillAnswer(question_num=1, kind=REVERSE_FILL_KIND_CHOICE, choice_index=0)},
+                )
+            ],
+        )
+        state = ExecutionState(config=ExecutionConfig(url="https://example.com", reverse_fill_spec=spec, target_num=target_num))
+        state.initialize_reverse_fill_runtime()
+        return state
+
     def test_load_survey_page_keeps_default_timeout_for_non_credamo(self) -> None:
         config = ExecutionConfig(url="https://example.com", survey_provider="wjx")
         driver = _FakeDriver()
@@ -347,6 +375,7 @@ class ExecutionLoopTests(unittest.TestCase):
         self.assertEqual(preferred, ["edge"])
         self.assertEqual(loop.stop_policy.failure_calls, [execution_loop_module.FailureReason.PROXY_UNAVAILABLE])
         self.assertEqual(loop.stop_policy.failure_kwargs[0].get("status_text"), "代理不可用")
+        self.assertFalse(bool(loop.stop_policy.failure_kwargs[0].get("consume_reverse_fill_attempt", True)))
         self.assertEqual(state.thread_progress["Slot-1"].status_text, "代理不可用")
         self.assertFalse(stop_signal.is_set())
 
@@ -384,6 +413,7 @@ class ExecutionLoopTests(unittest.TestCase):
         self.assertEqual(marked_bad, ["http://1.1.1.1:8000"])
         self.assertEqual(loop.stop_policy.failure_calls, [execution_loop_module.FailureReason.PROXY_UNAVAILABLE])
         self.assertEqual(loop.stop_policy.failure_kwargs[0].get("status_text"), "代理不可用")
+        self.assertFalse(bool(loop.stop_policy.failure_kwargs[0].get("consume_reverse_fill_attempt", True)))
         self.assertEqual(state.thread_progress["Slot-1"].status_text, "代理失效，切换中")
         self.assertFalse(stop_signal.is_set())
 
@@ -615,6 +645,65 @@ class ExecutionLoopTests(unittest.TestCase):
         self.assertTrue(stop_signal.is_set())
         self.assertEqual(prepare_round_context_calls, 1)
         self.assertEqual(loop.stop_policy.failure_calls, [execution_loop_module.FailureReason.PAGE_LOAD_FAILED])
+
+    def test_prepare_round_context_requeues_reverse_fill_when_joint_slot_unavailable(self) -> None:
+        state = self._build_reverse_fill_state()
+        config = state.config
+        loop = ExecutionLoop(config, state)
+        stop_signal = threading.Event()
+        state.wait_for_runtime_change = MagicMock(side_effect=lambda **_kwargs: stop_signal.set() or True)
+        state.reserve_joint_sample(2, thread_name="Worker-8")
+        state.reserve_joint_sample(2, thread_name="Worker-9")
+
+        with _patched_attr(
+            execution_loop_module,
+            "ensure_joint_psychometric_answer_plan",
+            lambda _config: SimpleNamespace(sample_count=2),
+        ):
+            ready = loop._prepare_round_context(stop_signal, thread_name="Worker-1", session=None)
+
+        self.assertFalse(ready)
+        self.assertEqual(list(state.reverse_fill_runtime.queued_row_numbers), [1])
+        self.assertEqual(state.thread_progress["Worker-1"].status_text, "等待信效度配额槽位")
+        state.wait_for_runtime_change.assert_called_once()
+
+    def test_prepare_round_context_releases_joint_slot_while_waiting_for_reverse_fill(self) -> None:
+        state = self._build_reverse_fill_state()
+        config = state.config
+        loop = ExecutionLoop(config, state)
+        stop_signal = threading.Event()
+        state.acquire_reverse_fill_sample("Worker-9")
+        release_joint = MagicMock(side_effect=state.release_joint_sample)
+        wait_runtime_change = MagicMock(side_effect=lambda **_kwargs: stop_signal.set() or True)
+        state.release_joint_sample = release_joint
+        state.wait_for_runtime_change = wait_runtime_change
+
+        with _patched_attr(
+            execution_loop_module,
+            "ensure_joint_psychometric_answer_plan",
+            lambda _config: SimpleNamespace(sample_count=1),
+        ):
+            ready = loop._prepare_round_context(stop_signal, thread_name="Worker-1", session=None)
+
+        self.assertFalse(ready)
+        release_joint.assert_called_once_with("Worker-1")
+        self.assertEqual(state.thread_progress["Worker-1"].status_text, "等待反填样本")
+        wait_runtime_change.assert_called_once()
+
+    def test_prepare_round_context_stops_when_reverse_fill_target_is_exhausted(self) -> None:
+        state = self._build_reverse_fill_state(target_num=2)
+        config = state.config
+        loop = ExecutionLoop(config, state)
+        stop_signal = threading.Event()
+        state.acquire_reverse_fill_sample("Worker-9")
+        state.mark_reverse_fill_submission_failed("Worker-9", max_retries=0)
+
+        ready = loop._prepare_round_context(stop_signal, thread_name="Worker-1", session=None)
+
+        self.assertFalse(ready)
+        self.assertTrue(stop_signal.is_set())
+        self.assertEqual(state.get_terminal_stop_snapshot()[0], "reverse_fill_exhausted")
+        self.assertEqual(state.thread_progress["Worker-1"].status_text, "反填样本不足")
 
 
 if __name__ == "__main__":

@@ -40,38 +40,37 @@ class AsyncBridgeLoopThread:
         return int(self._thread_id or 0)
 
     def start(self) -> None:
-        if self._thread is not None:
-            return
         with self._start_stop_lock:
             if self._thread is not None:
-                return
-            self._loop_ready.clear()
+                pass
+            else:
+                self._loop_ready.clear()
 
-            def _runner() -> None:
-                loop = asyncio.new_event_loop()
-                asyncio.set_event_loop(loop)
-                self._loop = loop
-                self._thread_id = threading.get_ident()
-                self._loop_ready.set()
-                try:
-                    loop.run_forever()
-                finally:
-                    pending = [task for task in asyncio.all_tasks(loop) if not task.done()]
-                    for task in pending:
-                        task.cancel()
-                    if pending:
-                        try:
-                            loop.run_until_complete(asyncio.gather(*pending, return_exceptions=True))
-                        except Exception:
-                            logging.debug("停止桥接循环时等待挂起任务失败", exc_info=True)
+                def _runner() -> None:
+                    loop = asyncio.new_event_loop()
+                    asyncio.set_event_loop(loop)
+                    self._loop = loop
+                    self._thread_id = threading.get_ident()
+                    self._loop_ready.set()
                     try:
-                        loop.run_until_complete(loop.shutdown_asyncgens())
-                    except Exception:
-                        logging.debug("停止桥接循环时关闭 async generators 失败", exc_info=True)
-                    loop.close()
+                        loop.run_forever()
+                    finally:
+                        pending = [task for task in asyncio.all_tasks(loop) if not task.done()]
+                        for task in pending:
+                            task.cancel()
+                        if pending:
+                            try:
+                                loop.run_until_complete(asyncio.gather(*pending, return_exceptions=True))
+                            except Exception:
+                                logging.debug("停止桥接循环时等待挂起任务失败", exc_info=True)
+                        try:
+                            loop.run_until_complete(loop.shutdown_asyncgens())
+                        except Exception:
+                            logging.debug("停止桥接循环时关闭 async generators 失败", exc_info=True)
+                        loop.close()
 
-            self._thread = threading.Thread(target=_runner, daemon=True, name=self._name)
-            self._thread.start()
+                self._thread = threading.Thread(target=_runner, daemon=True, name=self._name)
+                self._thread.start()
         self._loop_ready.wait()
 
     def run_coroutine(self, coro: Any) -> Any:

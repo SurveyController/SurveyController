@@ -136,6 +136,42 @@ class AsyncBridgeTests(unittest.TestCase):
         finally:
             bridge.stop()
 
+    def test_loop_property_waits_until_background_loop_is_ready(self) -> None:
+        bridge = AsyncBridgeLoopThread(name="BridgeLoopReady")
+        release_loop = threading.Event()
+        ready_to_race = threading.Event()
+        original_new_event_loop = __import__("asyncio").new_event_loop
+        errors: list[BaseException] = []
+        loops = []
+
+        def _slow_new_event_loop():
+            ready_to_race.set()
+            release_loop.wait(timeout=2)
+            return original_new_event_loop()
+
+        def _read_loop() -> None:
+            try:
+                loops.append(bridge.loop)
+            except BaseException as exc:  # pragma: no cover - 用于捕获旧竞态
+                errors.append(exc)
+
+        callers = [threading.Thread(target=_read_loop, name=f"LoopCaller-{idx}") for idx in range(2)]
+        try:
+            with patch("software.network.browser.async_bridge.asyncio.new_event_loop", side_effect=_slow_new_event_loop):
+                callers[0].start()
+                self.assertTrue(ready_to_race.wait(timeout=2))
+                callers[1].start()
+                time.sleep(0.05)
+                release_loop.set()
+                for caller in callers:
+                    caller.join(timeout=2)
+            self.assertEqual(errors, [])
+            self.assertEqual(len(loops), 2)
+            self.assertIs(loops[0], loops[1])
+        finally:
+            release_loop.set()
+            bridge.stop()
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -110,6 +110,7 @@ class ReverseFillQuestionPlan:
     column_headers: List[str] = field(default_factory=list)
     detail: str = ""
     fallback_ready: bool = False
+    fallback_resolved: bool = False
 
 
 @dataclass(frozen=True)
@@ -150,4 +151,3 @@ class ReverseFillAcquireResult:
     status: str
     sample: Optional[ReverseFillSampleRow] = None
     message: str = ""
-

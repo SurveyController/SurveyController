@@ -18,17 +18,24 @@ from qfluentwidgets import (
 )
 
 from software.app.config import (
+    AUTO_SAVE_LOG_RETENTION_COUNT_SETTING_KEY,
+    AUTO_SAVE_LOG_RETENTION_OPTIONS,
+    AUTO_SAVE_LOGS_SETTING_KEY,
     DEFAULT_DOWNLOAD_SOURCE,
+    DEFAULT_AUTO_SAVE_LOG_RETENTION_COUNT,
+    DEFAULT_AUTO_SAVE_LOGS,
     DOWNLOAD_SOURCES,
     NAVIGATION_TEXT_VISIBLE_SETTING_KEY,
     app_settings,
     get_bool_from_qsettings,
+    get_int_from_qsettings,
 )
 from software.logging.action_logger import bind_logged_action, log_action
 from software.logging.log_utils import log_suppressed_exception
 from software.providers.survey_cache import clear_survey_parse_cache
 from software.ui.widgets.setting_cards import (
     ComboSettingCard,
+    ExpandComboSwitchSettingCard,
     SwitchSettingCard,
 )
 
@@ -85,8 +92,35 @@ class SettingsPage(ScrollArea):
             self.behavior_group,
         )
         self.prevent_sleep_card.setChecked(get_bool_from_qsettings(settings.value("prevent_sleep_during_run"), True))
+        self.auto_save_logs_card = ExpandComboSwitchSettingCard(
+            FluentIcon.DOCUMENT,
+            "自动保存日志",
+            "关闭程序后自动保留本次运行日志，并只留下最近几份历史记录",
+            "保留最近日志文件数：",
+            combo_min_width=140,
+            combo_suffix="份",
+            parent=self.behavior_group,
+        )
+        self.auto_save_logs_card.setChecked(
+            get_bool_from_qsettings(settings.value(AUTO_SAVE_LOGS_SETTING_KEY), DEFAULT_AUTO_SAVE_LOGS)
+        )
+        self.auto_save_logs_combo = self.auto_save_logs_card.comboBox
+        for count in AUTO_SAVE_LOG_RETENTION_OPTIONS:
+            self.auto_save_logs_combo.addItem(str(count), userData=int(count))
+        saved_retention = get_int_from_qsettings(
+            settings.value(AUTO_SAVE_LOG_RETENTION_COUNT_SETTING_KEY),
+            DEFAULT_AUTO_SAVE_LOG_RETENTION_COUNT,
+            minimum=1,
+            maximum=max(AUTO_SAVE_LOG_RETENTION_OPTIONS),
+        )
+        retention_index = self.auto_save_logs_combo.findData(saved_retention)
+        if retention_index < 0:
+            retention_index = self.auto_save_logs_combo.findData(DEFAULT_AUTO_SAVE_LOG_RETENTION_COUNT)
+        if retention_index >= 0:
+            self.auto_save_logs_combo.setCurrentIndex(retention_index)
         self.behavior_group.addSettingCard(self.ask_save_card)
         self.behavior_group.addSettingCard(self.prevent_sleep_card)
+        self.behavior_group.addSettingCard(self.auto_save_logs_card)
         layout.addWidget(self.behavior_group)
 
         self.update_group = SettingCardGroup("软件更新", self.view)
@@ -179,6 +213,25 @@ class SettingsPage(ScrollArea):
             target="prevent_sleep_switch",
             page="settings",
             payload_factory=lambda checked: {"enabled": bool(checked)},
+        )
+        bind_logged_action(
+            self.auto_save_logs_card.switchButton.checkedChanged,
+            self._on_auto_save_logs_toggled,
+            scope="CONFIG",
+            event="toggle_auto_save_logs",
+            target="auto_save_logs_switch",
+            page="settings",
+            payload_factory=lambda checked: {"enabled": bool(checked)},
+        )
+        bind_logged_action(
+            self.auto_save_logs_combo.currentIndexChanged,
+            self._on_auto_save_log_retention_changed,
+            scope="CONFIG",
+            event="change_auto_save_log_retention",
+            target="auto_save_log_retention_combo",
+            page="settings",
+            payload_factory=lambda _index: {"keep_count": self.auto_save_logs_combo.currentData()},
+            forward_signal_args=False,
         )
         bind_logged_action(
             self.restart_card.clicked,
@@ -308,6 +361,34 @@ class SettingsPage(ScrollArea):
             payload={"enabled": bool(checked), "persist": persist},
         )
 
+    def _apply_auto_save_logs_state(self, checked: bool, persist: bool = True):
+        settings = app_settings()
+        if persist:
+            settings.setValue(AUTO_SAVE_LOGS_SETTING_KEY, checked)
+        self.auto_save_logs_card.setContentEnabled(bool(checked))
+        log_action(
+            "CONFIG",
+            "toggle_auto_save_logs",
+            "auto_save_logs_switch",
+            "settings",
+            result="changed",
+            payload={"enabled": bool(checked), "persist": persist},
+        )
+
+    def _apply_auto_save_log_retention_count(self, keep_count: int, persist: bool = True):
+        normalized = int(keep_count)
+        settings = app_settings()
+        if persist:
+            settings.setValue(AUTO_SAVE_LOG_RETENTION_COUNT_SETTING_KEY, normalized)
+        log_action(
+            "CONFIG",
+            "change_auto_save_log_retention",
+            "auto_save_log_retention_combo",
+            "settings",
+            result="changed",
+            payload={"keep_count": normalized, "persist": persist},
+        )
+
     def _apply_auto_update_state(self, checked: bool, persist: bool = True):
         settings = app_settings()
         if persist:
@@ -363,6 +444,18 @@ class SettingsPage(ScrollArea):
     def _on_prevent_sleep_toggled(self, checked: bool):
         self._apply_prevent_sleep_state(checked)
 
+    def _on_auto_save_logs_toggled(self, checked: bool):
+        self._apply_auto_save_logs_state(checked)
+
+    def _on_auto_save_log_retention_changed(self):
+        idx = self.auto_save_logs_combo.currentIndex()
+        keep_count = DEFAULT_AUTO_SAVE_LOG_RETENTION_COUNT
+        if idx >= 0:
+            keep_count_data = self.auto_save_logs_combo.itemData(idx)
+            if keep_count_data is not None:
+                keep_count = int(cast(Any, keep_count_data))
+        self._apply_auto_save_log_retention_count(keep_count)
+
     def _on_reset_ui_settings(self):
         box = MessageBox("恢复默认设置", "确定要恢复默认设置吗？\n这将还原所有设置项到初始状态。", self.window() or self)
         box.yesButton.setText("恢复")
@@ -378,6 +471,8 @@ class SettingsPage(ScrollArea):
             "window_topmost",
             "ask_save_on_close",
             "prevent_sleep_during_run",
+            AUTO_SAVE_LOGS_SETTING_KEY,
+            AUTO_SAVE_LOG_RETENTION_COUNT_SETTING_KEY,
             "auto_check_update",
         ):
             settings.remove(key)
@@ -387,17 +482,27 @@ class SettingsPage(ScrollArea):
             "window_topmost": False,
             "ask_save_on_close": True,
             "prevent_sleep_during_run": True,
+            AUTO_SAVE_LOGS_SETTING_KEY: DEFAULT_AUTO_SAVE_LOGS,
+            AUTO_SAVE_LOG_RETENTION_COUNT_SETTING_KEY: DEFAULT_AUTO_SAVE_LOG_RETENTION_COUNT,
             "auto_check_update": True,
         }
         self._set_switch_state(self.navigation_text_card, defaults[NAVIGATION_TEXT_VISIBLE_SETTING_KEY])
         self._set_switch_state(self.topmost_card, defaults["window_topmost"])
         self._set_switch_state(self.ask_save_card, defaults["ask_save_on_close"])
         self._set_switch_state(self.prevent_sleep_card, defaults["prevent_sleep_during_run"])
+        self._set_switch_state(self.auto_save_logs_card, defaults[AUTO_SAVE_LOGS_SETTING_KEY])
+        retention_index = self.auto_save_logs_combo.findData(defaults[AUTO_SAVE_LOG_RETENTION_COUNT_SETTING_KEY])
+        if retention_index >= 0:
+            self.auto_save_logs_combo.blockSignals(True)
+            self.auto_save_logs_combo.setCurrentIndex(retention_index)
+            self.auto_save_logs_combo.blockSignals(False)
         self._set_switch_state(self.auto_update_card, defaults["auto_check_update"])
         self._apply_navigation_text_state(defaults[NAVIGATION_TEXT_VISIBLE_SETTING_KEY], persist=False)
         self._apply_topmost_state(defaults["window_topmost"], persist=False)
         self._apply_ask_save_state(defaults["ask_save_on_close"], persist=False)
         self._apply_prevent_sleep_state(defaults["prevent_sleep_during_run"], persist=False)
+        self._apply_auto_save_logs_state(defaults[AUTO_SAVE_LOGS_SETTING_KEY], persist=False)
+        self._apply_auto_save_log_retention_count(defaults[AUTO_SAVE_LOG_RETENTION_COUNT_SETTING_KEY], persist=False)
         self._apply_auto_update_state(defaults["auto_check_update"], persist=False)
         InfoBar.success("", "已恢复默认设置", parent=self.window(), position=InfoBarPosition.TOP, duration=2000)
 

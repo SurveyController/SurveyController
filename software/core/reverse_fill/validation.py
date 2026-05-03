@@ -7,7 +7,8 @@ import os
 from collections.abc import Sequence
 from typing import Any, Dict, List, Optional
 
-from software.core.questions.schema import QuestionEntry
+from software.core.questions.default_builder import build_default_question_entries
+from software.core.questions.schema import QuestionEntry, _infer_option_count
 from software.core.questions.validation import validate_question_config
 from software.core.reverse_fill.parser import (
     infer_reverse_fill_question_type,
@@ -60,16 +61,20 @@ def _question_issue(
     reason: str,
     fallback_ready: bool,
     sample_rows: Optional[List[int]] = None,
+    suggestion: Optional[str] = None,
+    severity: Optional[str] = None,
 ) -> ReverseFillIssue:
-    suggestion = "已回退到当前题目的常规配置，可继续运行" if fallback_ready else "请先打开配置向导，把这题的常规配置补齐后再启动"
-    severity = "warn" if fallback_ready else "block"
+    resolved_suggestion = str(suggestion or "").strip()
+    if not resolved_suggestion:
+        resolved_suggestion = "已回退到当前题目的常规配置，可继续运行" if fallback_ready else "请先打开配置向导，把这题的常规配置补齐后再启动"
+    resolved_severity = str(severity or "").strip().lower() or ("warn" if fallback_ready else "block")
     return ReverseFillIssue(
         question_num=question_num,
         title=title,
-        severity=severity,
+        severity=resolved_severity,
         category=category,
         reason=reason,
-        suggestion=suggestion,
+        suggestion=resolved_suggestion,
         sample_rows=list(sample_rows or []),
     )
 
@@ -83,6 +88,7 @@ def _build_question_plan(
     columns: List[Any],
     detail: str,
     fallback_ready: bool,
+    fallback_resolved: bool = False,
 ) -> ReverseFillQuestionPlan:
     headers = [str(getattr(column, "header", "") or "").strip() for column in list(columns or []) if str(getattr(column, "header", "") or "").strip()]
     return ReverseFillQuestionPlan(
@@ -93,6 +99,56 @@ def _build_question_plan(
         column_headers=headers,
         detail=detail,
         fallback_ready=bool(fallback_ready),
+        fallback_resolved=bool(fallback_resolved),
+    )
+
+
+def _entry_differs_from_default(entry: Optional[QuestionEntry], default_entry: Optional[QuestionEntry]) -> bool:
+    if entry is None or default_entry is None:
+        return False
+    compare_fields = (
+        "question_type",
+        "probabilities",
+        "texts",
+        "rows",
+        "option_count",
+        "distribution_mode",
+        "custom_weights",
+        "ai_enabled",
+        "multi_text_blank_modes",
+        "multi_text_blank_ai_flags",
+        "multi_text_blank_int_ranges",
+        "text_random_mode",
+        "text_random_int_range",
+        "option_fill_texts",
+        "fillable_option_indices",
+        "attached_option_selects",
+        "is_location",
+        "dimension",
+        "psycho_bias",
+    )
+    for field_name in compare_fields:
+        left = copy.deepcopy(getattr(entry, field_name, None))
+        right = copy.deepcopy(getattr(default_entry, field_name, None))
+        if field_name == "option_count":
+            left = int(left or _infer_option_count(entry) or 0)
+            right = int(right or _infer_option_count(default_entry) or 0)
+        elif field_name == "fillable_option_indices":
+            left = list(left or [])
+            right = list(right or [])
+        if left != right:
+            return True
+    return False
+
+
+def _build_no_sample_issue(*, start_row: int, total_samples: int) -> ReverseFillIssue:
+    return ReverseFillIssue(
+        question_num=0,
+        title="样本总量",
+        severity="block",
+        category="sample_empty",
+        reason=f"起始样本行设为 {start_row}，但 Excel 总共只有 {total_samples} 行数据，后面已经没有可反填的样本了",
+        suggestion="请把起始样本行往前调，或更换包含更多数据的 Excel",
     )
 
 
@@ -123,10 +179,25 @@ def build_reverse_fill_spec(
     if not questions_info:
         raise ValueError("当前还没有解析出问卷题目，无法校验反填")
 
+    normalized_questions_info = [
+        ensure_survey_question_meta(raw_info, index=info_index)
+        for info_index, raw_info in enumerate(list(questions_info or []), start=1)
+        if isinstance(raw_info, (dict, SurveyQuestionMeta))
+    ]
+    default_entries = build_default_question_entries(normalized_questions_info)
+    default_entry_by_num = {
+        int(getattr(entry, "question_num", 0) or 0): entry
+        for entry in list(default_entries or [])
+        if int(getattr(entry, "question_num", 0) or 0) > 0
+    }
+
     export = load_wjx_excel_export(source_path, preferred_format=selected_format)
     normalized_start_row = max(1, int(start_row or 1))
     total_samples = int(export.total_data_rows or 0)
     available_rows = max(0, total_samples - normalized_start_row + 1)
+    effective_target_num = max(0, int(target_num or 0))
+    if effective_target_num <= 0:
+        effective_target_num = available_rows
     selected_rows = list(export.raw_rows or [])[normalized_start_row - 1 :]
 
     issues: List[ReverseFillIssue] = []
@@ -135,13 +206,12 @@ def build_reverse_fill_spec(
         int(row.data_row_number): {} for row in selected_rows
     }
 
-    if target_num > 0 and target_num > available_rows:
+    if available_rows <= 0:
+        issues.append(_build_no_sample_issue(start_row=normalized_start_row, total_samples=total_samples))
+    elif target_num > 0 and target_num > available_rows:
         issues.append(_build_global_issue(target_num=target_num, available_samples=available_rows))
 
-    for info_index, raw_info in enumerate(list(questions_info or []), start=1):
-        if not isinstance(raw_info, (dict, SurveyQuestionMeta)):
-            continue
-        info = ensure_survey_question_meta(raw_info, index=info_index)
+    for info in normalized_questions_info:
         if bool(info.is_description):
             continue
         question_num = int(info.num or 0)
@@ -152,6 +222,7 @@ def build_reverse_fill_spec(
         question_type = infer_reverse_fill_question_type(info, entry)
         columns = list((export.question_columns or {}).get(question_num) or [])
         fallback_ready = _regular_config_ready(entry, info, question_type)
+        fallback_resolved = fallback_ready and _entry_differs_from_default(entry, default_entry_by_num.get(question_num))
 
         if bool(info.unsupported):
             reason = str(info.unsupported_reason or "当前程序暂不支持这道题").strip()
@@ -174,6 +245,34 @@ def build_reverse_fill_spec(
                     columns=columns,
                     detail=reason,
                     fallback_ready=False,
+                    fallback_resolved=False,
+                )
+            )
+            continue
+
+        if question_type == "order":
+            reason = "排序题目前不参与反填覆盖"
+            issues.append(
+                _question_issue(
+                    question_num=question_num,
+                    title=title,
+                    category="auto_handled",
+                    reason=reason,
+                    fallback_ready=False,
+                    suggestion="自动按常规逻辑处理（执行时自动随机排序）",
+                    severity="warn",
+                )
+            )
+            question_plans.append(
+                _build_question_plan(
+                    question_num=question_num,
+                    title=title,
+                    question_type=question_type,
+                    status=REVERSE_FILL_STATUS_BLOCKED,
+                    columns=columns,
+                    detail=reason,
+                    fallback_ready=False,
+                    fallback_resolved=False,
                 )
             )
             continue
@@ -198,6 +297,7 @@ def build_reverse_fill_spec(
                     columns=columns,
                     detail=reason,
                     fallback_ready=fallback_ready,
+                    fallback_resolved=fallback_resolved,
                 )
             )
             continue
@@ -222,6 +322,7 @@ def build_reverse_fill_spec(
                     columns=columns,
                     detail=reason,
                     fallback_ready=fallback_ready,
+                    fallback_resolved=fallback_resolved,
                 )
             )
             continue
@@ -247,6 +348,7 @@ def build_reverse_fill_spec(
                     columns=columns,
                     detail=reason,
                     fallback_ready=fallback_ready,
+                    fallback_resolved=fallback_resolved,
                 )
             )
             continue
@@ -273,6 +375,7 @@ def build_reverse_fill_spec(
                         columns=columns,
                         detail=reason,
                         fallback_ready=fallback_ready,
+                        fallback_resolved=fallback_resolved,
                     )
                 )
                 continue
@@ -300,6 +403,7 @@ def build_reverse_fill_spec(
                         columns=columns,
                         detail=reason,
                         fallback_ready=fallback_ready,
+                        fallback_resolved=fallback_resolved,
                     )
                 )
                 continue
@@ -370,6 +474,7 @@ def build_reverse_fill_spec(
                     columns=columns,
                     detail=reason,
                     fallback_ready=fallback_ready,
+                    fallback_resolved=fallback_resolved,
                 )
             )
             for row_answers in answers_by_row.values():
@@ -406,7 +511,7 @@ def build_reverse_fill_spec(
         start_row=normalized_start_row,
         total_samples=total_samples,
         available_samples=available_rows,
-        target_num=max(0, int(target_num or 0)),
+        target_num=effective_target_num,
         question_plans=question_plans,
         issues=issues,
         samples=samples,
@@ -439,7 +544,7 @@ def build_enabled_reverse_fill_spec(
         return None
     source_path = str(getattr(config, "reverse_fill_source_path", "") or "").strip()
     if not source_path:
-        raise ValueError("已开启反填，但还没有选择 Excel 文件")
+        return None
     spec = build_reverse_fill_spec(
         source_path=source_path,
         survey_provider=str(getattr(config, "survey_provider", SURVEY_PROVIDER_WJX) or SURVEY_PROVIDER_WJX),

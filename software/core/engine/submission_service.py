@@ -100,6 +100,7 @@ class SubmissionService:
             failure_reason=FailureReason.SUBMISSION_VERIFICATION_REQUIRED,
             status_text="腾讯安全验证" if survey_provider == "qq" else "智能验证",
             log_message=message,
+            consume_reverse_fill_attempt=False,
         )
         _provider_handle_submission_verification_detected(
             self.state,
@@ -222,6 +223,7 @@ class SubmissionService:
                 failure_reason=FailureReason.FILL_FAILED,
                 status_text="提交未完成",
                 log_message="提交后未检测到完成页，本轮按失败处理",
+                consume_reverse_fill_attempt=False,
             )
             return SubmissionOutcome(
                 status="failure",

@@ -193,6 +193,10 @@ def _migrate_config_payload_v4_to_v5(payload: Dict[str, Any]) -> Dict[str, Any]:
         migrated["reverse_fill_start_row"] = max(1, int(migrated.get("reverse_fill_start_row") or 1))
     except Exception:
         migrated["reverse_fill_start_row"] = 1
+    try:
+        migrated["reverse_fill_threads"] = max(1, int(migrated.get("reverse_fill_threads") or migrated.get("threads") or 1))
+    except Exception:
+        migrated["reverse_fill_threads"] = 1
     migrated["config_schema_version"] = CURRENT_CONFIG_SCHEMA_VERSION
     return migrated
 
@@ -422,6 +426,7 @@ def normalize_runtime_config_payload(raw: Dict[str, Any]) -> RuntimeConfig:
     config.reverse_fill_source_path = str(raw.get("reverse_fill_source_path") or "")
     config.reverse_fill_format = _reverse_fill_format(raw.get("reverse_fill_format"))
     config.reverse_fill_start_row = max(1, _as_int(raw.get("reverse_fill_start_row"), 1))
+    config.reverse_fill_threads = max(1, _as_int(raw.get("reverse_fill_threads"), config.threads or 1))
     config.answer_rules = []
     config.dimension_groups = _normalize_dimension_groups(raw.get("dimension_groups"))
     raw_rules = raw.get("answer_rules")

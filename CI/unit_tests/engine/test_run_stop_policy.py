@@ -67,6 +67,26 @@ class RunStopPolicyTests(unittest.TestCase):
         self.assertFalse(stop_signal.is_set())
         self.assertEqual(list(state.reverse_fill_runtime.queued_row_numbers), [1])
 
+    def test_record_failure_requeues_reverse_fill_row_without_consuming_attempt(self) -> None:
+        state = self._build_reverse_fill_state()
+        config = state.config
+        state.acquire_reverse_fill_sample("Worker-1")
+        policy = RunStopPolicy(config, state)
+        stop_signal = threading.Event()
+
+        stopped = policy.record_failure(
+            stop_signal,
+            thread_name="Worker-1",
+            failure_reason=FailureReason.PROXY_UNAVAILABLE,
+            consume_reverse_fill_attempt=False,
+        )
+
+        self.assertFalse(stopped)
+        self.assertFalse(stop_signal.is_set())
+        self.assertEqual(list(state.reverse_fill_runtime.queued_row_numbers), [1])
+        self.assertEqual(state.reverse_fill_runtime.failure_count_by_row, {})
+        self.assertEqual(state.reverse_fill_runtime.discarded_row_numbers, set())
+
     def test_record_success_commits_progress_and_triggers_target_stop(self) -> None:
         config = ExecutionConfig(target_num=1, random_proxy_ip_enabled=True)
         state = ExecutionState(config=config, cur_fail=2)
@@ -99,6 +119,48 @@ class RunStopPolicyTests(unittest.TestCase):
 
         self.assertTrue(should_stop)
         self.assertIn(1, state.reverse_fill_runtime.committed_row_numbers)
+
+    def test_record_failure_stops_when_reverse_fill_sample_is_exhausted(self) -> None:
+        spec = ReverseFillSpec(
+            source_path="demo.xlsx",
+            selected_format="wjx_sequence",
+            detected_format="wjx_sequence",
+            start_row=1,
+            total_samples=2,
+            available_samples=2,
+            target_num=2,
+            samples=[
+                ReverseFillSampleRow(data_row_number=1, worksheet_row_number=2, answers={}),
+                ReverseFillSampleRow(data_row_number=2, worksheet_row_number=3, answers={}),
+            ],
+        )
+        state = ExecutionState(config=ExecutionConfig(reverse_fill_spec=spec, target_num=2), cur_num=1)
+        state.initialize_reverse_fill_runtime()
+        state.acquire_reverse_fill_sample("Worker-9")
+        state.commit_reverse_fill_sample("Worker-9")
+        state.acquire_reverse_fill_sample("Worker-1")
+        policy = RunStopPolicy(state.config, state)
+        stop_signal = threading.Event()
+
+        first_stopped = policy.record_failure(
+            stop_signal,
+            thread_name="Worker-1",
+            failure_reason=FailureReason.FILL_FAILED,
+        )
+        self.assertFalse(first_stopped)
+        self.assertFalse(stop_signal.is_set())
+
+        state.acquire_reverse_fill_sample("Worker-1")
+        second_stopped = policy.record_failure(
+            stop_signal,
+            thread_name="Worker-1",
+            failure_reason=FailureReason.FILL_FAILED,
+        )
+
+        self.assertTrue(second_stopped)
+        self.assertTrue(stop_signal.is_set())
+        self.assertIn(2, state.reverse_fill_runtime.discarded_row_numbers)
+        self.assertEqual(state.get_terminal_stop_snapshot()[0], "reverse_fill_exhausted")
 
 
 if __name__ == "__main__":
