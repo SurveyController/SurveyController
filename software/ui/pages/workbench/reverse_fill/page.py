@@ -602,7 +602,7 @@ class ReverseFillPage(DashboardClipboardMixin, QWidget):
             self._toast("主页尚未完成初始化，暂时不能开始执行", "error", duration=3000)
             return
         should_reset = bool(getattr(dashboard, "_completion_notified", False) or getattr(dashboard, "_last_progress", 0) >= 100)
-        dashboard._on_start_clicked()
+        dashboard._on_start_clicked(enable_reverse_fill=True)
         if should_reset:
             self.progress_bar.setValue(0)
             self.progress_pct.setText("0%")

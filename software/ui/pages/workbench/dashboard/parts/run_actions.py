@@ -39,7 +39,7 @@ class DashboardRunActionsMixin:
         def _sync_random_ip_toggle_presentation(self, enabled: bool) -> None: ...
         def window(self) -> Any: ...
 
-    def _on_start_clicked(self):
+    def _on_start_clicked(self, enable_reverse_fill: bool = False):
         if getattr(self.controller, "running", False):
             if self._completion_notified:
                 self._pending_restart = True
@@ -53,6 +53,7 @@ class DashboardRunActionsMixin:
             question_entries=self.question_page.get_entries(),
             questions_info=self.question_page.questions_info,
         )
+        cfg.reverse_fill_enabled = bool(enable_reverse_fill and str(getattr(cfg, "reverse_fill_source_path", "") or "").strip())
         if not cfg.question_entries:
             log_action(
                 "RUN",
@@ -80,7 +81,7 @@ class DashboardRunActionsMixin:
             "start_btn",
             "dashboard",
             result="started",
-            payload={"target": cfg.target, "threads": cfg.threads},
+            payload={"target": cfg.target, "threads": cfg.threads, "reverse_fill_enabled": cfg.reverse_fill_enabled},
         )
     def update_question_meta(self, title: str, count: int):
         self.count_label.setText(f"{count} 题")

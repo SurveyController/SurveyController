@@ -540,6 +540,8 @@ def build_enabled_reverse_fill_spec(
     questions_info: List[SurveyQuestionMeta | Dict[str, Any]],
     question_entries: List[QuestionEntry],
 ) -> Optional[ReverseFillSpec]:
+    if not bool(getattr(config, "reverse_fill_enabled", False)):
+        return None
     source_path = str(getattr(config, "reverse_fill_source_path", "") or "").strip()
     if not source_path:
         return None
@@ -550,7 +552,7 @@ def build_enabled_reverse_fill_spec(
         question_entries=list(question_entries or []),
         selected_format=str(getattr(config, "reverse_fill_format", REVERSE_FILL_FORMAT_AUTO) or REVERSE_FILL_FORMAT_AUTO),
         start_row=max(1, int(getattr(config, "reverse_fill_start_row", 1) or 1)),
-        target_num=0,
+        target_num=max(0, int(getattr(config, "target", 0) or 0)),
     )
     if spec.blocking_issue_count > 0:
         raise ValueError(format_reverse_fill_blocking_message(spec))

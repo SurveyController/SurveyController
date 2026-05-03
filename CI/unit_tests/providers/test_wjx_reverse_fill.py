@@ -298,6 +298,7 @@ class WjxReverseFillTests(unittest.TestCase):
 
         config = RuntimeConfig(
             survey_provider="wjx",
+            reverse_fill_enabled=True,
             reverse_fill_source_path=workbook_path,
             reverse_fill_format=REVERSE_FILL_FORMAT_WJX_TEXT,
             reverse_fill_start_row=1,
@@ -328,6 +329,7 @@ class WjxReverseFillTests(unittest.TestCase):
         spec = build_enabled_reverse_fill_spec(
             RuntimeConfig(
                 survey_provider="wjx",
+                reverse_fill_enabled=True,
                 reverse_fill_source_path=workbook_path,
                 reverse_fill_format=REVERSE_FILL_FORMAT_WJX_TEXT,
                 reverse_fill_start_row=1,
@@ -350,6 +352,65 @@ class WjxReverseFillTests(unittest.TestCase):
         self.assertEqual(spec.blocking_issue_count, 0)
         self.assertEqual(spec.question_plans[0].status, REVERSE_FILL_STATUS_FALLBACK)
         self.assertTrue(spec.question_plans[0].fallback_ready)
+
+    def test_build_enabled_reverse_fill_spec_returns_none_when_entry_not_started_from_reverse_fill(self) -> None:
+        workbook_path = self._track(
+            _write_workbook(
+                [
+                    ["序号", "1、单选题"],
+                    [1, 1],
+                    [2, 2],
+                    [3, 1],
+                ]
+            )
+        )
+
+        spec = build_enabled_reverse_fill_spec(
+            RuntimeConfig(
+                survey_provider="wjx",
+                reverse_fill_enabled=False,
+                reverse_fill_source_path=workbook_path,
+                reverse_fill_format=REVERSE_FILL_FORMAT_WJX_SEQUENCE,
+                reverse_fill_start_row=1,
+                target=2,
+            ),
+            questions_info=[
+                {"num": 1, "title": "单选题", "type_code": "3", "option_texts": ["选项1", "选项2"]},
+            ],
+            question_entries=[],
+        )
+
+        self.assertIsNone(spec)
+
+    def test_build_enabled_reverse_fill_spec_respects_requested_target_num(self) -> None:
+        workbook_path = self._track(
+            _write_workbook(
+                [
+                    ["序号", "1、单选题"],
+                    [1, 1],
+                    [2, 2],
+                    [3, 1],
+                ]
+            )
+        )
+
+        spec = build_enabled_reverse_fill_spec(
+            RuntimeConfig(
+                survey_provider="wjx",
+                reverse_fill_enabled=True,
+                reverse_fill_source_path=workbook_path,
+                reverse_fill_format=REVERSE_FILL_FORMAT_WJX_SEQUENCE,
+                reverse_fill_start_row=1,
+                target=2,
+            ),
+            questions_info=[
+                {"num": 1, "title": "单选题", "type_code": "3", "option_texts": ["选项1", "选项2"]},
+            ],
+            question_entries=[],
+        )
+
+        self.assertIsNotNone(spec)
+        self.assertEqual(spec.target_num, 2)
 
 
 if __name__ == "__main__":

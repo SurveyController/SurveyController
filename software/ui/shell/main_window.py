@@ -720,7 +720,8 @@ class MainWindow(
                 pending_entries = merged_entries
             self.question_page.set_questions(info, pending_entries)
             self.controller.question_entries = pending_entries
-            self.strategy_page.set_dimension_groups([])
+            if not selected_issue_nums:
+                self.strategy_page.set_dimension_groups([])
             self.strategy_page.set_entries(self.question_page.entries, self.question_page.entry_questions_info)
             self._sync_reverse_fill_context()
             self.dashboard.update_question_meta(parsed_title, len(pending_entries))
