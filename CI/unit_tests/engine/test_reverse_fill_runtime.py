@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import unittest
 
+from software.core.reverse_fill.runtime import resolve_current_reverse_fill_answer
 from software.core.reverse_fill.schema import (
     REVERSE_FILL_KIND_CHOICE,
     ReverseFillAnswer,
@@ -72,6 +73,59 @@ class ReverseFillRuntimeStateTests(unittest.TestCase):
         self.assertEqual(failed_row, 2)
         self.assertTrue(discarded)
         self.assertTrue(state.is_reverse_fill_target_unreachable())
+
+    def test_acquire_returns_disabled_when_runtime_not_initialized(self) -> None:
+        state = ExecutionState(config=ExecutionConfig())
+
+        result = state.acquire_reverse_fill_sample("Worker-1")
+
+        self.assertEqual(result.status, "disabled")
+        self.assertEqual(result.message, "reverse_fill_disabled")
+
+    def test_release_without_requeue_drops_reserved_row_from_queue(self) -> None:
+        state = self._build_state()
+
+        first = state.acquire_reverse_fill_sample("Worker-1")
+        released_row = state.release_reverse_fill_sample("Worker-1", requeue=False)
+        second = state.acquire_reverse_fill_sample("Worker-2")
+        exhausted = state.acquire_reverse_fill_sample("Worker-3")
+
+        self.assertEqual(first.sample.data_row_number, 1)
+        self.assertEqual(released_row, 1)
+        self.assertEqual(second.sample.data_row_number, 2)
+        self.assertEqual(exhausted.status, "exhausted")
+
+    def test_get_reverse_fill_answer_uses_thread_reserved_sample(self) -> None:
+        state = self._build_state()
+        state.acquire_reverse_fill_sample("Worker-1")
+        state.acquire_reverse_fill_sample("Worker-2")
+
+        answer = state.get_reverse_fill_answer(1, "Worker-2")
+
+        self.assertIsNotNone(answer)
+        self.assertEqual(answer.choice_index, 1)
+        self.assertIsNone(state.get_reverse_fill_answer(1, "Worker-3"))
+
+    def test_resolve_current_reverse_fill_answer_filters_invalid_contexts(self) -> None:
+        expected = ReverseFillAnswer(question_num=1, kind=REVERSE_FILL_KIND_CHOICE, choice_index=0)
+
+        class _ValidCtx:
+            def get_reverse_fill_answer(self, _question_num: int) -> ReverseFillAnswer:
+                return expected
+
+        class _BadValueCtx:
+            def get_reverse_fill_answer(self, _question_num: int) -> str:
+                return "not-an-answer"
+
+        class _ErrorCtx:
+            def get_reverse_fill_answer(self, _question_num: int) -> ReverseFillAnswer:
+                raise RuntimeError("boom")
+
+        self.assertIs(resolve_current_reverse_fill_answer(_ValidCtx(), 1), expected)
+        self.assertIsNone(resolve_current_reverse_fill_answer(_BadValueCtx(), 1))
+        self.assertIsNone(resolve_current_reverse_fill_answer(_ErrorCtx(), 1))
+        self.assertIsNone(resolve_current_reverse_fill_answer(object(), 1))
+        self.assertIsNone(resolve_current_reverse_fill_answer(None, 1))
 
 
 if __name__ == "__main__":

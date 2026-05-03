@@ -13,9 +13,11 @@ from software.core.reverse_fill.schema import (
     REVERSE_FILL_FORMAT_WJX_SEQUENCE,
     REVERSE_FILL_FORMAT_WJX_TEXT,
     REVERSE_FILL_STATUS_BLOCKED,
+    REVERSE_FILL_STATUS_FALLBACK,
     REVERSE_FILL_STATUS_REVERSE,
 )
-from software.core.reverse_fill.validation import build_reverse_fill_spec
+from software.core.reverse_fill.validation import build_enabled_reverse_fill_spec, build_reverse_fill_spec
+from software.io.config import RuntimeConfig
 from software.io.spreadsheets import load_wjx_excel_export
 
 
@@ -283,6 +285,71 @@ class WjxReverseFillTests(unittest.TestCase):
         self.assertEqual(spec.issues[0].category, "auto_handled")
         self.assertEqual(spec.issues[0].severity, "warn")
         self.assertIn("自动按常规逻辑处理", spec.issues[0].suggestion)
+
+    def test_build_enabled_reverse_fill_spec_raises_human_readable_blocking_message(self) -> None:
+        workbook_path = self._track(
+            _write_workbook(
+                [
+                    ["序号", "1、单选题"],
+                    [1, "其他〖无〗"],
+                ]
+            )
+        )
+
+        config = RuntimeConfig(
+            survey_provider="wjx",
+            reverse_fill_source_path=workbook_path,
+            reverse_fill_format=REVERSE_FILL_FORMAT_WJX_TEXT,
+            reverse_fill_start_row=1,
+        )
+
+        with self.assertRaisesRegex(ValueError, "反填配置校验失败") as context:
+            build_enabled_reverse_fill_spec(
+                config,
+                questions_info=[
+                    {"num": 1, "title": "单选题", "type_code": "3", "option_texts": ["选项1", "选项2"]},
+                ],
+                question_entries=[],
+            )
+
+        self.assertIn("第 1 题", str(context.exception))
+        self.assertIn("无法匹配选项", str(context.exception))
+
+    def test_build_enabled_reverse_fill_spec_allows_warn_only_fallback_plan(self) -> None:
+        workbook_path = self._track(
+            _write_workbook(
+                [
+                    ["序号", "1、所在地区"],
+                    [1, "上海"],
+                ]
+            )
+        )
+
+        spec = build_enabled_reverse_fill_spec(
+            RuntimeConfig(
+                survey_provider="wjx",
+                reverse_fill_source_path=workbook_path,
+                reverse_fill_format=REVERSE_FILL_FORMAT_WJX_TEXT,
+                reverse_fill_start_row=1,
+            ),
+            questions_info=[
+                {"num": 1, "title": "所在地区", "type_code": "1", "is_location": True},
+            ],
+            question_entries=[
+                QuestionEntry(
+                    question_type="text",
+                    probabilities=[1.0],
+                    texts=["上海"],
+                    question_num=1,
+                    question_title="所在地区",
+                    is_location=True,
+                )
+            ],
+        )
+
+        self.assertEqual(spec.blocking_issue_count, 0)
+        self.assertEqual(spec.question_plans[0].status, REVERSE_FILL_STATUS_FALLBACK)
+        self.assertTrue(spec.question_plans[0].fallback_ready)
 
 
 if __name__ == "__main__":

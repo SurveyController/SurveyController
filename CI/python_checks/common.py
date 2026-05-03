@@ -30,6 +30,7 @@ IMPORT_TIMEOUT_SECONDS = 12
 WINDOW_SMOKE_TIMEOUT_SECONDS = 25
 UNIT_TEST_TIMEOUT_SECONDS = int(os.environ.get("SURVEY_CONTROLLER_UNIT_TEST_TIMEOUT_SECONDS", "120"))
 PYRIGHT_TIMEOUT_SECONDS = int(os.environ.get("SURVEY_CONTROLLER_PYRIGHT_TIMEOUT_SECONDS", "90"))
+PYTEST_FAILURE_LOG_TAIL_LINES = 40
 UNICODE_SPACE_TRANSLATION = str.maketrans({
     "\u00a0": " ",
     "\u2000": " ",
@@ -243,6 +244,27 @@ def normalize_diagnostic_message(message: str) -> str:
     normalized = normalized.replace("\r\n", "\n").replace("\r", "\n")
     lines = [line.rstrip() for line in normalized.split("\n")]
     return "\n".join(lines).strip()
+
+
+def is_ci_environment() -> bool:
+    return os.environ.get("CI", "").strip().lower() == "true" or bool(os.environ.get("GITHUB_ACTIONS"))
+
+
+def build_pytest_args(test_target: str, *, verbose_in_ci: bool) -> list[str]:
+    args = [sys.executable, "-m", "pytest", test_target]
+    if verbose_in_ci and is_ci_environment():
+        args.extend(
+            [
+                "-ra",
+                "-vv",
+                "--tb=short",
+                "--durations=10",
+                "--color=yes",
+            ]
+        )
+    else:
+        args.append("-q")
+    return args
 
 
 def run_compile_checks(files: Iterable[Path]) -> list[dict]:
@@ -464,17 +486,7 @@ def run_unit_tests() -> dict | None:
     env = make_child_env()
     try:
         result = subprocess.run(
-            [
-                sys.executable,
-                "-m",
-                "unittest",
-                "discover",
-                "-s",
-                "CI/unit_tests",
-                "-t",
-                ".",
-                "-v",
-            ],
+            build_pytest_args("CI/unit_tests", verbose_in_ci=True),
             cwd=str(ROOT_DIR),
             capture_output=True,
             text=True,
@@ -551,12 +563,12 @@ def print_issues(title: str, issues: Iterable[dict]) -> None:
             stdout_text = item.get("stdout")
             stderr_text = item.get("stderr")
             if stdout_text:
-                print("   unittest stdout:")
-                for line in stdout_text.splitlines()[-12:]:
+                print("   pytest stdout:")
+                for line in stdout_text.splitlines()[-PYTEST_FAILURE_LOG_TAIL_LINES:]:
                     print(f"   {line}")
             if stderr_text:
-                print("   unittest stderr:")
-                for line in stderr_text.splitlines()[-12:]:
+                print("   pytest stderr:")
+                for line in stderr_text.splitlines()[-PYTEST_FAILURE_LOG_TAIL_LINES:]:
                     print(f"   {line}")
             continue
 
