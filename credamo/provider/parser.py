@@ -368,6 +368,8 @@ def _infer_type_code(question: Dict[str, Any]) -> str:
         return "4"
     if question_kind == "dropdown":
         return "7"
+    if question_kind == "matrix":
+        return "6"
     if question_kind == "scale":
         return "5"
     if question_kind == "order":
@@ -401,6 +403,8 @@ def _normalize_question(raw: Dict[str, Any], fallback_num: int) -> Dict[str, Any
     option_texts = [text for text in option_texts if text]
     text_inputs = max(0, int(raw.get("text_inputs") or 0))
     question_kind = str(raw.get("question_kind") or "").strip().lower()
+    row_texts = [_normalize_text(text) for text in raw.get("row_texts") or []]
+    row_texts = [text for text in row_texts if text]
     type_code = _infer_type_code({**raw, "options": len(option_texts), "text_inputs": text_inputs})
     forced_option_index, forced_option_text = _extract_force_select_option(
         raw_title or title,
@@ -444,8 +448,8 @@ def _normalize_question(raw: Dict[str, Any], fallback_num: int) -> Dict[str, Any
         "description": "",
         "type_code": type_code,
         "options": len(option_texts),
-        "rows": 1,
-        "row_texts": [],
+        "rows": max(1, len(row_texts)),
+        "row_texts": row_texts,
         "page": max(1, int(raw.get("page") or 1)),
         "option_texts": option_texts,
         "provider": SURVEY_PROVIDER_CREDAMO,
@@ -492,7 +496,30 @@ def _extract_questions_from_current_page(page: Any, *, page_number: int) -> List
     }
     return result;
   };
-  const data = [];
+    const matrixColumnTexts = (root) => uniqueTexts(
+      Array.from(root.querySelectorAll('thead th, .matrix-title, .matrix-column, .table-header th'))
+        .map((node) => node.innerText || node.textContent || '')
+        .filter((text) => clean(text) && !/^Q?\d+$/i.test(clean(text)))
+    );
+    const matrixRows = (root) => {
+      const rows = [];
+      const rowNodes = Array.from(root.querySelectorAll('tbody tr, .matrix-row, .el-table__row'));
+      for (const row of rowNodes) {
+        if (!visible(row, 12, 8)) continue;
+        const controls = Array.from(row.querySelectorAll('input[type="radio"], [role="radio"], .el-radio, .el-radio__input'));
+        if (!controls.length) continue;
+        const labelNode = row.querySelector('th, td:first-child, .matrix-row-title, .row-title, .statement, .label');
+        let label = clean((labelNode && (labelNode.innerText || labelNode.textContent)) || '');
+        if (!label) {
+          const clone = row.cloneNode(true);
+          Array.from(clone.querySelectorAll('input, [role="radio"], .el-radio, .el-radio__input')).forEach((node) => node.remove());
+          label = clean(clone.innerText || clone.textContent || '');
+        }
+        rows.push({ label, columns: controls.length });
+      }
+      return rows;
+    };
+    const data = [];
   const roots = Array.from(document.querySelectorAll('.answer-page .question'));
   roots.forEach((root, index) => {
     if (!visible(root)) return;
@@ -504,11 +531,16 @@ def _extract_questions_from_current_page(page: Any, *, page_number: int) -> List
     ).filter((node) => visible(node, 4, 4));
     const allInputs = Array.from(root.querySelectorAll('input, textarea, [role="radio"], [role="checkbox"]'));
 
+    const detectedMatrixRows = matrixRows(root);
+    const detectedMatrixColumns = matrixColumnTexts(root);
+
     let kind = '';
     if (root.querySelector('.multi-choice') || root.querySelector('input[type="checkbox"]') || root.querySelector('[role="checkbox"]')) {
       kind = 'multiple';
     } else if (root.querySelector('.pc-dropdown') || root.querySelector('.el-select')) {
       kind = 'dropdown';
+    } else if (detectedMatrixRows.length >= 2 && Math.max(...detectedMatrixRows.map((row) => row.columns || 0)) >= 2) {
+      kind = 'matrix';
     } else if (root.querySelector('.scale') || root.querySelector('.nps-item') || root.querySelector('.el-rate__item')) {
       kind = 'scale';
     } else if (root.querySelector('.rank-order')) {
@@ -540,6 +572,11 @@ def _extract_questions_from_current_page(page: Any, *, page_number: int) -> List
     const scaleTexts = uniqueTexts(Array.from(root.querySelectorAll('.scale .nps-item, .el-rate__item')).map((node) => node.innerText || node.textContent || ''));
     let optionTexts = [];
     if (kind === 'dropdown' && dropdownTexts.length) optionTexts = dropdownTexts;
+    else if (kind === 'matrix' && detectedMatrixColumns.length) optionTexts = detectedMatrixColumns;
+    else if (kind === 'matrix' && detectedMatrixRows.length) {
+      const maxColumns = Math.max(...detectedMatrixRows.map((row) => row.columns || 0));
+      optionTexts = Array.from({ length: maxColumns }, (_item, itemIndex) => `选项 ${itemIndex + 1}`);
+    }
     else if (kind === 'scale' && scaleTexts.length) optionTexts = scaleTexts;
     else if (choiceTexts.length) optionTexts = choiceTexts;
     else if (dropdownTexts.length) optionTexts = dropdownTexts;
@@ -564,6 +601,7 @@ def _extract_questions_from_current_page(page: Any, *, page_number: int) -> List
       tip_text: tipText,
       body_text: bodyText,
       option_texts: optionTexts,
+      row_texts: detectedMatrixRows.map((row, rowIndex) => row.label || `第 ${rowIndex + 1} 行`),
       input_types: inputTypes,
       text_inputs: editableInputs.length,
       required: /必答|必须|required/i.test(bodyText),
@@ -728,6 +766,7 @@ def _wait_for_page_change(page: Any, previous_signature: Tuple[Tuple[str, str], 
 def _prime_question_for_next(page: Any, root: Any, question: Dict[str, Any]) -> None:
     from credamo.provider.runtime import (
         _answer_dropdown,
+        _answer_matrix,
         _answer_multiple,
         _answer_order,
         _answer_scale,
@@ -757,6 +796,8 @@ def _prime_question_for_next(page: Any, root: Any, question: Dict[str, Any]) -> 
         _answer_multiple(page, root, first_option_weights)
     elif kind in {"dropdown", "7"}:
         _answer_dropdown(page, root, first_option_weights)
+    elif kind in {"matrix", "6", "9"}:
+        _answer_matrix(page, root, first_option_weights)
     elif kind in {"scale", "5", "score"}:
         _answer_scale(page, root, scale_weights)
     elif kind in {"order", "11"}:

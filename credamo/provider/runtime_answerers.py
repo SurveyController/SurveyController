@@ -401,6 +401,53 @@ def _answer_scale(page: Any, root: Any, weights: Any) -> bool:
     return _click_element(page, options[target_index])
 
 
+def _matrix_rows(root: Any) -> List[Tuple[Any, List[Any]]]:
+    row_selectors = ("tbody tr", ".matrix-row", ".el-table__row")
+    rows = []
+    for selector in row_selectors:
+        try:
+            row_nodes = root.query_selector_all(selector)
+        except Exception:
+            row_nodes = []
+        for row in row_nodes:
+            try:
+                controls = row.query_selector_all("input[type='radio'], [role='radio'], .el-radio, .el-radio__input")
+            except Exception:
+                controls = []
+            if len(controls) >= 2:
+                rows.append((row, controls))
+        if rows:
+            return rows
+    return rows
+
+
+def _answer_matrix(page: Any, root: Any, weights: Any, start_index: int = 0) -> bool:
+    del start_index
+    rows = _matrix_rows(root)
+    if not rows:
+        return False
+    clicked = False
+    for row_offset, (_row, controls) in enumerate(rows):
+        if not controls:
+            continue
+        row_weights = weights
+        if isinstance(weights, list) and weights and any(isinstance(item, (list, tuple)) for item in weights):
+            source_index = min(row_offset, len(weights) - 1)
+            row_weights = weights[source_index]
+        probabilities = normalize_droplist_probs(row_weights, len(controls))
+        target_index = min(weighted_index(probabilities), len(controls) - 1)
+        target = controls[target_index]
+        clicked_now = _click_element(page, target)
+        if not clicked_now:
+            try:
+                clicked_now = bool(page.evaluate("el => { el.click(); return true; }", target))
+            except Exception:
+                clicked_now = False
+        clicked = clicked_now or clicked
+        time.sleep(random.uniform(0.03, 0.08))
+    return clicked
+
+
 def _answer_order(page: Any, root: Any) -> bool:
     try:
         items = root.query_selector_all(".rank-order .choice-row, .choice-row")

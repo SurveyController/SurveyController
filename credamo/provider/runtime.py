@@ -23,6 +23,7 @@ _DOM_WAIT_FOR_DYNAMIC_QUESTION_ROOTS = _runtime_dom._wait_for_dynamic_question_r
 _DOM_WAIT_FOR_PAGE_CHANGE = _runtime_dom._wait_for_page_change
 _DOM_WAIT_FOR_QUESTION_ROOTS = _runtime_dom._wait_for_question_roots
 _ANSWER_DROPDOWN = _runtime_answerers._answer_dropdown
+_ANSWER_MATRIX = _runtime_answerers._answer_matrix
 _ANSWER_MULTIPLE = _runtime_answerers._answer_multiple
 _ANSWER_ORDER = _runtime_answerers._answer_order
 _ANSWER_SCALE = _runtime_answerers._answer_scale
@@ -147,6 +148,11 @@ def _answer_scale(page: Any, root: Any, weights: Any) -> bool:
     return _ANSWER_SCALE(page, root, weights)
 
 
+def _answer_matrix(page: Any, root: Any, weights: Any, start_index: int = 0) -> bool:
+    _sync_runtime_answerer_patch_points()
+    return _ANSWER_MATRIX(page, root, weights, start_index)
+
+
 def _answer_order(page: Any, root: Any) -> bool:
     _sync_runtime_answerer_patch_points()
     return _ANSWER_ORDER(page, root)
@@ -217,6 +223,14 @@ def brush_credamo(
                 elif entry_type in {"scale", "score"}:
                     weights = config.scale_prob[config_index] if config_index < len(config.scale_prob) else -1
                     _answer_scale(page, root, weights)
+                elif entry_type == "matrix":
+                    question_meta = config.questions_metadata.get(question_num) if hasattr(config, "questions_metadata") else None
+                    row_count = max(1, int(getattr(question_meta, "rows", 1) or 1))
+                    row_weights = []
+                    for row_offset in range(row_count):
+                        matrix_index = config_index + row_offset
+                        row_weights.append(config.matrix_prob[matrix_index] if matrix_index < len(config.matrix_prob) else -1)
+                    _answer_matrix(page, root, row_weights, config_index)
                 elif entry_type == "dropdown":
                     weights = config.droplist_prob[config_index] if config_index < len(config.droplist_prob) else -1
                     _answer_dropdown(page, root, weights)

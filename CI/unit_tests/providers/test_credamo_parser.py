@@ -77,6 +77,29 @@ class CredamoParserTests(unittest.TestCase):
         self.assertEqual(question["provider_page_id"], "2")
         self.assertEqual(question["options"], 3)
 
+    def test_normalize_question_detects_matrix_scale(self) -> None:
+        question = parser._normalize_question(
+            {
+                "question_num": "Q11",
+                "title": "Q11",
+                "question_kind": "matrix",
+                "provider_type": "matrix",
+                "option_texts": ["选项 1", "选项 2", "选项 3", "选项 4", "选项 5"],
+                "row_texts": ["陈述 1", "陈述 2", "陈述 3", "陈述 4", "陈述 5", "陈述 6", "陈述 7"],
+                "text_inputs": 0,
+                "page": 1,
+                "question_id": "question-5",
+            },
+            fallback_num=11,
+        )
+
+        self.assertEqual(question["num"], 11)
+        self.assertEqual(question["type_code"], "6")
+        self.assertEqual(question["provider_type"], "matrix")
+        self.assertEqual(question["options"], 5)
+        self.assertEqual(question["rows"], 7)
+        self.assertEqual(question["row_texts"][0], "陈述 1")
+
     def test_normalize_question_detects_force_select_instruction(self) -> None:
         question = parser._normalize_question(
             {
@@ -390,6 +413,19 @@ class CredamoParserTests(unittest.TestCase):
             parser._prime_question_for_next(page, root, question)
 
         scale_mock.assert_called_once_with(page, root, [100.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0])
+
+    def test_prime_question_answers_matrix_for_dynamic_reveal(self) -> None:
+        page = object()
+        root = object()
+        question = {
+            "provider_type": "matrix",
+            "options": 5,
+        }
+
+        with patch("credamo.provider.runtime._answer_matrix", return_value=True) as matrix_mock:
+            parser._prime_question_for_next(page, root, question)
+
+        matrix_mock.assert_called_once_with(page, root, [100.0, 0.0, 0.0, 0.0, 0.0])
 
     def test_order_entry_is_exposed_to_runtime_mapping(self) -> None:
         entry = QuestionEntry(
