@@ -81,6 +81,18 @@ _STATUS_LABELS = {
     REVERSE_FILL_STATUS_BLOCKED: "🔴 不支持",
 }
 
+_QUESTION_TYPE_LABELS = {
+    "single": "单选题",
+    "multiple": "多选题",
+    "dropdown": "下拉选择题",
+    "scale": "量表题",
+    "score": "评价题",
+    "text": "填空题",
+    "multi_text": "多项填空题",
+    "matrix": "矩阵题",
+    "order": "排序题",
+}
+
 _NON_ACTIONABLE_ISSUE_CATEGORIES = {"auto_handled"}
 
 
@@ -91,6 +103,13 @@ def _status_label_for_plan(plan: Any) -> str:
     if status == REVERSE_FILL_STATUS_FALLBACK and bool(getattr(plan, "fallback_ready", False)):
         return "🟡 可回退"
     return _STATUS_LABELS.get(status, status)
+
+
+def _question_type_label(value: Any) -> str:
+    normalized = str(value or "").strip().lower()
+    if not normalized:
+        return ""
+    return _QUESTION_TYPE_LABELS.get(normalized, str(value or "").strip())
 
 
 class ReverseFillPage(DashboardClipboardMixin, QWidget):
@@ -212,9 +231,10 @@ class ReverseFillPage(DashboardClipboardMixin, QWidget):
         input_row = QHBoxLayout()
         input_row.setSpacing(12)
         self.file_edit = LineEdit(self.file_panel)
-        self.file_edit.setPlaceholderText("~/Desktop/待填答卷数据.xlsx")
-        self.file_edit.setClearButtonEnabled(True)
-        self.browse_btn = PushButton(FluentIcon.FOLDER_ADD, "选择路径", self.file_panel)
+        self.file_edit.setPlaceholderText("assets/reverse_fill_example.xlsx")
+        self.file_edit.setReadOnly(True)
+        self.file_edit.setClearButtonEnabled(False)
+        self.browse_btn = PushButton(FluentIcon.FOLDER_ADD, "选择文件", self.file_panel)
         input_row.addWidget(self.file_edit, 1)
         input_row.addWidget(self.browse_btn)
         file_layout.addLayout(input_row)
@@ -751,7 +771,7 @@ class ReverseFillPage(DashboardClipboardMixin, QWidget):
                 suggestion_parts.append("无需处理")
 
             self._set_table_text(self.mapping_table, row, 0, str(int(plan.question_num or 0)))
-            self._set_table_text(self.mapping_table, row, 1, str(plan.question_type or ""))
+            self._set_table_text(self.mapping_table, row, 1, _question_type_label(plan.question_type))
             self._set_table_text(self.mapping_table, row, 2, _status_label_for_plan(plan))
             self._set_table_text(self.mapping_table, row, 3, " / ".join(list(plan.column_headers or [])))
             self._set_table_text(self.mapping_table, row, 4, "\n".join(detail_parts) or "无")

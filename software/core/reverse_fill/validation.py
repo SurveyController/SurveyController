@@ -259,7 +259,7 @@ def build_reverse_fill_spec(
                     category="auto_handled",
                     reason=reason,
                     fallback_ready=False,
-                    suggestion="这道排序题不会走 Excel 反填，运行时会自动按常规逻辑处理",
+                    suggestion="自动随机排序",
                     severity="warn",
                 )
             )
