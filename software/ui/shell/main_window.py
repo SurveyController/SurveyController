@@ -646,20 +646,46 @@ class MainWindow(
         url_edit.setText(text)
         url_edit.blockSignals(False)
 
-    def _open_reverse_fill_wizard(self) -> None:
+    def _open_reverse_fill_wizard(self, issue_question_nums: List[int]) -> None:
         info = list(self.question_page.questions_info or [])
         if not info:
             self._toast("当前还没有解析出题目，无法打开配置向导。", "warning")
             return
+        issue_nums = {int(num) for num in list(issue_question_nums or []) if int(num) > 0}
+        if not issue_nums:
+            self._toast("当前没有需要处理的异常题目。", "warning")
+            return
         self._open_parse_wizard_after_parse(
             copy.deepcopy(info),
             str(getattr(self.dashboard, "_survey_title", "") or "问卷"),
+            issue_question_nums=sorted(issue_nums),
         )
 
-    def _open_parse_wizard_after_parse(self, info: List[Dict[str, Any]], parsed_title: str) -> None:
+    def _open_parse_wizard_after_parse(
+        self,
+        info: List[Dict[str, Any]],
+        parsed_title: str,
+        *,
+        issue_question_nums: List[int] | None = None,
+    ) -> None:
         try:
             pending_entries = copy.deepcopy(self.controller.question_entries)
-            accepted = self.dashboard._run_question_wizard(pending_entries, info, parsed_title)
+            selected_info = list(copy.deepcopy(info or []))
+            selected_entries = pending_entries
+            selected_issue_nums = {int(num) for num in list(issue_question_nums or []) if int(num) > 0}
+            if selected_issue_nums:
+                info_by_num = {int(getattr(item, "num", 0) or 0): item for item in selected_info}
+                entry_by_num = {
+                    int(getattr(entry, "question_num", 0) or 0): entry
+                    for entry in selected_entries
+                    if int(getattr(entry, "question_num", 0) or 0) > 0
+                }
+                selected_info = [copy.deepcopy(info_by_num[num]) for num in selected_issue_nums if num in info_by_num]
+                selected_entries = [copy.deepcopy(entry_by_num[num]) for num in selected_issue_nums if num in entry_by_num]
+                if not selected_info or not selected_entries:
+                    self._toast("异常题目配置数据不完整，暂时无法打开配置向导。", "warning")
+                    return
+            accepted = self.dashboard._run_question_wizard(selected_entries, selected_info, parsed_title)
         except Exception as exc:
             logging.exception("自动配置向导打开失败")
             log_action(
@@ -682,6 +708,17 @@ class MainWindow(
             return
 
         if accepted:
+            if selected_issue_nums:
+                updated_entries_by_num = {
+                    int(getattr(entry, "question_num", 0) or 0): entry
+                    for entry in selected_entries
+                    if int(getattr(entry, "question_num", 0) or 0) > 0
+                }
+                merged_entries = []
+                for entry in pending_entries:
+                    question_num = int(getattr(entry, "question_num", 0) or 0)
+                    merged_entries.append(copy.deepcopy(updated_entries_by_num.get(question_num, entry)))
+                pending_entries = merged_entries
             self.question_page.set_questions(info, pending_entries)
             self.controller.question_entries = pending_entries
             self.strategy_page.set_dimension_groups([])

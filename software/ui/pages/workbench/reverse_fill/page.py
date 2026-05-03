@@ -10,7 +10,7 @@ from typing import TYPE_CHECKING, Any, Callable, List, Optional, Sequence
 
 from PySide6.QtCore import Qt, Signal
 from PySide6.QtGui import QColor
-from PySide6.QtWidgets import QApplication, QFileDialog, QHBoxLayout, QTableWidgetItem, QVBoxLayout, QWidget, QStackedWidget
+from PySide6.QtWidgets import QApplication, QFileDialog, QHBoxLayout, QTableWidgetItem, QVBoxLayout, QWidget
 from qfluentwidgets import (
     BodyLabel,
     CaptionLabel,
@@ -25,13 +25,11 @@ from qfluentwidgets import (
     PrimaryPushButton,
     PushButton,
     ScrollArea,
-    SettingCardGroup,
     StrongBodyLabel,
     SubtitleLabel,
     TableWidget,
     CardWidget,
     ElevatedCardWidget,
-    SegmentedWidget,
     IconWidget,
     ToolButton,
 )
@@ -63,7 +61,6 @@ from software.providers.contracts import SurveyQuestionMeta, ensure_survey_quest
 from software.ui.helpers.fluent_tooltip import install_tooltip_filter
 from software.ui.pages.workbench.dashboard.parts.clipboard import DashboardClipboardMixin
 from software.ui.widgets.paste_only_menu import PasteOnlyMenu
-from software.ui.widgets.setting_cards import SwitchSettingCard
 
 if TYPE_CHECKING:
     from software.ui.controller import RunController
@@ -77,14 +74,14 @@ _FORMAT_CHOICES = [
 ]
 
 _STATUS_LABELS = {
-    REVERSE_FILL_STATUS_REVERSE: "🟢 反填覆盖",
-    REVERSE_FILL_STATUS_FALLBACK: "🟡 常规回退",
-    REVERSE_FILL_STATUS_BLOCKED: "🔴 阻塞",
+    REVERSE_FILL_STATUS_REVERSE: "🟢 正常",
+    REVERSE_FILL_STATUS_FALLBACK: "🟡 需要处理",
+    REVERSE_FILL_STATUS_BLOCKED: "🔴 不支持",
 }
 
 
 class ReverseFillPage(DashboardClipboardMixin, QWidget):
-    """独立的反填数据源管理页。"""
+    """独立的反填数据源页。"""
 
     surveyUrlChanged = Signal(str)
 
@@ -100,7 +97,8 @@ class ReverseFillPage(DashboardClipboardMixin, QWidget):
         self._start_row_value: int = 1
         self._last_spec: Optional[ReverseFillSpec] = None
         self._last_error: str = ""
-        self._open_wizard_handler: Optional[Callable[[], None]] = None
+        self._open_wizard_handler: Optional[Callable[[List[int]], None]] = None
+        self._issue_question_nums: List[int] = []
         self._clipboard_parse_ticket = 0
         self._parse_requested_from_reverse_fill = False
         self._progress_infobar: Optional[InfoBar] = None
@@ -166,18 +164,10 @@ class ReverseFillPage(DashboardClipboardMixin, QWidget):
 
         link_layout.addLayout(title_row)
 
-        btn_row = QHBoxLayout()
-        btn_row.setSpacing(8)
-        self.parse_btn = PrimaryPushButton(FluentIcon.PLAY, "解析问卷结构", self.link_card)
-        btn_row.addWidget(self.parse_btn)
-        btn_row.addStretch(1)
-        link_layout.addLayout(btn_row)
-
         self._link_entry_widgets = (
             self.link_card,
             self.qr_btn,
             self.url_edit,
-            self.parse_btn,
         )
         for widget in self._link_entry_widgets:
             if widget is self.url_edit:
@@ -185,19 +175,6 @@ class ReverseFillPage(DashboardClipboardMixin, QWidget):
             widget.installEventFilter(self)
 
         layout.addWidget(self.link_card)
-
-    def _build_config_cards(self, layout: QVBoxLayout) -> None:
-        config_group = SettingCardGroup("数据源管理", self.view)
-        
-        self.enable_card = SwitchSettingCard(
-            FluentIcon.SYNC,
-            "启用自动反填",
-            "开启该功能后，会在受支持题型上生效，将其按 Excel 样本行级答卷数据执行点选回填。",
-            parent=config_group,
-        )
-        config_group.addSettingCard(self.enable_card)
-
-        layout.addWidget(config_group)
 
     def _build_file_picker(self, layout: QVBoxLayout) -> None:
         self.file_panel = ElevatedCardWidget(self.view)
@@ -239,29 +216,6 @@ class ReverseFillPage(DashboardClipboardMixin, QWidget):
 
         layout.addWidget(self.file_panel)
 
-    def _build_summary_banner(self, layout: QVBoxLayout) -> None:
-        self.summary_card = CardWidget(self.view)
-        self.summary_card.setObjectName("summaryCard")
-        sum_layout = QHBoxLayout(self.summary_card)
-        sum_layout.setContentsMargins(24, 20, 24, 20)
-        sum_layout.setSpacing(20)
-
-        self.summary_icon = IconWidget(FluentIcon.INFO, self.summary_card)
-        self.summary_icon.setFixedSize(28, 28)
-        sum_layout.addWidget(self.summary_icon)
-
-        text_layout = QVBoxLayout()
-        text_layout.setSpacing(6)
-        self.summary_title = StrongBodyLabel("等待基础样本解析装配", self.summary_card)
-        self.summary_desc = CaptionLabel("指定数据源后立刻按目标额度与题目树约束进行自动探测预诊，诊断是否存在数据风险。此过程自动完成。", self.summary_card)
-        text_layout.addWidget(self.summary_title)
-        text_layout.addWidget(self.summary_desc)
-        
-        sum_layout.addLayout(text_layout)
-        sum_layout.addStretch(1)
-
-        layout.addWidget(self.summary_card)
-
     def _build_details_tables(self, layout: QVBoxLayout) -> None:
         self.table_panel = ElevatedCardWidget(self.view)
         table_layout = QVBoxLayout(self.table_panel)
@@ -271,28 +225,21 @@ class ReverseFillPage(DashboardClipboardMixin, QWidget):
         header_widget = QWidget(self.table_panel)
         header_layout = QHBoxLayout(header_widget)
         header_layout.setContentsMargins(24, 16, 24, 12)
-        
-        self.segment = SegmentedWidget(header_widget)
-        
-        header_layout.addWidget(self.segment)
         header_layout.addStretch(1)
-        
-        self.open_wizard_btn = PrimaryPushButton(FluentIcon.EDIT, "一键定位处理缺失依赖", header_widget)
+
+        self.open_wizard_btn = PrimaryPushButton(FluentIcon.EDIT, "配置异常题目", header_widget)
         self.open_wizard_btn.hide()
         header_layout.addWidget(self.open_wizard_btn)
-        
+
         table_layout.addWidget(header_widget)
 
-        self.stacked_widget = QStackedWidget(self.table_panel)
-        
-        # 1. Mapping Table
-        mapping_wrapper = QWidget()
-        mapping_vbox = QVBoxLayout(mapping_wrapper)
-        mapping_vbox.setContentsMargins(24, 0, 24, 24)
-        
-        self.mapping_table = TableWidget(mapping_wrapper)
-        self.mapping_table.setColumnCount(5)
-        self.mapping_table.setHorizontalHeaderLabels(["对应题号", "解析特征题型", "挂载支持判定", "关联表头列标", "执行策略附注"])
+        table_wrapper = QWidget(self.table_panel)
+        table_vbox = QVBoxLayout(table_wrapper)
+        table_vbox.setContentsMargins(24, 0, 24, 24)
+
+        self.mapping_table = TableWidget(table_wrapper)
+        self.mapping_table.setColumnCount(6)
+        self.mapping_table.setHorizontalHeaderLabels(["题号", "题型", "状态", "关联列", "异常说明", "处理建议"])
         self.mapping_table.verticalHeader().setVisible(False)
         self.mapping_table.setSelectionBehavior(TableWidget.SelectionBehavior.SelectRows)
         self.mapping_table.setEditTriggers(TableWidget.EditTrigger.NoEditTriggers)
@@ -304,36 +251,10 @@ class ReverseFillPage(DashboardClipboardMixin, QWidget):
         m_header.setSectionResizeMode(2, m_header.ResizeMode.ResizeToContents)
         m_header.setSectionResizeMode(3, m_header.ResizeMode.Stretch)
         m_header.setSectionResizeMode(4, m_header.ResizeMode.Stretch)
-        mapping_vbox.addWidget(self.mapping_table)
-        
-        # 2. Issues Table
-        issue_wrapper = QWidget()
-        issue_vbox = QVBoxLayout(issue_wrapper)
-        issue_vbox.setContentsMargins(24, 0, 24, 24)
-        
-        self.issue_table = TableWidget(issue_wrapper)
-        self.issue_table.setColumnCount(5)
-        self.issue_table.setHorizontalHeaderLabels(["溯源题号", "诊断风险类目", "严重等级分布", "异常原因明细追查", "系统推荐化解方案"])
-        self.issue_table.verticalHeader().setVisible(False)
-        self.issue_table.setSelectionBehavior(TableWidget.SelectionBehavior.SelectRows)
-        self.issue_table.setEditTriggers(TableWidget.EditTrigger.NoEditTriggers)
-        self.issue_table.setAlternatingRowColors(True)
-        self.issue_table.setMinimumHeight(420)
-        i_header = self.issue_table.horizontalHeader()
-        i_header.setSectionResizeMode(0, i_header.ResizeMode.ResizeToContents)
-        i_header.setSectionResizeMode(1, i_header.ResizeMode.ResizeToContents)
-        i_header.setSectionResizeMode(2, i_header.ResizeMode.ResizeToContents)
-        i_header.setSectionResizeMode(3, i_header.ResizeMode.Stretch)
-        i_header.setSectionResizeMode(4, i_header.ResizeMode.Stretch)
-        issue_vbox.addWidget(self.issue_table)
-        
-        self.stacked_widget.addWidget(mapping_wrapper)
-        self.stacked_widget.addWidget(issue_wrapper)
+        m_header.setSectionResizeMode(5, m_header.ResizeMode.Stretch)
+        table_vbox.addWidget(self.mapping_table)
 
-        self.segment.addItem("mapping", "映射预览检查", lambda: self._switch_tab(0))
-        self.segment.addItem("issues", "异常与回退拦截项", lambda: self._switch_tab(1))
-        
-        table_layout.addWidget(self.stacked_widget)
+        table_layout.addWidget(table_wrapper)
         layout.addWidget(self.table_panel)
 
     def _build_ui(self) -> None:
@@ -353,14 +274,11 @@ class ReverseFillPage(DashboardClipboardMixin, QWidget):
 
         self._build_title_area(layout)
         self._build_survey_entry_card(layout)
-        self._build_config_cards(layout)
         self._build_file_picker(layout)
-        self._build_summary_banner(layout)
         self._build_details_tables(layout)
         layout.addStretch(1)
         outer.addWidget(self.scroll_area, 1)
         self._build_bottom_status_card(outer)
-        self.segment.setCurrentItem("mapping")
 
     def _build_bottom_status_card(self, outer_layout: QVBoxLayout) -> None:
         bottom = CardWidget(self)
@@ -386,7 +304,7 @@ class ReverseFillPage(DashboardClipboardMixin, QWidget):
         self.resume_btn.hide()
         self.stop_btn = PushButton("停止", bottom)
         self.stop_btn.setEnabled(False)
-        self.start_btn.setToolTip("请先在主页完成问卷解析和题目配置")
+        self.start_btn.setToolTip("请先完成问卷解析、题目配置，并导入 Excel 数据源")
         install_tooltip_filter(self.start_btn)
 
         top_row.addWidget(self.status_label)
@@ -399,17 +317,8 @@ class ReverseFillPage(DashboardClipboardMixin, QWidget):
         bottom_layout.addLayout(top_row)
         outer_layout.addWidget(bottom)
 
-    def _switch_tab(self, index: int) -> None:
-        self.stacked_widget.setCurrentIndex(index)
-        if index == 1 and self._questions_info:
-            self.open_wizard_btn.show()
-        else:
-            self.open_wizard_btn.hide()
-
     def _bind_events(self) -> None:
-        self.enable_card.switchButton.checkedChanged.connect(lambda _checked: self._refresh_preview())
         self.qr_btn.clicked.connect(self._on_qr_clicked)
-        self.parse_btn.clicked.connect(self._on_parse_clicked)
         self.url_edit.returnPressed.connect(self._on_parse_clicked)
         self.url_edit.textChanged.connect(self.surveyUrlChanged.emit)
         self.file_edit.editingFinished.connect(self._refresh_preview)
@@ -423,7 +332,7 @@ class ReverseFillPage(DashboardClipboardMixin, QWidget):
         self.resume_btn.clicked.connect(self._on_resume_clicked)
         self.stop_btn.clicked.connect(self.controller.stop_run)
 
-    def set_open_wizard_handler(self, handler: Optional[Callable[[], None]]) -> None:
+    def set_open_wizard_handler(self, handler: Optional[Callable[[List[int]], None]]) -> None:
         self._open_wizard_handler = handler
 
     def set_question_context(
@@ -443,16 +352,13 @@ class ReverseFillPage(DashboardClipboardMixin, QWidget):
 
     def update_config(self, cfg: RuntimeConfig) -> None:
         self._target_num = max(1, int(getattr(cfg, "target", self._target_num) or self._target_num))
-        cfg.reverse_fill_enabled = bool(self.enable_card.isChecked())
         cfg.reverse_fill_source_path = self.file_edit.text().strip()
+        cfg.reverse_fill_enabled = bool(cfg.reverse_fill_source_path)
         cfg.reverse_fill_format = self._selected_format()
         cfg.reverse_fill_start_row = max(1, int(self._start_row_value or 1))
 
     def apply_config(self, cfg: RuntimeConfig) -> None:
         self._target_num = max(1, int(getattr(cfg, "target", 1) or 1))
-        self.enable_card.blockSignals(True)
-        self.enable_card.setChecked(bool(getattr(cfg, "reverse_fill_enabled", False)))
-        self.enable_card.blockSignals(False)
         self.url_edit.blockSignals(True)
         self.url_edit.setText(str(getattr(cfg, "url", "") or ""))
         self.url_edit.blockSignals(False)
@@ -505,10 +411,14 @@ class ReverseFillPage(DashboardClipboardMixin, QWidget):
         except Exception:
             return False
 
+    def _has_excel_source_path(self) -> bool:
+        return bool(self.file_edit.text().strip())
+
     def _sync_start_button_state(self, running: Optional[bool] = None) -> None:
         if running is None:
             running = bool(getattr(self.controller, "running", False))
-        self.start_btn.setEnabled((not bool(running)) and self._has_question_entries())
+        enabled = (not bool(running)) and self._has_question_entries() and self._has_excel_source_path()
+        self.start_btn.setEnabled(enabled)
 
     def _set_main_progress_indeterminate(self, enabled: bool) -> None:
         flag = bool(enabled)
@@ -565,7 +475,7 @@ class ReverseFillPage(DashboardClipboardMixin, QWidget):
             self.start_btn.setText("重新开始")
         else:
             self.start_btn.setText("开始执行")
-        self.start_btn.setEnabled(self._has_question_entries())
+        self._sync_start_button_state(running=False)
         self.stop_btn.setEnabled(False)
         if not self._completion_notified:
             self._show_end_toast_after_cleanup = True
@@ -647,7 +557,7 @@ class ReverseFillPage(DashboardClipboardMixin, QWidget):
         log_action(
             "UI",
             "parse_survey",
-            "parse_btn",
+            "url_edit",
             "reverse_fill",
             result="started",
             payload={"provider": provider},
@@ -681,8 +591,12 @@ class ReverseFillPage(DashboardClipboardMixin, QWidget):
         if not callable(self._open_wizard_handler):
             self._toast("目前无法直接导航至系统向导。您需优先在仪表盘主页完成问卷解析方可继续。", "warning")
             return
+        issue_question_nums = [int(num) for num in self._issue_question_nums if int(num) > 0]
+        if not issue_question_nums:
+            self._toast("当前没有需要处理的异常题目。", "warning")
+            return
         try:
-            self._open_wizard_handler()
+            self._open_wizard_handler(issue_question_nums)
         except Exception as exc:
             logging.info("打开配置向导异常崩溃", exc_info=True)
             self._toast(f"触发配置交互向导意外阻断：{exc}", "error")
@@ -695,51 +609,62 @@ class ReverseFillPage(DashboardClipboardMixin, QWidget):
         item.setText(text)
 
     def _clear_tables(self) -> None:
+        self._issue_question_nums = []
         self.mapping_table.setRowCount(0)
-        self.issue_table.setRowCount(0)
-        self.segment.setItemText("issues", "异常与回退拦截项 (0)")
+        self.open_wizard_btn.hide()
 
     def _populate_plan_table(self, spec: ReverseFillSpec) -> None:
+        issues_by_question: dict[int, list[Any]] = {}
+        for issue in list(spec.issues or []):
+            key = int(issue.question_num or 0)
+            issues_by_question.setdefault(key, []).append(issue)
+
         plans = list(spec.question_plans or [])
-        self.mapping_table.setRowCount(len(plans))
+        global_issues = list(issues_by_question.get(0, []))
+        self.mapping_table.setRowCount(len(plans) + len(global_issues))
         for row, plan in enumerate(plans):
+            question_num = int(plan.question_num or 0)
+            issues = issues_by_question.get(question_num, [])
+            detail_parts = [str(plan.detail or "").strip()] if str(plan.detail or "").strip() else []
+            suggestion_parts: list[str] = []
+            for issue in issues:
+                reason = str(issue.reason or "").strip()
+                if reason and reason not in detail_parts:
+                    detail_parts.append(reason)
+                suggestion = str(issue.suggestion or "").strip()
+                if suggestion and suggestion not in suggestion_parts:
+                    suggestion_parts.append(suggestion)
+            if not issues and str(plan.status or "") == REVERSE_FILL_STATUS_REVERSE:
+                suggestion_parts.append("无需处理")
+
             self._set_table_text(self.mapping_table, row, 0, str(int(plan.question_num or 0)))
             self._set_table_text(self.mapping_table, row, 1, str(plan.question_type or ""))
             self._set_table_text(self.mapping_table, row, 2, _STATUS_LABELS.get(str(plan.status or ""), str(plan.status or "")))
             self._set_table_text(self.mapping_table, row, 3, " / ".join(list(plan.column_headers or [])))
-            self._set_table_text(self.mapping_table, row, 4, str(plan.detail or ""))
+            self._set_table_text(self.mapping_table, row, 4, "\n".join(detail_parts) or "无")
+            self._set_table_text(self.mapping_table, row, 5, "\n".join(suggestion_parts) or "无")
 
-    def _populate_issue_table(self, spec: ReverseFillSpec) -> None:
-        issues = list(spec.issues or [])
-        self.issue_table.setRowCount(len(issues))
-        for row, issue in enumerate(issues):
-            question_text = "全局逻辑阻断" if int(issue.question_num or 0) <= 0 else str(int(issue.question_num or 0))
-            self._set_table_text(self.issue_table, row, 0, question_text)
-            self._set_table_text(self.issue_table, row, 1, str(issue.category or ""))
-            severity = str(issue.severity or "").strip().lower()
-            if severity in {"block", "error"}:
-                severity = "🔴 严重缺陷 (运行时阻塞)"
-            elif severity in {"warn", "warning"}:
-                severity = "🟡 低危警告 (人工注意)"
-            self._set_table_text(self.issue_table, row, 2, severity)
-            reason = str(issue.reason or "")
-            if issue.sample_rows:
-                reason = f"{reason}\n（参考样例数据源定位行码：{', '.join(str(int(item)) for item in issue.sample_rows[:3])}）"
-            self._set_table_text(self.issue_table, row, 3, reason)
-            self._set_table_text(self.issue_table, row, 4, str(issue.suggestion or ""))
+        base_row = len(plans)
+        for offset, issue in enumerate(global_issues):
+            row = base_row + offset
+            self._set_table_text(self.mapping_table, row, 0, "全局")
+            self._set_table_text(self.mapping_table, row, 1, str(issue.category or "全局"))
+            self._set_table_text(self.mapping_table, row, 2, "🔴 不支持")
+            self._set_table_text(self.mapping_table, row, 3, "无")
+            self._set_table_text(self.mapping_table, row, 4, str(issue.reason or ""))
+            self._set_table_text(self.mapping_table, row, 5, str(issue.suggestion or ""))
 
     def _refresh_preview(self) -> None:
         self._last_spec = None
         self._last_error = ""
         source_path = self.file_edit.text().strip()
         context_ready = self._context_ready()
+        self._sync_start_button_state()
 
         controls_enabled = context_ready
         self.file_edit.setEnabled(controls_enabled)
         self.browse_btn.setEnabled(controls_enabled)
-        if hasattr(self, 'open_wizard_btn'):
-            if self.stacked_widget.currentIndex() == 1:
-                self.open_wizard_btn.setVisible(bool(self._questions_info))
+        self.open_wizard_btn.hide()
 
         if not context_ready:
             provider = normalize_survey_provider(self._survey_provider, default="")
@@ -750,18 +675,12 @@ class ReverseFillPage(DashboardClipboardMixin, QWidget):
                 
             self.detected_format_label.setText("验证结果：未接通目标流")
             self.state_hint_label.setText(hint)
-            self.summary_icon.setIcon(FluentIcon.CANCEL)
-            self.summary_title.setText("脱机阻隔状态，验证功能暂被冻结")
-            self.summary_desc.setText(hint)
             self._clear_tables()
             return
 
         if not source_path:
             self.detected_format_label.setText("验证结果：待指定 Excel 数据池")
             self.state_hint_label.setText("必须提供用于特征分析的前置样卷数据路径")
-            self.summary_icon.setIcon(FluentIcon.INFO)
-            self.summary_title.setText("需您补充指定本地存放的 Excel 源文件")
-            self.summary_desc.setText("完成路径引用关联以后将即时生成详细映射自诊、挂载清单并完成业务规则审查。")
             self._clear_tables()
             return
 
@@ -779,9 +698,6 @@ class ReverseFillPage(DashboardClipboardMixin, QWidget):
             self._last_error = str(exc)
             self.detected_format_label.setText("验证结果：提取引发崩溃挂起")
             self.state_hint_label.setText(self._last_error)
-            self.summary_icon.setIcon(FluentIcon.INFO)
-            self.summary_title.setText("构建本地提取层中抛出了预料外中断")
-            self.summary_desc.setText(self._last_error)
             self._clear_tables()
             return
 
@@ -789,27 +705,13 @@ class ReverseFillPage(DashboardClipboardMixin, QWidget):
         self.detected_format_label.setText(
             f"归一分析识别格式：{reverse_fill_format_label(spec.detected_format)}"
         )
-        enabled_text = "运行时将切入主动控制流拦截执行" if self.enable_card.isChecked() else "全局切断触发链路验证仅用作演示"
+        enabled_text = "运行时会自动按 Excel 样本执行反填"
         self.state_hint_label.setText(
             f"行为定性预判：{enabled_text} （自 Excel 原始单元格界限第 {spec.start_row} 起进行数据锚定）"
         )
         
+        issue_question_nums = sorted({int(item.question_num or 0) for item in list(spec.issues or []) if int(item.question_num or 0) > 0})
+        self._issue_question_nums = issue_question_nums
         issue_cnt = len(spec.issues or [])
-        block_cnt = spec.blocking_issue_count
-        
-        if block_cnt > 0:
-            self.summary_icon.setIcon(FluentIcon.INFO)
-        else:
-            self.summary_icon.setIcon(FluentIcon.COMPLETED)
-            
-        self.summary_title.setText(
-            f"通过前置模拟检查就绪！有效净容量 {spec.available_samples} 份 （数据原尺寸总池深 {spec.total_samples} 份）"
-        )
-        
-        self.summary_desc.setText(
-            f"配置目标输出配额量 {spec.target_num or self._target_num} 份，共排定覆盖题型推演线路图 {len(spec.question_plans or [])} 条，核查出隐患支点项 {issue_cnt} 枚 (导致运行时直接致命崩溃项 {block_cnt} 个)。"
-        )
-        
-        self.segment.setItemText("issues", f"异常与回退拦截项 ({issue_cnt})")
+        self.open_wizard_btn.setVisible(issue_cnt > 0)
         self._populate_plan_table(spec)
-        self._populate_issue_table(spec)

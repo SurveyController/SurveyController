@@ -435,11 +435,9 @@ def build_enabled_reverse_fill_spec(
     questions_info: List[SurveyQuestionMeta | Dict[str, Any]],
     question_entries: List[QuestionEntry],
 ) -> Optional[ReverseFillSpec]:
-    if not bool(getattr(config, "reverse_fill_enabled", False)):
-        return None
     source_path = str(getattr(config, "reverse_fill_source_path", "") or "").strip()
     if not source_path:
-        raise ValueError("已开启反填，但还没有选择 Excel 文件")
+        return None
     spec = build_reverse_fill_spec(
         source_path=source_path,
         survey_provider=str(getattr(config, "survey_provider", SURVEY_PROVIDER_WJX) or SURVEY_PROVIDER_WJX),
