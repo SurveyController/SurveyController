@@ -4,7 +4,8 @@ from __future__ import annotations
 
 import time
 from dataclasses import dataclass
-from typing import Any, Dict, List
+import threading
+from typing import TYPE_CHECKING, Any, Dict, List, Protocol
 
 
 @dataclass
@@ -21,6 +22,20 @@ class ThreadProgressState:
     status_text: str = "等待中"
     running: bool = False
     last_update_ts: float = 0.0
+
+
+if TYPE_CHECKING:
+    class _ThreadProgressHost(Protocol):
+        lock: threading.Lock
+        thread_progress: dict[str, ThreadProgressState]
+
+        @staticmethod
+        def _resolve_thread_index(thread_name: str) -> int: ...
+
+        @staticmethod
+        def _format_thread_display_name(thread_name: str, thread_index: int) -> str: ...
+
+        def _get_or_create_thread_state_locked(self, thread_name: str) -> ThreadProgressState: ...
 
 
 class ThreadProgressMixin:
@@ -65,7 +80,10 @@ class ThreadProgressMixin:
             return "会话 ?"
         return text or "线程 ?"
 
-    def _get_or_create_thread_state_locked(self, thread_name: str) -> ThreadProgressState:
+    def _get_or_create_thread_state_locked(
+        self: "_ThreadProgressHost",
+        thread_name: str,
+    ) -> ThreadProgressState:
         key = str(thread_name or "").strip() or "Worker-?"
         state = self.thread_progress.get(key)
         if state is not None:
@@ -78,7 +96,7 @@ class ThreadProgressMixin:
         self.thread_progress[key] = state
         return state
 
-    def ensure_worker_threads(self, expected_count: int, *, prefix: str = "Worker") -> None:
+    def ensure_worker_threads(self: "_ThreadProgressHost", expected_count: int, *, prefix: str = "Worker") -> None:
         count = max(1, int(expected_count or 1))
         now = time.time()
         normalized_prefix = str(prefix or "Worker").strip() or "Worker"
@@ -97,7 +115,7 @@ class ThreadProgressMixin:
                     state.last_update_ts = now
 
     def update_thread_status(
-        self,
+        self: "_ThreadProgressHost",
         thread_name: str,
         status_text: str,
         *,
@@ -112,7 +130,7 @@ class ThreadProgressMixin:
             state.last_update_ts = now
 
     def update_thread_step(
-        self,
+        self: "_ThreadProgressHost",
         thread_name: str,
         step_current: int,
         step_total: int,
@@ -135,7 +153,12 @@ class ThreadProgressMixin:
                 thread_state.running = bool(running)
             thread_state.last_update_ts = now
 
-    def increment_thread_success(self, thread_name: str, *, status_text: str = "提交成功") -> None:
+    def increment_thread_success(
+        self: "_ThreadProgressHost",
+        thread_name: str,
+        *,
+        status_text: str = "提交成功",
+    ) -> None:
         now = time.time()
         with self.lock:
             state = self._get_or_create_thread_state_locked(thread_name)
@@ -146,7 +169,12 @@ class ThreadProgressMixin:
             state.running = True
             state.last_update_ts = now
 
-    def increment_thread_fail(self, thread_name: str, *, status_text: str = "失败重试") -> None:
+    def increment_thread_fail(
+        self: "_ThreadProgressHost",
+        thread_name: str,
+        *,
+        status_text: str = "失败重试",
+    ) -> None:
         now = time.time()
         with self.lock:
             state = self._get_or_create_thread_state_locked(thread_name)
@@ -155,7 +183,12 @@ class ThreadProgressMixin:
             state.running = True
             state.last_update_ts = now
 
-    def mark_thread_finished(self, thread_name: str, *, status_text: str = "已停止") -> None:
+    def mark_thread_finished(
+        self: "_ThreadProgressHost",
+        thread_name: str,
+        *,
+        status_text: str = "已停止",
+    ) -> None:
         now = time.time()
         with self.lock:
             state = self._get_or_create_thread_state_locked(thread_name)
@@ -163,7 +196,7 @@ class ThreadProgressMixin:
             state.status_text = str(status_text or "已停止")
             state.last_update_ts = now
 
-    def snapshot_thread_progress(self) -> List[Dict[str, Any]]:
+    def snapshot_thread_progress(self: "_ThreadProgressHost") -> List[Dict[str, Any]]:
         with self.lock:
             rows = []
             for state in self.thread_progress.values():

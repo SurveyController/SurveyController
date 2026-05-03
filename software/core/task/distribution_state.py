@@ -3,7 +3,28 @@
 from __future__ import annotations
 
 import threading
-from typing import Any, List, Optional, Tuple
+from typing import TYPE_CHECKING, Any, List, Optional, Protocol, Tuple
+
+
+if TYPE_CHECKING:
+    class _DistributionRuntimeHost(Protocol):
+        lock: threading.Lock
+        distribution_runtime_stats: dict[str, dict[str, Any]]
+        distribution_pending_by_thread: dict[str, list[tuple[str, int, int]]]
+        joint_reserved_sample_by_thread: dict[str, int]
+        joint_committed_sample_indexes: set[int]
+
+        @staticmethod
+        def _normalize_distribution_counts(raw_counts: Any, option_count: int) -> List[int]: ...
+        def reserve_joint_sample(self, sample_count: int, thread_name: Optional[str] = None) -> Optional[int]: ...
+
+        def notify_runtime_change(self) -> None: ...
+        def wait_for_runtime_change(
+            self,
+            *,
+            stop_signal: Optional[threading.Event] = None,
+            timeout: Optional[float] = None,
+        ) -> bool: ...
 
 
 class DistributionRuntimeMixin:
@@ -20,7 +41,11 @@ class DistributionRuntimeMixin:
                 normalized[idx] = 0
         return normalized
 
-    def snapshot_distribution_stats(self, stat_key: str, option_count: int) -> Tuple[int, List[int]]:
+    def snapshot_distribution_stats(
+        self: "_DistributionRuntimeHost",
+        stat_key: str,
+        option_count: int,
+    ) -> Tuple[int, List[int]]:
         with self.lock:
             bucket = self.distribution_runtime_stats.get(str(stat_key or "")) or {}
             total = max(0, int(bucket.get("total") or 0)) if isinstance(bucket, dict) else 0
@@ -30,13 +55,13 @@ class DistributionRuntimeMixin:
             )
         return total, counts
 
-    def reset_pending_distribution(self, thread_name: Optional[str] = None) -> None:
+    def reset_pending_distribution(self: "_DistributionRuntimeHost", thread_name: Optional[str] = None) -> None:
         key = str(thread_name or threading.current_thread().name or "Worker-?").strip() or "Worker-?"
         with self.lock:
             self.distribution_pending_by_thread[key] = []
 
     def append_pending_distribution_choice(
-        self,
+        self: "_DistributionRuntimeHost",
         stat_key: str,
         option_index: int,
         option_count: int,
@@ -54,7 +79,7 @@ class DistributionRuntimeMixin:
             pending = self.distribution_pending_by_thread.setdefault(key, [])
             pending.append(item)
 
-    def commit_pending_distribution(self, thread_name: Optional[str] = None) -> int:
+    def commit_pending_distribution(self: "_DistributionRuntimeHost", thread_name: Optional[str] = None) -> int:
         key = str(thread_name or threading.current_thread().name or "Worker-?").strip() or "Worker-?"
         committed = 0
         with self.lock:
@@ -77,13 +102,20 @@ class DistributionRuntimeMixin:
                 committed += 1
         return committed
 
-    def peek_reserved_joint_sample(self, thread_name: Optional[str] = None) -> Optional[int]:
+    def peek_reserved_joint_sample(
+        self: "_DistributionRuntimeHost",
+        thread_name: Optional[str] = None,
+    ) -> Optional[int]:
         key = str(thread_name or threading.current_thread().name or "Worker-?").strip() or "Worker-?"
         with self.lock:
             reserved = self.joint_reserved_sample_by_thread.get(key)
             return int(reserved) if reserved is not None else None
 
-    def reserve_joint_sample(self, sample_count: int, thread_name: Optional[str] = None) -> Optional[int]:
+    def reserve_joint_sample(
+        self: "_DistributionRuntimeHost",
+        sample_count: int,
+        thread_name: Optional[str] = None,
+    ) -> Optional[int]:
         key = str(thread_name or threading.current_thread().name or "Worker-?").strip() or "Worker-?"
         total = max(0, int(sample_count or 0))
         if total <= 0:
@@ -100,7 +132,10 @@ class DistributionRuntimeMixin:
                 return sample_index
         return None
 
-    def release_joint_sample(self, thread_name: Optional[str] = None) -> Optional[int]:
+    def release_joint_sample(
+        self: "_DistributionRuntimeHost",
+        thread_name: Optional[str] = None,
+    ) -> Optional[int]:
         key = str(thread_name or threading.current_thread().name or "Worker-?").strip() or "Worker-?"
         with self.lock:
             reserved = self.joint_reserved_sample_by_thread.pop(key, None)
@@ -109,7 +144,10 @@ class DistributionRuntimeMixin:
             return int(reserved)
         return None
 
-    def commit_joint_sample(self, thread_name: Optional[str] = None) -> Optional[int]:
+    def commit_joint_sample(
+        self: "_DistributionRuntimeHost",
+        thread_name: Optional[str] = None,
+    ) -> Optional[int]:
         key = str(thread_name or threading.current_thread().name or "Worker-?").strip() or "Worker-?"
         with self.lock:
             reserved = self.joint_reserved_sample_by_thread.pop(key, None)
@@ -120,7 +158,7 @@ class DistributionRuntimeMixin:
         return int(reserved)
 
     def wait_for_joint_sample(
-        self,
+        self: "_DistributionRuntimeHost",
         sample_count: int,
         *,
         thread_name: Optional[str] = None,

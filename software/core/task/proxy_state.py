@@ -5,7 +5,7 @@ from __future__ import annotations
 import threading
 import time
 from dataclasses import dataclass
-from typing import Optional
+from typing import TYPE_CHECKING, Optional, Protocol
 
 
 @dataclass
@@ -19,8 +19,26 @@ class ProxyLease:
     source: str = ""
 
 
+if TYPE_CHECKING:
+    class _ProxyRuntimeHost(Protocol):
+        lock: threading.Lock
+        _browser_semaphore_lock: threading.Lock
+        _browser_semaphore: Optional[threading.Semaphore]
+        _browser_semaphore_max_instances: int
+        proxy_waiting_threads: int
+        proxy_in_use_by_thread: dict[str, ProxyLease]
+        submit_proxy_in_use_by_thread: dict[str, ProxyLease]
+        proxy_cooldown_until_by_address: dict[str, float]
+        _runtime_condition: threading.Condition
+
+        def _purge_expired_proxy_cooldowns_locked(self, *, now_ts: Optional[float] = None) -> None: ...
+        def _is_proxy_in_cooldown_locked(self, proxy_address: str, *, now_ts: Optional[float] = None) -> bool: ...
+        def active_proxy_addresses_locked(self, *, exclude_thread_name: str = "") -> set[str]: ...
+        def notify_runtime_change(self) -> None: ...
+
+
 class ProxyRuntimeMixin:
-    def get_browser_semaphore(self, max_instances: int) -> threading.Semaphore:
+    def get_browser_semaphore(self: "_ProxyRuntimeHost", max_instances: int) -> threading.Semaphore:
         normalized = max(1, int(max_instances or 1))
         with self._browser_semaphore_lock:
             if self._browser_semaphore is None or self._browser_semaphore_max_instances != normalized:
@@ -28,29 +46,33 @@ class ProxyRuntimeMixin:
                 self._browser_semaphore_max_instances = normalized
             return self._browser_semaphore
 
-    def register_proxy_waiter(self) -> None:
+    def register_proxy_waiter(self: "_ProxyRuntimeHost") -> None:
         with self.lock:
             self.proxy_waiting_threads = max(0, int(self.proxy_waiting_threads or 0)) + 1
 
-    def unregister_proxy_waiter(self) -> None:
+    def unregister_proxy_waiter(self: "_ProxyRuntimeHost") -> None:
         with self.lock:
             self.proxy_waiting_threads = max(0, int(self.proxy_waiting_threads or 0) - 1)
 
-    def mark_proxy_in_use(self, thread_name: str, lease: ProxyLease) -> None:
+    def mark_proxy_in_use(self: "_ProxyRuntimeHost", thread_name: str, lease: ProxyLease) -> None:
         key = str(thread_name or "").strip()
         if not key or not isinstance(lease, ProxyLease):
             return
         with self.lock:
             self.proxy_in_use_by_thread[key] = lease
 
-    def mark_submit_proxy_in_use(self, thread_name: str, lease: ProxyLease) -> None:
+    def mark_submit_proxy_in_use(self: "_ProxyRuntimeHost", thread_name: str, lease: ProxyLease) -> None:
         key = str(thread_name or "").strip()
         if not key or not isinstance(lease, ProxyLease):
             return
         with self.lock:
             self.submit_proxy_in_use_by_thread[key] = lease
 
-    def _purge_expired_proxy_cooldowns_locked(self, *, now_ts: Optional[float] = None) -> None:
+    def _purge_expired_proxy_cooldowns_locked(
+        self: "_ProxyRuntimeHost",
+        *,
+        now_ts: Optional[float] = None,
+    ) -> None:
         current = float(now_ts if now_ts is not None else time.time())
         expired = [
             address
@@ -60,11 +82,16 @@ class ProxyRuntimeMixin:
         for address in expired:
             self.proxy_cooldown_until_by_address.pop(address, None)
 
-    def purge_expired_proxy_cooldowns(self, *, now_ts: Optional[float] = None) -> None:
+    def purge_expired_proxy_cooldowns(self: "_ProxyRuntimeHost", *, now_ts: Optional[float] = None) -> None:
         with self.lock:
             self._purge_expired_proxy_cooldowns_locked(now_ts=now_ts)
 
-    def _is_proxy_in_cooldown_locked(self, proxy_address: str, *, now_ts: Optional[float] = None) -> bool:
+    def _is_proxy_in_cooldown_locked(
+        self: "_ProxyRuntimeHost",
+        proxy_address: str,
+        *,
+        now_ts: Optional[float] = None,
+    ) -> bool:
         normalized = str(proxy_address or "").strip()
         if not normalized:
             return False
@@ -72,14 +99,23 @@ class ProxyRuntimeMixin:
         current = float(now_ts if now_ts is not None else time.time())
         return float(self.proxy_cooldown_until_by_address.get(normalized, 0.0) or 0.0) > current
 
-    def is_proxy_in_cooldown(self, proxy_address: str, *, now_ts: Optional[float] = None) -> bool:
+    def is_proxy_in_cooldown(
+        self: "_ProxyRuntimeHost",
+        proxy_address: str,
+        *,
+        now_ts: Optional[float] = None,
+    ) -> bool:
         normalized = str(proxy_address or "").strip()
         if not normalized:
             return False
         with self.lock:
             return self._is_proxy_in_cooldown_locked(normalized, now_ts=now_ts)
 
-    def mark_proxy_in_cooldown(self, proxy_address: str, cooldown_seconds: float) -> None:
+    def mark_proxy_in_cooldown(
+        self: "_ProxyRuntimeHost",
+        proxy_address: str,
+        cooldown_seconds: float,
+    ) -> None:
         normalized = str(proxy_address or "").strip()
         if not normalized:
             return
@@ -95,7 +131,11 @@ class ProxyRuntimeMixin:
             self.proxy_cooldown_until_by_address[normalized] = max(previous_until, cooldown_until)
         self.notify_runtime_change()
 
-    def active_proxy_addresses_locked(self, *, exclude_thread_name: str = "") -> set[str]:
+    def active_proxy_addresses_locked(
+        self: "_ProxyRuntimeHost",
+        *,
+        exclude_thread_name: str = "",
+    ) -> set[str]:
         excluded = str(exclude_thread_name or "").strip()
         active = set()
         for proxy_map in (self.proxy_in_use_by_thread, self.submit_proxy_in_use_by_thread):
@@ -107,23 +147,32 @@ class ProxyRuntimeMixin:
                     active.add(address)
         return active
 
-    def snapshot_active_proxy_addresses(self, *, exclude_thread_name: str = "") -> set[str]:
+    def snapshot_active_proxy_addresses(
+        self: "_ProxyRuntimeHost",
+        *,
+        exclude_thread_name: str = "",
+    ) -> set[str]:
         with self.lock:
             return self.active_proxy_addresses_locked(exclude_thread_name=exclude_thread_name)
 
-    def is_proxy_address_in_use(self, proxy_address: str, *, exclude_thread_name: str = "") -> bool:
+    def is_proxy_address_in_use(
+        self: "_ProxyRuntimeHost",
+        proxy_address: str,
+        *,
+        exclude_thread_name: str = "",
+    ) -> bool:
         normalized = str(proxy_address or "").strip()
         if not normalized:
             return False
         with self.lock:
             return normalized in self.active_proxy_addresses_locked(exclude_thread_name=exclude_thread_name)
 
-    def notify_runtime_change(self) -> None:
+    def notify_runtime_change(self: "_ProxyRuntimeHost") -> None:
         with self._runtime_condition:
             self._runtime_condition.notify_all()
 
     def wait_for_runtime_change(
-        self,
+        self: "_ProxyRuntimeHost",
         *,
         stop_signal: Optional[threading.Event] = None,
         timeout: Optional[float] = None,
@@ -135,7 +184,7 @@ class ProxyRuntimeMixin:
             self._runtime_condition.wait(timeout=wait_timeout)
         return bool(stop_signal is not None and stop_signal.is_set())
 
-    def release_proxy_in_use(self, thread_name: str) -> Optional[ProxyLease]:
+    def release_proxy_in_use(self: "_ProxyRuntimeHost", thread_name: str) -> Optional[ProxyLease]:
         key = str(thread_name or "").strip()
         if not key:
             return None

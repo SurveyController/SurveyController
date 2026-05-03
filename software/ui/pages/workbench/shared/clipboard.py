@@ -9,7 +9,7 @@ from typing import TYPE_CHECKING, Optional
 from PIL import Image
 from PySide6.QtCore import QEvent, QMimeData, QTimer
 from PySide6.QtGui import QClipboard, QDragEnterEvent, QDropEvent, QImage
-from PySide6.QtWidgets import QFileDialog
+from PySide6.QtWidgets import QFileDialog, QWidget
 
 from software.app.runtime_paths import get_runtime_directory
 from software.io.qr import decode_qrcode
@@ -200,12 +200,13 @@ class SurveyClipboardMixin:
             log_suppressed_exception("_process_qrcode_image", exc, level=logging.WARNING)
 
     def _on_qr_clicked(self):
+        parent = self.link_card if isinstance(getattr(self, "link_card", None), QWidget) else None
         path, _ = QFileDialog.getOpenFileName(
-            self,
+            parent,
             "选择二维码图片",
             get_runtime_directory(),
             "含有二维码的图片 (*.png *.jpg *.jpeg *.bmp)",
-        )  # type: ignore[arg-type]
+        )
         if not path:
             return
         self._process_qrcode_image(path)

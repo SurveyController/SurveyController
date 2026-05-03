@@ -165,6 +165,8 @@ class DashboardPage(
         self.link_card = survey_entry
         self.qr_btn = survey_entry.qr_btn
         self.url_edit = survey_entry.url_edit
+        if survey_entry.parse_btn is None:
+            raise RuntimeError("SurveyEntryCard 缺少解析按钮，无法初始化主页入口")
         self.parse_btn = survey_entry.parse_btn
         layout.addWidget(self.link_card)
 

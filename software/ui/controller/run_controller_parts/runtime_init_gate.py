@@ -81,20 +81,11 @@ class RunControllerInitializationMixin:
         adapter: Any
         config: RuntimeConfig
         running: bool
-        _starting: bool
-        _initializing: bool
         _status_timer: Any
         _execution_state: Optional[ExecutionState]
-        _prepared_execution_artifacts: Optional[PreparedExecutionArtifacts]
-        _init_stage_text: str
-        _init_steps: List[Dict[str, str]]
-        _init_completed_steps: set[str]
-        _init_current_step_key: str
-        _init_gate_stop_event: Optional[threading.Event]
         _init_gate_thread: Optional[threading.Thread]
         _startup_status_check_lock: threading.Lock
         _startup_status_check_active: bool
-        _startup_service_warnings: List[str]
         survey_title: str
         custom_confirm_dialog_handler: Optional[Any]
         confirm_dialog_handler: Optional[Any]
@@ -103,6 +94,51 @@ class RunControllerInitializationMixin:
         threadProgressUpdated: Any
         runFailed: Any
         startupHintEmitted: Any
+
+        @property
+        def _starting(self) -> bool: ...
+        @_starting.setter
+        def _starting(self, value: bool) -> None: ...
+
+        @property
+        def _initializing(self) -> bool: ...
+        @_initializing.setter
+        def _initializing(self, value: bool) -> None: ...
+
+        @property
+        def _prepared_execution_artifacts(self) -> Optional[PreparedExecutionArtifacts]: ...
+        @_prepared_execution_artifacts.setter
+        def _prepared_execution_artifacts(self, value: Optional[PreparedExecutionArtifacts]) -> None: ...
+
+        @property
+        def _init_stage_text(self) -> str: ...
+        @_init_stage_text.setter
+        def _init_stage_text(self, value: str) -> None: ...
+
+        @property
+        def _init_steps(self) -> List[Dict[str, str]]: ...
+        @_init_steps.setter
+        def _init_steps(self, value: List[Dict[str, str]]) -> None: ...
+
+        @property
+        def _init_completed_steps(self) -> set[str]: ...
+        @_init_completed_steps.setter
+        def _init_completed_steps(self, value: set[str]) -> None: ...
+
+        @property
+        def _init_current_step_key(self) -> str: ...
+        @_init_current_step_key.setter
+        def _init_current_step_key(self, value: str) -> None: ...
+
+        @property
+        def _init_gate_stop_event(self) -> Optional[threading.Event]: ...
+        @_init_gate_stop_event.setter
+        def _init_gate_stop_event(self, value: Optional[threading.Event]) -> None: ...
+
+        @property
+        def _startup_service_warnings(self) -> List[str]: ...
+        @_startup_service_warnings.setter
+        def _startup_service_warnings(self, value: List[str]) -> None: ...
 
         def _start_workers_with_proxy_pool(
             self,
