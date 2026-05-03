@@ -87,12 +87,23 @@ def _build_execution_config_template(
     except Exception:
         psycho_target_alpha = normalize_target_alpha(None)
 
+    thread_limit = _resolve_thread_limit(config)
+    requested_target_num = max(1, int(getattr(config, "target", 1) or 1))
+    requested_num_threads = max(1, int(getattr(config, "threads", 1) or 1))
+    if reverse_fill_spec is not None:
+        requested_target_num = max(1, int(getattr(reverse_fill_spec, "target_num", 0) or 1))
+        requested_num_threads = max(
+            1,
+            int(getattr(config, "reverse_fill_threads", getattr(config, "threads", 1)) or 1),
+        )
+        requested_num_threads = min(requested_num_threads, requested_target_num)
+
     execution_config = ExecutionConfig(
         url=str(getattr(config, "url", "") or ""),
         survey_title=survey_title,
         survey_provider=survey_provider,
-        target_num=max(1, int(getattr(config, "target", 1) or 1)),
-        num_threads=max(1, min(_resolve_thread_limit(config), int(getattr(config, "threads", 1) or 1))),
+        target_num=requested_target_num,
+        num_threads=max(1, min(thread_limit, requested_num_threads)),
         headless_mode=bool(getattr(config, "headless_mode", False)),
         browser_preference=copy.deepcopy(list(getattr(config, "browser_preference", []) or [])),
         fail_threshold=5,

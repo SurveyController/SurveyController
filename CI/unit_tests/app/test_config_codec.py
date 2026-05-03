@@ -22,6 +22,7 @@ class ConfigCodecTests(unittest.TestCase):
             reverse_fill_source_path="D:/demo.xlsx",
             reverse_fill_format=REVERSE_FILL_FORMAT_WJX_SEQUENCE,
             reverse_fill_start_row=3,
+            reverse_fill_threads=4,
         )
 
         payload = serialize_runtime_config(config)
@@ -32,6 +33,7 @@ class ConfigCodecTests(unittest.TestCase):
         self.assertEqual(restored.reverse_fill_source_path, "D:/demo.xlsx")
         self.assertEqual(restored.reverse_fill_format, REVERSE_FILL_FORMAT_WJX_SEQUENCE)
         self.assertEqual(restored.reverse_fill_start_row, 3)
+        self.assertEqual(restored.reverse_fill_threads, 4)
 
     def test_legacy_v4_payload_is_upgraded_to_v5_with_reverse_fill_defaults(self) -> None:
         upgraded = _ensure_supported_config_payload(
@@ -41,6 +43,7 @@ class ConfigCodecTests(unittest.TestCase):
                 "reverse_fill_source_path": "D:/legacy.xlsx",
                 "reverse_fill_format": "unknown",
                 "reverse_fill_start_row": 0,
+                "threads": 6,
             },
             config_path="legacy.json",
         )
@@ -50,6 +53,7 @@ class ConfigCodecTests(unittest.TestCase):
         self.assertEqual(upgraded["reverse_fill_source_path"], "D:/legacy.xlsx")
         self.assertEqual(upgraded["reverse_fill_format"], "auto")
         self.assertEqual(upgraded["reverse_fill_start_row"], 1)
+        self.assertEqual(upgraded["reverse_fill_threads"], 6)
 
     def test_runtime_config_roundtrip_keeps_questions_info_provider_metadata(self) -> None:
         config = RuntimeConfig(

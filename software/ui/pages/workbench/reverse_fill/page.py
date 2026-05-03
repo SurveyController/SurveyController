@@ -8,8 +8,8 @@ import logging
 import os
 from typing import TYPE_CHECKING, Any, Callable, List, Optional, Sequence
 
-from PySide6.QtCore import Qt, Signal
-from PySide6.QtGui import QColor
+from PySide6.QtCore import QEvent, Qt, Signal
+from PySide6.QtGui import QColor, QDragEnterEvent, QDropEvent
 from PySide6.QtWidgets import QApplication, QFileDialog, QHBoxLayout, QTableWidgetItem, QVBoxLayout, QWidget
 from qfluentwidgets import (
     BodyLabel,
@@ -34,6 +34,7 @@ from qfluentwidgets import (
     ToolButton,
 )
 
+from software.app.config import HEADLESS_MAX_THREADS
 from software.core.reverse_fill.schema import (
     REVERSE_FILL_FORMAT_AUTO,
     REVERSE_FILL_FORMAT_WJX_SCORE,
@@ -60,6 +61,7 @@ from software.providers.common import (
 from software.providers.contracts import SurveyQuestionMeta, ensure_survey_question_metas
 from software.ui.helpers.fluent_tooltip import install_tooltip_filter
 from software.ui.pages.workbench.dashboard.parts.clipboard import DashboardClipboardMixin
+from software.ui.widgets.no_wheel import NoWheelSpinBox
 from software.ui.widgets.paste_only_menu import PasteOnlyMenu
 
 if TYPE_CHECKING:
@@ -79,6 +81,17 @@ _STATUS_LABELS = {
     REVERSE_FILL_STATUS_BLOCKED: "🔴 不支持",
 }
 
+_NON_ACTIONABLE_ISSUE_CATEGORIES = {"auto_handled"}
+
+
+def _status_label_for_plan(plan: Any) -> str:
+    status = str(getattr(plan, "status", "") or "")
+    if status == REVERSE_FILL_STATUS_FALLBACK and bool(getattr(plan, "fallback_resolved", False)):
+        return "🟢 已处理"
+    if status == REVERSE_FILL_STATUS_FALLBACK and bool(getattr(plan, "fallback_ready", False)):
+        return "🟡 可回退"
+    return _STATUS_LABELS.get(status, status)
+
 
 class ReverseFillPage(DashboardClipboardMixin, QWidget):
     """独立的反填数据源页。"""
@@ -92,7 +105,7 @@ class ReverseFillPage(DashboardClipboardMixin, QWidget):
         self._question_entries: List[Any] = []
         self._survey_provider: str = ""
         self._survey_title: str = ""
-        self._target_num: int = 1
+        self._reverse_fill_threads_value: int = 1
         self._selected_format_value: str = REVERSE_FILL_FORMAT_AUTO
         self._start_row_value: int = 1
         self._last_spec: Optional[ReverseFillSpec] = None
@@ -178,6 +191,7 @@ class ReverseFillPage(DashboardClipboardMixin, QWidget):
 
     def _build_file_picker(self, layout: QVBoxLayout) -> None:
         self.file_panel = ElevatedCardWidget(self.view)
+        self.file_panel.setAcceptDrops(True)
         file_layout = QVBoxLayout(self.file_panel)
         file_layout.setContentsMargins(20, 18, 20, 20)
         file_layout.setSpacing(14)
@@ -191,14 +205,14 @@ class ReverseFillPage(DashboardClipboardMixin, QWidget):
         header_row.addStretch(1)
         file_layout.addLayout(header_row)
 
-        desc_label = CaptionLabel("点击以选择需要调取和读取逻辑的 .xlsx 扩展名样本数据源文件。", self.file_panel)
+        desc_label = CaptionLabel("在此处导入/拖入用于反填的 .xlsx 文件。", self.file_panel)
         desc_label.setContentsMargins(0, 0, 0, 4)
         file_layout.addWidget(desc_label)
 
         input_row = QHBoxLayout()
         input_row.setSpacing(12)
         self.file_edit = LineEdit(self.file_panel)
-        self.file_edit.setPlaceholderText("C:/Users/Administrator/Desktop/待填答卷数据.xlsx")
+        self.file_edit.setPlaceholderText("~/Desktop/待填答卷数据.xlsx")
         self.file_edit.setClearButtonEnabled(True)
         self.browse_btn = PushButton(FluentIcon.FOLDER_ADD, "选择路径", self.file_panel)
         input_row.addWidget(self.file_edit, 1)
@@ -213,6 +227,34 @@ class ReverseFillPage(DashboardClipboardMixin, QWidget):
         info_row.addWidget(self.state_hint_label)
         info_row.addStretch(1)
         file_layout.addLayout(info_row)
+
+        concurrency_row = QHBoxLayout()
+        concurrency_row.setSpacing(12)
+        concurrency_label = BodyLabel("反填并发数", self.file_panel)
+        concurrency_hint = CaptionLabel("", self.file_panel)
+        self.reverse_fill_threads_spin = NoWheelSpinBox(self.file_panel)
+        self.reverse_fill_threads_spin.setRange(1, HEADLESS_MAX_THREADS)
+        self.reverse_fill_threads_spin.setValue(self._reverse_fill_threads_value)
+        self.reverse_fill_threads_spin.setFixedWidth(160)
+        self.reverse_fill_threads_spin.setFixedHeight(36)
+        concurrency_row.addWidget(concurrency_label)
+        concurrency_row.addWidget(self.reverse_fill_threads_spin)
+        concurrency_row.addWidget(concurrency_hint, 1)
+        file_layout.addLayout(concurrency_row)
+
+        self._file_drop_widgets = (
+            self.file_panel,
+            header_icon,
+            header_title,
+            desc_label,
+            self.file_edit,
+        )
+        for widget in self._file_drop_widgets:
+            try:
+                widget.setAcceptDrops(True)
+            except Exception:
+                pass
+            widget.installEventFilter(self)
 
         layout.addWidget(self.file_panel)
 
@@ -330,6 +372,7 @@ class ReverseFillPage(DashboardClipboardMixin, QWidget):
         self.url_edit.returnPressed.connect(self._on_parse_clicked)
         self.url_edit.textChanged.connect(self.surveyUrlChanged.emit)
         self.file_edit.editingFinished.connect(self._refresh_preview)
+        self.reverse_fill_threads_spin.valueChanged.connect(self._on_reverse_fill_threads_changed)
         self.browse_btn.clicked.connect(self._browse_excel_file)
         self.open_wizard_btn.clicked.connect(self._open_wizard)
         clipboard = QApplication.clipboard()
@@ -359,19 +402,27 @@ class ReverseFillPage(DashboardClipboardMixin, QWidget):
         self._sync_start_button_state()
 
     def update_config(self, cfg: RuntimeConfig) -> None:
-        self._target_num = max(1, int(getattr(cfg, "target", self._target_num) or self._target_num))
         cfg.reverse_fill_source_path = self.file_edit.text().strip()
         cfg.reverse_fill_enabled = bool(cfg.reverse_fill_source_path)
         cfg.reverse_fill_format = self._selected_format()
         cfg.reverse_fill_start_row = max(1, int(self._start_row_value or 1))
+        cfg.reverse_fill_threads = max(1, int(self._reverse_fill_threads_value or 1))
+        if cfg.reverse_fill_enabled:
+            cfg.threads = max(1, int(cfg.reverse_fill_threads or 1))
 
     def apply_config(self, cfg: RuntimeConfig) -> None:
-        self._target_num = max(1, int(getattr(cfg, "target", 1) or 1))
         self.url_edit.blockSignals(True)
         self.url_edit.setText(str(getattr(cfg, "url", "") or ""))
         self.url_edit.blockSignals(False)
         self.file_edit.setText(str(getattr(cfg, "reverse_fill_source_path", "") or ""))
         self._start_row_value = max(1, int(getattr(cfg, "reverse_fill_start_row", 1) or 1))
+        self._reverse_fill_threads_value = max(
+            1,
+            int(getattr(cfg, "reverse_fill_threads", getattr(cfg, "threads", 1)) or 1),
+        )
+        self.reverse_fill_threads_spin.blockSignals(True)
+        self.reverse_fill_threads_spin.setValue(self._reverse_fill_threads_value)
+        self.reverse_fill_threads_spin.blockSignals(False)
 
         selected_format = str(getattr(cfg, "reverse_fill_format", REVERSE_FILL_FORMAT_AUTO) or REVERSE_FILL_FORMAT_AUTO)
         valid_formats = {value for value, _label in _FORMAT_CHOICES}
@@ -380,6 +431,23 @@ class ReverseFillPage(DashboardClipboardMixin, QWidget):
 
     def _selected_format(self) -> str:
         return str(self._selected_format_value or REVERSE_FILL_FORMAT_AUTO)
+
+    def eventFilter(self, watched, event):
+        if watched in getattr(self, "_file_drop_widgets", ()):
+            if event.type() == QEvent.Type.DragEnter:
+                if isinstance(event, QDragEnterEvent) and self._mime_has_excel_file(event):
+                    event.acceptProposedAction()
+                    return True
+                return False
+            if event.type() == QEvent.Type.Drop:
+                if isinstance(event, QDropEvent):
+                    file_path = self._extract_excel_path_from_drop(event)
+                    if file_path:
+                        self._apply_excel_source_path(file_path)
+                        event.acceptProposedAction()
+                        return True
+                return False
+        return super().eventFilter(watched, event)
 
     def _toast(self, message: str, level: str = "warning", duration: int = 2400, show_progress: bool = False) -> Optional[InfoBar]:
         if self._progress_infobar:
@@ -542,7 +610,44 @@ class ReverseFillPage(DashboardClipboardMixin, QWidget):
         )
         if not path:
             return
-        self.file_edit.setText(path)
+        self._apply_excel_source_path(path)
+
+    def _on_reverse_fill_threads_changed(self, value: int) -> None:
+        self._reverse_fill_threads_value = max(1, int(value or 1))
+        self._refresh_preview()
+
+    def _mime_has_excel_file(self, event: QDragEnterEvent | QDropEvent) -> bool:
+        mime_data = event.mimeData()
+        if not mime_data or not mime_data.hasUrls():
+            return False
+        for url in mime_data.urls():
+            file_path = str(url.toLocalFile() or "").strip()
+            if self._is_supported_excel_path(file_path):
+                return True
+        return False
+
+    def _extract_excel_path_from_drop(self, event: QDropEvent) -> str:
+        mime_data = event.mimeData()
+        if not mime_data or not mime_data.hasUrls():
+            return ""
+        for url in mime_data.urls():
+            file_path = str(url.toLocalFile() or "").strip()
+            if self._is_supported_excel_path(file_path):
+                return file_path
+        self._toast("这里只支持拖入 .xlsx 表格文件", "warning", duration=2600)
+        return ""
+
+    @staticmethod
+    def _is_supported_excel_path(file_path: str) -> bool:
+        normalized = str(file_path or "").strip()
+        return bool(normalized) and os.path.isfile(normalized) and normalized.lower().endswith(".xlsx")
+
+    def _apply_excel_source_path(self, file_path: str) -> None:
+        normalized = str(file_path or "").strip()
+        if not self._is_supported_excel_path(normalized):
+            self._toast("请选择 .xlsx 表格文件", "warning", duration=2600)
+            return
+        self.file_edit.setText(normalized)
         self._refresh_preview()
 
     def _on_parse_clicked(self) -> None:
@@ -647,7 +752,7 @@ class ReverseFillPage(DashboardClipboardMixin, QWidget):
 
             self._set_table_text(self.mapping_table, row, 0, str(int(plan.question_num or 0)))
             self._set_table_text(self.mapping_table, row, 1, str(plan.question_type or ""))
-            self._set_table_text(self.mapping_table, row, 2, _STATUS_LABELS.get(str(plan.status or ""), str(plan.status or "")))
+            self._set_table_text(self.mapping_table, row, 2, _status_label_for_plan(plan))
             self._set_table_text(self.mapping_table, row, 3, " / ".join(list(plan.column_headers or [])))
             self._set_table_text(self.mapping_table, row, 4, "\n".join(detail_parts) or "无")
             self._set_table_text(self.mapping_table, row, 5, "\n".join(suggestion_parts) or "无")
@@ -679,7 +784,7 @@ class ReverseFillPage(DashboardClipboardMixin, QWidget):
             if provider != SURVEY_PROVIDER_WJX:
                 hint = "该执行总线暂不能在当前平台环境接管反填覆盖支持，相关控制流已全托管休眠"
             else:
-                hint = "未在内存缓冲探测到最新的结构特征表。须优先通过核心解析引擎提取目标网络题库方可对表"
+                hint = ""
                 
             self.detected_format_label.setText("验证结果：未接通目标流")
             self.state_hint_label.setText(hint)
@@ -688,7 +793,7 @@ class ReverseFillPage(DashboardClipboardMixin, QWidget):
 
         if not source_path:
             self.detected_format_label.setText("验证结果：待指定 Excel 数据池")
-            self.state_hint_label.setText("必须提供用于特征分析的前置样卷数据路径")
+            self.state_hint_label.setText("")
             self._clear_tables()
             return
 
@@ -700,7 +805,7 @@ class ReverseFillPage(DashboardClipboardMixin, QWidget):
                 question_entries=self._question_entries,
                 selected_format=self._selected_format(),
                 start_row=max(1, int(self._start_row_value or 1)),
-                target_num=max(0, int(self._target_num or 0)),
+                target_num=0,
             )
         except Exception as exc:
             self._last_error = str(exc)
@@ -711,15 +816,17 @@ class ReverseFillPage(DashboardClipboardMixin, QWidget):
 
         self._last_spec = spec
         self.detected_format_label.setText(
-            f"归一分析识别格式：{reverse_fill_format_label(spec.detected_format)}"
+            f"识别格式：{reverse_fill_format_label(spec.detected_format)}"
         )
-        enabled_text = "运行时会自动按 Excel 样本执行反填"
-        self.state_hint_label.setText(
-            f"行为定性预判：{enabled_text} （自 Excel 原始单元格界限第 {spec.start_row} 起进行数据锚定）"
-        )
+        self.state_hint_label.setText("")
         
-        issue_question_nums = sorted({int(item.question_num or 0) for item in list(spec.issues or []) if int(item.question_num or 0) > 0})
+        actionable_issues = [
+            item
+            for item in list(spec.issues or [])
+            if str(getattr(item, "category", "") or "").strip() not in _NON_ACTIONABLE_ISSUE_CATEGORIES
+        ]
+        issue_question_nums = sorted({int(item.question_num or 0) for item in actionable_issues if int(item.question_num or 0) > 0})
         self._issue_question_nums = issue_question_nums
-        issue_cnt = len(spec.issues or [])
+        issue_cnt = len(actionable_issues)
         self.open_wizard_btn.setVisible(issue_cnt > 0)
         self._populate_plan_table(spec)

@@ -6,6 +6,8 @@ import unittest
 
 from openpyxl import Workbook
 
+from software.app.config import DEFAULT_FILL_TEXT
+from software.core.questions.schema import QuestionEntry
 from software.core.reverse_fill.schema import (
     REVERSE_FILL_FORMAT_WJX_SCORE,
     REVERSE_FILL_FORMAT_WJX_SEQUENCE,
@@ -133,6 +135,154 @@ class WjxReverseFillTests(unittest.TestCase):
         self.assertEqual(spec.blocking_issue_count, 1)
         self.assertEqual(spec.question_plans[0].status, REVERSE_FILL_STATUS_BLOCKED)
         self.assertEqual(spec.issues[0].category, "unsupported_value")
+
+    def test_build_reverse_fill_spec_uses_available_samples_as_target_when_not_provided(self) -> None:
+        workbook_path = self._track(
+            _write_workbook(
+                [
+                    ["序号", "1、单选题"],
+                    [1, 1],
+                    [2, 2],
+                    [3, 1],
+                ]
+            )
+        )
+
+        spec = build_reverse_fill_spec(
+            source_path=workbook_path,
+            survey_provider="wjx",
+            questions_info=[
+                {"num": 1, "title": "单选题", "type_code": "3", "option_texts": ["选项1", "选项2"]},
+            ],
+            question_entries=[],
+            selected_format=REVERSE_FILL_FORMAT_WJX_SEQUENCE,
+            start_row=2,
+            target_num=0,
+        )
+
+        self.assertEqual(spec.available_samples, 2)
+        self.assertEqual(spec.target_num, 2)
+
+    def test_build_reverse_fill_spec_blocks_when_start_row_has_no_remaining_samples(self) -> None:
+        workbook_path = self._track(
+            _write_workbook(
+                [
+                    ["序号", "1、单选题"],
+                    [1, 1],
+                ]
+            )
+        )
+
+        spec = build_reverse_fill_spec(
+            source_path=workbook_path,
+            survey_provider="wjx",
+            questions_info=[
+                {"num": 1, "title": "单选题", "type_code": "3", "option_texts": ["选项1", "选项2"]},
+            ],
+            question_entries=[],
+            selected_format=REVERSE_FILL_FORMAT_WJX_SEQUENCE,
+            start_row=2,
+            target_num=0,
+        )
+
+        self.assertEqual(spec.blocking_issue_count, 1)
+        self.assertEqual(spec.issues[0].category, "sample_empty")
+
+    def test_build_reverse_fill_spec_marks_custom_fallback_as_resolved(self) -> None:
+        workbook_path = self._track(
+            _write_workbook(
+                [
+                    ["序号", "1、姓名", "1、姓名补列"],
+                    [1, "张三", "李四"],
+                ]
+            )
+        )
+
+        spec = build_reverse_fill_spec(
+            source_path=workbook_path,
+            survey_provider="wjx",
+            questions_info=[
+                {"num": 1, "title": "姓名", "type_code": "1"},
+            ],
+            question_entries=[
+                QuestionEntry(
+                    question_type="text",
+                    probabilities=[1.0],
+                    texts=["手动配置值"],
+                    question_num=1,
+                    question_title="姓名",
+                )
+            ],
+            selected_format=REVERSE_FILL_FORMAT_WJX_TEXT,
+            start_row=1,
+            target_num=0,
+        )
+
+        self.assertEqual(spec.question_plans[0].status, "fallback_config")
+        self.assertTrue(spec.question_plans[0].fallback_ready)
+        self.assertTrue(spec.question_plans[0].fallback_resolved)
+
+    def test_build_reverse_fill_spec_keeps_default_fallback_unresolved(self) -> None:
+        workbook_path = self._track(
+            _write_workbook(
+                [
+                    ["序号", "1、姓名", "1、姓名补列"],
+                    [1, "张三", "李四"],
+                ]
+            )
+        )
+
+        spec = build_reverse_fill_spec(
+            source_path=workbook_path,
+            survey_provider="wjx",
+            questions_info=[
+                {"num": 1, "title": "姓名", "type_code": "1"},
+            ],
+            question_entries=[
+                QuestionEntry(
+                    question_type="text",
+                    probabilities=[1.0],
+                    texts=[DEFAULT_FILL_TEXT],
+                    question_num=1,
+                    question_title="姓名",
+                )
+            ],
+            selected_format=REVERSE_FILL_FORMAT_WJX_TEXT,
+            start_row=1,
+            target_num=0,
+        )
+
+        self.assertEqual(spec.question_plans[0].status, "fallback_config")
+        self.assertTrue(spec.question_plans[0].fallback_ready)
+        self.assertFalse(spec.question_plans[0].fallback_resolved)
+
+    def test_build_reverse_fill_spec_marks_order_as_auto_handled_unsupported(self) -> None:
+        workbook_path = self._track(
+            _write_workbook(
+                [
+                    ["序号", "1、排序题"],
+                    [1, "1→2→3"],
+                ]
+            )
+        )
+
+        spec = build_reverse_fill_spec(
+            source_path=workbook_path,
+            survey_provider="wjx",
+            questions_info=[
+                {"num": 1, "title": "排序题", "type_code": "11", "option_texts": ["A", "B", "C"]},
+            ],
+            question_entries=[],
+            selected_format=REVERSE_FILL_FORMAT_WJX_TEXT,
+            start_row=1,
+            target_num=0,
+        )
+
+        self.assertEqual(spec.blocking_issue_count, 0)
+        self.assertEqual(spec.question_plans[0].status, REVERSE_FILL_STATUS_BLOCKED)
+        self.assertEqual(spec.issues[0].category, "auto_handled")
+        self.assertEqual(spec.issues[0].severity, "warn")
+        self.assertIn("自动按常规逻辑处理", spec.issues[0].suggestion)
 
 
 if __name__ == "__main__":
