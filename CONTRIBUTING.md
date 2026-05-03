@@ -19,6 +19,7 @@
 │   │   └── 新功能请求.md
 │   └── workflows/
 │       ├── deploy-worker.yml
+│       ├── build-release-installer.yml
 │       ├── python-ci.yml
 │       └── release-to-r2.yml
 ├── .gitignore
@@ -171,6 +172,13 @@
 ├── README.md
 ├── requirements.txt
 ├── rthook_pyside6.py
+├── Setup/
+│   ├── LICENSE/
+│   │   ├── after_install.txt
+│   │   └── before_install.txt
+│   ├── bg.bmp
+│   ├── icon.bmp
+│   └── InnoSetup.iss
 ├── software/
 │   ├── __init__.py
 │   ├── app/
