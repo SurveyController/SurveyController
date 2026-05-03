@@ -259,7 +259,7 @@ def build_reverse_fill_spec(
                     category="auto_handled",
                     reason=reason,
                     fallback_ready=False,
-                    suggestion="自动随机排序",
+                    suggestion="自动按常规逻辑处理（执行时自动随机排序）",
                     severity="warn",
                 )
             )
