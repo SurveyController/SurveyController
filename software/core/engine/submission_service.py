@@ -22,7 +22,6 @@ from software.core.task import ExecutionConfig, ExecutionState
 from software.logging.log_utils import log_suppressed_exception
 from software.network.browser import BrowserDriver
 from software.providers.registry import (
-    consume_submission_success_signal_sync as _provider_consume_submission_success_signal,
     handle_submission_verification_detected_sync as _provider_handle_submission_verification_detected,
     submission_requires_verification_sync as _provider_submission_requires_verification,
     submission_validation_message_sync as _provider_submission_validation_message,
@@ -52,6 +51,37 @@ class SubmissionService:
         if bool(self.config.headless_mode):
             return float(HEADLESS_POST_SUBMIT_CLOSE_GRACE_SECONDS or 0.0)
         return float(POST_SUBMIT_CLOSE_GRACE_SECONDS or 0.0)
+
+    def _survey_provider_key(self) -> str:
+        return str(self.config.survey_provider or "wjx").strip().lower()
+
+    def _is_wjx_provider(self) -> bool:
+        return self._survey_provider_key() == "wjx"
+
+    def _build_success_outcome(
+        self,
+        stop_signal: threading.Event,
+        *,
+        thread_name: str,
+    ) -> SubmissionOutcome:
+        grace_seconds = self._resolve_post_submit_close_grace_seconds()
+        if grace_seconds > 0 and not stop_signal.is_set():
+            time.sleep(grace_seconds)
+        should_stop = self.stop_policy.record_success(stop_signal, thread_name=thread_name)
+        return SubmissionOutcome("success", None, "提交成功", True, should_stop, self.config.random_proxy_ip_enabled)
+
+    def _detect_completion_once(self, driver: BrowserDriver) -> bool:
+        try:
+            current_url = driver.current_url
+        except Exception:
+            current_url = ""
+        if "complete" in str(current_url).lower():
+            return True
+        try:
+            return bool(duration_control.is_survey_completion_page(driver, provider=self.config.survey_provider))
+        except Exception as exc:
+            log_suppressed_exception("SubmissionService._detect_completion_once", exc, level=logging.WARNING)
+            return False
 
     def _wait_for_completion_page(
         self,
@@ -85,7 +115,7 @@ class SubmissionService:
         gui_instance: Any,
         thread_name: Optional[str] = None,
     ) -> SubmissionOutcome:
-        survey_provider = str(self.config.survey_provider or "wjx").strip().lower()
+        survey_provider = self._survey_provider_key()
         fallback_message = "提交命中平台安全验证，当前版本暂不支持自动处理"
         message = _provider_submission_validation_message(driver, provider=survey_provider) or fallback_message
         logging.warning("%s", message)
@@ -124,7 +154,7 @@ class SubmissionService:
         gui_instance: Any,
         thread_name: Optional[str] = None,
     ) -> Optional[SubmissionOutcome]:
-        survey_provider = str(self.config.survey_provider or "wjx").strip().lower()
+        survey_provider = self._survey_provider_key()
         if survey_provider == "qq":
             if _provider_submission_requires_verification(driver, provider=survey_provider):
                 return self._handle_detected_submission_verification(driver, stop_signal, gui_instance, thread_name=thread_name)
@@ -150,37 +180,36 @@ class SubmissionService:
         gui_instance: Any,
         thread_name: str,
     ) -> SubmissionOutcome:
-        if self.config.headless_mode and _provider_consume_submission_success_signal(
-            driver,
-            provider=self.config.survey_provider,
-        ):
-            grace_seconds = self._resolve_post_submit_close_grace_seconds()
-            if grace_seconds > 0 and not stop_signal.is_set():
-                time.sleep(grace_seconds)
-            should_stop = self.stop_policy.record_success(stop_signal, thread_name=thread_name)
-            return SubmissionOutcome("success", None, "提交成功", True, should_stop, self.config.random_proxy_ip_enabled)
-
         if stop_signal.wait(random.uniform(0.2, 0.6)):
             return SubmissionOutcome("aborted", FailureReason.USER_STOPPED, "任务已停止", False, True, False)
 
-        verification_outcome = self._check_submission_verification_after_submit(
-            driver,
-            stop_signal,
-            gui_instance,
-            thread_name=thread_name,
-        )
-        if verification_outcome is not None:
-            return verification_outcome
+        if self._is_wjx_provider():
+            if self._detect_completion_once(driver):
+                return self._build_success_outcome(stop_signal, thread_name=thread_name)
+            wait_seconds = max(1.0, float(POST_SUBMIT_URL_MAX_WAIT or 0.0) * 2.0)
+        else:
+            verification_outcome = self._check_submission_verification_after_submit(
+                driver,
+                stop_signal,
+                gui_instance,
+                thread_name=thread_name,
+            )
+            if verification_outcome is not None:
+                return verification_outcome
 
-        if not stop_signal.is_set() and _provider_submission_requires_verification(
-            driver,
-            provider=self.config.survey_provider,
-        ):
-            return self._handle_detected_submission_verification(driver, stop_signal, gui_instance, thread_name=thread_name)
+            if not stop_signal.is_set() and _provider_submission_requires_verification(
+                driver,
+                provider=self.config.survey_provider,
+            ):
+                return self._handle_detected_submission_verification(driver, stop_signal, gui_instance, thread_name=thread_name)
 
-        wait_seconds = max(3.0, float(POST_SUBMIT_URL_MAX_WAIT or 0.0) * 6.0)
+            wait_seconds = max(3.0, float(POST_SUBMIT_URL_MAX_WAIT or 0.0) * 6.0)
+
         poll_interval = max(0.05, float(POST_SUBMIT_URL_POLL_INTERVAL or 0.1))
         completion_detected = self._wait_for_completion_page(driver, stop_signal, wait_seconds, poll_interval)
+
+        if completion_detected:
+            return self._build_success_outcome(stop_signal, thread_name=thread_name)
 
         if not completion_detected and not stop_signal.is_set():
             if _provider_submission_requires_verification(driver, provider=self.config.survey_provider):
@@ -203,18 +232,9 @@ class SubmissionService:
 
         if not completion_detected and not stop_signal.is_set():
             try:
-                current_url = driver.current_url
+                completion_detected = self._detect_completion_once(driver)
             except Exception:
-                current_url = ""
-            if "complete" in str(current_url).lower():
-                completion_detected = True
-            else:
-                try:
-                    completion_detected = bool(
-                        duration_control.is_survey_completion_page(driver, provider=self.config.survey_provider)
-                    )
-                except Exception:
-                    completion_detected = False
+                completion_detected = False
 
         if not completion_detected:
             stopped = self.stop_policy.record_failure(
@@ -234,11 +254,7 @@ class SubmissionService:
                 should_rotate_proxy=False,
             )
 
-        grace_seconds = self._resolve_post_submit_close_grace_seconds()
-        if grace_seconds > 0 and not stop_signal.is_set():
-            time.sleep(grace_seconds)
-        should_stop = self.stop_policy.record_success(stop_signal, thread_name=thread_name)
-        return SubmissionOutcome("success", None, "提交成功", True, should_stop, self.config.random_proxy_ip_enabled)
+        return self._build_success_outcome(stop_signal, thread_name=thread_name)
 
 
 __all__ = ["SubmissionOutcome", "SubmissionService"]

@@ -231,7 +231,6 @@ class AsyncSlotRunner:
         setattr(driver, "_thread_name", self.slot_label)
         setattr(driver, "_session_state", self.state)
         setattr(driver, "_session_proxy_address", proxy_address)
-        setattr(driver, "_submit_proxy_address", proxy_address)
         return session
 
     async def _close_session(self, session: Optional[AsyncBrowserSession]) -> None:

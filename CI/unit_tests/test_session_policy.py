@@ -82,22 +82,6 @@ class SessionPolicyTests(unittest.TestCase):
         self.assertEqual(selected, usable)
         self.assertEqual(ctx.config.proxy_ip_pool, [])
 
-    def test_pop_available_proxy_lease_skips_proxy_used_by_submit_retry(self) -> None:
-        ctx = ExecutionState(config=ExecutionConfig())
-        duplicated = ProxyLease(address="http://1.1.1.1:8000")
-        usable = ProxyLease(address="http://2.2.2.2:8000")
-        ctx.config.proxy_ip_pool = [duplicated, usable]
-        ctx.submit_proxy_in_use_by_thread = {
-            "Worker-9": ProxyLease(address="http://1.1.1.1:8000"),
-        }
-
-        with patch.object(session_policy, "get_proxy_required_ttl_seconds", return_value=0), \
-             patch.object(session_policy, "proxy_lease_has_sufficient_ttl", return_value=True):
-            selected = session_policy._pop_available_proxy_lease_locked(ctx)
-
-        self.assertEqual(selected, usable)
-        self.assertEqual(ctx.config.proxy_ip_pool, [])
-
     def test_pop_available_proxy_lease_skips_proxy_in_cooldown(self) -> None:
         ctx = ExecutionState(config=ExecutionConfig())
         cooled = ProxyLease(address="http://1.1.1.1:8000")

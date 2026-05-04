@@ -13,7 +13,6 @@ from wjx.provider._submission_core import (
     _looks_like_wjx_survey_url,
     _normalize_url_for_compare,
     _page_looks_like_wjx_questionnaire,
-    consume_headless_httpx_submit_success,
     _is_device_quota_limit_page,
     submit,
 )
@@ -283,10 +282,6 @@ def handle_submission_verification_detected(
     _trigger_aliyun_captcha_stop(ctx, gui_instance, stop_signal)
 
 
-def consume_submission_success_signal(driver: BrowserDriver) -> bool:
-    return consume_headless_httpx_submit_success(driver)
-
-
 def is_device_quota_limit_page(driver: BrowserDriver) -> bool:
     return _is_device_quota_limit_page(driver)
 
@@ -299,7 +294,6 @@ __all__ = [
     "_looks_like_wjx_survey_url",
     "_normalize_url_for_compare",
     "_page_looks_like_wjx_questionnaire",
-    "consume_submission_success_signal",
     "handle_submission_verification_detected",
     "is_device_quota_limit_page",
     "submission_requires_verification",
