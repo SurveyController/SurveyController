@@ -36,6 +36,12 @@ jobs:
           python -m pip install --upgrade pip
           python -m pip install -r requirements.txt pyinstaller
 
+      - name: Show Python and PyInstaller version
+        shell: powershell
+        run: |
+          python --version
+          python -m PyInstaller --version
+
       - name: Install Inno Setup
         shell: powershell
         run: choco install innosetup --yes --no-progress
@@ -52,7 +58,10 @@ jobs:
           "asset_path=$assetPath" >> $env:GITHUB_OUTPUT
 
       - name: Build PyInstaller bundle
-        run: pyinstaller SurveyController.spec --noconfirm
+        shell: powershell
+        run: |
+          Remove-Item -Recurse -Force build, dist -ErrorAction SilentlyContinue
+          python -m PyInstaller SurveyController.spec --noconfirm --clean
 
       - name: Build Inno Setup installer
         shell: powershell

@@ -11,6 +11,7 @@ from typing import Any, Dict, List, Optional, Tuple
 from software.app.config import DEFAULT_FILL_TEXT
 from software.network.browser.transient import create_playwright_driver
 from software.providers.common import SURVEY_PROVIDER_CREDAMO
+from credamo.provider.runtime_dom import _looks_like_loading_shell, _page_loading_snapshot, _wait_for_question_roots
 
 _QUESTION_NUMBER_RE = re.compile(r"^\s*(?:Q|题目?)\s*(\d+)\b", re.IGNORECASE)
 _TYPE_ONLY_TITLE_RE = re.compile(r"^\s*\[[^\]]+\]\s*$")
@@ -49,10 +50,71 @@ _PARSE_PAGE_WAIT_SECONDS = 8.0
 _DYNAMIC_REVEAL_WAIT_SECONDS = 2.0
 _NEXT_BUTTON_MARKERS = ("下一页", "next", "继续")
 _SUBMIT_BUTTON_MARKERS = ("提交", "完成", "交卷", "submit", "finish", "done")
+_MATRIX_HEADER_TEXT_SELECTORS = (
+    "thead th",
+    ".matrix-title",
+    ".matrix-column",
+    ".table-header th",
+    ".el-table__header-wrapper th",
+    ".el-table__header th",
+    "[role='columnheader']",
+    ".matrix thead th",
+    ".matrix-header th",
+    ".matrix-header-cell",
+    ".matrix-col-title",
+    ".rating-text",
+    ".scale-text",
+    ".satisfaction-text",
+)
+_MATRIX_HEADER_CONTAINER_SELECTORS = (
+    ".matrix-header",
+    ".matrix-header.pc",
+    ".pc-matrix .matrix-header",
+    ".pc-matrix .matrix-header.pc",
+)
 
 
 class CredamoParseError(RuntimeError):
     """Credamo 页面结构无法解析时抛出的业务异常。"""
+
+
+def _retry_initial_question_load_if_needed(page: Any) -> List[Any]:
+    roots = _wait_for_question_roots(page, None)
+    if roots:
+        return roots
+
+    title, body_text = _page_loading_snapshot(page)
+    if not _looks_like_loading_shell(title, body_text):
+        logging.info("Credamo 解析入口等待题目后仍未发现可见题目节点")
+        return roots
+
+    try:
+        current_url = str(page.url or "").strip()
+    except Exception:
+        current_url = ""
+    reload_target = current_url or None
+    logging.warning(
+        "Credamo 解析入口命中载入壳页，准备刷新重试：title=%s body=%s url=%s",
+        title or "<empty>",
+        (body_text[:80] or "<empty>"),
+        reload_target or "<empty>",
+    )
+    try:
+        if reload_target:
+            page.goto(reload_target, wait_until="domcontentloaded", timeout=45000)
+        else:
+            page.reload(wait_until="domcontentloaded", timeout=45000)
+        try:
+            page.wait_for_load_state("networkidle", timeout=8000)
+        except Exception:
+            pass
+    except Exception:
+        logging.info("Credamo 解析入口刷新重试失败", exc_info=True)
+
+    roots = _wait_for_question_roots(page, None)
+    if not roots:
+        logging.info("Credamo 解析入口刷新重试后仍未发现可见题目节点")
+    return roots
 
 
 def _normalize_text(value: Any) -> str:
@@ -383,6 +445,29 @@ def _infer_type_code(question: Dict[str, Any]) -> str:
     return "1"
 
 
+def _is_generic_matrix_option_text(text: Any) -> bool:
+    normalized = _normalize_text(text)
+    if not normalized:
+        return False
+    return bool(re.fullmatch(r"选项\s*\d+", normalized, re.IGNORECASE))
+
+
+def _resolve_matrix_option_texts(raw: Dict[str, Any], option_texts: List[str]) -> List[str]:
+    question_kind = str(raw.get("question_kind") or "").strip().lower()
+    provider_type = str(raw.get("provider_type") or "").strip().lower()
+    if question_kind != "matrix" and provider_type != "matrix":
+        return option_texts
+
+    matrix_column_texts = [_normalize_text(text) for text in raw.get("matrix_column_texts") or []]
+    matrix_column_texts = [text for text in matrix_column_texts if text]
+    if matrix_column_texts:
+        return matrix_column_texts
+
+    if option_texts and not all(_is_generic_matrix_option_text(text) for text in option_texts):
+        return option_texts
+    return option_texts
+
+
 def _normalize_question(raw: Dict[str, Any], fallback_num: int) -> Dict[str, Any]:
     raw_title = _normalize_text(raw.get("title_full_text") or raw.get("title"))
     question_num = _normalize_question_number(raw.get("question_num"), fallback_num)
@@ -401,6 +486,7 @@ def _normalize_question(raw: Dict[str, Any], fallback_num: int) -> Dict[str, Any
 
     option_texts = [_normalize_text(text) for text in raw.get("option_texts") or []]
     option_texts = [text for text in option_texts if text]
+    option_texts = _resolve_matrix_option_texts(raw, option_texts)
     text_inputs = max(0, int(raw.get("text_inputs") or 0))
     question_kind = str(raw.get("question_kind") or "").strip().lower()
     row_texts = [_normalize_text(text) for text in raw.get("row_texts") or []]
@@ -496,11 +582,66 @@ def _extract_questions_from_current_page(page: Any, *, page_number: int) -> List
     }
     return result;
   };
-    const matrixColumnTexts = (root) => uniqueTexts(
-      Array.from(root.querySelectorAll('thead th, .matrix-title, .matrix-column, .table-header th'))
-        .map((node) => node.innerText || node.textContent || '')
-        .filter((text) => clean(text) && !/^Q?\d+$/i.test(clean(text)))
-    );
+    const isLikelyPlaceholder = (text) => /^选项\s*\d+$/i.test(clean(text));
+    const matrixHeaderTextSelectors = %s;
+    const matrixHeaderContainerSelectors = %s;
+    const matrixColumnTexts = (root, detectedRows) => {
+      const candidateTexts = uniqueTexts(
+        Array.from(root.querySelectorAll(matrixHeaderTextSelectors.join(', ')))
+          .map((node) => node.innerText || node.textContent || '')
+          .filter((text) => {
+            const normalized = clean(text);
+            return normalized && !/^Q?\d+$/i.test(normalized);
+          })
+      );
+      const filteredCandidates = candidateTexts.filter((text) => !isLikelyPlaceholder(text));
+      const rowLabels = new Set((detectedRows || []).map((row) => clean(row && row.label)).filter(Boolean));
+      const matrixLikeCandidates = filteredCandidates.filter((text) => !rowLabels.has(clean(text)));
+      if (matrixLikeCandidates.length >= 2) {
+        return matrixLikeCandidates;
+      }
+
+      const containerTexts = uniqueTexts(
+        Array.from(root.querySelectorAll(matrixHeaderContainerSelectors.join(', ')))
+          .map((node) => node.innerText || node.textContent || '')
+          .filter((text) => clean(text))
+      );
+      for (const containerText of containerTexts) {
+        const fragments = clean(containerText)
+          .split(/\s+/)
+          .map((text) => clean(text))
+          .filter((text) => text && !isLikelyPlaceholder(text) && !rowLabels.has(text));
+        const uniqueFragments = uniqueTexts(fragments);
+        if (uniqueFragments.length >= 2) {
+          return uniqueFragments;
+        }
+      }
+
+      const fallbackColumns = [];
+      const rowNodes = Array.from(root.querySelectorAll('tbody tr, .matrix-row, .el-table__row'));
+      for (const row of rowNodes) {
+        if (!visible(row, 12, 8)) continue;
+        const controls = Array.from(row.querySelectorAll('input[type="radio"], [role="radio"], .el-radio, .el-radio__input')).filter((node) => visible(node, 4, 4));
+        if (controls.length < 2) continue;
+        const cells = Array.from(row.querySelectorAll('th, td, .el-table__cell'));
+        if (cells.length < controls.length + 1) continue;
+        const texts = [];
+        for (let i = cells.length - controls.length; i < cells.length; i += 1) {
+          const cell = cells[i];
+          if (!cell) continue;
+          const clone = cell.cloneNode(true);
+          Array.from(clone.querySelectorAll('input, [role="radio"], .el-radio, .el-radio__input')).forEach((node) => node.remove());
+          const text = clean(clone.innerText || clone.textContent || '');
+          texts.push(text);
+        }
+        const usable = texts.filter((text) => text && !isLikelyPlaceholder(text));
+        if (usable.length >= 2) {
+          fallbackColumns.push(...usable);
+          break;
+        }
+      }
+      return uniqueTexts(fallbackColumns);
+    };
     const matrixRows = (root) => {
       const rows = [];
       const rowNodes = Array.from(root.querySelectorAll('tbody tr, .matrix-row, .el-table__row'));
@@ -532,7 +673,7 @@ def _extract_questions_from_current_page(page: Any, *, page_number: int) -> List
     const allInputs = Array.from(root.querySelectorAll('input, textarea, [role="radio"], [role="checkbox"]'));
 
     const detectedMatrixRows = matrixRows(root);
-    const detectedMatrixColumns = matrixColumnTexts(root);
+    const detectedMatrixColumns = matrixColumnTexts(root, detectedMatrixRows);
 
     let kind = '';
     if (root.querySelector('.multi-choice') || root.querySelector('input[type="checkbox"]') || root.querySelector('[role="checkbox"]')) {
@@ -601,6 +742,7 @@ def _extract_questions_from_current_page(page: Any, *, page_number: int) -> List
       tip_text: tipText,
       body_text: bodyText,
       option_texts: optionTexts,
+      matrix_column_texts: detectedMatrixColumns,
       row_texts: detectedMatrixRows.map((row, rowIndex) => row.label || `第 ${rowIndex + 1} 行`),
       input_types: inputTypes,
       text_inputs: editableInputs.length,
@@ -611,7 +753,10 @@ def _extract_questions_from_current_page(page: Any, *, page_number: int) -> List
   });
   return data;
 }
-"""
+""" % (
+        repr(list(_MATRIX_HEADER_TEXT_SELECTORS)),
+        repr(list(_MATRIX_HEADER_CONTAINER_SELECTORS)),
+    )
     try:
         data = page.evaluate(script)
     except Exception as exc:
@@ -892,10 +1037,7 @@ def parse_credamo_survey(url: str) -> Tuple[List[Dict[str, Any]], str]:
             page.wait_for_load_state("networkidle", timeout=8000)
         except Exception:
             pass
-        try:
-            page.wait_for_selector(".answer-page .question", timeout=15000)
-        except Exception as exc:
-            logging.info("Credamo 解析等待题目控件超时：%s", exc)
+        initial_roots = _retry_initial_question_load_if_needed(page)
         questions: List[Dict[str, Any]] = []
         seen_question_keys: set[str] = set()
         title = _normalize_text(page.title())

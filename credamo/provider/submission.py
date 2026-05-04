@@ -9,16 +9,28 @@ from typing import Any, Optional
 from software.network.browser import BrowserDriver
 
 _COMPLETION_MARKERS = (
+    "答卷已经提交",
+    "已提交",
     "提交成功",
     "作答完成",
     "问卷已完成",
+    "已完成本次问卷",
+    "已完成本次答卷",
+    "感谢您的宝贵时间",
     "感谢参与",
     "感谢作答",
     "感谢您的参与",
     "thank",
     "success",
 )
-_VERIFICATION_MARKERS = ("验证码", "验证", "captcha", "滑块")
+_VERIFICATION_MARKERS = (
+    "验证码",
+    "安全验证",
+    "滑块验证",
+    "captcha",
+    "请完成验证",
+    "请先完成验证",
+)
 _VISIBLE_FEEDBACK_SELECTORS = (
     ".el-message",
     ".el-message__content",
@@ -42,6 +54,17 @@ _SELECTION_VALIDATION_PATTERNS = (
     re.compile(r"(?:请|需)?(?:至多|最多|不超过)\s*(?:选择|选)\s*\d+\s*(?:个)?(?:选项|答案|项)"),
     re.compile(r"(?:请|需)?(?:选择|选)\s*\d+\s*(?:[-~～至到]\s*\d+)\s*(?:个)?(?:选项|答案|项)"),
     re.compile(r"(?:还需|还要|还差)\s*(?:选择|选)\s*\d+\s*(?:个)?(?:选项|答案|项)"),
+)
+_COMPLETION_URL_MARKERS = ("complete", "success", "finish", "done", "submitted", "result")
+_ACTION_SELECTORS = (
+    "#credamo-submit-btn",
+    ".page-control button",
+    ".btn-next",
+    ".btn-submit",
+    "button[type='submit']",
+    "input[type='submit']",
+    "input[type='button']",
+    "[role='button']",
 )
 
 
@@ -86,25 +109,65 @@ def _looks_like_selection_validation(text: str) -> bool:
     return any(pattern.search(normalized) for pattern in _SELECTION_VALIDATION_PATTERNS)
 
 
+def _contains_completion_marker(text: str) -> bool:
+    normalized = str(text or "").lower()
+    return any(marker.lower() in normalized for marker in _COMPLETION_MARKERS)
+
+
+def _contains_verification_marker(text: str) -> bool:
+    normalized = str(text or "").lower()
+    return any(marker.lower() in normalized for marker in _VERIFICATION_MARKERS)
+
+
+def _has_visible_action_controls(driver: BrowserDriver) -> bool:
+    selector = ",".join(_ACTION_SELECTORS)
+    script = f"""
+return (() => {{
+    const visible = (el) => {{
+        if (!el) return false;
+        const style = window.getComputedStyle(el);
+        if (!style) return false;
+        if (style.display === 'none' || style.visibility === 'hidden' || style.opacity === '0') return false;
+        const rect = el.getBoundingClientRect();
+        return rect.width > 0 && rect.height > 0;
+    }};
+    return Array.from(document.querySelectorAll({selector!r})).some(visible);
+}})();
+"""
+    try:
+        return bool(driver.execute_script(script))
+    except Exception:
+        return False
+
+
 def is_completion_page(driver: BrowserDriver) -> bool:
     try:
         url = str(driver.current_url or "").lower()
     except Exception:
         url = ""
-    if any(marker in url for marker in ("complete", "success", "finish", "done")):
+    if any(marker in url for marker in _COMPLETION_URL_MARKERS):
         return True
-    text = _body_text(driver).lower()
-    return any(marker.lower() in text for marker in _COMPLETION_MARKERS)
+    feedback_text = _visible_feedback_text(driver)
+    if _contains_completion_marker(feedback_text):
+        return True
+    text = _body_text(driver)
+    if not _contains_completion_marker(text):
+        return False
+    return not _has_visible_action_controls(driver)
 
 
 def submission_requires_verification(driver: BrowserDriver) -> bool:
     feedback_text = _visible_feedback_text(driver)
+    if _contains_completion_marker(feedback_text):
+        return False
     if _looks_like_selection_validation(feedback_text):
         return False
-    if feedback_text and any(marker.lower() in feedback_text.lower() for marker in _VERIFICATION_MARKERS):
+    if feedback_text and _contains_verification_marker(feedback_text):
         return True
-    text = _body_text(driver).lower()
-    return any(marker.lower() in text for marker in _VERIFICATION_MARKERS)
+    text = _body_text(driver)
+    if _contains_completion_marker(text):
+        return False
+    return _contains_verification_marker(text)
 
 
 def submission_validation_message(driver: Optional[BrowserDriver] = None) -> str:

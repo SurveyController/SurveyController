@@ -5,12 +5,15 @@ from credamo.provider import submission
 
 
 class _FakeDriver:
-    def __init__(self, body_text: str = "") -> None:
+    def __init__(self, body_text: str = "", current_url: str = "https://example.com/form") -> None:
         self.body_text = body_text
+        self.current_url = current_url
 
     def execute_script(self, script: str):
         if "document.body ? document.body.innerText" in script:
             return self.body_text
+        if "document.querySelectorAll" in script:
+            return False
         return ""
 
 
@@ -38,6 +41,25 @@ class CredamoSubmissionTests(unittest.TestCase):
 
         with patch("credamo.provider.submission._visible_feedback_text", return_value=""):
             self.assertTrue(submission.submission_requires_verification(driver))
+
+    def test_submission_requires_verification_does_not_treat_completion_text_as_verification(self) -> None:
+        driver = _FakeDriver(body_text="感谢您的参与，答卷已经提交")
+
+        with patch("credamo.provider.submission._visible_feedback_text", return_value=""):
+            self.assertFalse(submission.submission_requires_verification(driver))
+
+    def test_is_completion_page_accepts_body_completion_text_without_special_url(self) -> None:
+        driver = _FakeDriver(body_text="感谢您的宝贵时间，问卷已完成")
+
+        with patch("credamo.provider.submission._visible_feedback_text", return_value=""):
+            self.assertTrue(submission.is_completion_page(driver))
+
+    def test_is_completion_page_ignores_completion_text_when_submit_controls_still_visible(self) -> None:
+        driver = _FakeDriver(body_text="感谢您的参与")
+
+        with patch("credamo.provider.submission._visible_feedback_text", return_value=""), \
+             patch("credamo.provider.submission._has_visible_action_controls", return_value=True):
+            self.assertFalse(submission.is_completion_page(driver))
 
 
 if __name__ == "__main__":

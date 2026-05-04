@@ -42,6 +42,22 @@ class CredamoParserTests(unittest.TestCase):
         def locator(self, _selector: str) -> "CredamoParserTests._FakeLocator":
             return CredamoParserTests._FakeLocator(self.buttons)
 
+    class _RetryPage:
+        def __init__(self, url: str = "https://www.credamo.com/answer.html#/s/demo/") -> None:
+            self.url = url
+            self.goto_calls: list[tuple[str, str, int]] = []
+            self.reload_calls = 0
+            self.wait_calls = 0
+
+        def goto(self, url: str, wait_until: str, timeout: int) -> None:
+            self.goto_calls.append((url, wait_until, timeout))
+
+        def reload(self, wait_until: str, timeout: int) -> None:
+            self.reload_calls += 1
+
+        def wait_for_load_state(self, _state: str, timeout: int) -> None:
+            self.wait_calls += 1
+
     def test_infer_type_code_uses_page_block_kind(self) -> None:
         self.assertEqual(parser._infer_type_code({"question_kind": "dropdown"}), "7")
         self.assertEqual(parser._infer_type_code({"question_kind": "scale"}), "5")
@@ -55,6 +71,40 @@ class CredamoParserTests(unittest.TestCase):
         ])
 
         self.assertEqual(parser._detect_navigation_action(page), "next")
+
+    def test_retry_initial_question_load_refreshes_when_stuck_on_loading_shell(self) -> None:
+        page = self._RetryPage()
+        expected_roots = [object()]
+
+        with patch(
+            "credamo.provider.parser._wait_for_question_roots",
+            side_effect=[[], expected_roots],
+        ), patch(
+            "credamo.provider.parser._page_loading_snapshot",
+            return_value=("答卷", "载入中..."),
+        ):
+            roots = parser._retry_initial_question_load_if_needed(page)
+
+        self.assertEqual(roots, expected_roots)
+        self.assertEqual(page.goto_calls, [(page.url, "domcontentloaded", 45000)])
+        self.assertEqual(page.wait_calls, 1)
+        self.assertEqual(page.reload_calls, 0)
+
+    def test_retry_initial_question_load_skips_refresh_when_not_loading_shell(self) -> None:
+        page = self._RetryPage()
+
+        with patch(
+            "credamo.provider.parser._wait_for_question_roots",
+            return_value=[],
+        ), patch(
+            "credamo.provider.parser._page_loading_snapshot",
+            return_value=("AI 技能成长平台功能需求调研问卷", "页面正文"),
+        ):
+            roots = parser._retry_initial_question_load_if_needed(page)
+
+        self.assertEqual(roots, [])
+        self.assertEqual(page.goto_calls, [])
+        self.assertEqual(page.wait_calls, 0)
 
     def test_normalize_question_keeps_credamo_specific_type(self) -> None:
         question = parser._normalize_question(
@@ -99,6 +149,62 @@ class CredamoParserTests(unittest.TestCase):
         self.assertEqual(question["options"], 5)
         self.assertEqual(question["rows"], 7)
         self.assertEqual(question["row_texts"][0], "陈述 1")
+
+    def test_normalize_question_prefers_matrix_column_texts_over_placeholder_options(self) -> None:
+        question = parser._normalize_question(
+            {
+                "question_num": "Q8",
+                "title": "Q8 生成基于专业与目标的大学四年成长路径",
+                "question_kind": "matrix",
+                "provider_type": "matrix",
+                "option_texts": ["选项 1", "选项 2", "选项 3", "选项 4", "选项 5"],
+                "matrix_column_texts": ["非常满意", "比较满意", "满意", "比较不满意", "非常不满意"],
+                "row_texts": ["如果提供此服务，您觉得", "如果不提供此服务，您觉得"],
+                "text_inputs": 0,
+                "page": 2,
+                "question_id": "question-3",
+            },
+            fallback_num=8,
+        )
+
+        self.assertEqual(
+            question["option_texts"],
+            ["非常满意", "比较满意", "满意", "比较不满意", "非常不满意"],
+        )
+        self.assertEqual(question["options"], 5)
+        self.assertEqual(question["rows"], 2)
+
+    def test_extract_questions_from_current_page_reads_matrix_header_container_texts(self) -> None:
+        class _EvalPage:
+            def evaluate(self, script: str):
+                self.script = script
+                return [
+                    {
+                        "question_id": "question-3",
+                        "question_num": "Q8",
+                        "title": "Q8 生成基于专业与目标的大学四年成长路径",
+                        "title_full_text": "Q8 生成基于专业与目标的大学四年成长路径",
+                        "title_text": "生成基于专业与目标的大学四年成长路径",
+                        "tip_text": "",
+                        "body_text": "Q8 生成基于专业与目标的大学四年成长路径 非常满意 比较满意 满意 比较不满意 非常不满意 如果提供此服务，您觉得 如果不提供此服务，您觉得",
+                        "option_texts": ["选项 1", "选项 2", "选项 3", "选项 4", "选项 5"],
+                        "matrix_column_texts": ["非常满意", "比较满意", "满意", "比较不满意", "非常不满意"],
+                        "row_texts": ["如果提供此服务，您觉得", "如果不提供此服务，您觉得"],
+                        "input_types": ["radio"],
+                        "text_inputs": 0,
+                        "required": True,
+                        "provider_type": "matrix",
+                        "question_kind": "matrix",
+                    }
+                ]
+
+        questions = parser._extract_questions_from_current_page(_EvalPage(), page_number=1)
+
+        self.assertEqual(len(questions), 1)
+        self.assertEqual(
+            questions[0]["option_texts"],
+            ["非常满意", "比较满意", "满意", "比较不满意", "非常不满意"],
+        )
 
     def test_normalize_question_detects_force_select_instruction(self) -> None:
         question = parser._normalize_question(
