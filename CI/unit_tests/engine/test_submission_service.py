@@ -28,7 +28,7 @@ class SubmissionServiceTests(unittest.TestCase):
 
         self.assertFalse(completed)
 
-    def test_finalize_after_submit_returns_headless_success_signal(self) -> None:
+    def test_finalize_after_submit_returns_fast_success_when_completion_is_detected_immediately(self) -> None:
         config = ExecutionConfig(headless_mode=True, random_proxy_ip_enabled=True, survey_provider="wjx")
         state = ExecutionState(config=config)
         stop_policy = MagicMock()
@@ -36,9 +36,11 @@ class SubmissionServiceTests(unittest.TestCase):
         service = SubmissionService(config, state, stop_policy)
         stop_signal = MagicMock()
         stop_signal.is_set.return_value = False
+        stop_signal.wait.return_value = False
         driver = object()
 
-        with patch("software.core.engine.submission_service._provider_consume_submission_success_signal", return_value=True), \
+        with patch.object(service, "_detect_completion_once", return_value=True), \
+             patch("software.core.engine.submission_service.random.uniform", return_value=0.2), \
              patch("software.core.engine.submission_service.time.sleep") as sleep_mock:
             outcome = service.finalize_after_submit(
                 driver,
@@ -62,8 +64,7 @@ class SubmissionServiceTests(unittest.TestCase):
         stop_signal.wait.return_value = True
         driver = object()
 
-        with patch("software.core.engine.submission_service._provider_consume_submission_success_signal", return_value=False), \
-             patch("software.core.engine.submission_service.random.uniform", return_value=0.2):
+        with patch("software.core.engine.submission_service.random.uniform", return_value=0.2):
             outcome = service.finalize_after_submit(
                 driver,
                 stop_signal=stop_signal,
@@ -77,6 +78,66 @@ class SubmissionServiceTests(unittest.TestCase):
         stop_policy.record_success.assert_not_called()
         stop_policy.record_failure.assert_not_called()
 
+    def test_finalize_after_submit_wjx_prefers_fast_completion_before_verification_wait(self) -> None:
+        config = ExecutionConfig(headless_mode=False, survey_provider="wjx")
+        state = ExecutionState(config=config)
+        stop_policy = MagicMock()
+        stop_policy.record_success.return_value = False
+        service = SubmissionService(config, state, stop_policy)
+        stop_signal = MagicMock(spec=threading.Event)
+        stop_signal.is_set.return_value = False
+        stop_signal.wait.return_value = False
+
+        with patch.object(service, "_detect_completion_once", return_value=True) as detect_mock, \
+             patch("software.core.engine.submission_service._provider_wait_for_submission_verification") as verification_wait_mock, \
+             patch("software.core.engine.submission_service._provider_submission_requires_verification") as verification_mock, \
+             patch("software.core.engine.submission_service.random.uniform", return_value=0.2), \
+             patch("software.core.engine.submission_service.time.sleep"):
+            outcome = service.finalize_after_submit(
+                object(),
+                stop_signal=stop_signal,
+                gui_instance=None,
+                thread_name="Worker-1",
+            )
+
+        self.assertEqual(outcome.status, "success")
+        self.assertTrue(outcome.completion_detected)
+        detect_mock.assert_called_once()
+        verification_wait_mock.assert_not_called()
+        verification_mock.assert_not_called()
+        stop_policy.record_success.assert_called_once_with(stop_signal, thread_name="Worker-1")
+
+    def test_finalize_after_submit_wjx_uses_short_completion_wait_before_verification(self) -> None:
+        config = ExecutionConfig(headless_mode=False, survey_provider="wjx")
+        state = ExecutionState(config=config)
+        stop_policy = MagicMock()
+        stop_policy.record_success.return_value = True
+        service = SubmissionService(config, state, stop_policy)
+        stop_signal = MagicMock(spec=threading.Event)
+        stop_signal.is_set.return_value = False
+        stop_signal.wait.return_value = False
+
+        with patch.object(service, "_detect_completion_once", return_value=False), \
+             patch.object(service, "_wait_for_completion_page", return_value=True) as wait_mock, \
+             patch("software.core.engine.submission_service._provider_submission_requires_verification") as verification_mock, \
+             patch("software.core.engine.submission_service._provider_wait_for_submission_verification") as verification_wait_mock, \
+             patch("software.core.engine.submission_service.random.uniform", return_value=0.2), \
+             patch("software.core.engine.submission_service.time.sleep"):
+            outcome = service.finalize_after_submit(
+                object(),
+                stop_signal=stop_signal,
+                gui_instance=None,
+                thread_name="Worker-1",
+            )
+
+        self.assertEqual(outcome.status, "success")
+        self.assertTrue(outcome.completion_detected)
+        wait_mock.assert_called_once()
+        self.assertEqual(wait_mock.call_args.args[2], 1.6)
+        verification_mock.assert_not_called()
+        verification_wait_mock.assert_not_called()
+        stop_policy.record_success.assert_called_once_with(stop_signal, thread_name="Worker-1")
+
     def test_finalize_after_submit_marks_failure_when_completion_never_appears(self) -> None:
         config = ExecutionConfig(headless_mode=False, survey_provider="wjx")
         state = ExecutionState(config=config)
@@ -88,8 +149,7 @@ class SubmissionServiceTests(unittest.TestCase):
         stop_signal.wait.return_value = False
         driver = SimpleNamespace(current_url="https://example.com/form")
 
-        with patch("software.core.engine.submission_service._provider_consume_submission_success_signal", return_value=False), \
-             patch("software.core.engine.submission_service._provider_submission_requires_verification", return_value=False), \
+        with patch("software.core.engine.submission_service._provider_submission_requires_verification", return_value=False), \
              patch("software.core.engine.submission_service._provider_wait_for_submission_verification", return_value=False), \
              patch.object(service, "_wait_for_completion_page", side_effect=[False, False]), \
              patch("software.core.engine.submission_service.duration_control.is_survey_completion_page", return_value=False), \
@@ -119,8 +179,7 @@ class SubmissionServiceTests(unittest.TestCase):
         stop_signal.wait.return_value = False
         driver = SimpleNamespace(current_url="https://example.com/complete")
 
-        with patch("software.core.engine.submission_service._provider_consume_submission_success_signal", return_value=False), \
-             patch("software.core.engine.submission_service._provider_submission_requires_verification", return_value=False), \
+        with patch("software.core.engine.submission_service._provider_submission_requires_verification", return_value=False), \
              patch("software.core.engine.submission_service._provider_wait_for_submission_verification", return_value=False), \
              patch.object(service, "_wait_for_completion_page", side_effect=[False, False]), \
              patch("software.core.engine.submission_service.random.uniform", return_value=0.2), \
@@ -148,8 +207,7 @@ class SubmissionServiceTests(unittest.TestCase):
         stop_signal.wait.return_value = False
         driver = SimpleNamespace(current_url="https://example.com/form")
 
-        with patch("software.core.engine.submission_service._provider_consume_submission_success_signal", return_value=False), \
-             patch("software.core.engine.submission_service._provider_submission_requires_verification", return_value=False), \
+        with patch("software.core.engine.submission_service._provider_submission_requires_verification", return_value=False), \
              patch("software.core.engine.submission_service._provider_wait_for_submission_verification", return_value=False), \
              patch.object(service, "_wait_for_completion_page", side_effect=[False, False]), \
              patch("software.core.engine.submission_service.duration_control.is_survey_completion_page", return_value=True), \
@@ -178,8 +236,7 @@ class SubmissionServiceTests(unittest.TestCase):
         stop_signal.wait.return_value = False
         driver = object()
 
-        with patch("software.core.engine.submission_service._provider_consume_submission_success_signal", return_value=False), \
-             patch("software.core.engine.submission_service._provider_submission_requires_verification", return_value=True), \
+        with patch("software.core.engine.submission_service._provider_submission_requires_verification", return_value=True), \
              patch("software.core.engine.submission_service._provider_submission_validation_message", return_value="命中腾讯安全验证"), \
              patch("software.core.engine.submission_service._provider_handle_submission_verification_detected") as handle_mock, \
              patch("software.core.engine.submission_service.random.uniform", return_value=0.2):
@@ -197,8 +254,8 @@ class SubmissionServiceTests(unittest.TestCase):
         handle_mock.assert_called_once()
         self.assertFalse(bool(stop_policy.record_failure.call_args.kwargs.get("consume_reverse_fill_attempt", True)))
 
-    def test_finalize_after_submit_returns_secondary_verification_outcome_after_waits(self) -> None:
-        config = ExecutionConfig(headless_mode=False, survey_provider="wjx")
+    def test_finalize_after_submit_returns_secondary_verification_outcome_after_waits_for_non_wjx(self) -> None:
+        config = ExecutionConfig(headless_mode=False, survey_provider="credamo")
         state = ExecutionState(config=config)
         stop_policy = MagicMock()
         service = SubmissionService(config, state, stop_policy)
@@ -214,8 +271,7 @@ class SubmissionServiceTests(unittest.TestCase):
             should_rotate_proxy=False,
         )
 
-        with patch("software.core.engine.submission_service._provider_consume_submission_success_signal", return_value=False), \
-             patch("software.core.engine.submission_service._provider_submission_requires_verification", return_value=False), \
+        with patch("software.core.engine.submission_service._provider_submission_requires_verification", return_value=False), \
              patch.object(service, "_check_submission_verification_after_submit", side_effect=[None, expected]), \
              patch.object(service, "_wait_for_completion_page", side_effect=[False, False]), \
              patch("software.core.engine.submission_service.random.uniform", return_value=0.2):

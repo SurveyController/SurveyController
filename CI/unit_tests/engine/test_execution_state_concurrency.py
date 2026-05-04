@@ -110,7 +110,6 @@ class ExecutionStateConcurrencyTests(unittest.TestCase):
     def test_release_proxy_in_use_notifies_waiting_threads(self) -> None:
         state = ExecutionState()
         state.mark_proxy_in_use("Worker-1", ProxyLease(address="http://1.1.1.1:8000"))
-        state.mark_submit_proxy_in_use("Worker-1", ProxyLease(address="http://2.2.2.2:8000"))
         result: dict[str, bool] = {}
 
         def _waiter() -> None:

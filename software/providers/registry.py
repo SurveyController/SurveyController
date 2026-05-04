@@ -51,7 +51,6 @@ _WJX_SUBMISSION_REQUIRES_VERIFICATION: HookTarget = ("wjx.provider.submission", 
 _WJX_SUBMISSION_VALIDATION_MESSAGE: HookTarget = ("wjx.provider.submission", "submission_validation_message")
 _WJX_WAIT_FOR_SUBMISSION_VERIFICATION: HookTarget = ("wjx.provider.submission", "wait_for_submission_verification")
 _WJX_HANDLE_SUBMISSION_VERIFICATION_DETECTED: HookTarget = ("wjx.provider.submission", "handle_submission_verification_detected")
-_WJX_CONSUME_SUBMISSION_SUCCESS_SIGNAL: HookTarget = ("wjx.provider.submission", "consume_submission_success_signal")
 _WJX_IS_DEVICE_QUOTA_LIMIT_PAGE: HookTarget = ("wjx.provider.submission", "is_device_quota_limit_page")
 
 _QQ_IS_COMPLETION_PAGE: HookTarget = ("tencent.provider.runtime_flow", "qq_is_completion_page")
@@ -79,7 +78,6 @@ _PROVIDER_REGISTRY = {
             submission_validation_message=build_text_hook(_WJX_SUBMISSION_VALIDATION_MESSAGE),
             wait_for_submission_verification=build_wait_hook(_WJX_WAIT_FOR_SUBMISSION_VERIFICATION),
             handle_submission_verification_detected=build_action_hook(_WJX_HANDLE_SUBMISSION_VERIFICATION_DETECTED),
-            consume_submission_success_signal=build_predicate_hook(_WJX_CONSUME_SUBMISSION_SUCCESS_SIGNAL),
             is_device_quota_limit_page=build_predicate_hook(_WJX_IS_DEVICE_QUOTA_LIMIT_PAGE),
         ),
     ),

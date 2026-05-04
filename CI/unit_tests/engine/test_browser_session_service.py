@@ -180,7 +180,7 @@ class BrowserSessionServiceTests(unittest.TestCase):
         self.assertEqual(state.semaphore.acquired, 0)
         self.assertEqual(state.semaphore.released, 0)
 
-    def test_create_browser_keeps_same_proxy_for_headless_browser_and_submit(self) -> None:
+    def test_create_browser_keeps_same_proxy_for_headless_browser_session(self) -> None:
         state = _FakeState()
         config = SimpleNamespace(
             headless_mode=True,
@@ -199,7 +199,6 @@ class BrowserSessionServiceTests(unittest.TestCase):
 
         self.assertEqual(browser_name, "edge")
         self.assertEqual(create_driver_mock.call_args.kwargs["proxy_address"], "http://1.1.1.1:8000")
-        self.assertEqual(getattr(fake_driver, "_submit_proxy_address", None), "http://1.1.1.1:8000")
         self.assertEqual(getattr(fake_driver, "_thread_name", None), "Worker-1")
 
     def test_dispose_without_driver_releases_proxy_and_semaphore(self) -> None:

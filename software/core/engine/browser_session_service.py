@@ -254,7 +254,6 @@ class BrowserSessionService:
                 return None
 
             browser_proxy_address = self.proxy_address
-            submit_proxy_address = self.proxy_address
 
             ua_value, _ = _select_user_agent_for_session(self.state)
             if acquire_browser_semaphore and not self.sem_acquired:
@@ -364,7 +363,6 @@ class BrowserSessionService:
             setattr(driver, "_thread_name", self.thread_name)
             setattr(driver, "_session_state", self.state)
             setattr(driver, "_session_proxy_address", self.proxy_address)
-            setattr(driver, "_submit_proxy_address", submit_proxy_address)
             runtime_window_size = _resolve_runtime_window_size(self.config)
             if runtime_window_size is not None:
                 width, height = runtime_window_size

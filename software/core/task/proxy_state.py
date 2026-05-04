@@ -27,7 +27,6 @@ if TYPE_CHECKING:
         _browser_semaphore_max_instances: int
         proxy_waiting_threads: int
         proxy_in_use_by_thread: dict[str, ProxyLease]
-        submit_proxy_in_use_by_thread: dict[str, ProxyLease]
         proxy_cooldown_until_by_address: dict[str, float]
         _runtime_condition: threading.Condition
 
@@ -60,13 +59,6 @@ class ProxyRuntimeMixin:
             return
         with self.lock:
             self.proxy_in_use_by_thread[key] = lease
-
-    def mark_submit_proxy_in_use(self: "_ProxyRuntimeHost", thread_name: str, lease: ProxyLease) -> None:
-        key = str(thread_name or "").strip()
-        if not key or not isinstance(lease, ProxyLease):
-            return
-        with self.lock:
-            self.submit_proxy_in_use_by_thread[key] = lease
 
     def _purge_expired_proxy_cooldowns_locked(
         self: "_ProxyRuntimeHost",
@@ -138,13 +130,12 @@ class ProxyRuntimeMixin:
     ) -> set[str]:
         excluded = str(exclude_thread_name or "").strip()
         active = set()
-        for proxy_map in (self.proxy_in_use_by_thread, self.submit_proxy_in_use_by_thread):
-            for thread_name, lease in proxy_map.items():
-                if excluded and str(thread_name or "").strip() == excluded:
-                    continue
-                address = str(getattr(lease, "address", "") or "").strip()
-                if address:
-                    active.add(address)
+        for thread_name, lease in self.proxy_in_use_by_thread.items():
+            if excluded and str(thread_name or "").strip() == excluded:
+                continue
+            address = str(getattr(lease, "address", "") or "").strip()
+            if address:
+                active.add(address)
         return active
 
     def snapshot_active_proxy_addresses(
@@ -189,8 +180,7 @@ class ProxyRuntimeMixin:
         if not key:
             return None
         with self.lock:
-            submit_released = self.submit_proxy_in_use_by_thread.pop(key, None)
             released = self.proxy_in_use_by_thread.pop(key, None)
-        if released is not None or submit_released is not None:
+        if released is not None:
             self.notify_runtime_change()
         return released
