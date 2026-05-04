@@ -87,6 +87,90 @@ class RunStopPolicyTests(unittest.TestCase):
         self.assertEqual(state.reverse_fill_runtime.failure_count_by_row, {})
         self.assertEqual(state.reverse_fill_runtime.discarded_row_numbers, set())
 
+    def test_proxy_unavailable_threshold_scales_with_random_proxy_concurrency(self) -> None:
+        config = ExecutionConfig(
+            fail_threshold=5,
+            num_threads=32,
+            random_proxy_ip_enabled=True,
+        )
+        state = ExecutionState(config=config, cur_fail=4)
+        policy = RunStopPolicy(config, state)
+        stop_signal = threading.Event()
+
+        stopped = policy.record_failure(
+            stop_signal,
+            thread_name="Slot-1",
+            failure_reason=FailureReason.PROXY_UNAVAILABLE,
+            threshold_override=policy.proxy_unavailable_threshold(),
+            terminal_stop_category="proxy_unavailable_threshold",
+            consume_reverse_fill_attempt=False,
+        )
+
+        self.assertFalse(stopped)
+        self.assertFalse(stop_signal.is_set())
+        self.assertEqual(state.cur_fail, 4)
+        self.assertEqual(state.proxy_unavailable_fail_count, 1)
+        self.assertEqual(state.get_terminal_stop_snapshot()[0], "")
+
+    def test_failure_threshold_uses_half_concurrency_when_threads_above_ten(self) -> None:
+        config = ExecutionConfig(fail_threshold=5, num_threads=32, stop_on_fail_enabled=True)
+        state = ExecutionState(config=config, cur_fail=15)
+        policy = RunStopPolicy(config, state)
+        stop_signal = threading.Event()
+
+        stopped = policy.record_failure(
+            stop_signal,
+            thread_name="Slot-1",
+            failure_reason=FailureReason.FILL_FAILED,
+        )
+
+        self.assertTrue(stopped)
+        self.assertTrue(stop_signal.is_set())
+        self.assertEqual(state.cur_fail, 16)
+        self.assertEqual(state.get_terminal_stop_snapshot()[0], "fail_threshold")
+
+    def test_failure_threshold_keeps_config_value_when_threads_not_above_ten(self) -> None:
+        config = ExecutionConfig(fail_threshold=5, num_threads=10, stop_on_fail_enabled=True)
+        state = ExecutionState(config=config, cur_fail=4)
+        policy = RunStopPolicy(config, state)
+        stop_signal = threading.Event()
+
+        stopped = policy.record_failure(
+            stop_signal,
+            thread_name="Slot-1",
+            failure_reason=FailureReason.FILL_FAILED,
+        )
+
+        self.assertTrue(stopped)
+        self.assertTrue(stop_signal.is_set())
+        self.assertEqual(state.cur_fail, 5)
+        self.assertEqual(state.get_terminal_stop_snapshot()[0], "fail_threshold")
+
+    def test_proxy_unavailable_uses_independent_counter(self) -> None:
+        config = ExecutionConfig(
+            fail_threshold=5,
+            num_threads=8,
+            random_proxy_ip_enabled=True,
+        )
+        state = ExecutionState(config=config, cur_fail=3, proxy_unavailable_fail_count=7)
+        policy = RunStopPolicy(config, state)
+        stop_signal = threading.Event()
+
+        stopped = policy.record_failure(
+            stop_signal,
+            thread_name="Slot-2",
+            failure_reason=FailureReason.PROXY_UNAVAILABLE,
+            threshold_override=policy.proxy_unavailable_threshold(),
+            terminal_stop_category="proxy_unavailable_threshold",
+            consume_reverse_fill_attempt=False,
+        )
+
+        self.assertTrue(stopped)
+        self.assertTrue(stop_signal.is_set())
+        self.assertEqual(state.cur_fail, 3)
+        self.assertEqual(state.proxy_unavailable_fail_count, 8)
+        self.assertEqual(state.get_terminal_stop_snapshot()[0], "proxy_unavailable_threshold")
+
     def test_record_success_commits_progress_and_triggers_target_stop(self) -> None:
         config = ExecutionConfig(target_num=1, random_proxy_ip_enabled=True)
         state = ExecutionState(config=config, cur_fail=2)
@@ -101,6 +185,7 @@ class RunStopPolicyTests(unittest.TestCase):
         self.assertTrue(should_stop)
         self.assertEqual(state.cur_num, 1)
         self.assertEqual(state.cur_fail, 0)
+        self.assertEqual(state.proxy_unavailable_fail_count, 0)
         self.assertIn(0, state.joint_committed_sample_indexes)
         self.assertEqual(state.distribution_runtime_stats["q:1"]["total"], 1)
         self.assertTrue(stop_signal.is_set())

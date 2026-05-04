@@ -1037,7 +1037,7 @@ def parse_credamo_survey(url: str) -> Tuple[List[Dict[str, Any]], str]:
             page.wait_for_load_state("networkidle", timeout=8000)
         except Exception:
             pass
-        initial_roots = _retry_initial_question_load_if_needed(page)
+        _retry_initial_question_load_if_needed(page)
         questions: List[Dict[str, Any]] = []
         seen_question_keys: set[str] = set()
         title = _normalize_text(page.title())

@@ -7,6 +7,7 @@ from typing import Any, Callable, Dict, List, Optional
 from PySide6.QtCore import QObject, QTimer, Signal, Slot
 
 from software.core.engine.cleanup import CleanupRunner
+from software.core.engine.async_engine import AsyncEngineClient
 from software.core.questions.config import QuestionEntry
 from software.core.task import ExecutionState
 from software.io.config import RuntimeConfig
@@ -58,6 +59,7 @@ class RunController(
         self._monitor_thread: Optional[threading.Thread] = None
         self._init_gate_thread: Optional[threading.Thread] = None
         self._execution_state: Optional[ExecutionState] = None
+        self._async_engine_client: Optional[AsyncEngineClient] = None
         self._cleanup_runner = CleanupRunner()
         self.on_ip_counter: Optional[Callable[[float, float, bool], None]] = None
         self.on_random_ip_loading: Optional[Callable[[bool, str], None]] = None

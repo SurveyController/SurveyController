@@ -507,8 +507,8 @@ def submit(
 
     if (
         ctx is not None
-        and bool(getattr(ctx, "headless_mode", False))
-        and str(getattr(ctx, "survey_provider", "wjx") or "wjx").strip().lower() == "wjx"
+        and bool(getattr(getattr(ctx, "config", ctx), "headless_mode", False))
+        and str(getattr(getattr(ctx, "config", ctx), "survey_provider", "wjx") or "wjx").strip().lower() == "wjx"
     ):
         _submit_via_headless_httpx(
             driver,

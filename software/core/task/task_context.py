@@ -87,6 +87,7 @@ class ExecutionState(
 
     cur_num: int = 0
     cur_fail: int = 0
+    proxy_unavailable_fail_count: int = 0
     device_quota_fail_count: int = 0
     terminal_stop_category: str = ""
     terminal_failure_reason: str = ""

@@ -36,8 +36,8 @@ from software.network.session_policy import (
     _mark_proxy_temporarily_bad,
     _record_bad_proxy_and_maybe_pause,
 )
-from software.providers.registry import fill_survey as _provider_fill_survey
-from software.providers.registry import is_device_quota_limit_page as _provider_is_device_quota_limit_page
+from software.providers.registry import fill_survey_sync as _provider_fill_survey
+from software.providers.registry import is_device_quota_limit_page_sync as _provider_is_device_quota_limit_page
 from software.network.browser.owner_pool import BrowserOwnerPool
 
 def _exception_summary(exc: BaseException) -> str:
@@ -138,12 +138,20 @@ class ExecutionLoop:
         status_text: str,
         log_message: str,
     ) -> bool:
+        threshold_getter = getattr(self.stop_policy, "proxy_unavailable_threshold", None)
+        threshold_override = (
+            int(threshold_getter())
+            if callable(threshold_getter)
+            else max(1, int(self.config.fail_threshold or 1), int(self.config.num_threads or 1))
+        )
         stopped = self.stop_policy.record_failure(
             stop_signal,
             thread_name=thread_name,
             failure_reason=FailureReason.PROXY_UNAVAILABLE,
             status_text=status_text,
             log_message=log_message,
+            threshold_override=threshold_override,
+            terminal_stop_category="proxy_unavailable_threshold",
             consume_reverse_fill_attempt=False,
         )
         if stopped and not stop_signal.is_set():

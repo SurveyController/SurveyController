@@ -106,7 +106,7 @@ def is_survey_completion_page(driver: Any, provider: Optional[str] = None) -> bo
         log_suppressed_exception("is_survey_completion_page: current_url", exc, level=logging.WARNING)
 
     try:
-        from software.providers.registry import is_completion_page as _provider_is_completion_page
+        from software.providers.registry import is_completion_page_sync as _provider_is_completion_page
 
         if _provider_is_completion_page(driver, provider=provider):
             return True

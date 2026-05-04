@@ -22,11 +22,11 @@ from software.core.task import ExecutionConfig, ExecutionState
 from software.logging.log_utils import log_suppressed_exception
 from software.network.browser import BrowserDriver
 from software.providers.registry import (
-    consume_submission_success_signal as _provider_consume_submission_success_signal,
-    handle_submission_verification_detected as _provider_handle_submission_verification_detected,
-    submission_requires_verification as _provider_submission_requires_verification,
-    submission_validation_message as _provider_submission_validation_message,
-    wait_for_submission_verification as _provider_wait_for_submission_verification,
+    consume_submission_success_signal_sync as _provider_consume_submission_success_signal,
+    handle_submission_verification_detected_sync as _provider_handle_submission_verification_detected,
+    submission_requires_verification_sync as _provider_submission_requires_verification,
+    submission_validation_message_sync as _provider_submission_validation_message,
+    wait_for_submission_verification_sync as _provider_wait_for_submission_verification,
 )
 
 
