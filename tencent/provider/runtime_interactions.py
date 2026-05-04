@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 import time
-from typing import List, Optional, Sequence
+from typing import Dict, List, Optional, Sequence
 
 from software.network.browser import BrowserDriver
 
@@ -12,6 +12,75 @@ def _page(driver: BrowserDriver):
     if page is None:
         raise RuntimeError("当前浏览器驱动不支持腾讯问卷自动填写")
     return page
+
+
+def _supports_page_snapshot(driver: BrowserDriver) -> bool:
+    return getattr(driver, "page", None) is not None
+
+
+def _collect_question_visibility_map(driver: BrowserDriver, question_ids: Sequence[str]) -> Dict[str, Dict[str, bool]]:
+    normalized_ids = [str(question_id or "").strip() for question_id in question_ids if str(question_id or "").strip()]
+    if not normalized_ids:
+        return {}
+    payload = _page(driver).evaluate(
+        """(questionIds) => {
+            const visible = (el) => {
+                if (!el) return false;
+                const style = window.getComputedStyle(el);
+                if (!style) return false;
+                if (style.display === 'none' || style.visibility === 'hidden' || style.opacity === '0') return false;
+                const rect = el.getBoundingClientRect();
+                return rect.width > 0 && rect.height > 0;
+            };
+            const result = {};
+            for (const questionId of questionIds) {
+                const section = document.querySelector(`section.question[data-question-id="${questionId}"]`);
+                result[questionId] = {
+                    attached: !!section,
+                    visible: !!section && visible(section),
+                };
+            }
+            return result;
+        }""",
+        normalized_ids,
+    ) or {}
+    result: Dict[str, Dict[str, bool]] = {}
+    for question_id in normalized_ids:
+        item = payload.get(question_id) if isinstance(payload, dict) else None
+        result[question_id] = {
+            "attached": bool((item or {}).get("attached")) if isinstance(item, dict) else False,
+            "visible": bool((item or {}).get("visible")) if isinstance(item, dict) else False,
+        }
+    return result
+
+
+def _wait_for_question_visibility_map(
+    driver: BrowserDriver,
+    question_ids: Sequence[str],
+    *,
+    timeout_ms: int,
+    require_any_visible: bool = True,
+    poll_ms: int = 80,
+) -> Dict[str, Dict[str, bool]]:
+    normalized_timeout = max(0, int(timeout_ms or 0))
+    snapshot = _collect_question_visibility_map(driver, question_ids)
+    if not require_any_visible:
+        return snapshot
+    if any(bool(item.get("visible")) for item in snapshot.values()):
+        return snapshot
+    if normalized_timeout <= 0:
+        return snapshot
+    page = _page(driver)
+    deadline = time.time() + max(0.05, normalized_timeout / 1000.0)
+    while time.time() < deadline:
+        try:
+            page.wait_for_timeout(max(20, int(poll_ms or 0)))
+        except Exception:
+            time.sleep(max(0.02, float(poll_ms or 0) / 1000.0))
+        snapshot = _collect_question_visibility_map(driver, question_ids)
+        if any(bool(item.get("visible")) for item in snapshot.values()):
+            return snapshot
+    return snapshot
 
 def _wait_for_question_visible(driver: BrowserDriver, provider_question_id: str, timeout_ms: int = 8000) -> bool:
     if not provider_question_id:
@@ -27,20 +96,7 @@ def _is_question_visible(driver: BrowserDriver, provider_question_id: str) -> bo
     if not provider_question_id:
         return False
     try:
-        return bool(
-            _page(driver).evaluate(
-                """(questionId) => {
-                    const section = document.querySelector(`section.question[data-question-id="${questionId}"]`);
-                    if (!section) return false;
-                    const style = window.getComputedStyle(section);
-                    if (!style) return false;
-                    if (style.display === 'none' || style.visibility === 'hidden' || style.opacity === '0') return false;
-                    const rect = section.getBoundingClientRect();
-                    return rect.width > 0 && rect.height > 0;
-                }""",
-                provider_question_id,
-            )
-        )
+        return bool((_collect_question_visibility_map(driver, [provider_question_id]).get(provider_question_id) or {}).get("visible"))
     except Exception:
         return False
 

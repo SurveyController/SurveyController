@@ -43,6 +43,58 @@ def _build_initial_indices() -> Dict[str, int]:
     }
 
 
+def _collect_visible_question_snapshot(driver: BrowserDriver) -> Dict[int, Dict[str, Any]]:
+    try:
+        payload = driver.execute_script(
+            r"""
+            return (() => {
+                const visible = (el) => {
+                    if (!el) return false;
+                    const style = window.getComputedStyle(el);
+                    if (!style || style.display === 'none' || style.visibility === 'hidden' || style.opacity === '0') return false;
+                    const rect = el.getBoundingClientRect();
+                    return rect.width > 0 && rect.height > 0;
+                };
+                const normalize = (text) => String(text || '').replace(/\s+/g, ' ').trim();
+                const result = {};
+                const nodes = Array.from(document.querySelectorAll('#divQuestion [topic], #divQuestion div[id^="div"]'));
+                nodes.forEach((node) => {
+                    const rawTopic = String(node.getAttribute('topic') || '').trim();
+                    const idMatch = String(node.getAttribute('id') || '').trim().match(/^div(\d+)$/);
+                    const questionNum = rawTopic && /^\d+$/.test(rawTopic)
+                        ? Number.parseInt(rawTopic, 10)
+                        : (idMatch ? Number.parseInt(idMatch[1], 10) : 0);
+                    if (!questionNum || !visible(node)) return;
+                    result[String(questionNum)] = {
+                        visible: true,
+                        type: String(node.getAttribute('type') || '').trim(),
+                        title: normalize(node.innerText || node.textContent || '').slice(0, 180),
+                    };
+                });
+                return result;
+            })();
+            """
+        ) or {}
+    except Exception:
+        return {}
+    snapshot: Dict[int, Dict[str, Any]] = {}
+    if not isinstance(payload, dict):
+        return snapshot
+    for raw_key, value in payload.items():
+        try:
+            question_num = int(raw_key)
+        except Exception:
+            continue
+        if question_num <= 0 or not isinstance(value, dict):
+            continue
+        snapshot[question_num] = {
+            "visible": bool(value.get("visible")),
+            "type": str(value.get("type") or "").strip(),
+            "title": str(value.get("title") or "").strip(),
+        }
+    return snapshot
+
+
 def _update_abort_status(ctx: ExecutionState, thread_name: str) -> None:
     try:
         ctx.update_thread_status(thread_name, "已中断", running=False)
@@ -153,6 +205,7 @@ def brush(
     current_question_number = 0
     active_stop = stop_signal or ctx.stop_event
     runtime_config = ctx.config
+    run_started_at = time.perf_counter()
 
     def _abort_requested() -> bool:
         return bool(active_stop and active_stop.is_set())
@@ -163,10 +216,20 @@ def brush(
 
     total_pages = len(questions_per_page)
     for page_index, questions_count in enumerate(questions_per_page):
+        page_snapshot_started_at = time.perf_counter()
+        page_snapshot = _collect_visible_question_snapshot(driver)
+        logging.info(
+            "WJX 页面题目快照完成：page=%s count=%s elapsed=%.3fs",
+            page_index + 1,
+            len(page_snapshot),
+            time.perf_counter() - page_snapshot_started_at,
+        )
         for _ in range(1, questions_count + 1):
             if _abort_requested():
                 _update_abort_status(ctx, thread_name)
                 return False
+            if current_question_number > 0:
+                page_snapshot = _collect_visible_question_snapshot(driver)
             current_question_number += 1
             if total_steps > 0:
                 try:
@@ -187,18 +250,21 @@ def brush(
             if question_div is None:
                 continue
 
-            question_visible = False
-            for attempt in range(5):
-                try:
-                    if question_div.is_displayed():
-                        question_visible = True
+            snapshot_item = page_snapshot.get(current_question_number) if isinstance(page_snapshot, dict) else None
+            question_visible = bool((snapshot_item or {}).get("visible")) if isinstance(snapshot_item, dict) else False
+            question_type = str((snapshot_item or {}).get("type") or "").strip() if isinstance(snapshot_item, dict) else ""
+            if not question_visible:
+                for attempt in range(2):
+                    try:
+                        if question_div.is_displayed():
+                            question_visible = True
+                            break
+                    except Exception:
                         break
-                except Exception:
-                    break
-                if attempt < 4:
-                    time.sleep(0.1)
-
-            question_type = question_div.get_attribute("type")
+                    if attempt < 1:
+                        time.sleep(0.04)
+            if not question_type:
+                question_type = question_div.get_attribute("type")
             if question_type is None:
                 logging.info("跳过第%d题（type 属性为空）", current_question_number)
                 continue
@@ -219,6 +285,7 @@ def brush(
                 continue
 
             config_entry = runtime_config.question_config_index_map.get(current_question_number)
+            question_started_at = time.perf_counter()
             dispatch_result = _dispatcher.fill(
                 driver=driver,
                 question_type=question_type,
@@ -239,6 +306,12 @@ def brush(
                     question_div=question_div,
                     indices=indices,
                 )
+            logging.info(
+                "WJX 题目处理耗时：question=%s type=%s elapsed=%.3fs",
+                current_question_number,
+                question_type,
+                time.perf_counter() - question_started_at,
+            )
 
         _human_scroll_after_question(driver)
         if _abort_requested():
@@ -290,6 +363,7 @@ def brush(
         ctx.update_thread_status(thread_name, "等待结果确认", running=True)
     except Exception:
         logging.info("更新线程状态失败：等待结果确认", exc_info=True)
+    logging.info("WJX 整体答题耗时：elapsed=%.3fs", time.perf_counter() - run_started_at)
     return True
 
 

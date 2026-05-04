@@ -6,6 +6,7 @@ import asyncio
 import inspect
 import logging
 import random
+import subprocess
 import threading
 import time
 from concurrent.futures import Future
@@ -15,6 +16,7 @@ from typing import Any, Optional, Set, cast
 from software.logging.log_utils import log_suppressed_exception
 from software.network.browser.exceptions import NoSuchElementException, ProxyConnectionError
 from software.network.browser.options import _build_selector, _is_browser_disconnected_error, _is_proxy_tunnel_error
+from software.network.browser.subprocess_utils import build_local_text_subprocess_kwargs
 
 _PRIMITIVE_TYPES = (str, int, float, bool, bytes, type(None))
 
@@ -58,6 +60,37 @@ class AsyncLoopPortal:
                 awaitable.close()
             raise
         return future.result()
+
+    def run_with_timeout(self, awaitable: Awaitable[Any] | Any, timeout: Optional[float]) -> Any:
+        if self._loop.is_closed():
+            if inspect.iscoroutine(awaitable):
+                awaitable.close()
+            raise RuntimeError("后台 asyncio loop 已关闭")
+        if not inspect.isawaitable(awaitable):
+            return awaitable
+        if threading.get_ident() == self._thread_id:
+            if inspect.iscoroutine(awaitable):
+                awaitable.close()
+            raise RuntimeError("不能在后台 asyncio 线程里阻塞等待自身协程")
+        coroutine: Coroutine[Any, Any, Any]
+        if inspect.iscoroutine(awaitable):
+            coroutine = cast(Coroutine[Any, Any, Any], awaitable)
+        else:
+            async def _await_wrapper() -> Any:
+                return await cast(Awaitable[Any], awaitable)
+
+            coroutine = _await_wrapper()
+        try:
+            future: Future[Any] = asyncio.run_coroutine_threadsafe(coroutine, self._loop)
+        except Exception:
+            if inspect.iscoroutine(awaitable):
+                awaitable.close()
+            raise
+        try:
+            return future.result(timeout=None if timeout is None else max(0.0, float(timeout)))
+        except Exception:
+            future.cancel()
+            raise
 
     def wrap(self, value: Any, *, owner: Optional[Any] = None) -> Any:
         if isinstance(value, _PRIMITIVE_TYPES):
@@ -431,6 +464,38 @@ class AsyncBrowserDriver:
             self._cleanup_done = True
             return True
 
+    def _force_terminate_browser_process_tree(self) -> bool:
+        pids = {int(pid) for pid in self.browser_pids if pid}
+        if self.browser_pid:
+            pids.add(int(self.browser_pid))
+        if not pids:
+            return False
+
+        no_window = getattr(subprocess, "CREATE_NO_WINDOW", 0x08000000)
+        terminated = False
+        for pid in sorted(pids):
+            try:
+                result = subprocess.run(
+                    ["taskkill", "/PID", str(pid), "/T", "/F"],
+                    capture_output=True,
+                    timeout=5,
+                    creationflags=no_window,
+                    **build_local_text_subprocess_kwargs(),
+                )
+            except Exception as exc:
+                log_suppressed_exception("AsyncBrowserDriver._force_terminate_browser_process_tree taskkill", exc, level=logging.WARNING)
+                continue
+
+            output = f"{result.stdout or ''}\n{result.stderr or ''}".lower()
+            if result.returncode == 0:
+                terminated = True
+                continue
+            if "not found" in output or "没有运行的任务" in output or "找不到进程" in output:
+                terminated = True
+                continue
+            logging.warning("强制关闭异步浏览器进程失败(pid=%s): %s", pid, output.strip() or f"returncode={result.returncode}")
+        return terminated
+
     async def aclose(self) -> None:
         try:
             await self._page.close()
@@ -450,9 +515,10 @@ class AsyncBrowserDriver:
         if not self.mark_cleanup_done():
             return
         try:
-            self._portal.run(self.aclose())
+            self._portal.run_with_timeout(self.aclose(), timeout=2.0)
         except Exception as exc:
             log_suppressed_exception("AsyncBrowserDriver.quit", exc, level=logging.WARNING)
+            self._force_terminate_browser_process_tree()
 
 
 __all__ = [

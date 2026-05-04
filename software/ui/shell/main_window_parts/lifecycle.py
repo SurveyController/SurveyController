@@ -40,7 +40,6 @@ class MainWindowLifecycleMixin:
         def close(self) -> bool: ...
         def _stop_update_check_worker(self) -> None: ...
         def _cancel_startup_update_check(self) -> None: ...
-
     def _cleanup_runtime_resources_on_close(self) -> None:
         try:
             self._random_ip_quota_auto_sync_timer.stop()
@@ -48,9 +47,9 @@ class MainWindowLifecycleMixin:
             log_suppressed_exception("closeEvent: self._random_ip_quota_auto_sync_timer.stop()", exc)
 
         try:
-            self.controller.shutdown_for_close(timeout_seconds=5.0)
+            self.controller.request_shutdown_for_close()
         except Exception as exc:
-            log_suppressed_exception("closeEvent: self.controller.shutdown_for_close()", exc)
+            log_suppressed_exception("closeEvent: self.controller.request_shutdown_for_close()", exc)
 
         try:
             if self._boot_splash:
@@ -156,9 +155,9 @@ class MainWindowLifecycleMixin:
                 or bool(getattr(self.controller, "_starting", False))
                 or bool(getattr(self.controller, "is_initializing", lambda: False)())
             ):
-                self.controller.shutdown_for_close(timeout_seconds=5.0)
+                self.controller.stop_run()
         except Exception as exc:
-            log_suppressed_exception("_confirm_close_with_optional_save: self.controller.shutdown_for_close()", exc, level=logging.WARNING)
+            log_suppressed_exception("_confirm_close_with_optional_save: self.controller.stop_run()", exc, level=logging.WARNING)
 
         if reply == 1 or reply is True:
             try:

@@ -101,7 +101,7 @@ def main():
     shutdown_logging()
     _disable_fault_handler()
 
-    sys.exit(exit_code)
+    os._exit(int(exit_code))
 
 
 if __name__ == "__main__":

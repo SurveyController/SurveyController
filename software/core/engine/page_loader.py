@@ -9,6 +9,7 @@ from typing import Any, Callable
 from software.core.engine.page_load_probe import (
     PAGE_LOAD_PROBE_ANSWERABLE,
     PAGE_LOAD_PROBE_BUSINESS_PAGE,
+    PAGE_LOAD_PROBE_PROXY_UNUSABLE,
     wait_for_page_probe,
 )
 from software.core.task import ExecutionConfig
@@ -21,8 +22,10 @@ CREDAMO_PAGE_LOAD_TIMEOUT_MS = 45000
 RANDOM_PROXY_FAST_COMMIT_TIMEOUT_MS = 8000
 RANDOM_PROXY_FAST_PROBE_TIMEOUT_MS = 2500
 RANDOM_PROXY_FAST_PROBE_INTERVAL_SECONDS = 0.25
+RANDOM_PROXY_FAST_LOADING_GRACE_PROBE_TIMEOUT_MS = 4000
 RANDOM_PROXY_FALLBACK_DOM_TIMEOUT_MS = 6000
 RANDOM_PROXY_FALLBACK_PROBE_TIMEOUT_MS = 1500
+RANDOM_PROXY_LOADING_GRACE_PROBE_TIMEOUT_MS = 4000
 PAGE_LOAD_RETRY_DELAYS_SECONDS = (0.4, 1.0)
 PAGE_LOAD_PROXY_ERROR_MARKERS = (
     "ERR_TUNNEL_CONNECTION_FAILED",
@@ -75,6 +78,28 @@ def random_proxy_probe_succeeded(status: str) -> bool:
     return status in {PAGE_LOAD_PROBE_ANSWERABLE, PAGE_LOAD_PROBE_BUSINESS_PAGE}
 
 
+def should_grant_random_proxy_loading_grace(probe_result: Any, last_exc: Exception | None) -> bool:
+    if probe_result is None:
+        return False
+    if str(getattr(probe_result, "status", "") or "") != PAGE_LOAD_PROBE_PROXY_UNUSABLE:
+        return False
+    detail = str(getattr(probe_result, "detail", "") or "").strip().lower()
+    if detail not in {"page_still_loading", "no_answerable_signal", "blank_page"}:
+        return False
+    if last_exc is None:
+        return True
+    return not looks_like_proxy_page_load_failure(last_exc)
+
+
+def should_delay_random_proxy_reload(probe_result: Any) -> bool:
+    if probe_result is None:
+        return False
+    if str(getattr(probe_result, "status", "") or "") != PAGE_LOAD_PROBE_PROXY_UNUSABLE:
+        return False
+    detail = str(getattr(probe_result, "detail", "") or "").strip().lower()
+    return detail in {"page_still_loading", "no_answerable_signal", "blank_page"}
+
+
 def load_survey_page_with_random_proxy(
     driver: Any,
     config: ExecutionConfig,
@@ -113,6 +138,24 @@ def load_survey_page_with_random_proxy(
         if random_proxy_probe_succeeded(first_probe.status):
             logging.info("随机代理首载探测成功：status=%s detail=%s", first_probe.status, first_probe.detail or "-")
             return
+        if should_delay_random_proxy_reload(first_probe):
+            logging.info(
+                "随机代理首载：页面仍在加载，先保持原页追加探测 timeout=%sms interval=%.2fs detail=%s",
+                RANDOM_PROXY_FAST_LOADING_GRACE_PROBE_TIMEOUT_MS,
+                RANDOM_PROXY_FAST_PROBE_INTERVAL_SECONDS,
+                first_probe.detail or "-",
+            )
+            grace_probe = probe_waiter(
+                driver,
+                provider=provider,
+                timeout_ms=RANDOM_PROXY_FAST_LOADING_GRACE_PROBE_TIMEOUT_MS,
+                poll_interval_seconds=RANDOM_PROXY_FAST_PROBE_INTERVAL_SECONDS,
+            )
+            if random_proxy_probe_succeeded(grace_probe.status):
+                logging.info("随机代理首载宽限探测成功：status=%s detail=%s", grace_probe.status, grace_probe.detail or "-")
+                return
+            first_probe = grace_probe
+            first_probe_detail = str(first_probe.detail or first_probe_detail or "")
         logging.warning(
             "随机代理首载探测未命中可答题页面：status=%s detail=%s，转入短重载补救",
             first_probe.status,
@@ -160,6 +203,23 @@ def load_survey_page_with_random_proxy(
     if random_proxy_probe_succeeded(second_probe.status):
         logging.info("随机代理补救后探测成功：status=%s detail=%s", second_probe.status, second_probe.detail or "-")
         return
+    if should_grant_random_proxy_loading_grace(second_probe, last_exc):
+        logging.info(
+            "随机代理首载：页面仍在加载，追加宽限探测 timeout=%sms interval=%.2fs detail=%s",
+            RANDOM_PROXY_LOADING_GRACE_PROBE_TIMEOUT_MS,
+            RANDOM_PROXY_FAST_PROBE_INTERVAL_SECONDS,
+            getattr(second_probe, "detail", "") or "-",
+        )
+        third_probe = probe_waiter(
+            driver,
+            provider=provider,
+            timeout_ms=RANDOM_PROXY_LOADING_GRACE_PROBE_TIMEOUT_MS,
+            poll_interval_seconds=RANDOM_PROXY_FAST_PROBE_INTERVAL_SECONDS,
+        )
+        if random_proxy_probe_succeeded(third_probe.status):
+            logging.info("随机代理宽限探测成功：status=%s detail=%s", third_probe.status, third_probe.detail or "-")
+            return
+        second_probe = third_probe
 
     failure_detail = str(second_probe.detail or first_probe_detail or "")
     if not failure_detail and last_exc is not None:

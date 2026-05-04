@@ -30,9 +30,18 @@ from .runtime_flow import (
     _group_questions_by_page,
     _wait_for_page_transition,
 )
-from .runtime_interactions import _is_question_visible, _wait_for_question_visible
+from .runtime_interactions import (
+    _collect_question_visibility_map,
+    _is_question_visible,
+    _supports_page_snapshot,
+    _wait_for_question_visibility_map,
+    _wait_for_question_visible,
+)
 
 __all__ = ["brush_qq"]
+_QQ_PAGE_READY_TIMEOUT_MS = 2500
+_QQ_SINGLE_QUESTION_FALLBACK_TIMEOUT_MS = 1800
+_QQ_PAGE_TRANSITION_TIMEOUT_MS = 5000
 def brush_qq(
     driver: BrowserDriver,
     config: ExecutionConfig,
@@ -65,6 +74,15 @@ def brush_qq(
         return bool(active_stop and active_stop.is_set())
 
     for page_index, questions in enumerate(page_groups):
+        page_question_ids = [str(question.provider_question_id or "").strip() for question in questions if str(question.provider_question_id or "").strip()]
+        page_snapshot = {}
+        if _supports_page_snapshot(driver):
+            page_snapshot = _wait_for_question_visibility_map(
+                driver,
+                page_question_ids,
+                timeout_ms=_QQ_PAGE_READY_TIMEOUT_MS,
+                require_any_visible=True,
+            )
         for question in questions:
             if _abort_requested():
                 try:
@@ -77,10 +95,21 @@ def brush_qq(
             question_id = str(question.provider_question_id or "")
             if question_num <= 0 or not question_id:
                 continue
-            if not _wait_for_question_visible(driver, question_id, timeout_ms=8000):
-                logging.warning("腾讯问卷第%d题未出现在当前页面，已跳过。", question_num)
-                continue
-            if not _is_question_visible(driver, question_id):
+            snapshot_item = page_snapshot.get(question_id) if isinstance(page_snapshot, dict) else None
+            question_visible = bool((snapshot_item or {}).get("visible")) if isinstance(snapshot_item, dict) else False
+            if not question_visible:
+                if snapshot_item is None:
+                    question_visible = _wait_for_question_visible(
+                        driver,
+                        question_id,
+                        timeout_ms=_QQ_SINGLE_QUESTION_FALLBACK_TIMEOUT_MS,
+                    )
+                elif bool((snapshot_item or {}).get("attached")):
+                    question_visible = _is_question_visible(driver, question_id)
+                else:
+                    question_visible = False
+            if not question_visible:
+                logging.warning("腾讯问卷第%d题未在当前页快照中可见，已跳过。", question_num)
                 continue
 
             step_index += 1
@@ -158,7 +187,12 @@ def brush_qq(
         clicked = _click_next_page_button(driver)
         if not clicked:
             raise NoSuchElementException("腾讯问卷下一页按钮未找到")
-        _wait_for_page_transition(driver, current_first, next_first)
+        _wait_for_page_transition(
+            driver,
+            current_first,
+            next_first,
+            timeout_ms=_QQ_PAGE_TRANSITION_TIMEOUT_MS,
+        )
         click_delay = float(HEADLESS_PAGE_CLICK_DELAY if headless_mode else 0.5)
         if click_delay > 0:
             if active_stop and active_stop.wait(click_delay):

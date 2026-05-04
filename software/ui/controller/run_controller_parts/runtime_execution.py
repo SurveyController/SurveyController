@@ -430,6 +430,12 @@ class RunControllerExecutionMixin:
         self._cleanup_scheduled = True
         self.stop_run()
 
+        try:
+            if self.adapter:
+                self.adapter.cleanup_browsers()
+        except Exception:
+            logging.warning("关闭窗口时执行浏览器兜底清理失败", exc_info=True)
+
         deadline = time.monotonic() + max(0.0, float(timeout_seconds or 0.0))
         current = threading.current_thread()
         pending = [thread for thread in self._collect_shutdown_threads() if thread is not current]
@@ -440,10 +446,6 @@ class RunControllerExecutionMixin:
                 break
             remaining = deadline - time.monotonic()
             if remaining <= 0:
-                logging.warning(
-                    "关闭窗口时仍有后台线程未退出：%s",
-                    ", ".join(thread.name or "UnnamedThread" for thread in alive),
-                )
                 break
             slice_timeout = min(0.1, remaining)
             for thread in alive:
@@ -458,23 +460,49 @@ class RunControllerExecutionMixin:
         try:
             engine_client = getattr(self, "_async_engine_client", None)
             if engine_client is not None:
-                engine_client.shutdown(timeout=max(0.0, timeout_seconds))
+                remaining = max(0.0, deadline - time.monotonic())
+                engine_client.shutdown(timeout=remaining)
                 self._async_engine_client = None
         except Exception:
             logging.warning("关闭窗口时停止 async-first 内核失败", exc_info=True)
-
-        try:
-            if self.adapter:
-                self.adapter.cleanup_browsers()
-        except Exception:
-            logging.warning("关闭窗口时执行浏览器兜底清理失败", exc_info=True)
 
         self.worker_threads = [thread for thread in self.worker_threads if thread.is_alive()]
         if self._monitor_thread is not None and not self._monitor_thread.is_alive():
             self._monitor_thread = None
         if self._init_gate_thread is not None and not self._init_gate_thread.is_alive():
             self._init_gate_thread = None
-        return not any(thread.is_alive() for thread in pending)
+        alive = [thread for thread in pending if thread.is_alive()]
+        if alive:
+            logging.warning(
+                "关闭窗口时仍有后台线程未退出：%s",
+                ", ".join(thread.name or "UnnamedThread" for thread in alive),
+            )
+        return not alive
+
+    def request_shutdown_for_close(self, timeout_seconds: float = 5.0) -> None:
+        with self._close_shutdown_lock:
+            active = getattr(self, "_close_shutdown_thread", None)
+            if isinstance(active, threading.Thread) and active.is_alive():
+                return
+
+            def _worker() -> None:
+                try:
+                    self.shutdown_for_close(timeout_seconds=timeout_seconds)
+                except Exception:
+                    logging.warning("异步关闭收尾失败", exc_info=True)
+                finally:
+                    with self._close_shutdown_lock:
+                        current = getattr(self, "_close_shutdown_thread", None)
+                        if current is threading.current_thread():
+                            self._close_shutdown_thread = None
+
+            thread = threading.Thread(
+                target=_worker,
+                daemon=True,
+                name="CloseShutdownWorker",
+            )
+            self._close_shutdown_thread = thread
+            thread.start()
 
     def _emit_quick_bug_report_suggestion_if_needed(self) -> None:
         if self._quick_feedback_prompt_emitted:

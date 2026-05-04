@@ -227,6 +227,34 @@ class ExecutionLoopTests(unittest.TestCase):
             ],
         )
 
+    def test_load_survey_page_random_proxy_waits_on_original_page_before_reload(self) -> None:
+        config = ExecutionConfig(
+            url="https://example.com",
+            survey_provider="wjx",
+            random_proxy_ip_enabled=True,
+        )
+        driver = _FakeDriver()
+        probe_results = iter(
+            [
+                PageLoadProbeResult(PAGE_LOAD_PROBE_PROXY_UNUSABLE, detail="page_still_loading", retryable=False),
+                PageLoadProbeResult(PAGE_LOAD_PROBE_ANSWERABLE, detail="wjx_questionnaire"),
+            ]
+        )
+
+        with _patched_attr(
+            execution_loop_module,
+            "wait_for_page_probe",
+            lambda *_args, **_kwargs: next(probe_results),
+        ):
+            _load_survey_page(driver, config)
+
+        self.assertEqual(
+            driver.calls,
+            [
+                ("https://example.com", 8000, "commit"),
+            ],
+        )
+
     def test_load_survey_page_random_proxy_falls_back_to_domcontentloaded_after_probe_miss(self) -> None:
         config = ExecutionConfig(
             url="https://example.com",
@@ -236,6 +264,7 @@ class ExecutionLoopTests(unittest.TestCase):
         driver = _FakeDriver()
         probe_results = iter(
             [
+                PageLoadProbeResult(PAGE_LOAD_PROBE_PROXY_UNUSABLE, detail="blank_page", retryable=False),
                 PageLoadProbeResult(PAGE_LOAD_PROBE_PROXY_UNUSABLE, detail="blank_page", retryable=False),
                 PageLoadProbeResult(PAGE_LOAD_PROBE_ANSWERABLE, detail="wjx_dom_ready"),
             ]
@@ -266,6 +295,7 @@ class ExecutionLoopTests(unittest.TestCase):
         probe_results = iter(
             [
                 PageLoadProbeResult(PAGE_LOAD_PROBE_PROXY_UNUSABLE, detail="blank_page", retryable=False),
+                PageLoadProbeResult(PAGE_LOAD_PROBE_PROXY_UNUSABLE, detail="blank_page", retryable=False),
                 PageLoadProbeResult(PAGE_LOAD_PROBE_PROXY_UNUSABLE, detail="proxy_error_page", retryable=False),
             ]
         )
@@ -277,6 +307,36 @@ class ExecutionLoopTests(unittest.TestCase):
         ):
             with self.assertRaises(execution_loop_module.ProxyConnectionError):
                 _load_survey_page(driver, config)
+
+        self.assertEqual(
+            driver.calls,
+            [
+                ("https://example.com", 8000, "commit"),
+                ("https://example.com", 6000, "domcontentloaded"),
+            ],
+        )
+
+    def test_load_survey_page_random_proxy_grants_loading_grace_before_marking_proxy_bad(self) -> None:
+        config = ExecutionConfig(
+            url="https://example.com",
+            survey_provider="wjx",
+            random_proxy_ip_enabled=True,
+        )
+        driver = _FakeDriver()
+        probe_results = iter(
+            [
+                PageLoadProbeResult(PAGE_LOAD_PROBE_PROXY_UNUSABLE, detail="page_still_loading", retryable=False),
+                PageLoadProbeResult(PAGE_LOAD_PROBE_PROXY_UNUSABLE, detail="page_still_loading", retryable=False),
+                PageLoadProbeResult(PAGE_LOAD_PROBE_ANSWERABLE, detail="wjx_questionnaire"),
+            ]
+        )
+
+        with _patched_attr(
+            execution_loop_module,
+            "wait_for_page_probe",
+            lambda *_args, **_kwargs: next(probe_results),
+        ):
+            _load_survey_page(driver, config)
 
         self.assertEqual(
             driver.calls,
