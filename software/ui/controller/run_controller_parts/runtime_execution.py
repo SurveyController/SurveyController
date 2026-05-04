@@ -10,7 +10,7 @@ from typing import TYPE_CHECKING, Any, Callable, Dict, List, Optional
 from PySide6.QtCore import QCoreApplication
 
 from software.app.config import STOP_FORCE_WAIT_SECONDS, app_settings, get_bool_from_qsettings
-from software.core.engine.async_runtime import AsyncRuntimeCoordinator
+from software.core.engine.async_engine import AsyncEngineClient
 from software.core.engine.failure_reason import FailureReason
 from software.core.task import ExecutionConfig, ExecutionState, ProxyLease
 from software.io.config import RuntimeConfig
@@ -49,6 +49,7 @@ class RunControllerExecutionMixin:
         _init_gate_thread: Optional[threading.Thread]
         _monitor_thread: Optional[threading.Thread]
         _execution_state: Optional[ExecutionState]
+        _async_engine_client: Optional[AsyncEngineClient]
         _sleep_blocker: Any
         survey_provider: str
         question_entries: List[Any]
@@ -282,26 +283,20 @@ class RunControllerExecutionMixin:
             self.runStateChanged.emit(True)
         self._status_timer.start()
 
-        logging.debug("创建异步运行协调线程，总并发=%s", worker_count)
-        coordinator = AsyncRuntimeCoordinator(
-            config=execution_config,
-            state=execution_state,
-            stop_signal=self.stop_event,
+        logging.debug("启动 async-first 后台运行内核，总并发=%s", worker_count)
+        engine_client = AsyncEngineClient()
+        self._async_engine_client = engine_client
+        run_future = engine_client.start_run(
+            execution_config,
+            execution_state,
             gui_instance=self.adapter,
         )
-        runtime_thread = threading.Thread(
-            target=coordinator.run,
-            daemon=True,
-            name="AsyncRuntimeThread",
-        )
-        self.worker_threads = [runtime_thread]
-
-        logging.debug("启动异步运行协调线程")
-        runtime_thread.start()
+        runtime_thread = engine_client.thread
+        self.worker_threads = [runtime_thread] if isinstance(runtime_thread, threading.Thread) else []
 
         monitor = threading.Thread(
-            target=self._wait_for_threads,
-            args=(self.adapter,),
+            target=self._wait_for_async_run,
+            args=(run_future, self.adapter),
             daemon=True,
             name="Monitor",
         )
@@ -312,6 +307,16 @@ class RunControllerExecutionMixin:
         try:
             for t in self.worker_threads:
                 t.join()
+            self._on_run_finished(adapter_snapshot)
+        finally:
+            self._monitor_thread = None
+    def _wait_for_async_run(self, run_future: Any, adapter_snapshot: Optional[Any] = None):
+        try:
+            try:
+                run_future.result()
+            except Exception:
+                logging.warning("async-first 运行内核异常退出", exc_info=True)
+                self._dispatch_to_ui_async(lambda: self.runFailed.emit("后台运行内核异常退出，请查看日志"))
             self._on_run_finished(adapter_snapshot)
         finally:
             self._monitor_thread = None
@@ -373,6 +378,12 @@ class RunControllerExecutionMixin:
             return
         if not self.running:
             return
+        engine_client = getattr(self, "_async_engine_client", None)
+        if engine_client is not None:
+            try:
+                engine_client.stop_run()
+            except Exception:
+                logging.debug("停止 async-first 内核失败", exc_info=True)
         self.stop_event.set()
         gate_stop = self._init_gate_stop_event
         if gate_stop is not None:
@@ -389,6 +400,11 @@ class RunControllerExecutionMixin:
                 self.adapter.resume_run()
         except Exception:
             logging.debug("停止时恢复暂停状态失败", exc_info=True)
+        if engine_client is not None:
+            try:
+                engine_client.resume_run()
+            except Exception:
+                logging.debug("停止时恢复 async-first 内核暂停状态失败", exc_info=True)
         self._release_sleep_blocker()
         self._schedule_cleanup()
         if self._paused_state:
@@ -440,6 +456,14 @@ class RunControllerExecutionMixin:
                     logging.debug("关闭等待期间处理事件失败", exc_info=True)
 
         try:
+            engine_client = getattr(self, "_async_engine_client", None)
+            if engine_client is not None:
+                engine_client.shutdown(timeout=max(0.0, timeout_seconds))
+                self._async_engine_client = None
+        except Exception:
+            logging.warning("关闭窗口时停止 async-first 内核失败", exc_info=True)
+
+        try:
             if self.adapter:
                 self.adapter.cleanup_browsers()
         except Exception:
@@ -484,6 +508,12 @@ class RunControllerExecutionMixin:
         """Resume execution after a pause (does not restart threads)."""
         if not self.running:
             return
+        engine_client = getattr(self, "_async_engine_client", None)
+        if engine_client is not None:
+            try:
+                engine_client.resume_run()
+            except Exception:
+                logging.debug("恢复 async-first 内核运行失败", exc_info=True)
         try:
             self.adapter.resume_run()
         except Exception:

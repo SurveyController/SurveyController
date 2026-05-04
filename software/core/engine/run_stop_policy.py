@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import math
 import logging
 import threading
 import time
@@ -26,6 +27,19 @@ class RunStopPolicy:
         except Exception:
             logging.info("暂停等待失败", exc_info=True)
 
+    def failure_threshold(self) -> int:
+        base_threshold = max(1, int(self.config.fail_threshold or 1))
+        num_threads = max(1, int(self.config.num_threads or 1))
+        if num_threads > 10:
+            return max(base_threshold, int(math.ceil(num_threads / 2.0)))
+        return base_threshold
+
+    def proxy_unavailable_threshold(self) -> int:
+        base_threshold = self.failure_threshold()
+        if not bool(self.config.random_proxy_ip_enabled):
+            return base_threshold
+        return max(base_threshold, int(self.config.num_threads or 1))
+
     def record_failure(
         self,
         stop_signal: Optional[threading.Event],
@@ -40,9 +54,15 @@ class RunStopPolicy:
         consume_reverse_fill_attempt: bool = True,
         reverse_fill_max_retries: int = 1,
     ) -> bool:
-        stop_threshold = max(1, int(threshold_override or self.config.fail_threshold or 1))
+        stop_threshold = max(1, int(threshold_override or self.failure_threshold()))
+        is_proxy_unavailable = failure_reason == FailureReason.PROXY_UNAVAILABLE
         with self.state.lock:
-            self.state.cur_fail += 1
+            if is_proxy_unavailable:
+                self.state.proxy_unavailable_fail_count = max(0, int(self.state.proxy_unavailable_fail_count or 0)) + 1
+                consecutive_failures = int(self.state.proxy_unavailable_fail_count or 0)
+            else:
+                self.state.cur_fail += 1
+                consecutive_failures = int(self.state.cur_fail or 0)
             if failure_reason == FailureReason.DEVICE_QUOTA_LIMIT:
                 self.state.device_quota_fail_count = max(0, int(self.state.device_quota_fail_count or 0)) + 1
             message = str(log_message or "").strip()
@@ -52,11 +72,11 @@ class RunStopPolicy:
             if threshold_enabled:
                 logging.warning(
                     "已连续失败%s次，连续失败达到%s次将强制停止",
-                    self.state.cur_fail,
+                    consecutive_failures,
                     stop_threshold,
                 )
             else:
-                logging.warning("已连续失败%s次（失败止损已关闭）", self.state.cur_fail)
+                logging.warning("已连续失败%s次（失败止损已关闭）", consecutive_failures)
         if thread_name:
             try:
                 self.state.release_joint_sample(thread_name)
@@ -95,7 +115,7 @@ class RunStopPolicy:
                 stop_signal.set()
             return True
         threshold_enabled = bool(self.config.stop_on_fail_enabled or force_stop_when_threshold_reached)
-        if threshold_enabled and self.state.cur_fail >= stop_threshold:
+        if threshold_enabled and consecutive_failures >= stop_threshold:
             logging.critical("连续失败次数过多，强制停止，请检查配置是否正确")
             self.state.mark_terminal_stop(
                 terminal_stop_category,
@@ -119,6 +139,7 @@ class RunStopPolicy:
                 previous_consecutive_failures = int(self.state.cur_fail or 0)
                 self.state.cur_num += 1
                 self.state.cur_fail = 0
+                self.state.proxy_unavailable_fail_count = 0
                 record_thread_success = True
                 logging.info(
                     "[OK] 已填写%s份 - 连续失败%s次 - %s",

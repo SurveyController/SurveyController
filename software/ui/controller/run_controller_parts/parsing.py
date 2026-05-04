@@ -73,6 +73,6 @@ class RunControllerParsingMixin:
         threading.Thread(target=_worker, daemon=True, name="SurveyParse").start()
 
     def _parse_questions(self, url: str) -> SurveyDefinition:
-        from software.providers.registry import parse_survey
-        return parse_survey(url)
+        from software.providers.registry import parse_survey_sync
+        return parse_survey_sync(url)
 

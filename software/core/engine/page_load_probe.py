@@ -12,7 +12,7 @@ from software.providers.common import (
     SURVEY_PROVIDER_WJX,
     normalize_survey_provider,
 )
-from software.providers.registry import is_device_quota_limit_page as _provider_is_device_quota_limit_page
+from software.providers.registry import is_device_quota_limit_page_sync as _provider_is_device_quota_limit_page
 from wjx.provider.submission_pages import _page_looks_like_wjx_questionnaire
 
 PAGE_LOAD_PROBE_ANSWERABLE = "answerable"

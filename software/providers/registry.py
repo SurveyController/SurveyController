@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 from typing import Any, Optional
 
 from software.core.engine.provider_common import provider_run_context
@@ -122,15 +123,23 @@ def _get_provider_adapter(*, provider: Optional[str] = None, ctx: Any = None, ur
     return adapter
 
 
-def parse_survey(url: str) -> SurveyDefinition:
+async def parse_survey(url: str) -> SurveyDefinition:
     """解析问卷结构，返回标准化后的 SurveyDefinition。"""
+    return await asyncio.to_thread(
+        parse_survey_sync,
+        url,
+    )
+
+
+def parse_survey_sync(url: str) -> SurveyDefinition:
+    """同步解析问卷结构，供旧 UI/测试临时兼容。"""
     return parse_survey_with_cache(
         url,
         lambda normalized_url: _get_provider_adapter(url=normalized_url).parse_survey(normalized_url),
     )
 
 
-def fill_survey(
+async def fill_survey(
     driver: Any,
     config: ExecutionConfig,
     state: ExecutionState,
@@ -141,6 +150,40 @@ def fill_survey(
     provider: Optional[str] = None,
 ) -> bool:
     """Provider 运行时答题分发。"""
+    adapter = _get_provider_adapter(provider=provider, ctx=state)
+    try:
+        state.update_thread_status(thread_name, "识别题目", running=True)
+    except Exception:
+        pass
+    with provider_run_context(
+        config,
+        state=state,
+        thread_name=thread_name,
+        psycho_plan=psycho_plan,
+    ) as resolved_plan:
+        return bool(
+            await adapter.fill_survey_async(
+                driver,
+                config,
+                state,
+                stop_signal=stop_signal,
+                thread_name=thread_name,
+                psycho_plan=resolved_plan,
+            )
+        )
+
+
+def fill_survey_sync(
+    driver: Any,
+    config: ExecutionConfig,
+    state: ExecutionState,
+    *,
+    stop_signal: Any = None,
+    thread_name: str = "",
+    psycho_plan: Any = None,
+    provider: Optional[str] = None,
+) -> bool:
+    """同步 Provider 运行时答题分发，供旧引擎临时兼容。"""
     adapter = _get_provider_adapter(provider=provider, ctx=state)
     try:
         state.update_thread_status(thread_name, "识别题目", running=True)
@@ -164,22 +207,34 @@ def fill_survey(
         )
 
 
-def is_completion_page(driver: Any, provider: Optional[str] = None) -> bool:
+async def is_completion_page(driver: Any, provider: Optional[str] = None) -> bool:
     """Provider 完成页识别分发。"""
+    return bool(await _get_provider_adapter(provider=provider).is_completion_page_async(driver))
+
+
+def is_completion_page_sync(driver: Any, provider: Optional[str] = None) -> bool:
     return bool(_get_provider_adapter(provider=provider).is_completion_page(driver))
 
 
-def submission_requires_verification(driver: Any, provider: Optional[str] = None) -> bool:
+async def submission_requires_verification(driver: Any, provider: Optional[str] = None) -> bool:
     """Provider 提交后风控/验证识别分发。"""
+    return bool(await _get_provider_adapter(provider=provider).submission_requires_verification_async(driver))
+
+
+def submission_requires_verification_sync(driver: Any, provider: Optional[str] = None) -> bool:
     return bool(_get_provider_adapter(provider=provider).submission_requires_verification(driver))
 
 
-def submission_validation_message(driver: Any, provider: Optional[str] = None) -> str:
+async def submission_validation_message(driver: Any, provider: Optional[str] = None) -> str:
     """Provider 提交后校验文案提取分发。"""
+    return str(await _get_provider_adapter(provider=provider).submission_validation_message_async(driver) or "").strip()
+
+
+def submission_validation_message_sync(driver: Any, provider: Optional[str] = None) -> str:
     return str(_get_provider_adapter(provider=provider).submission_validation_message(driver) or "").strip()
 
 
-def wait_for_submission_verification(
+async def wait_for_submission_verification(
     driver: Any,
     *,
     provider: Optional[str] = None,
@@ -187,6 +242,22 @@ def wait_for_submission_verification(
     stop_signal: Any = None,
 ) -> bool:
     """Provider 提交后短时间轮询风控/验证命中。"""
+    return bool(
+        await _get_provider_adapter(provider=provider).wait_for_submission_verification_async(
+            driver,
+            timeout=timeout,
+            stop_signal=stop_signal,
+        )
+    )
+
+
+def wait_for_submission_verification_sync(
+    driver: Any,
+    *,
+    provider: Optional[str] = None,
+    timeout: int = 3,
+    stop_signal: Any = None,
+) -> bool:
     return bool(
         _get_provider_adapter(provider=provider).wait_for_submission_verification(
             driver,
@@ -196,7 +267,7 @@ def wait_for_submission_verification(
     )
 
 
-def handle_submission_verification_detected(
+async def handle_submission_verification_detected(
     ctx: Any,
     gui_instance: Any,
     stop_signal: Any,
@@ -204,6 +275,20 @@ def handle_submission_verification_detected(
     provider: Optional[str] = None,
 ) -> None:
     """Provider 提交后命中风控/验证时的后续策略分发。"""
+    await _get_provider_adapter(provider=provider, ctx=ctx).handle_submission_verification_detected_async(
+        ctx,
+        gui_instance,
+        stop_signal,
+    )
+
+
+def handle_submission_verification_detected_sync(
+    ctx: Any,
+    gui_instance: Any,
+    stop_signal: Any,
+    *,
+    provider: Optional[str] = None,
+) -> None:
     _get_provider_adapter(provider=provider, ctx=ctx).handle_submission_verification_detected(
         ctx,
         gui_instance,
@@ -211,13 +296,21 @@ def handle_submission_verification_detected(
     )
 
 
-def consume_submission_success_signal(driver: Any, provider: Optional[str] = None) -> bool:
+async def consume_submission_success_signal(driver: Any, provider: Optional[str] = None) -> bool:
     """Provider 提交成功短路标记读取。"""
+    return bool(await _get_provider_adapter(provider=provider).consume_submission_success_signal_async(driver))
+
+
+def consume_submission_success_signal_sync(driver: Any, provider: Optional[str] = None) -> bool:
     return bool(_get_provider_adapter(provider=provider).consume_submission_success_signal(driver))
 
 
-def is_device_quota_limit_page(driver: Any, provider: Optional[str] = None) -> bool:
+async def is_device_quota_limit_page(driver: Any, provider: Optional[str] = None) -> bool:
     """Provider 设备次数上限页识别。"""
+    return bool(await _get_provider_adapter(provider=provider).is_device_quota_limit_page_async(driver))
+
+
+def is_device_quota_limit_page_sync(driver: Any, provider: Optional[str] = None) -> bool:
     return bool(_get_provider_adapter(provider=provider).is_device_quota_limit_page(driver))
 
 
@@ -227,15 +320,24 @@ __all__ = [
     "SURVEY_PROVIDER_CREDAMO",
     "SurveyDefinition",
     "consume_submission_success_signal",
+    "consume_submission_success_signal_sync",
     "detect_survey_provider",
     "parse_survey",
+    "parse_survey_sync",
     "fill_survey",
+    "fill_survey_sync",
     "is_completion_page",
+    "is_completion_page_sync",
     "is_device_quota_limit_page",
+    "is_device_quota_limit_page_sync",
     "handle_submission_verification_detected",
+    "handle_submission_verification_detected_sync",
     "submission_requires_verification",
+    "submission_requires_verification_sync",
     "submission_validation_message",
+    "submission_validation_message_sync",
     "wait_for_submission_verification",
+    "wait_for_submission_verification_sync",
 ]
 
 

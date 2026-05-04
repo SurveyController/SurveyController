@@ -210,11 +210,13 @@ class ThreadProgressMixin:
                 rows.append(
                     {
                         "thread_name": state.thread_name,
+                        "slot_label": state.thread_name,
                         "thread_display_name": self._format_thread_display_name(
                             state.thread_name,
                             int(state.thread_index or 0),
                         ),
                         "thread_index": int(state.thread_index or 0),
+                        "slot_id": int(state.thread_index or 0),
                         "success_count": int(state.success_count or 0),
                         "fail_count": int(state.fail_count or 0),
                         "step_current": current,
