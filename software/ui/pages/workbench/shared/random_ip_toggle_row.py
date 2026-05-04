@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from typing import Any, cast
+
 from PySide6.QtWidgets import QHBoxLayout, QWidget
 from qfluentwidgets import BodyLabel, FluentIcon, IndeterminateProgressRing, TogglePushButton
 
@@ -11,21 +13,24 @@ class RandomIpToggleRow(QWidget):
 
     def __init__(
         self,
-        loading_label_cls: type[BodyLabel],
+        loading_label_cls: Any,
         parent: QWidget | None = None,
         *,
         leading_label_text: str | None = None,
         stretch_tail: bool = True,
     ) -> None:
         super().__init__(parent)
-        self.leading_label = loading_label_cls(leading_label_text, self) if leading_label_text else None
+        self.leading_label = cast(
+            BodyLabel | None,
+            loading_label_cls(leading_label_text, self) if leading_label_text else None,
+        )
         self.toggle_button = TogglePushButton(self)
         self.toggle_button.setMinimumHeight(36)
         self.loading_ring = IndeterminateProgressRing(self)
         self.loading_ring.setFixedSize(18, 18)
         self.loading_ring.setStrokeWidth(2)
         self.loading_ring.hide()
-        self.loading_label = loading_label_cls("", self)
+        self.loading_label = cast(BodyLabel, loading_label_cls("", self))
         self.loading_label.hide()
 
         layout = QHBoxLayout(self)
