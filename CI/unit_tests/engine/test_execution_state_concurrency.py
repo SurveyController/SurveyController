@@ -126,6 +126,23 @@ class ExecutionStateConcurrencyTests(unittest.TestCase):
         self.assertFalse(result["value"])
         self.assertEqual(state.snapshot_active_proxy_addresses(), set())
 
+    def test_mark_successful_proxy_address_blocks_future_reuse(self) -> None:
+        state = ExecutionState()
+        changed = state.mark_successful_proxy_address("http://1.1.1.1:8000")
+
+        self.assertTrue(changed)
+        self.assertTrue(state.is_successful_proxy_address("http://1.1.1.1:8000"))
+        self.assertEqual(state.snapshot_successful_proxy_addresses(), {"http://1.1.1.1:8000"})
+
+    def test_snapshot_blocked_proxy_addresses_merges_active_and_successful_sets(self) -> None:
+        state = ExecutionState()
+        state.mark_proxy_in_use("Worker-1", ProxyLease(address="http://1.1.1.1:8000"))
+        state.mark_successful_proxy_address("http://2.2.2.2:8000")
+
+        blocked = state.snapshot_blocked_proxy_addresses()
+
+        self.assertEqual(blocked, {"http://1.1.1.1:8000", "http://2.2.2.2:8000"})
+
     def test_mark_terminal_stop_preserves_first_value_until_explicit_overwrite(self) -> None:
         state = ExecutionState()
         state.mark_terminal_stop("first", failure_reason="a", message="first-message")

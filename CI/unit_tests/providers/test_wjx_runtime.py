@@ -8,6 +8,7 @@ from types import SimpleNamespace
 from wjx.provider import runtime
 from wjx.provider import runtime_dispatch
 from software.core.engine.dom_helpers import _driver_question_looks_like_reorder
+from software.providers.contracts import SurveyQuestionMeta
 
 
 @contextmanager
@@ -60,6 +61,7 @@ class _FakeState(SimpleNamespace):
         config_defaults = dict(
             question_dimension_map={},
             question_config_index_map={},
+            questions_metadata={},
             single_prob=[],
             single_option_fill_texts=[],
             single_attached_option_selects=[],
@@ -216,7 +218,13 @@ class WjxRuntimeTests(unittest.TestCase):
         self.assertEqual(indices["matrix"], 6)
 
     def test_brush_walks_pages_then_submits(self) -> None:
-        ctx = _FakeState(question_config_index_map={1: ("single", 0), 2: ("single", 1)})
+        ctx = _FakeState(
+            question_config_index_map={1: ("single", 0), 2: ("single", 1)},
+            questions_metadata={
+                1: SurveyQuestionMeta(num=1, title="Q1", type_code="3", page=1),
+                2: SurveyQuestionMeta(num=2, title="Q2", type_code="3", page=2),
+            },
+        )
         driver = _FakeDriver(
             {
                 "#div1": _FakeQuestionDiv("3", text="Q1"),
@@ -230,7 +238,16 @@ class WjxRuntimeTests(unittest.TestCase):
             return None
 
         with ExitStack() as stack:
-            stack.enter_context(_patched_attr(runtime, "_wjx_detect", lambda *_args, **_kwargs: [1, 1]))
+            stack.enter_context(
+                _patched_attr(
+                    runtime,
+                    "_refresh_visible_question_snapshot",
+                    lambda _driver, **_kwargs: {
+                        1: {"visible": True, "type": "3", "title": "Q1"},
+                        2: {"visible": True, "type": "3", "title": "Q2"},
+                    },
+                )
+            )
             stack.enter_context(_patched_attr(runtime, "_is_headless_mode", lambda _ctx: True))
             stack.enter_context(_patched_attr(runtime, "HEADLESS_PAGE_BUFFER_DELAY", 0.0))
             stack.enter_context(_patched_attr(runtime, "HEADLESS_PAGE_CLICK_DELAY", 0.0))
@@ -257,7 +274,10 @@ class WjxRuntimeTests(unittest.TestCase):
         self.assertIn(("提交中", True), ctx.status_updates)
 
     def test_brush_uses_page_snapshot_visibility_fast_path(self) -> None:
-        ctx = _FakeState(question_config_index_map={1: ("single", 0)})
+        ctx = _FakeState(
+            question_config_index_map={1: ("single", 0)},
+            questions_metadata={1: SurveyQuestionMeta(num=1, title="Q1", type_code="3", page=1)},
+        )
         driver = _FakeDriver({"#div1": _FakeQuestionDiv("3", displayed=False, text="Q1")})
         calls: list[object] = []
 
@@ -266,8 +286,13 @@ class WjxRuntimeTests(unittest.TestCase):
             return None
 
         with ExitStack() as stack:
-            stack.enter_context(_patched_attr(runtime, "_wjx_detect", lambda *_args, **_kwargs: [1]))
-            stack.enter_context(_patched_attr(runtime, "_collect_visible_question_snapshot", lambda _driver: {1: {"visible": True, "type": "3", "title": "Q1"}}))
+            stack.enter_context(
+                _patched_attr(
+                    runtime,
+                    "_refresh_visible_question_snapshot",
+                    lambda _driver, **_kwargs: {1: {"visible": True, "type": "3", "title": "Q1"}},
+                )
+            )
             stack.enter_context(_patched_attr(runtime, "_is_headless_mode", lambda _ctx: True))
             stack.enter_context(_patched_attr(runtime, "HEADLESS_PAGE_BUFFER_DELAY", 0.0))
             stack.enter_context(_patched_attr(runtime, "_driver_question_looks_like_description", lambda *_args, **_kwargs: False))
@@ -288,7 +313,14 @@ class WjxRuntimeTests(unittest.TestCase):
         self.assertIn(("fill", 1), calls)
 
     def test_brush_refreshes_snapshot_after_skip_logic_changes_visibility(self) -> None:
-        ctx = _FakeState(question_config_index_map={1: ("single", 0), 3: ("single", 1)})
+        ctx = _FakeState(
+            question_config_index_map={1: ("single", 0), 3: ("single", 1)},
+            questions_metadata={
+                1: SurveyQuestionMeta(num=1, title="Q1", type_code="3", page=1, has_dependent_display_logic=True),
+                2: SurveyQuestionMeta(num=2, title="Q2", type_code="4", page=1),
+                3: SurveyQuestionMeta(num=3, title="Q3", type_code="3", page=1),
+            },
+        )
         driver = _FakeDriver(
             {
                 "#div1": _FakeQuestionDiv("3", displayed=True, text="Q1"),
@@ -319,8 +351,68 @@ class WjxRuntimeTests(unittest.TestCase):
             return None
 
         with ExitStack() as stack:
-            stack.enter_context(_patched_attr(runtime, "_wjx_detect", lambda *_args, **_kwargs: [3]))
-            stack.enter_context(_patched_attr(runtime, "_collect_visible_question_snapshot", lambda _driver: next(snapshots)))
+            stack.enter_context(_patched_attr(runtime, "_refresh_visible_question_snapshot", lambda _driver, **_kwargs: next(snapshots)))
+            stack.enter_context(_patched_attr(runtime, "_is_headless_mode", lambda _ctx: True))
+            stack.enter_context(_patched_attr(runtime, "HEADLESS_PAGE_BUFFER_DELAY", 0.0))
+            stack.enter_context(_patched_attr(runtime, "_driver_question_looks_like_description", lambda *_args, **_kwargs: False))
+            stack.enter_context(_patched_attr(runtime, "_human_scroll_after_question", lambda *_args, **_kwargs: None))
+            stack.enter_context(_patched_attr(runtime, "has_configured_answer_duration", lambda _value: False))
+            stack.enter_context(_patched_attr(runtime, "simulate_answer_duration_delay", lambda *_args, **_kwargs: False))
+            stack.enter_context(_patched_attr(runtime._dispatcher, "fill", _fake_fill))
+            stack.enter_context(_patched_attr(runtime, "submit", lambda *_args, **_kwargs: calls.append("submit")))
+            result = runtime.brush(
+                driver,
+                ctx,
+                stop_signal=threading.Event(),
+                thread_name="Worker-1",
+                psycho_plan=None,
+            )
+
+        self.assertTrue(result)
+        self.assertIn(("fill", 1), calls)
+        self.assertIn(("fill", 3), calls)
+        self.assertNotIn(("fill", 2), calls)
+
+    def test_brush_refreshes_snapshot_after_jump_question_changes_visible_set(self) -> None:
+        ctx = _FakeState(
+            question_config_index_map={1: ("single", 0), 2: ("single", 1), 3: ("single", 2)},
+            questions_metadata={
+                1: SurveyQuestionMeta(num=1, title="Q1", type_code="3", page=1, has_jump=True),
+                2: SurveyQuestionMeta(num=2, title="Q2", type_code="3", page=1),
+                3: SurveyQuestionMeta(num=3, title="Q3", type_code="3", page=1),
+            },
+        )
+        driver = _FakeDriver(
+            {
+                "#div1": _FakeQuestionDiv("3", displayed=True, text="Q1"),
+                "#div2": _FakeQuestionDiv("3", displayed=False, text="Q2"),
+                "#div3": _FakeQuestionDiv("3", displayed=True, text="Q3"),
+            }
+        )
+        calls: list[object] = []
+        snapshots = iter(
+            [
+                {
+                    1: {"visible": True, "type": "3", "title": "Q1"},
+                    2: {"visible": True, "type": "3", "title": "Q2"},
+                },
+                {
+                    1: {"visible": True, "type": "3", "title": "Q1"},
+                    3: {"visible": True, "type": "3", "title": "Q3"},
+                },
+                {
+                    1: {"visible": True, "type": "3", "title": "Q1"},
+                    3: {"visible": True, "type": "3", "title": "Q3"},
+                },
+            ]
+        )
+
+        def _fake_fill(*, question_num: int, **_kwargs):
+            calls.append(("fill", question_num))
+            return None
+
+        with ExitStack() as stack:
+            stack.enter_context(_patched_attr(runtime, "_refresh_visible_question_snapshot", lambda _driver, **_kwargs: next(snapshots)))
             stack.enter_context(_patched_attr(runtime, "_is_headless_mode", lambda _ctx: True))
             stack.enter_context(_patched_attr(runtime, "HEADLESS_PAGE_BUFFER_DELAY", 0.0))
             stack.enter_context(_patched_attr(runtime, "_driver_question_looks_like_description", lambda *_args, **_kwargs: False))

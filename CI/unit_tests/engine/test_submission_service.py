@@ -37,7 +37,10 @@ class SubmissionServiceTests(unittest.TestCase):
         stop_signal = MagicMock()
         stop_signal.is_set.return_value = False
         stop_signal.wait.return_value = False
-        driver = object()
+        driver = SimpleNamespace(
+            _session_proxy_address="http://1.1.1.1:8000",
+            _thread_name="Worker-1",
+        )
 
         with patch.object(service, "_detect_completion_once", return_value=True), \
              patch("software.core.engine.submission_service.random.uniform", return_value=0.2), \
@@ -52,8 +55,43 @@ class SubmissionServiceTests(unittest.TestCase):
         self.assertEqual(outcome.status, "success")
         self.assertTrue(outcome.completion_detected)
         self.assertTrue(outcome.should_rotate_proxy)
+        self.assertTrue(state.is_successful_proxy_address("http://1.1.1.1:8000"))
         stop_policy.record_success.assert_called_once_with(stop_signal, thread_name="Worker-1")
         sleep_mock.assert_called()
+
+    def test_finalize_after_submit_marks_submit_proxy_address_when_present(self) -> None:
+        config = ExecutionConfig(headless_mode=False, random_proxy_ip_enabled=True, survey_provider="wjx")
+        state = ExecutionState(config=config)
+        stop_policy = MagicMock()
+        stop_policy.record_success.return_value = False
+        service = SubmissionService(config, state, stop_policy)
+        stop_signal = MagicMock(spec=threading.Event)
+        stop_signal.is_set.return_value = False
+        stop_signal.wait.return_value = False
+        driver = SimpleNamespace(
+            current_url="https://example.com/complete",
+            _session_proxy_address="http://1.1.1.1:8000",
+            _submit_proxy_address="http://2.2.2.2:8000",
+            _thread_name="Worker-1",
+        )
+
+        with patch("software.core.engine.submission_service._provider_submission_requires_verification", return_value=False), \
+             patch("software.core.engine.submission_service._provider_wait_for_submission_verification", return_value=False), \
+             patch.object(service, "_wait_for_completion_page", side_effect=[False, False]), \
+             patch("software.core.engine.submission_service.random.uniform", return_value=0.2), \
+             patch("software.core.engine.submission_service.time.sleep"):
+            outcome = service.finalize_after_submit(
+                driver,
+                stop_signal=stop_signal,
+                gui_instance=None,
+                thread_name="Worker-1",
+            )
+
+        self.assertEqual(outcome.status, "success")
+        self.assertEqual(
+            state.snapshot_successful_proxy_addresses(),
+            {"http://1.1.1.1:8000", "http://2.2.2.2:8000"},
+        )
 
     def test_finalize_after_submit_returns_aborted_when_user_stops_during_initial_wait(self) -> None:
         config = ExecutionConfig(headless_mode=False, survey_provider="wjx")

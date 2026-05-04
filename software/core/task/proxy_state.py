@@ -27,6 +27,7 @@ if TYPE_CHECKING:
         _browser_semaphore_max_instances: int
         proxy_waiting_threads: int
         proxy_in_use_by_thread: dict[str, ProxyLease]
+        successful_proxy_addresses: set[str]
         proxy_cooldown_until_by_address: dict[str, float]
         _runtime_condition: threading.Condition
 
@@ -138,6 +139,13 @@ class ProxyRuntimeMixin:
                 active.add(address)
         return active
 
+    def successful_proxy_addresses_locked(self: "_ProxyRuntimeHost") -> set[str]:
+        return {
+            str(address or "").strip()
+            for address in set(self.successful_proxy_addresses or set())
+            if str(address or "").strip()
+        }
+
     def snapshot_active_proxy_addresses(
         self: "_ProxyRuntimeHost",
         *,
@@ -145,6 +153,20 @@ class ProxyRuntimeMixin:
     ) -> set[str]:
         with self.lock:
             return self.active_proxy_addresses_locked(exclude_thread_name=exclude_thread_name)
+
+    def snapshot_successful_proxy_addresses(self: "_ProxyRuntimeHost") -> set[str]:
+        with self.lock:
+            return self.successful_proxy_addresses_locked()
+
+    def snapshot_blocked_proxy_addresses(
+        self: "_ProxyRuntimeHost",
+        *,
+        exclude_thread_name: str = "",
+    ) -> set[str]:
+        with self.lock:
+            blocked = self.active_proxy_addresses_locked(exclude_thread_name=exclude_thread_name)
+            blocked.update(self.successful_proxy_addresses_locked())
+            return blocked
 
     def is_proxy_address_in_use(
         self: "_ProxyRuntimeHost",
@@ -157,6 +179,25 @@ class ProxyRuntimeMixin:
             return False
         with self.lock:
             return normalized in self.active_proxy_addresses_locked(exclude_thread_name=exclude_thread_name)
+
+    def mark_successful_proxy_address(self: "_ProxyRuntimeHost", proxy_address: str) -> bool:
+        normalized = str(proxy_address or "").strip()
+        if not normalized:
+            return False
+        with self.lock:
+            previous_size = len(self.successful_proxy_addresses)
+            self.successful_proxy_addresses.add(normalized)
+            changed = len(self.successful_proxy_addresses) != previous_size
+        if changed:
+            self.notify_runtime_change()
+        return changed
+
+    def is_successful_proxy_address(self: "_ProxyRuntimeHost", proxy_address: str) -> bool:
+        normalized = str(proxy_address or "").strip()
+        if not normalized:
+            return False
+        with self.lock:
+            return normalized in self.successful_proxy_addresses_locked()
 
     def notify_runtime_change(self: "_ProxyRuntimeHost") -> None:
         with self._runtime_condition:

@@ -100,6 +100,7 @@ class ExecutionState(
 
     proxy_waiting_threads: int = 0
     proxy_in_use_by_thread: Dict[str, ProxyLease] = field(default_factory=dict)
+    successful_proxy_addresses: set[str] = field(default_factory=set)
     proxy_cooldown_until_by_address: Dict[str, float] = field(default_factory=dict)
     reverse_fill_runtime: Optional[ReverseFillRuntimeState] = None
 

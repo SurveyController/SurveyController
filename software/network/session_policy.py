@@ -18,6 +18,12 @@ def _active_proxy_addresses_locked(ctx: ExecutionState, *, exclude_thread_name: 
     return ctx.active_proxy_addresses_locked(exclude_thread_name=exclude_thread_name)
 
 
+def _blocked_proxy_addresses_locked(ctx: ExecutionState, *, exclude_thread_name: str = "") -> set[str]:
+    blocked = _active_proxy_addresses_locked(ctx, exclude_thread_name=exclude_thread_name)
+    blocked.update(ctx.successful_proxy_addresses_locked())
+    return blocked
+
+
 def _record_bad_proxy_and_maybe_pause(
     ctx: ExecutionState,
     gui_instance: Optional[Any],
@@ -88,7 +94,7 @@ def _purge_unusable_proxy_pool_locked(ctx: ExecutionState) -> None:
 
 def _pop_available_proxy_lease_locked(ctx: ExecutionState) -> Optional[ProxyLease]:
     _purge_unusable_proxy_pool_locked(ctx)
-    active_addresses = _active_proxy_addresses_locked(ctx)
+    blocked_addresses = _blocked_proxy_addresses_locked(ctx)
     while ctx.config.proxy_ip_pool:
         lease = coerce_proxy_lease(ctx.config.proxy_ip_pool.pop(0))
         if lease is None:
@@ -99,8 +105,8 @@ def _pop_available_proxy_lease_locked(ctx: ExecutionState) -> Optional[ProxyLeas
         if ctx._is_proxy_in_cooldown_locked(lease.address):
             logging.info("已跳过冷却中的代理：%s", mask_proxy_for_log(lease.address))
             continue
-        if lease.address in active_addresses:
-            logging.info("已跳过正在被其他会话占用的代理：%s", mask_proxy_for_log(lease.address))
+        if lease.address in blocked_addresses:
+            logging.info("已跳过已占用或已成功使用过的代理：%s", mask_proxy_for_log(lease.address))
             continue
         return lease
     return None
@@ -195,7 +201,7 @@ def _select_proxy_for_session(
                             _purge_unusable_proxy_pool_locked(ctx)
                             _pool_leases = [coerce_proxy_lease(item) for item in ctx.config.proxy_ip_pool]
                             existing = {lease.address for lease in _pool_leases if lease is not None}
-                            existing.update(_active_proxy_addresses_locked(ctx))
+                            existing.update(_blocked_proxy_addresses_locked(ctx))
                             required_ttl = _required_proxy_ttl_seconds(ctx)
                             for item in fetched:
                                 lease = coerce_proxy_lease(item)

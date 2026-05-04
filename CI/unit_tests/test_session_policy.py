@@ -96,6 +96,20 @@ class SessionPolicyTests(unittest.TestCase):
         self.assertEqual(selected, usable)
         self.assertEqual(ctx.config.proxy_ip_pool, [])
 
+    def test_pop_available_proxy_lease_skips_successfully_used_proxy(self) -> None:
+        ctx = ExecutionState(config=ExecutionConfig())
+        used = ProxyLease(address="http://1.1.1.1:8000")
+        usable = ProxyLease(address="http://2.2.2.2:8000")
+        ctx.config.proxy_ip_pool = [used, usable]
+        ctx.mark_successful_proxy_address(used.address)
+
+        with patch.object(session_policy, "get_proxy_required_ttl_seconds", return_value=0), \
+             patch.object(session_policy, "proxy_lease_has_sufficient_ttl", return_value=True):
+            selected = session_policy._pop_available_proxy_lease_locked(ctx)
+
+        self.assertEqual(selected, usable)
+        self.assertEqual(ctx.config.proxy_ip_pool, [])
+
     def test_select_proxy_for_session_returns_none_when_random_proxy_disabled(self) -> None:
         ctx = ExecutionState(config=ExecutionConfig(random_proxy_ip_enabled=False))
 
@@ -154,6 +168,23 @@ class SessionPolicyTests(unittest.TestCase):
     def test_select_proxy_for_session_skips_fetched_proxy_in_cooldown(self) -> None:
         ctx = ExecutionState(config=ExecutionConfig(random_proxy_ip_enabled=True, target_num=2))
         ctx.mark_proxy_in_cooldown("http://1.1.1.1:8000", 180.0)
+
+        fetched = [
+            ProxyLease(address="http://1.1.1.1:8000", source="api"),
+            ProxyLease(address="http://2.2.2.2:8000", source="api"),
+        ]
+
+        with patch.object(session_policy, "fetch_proxy_batch", return_value=fetched), \
+             patch.object(session_policy, "get_proxy_required_ttl_seconds", return_value=0), \
+             patch.object(session_policy, "proxy_lease_has_sufficient_ttl", return_value=True):
+            selected = session_policy._select_proxy_for_session(ctx, "Worker-1")
+
+        self.assertEqual(selected, "http://2.2.2.2:8000")
+        self.assertEqual(ctx.proxy_in_use_by_thread["Worker-1"].address, "http://2.2.2.2:8000")
+
+    def test_select_proxy_for_session_skips_fetched_proxy_used_by_previous_success(self) -> None:
+        ctx = ExecutionState(config=ExecutionConfig(random_proxy_ip_enabled=True, target_num=2))
+        ctx.mark_successful_proxy_address("http://1.1.1.1:8000")
 
         fetched = [
             ProxyLease(address="http://1.1.1.1:8000", source="api"),

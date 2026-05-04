@@ -5,7 +5,7 @@ from __future__ import annotations
 import logging
 import threading
 import time
-from typing import Any, Dict, Optional
+from typing import Any, Dict, Iterable, Optional
 
 from software.app.config import HEADLESS_PAGE_BUFFER_DELAY, HEADLESS_PAGE_CLICK_DELAY
 from software.core.engine.dom_helpers import (
@@ -19,6 +19,8 @@ from software.core.questions.utils import _should_treat_question_as_text_like
 from software.core.reverse_fill.runtime import resolve_current_reverse_fill_answer
 from software.core.task import ExecutionConfig, ExecutionState
 from software.network.browser import BrowserDriver, By, NoSuchElementException
+from software.providers.contracts import SurveyQuestionMeta
+from software.providers.registry import parse_survey_sync
 from wjx.provider.detection import detect as _wjx_detect
 from wjx.provider.navigation import _click_next_page_button, _human_scroll_after_question
 from wjx.provider.questions.multiple import multiple as _multiple_impl
@@ -93,6 +95,71 @@ def _collect_visible_question_snapshot(driver: BrowserDriver) -> Dict[int, Dict[
             "title": str(value.get("title") or "").strip(),
         }
     return snapshot
+
+
+def _refresh_visible_question_snapshot(driver: BrowserDriver, *, reason: str) -> Dict[int, Dict[str, Any]]:
+    started_at = time.perf_counter()
+    snapshot = _collect_visible_question_snapshot(driver)
+    logging.info(
+        "WJX 页面题目快照刷新：reason=%s count=%s elapsed=%.3fs",
+        reason,
+        len(snapshot),
+        time.perf_counter() - started_at,
+    )
+    return snapshot
+
+
+def _snapshot_visible_numbers(snapshot: Dict[int, Dict[str, Any]]) -> set[int]:
+    return {
+        int(question_num)
+        for question_num, payload in dict(snapshot or {}).items()
+        if isinstance(payload, dict) and bool(payload.get("visible"))
+    }
+
+
+def _question_metadata_map(ctx: ExecutionState) -> Dict[int, SurveyQuestionMeta]:
+    metadata = getattr(getattr(ctx, "config", ctx), "questions_metadata", {}) or {}
+    normalized: Dict[int, SurveyQuestionMeta] = {}
+    if isinstance(metadata, dict):
+        for raw_num, meta in metadata.items():
+            try:
+                question_num = int(raw_num)
+            except Exception:
+                continue
+            if question_num <= 0 or meta is None:
+                continue
+            normalized[question_num] = meta
+    return normalized
+
+
+def _build_metadata_page_plan(ctx: ExecutionState) -> list[tuple[int, list[SurveyQuestionMeta]]]:
+    metadata = _question_metadata_map(ctx)
+    by_page: dict[int, list[SurveyQuestionMeta]] = {}
+    for meta in metadata.values():
+        try:
+            page_number = max(1, int(getattr(meta, "page", 1) or 1))
+        except Exception:
+            page_number = 1
+        by_page.setdefault(page_number, []).append(meta)
+    page_plan: list[tuple[int, list[SurveyQuestionMeta]]] = []
+    for page_number in sorted(by_page):
+        page_questions = sorted(
+            by_page[page_number],
+            key=lambda item: (int(getattr(item, "num", 0) or 0), str(getattr(item, "title", "") or "")),
+        )
+        if page_questions:
+            page_plan.append((page_number, page_questions))
+    return page_plan
+
+
+def _question_requires_snapshot_refresh(question_meta: SurveyQuestionMeta | None) -> bool:
+    if question_meta is None:
+        return False
+    return bool(
+        getattr(question_meta, "has_jump", False)
+        or getattr(question_meta, "has_dependent_display_logic", False)
+        or getattr(question_meta, "has_display_condition", False)
+    )
 
 
 def _update_abort_status(ctx: ExecutionState, thread_name: str) -> None:
@@ -180,16 +247,167 @@ def _fallback_unknown_question(
     print(f"第{question_num}题为不支持类型(type={question_type})")
 
 
-def brush(
+def _refresh_questions_metadata(ctx: ExecutionState) -> bool:
+    url = str(getattr(getattr(ctx, "config", ctx), "url", "") or "").strip()
+    if not url:
+        return False
+    try:
+        definition = parse_survey_sync(url)
+    except Exception as exc:
+        logging.warning("WJX 结构漂移后刷新题目结构失败：%s", exc)
+        return False
+    if not getattr(definition, "questions", None):
+        return False
+    changed = False
+    with getattr(ctx, "lock", threading.Lock()):
+        current = dict(getattr(ctx.config, "questions_metadata", {}) or {})
+        updated = dict(current)
+        for meta in list(definition.questions or []):
+            try:
+                question_num = int(getattr(meta, "num", 0) or 0)
+            except Exception:
+                question_num = 0
+            if question_num <= 0:
+                continue
+            previous = updated.get(question_num)
+            updated[question_num] = meta
+            if previous != meta:
+                changed = True
+        if changed:
+            ctx.config.questions_metadata = updated
+    if changed:
+        logging.info("WJX 结构漂移刷新完成：questions=%s", len(getattr(definition, "questions", []) or []))
+    return changed
+
+
+def _refresh_metadata_when_snapshot_drifts(
+    ctx: ExecutionState,
+    snapshot: Dict[int, Dict[str, Any]],
+) -> bool:
+    metadata = _question_metadata_map(ctx)
+    unknown_visible = [num for num in _snapshot_visible_numbers(snapshot) if num not in metadata]
+    if not unknown_visible:
+        return False
+    logging.warning("WJX 检测到缓存外新题目，触发结构刷新：questions=%s", unknown_visible)
+    return _refresh_questions_metadata(ctx)
+
+
+def _question_is_visible(
+    question_div,
+    snapshot_item: Dict[str, Any] | None,
+) -> bool:
+    if isinstance(snapshot_item, dict) and bool(snapshot_item.get("visible")):
+        return True
+    if question_div is None:
+        return False
+    for attempt in range(2):
+        try:
+            if question_div.is_displayed():
+                return True
+        except Exception:
+            return False
+        if attempt < 1:
+            time.sleep(0.04)
+    return False
+
+
+def _finalize_page(
+    driver: BrowserDriver,
+    active_stop: Optional[threading.Event],
+    *,
+    headless_mode: bool,
+    is_last_page: bool,
+    runtime_config: ExecutionConfig,
+    thread_name: str,
+    ctx: ExecutionState,
+) -> bool:
+    _human_scroll_after_question(driver)
+    if active_stop and active_stop.is_set():
+        _update_abort_status(ctx, thread_name)
+        return False
+    buffer_delay = float(HEADLESS_PAGE_BUFFER_DELAY if headless_mode else 0.5)
+    if buffer_delay > 0:
+        if active_stop:
+            if active_stop.wait(buffer_delay):
+                _update_abort_status(ctx, thread_name)
+                return False
+        else:
+            time.sleep(buffer_delay)
+    if is_last_page:
+        if has_configured_answer_duration(runtime_config.answer_duration_range_seconds):
+            try:
+                ctx.update_thread_status(thread_name, "等待时长中", running=True)
+            except Exception:
+                logging.info("更新线程状态失败：等待时长中", exc_info=True)
+        if simulate_answer_duration_delay(active_stop, runtime_config.answer_duration_range_seconds):
+            _update_abort_status(ctx, thread_name)
+            return False
+        if active_stop and active_stop.is_set():
+            _update_abort_status(ctx, thread_name)
+            return False
+        return True
+    clicked = _click_next_page_button(driver)
+    if not clicked:
+        raise NoSuchElementException("Next page button not found")
+    click_delay = float(HEADLESS_PAGE_CLICK_DELAY if headless_mode else 0.5)
+    if click_delay > 0:
+        if active_stop:
+            if active_stop.wait(click_delay):
+                _update_abort_status(ctx, thread_name)
+                return False
+        else:
+            time.sleep(click_delay)
+    return True
+
+
+def _run_question_dispatch(
+    driver: BrowserDriver,
+    ctx: ExecutionState,
+    *,
+    question_num: int,
+    question_type: str,
+    question_div,
+    indices: Dict[str, int],
+    psycho_plan: Optional[Any],
+) -> None:
+    config_entry = ctx.config.question_config_index_map.get(question_num)
+    question_started_at = time.perf_counter()
+    dispatch_result = _dispatcher.fill(
+        driver=driver,
+        question_type=question_type,
+        question_num=question_num,
+        question_div=question_div,
+        config_entry=config_entry,
+        indices=indices,
+        ctx=ctx,
+        psycho_plan=psycho_plan,
+    )
+
+    if dispatch_result is False:
+        _fallback_unknown_question(
+            driver,
+            ctx,
+            question_num=question_num,
+            question_type=question_type,
+            question_div=question_div,
+            indices=indices,
+        )
+    logging.info(
+        "WJX 题目处理耗时：question=%s type=%s elapsed=%.3fs",
+        question_num,
+        question_type,
+        time.perf_counter() - question_started_at,
+    )
+
+
+def _brush_with_detect_fallback(
     driver: BrowserDriver,
     ctx: ExecutionState,
     stop_signal: Optional[threading.Event] = None,
     *,
-    thread_name: Optional[str] = None,
-    psycho_plan: Optional[Any] = None,
+    thread_name: str,
+    psycho_plan: Optional[Any],
 ) -> bool:
-    """批量填写一份问卷；返回 True 代表完整提交，False 代表过程中被用户打断。"""
-    thread_name = str(thread_name or threading.current_thread().name or "Worker-?").strip() or "Worker-?"
     questions_per_page = _wjx_detect(driver, stop_signal=stop_signal)
     headless_mode = _is_headless_mode(ctx)
     try:
@@ -216,20 +434,13 @@ def brush(
 
     total_pages = len(questions_per_page)
     for page_index, questions_count in enumerate(questions_per_page):
-        page_snapshot_started_at = time.perf_counter()
-        page_snapshot = _collect_visible_question_snapshot(driver)
-        logging.info(
-            "WJX 页面题目快照完成：page=%s count=%s elapsed=%.3fs",
-            page_index + 1,
-            len(page_snapshot),
-            time.perf_counter() - page_snapshot_started_at,
-        )
+        page_snapshot = _refresh_visible_question_snapshot(driver, reason=f"fallback_page_{page_index + 1}")
         for _ in range(1, questions_count + 1):
             if _abort_requested():
                 _update_abort_status(ctx, thread_name)
                 return False
             if current_question_number > 0:
-                page_snapshot = _collect_visible_question_snapshot(driver)
+                page_snapshot = _refresh_visible_question_snapshot(driver, reason=f"fallback_question_{current_question_number}")
             current_question_number += 1
             if total_steps > 0:
                 try:
@@ -251,18 +462,8 @@ def brush(
                 continue
 
             snapshot_item = page_snapshot.get(current_question_number) if isinstance(page_snapshot, dict) else None
-            question_visible = bool((snapshot_item or {}).get("visible")) if isinstance(snapshot_item, dict) else False
+            question_visible = _question_is_visible(question_div, snapshot_item)
             question_type = str((snapshot_item or {}).get("type") or "").strip() if isinstance(snapshot_item, dict) else ""
-            if not question_visible:
-                for attempt in range(2):
-                    try:
-                        if question_div.is_displayed():
-                            question_visible = True
-                            break
-                    except Exception:
-                        break
-                    if attempt < 1:
-                        time.sleep(0.04)
             if not question_type:
                 question_type = question_div.get_attribute("type")
             if question_type is None:
@@ -284,74 +485,203 @@ def brush(
                     logging.info("跳过第%d题（未显示，type=%s）", current_question_number, question_type)
                 continue
 
-            config_entry = runtime_config.question_config_index_map.get(current_question_number)
-            question_started_at = time.perf_counter()
-            dispatch_result = _dispatcher.fill(
-                driver=driver,
-                question_type=question_type,
+            _run_question_dispatch(
+                driver,
+                ctx,
                 question_num=current_question_number,
+                question_type=question_type,
                 question_div=question_div,
-                config_entry=config_entry,
                 indices=indices,
-                ctx=ctx,
                 psycho_plan=psycho_plan,
             )
 
-            if dispatch_result is False:
-                _fallback_unknown_question(
-                    driver,
-                    ctx,
-                    question_num=current_question_number,
-                    question_type=question_type,
-                    question_div=question_div,
-                    indices=indices,
-                )
-            logging.info(
-                "WJX 题目处理耗时：question=%s type=%s elapsed=%.3fs",
-                current_question_number,
-                question_type,
-                time.perf_counter() - question_started_at,
-            )
+        if not _finalize_page(
+            driver,
+            active_stop,
+            headless_mode=headless_mode,
+            is_last_page=(page_index == total_pages - 1),
+            runtime_config=runtime_config,
+            thread_name=thread_name,
+            ctx=ctx,
+        ):
+            return False
 
-        _human_scroll_after_question(driver)
-        if _abort_requested():
+    if active_stop and active_stop.is_set():
+        _update_abort_status(ctx, thread_name)
+        return False
+    try:
+        ctx.update_thread_status(thread_name, "提交中", running=True)
+    except Exception:
+        logging.info("更新线程状态失败：提交中", exc_info=True)
+    submit(driver, ctx=ctx, stop_signal=active_stop)
+    try:
+        ctx.update_thread_status(thread_name, "等待结果确认", running=True)
+    except Exception:
+        logging.info("更新线程状态失败：等待结果确认", exc_info=True)
+    logging.info("WJX 整体答题耗时（fallback）：elapsed=%.3fs", time.perf_counter() - run_started_at)
+    return True
+
+
+def _brush_with_metadata(
+    driver: BrowserDriver,
+    ctx: ExecutionState,
+    stop_signal: Optional[threading.Event] = None,
+    *,
+    thread_name: str,
+    psycho_plan: Optional[Any],
+) -> bool:
+    page_plan = _build_metadata_page_plan(ctx)
+    if not page_plan:
+        return _brush_with_detect_fallback(
+            driver,
+            ctx,
+            stop_signal=stop_signal,
+            thread_name=thread_name,
+            psycho_plan=psycho_plan,
+        )
+
+    headless_mode = _is_headless_mode(ctx)
+    active_stop = stop_signal or ctx.stop_event
+    runtime_config = ctx.config
+    indices = _build_initial_indices()
+    progress_step = 0
+    total_steps = sum(len(question_list) for _, question_list in page_plan)
+    run_started_at = time.perf_counter()
+
+    try:
+        ctx.update_thread_step(thread_name, 0, total_steps, status_text="答题中", running=True)
+    except Exception:
+        logging.info("初始化线程步骤进度失败", exc_info=True)
+
+    for page_index, (page_number, _) in enumerate(page_plan):
+        if active_stop and active_stop.is_set():
             _update_abort_status(ctx, thread_name)
             return False
-        buffer_delay = float(HEADLESS_PAGE_BUFFER_DELAY if headless_mode else 0.5)
-        if buffer_delay > 0:
-            if active_stop:
-                if active_stop.wait(buffer_delay):
-                    _update_abort_status(ctx, thread_name)
-                    return False
-            else:
-                time.sleep(buffer_delay)
-        is_last_page = (page_index == total_pages - 1)
-        if is_last_page:
-            if has_configured_answer_duration(runtime_config.answer_duration_range_seconds):
-                try:
-                    ctx.update_thread_status(thread_name, "等待时长中", running=True)
-                except Exception:
-                    logging.info("更新线程状态失败：等待时长中", exc_info=True)
-            if simulate_answer_duration_delay(active_stop, runtime_config.answer_duration_range_seconds):
-                _update_abort_status(ctx, thread_name)
-                return False
-            if _abort_requested():
-                _update_abort_status(ctx, thread_name)
-                return False
-            break
-        clicked = _click_next_page_button(driver)
-        if not clicked:
-            raise NoSuchElementException("Next page button not found")
-        click_delay = float(HEADLESS_PAGE_CLICK_DELAY if headless_mode else 0.5)
-        if click_delay > 0:
-            if active_stop:
-                if active_stop.wait(click_delay):
-                    _update_abort_status(ctx, thread_name)
-                    return False
-            else:
-                time.sleep(click_delay)
 
-    if _abort_requested():
+        snapshot = _refresh_visible_question_snapshot(driver, reason=f"page_{page_number}_enter")
+        if _refresh_metadata_when_snapshot_drifts(ctx, snapshot):
+            page_plan = _build_metadata_page_plan(ctx)
+        page_questions = [meta for candidate_page, questions in page_plan if candidate_page == page_number for meta in questions]
+        question_index = 0
+
+        while question_index < len(page_questions):
+            if active_stop and active_stop.is_set():
+                _update_abort_status(ctx, thread_name)
+                return False
+
+            question_meta = page_questions[question_index]
+            question_num = int(getattr(question_meta, "num", 0) or 0)
+            if question_num <= 0:
+                question_index += 1
+                continue
+
+            progress_step += 1
+            if total_steps > 0:
+                try:
+                    ctx.update_thread_step(
+                        thread_name,
+                        progress_step,
+                        total_steps,
+                        status_text="答题中",
+                        running=True,
+                    )
+                except Exception:
+                    logging.info("更新线程步骤进度失败", exc_info=True)
+
+            question_selector = f"#div{question_num}"
+            try:
+                question_div = driver.find_element(By.CSS_SELECTOR, question_selector)
+            except Exception:
+                question_div = None
+
+            snapshot_item = snapshot.get(question_num) if isinstance(snapshot, dict) else None
+            question_visible = _question_is_visible(question_div, snapshot_item)
+            if not question_visible and question_index + 1 < len(page_questions):
+                refreshed = _refresh_visible_question_snapshot(driver, reason=f"question_{question_num}_expected_visible_miss")
+                if _refresh_metadata_when_snapshot_drifts(ctx, refreshed):
+                    page_plan = _build_metadata_page_plan(ctx)
+                    page_questions = [meta for candidate_page, questions in page_plan if candidate_page == page_number for meta in questions]
+                snapshot = refreshed
+                snapshot_item = snapshot.get(question_num)
+                question_visible = _question_is_visible(question_div, snapshot_item)
+
+            if question_div is None or not question_visible:
+                logging.info("跳过第%d题（缓存存在但当前未显示）", question_num)
+                question_index += 1
+                continue
+
+            question_type = str((snapshot_item or {}).get("type") or "").strip() if isinstance(snapshot_item, dict) else ""
+            if not question_type:
+                try:
+                    question_type = str(question_div.get_attribute("type") or "").strip()
+                except Exception:
+                    question_type = str(getattr(question_meta, "type_code", "") or "").strip()
+            if not question_type:
+                logging.info("跳过第%d题（type 属性为空）", question_num)
+                question_index += 1
+                continue
+
+            if _driver_question_looks_like_description(question_div, question_type):
+                title = _question_title_for_log(driver, question_num, question_div)
+                if title:
+                    logging.info("跳过第%d题（说明页/阅读材料，type=%s，标题=%s）", question_num, question_type, title)
+                else:
+                    logging.info("跳过第%d题（说明页/阅读材料，type=%s）", question_num, question_type)
+                question_index += 1
+                continue
+
+            _run_question_dispatch(
+                driver,
+                ctx,
+                question_num=question_num,
+                question_type=question_type,
+                question_div=question_div,
+                indices=indices,
+                psycho_plan=psycho_plan,
+            )
+
+            should_refresh_after_dispatch = _question_requires_snapshot_refresh(question_meta)
+            if not should_refresh_after_dispatch and question_index + 1 < len(page_questions):
+                next_question_num = int(getattr(page_questions[question_index + 1], "num", 0) or 0)
+                next_snapshot_item = snapshot.get(next_question_num) if isinstance(snapshot, dict) else None
+                next_question_div = None
+                try:
+                    next_question_div = driver.find_element(By.CSS_SELECTOR, f"#div{next_question_num}")
+                except Exception:
+                    next_question_div = None
+                if not _question_is_visible(next_question_div, next_snapshot_item):
+                    should_refresh_after_dispatch = True
+
+            if should_refresh_after_dispatch:
+                refreshed = _refresh_visible_question_snapshot(driver, reason=f"question_{question_num}_display_logic")
+                previous_visible = _snapshot_visible_numbers(snapshot)
+                current_visible = _snapshot_visible_numbers(refreshed)
+                if _refresh_metadata_when_snapshot_drifts(ctx, refreshed):
+                    page_plan = _build_metadata_page_plan(ctx)
+                    page_questions = [meta for candidate_page, questions in page_plan if candidate_page == page_number for meta in questions]
+                snapshot = refreshed
+                if previous_visible != current_visible:
+                    logging.info(
+                        "WJX 题目显隐发生变化：question=%s before=%s after=%s",
+                        question_num,
+                        sorted(previous_visible),
+                        sorted(current_visible),
+                    )
+
+            question_index += 1
+
+        if not _finalize_page(
+            driver,
+            active_stop,
+            headless_mode=headless_mode,
+            is_last_page=(page_index == len(page_plan) - 1),
+            runtime_config=runtime_config,
+            thread_name=thread_name,
+            ctx=ctx,
+        ):
+            return False
+
+    if active_stop and active_stop.is_set():
         _update_abort_status(ctx, thread_name)
         return False
     try:
@@ -365,6 +695,28 @@ def brush(
         logging.info("更新线程状态失败：等待结果确认", exc_info=True)
     logging.info("WJX 整体答题耗时：elapsed=%.3fs", time.perf_counter() - run_started_at)
     return True
+
+
+def brush(
+    driver: BrowserDriver,
+    ctx: ExecutionState,
+    stop_signal: Optional[threading.Event] = None,
+    *,
+    thread_name: Optional[str] = None,
+    psycho_plan: Optional[Any] = None,
+) -> bool:
+    """批量填写一份问卷；返回 True 代表完整提交，False 代表过程中被用户打断。"""
+    normalized_thread_name = str(thread_name or threading.current_thread().name or "Worker-?").strip() or "Worker-?"
+    if stop_signal and stop_signal.is_set():
+        _update_abort_status(ctx, normalized_thread_name)
+        return False
+    return _brush_with_metadata(
+        driver,
+        ctx,
+        stop_signal=stop_signal,
+        thread_name=normalized_thread_name,
+        psycho_plan=psycho_plan,
+    )
 
 
 def brush_wjx(

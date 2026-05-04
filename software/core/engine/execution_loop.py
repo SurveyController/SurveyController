@@ -421,6 +421,21 @@ class ExecutionLoop:
         except Exception:
             logging.info("释放反填样本失败", exc_info=True)
 
+    def _wait_for_next_unique_proxy(
+        self,
+        stop_signal: threading.Event,
+        *,
+        thread_name: str,
+    ) -> bool:
+        if not self.config.random_proxy_ip_enabled:
+            return True
+        self._update_thread_status(thread_name, "等待新代理", running=True)
+        while not stop_signal.is_set():
+            if self.state.wait_for_runtime_change(stop_signal=stop_signal, timeout=0.5):
+                return False
+            return True
+        return False
+
     def _handle_ai_runtime_error(self, exc: AIRuntimeError, stop_signal: threading.Event, *, thread_name: str) -> bool:
         return _handle_ai_runtime_error_impl(
             exc,
@@ -609,6 +624,13 @@ class ExecutionLoop:
                         should_refill = False
                         should_requeue_dispatch = False
                         break
+                    if bool(getattr(outcome, "should_rotate_proxy", False)):
+                        active_session.dispose()
+                        active_session = None
+                        if not self._wait_for_next_unique_proxy(stop_signal, thread_name=thread_name):
+                            should_refill = False
+                            should_requeue_dispatch = False
+                            break
                     dispatch_delay_seconds = self._resolve_dispatch_delay_seconds()
                     if dispatch_delay_seconds > 0:
                         self._update_thread_step(thread_name, "等待提交间隔")
@@ -776,6 +798,9 @@ class ExecutionLoop:
                 )
                 if outcome.status == "success":
                     session.dispose()
+                    if bool(getattr(outcome, "should_rotate_proxy", False)) and not self._wait_for_next_unique_proxy(stop_signal, thread_name=thread_name):
+                        should_requeue_dispatch = False
+                        break
                     if outcome.should_stop:
                         should_requeue_dispatch = False
                         break
