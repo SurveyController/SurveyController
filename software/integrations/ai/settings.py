@@ -5,6 +5,8 @@ from __future__ import annotations
 
 from typing import Any, Dict, List, Optional
 
+from software.app.settings_store import app_settings
+
 AI_PROVIDERS = {
     "deepseek": {
         "label": "DeepSeek",
@@ -92,6 +94,7 @@ _DEFAULT_AI_SETTINGS: Dict[str, Any] = {
     "system_prompt": DEFAULT_SYSTEM_PROMPT_FREE,
 }
 _RUNTIME_AI_SETTINGS: Optional[Dict[str, Any]] = None
+_AI_SETTINGS_KEY_PREFIX = "ai/"
 
 __all__ = [
     "AI_MODE_FREE",
@@ -109,6 +112,7 @@ __all__ = [
     "get_ai_settings",
     "get_default_system_prompt",
     "save_ai_settings",
+    "reset_ai_settings",
 ]
 
 
@@ -123,8 +127,37 @@ def get_default_system_prompt(ai_mode: Any = AI_MODE_PROVIDER) -> str:
 def _ensure_runtime_settings() -> Dict[str, Any]:
     global _RUNTIME_AI_SETTINGS
     if _RUNTIME_AI_SETTINGS is None:
-        _RUNTIME_AI_SETTINGS = dict(_DEFAULT_AI_SETTINGS)
+        _RUNTIME_AI_SETTINGS = _load_ai_settings_from_store()
     return _RUNTIME_AI_SETTINGS
+
+
+def _load_ai_settings_from_store() -> Dict[str, Any]:
+    settings = dict(_DEFAULT_AI_SETTINGS)
+    store = app_settings()
+    settings["ai_mode"] = _normalize_ai_mode(store.value(f"{_AI_SETTINGS_KEY_PREFIX}mode", settings["ai_mode"]))
+    provider = str(store.value(f"{_AI_SETTINGS_KEY_PREFIX}provider", settings["provider"]) or "deepseek").strip()
+    settings["provider"] = provider if provider in AI_PROVIDERS else "deepseek"
+    settings["api_key"] = str(store.value(f"{_AI_SETTINGS_KEY_PREFIX}api_key", settings["api_key"]) or "")
+    settings["base_url"] = str(store.value(f"{_AI_SETTINGS_KEY_PREFIX}base_url", settings["base_url"]) or "").strip()
+    settings["api_protocol"] = _normalize_custom_api_protocol(
+        store.value(f"{_AI_SETTINGS_KEY_PREFIX}api_protocol", settings["api_protocol"])
+    )
+    settings["model"] = str(store.value(f"{_AI_SETTINGS_KEY_PREFIX}model", settings["model"]) or "").strip()
+    prompt = str(store.value(f"{_AI_SETTINGS_KEY_PREFIX}system_prompt", settings["system_prompt"]) or "").strip()
+    settings["system_prompt"] = prompt or get_default_system_prompt(settings["ai_mode"])
+    return settings
+
+
+def _persist_ai_settings(settings: Dict[str, Any]) -> None:
+    store = app_settings()
+    store.setValue(f"{_AI_SETTINGS_KEY_PREFIX}mode", settings["ai_mode"])
+    store.setValue(f"{_AI_SETTINGS_KEY_PREFIX}provider", settings["provider"])
+    store.setValue(f"{_AI_SETTINGS_KEY_PREFIX}api_key", settings["api_key"])
+    store.setValue(f"{_AI_SETTINGS_KEY_PREFIX}base_url", settings["base_url"])
+    store.setValue(f"{_AI_SETTINGS_KEY_PREFIX}api_protocol", settings["api_protocol"])
+    store.setValue(f"{_AI_SETTINGS_KEY_PREFIX}model", settings["model"])
+    store.setValue(f"{_AI_SETTINGS_KEY_PREFIX}system_prompt", settings["system_prompt"])
+    store.sync()
 
 
 def get_ai_settings() -> Dict[str, Any]:
@@ -164,6 +197,34 @@ def save_ai_settings(
         settings["model"] = str(model)
     if system_prompt is not None:
         settings["system_prompt"] = str(system_prompt)
+    settings["ai_mode"] = _normalize_ai_mode(settings.get("ai_mode"))
+    provider_value = str(settings.get("provider") or "deepseek").strip()
+    settings["provider"] = provider_value if provider_value in AI_PROVIDERS else "deepseek"
+    settings["api_key"] = str(settings.get("api_key") or "")
+    settings["base_url"] = str(settings.get("base_url") or "").strip()
+    settings["api_protocol"] = _normalize_custom_api_protocol(settings.get("api_protocol"))
+    settings["model"] = str(settings.get("model") or "").strip()
+    prompt = str(settings.get("system_prompt") or "").strip()
+    settings["system_prompt"] = prompt or get_default_system_prompt(settings["ai_mode"])
+    _persist_ai_settings(settings)
+
+
+def reset_ai_settings() -> None:
+    """重置 AI 配置并清理持久化存储。"""
+    global _RUNTIME_AI_SETTINGS
+    store = app_settings()
+    for key in (
+        f"{_AI_SETTINGS_KEY_PREFIX}mode",
+        f"{_AI_SETTINGS_KEY_PREFIX}provider",
+        f"{_AI_SETTINGS_KEY_PREFIX}api_key",
+        f"{_AI_SETTINGS_KEY_PREFIX}base_url",
+        f"{_AI_SETTINGS_KEY_PREFIX}api_protocol",
+        f"{_AI_SETTINGS_KEY_PREFIX}model",
+        f"{_AI_SETTINGS_KEY_PREFIX}system_prompt",
+    ):
+        store.remove(key)
+    store.sync()
+    _RUNTIME_AI_SETTINGS = dict(_DEFAULT_AI_SETTINGS)
 
 
 def get_ai_readiness_error(config: Optional[Dict[str, Any]] = None) -> str:
