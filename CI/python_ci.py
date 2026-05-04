@@ -86,7 +86,7 @@ def main() -> int:
     compile_issues = run_compile_checks(compile_targets)
     ruff_issues, ruff_error = run_ruff_check(target_dirs)
     pyright_issues, pyright_error = run_pyright_check(target_dirs) if pyright_mode else ([], None)
-    unit_test_issue = run_unit_tests()
+    unit_test_issue, coverage_summary = run_unit_tests()
     import_issues = run_module_import_checks(modules) if args.full else []
     window_issue = run_window_smoke_check() if args.full else None
 
@@ -112,6 +112,9 @@ def main() -> int:
     if pyright_mode:
         print(f"[INFO] Pyright diagnostics: {len(pyright_issues)}")
     print(f"[INFO] Unit test failures: {1 if unit_test_issue else 0}")
+    if coverage_summary:
+        print("[INFO] Coverage summary:")
+        print(coverage_summary)
     print(f"[INFO] Module import failures: {len(import_issues)}")
     print(f"[INFO] Main window smoke failures: {1 if window_issue else 0}")
     print(f"[INFO] Elapsed time: {elapsed:.2f}s")

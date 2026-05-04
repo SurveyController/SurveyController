@@ -1,12 +1,9 @@
 from __future__ import annotations
-
 import threading
-import unittest
-
 from software.ui.controller.run_controller import EngineGuiAdapter
 
-
 class _FakeCleanupTarget:
+
     def __init__(self, name: str, events: list[str], on_quit=None) -> None:
         self.name = name
         self.events = events
@@ -24,43 +21,27 @@ class _FakeCleanupTarget:
         if callable(self.on_quit):
             self.on_quit()
 
+class EngineGuiAdapterCleanupTests:
 
-class EngineGuiAdapterCleanupTests(unittest.TestCase):
     def _build_adapter(self) -> EngineGuiAdapter:
-        return EngineGuiAdapter(
-            dispatcher=lambda callback: callback(),
-            async_dispatcher=lambda callback: callback(),
-            stop_signal=threading.Event(),
-        )
+        return EngineGuiAdapter(dispatcher=lambda callback: callback(), async_dispatcher=lambda callback: callback(), stop_signal=threading.Event())
 
     def test_cleanup_browsers_uses_lifo_order(self) -> None:
         adapter = self._build_adapter()
         events: list[str] = []
-        pool = _FakeCleanupTarget("pool", events)
-        driver = _FakeCleanupTarget("driver", events)
-
+        pool = _FakeCleanupTarget('pool', events)
+        driver = _FakeCleanupTarget('driver', events)
         adapter.register_cleanup_target(pool)
         adapter.register_cleanup_target(driver)
         adapter.cleanup_browsers()
-
-        self.assertEqual(events, ["driver", "pool"])
+        assert events == ['driver', 'pool']
 
     def test_cleanup_browsers_drains_targets_added_during_cleanup(self) -> None:
         adapter = self._build_adapter()
         events: list[str] = []
-        late = _FakeCleanupTarget("late", events)
-        first = _FakeCleanupTarget(
-            "first",
-            events,
-            on_quit=lambda: adapter.register_cleanup_target(late),
-        )
-
+        late = _FakeCleanupTarget('late', events)
+        first = _FakeCleanupTarget('first', events, on_quit=lambda: adapter.register_cleanup_target(late))
         adapter.register_cleanup_target(first)
         adapter.cleanup_browsers()
-
-        self.assertEqual(events, ["first", "late"])
-        self.assertEqual(adapter.active_drivers, [])
-
-
-if __name__ == "__main__":
-    unittest.main()
+        assert events == ['first', 'late']
+        assert adapter.active_drivers == []

@@ -1,42 +1,43 @@
 from __future__ import annotations
 
 import asyncio
-import unittest
 
 from software.core.engine.async_scheduler import AsyncScheduler
 
 
-class AsyncSchedulerTests(unittest.IsolatedAsyncioTestCase):
-    async def test_scheduler_enforces_bounded_tokens(self) -> None:
+def test_scheduler_enforces_bounded_tokens() -> None:
+    async def _exercise() -> None:
         scheduler = AsyncScheduler(concurrency=2)
         try:
             first = await scheduler.acquire()
             second = await scheduler.acquire()
-            self.assertIsNotNone(first)
-            self.assertIsNotNone(second)
+            assert first is not None
+            assert second is not None
 
             waiter = asyncio.create_task(scheduler.acquire())
             await asyncio.sleep(0.05)
-            self.assertFalse(waiter.done())
+            assert not waiter.done()
 
             await scheduler.release(first or 0, requeue=True)
-            self.assertEqual(await asyncio.wait_for(waiter, timeout=1.0), first)
+            assert await asyncio.wait_for(waiter, timeout=1.0) == first
         finally:
             await scheduler.close()
 
-    async def test_scheduler_delays_requeued_token(self) -> None:
+    asyncio.run(_exercise())
+
+
+def test_scheduler_delays_requeued_token() -> None:
+    async def _exercise() -> None:
         scheduler = AsyncScheduler(concurrency=1)
         try:
             token = await scheduler.acquire()
-            self.assertIsNotNone(token)
+            assert token is not None
             await scheduler.release(token or 0, requeue=True, delay_seconds=0.05)
             delayed = asyncio.create_task(scheduler.acquire())
             await asyncio.sleep(0.01)
-            self.assertFalse(delayed.done())
-            self.assertEqual(await asyncio.wait_for(delayed, timeout=1.0), token)
+            assert not delayed.done()
+            assert await asyncio.wait_for(delayed, timeout=1.0) == token
         finally:
             await scheduler.close()
 
-
-if __name__ == "__main__":
-    unittest.main()
+    asyncio.run(_exercise())

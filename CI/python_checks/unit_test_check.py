@@ -17,9 +17,12 @@ def main() -> int:
     target_dirs = ensure_target_dirs()
 
     print_scan_targets(target_dirs)
-    issue = run_unit_tests()
+    issue, coverage_summary = run_unit_tests()
     print(f"[INFO] Unit test failures: {1 if issue else 0}")
     if issue is None:
+        if coverage_summary:
+            print("[INFO] Coverage summary:")
+            print(coverage_summary)
         print("[PASS] Unit tests passed.")
         return 0
 

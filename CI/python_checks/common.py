@@ -267,6 +267,22 @@ def build_pytest_args(test_target: str, *, verbose_in_ci: bool) -> list[str]:
     return args
 
 
+def build_unit_test_pytest_args(*, verbose_in_ci: bool) -> list[str]:
+    args = build_pytest_args("CI/unit_tests", verbose_in_ci=verbose_in_ci)
+    args.extend(
+        [
+            "--cov=software",
+            "--cov=wjx",
+            "--cov=tencent",
+            "--cov=credamo",
+            "--cov-fail-under=70",
+            "--cov-report=term-missing:skip-covered",
+            "--cov-report=xml:coverage.xml",
+        ]
+    )
+    return args
+
+
 def run_compile_checks(files: Iterable[Path]) -> list[dict]:
     issues: list[dict] = []
     for path in files:
@@ -482,11 +498,36 @@ def run_window_smoke_check() -> dict | None:
     }
 
 
-def run_unit_tests() -> dict | None:
+def extract_coverage_summary(stdout: str) -> str | None:
+    lines = stdout.splitlines()
+    start_index: int | None = None
+    for index, line in enumerate(lines):
+        if line.strip().startswith("Name") and "Cover" in line:
+            start_index = index
+            break
+
+    if start_index is None:
+        return None
+
+    summary_lines: list[str] = []
+    for line in lines[start_index:]:
+        stripped = line.rstrip()
+        if not stripped:
+            if summary_lines:
+                break
+            continue
+        summary_lines.append(stripped)
+        if stripped.startswith("TOTAL"):
+            break
+
+    return "\n".join(summary_lines) if summary_lines else None
+
+
+def run_unit_tests() -> tuple[dict | None, str | None]:
     env = make_child_env()
     try:
         result = subprocess.run(
-            build_pytest_args("CI/unit_tests", verbose_in_ci=True),
+            build_unit_test_pytest_args(verbose_in_ci=True),
             cwd=str(ROOT_DIR),
             capture_output=True,
             text=True,
@@ -499,10 +540,12 @@ def run_unit_tests() -> dict | None:
         return {
             "phase": "unit",
             "message": f"Unit tests timed out (>{UNIT_TEST_TIMEOUT_SECONDS}s).",
-        }
+        }, None
+
+    coverage_summary = extract_coverage_summary(result.stdout or "")
 
     if result.returncode == 0:
-        return None
+        return None, coverage_summary
 
     summary = summarize_child_output(result.stdout, result.stderr) or "Unit tests failed."
     return {
@@ -510,7 +553,7 @@ def run_unit_tests() -> dict | None:
         "message": summary,
         "stdout": (result.stdout or "").strip(),
         "stderr": (result.stderr or "").strip(),
-    }
+    }, coverage_summary
 
 
 def print_issues(title: str, issues: Iterable[dict]) -> None:

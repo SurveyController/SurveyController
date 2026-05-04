@@ -1,4 +1,4 @@
-import unittest
+import asyncio
 
 from software.network.browser.async_owner_pool import _route_runtime_resource
 
@@ -25,27 +25,27 @@ class _FakeRoute:
         self.actions.append("fallback")
 
 
-class AsyncBrowserOwnerPoolRouteTests(unittest.IsolatedAsyncioTestCase):
-    async def test_processjq_request_falls_through_to_specific_route(self) -> None:
+def test_processjq_request_falls_through_to_specific_route() -> None:
+    async def _exercise() -> list[str]:
         route = _FakeRoute()
 
         await _route_runtime_resource(
             route,
             _FakeRequest(url="https://www.wjx.cn/joinnew/processjq.ashx?x=1", resource_type="xhr"),
         )
+        return route.actions
 
-        self.assertEqual(route.actions, ["fallback"])
+    assert asyncio.run(_exercise()) == ["fallback"]
 
-    async def test_runtime_route_aborts_heavy_resources(self) -> None:
+
+def test_runtime_route_aborts_heavy_resources() -> None:
+    async def _exercise() -> list[str]:
         route = _FakeRoute()
 
         await _route_runtime_resource(
             route,
             _FakeRequest(url="https://example.test/logo.png", resource_type="image"),
         )
+        return route.actions
 
-        self.assertEqual(route.actions, ["abort"])
-
-
-if __name__ == "__main__":
-    unittest.main()
+    assert asyncio.run(_exercise()) == ["abort"]
