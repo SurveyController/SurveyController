@@ -9,7 +9,7 @@ import time
 from typing import Any, Dict, List, Optional, Tuple
 
 from software.app.config import DEFAULT_FILL_TEXT
-from software.network.browser.transient import create_playwright_driver
+from software.network.browser.parse_pool import acquire_parse_browser_session
 from software.providers.common import SURVEY_PROVIDER_CREDAMO
 from credamo.provider.runtime_dom import _looks_like_loading_shell, _page_loading_snapshot, _wait_for_question_roots
 
@@ -1023,14 +1023,7 @@ def _collect_current_page_until_stable(page: Any, *, page_number: int) -> Tuple[
 
 
 def parse_credamo_survey(url: str) -> Tuple[List[Dict[str, Any]], str]:
-    driver = None
-    try:
-        driver, _browser_name = create_playwright_driver(
-            headless=True,
-            prefer_browsers=["edge", "chrome"],
-            persistent_browser=False,
-            transient_launch=True,
-        )
+    with acquire_parse_browser_session() as driver:
         driver.get(url, timeout=45000, wait_until="domcontentloaded")
         page = driver.page
         try:
@@ -1075,9 +1068,3 @@ def parse_credamo_survey(url: str) -> Tuple[List[Dict[str, Any]], str]:
             except Exception:
                 title = ""
         return questions, title or "Credamo 见数问卷"
-    finally:
-        if driver is not None:
-            try:
-                driver.quit()
-            except Exception:
-                logging.info("关闭 Credamo 解析浏览器失败", exc_info=True)

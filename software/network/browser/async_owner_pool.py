@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import inspect
 import logging
 from dataclasses import dataclass
 from typing import Any, List, Optional, Tuple
@@ -216,9 +217,13 @@ async def _route_runtime_resource(route: Any, request: Any) -> None:
     async def _pass_through() -> None:
         fallback = getattr(route, "fallback", None)
         if callable(fallback):
-            await fallback()
+            result = fallback()
+            if inspect.isawaitable(result):
+                await result
             return
-        await route.continue_()
+        result = route.continue_()
+        if inspect.isawaitable(result):
+            await result
 
     try:
         resource_type = str(getattr(request, "resource_type", "") or "").lower()

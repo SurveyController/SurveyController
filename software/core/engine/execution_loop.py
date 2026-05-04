@@ -6,7 +6,7 @@ import logging
 import random
 import threading
 import traceback
-from typing import Any, Callable
+from typing import Any, Callable, cast
 
 import software.core.modes.timed_mode as timed_mode
 from software.app.config import BROWSER_PREFERENCE
@@ -139,9 +139,10 @@ class ExecutionLoop:
         log_message: str,
     ) -> bool:
         threshold_getter = getattr(self.stop_policy, "proxy_unavailable_threshold", None)
+        threshold_value = threshold_getter() if callable(threshold_getter) else None
         threshold_override = (
-            int(threshold_getter())
-            if callable(threshold_getter)
+            int(cast(int, threshold_value))
+            if threshold_value is not None
             else max(1, int(self.config.fail_threshold or 1), int(self.config.num_threads or 1))
         )
         stopped = self.stop_policy.record_failure(

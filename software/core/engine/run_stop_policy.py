@@ -9,6 +9,7 @@ import time
 from typing import Any, Optional
 
 from software.core.engine.failure_reason import FailureReason
+from software.core.engine.stop_signal import StopSignalLike
 from software.core.task import ExecutionConfig, ExecutionState
 
 
@@ -20,7 +21,7 @@ class RunStopPolicy:
         self.state = state
         self.gui_instance = gui_instance
 
-    def wait_if_paused(self, stop_signal: Optional[threading.Event]) -> None:
+    def wait_if_paused(self, stop_signal: Optional[StopSignalLike]) -> None:
         try:
             if self.gui_instance:
                 self.gui_instance.wait_if_paused(stop_signal)
@@ -42,7 +43,7 @@ class RunStopPolicy:
 
     def record_failure(
         self,
-        stop_signal: Optional[threading.Event],
+        stop_signal: Optional[StopSignalLike],
         thread_name: Optional[str] = None,
         *,
         failure_reason: FailureReason = FailureReason.FILL_FAILED,
@@ -127,7 +128,7 @@ class RunStopPolicy:
             return True
         return False
 
-    def record_success(self, stop_signal: threading.Event, thread_name: Optional[str] = None) -> bool:
+    def record_success(self, stop_signal: StopSignalLike, thread_name: Optional[str] = None) -> bool:
         should_handle_random_ip = False
         trigger_target_stop = False
         should_break = False
@@ -182,7 +183,7 @@ class RunStopPolicy:
                 handler(stop_signal)
         return should_break or trigger_target_stop
 
-    def trigger_target_reached_stop(self, stop_signal: Optional[threading.Event]) -> None:
+    def trigger_target_reached_stop(self, stop_signal: Optional[StopSignalLike]) -> None:
         with self.state._target_reached_stop_lock:
             if self.state._target_reached_stop_triggered:
                 if stop_signal:
