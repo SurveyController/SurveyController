@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import os
 import tempfile
+import threading
+import time
 import unittest
 
 from software.providers.contracts import build_survey_definition
@@ -14,6 +16,9 @@ class SurveyCacheTests(unittest.TestCase):
         original_runtime_directory = survey_cache.get_runtime_directory
         survey_cache.get_runtime_directory = lambda: temp_dir
         return original_runtime_directory
+
+    def tearDown(self) -> None:
+        survey_cache.clear_survey_parse_cache()
 
     def test_same_fingerprint_reuses_cached_definition(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -201,6 +206,88 @@ class SurveyCacheTests(unittest.TestCase):
 
             self.assertEqual(removed_count, 2)
             self.assertEqual(os.listdir(cache_dir), [])
+
+    def test_same_url_concurrent_requests_share_singleflight_parse(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            original_runtime_directory = self._patch_runtime_directory(temp_dir)
+            original_fetch_fingerprint = survey_cache._fetch_remote_fingerprint
+            call_count = 0
+            call_lock = threading.Lock()
+            results: list[str] = []
+            start_event = threading.Event()
+            errors: list[BaseException] = []
+
+            def parser(url: str):
+                nonlocal call_count
+                with call_lock:
+                    call_count += 1
+                start_event.wait(timeout=1)
+                time.sleep(0.05)
+                return build_survey_definition("wjx", "并发标题", [{"num": 1, "title": url, "type_code": "3"}])
+
+            def worker() -> None:
+                try:
+                    definition = parse_survey_with_cache("https://www.wjx.cn/vm/demo.aspx", parser)
+                    results.append(definition.title)
+                except BaseException as exc:
+                    errors.append(exc)
+
+            threads = [threading.Thread(target=worker) for _ in range(5)]
+            try:
+                survey_cache._fetch_remote_fingerprint = lambda url, provider: None
+                for thread in threads:
+                    thread.start()
+                time.sleep(0.05)
+                start_event.set()
+                for thread in threads:
+                    thread.join(timeout=5)
+            finally:
+                survey_cache.get_runtime_directory = original_runtime_directory
+                survey_cache._fetch_remote_fingerprint = original_fetch_fingerprint
+
+            self.assertEqual(errors, [])
+            self.assertEqual(call_count, 1)
+            self.assertEqual(results, ["并发标题"] * 5)
+
+    def test_stale_cache_returns_immediately_and_triggers_single_background_refresh(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            original_runtime_directory = self._patch_runtime_directory(temp_dir)
+            original_fetch_fingerprint = survey_cache._fetch_remote_fingerprint
+            original_now = survey_cache._now
+            now_values = [1000, 1000 + survey_cache._SURVEY_PARSE_CACHE_TTL_SECONDS + 10]
+            titles = ["旧标题", "新标题"]
+            parser_calls: list[str] = []
+            refresh_event = threading.Event()
+
+            def parser(url: str):
+                parser_calls.append(url)
+                title = titles.pop(0)
+                if title == "新标题":
+                    refresh_event.set()
+                return build_survey_definition("wjx", title, [{"num": 1, "title": title, "type_code": "3"}])
+
+            fingerprint_calls = iter(["old", "changed", "changed"])
+
+            try:
+                survey_cache._now = lambda: now_values.pop(0) if now_values else 1000 + survey_cache._SURVEY_PARSE_CACHE_TTL_SECONDS + 20
+                survey_cache._fetch_remote_fingerprint = lambda url, provider: next(fingerprint_calls, "changed")
+                first = parse_survey_with_cache("https://www.wjx.cn/vm/demo.aspx", parser)
+                second = parse_survey_with_cache("https://www.wjx.cn/vm/demo.aspx", parser)
+                refresh_event.wait(timeout=3)
+                for _ in range(30):
+                    third = parse_survey_with_cache("https://www.wjx.cn/vm/demo.aspx", parser)
+                    if third.title == "新标题":
+                        break
+                    time.sleep(0.05)
+            finally:
+                survey_cache.get_runtime_directory = original_runtime_directory
+                survey_cache._fetch_remote_fingerprint = original_fetch_fingerprint
+                survey_cache._now = original_now
+
+            self.assertEqual(first.title, "旧标题")
+            self.assertEqual(second.title, "旧标题")
+            self.assertEqual(third.title, "新标题")
+            self.assertEqual(len(parser_calls), 2)
 
 
 if __name__ == "__main__":

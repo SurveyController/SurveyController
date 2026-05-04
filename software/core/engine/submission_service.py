@@ -18,6 +18,7 @@ from software.app.config import (
 )
 from software.core.engine.failure_reason import FailureReason
 from software.core.engine.run_stop_policy import RunStopPolicy
+from software.core.engine.stop_signal import StopSignalLike
 from software.core.task import ExecutionConfig, ExecutionState
 from software.logging.log_utils import log_suppressed_exception
 from software.network.browser import BrowserDriver
@@ -60,7 +61,7 @@ class SubmissionService:
 
     def _build_success_outcome(
         self,
-        stop_signal: threading.Event,
+        stop_signal: StopSignalLike,
         *,
         thread_name: str,
     ) -> SubmissionOutcome:
@@ -86,7 +87,7 @@ class SubmissionService:
     def _wait_for_completion_page(
         self,
         driver: BrowserDriver,
-        stop_signal: threading.Event,
+        stop_signal: StopSignalLike,
         max_wait_seconds: float,
         poll_interval: float,
     ) -> bool:
@@ -111,7 +112,7 @@ class SubmissionService:
     def _handle_detected_submission_verification(
         self,
         driver: BrowserDriver,
-        stop_signal: threading.Event,
+        stop_signal: StopSignalLike,
         gui_instance: Any,
         thread_name: Optional[str] = None,
     ) -> SubmissionOutcome:
@@ -150,7 +151,7 @@ class SubmissionService:
     def _check_submission_verification_after_submit(
         self,
         driver: BrowserDriver,
-        stop_signal: threading.Event,
+        stop_signal: StopSignalLike,
         gui_instance: Any,
         thread_name: Optional[str] = None,
     ) -> Optional[SubmissionOutcome]:
@@ -176,7 +177,7 @@ class SubmissionService:
         self,
         driver: BrowserDriver,
         *,
-        stop_signal: threading.Event,
+        stop_signal: StopSignalLike,
         gui_instance: Any,
         thread_name: str,
     ) -> SubmissionOutcome:

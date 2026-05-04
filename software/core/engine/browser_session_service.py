@@ -7,6 +7,7 @@ import threading
 import time
 from typing import Any, Optional
 
+from software.core.engine.stop_signal import StopSignalLike
 from software.network.browser.manager import (
     BrowserManager,
     create_browser_manager,
@@ -197,7 +198,7 @@ class BrowserSessionService:
                 self._browser_manager = None
 
     @staticmethod
-    def _is_stop_requested(stop_signal: Optional[threading.Event]) -> bool:
+    def _is_stop_requested(stop_signal: Optional[StopSignalLike]) -> bool:
         return bool(stop_signal is not None and stop_signal.is_set())
 
     def _release_owner_lease(self) -> None:
@@ -216,7 +217,7 @@ class BrowserSessionService:
         window_x_pos: int,
         window_y_pos: int,
         *,
-        stop_signal: Optional[threading.Event] = None,
+        stop_signal: Optional[StopSignalLike] = None,
         acquire_browser_semaphore: bool = True,
     ) -> Optional[str]:
         should_wait_for_proxy = bool(self.config.random_proxy_ip_enabled and stop_signal is not None)

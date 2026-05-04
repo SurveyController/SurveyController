@@ -4,14 +4,13 @@ from __future__ import annotations
 
 import logging
 import re
-import time
 from typing import Any, Dict, List, Optional, Tuple
 
-from software.network.browser.transient import create_playwright_driver
 from software.network.browser import (
     describe_playwright_startup_error,
     is_playwright_startup_environment_error,
 )
+from software.network.browser.parse_pool import acquire_parse_browser_session
 from wjx.provider.html_parser import (
     _normalize_html_text,
     extract_survey_title_from_html,
@@ -162,24 +161,26 @@ def parse_wjx_survey(url: str) -> Tuple[List[Dict[str, Any]], str]:
         info = None
 
     if info is None:
-        driver = None
         try:
-            driver, _ = create_playwright_driver(
-                headless=True,
-                user_agent=None,
-                persistent_browser=False,
-                transient_launch=True,
-            )
-            driver.get(url)
-            time.sleep(2.5)
-            page_source = driver.page_source
-            if is_paused_survey_page(page_source):
-                raise SurveyPausedError(PAUSED_SURVEY_ERROR_MESSAGE)
-            not_open_message = build_not_open_survey_message(page_source)
-            if not_open_message:
-                raise SurveyNotOpenError(not_open_message)
-            info = parse_survey_questions_from_html(page_source)
-            title = extract_survey_title_from_html(page_source) or title
+            with acquire_parse_browser_session() as driver:
+                driver.get(url, timeout=20000, wait_until="domcontentloaded")
+                page = getattr(driver, "page", None)
+                if page is not None:
+                    try:
+                        page.wait_for_selector("#divQuestion, div[topic], fieldset", state="attached", timeout=6000)
+                    except Exception:
+                        try:
+                            page.wait_for_load_state("networkidle", timeout=2000)
+                        except Exception:
+                            pass
+                page_source = driver.page_source
+                if is_paused_survey_page(page_source):
+                    raise SurveyPausedError(PAUSED_SURVEY_ERROR_MESSAGE)
+                not_open_message = build_not_open_survey_message(page_source)
+                if not_open_message:
+                    raise SurveyNotOpenError(not_open_message)
+                info = parse_survey_questions_from_html(page_source)
+                title = extract_survey_title_from_html(page_source) or title
         except SurveyPausedError:
             raise
         except SurveyNotOpenError:
@@ -188,12 +189,6 @@ def parse_wjx_survey(url: str) -> Tuple[List[Dict[str, Any]], str]:
             browser_exc = exc
             logging.exception("使用 Playwright 获取问卷失败，url=%r", url)
             info = None
-        finally:
-            try:
-                if driver:
-                    driver.quit()
-            except Exception:
-                logging.info("关闭解析用浏览器实例失败", exc_info=True)
 
     if not info:
         raise RuntimeError(_build_parser_failure_message(http_exc, browser_exc))

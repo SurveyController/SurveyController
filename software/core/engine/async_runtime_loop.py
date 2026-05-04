@@ -6,7 +6,7 @@ import asyncio
 import logging
 import random
 import traceback
-from typing import Any, Optional
+from typing import Any, Optional, cast
 
 import software.core.modes.timed_mode as timed_mode
 from software.app.config import BROWSER_PREFERENCE
@@ -317,9 +317,10 @@ class AsyncSlotRunner:
 
     def _handle_proxy_unavailable(self, *, status_text: str, log_message: str) -> bool:
         threshold_getter = getattr(self.stop_policy, "proxy_unavailable_threshold", None)
+        threshold_value = threshold_getter() if callable(threshold_getter) else None
         threshold_override = (
-            int(threshold_getter())
-            if callable(threshold_getter)
+            int(cast(int, threshold_value))
+            if threshold_value is not None
             else max(1, int(self.config.fail_threshold or 1), int(self.config.num_threads or 1))
         )
         stopped = self.stop_policy.record_failure(

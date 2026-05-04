@@ -30,7 +30,20 @@ _CACHE_DIR_NAME = "survey_cache"
 _SURVEY_PARSE_CACHE_TTL_SECONDS = 2 * 60 * 60
 _FALLBACK_TTL_SECONDS = _SURVEY_PARSE_CACHE_TTL_SECONDS
 _CREDAMO_TTL_SECONDS = _SURVEY_PARSE_CACHE_TTL_SECONDS
-_LOCK = threading.RLock()
+_STALE_WHILE_REVALIDATE_MAX_SECONDS = 24 * 60 * 60
+_REGISTRY_LOCK = threading.RLock()
+
+
+class _InflightEntry:
+    def __init__(self) -> None:
+        self.event = threading.Event()
+        self.result: Optional[SurveyDefinition] = None
+        self.error: Optional[BaseException] = None
+
+
+_INFLIGHT_BY_URL: dict[str, _InflightEntry] = {}
+_REFRESH_IN_PROGRESS: set[str] = set()
+_REFRESH_THREADS: set[threading.Thread] = set()
 
 
 def _now() -> float:
@@ -211,65 +224,200 @@ def _write_cached_definition(path: str, definition: SurveyDefinition, fingerprin
         logging.info("写入问卷解析缓存失败，path=%r：%s", path, exc)
 
 
+def _stale_while_revalidate_window_seconds(provider: str) -> Optional[int]:
+    if provider == SURVEY_PROVIDER_CREDAMO:
+        return None
+    return _STALE_WHILE_REVALIDATE_MAX_SECONDS
+
+
+def _cache_age_seconds(cached_at: float) -> float:
+    return max(0.0, _now() - float(cached_at or 0.0))
+
+
+def _begin_inflight(normalized_url: str) -> tuple[_InflightEntry, bool]:
+    with _REGISTRY_LOCK:
+        entry = _INFLIGHT_BY_URL.get(normalized_url)
+        if entry is not None:
+            return entry, False
+        entry = _InflightEntry()
+        _INFLIGHT_BY_URL[normalized_url] = entry
+        return entry, True
+
+
+def _finish_inflight(normalized_url: str, entry: _InflightEntry, *, result: Optional[SurveyDefinition] = None, error: Optional[BaseException] = None) -> None:
+    entry.result = result
+    entry.error = error
+    entry.event.set()
+    with _REGISTRY_LOCK:
+        current = _INFLIGHT_BY_URL.get(normalized_url)
+        if current is entry:
+            _INFLIGHT_BY_URL.pop(normalized_url, None)
+
+
+def _wait_inflight(entry: _InflightEntry) -> SurveyDefinition:
+    entry.event.wait()
+    if entry.error is not None:
+        raise entry.error
+    if entry.result is None:
+        raise RuntimeError("问卷解析 singleflight 完成后结果为空")
+    return entry.result
+
+
+def _run_singleflight_parse(
+    normalized_url: str,
+    parser: Callable[[str], SurveyDefinition],
+    *,
+    on_success: Optional[Callable[[SurveyDefinition], None]] = None,
+) -> SurveyDefinition:
+    entry, is_leader = _begin_inflight(normalized_url)
+    if not is_leader:
+        return _wait_inflight(entry)
+    try:
+        definition = parser(normalized_url)
+        if on_success is not None:
+            on_success(definition)
+        _finish_inflight(normalized_url, entry, result=definition)
+        return definition
+    except BaseException as exc:
+        _finish_inflight(normalized_url, entry, error=exc)
+        raise
+
+
+def _start_background_refresh(
+    normalized_url: str,
+    provider: str,
+    path: str,
+    parser: Callable[[str], SurveyDefinition],
+) -> None:
+    with _REGISTRY_LOCK:
+        if normalized_url in _REFRESH_IN_PROGRESS:
+            return
+        _REFRESH_IN_PROGRESS.add(normalized_url)
+
+    def _refresh_worker() -> None:
+        try:
+            def _persist(definition: SurveyDefinition) -> None:
+                fingerprint = _fetch_remote_fingerprint(normalized_url, provider)
+                _write_cached_definition(path, definition, fingerprint)
+
+            refreshed = _run_singleflight_parse(normalized_url, parser, on_success=_persist)
+            logging.info(
+                "后台刷新问卷解析缓存成功，url=%r provider=%s questions=%s",
+                normalized_url,
+                provider,
+                len(getattr(refreshed, "questions", []) or []),
+            )
+        except Exception as exc:
+            logging.info("后台刷新问卷解析缓存失败，url=%r provider=%s：%s", normalized_url, provider, exc)
+        finally:
+            with _REGISTRY_LOCK:
+                _REFRESH_IN_PROGRESS.discard(normalized_url)
+                _REFRESH_THREADS.discard(threading.current_thread())
+
+    thread = threading.Thread(
+        target=_refresh_worker,
+        daemon=True,
+        name=f"SurveyCacheRefresh-{_cache_key(normalized_url)[:8]}",
+    )
+    with _REGISTRY_LOCK:
+        _REFRESH_THREADS.add(thread)
+    thread.start()
+
+
+def _wait_refresh_threads(timeout: float = 5.0) -> None:
+    deadline = time.time() + max(0.0, float(timeout or 0.0))
+    while True:
+        with _REGISTRY_LOCK:
+            threads = [thread for thread in _REFRESH_THREADS if thread.is_alive()]
+            _REFRESH_THREADS.clear()
+            _REFRESH_THREADS.update(threads)
+        if not threads:
+            return
+        now = time.time()
+        remaining = deadline - now
+        if remaining <= 0:
+            return
+        for thread in threads:
+            thread.join(timeout=min(remaining, 0.1))
+
+
 def parse_survey_with_cache(url: str, parser: Callable[[str], SurveyDefinition]) -> SurveyDefinition:
     """解析问卷；远端指纹未变时复用本地缓存。"""
     normalized_url = _normalize_cache_url(url)
     provider = detect_survey_provider(normalized_url)
     path = _cache_path(normalized_url)
+    ttl_only_seconds = _ttl_only_cache_seconds(provider)
+    stale_window_seconds = _stale_while_revalidate_window_seconds(provider)
+    refresh_after_seconds = _SURVEY_PARSE_CACHE_TTL_SECONDS
 
-    with _LOCK:
-        cached = _load_cached_definition(path)
-        ttl_only_seconds = _ttl_only_cache_seconds(provider)
-        if cached is not None and ttl_only_seconds is not None:
-            definition, _cached_fingerprint, cached_at = cached
-            if (_now() - cached_at) <= ttl_only_seconds:
-                logging.info("短时命中问卷解析缓存，url=%r provider=%s", normalized_url, provider)
-                return definition
-
-            logging.info("问卷短时缓存已过期，重新解析，url=%r provider=%s", normalized_url, provider)
-            definition = parser(normalized_url)
-            _write_cached_definition(path, definition, f"ttl-only:{provider}")
+    cached = _load_cached_definition(path)
+    if cached is not None and ttl_only_seconds is not None:
+        definition, _cached_fingerprint, cached_at = cached
+        cache_age = _cache_age_seconds(cached_at)
+        if cache_age <= ttl_only_seconds:
+            logging.info("短时命中问卷解析缓存，url=%r provider=%s", normalized_url, provider)
             return definition
 
-        if ttl_only_seconds is not None:
-            definition = parser(normalized_url)
-            _write_cached_definition(path, definition, f"ttl-only:{provider}")
+        logging.info("问卷短时缓存已过期，重新解析，url=%r provider=%s", normalized_url, provider)
+        return _run_singleflight_parse(
+            normalized_url,
+            parser,
+            on_success=lambda refreshed: _write_cached_definition(path, refreshed, f"ttl-only:{provider}"),
+        )
+
+    if ttl_only_seconds is not None:
+        return _run_singleflight_parse(
+            normalized_url,
+            parser,
+            on_success=lambda refreshed: _write_cached_definition(path, refreshed, f"ttl-only:{provider}"),
+        )
+
+    remote_fingerprint = _fetch_remote_fingerprint(normalized_url, provider)
+    if cached is not None:
+        definition, cached_fingerprint, cached_at = cached
+        cache_age = _cache_age_seconds(cached_at)
+        if remote_fingerprint and remote_fingerprint == cached_fingerprint:
+            logging.info("命中问卷解析缓存，url=%r", normalized_url)
+            return definition
+        if not remote_fingerprint and cached_fingerprint and cache_age <= _FALLBACK_TTL_SECONDS:
+            logging.info("远端指纹不可用，短时复用问卷解析缓存，url=%r", normalized_url)
+            return definition
+        if (
+            stale_window_seconds is not None
+            and cache_age > refresh_after_seconds
+            and cache_age <= stale_window_seconds
+        ):
+            logging.info("返回陈旧问卷解析缓存并触发后台刷新，url=%r provider=%s", normalized_url, provider)
+            _start_background_refresh(normalized_url, provider, path, parser)
             return definition
 
-        remote_fingerprint = _fetch_remote_fingerprint(normalized_url, provider)
-        if cached is not None:
-            definition, cached_fingerprint, cached_at = cached
-            if remote_fingerprint and remote_fingerprint == cached_fingerprint:
-                logging.info("命中问卷解析缓存，url=%r", normalized_url)
-                return definition
-            if not remote_fingerprint and cached_fingerprint and (_now() - cached_at) <= _FALLBACK_TTL_SECONDS:
-                logging.info("远端指纹不可用，短时复用问卷解析缓存，url=%r", normalized_url)
-                return definition
+    def _persist(definition: SurveyDefinition) -> None:
+        fingerprint = remote_fingerprint or _fetch_remote_fingerprint(normalized_url, provider)
+        _write_cached_definition(path, definition, fingerprint)
 
-        definition = parser(normalized_url)
-        if not remote_fingerprint:
-            remote_fingerprint = _fetch_remote_fingerprint(normalized_url, provider)
-        _write_cached_definition(path, definition, remote_fingerprint)
-        return definition
+    return _run_singleflight_parse(normalized_url, parser, on_success=_persist)
 
 
 def clear_survey_parse_cache() -> int:
     """清空问卷解析缓存目录，返回删除的文件/目录数量。"""
     cache_dir = _cache_directory()
+    _wait_refresh_threads(timeout=2.0)
+    with _REGISTRY_LOCK:
+        _INFLIGHT_BY_URL.clear()
+        _REFRESH_IN_PROGRESS.clear()
     if not os.path.isdir(cache_dir):
         return 0
 
     removed_count = 0
-    with _LOCK:
-        for entry in os.scandir(cache_dir):
-            try:
-                if entry.is_dir(follow_symlinks=False):
-                    shutil.rmtree(entry.path)
-                else:
-                    os.remove(entry.path)
-                removed_count += 1
-            except FileNotFoundError:
-                continue
+    for entry in os.scandir(cache_dir):
+        try:
+            if entry.is_dir(follow_symlinks=False):
+                shutil.rmtree(entry.path)
+            else:
+                os.remove(entry.path)
+            removed_count += 1
+        except FileNotFoundError:
+            continue
     return removed_count
 
 

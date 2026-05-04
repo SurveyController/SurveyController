@@ -9,7 +9,8 @@ import random
 import threading
 import time
 from concurrent.futures import Future
-from typing import Any, Optional, Set
+from collections.abc import Awaitable, Coroutine
+from typing import Any, Optional, Set, cast
 
 from software.logging.log_utils import log_suppressed_exception
 from software.network.browser.exceptions import NoSuchElementException, ProxyConnectionError
@@ -31,7 +32,7 @@ class AsyncLoopPortal:
     def loop(self) -> asyncio.AbstractEventLoop:
         return self._loop
 
-    def run(self, awaitable: Any) -> Any:
+    def run(self, awaitable: Awaitable[Any] | Any) -> Any:
         if self._loop.is_closed():
             if inspect.iscoroutine(awaitable):
                 awaitable.close()
@@ -42,8 +43,16 @@ class AsyncLoopPortal:
             if inspect.iscoroutine(awaitable):
                 awaitable.close()
             raise RuntimeError("不能在后台 asyncio 线程里阻塞等待自身协程")
+        coroutine: Coroutine[Any, Any, Any]
+        if inspect.iscoroutine(awaitable):
+            coroutine = cast(Coroutine[Any, Any, Any], awaitable)
+        else:
+            async def _await_wrapper() -> Any:
+                return await cast(Awaitable[Any], awaitable)
+
+            coroutine = _await_wrapper()
         try:
-            future: Future[Any] = asyncio.run_coroutine_threadsafe(awaitable, self._loop)
+            future: Future[Any] = asyncio.run_coroutine_threadsafe(coroutine, self._loop)
         except Exception:
             if inspect.iscoroutine(awaitable):
                 awaitable.close()

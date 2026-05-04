@@ -3,6 +3,7 @@ from typing import Any, Optional, Tuple
 import logging
 import threading
 
+from software.core.engine.stop_signal import StopSignalLike
 from software.core.task import ExecutionState, ProxyLease
 from software.network.proxy.pool import coerce_proxy_lease, mask_proxy_for_log
 from software.network.proxy.api import fetch_proxy_batch
@@ -130,7 +131,7 @@ def _resolve_proxy_request_num_locked(ctx: ExecutionState) -> int:
 
 def _should_stop_proxy_wait(
     ctx: ExecutionState,
-    stop_signal: Optional[threading.Event],
+    stop_signal: Optional[StopSignalLike],
 ) -> bool:
     if stop_signal is not None and stop_signal.is_set():
         return True
@@ -139,7 +140,7 @@ def _should_stop_proxy_wait(
 
 def _wait_for_next_proxy_cycle(
     ctx: ExecutionState,
-    stop_signal: Optional[threading.Event],
+    stop_signal: Optional[StopSignalLike],
     *,
     timeout: float = _PROXY_WAIT_POLL_SECONDS,
 ) -> bool:
@@ -150,7 +151,7 @@ def _select_proxy_for_session(
     ctx: ExecutionState,
     thread_name: str = "",
     *,
-    stop_signal: Optional[threading.Event] = None,
+    stop_signal: Optional[StopSignalLike] = None,
     wait: bool = False,
 ) -> Optional[str]:
     if not ctx.config.random_proxy_ip_enabled:

@@ -8,13 +8,14 @@ from typing import Any, Callable
 
 from software.core.ai.runtime import AIRuntimeError, is_ai_timeout_runtime_error, is_free_ai_runtime_error
 from software.core.engine.failure_reason import FailureReason
+from software.core.engine.stop_signal import StopSignalLike
 from software.core.task import ExecutionConfig, ExecutionState
 FREE_AI_TIMEOUT_FAIL_THRESHOLD = 5
 
 
 def handle_ai_runtime_error(
     exc: AIRuntimeError,
-    stop_signal: threading.Event,
+    stop_signal: StopSignalLike,
     *,
     thread_name: str,
     stop_policy: Any,
@@ -54,7 +55,7 @@ def handle_ai_runtime_error(
 
 def handle_proxy_connection_error(
     session: Any,
-    stop_signal: threading.Event,
+    stop_signal: StopSignalLike,
     *,
     thread_name: str,
     state: ExecutionState,
