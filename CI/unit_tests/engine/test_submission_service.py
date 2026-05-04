@@ -43,8 +43,7 @@ class SubmissionServiceTests(unittest.TestCase):
         )
 
         with patch.object(service, "_detect_completion_once", return_value=True), \
-             patch("software.core.engine.submission_service.random.uniform", return_value=0.2), \
-             patch("software.core.engine.submission_service.time.sleep") as sleep_mock:
+             patch("software.core.engine.submission_service.random.uniform", return_value=0.2):
             outcome = service.finalize_after_submit(
                 driver,
                 stop_signal=stop_signal,
@@ -57,7 +56,9 @@ class SubmissionServiceTests(unittest.TestCase):
         self.assertTrue(outcome.should_rotate_proxy)
         self.assertTrue(state.is_successful_proxy_address("http://1.1.1.1:8000"))
         stop_policy.record_success.assert_called_once_with(stop_signal, thread_name="Worker-1")
-        sleep_mock.assert_called()
+        self.assertGreaterEqual(stop_signal.wait.call_count, 2)
+        self.assertEqual(stop_signal.wait.call_args_list[0].args[0], 0.2)
+        self.assertEqual(stop_signal.wait.call_args_list[1].args[0], 0.25)
 
     def test_finalize_after_submit_marks_submit_proxy_address_when_present(self) -> None:
         config = ExecutionConfig(headless_mode=False, random_proxy_ip_enabled=True, survey_provider="wjx")

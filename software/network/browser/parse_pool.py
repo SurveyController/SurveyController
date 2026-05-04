@@ -39,19 +39,6 @@ def _get_parse_pool() -> BrowserOwnerPool:
         return _POOL
 
 
-def shutdown_parse_browser_pool() -> None:
-    global _POOL
-    with _POOL_LOCK:
-        pool = _POOL
-        _POOL = None
-    if pool is None:
-        return
-    try:
-        pool.shutdown()
-    except Exception as exc:
-        logging.info("关闭解析浏览器池失败：%s", exc, exc_info=True)
-
-
 @contextmanager
 def acquire_parse_browser_session(
     *,
@@ -87,5 +74,4 @@ def acquire_parse_browser_session(
 
 __all__ = [
     "acquire_parse_browser_session",
-    "shutdown_parse_browser_pool",
 ]

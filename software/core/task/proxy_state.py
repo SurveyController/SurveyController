@@ -7,6 +7,8 @@ import time
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Optional, Protocol
 
+from software.core.engine.stop_signal import StopSignalLike
+
 
 @dataclass
 class ProxyLease:
@@ -34,6 +36,7 @@ if TYPE_CHECKING:
         def _purge_expired_proxy_cooldowns_locked(self, *, now_ts: Optional[float] = None) -> None: ...
         def _is_proxy_in_cooldown_locked(self, proxy_address: str, *, now_ts: Optional[float] = None) -> bool: ...
         def active_proxy_addresses_locked(self, *, exclude_thread_name: str = "") -> set[str]: ...
+        def successful_proxy_addresses_locked(self) -> set[str]: ...
         def notify_runtime_change(self) -> None: ...
 
 
@@ -206,7 +209,7 @@ class ProxyRuntimeMixin:
     def wait_for_runtime_change(
         self: "_ProxyRuntimeHost",
         *,
-        stop_signal: Optional[threading.Event] = None,
+        stop_signal: Optional[StopSignalLike] = None,
         timeout: Optional[float] = None,
     ) -> bool:
         if stop_signal is not None and stop_signal.is_set():

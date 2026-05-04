@@ -207,6 +207,30 @@ class SurveyCacheTests(unittest.TestCase):
             self.assertEqual(removed_count, 2)
             self.assertEqual(os.listdir(cache_dir), [])
 
+    def test_clear_survey_parse_cache_blocks_late_background_rewrite(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            original_runtime_directory = self._patch_runtime_directory(temp_dir)
+            cache_dir = os.path.join(temp_dir, "configs", "survey_cache")
+            os.makedirs(cache_dir, exist_ok=True)
+            cache_path = os.path.join(cache_dir, "stale.json")
+            wrote_attempt = threading.Event()
+
+            try:
+                epoch_before_clear = survey_cache._cache_clear_epoch_snapshot()
+                survey_cache.clear_survey_parse_cache()
+                survey_cache._write_cached_definition(
+                    cache_path,
+                    build_survey_definition("wjx", "标题", [{"num": 1, "title": "Q1", "type_code": "3"}]),
+                    "fingerprint",
+                    expected_epoch=epoch_before_clear,
+                )
+                wrote_attempt.set()
+            finally:
+                survey_cache.get_runtime_directory = original_runtime_directory
+
+            self.assertTrue(wrote_attempt.is_set())
+            self.assertFalse(os.path.exists(cache_path))
+
     def test_same_url_concurrent_requests_share_singleflight_parse(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             original_runtime_directory = self._patch_runtime_directory(temp_dir)

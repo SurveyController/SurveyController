@@ -14,6 +14,8 @@ from software.logging.action_logger import log_action
 class MainWindowDialogsMixin:
     """为主窗口提供线程安全的消息提示与确认对话框。"""
 
+    _UI_DISPATCH_TIMEOUT_SECONDS = 5.0
+
     def _qt_timer_context(self) -> QObject:
         """声明该 mixin 只用于 QObject 宿主，统一提供定时器回调上下文。"""
         return cast(QObject, self)
@@ -26,8 +28,12 @@ class MainWindowDialogsMixin:
 
         done = threading.Event()
         result: Dict[str, Any] = {}
+        ticket = object()
 
         def _wrapper():
+            if result.get("cancelled") is ticket:
+                done.set()
+                return
             try:
                 result["value"] = func()
             finally:
@@ -35,7 +41,8 @@ class MainWindowDialogsMixin:
 
         QTimer.singleShot(0, self._qt_timer_context(), _wrapper)
 
-        if not done.wait(timeout=5):
+        if not done.wait(timeout=self._UI_DISPATCH_TIMEOUT_SECONDS):
+            result["cancelled"] = ticket
             logging.warning("UI 调度超时，放弃执行回调以避免阻塞")
             return None
         return result.get("value")

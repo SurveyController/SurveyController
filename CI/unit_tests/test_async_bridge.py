@@ -172,6 +172,18 @@ class AsyncBridgeTests(unittest.TestCase):
             release_loop.set()
             bridge.stop()
 
+    def test_start_raises_when_background_loop_initialization_fails(self) -> None:
+        bridge = AsyncBridgeLoopThread(name="BridgeStartupFailure")
+
+        def _boom():
+            raise RuntimeError("boom")
+
+        with patch("software.network.browser.async_bridge.asyncio.new_event_loop", side_effect=_boom):
+            with self.assertRaisesRegex(RuntimeError, "启动失败"):
+                bridge.start()
+
+        bridge.stop()
+
 
 if __name__ == "__main__":
     unittest.main()

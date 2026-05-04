@@ -32,6 +32,7 @@ _FALLBACK_TTL_SECONDS = _SURVEY_PARSE_CACHE_TTL_SECONDS
 _CREDAMO_TTL_SECONDS = _SURVEY_PARSE_CACHE_TTL_SECONDS
 _STALE_WHILE_REVALIDATE_MAX_SECONDS = 24 * 60 * 60
 _REGISTRY_LOCK = threading.RLock()
+_CACHE_CLEAR_EPOCH = 0
 
 
 class _InflightEntry:
@@ -48,6 +49,18 @@ _REFRESH_THREADS: set[threading.Thread] = set()
 
 def _now() -> float:
     return time.time()
+
+
+def _cache_clear_epoch_snapshot() -> int:
+    with _REGISTRY_LOCK:
+        return int(_CACHE_CLEAR_EPOCH)
+
+
+def _bump_cache_clear_epoch() -> int:
+    global _CACHE_CLEAR_EPOCH
+    with _REGISTRY_LOCK:
+        _CACHE_CLEAR_EPOCH += 1
+        return int(_CACHE_CLEAR_EPOCH)
 
 
 def _normalize_credamo_url_parts(
@@ -205,8 +218,17 @@ def _load_cached_definition(path: str) -> Optional[tuple[SurveyDefinition, str, 
     return definition, fingerprint, cached_at
 
 
-def _write_cached_definition(path: str, definition: SurveyDefinition, fingerprint: Optional[str]) -> None:
+def _write_cached_definition(
+    path: str,
+    definition: SurveyDefinition,
+    fingerprint: Optional[str],
+    *,
+    expected_epoch: Optional[int] = None,
+) -> None:
     if not fingerprint:
+        return
+    if expected_epoch is not None and int(expected_epoch) != _cache_clear_epoch_snapshot():
+        logging.info("跳过过期问卷解析缓存写回，path=%r expected_epoch=%s", path, expected_epoch)
         return
     payload = {
         "version": _CACHE_VERSION,
@@ -289,6 +311,7 @@ def _start_background_refresh(
     path: str,
     parser: Callable[[str], SurveyDefinition],
 ) -> None:
+    refresh_epoch = _cache_clear_epoch_snapshot()
     with _REGISTRY_LOCK:
         if normalized_url in _REFRESH_IN_PROGRESS:
             return
@@ -298,7 +321,12 @@ def _start_background_refresh(
         try:
             def _persist(definition: SurveyDefinition) -> None:
                 fingerprint = _fetch_remote_fingerprint(normalized_url, provider)
-                _write_cached_definition(path, definition, fingerprint)
+                _write_cached_definition(
+                    path,
+                    definition,
+                    fingerprint,
+                    expected_epoch=refresh_epoch,
+                )
 
             refreshed = _run_singleflight_parse(normalized_url, parser, on_success=_persist)
             logging.info(
@@ -344,6 +372,7 @@ def _wait_refresh_threads(timeout: float = 5.0) -> None:
 def parse_survey_with_cache(url: str, parser: Callable[[str], SurveyDefinition]) -> SurveyDefinition:
     """解析问卷；远端指纹未变时复用本地缓存。"""
     normalized_url = _normalize_cache_url(url)
+    cache_epoch = _cache_clear_epoch_snapshot()
     provider = detect_survey_provider(normalized_url)
     path = _cache_path(normalized_url)
     ttl_only_seconds = _ttl_only_cache_seconds(provider)
@@ -362,14 +391,24 @@ def parse_survey_with_cache(url: str, parser: Callable[[str], SurveyDefinition])
         return _run_singleflight_parse(
             normalized_url,
             parser,
-            on_success=lambda refreshed: _write_cached_definition(path, refreshed, f"ttl-only:{provider}"),
+            on_success=lambda refreshed: _write_cached_definition(
+                path,
+                refreshed,
+                f"ttl-only:{provider}",
+                expected_epoch=cache_epoch,
+            ),
         )
 
     if ttl_only_seconds is not None:
         return _run_singleflight_parse(
             normalized_url,
             parser,
-            on_success=lambda refreshed: _write_cached_definition(path, refreshed, f"ttl-only:{provider}"),
+            on_success=lambda refreshed: _write_cached_definition(
+                path,
+                refreshed,
+                f"ttl-only:{provider}",
+                expected_epoch=cache_epoch,
+            ),
         )
 
     remote_fingerprint = _fetch_remote_fingerprint(normalized_url, provider)
@@ -393,7 +432,12 @@ def parse_survey_with_cache(url: str, parser: Callable[[str], SurveyDefinition])
 
     def _persist(definition: SurveyDefinition) -> None:
         fingerprint = remote_fingerprint or _fetch_remote_fingerprint(normalized_url, provider)
-        _write_cached_definition(path, definition, fingerprint)
+        _write_cached_definition(
+            path,
+            definition,
+            fingerprint,
+            expected_epoch=cache_epoch,
+        )
 
     return _run_singleflight_parse(normalized_url, parser, on_success=_persist)
 
@@ -401,6 +445,7 @@ def parse_survey_with_cache(url: str, parser: Callable[[str], SurveyDefinition])
 def clear_survey_parse_cache() -> int:
     """清空问卷解析缓存目录，返回删除的文件/目录数量。"""
     cache_dir = _cache_directory()
+    _bump_cache_clear_epoch()
     _wait_refresh_threads(timeout=2.0)
     with _REGISTRY_LOCK:
         _INFLIGHT_BY_URL.clear()

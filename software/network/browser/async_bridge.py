@@ -18,6 +18,8 @@ _PRIMITIVE_TYPES = (str, int, float, bool, bytes, type(None))
 class AsyncBridgeLoopThread:
     """在专属线程里运行 asyncio 循环，并为同步调用方提供阻塞桥接。"""
 
+    _START_TIMEOUT_SECONDS = 5.0
+
     def __init__(self, *, name: str):
         self._name = str(name or "AsyncBridgeLoop")
         self._loop_ready = threading.Event()
@@ -27,6 +29,7 @@ class AsyncBridgeLoopThread:
         self._closed = False
         self._route_wrappers: Dict[tuple[int, int], Callable[..., Any]] = {}
         self._start_stop_lock = threading.Lock()
+        self._startup_error: Optional[BaseException] = None
 
     @property
     def loop(self) -> asyncio.AbstractEventLoop:
@@ -45,33 +48,47 @@ class AsyncBridgeLoopThread:
                 pass
             else:
                 self._loop_ready.clear()
+                self._startup_error = None
 
                 def _runner() -> None:
-                    loop = asyncio.new_event_loop()
-                    asyncio.set_event_loop(loop)
-                    self._loop = loop
-                    self._thread_id = threading.get_ident()
-                    self._loop_ready.set()
                     try:
-                        loop.run_forever()
-                    finally:
-                        pending = [task for task in asyncio.all_tasks(loop) if not task.done()]
-                        for task in pending:
-                            task.cancel()
-                        if pending:
+                        loop = asyncio.new_event_loop()
+                        asyncio.set_event_loop(loop)
+                        self._loop = loop
+                        self._thread_id = threading.get_ident()
+                        self._loop_ready.set()
+                        try:
+                            loop.run_forever()
+                        finally:
+                            pending = [task for task in asyncio.all_tasks(loop) if not task.done()]
+                            for task in pending:
+                                task.cancel()
                             try:
-                                loop.run_until_complete(asyncio.gather(*pending, return_exceptions=True))
+                                if pending:
+                                    loop.run_until_complete(asyncio.gather(*pending, return_exceptions=True))
                             except Exception:
                                 logging.debug("停止桥接循环时等待挂起任务失败", exc_info=True)
-                        try:
-                            loop.run_until_complete(loop.shutdown_asyncgens())
-                        except Exception:
-                            logging.debug("停止桥接循环时关闭 async generators 失败", exc_info=True)
-                        loop.close()
+                            try:
+                                loop.run_until_complete(loop.shutdown_asyncgens())
+                            except Exception:
+                                logging.debug("停止桥接循环时关闭 async generators 失败", exc_info=True)
+                            loop.close()
+                    except BaseException as exc:
+                        self._startup_error = exc
+                        self._loop = None
+                        self._thread_id = None
+                        self._loop_ready.set()
+                        logging.warning("%s 后台事件循环启动失败: %s", self._name, exc, exc_info=True)
+                        return
 
                 self._thread = threading.Thread(target=_runner, daemon=True, name=self._name)
                 self._thread.start()
-        self._loop_ready.wait()
+        if not self._loop_ready.wait(timeout=self._START_TIMEOUT_SECONDS):
+            raise TimeoutError(f"{self._name} 启动超时")
+        if self._startup_error is not None:
+            raise RuntimeError(f"{self._name} 启动失败") from self._startup_error
+        if self._loop is None:
+            raise RuntimeError(f"{self._name} 未能初始化事件循环")
 
     def run_coroutine(self, coro: Any) -> Any:
         if self._closed:
@@ -108,6 +125,7 @@ class AsyncBridgeLoopThread:
             self._loop = None
             self._thread_id = None
             self._route_wrappers.clear()
+            self._startup_error = None
 
     def _wrap_value(self, value: Any, owner: Optional[Any] = None) -> Any:
         if isinstance(value, _PRIMITIVE_TYPES):
