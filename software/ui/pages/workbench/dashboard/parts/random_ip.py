@@ -36,6 +36,7 @@ if TYPE_CHECKING:
     from qfluentwidgets import BodyLabel, ProgressRing, PushButton, TogglePushButton
     from software.ui.controller import RunController
     from software.ui.pages.workbench.runtime_panel import RuntimePage
+    from software.ui.pages.workbench.shared import RandomIpToggleRow
     from software.ui.widgets.full_width_infobar import FullWidthInfoBar
 
 
@@ -45,6 +46,7 @@ class DashboardRandomIPMixin:
     if TYPE_CHECKING:
         # 以下属性由 DashboardPage 主类提供，此处仅用于 Pylance 类型检查
         card_btn: PushButton
+        random_ip_row: RandomIpToggleRow
         random_ip_usage_ring: ProgressRing
         random_ip_cb: TogglePushButton
         random_ip_loading_ring: Any
