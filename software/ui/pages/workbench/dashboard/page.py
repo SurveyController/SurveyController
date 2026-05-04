@@ -23,7 +23,6 @@ from qfluentwidgets import (
     CardWidget,
     PushButton,
     TableWidget,
-    IndeterminateProgressRing,
     ProgressRing,
     CommandBar,
     Action,
@@ -31,10 +30,10 @@ from qfluentwidgets import (
     InfoBar,
     InfoBarPosition,
     InfoBarIcon,
+    IndeterminateProgressRing,
     HyperlinkButton,
     SegmentedWidget,
     DrillInTransitionStackedWidget,
-    TogglePushButton,
 )
 
 from software.ui.pages.workbench.dashboard.cards import DashboardActionCard, RuntimeSettingsHintCard
@@ -44,7 +43,7 @@ from software.ui.pages.workbench.dashboard.parts.progress import DashboardProgre
 from software.ui.pages.workbench.dashboard.parts.random_ip import DashboardRandomIPMixin
 from software.ui.pages.workbench.dashboard.parts.run_actions import DashboardRunActionsMixin
 from software.ui.pages.workbench.dashboard.parts.survey_parse import DashboardSurveyParseMixin
-from software.ui.pages.workbench.shared import SurveyClipboardMixin, SurveyEntryCard
+from software.ui.pages.workbench.shared import RandomIpToggleRow, SurveyClipboardMixin, SurveyEntryCard
 from software.ui.helpers.fluent_tooltip import install_tooltip_filter
 from software.ui.widgets.config_drawer import ConfigDrawer
 from software.ui.widgets.full_width_infobar import FullWidthInfoBar
@@ -207,23 +206,12 @@ class DashboardPage(
         spin_row.addStretch(1)
         left_column.addLayout(spin_row)
 
-        self.random_ip_cb = TogglePushButton(self)
-        self.random_ip_cb.setMinimumHeight(36)
-        self._sync_random_ip_toggle_presentation(False)
-        random_ip_row = QHBoxLayout()
-        random_ip_row.setSpacing(8)
-        random_ip_row.addWidget(self.random_ip_cb)
-        self.random_ip_loading_ring = IndeterminateProgressRing(self)
-        self.random_ip_loading_ring.setFixedSize(18, 18)
-        self.random_ip_loading_ring.setStrokeWidth(2)
-        self.random_ip_loading_ring.hide()
-        random_ip_row.addWidget(self.random_ip_loading_ring)
-        self.random_ip_loading_label = BodyLabel("", self)
+        self.random_ip_row = RandomIpToggleRow(BodyLabel, self)
+        self.random_ip_cb = self.random_ip_row.toggle_button
+        self.random_ip_loading_ring = self.random_ip_row.loading_ring
+        self.random_ip_loading_label = self.random_ip_row.loading_label
         self.random_ip_loading_label.setStyleSheet("color: #606060; font-size: 12px;")
-        self.random_ip_loading_label.hide()
-        random_ip_row.addWidget(self.random_ip_loading_label)
-        random_ip_row.addStretch(1)
-        left_column.addLayout(random_ip_row)
+        left_column.addWidget(self.random_ip_row)
         quick_action_column = QVBoxLayout()
         quick_action_column.setContentsMargins(0, 0, 0, 0)
         quick_action_column.setSpacing(8)

@@ -11,6 +11,7 @@ from software.integrations.ai.client import (
     save_ai_settings,
     test_connection,
 )
+from software.integrations.ai.settings import reset_ai_settings
 
 __all__ = [
     "AI_PROVIDERS",
@@ -20,6 +21,7 @@ __all__ = [
     "get_ai_readiness_error",
     "get_ai_settings",
     "get_default_system_prompt",
+    "reset_ai_settings",
     "save_ai_settings",
     "test_connection",
 ]

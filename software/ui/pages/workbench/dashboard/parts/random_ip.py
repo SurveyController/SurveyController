@@ -232,22 +232,14 @@ class DashboardRandomIPMixin:
 
     def _sync_random_ip_toggle_presentation(self, enabled: bool) -> None:
         """同步概览页随机 IP 按钮的文案和图标。"""
-        active = bool(enabled)
         try:
-            self.random_ip_cb.setText("已启用随机ip" if active else "点击启用随机ip")
-            self.random_ip_cb.setIcon(FluentIcon.VIEW if active else FluentIcon.HIDE)
+            self.random_ip_row.sync_toggle_presentation(enabled)
         except Exception as exc:
             log_suppressed_exception("_sync_random_ip_toggle_presentation", exc, level=logging.WARNING)
 
     def set_random_ip_loading(self, loading: bool, message: str = "") -> None:
-        active = bool(loading)
-        text = str(message or "正在处理...") if active else ""
         try:
-            self.random_ip_loading_ring.setVisible(active)
-            self.random_ip_loading_label.setVisible(active)
-            self.random_ip_loading_label.setText(text)
-            self.random_ip_cb.setEnabled(not active)
-            self._sync_random_ip_toggle_presentation(self.random_ip_cb.isChecked())
+            self.random_ip_row.set_loading(loading, message)
         except Exception as exc:
             log_suppressed_exception("set_random_ip_loading dashboard", exc, level=logging.WARNING)
 

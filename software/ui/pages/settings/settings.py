@@ -32,6 +32,7 @@ from software.app.config import (
 )
 from software.logging.action_logger import bind_logged_action, log_action
 from software.logging.log_utils import log_suppressed_exception
+from software.integrations.ai import reset_ai_settings
 from software.providers.survey_cache import clear_survey_parse_cache
 from software.ui.widgets.setting_cards import (
     ComboSettingCard,
@@ -474,8 +475,10 @@ class SettingsPage(ScrollArea):
             AUTO_SAVE_LOGS_SETTING_KEY,
             AUTO_SAVE_LOG_RETENTION_COUNT_SETTING_KEY,
             "auto_check_update",
+            "download_source",
         ):
             settings.remove(key)
+        reset_ai_settings()
 
         defaults = {
             NAVIGATION_TEXT_VISIBLE_SETTING_KEY: True,
@@ -485,6 +488,7 @@ class SettingsPage(ScrollArea):
             AUTO_SAVE_LOGS_SETTING_KEY: DEFAULT_AUTO_SAVE_LOGS,
             AUTO_SAVE_LOG_RETENTION_COUNT_SETTING_KEY: DEFAULT_AUTO_SAVE_LOG_RETENTION_COUNT,
             "auto_check_update": True,
+            "download_source": DEFAULT_DOWNLOAD_SOURCE,
         }
         self._set_switch_state(self.navigation_text_card, defaults[NAVIGATION_TEXT_VISIBLE_SETTING_KEY])
         self._set_switch_state(self.topmost_card, defaults["window_topmost"])
@@ -497,6 +501,11 @@ class SettingsPage(ScrollArea):
             self.auto_save_logs_combo.setCurrentIndex(retention_index)
             self.auto_save_logs_combo.blockSignals(False)
         self._set_switch_state(self.auto_update_card, defaults["auto_check_update"])
+        download_index = self.download_source_combo.findData(defaults["download_source"])
+        if download_index >= 0:
+            self.download_source_combo.blockSignals(True)
+            self.download_source_combo.setCurrentIndex(download_index)
+            self.download_source_combo.blockSignals(False)
         self._apply_navigation_text_state(defaults[NAVIGATION_TEXT_VISIBLE_SETTING_KEY], persist=False)
         self._apply_topmost_state(defaults["window_topmost"], persist=False)
         self._apply_ask_save_state(defaults["ask_save_on_close"], persist=False)

@@ -3,7 +3,7 @@
 
 #define MyAppName "SurveyController"
 #ifndef MyReleaseTag
-  #define MyReleaseTag "v3.1.0"
+  #define MyReleaseTag "v3.1.1"
 #endif
 #define MyAppVersion MyReleaseTag
 #define MyAppPublisher "HUNGRY_M0"

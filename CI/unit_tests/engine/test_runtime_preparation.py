@@ -162,7 +162,7 @@ class RuntimePreparationTests(unittest.TestCase):
             headless_artifacts = prepare_execution_artifacts(headless_config)
             headed_artifacts = prepare_execution_artifacts(headed_config)
 
-        self.assertEqual(headless_artifacts.execution_config_template.num_threads, 36)
+        self.assertEqual(headless_artifacts.execution_config_template.num_threads, 64)
         self.assertEqual(headed_artifacts.execution_config_template.num_threads, 12)
 
     def test_prepare_execution_artifacts_uses_reverse_fill_sample_count_and_threads(self) -> None:

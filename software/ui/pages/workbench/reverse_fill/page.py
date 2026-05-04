@@ -28,9 +28,7 @@ from qfluentwidgets import (
     StrongBodyLabel,
     SubtitleLabel,
     TableWidget,
-    TogglePushButton,
-    CardWidget,
-    ElevatedCardWidget,
+    SimpleCardWidget,
     IconWidget,
 )
 
@@ -60,7 +58,7 @@ from software.providers.common import (
 )
 from software.providers.contracts import SurveyQuestionMeta, ensure_survey_question_metas
 from software.ui.helpers.fluent_tooltip import install_tooltip_filter
-from software.ui.pages.workbench.shared import SurveyClipboardMixin, SurveyEntryCard
+from software.ui.pages.workbench.shared import RandomIpToggleRow, SurveyClipboardMixin, SurveyEntryCard
 from software.ui.widgets.no_wheel import NoWheelSpinBox
 
 if TYPE_CHECKING:
@@ -180,7 +178,7 @@ class ReverseFillPage(SurveyClipboardMixin, QWidget):
         layout.addWidget(self.link_card)
 
     def _build_file_picker(self, layout: QVBoxLayout) -> None:
-        self.file_panel = ElevatedCardWidget(self.view)
+        self.file_panel = SimpleCardWidget(self.view)
         self.file_panel.setAcceptDrops(True)
         file_layout = QVBoxLayout(self.file_panel)
         file_layout.setContentsMargins(20, 18, 20, 20)
@@ -221,30 +219,26 @@ class ReverseFillPage(SurveyClipboardMixin, QWidget):
 
         concurrency_row = QHBoxLayout()
         concurrency_row.setSpacing(12)
-        concurrency_label = BodyLabel("反填并发数", self.file_panel)
-        concurrency_hint = CaptionLabel("", self.file_panel)
         self.reverse_fill_threads_spin = NoWheelSpinBox(self.file_panel)
         self.reverse_fill_threads_spin.setRange(1, HEADLESS_MAX_THREADS)
         self.reverse_fill_threads_spin.setValue(self._reverse_fill_threads_value)
         self.reverse_fill_threads_spin.setFixedWidth(160)
         self.reverse_fill_threads_spin.setFixedHeight(36)
-        self.random_ip_cb = TogglePushButton(self.file_panel)
-        self.random_ip_cb.setMinimumHeight(36)
-        self.random_ip_cb.setMinimumWidth(150)
-        self._sync_random_ip_toggle_presentation(False)
-        self.random_ip_loading_ring = IndeterminateProgressRing(self.file_panel)
-        self.random_ip_loading_ring.setFixedSize(18, 18)
-        self.random_ip_loading_ring.setStrokeWidth(2)
-        self.random_ip_loading_ring.hide()
-        self.random_ip_loading_label = CaptionLabel("", self.file_panel)
-        self.random_ip_loading_label.hide()
-        concurrency_row.addWidget(concurrency_label)
+        self.random_ip_row = RandomIpToggleRow(
+            CaptionLabel,
+            self.file_panel,
+            leading_label_text="反填并发数",
+            stretch_tail=False,
+        )
+        self.random_ip_cb = self.random_ip_row.toggle_button
+        self.random_ip_loading_ring = self.random_ip_row.loading_ring
+        self.random_ip_loading_label = self.random_ip_row.loading_label
+        if self.random_ip_row.leading_label is not None:
+            self.random_ip_row.leading_label.setParent(self.file_panel)
+            concurrency_row.addWidget(self.random_ip_row.leading_label)
         concurrency_row.addWidget(self.reverse_fill_threads_spin)
-        concurrency_row.addSpacing(8)
-        concurrency_row.addWidget(self.random_ip_cb)
-        concurrency_row.addWidget(self.random_ip_loading_ring)
-        concurrency_row.addWidget(self.random_ip_loading_label)
-        concurrency_row.addWidget(concurrency_hint, 1)
+        concurrency_row.addStretch(1)
+        concurrency_row.addWidget(self.random_ip_row)
         file_layout.addLayout(concurrency_row)
 
         self._file_drop_widgets = (
@@ -264,7 +258,7 @@ class ReverseFillPage(SurveyClipboardMixin, QWidget):
         layout.addWidget(self.file_panel)
 
     def _build_details_tables(self, layout: QVBoxLayout) -> None:
-        self.table_panel = ElevatedCardWidget(self.view)
+        self.table_panel = SimpleCardWidget(self.view)
         table_layout = QVBoxLayout(self.table_panel)
         table_layout.setContentsMargins(0, 0, 0, 0)
         table_layout.setSpacing(0)
@@ -336,7 +330,7 @@ class ReverseFillPage(SurveyClipboardMixin, QWidget):
         self._build_bottom_status_card(outer)
 
     def _build_bottom_status_card(self, outer_layout: QVBoxLayout) -> None:
-        bottom = CardWidget(self)
+        bottom = SimpleCardWidget(self)
         bottom_layout = QVBoxLayout(bottom)
         bottom_layout.setContentsMargins(12, 10, 12, 10)
         bottom_layout.setSpacing(8)
@@ -500,9 +494,7 @@ class ReverseFillPage(SurveyClipboardMixin, QWidget):
         return bool(self.file_edit.text().strip())
 
     def _sync_random_ip_toggle_presentation(self, enabled: bool) -> None:
-        active = bool(enabled)
-        self.random_ip_cb.setText("已启用随机ip" if active else "点击启用随机ip")
-        self.random_ip_cb.setIcon(FluentIcon.VIEW if active else FluentIcon.HIDE)
+        self.random_ip_row.sync_toggle_presentation(enabled)
 
     def _apply_runtime_ui_state(self, state: dict) -> None:
         enabled = bool((state or {}).get("random_ip_enabled", False))
@@ -513,13 +505,7 @@ class ReverseFillPage(SurveyClipboardMixin, QWidget):
         self._sync_random_ip_toggle_presentation(enabled)
 
     def set_random_ip_loading(self, loading: bool, message: str = "") -> None:
-        active = bool(loading)
-        text = str(message or "正在处理...") if active else ""
-        self.random_ip_loading_ring.setVisible(active)
-        self.random_ip_loading_label.setVisible(active)
-        self.random_ip_loading_label.setText(text)
-        self.random_ip_cb.setEnabled(not active)
-        self._sync_random_ip_toggle_presentation(self.random_ip_cb.isChecked())
+        self.random_ip_row.set_loading(loading, message)
 
     def _on_random_ip_toggled(self, enabled: bool) -> None:
         self._sync_random_ip_toggle_presentation(bool(enabled))

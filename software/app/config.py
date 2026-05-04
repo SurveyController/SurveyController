@@ -157,7 +157,7 @@ BROWSER_PREFERENCE = ["edge", "chrome"]
 HEADLESS_WINDOW_SIZE = "1920,1080"
 # 并发会话上限
 NON_HEADLESS_MAX_THREADS = 12
-HEADLESS_MAX_THREADS = 36
+HEADLESS_MAX_THREADS = 64
 
 # ==================== 用户代理配置 ====================
 USER_AGENT_PRESETS = {

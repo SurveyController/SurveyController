@@ -419,16 +419,6 @@ class RuntimeAISection(QObject):
         self._set_ai_controls_blocked(False)
         self._ai_loading = False
 
-        save_ai_settings(
-            ai_mode=cfg.ai_mode,
-            provider=cfg.ai_provider,
-            api_key=cfg.ai_api_key or "",
-            base_url=cfg.ai_base_url or "",
-            api_protocol="auto",
-            model=cfg.ai_model or "",
-            system_prompt=self._ai_system_prompt,
-        )
-
     def _on_ai_mode_changed(self):
         """AI 模式变化"""
         if self._ai_loading:
