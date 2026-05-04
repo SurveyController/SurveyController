@@ -315,6 +315,21 @@ class AsyncSlotRunner:
             thread_name=self.slot_label,
         )
 
+    async def _wait_for_next_unique_proxy(self) -> bool:
+        if not self.config.random_proxy_ip_enabled:
+            return True
+        self._update_status("等待新代理")
+        while not self.run_context.stop_requested():
+            stopped = await asyncio.to_thread(
+                self.state.wait_for_runtime_change,
+                stop_signal=self.stop_proxy,
+                timeout=0.5,
+            )
+            if stopped:
+                return False
+            return True
+        return False
+
     def _handle_proxy_unavailable(self, *, status_text: str, log_message: str) -> bool:
         threshold_getter = getattr(self.stop_policy, "proxy_unavailable_threshold", None)
         threshold_value = threshold_getter() if callable(threshold_getter) else None
@@ -422,6 +437,12 @@ class AsyncSlotRunner:
                     continue
                 outcome = await self._finalize_after_submit(session)
                 if outcome.status == "success":
+                    if bool(getattr(outcome, "should_rotate_proxy", False)):
+                        await self._close_session(session)
+                        session = None
+                        if not await self._wait_for_next_unique_proxy():
+                            should_requeue_dispatch = False
+                            break
                     if outcome.should_stop:
                         should_requeue_dispatch = False
                         break

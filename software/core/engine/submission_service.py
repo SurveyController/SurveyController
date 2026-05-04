@@ -59,12 +59,38 @@ class SubmissionService:
     def _is_wjx_provider(self) -> bool:
         return self._survey_provider_key() == "wjx"
 
+    def _mark_successful_submit_proxies(self, driver: BrowserDriver) -> None:
+        for attr_name in ("_session_proxy_address", "_submit_proxy_address"):
+            proxy_address = str(getattr(driver, attr_name, "") or "").strip()
+            if not proxy_address:
+                continue
+            try:
+                self.state.mark_successful_proxy_address(proxy_address)
+            except Exception as exc:
+                log_suppressed_exception(
+                    f"SubmissionService._mark_successful_submit_proxies {attr_name}",
+                    exc,
+                    level=logging.WARNING,
+                )
+        try:
+            thread_name = str(getattr(driver, "_thread_name", "") or "").strip()
+            if thread_name:
+                self.state.release_proxy_in_use(thread_name)
+        except Exception as exc:
+            log_suppressed_exception(
+                "SubmissionService._mark_successful_submit_proxies release_proxy_in_use",
+                exc,
+                level=logging.WARNING,
+            )
+
     def _build_success_outcome(
         self,
+        driver: BrowserDriver,
         stop_signal: StopSignalLike,
         *,
         thread_name: str,
     ) -> SubmissionOutcome:
+        self._mark_successful_submit_proxies(driver)
         grace_seconds = self._resolve_post_submit_close_grace_seconds()
         if grace_seconds > 0 and not stop_signal.is_set():
             time.sleep(grace_seconds)
@@ -186,7 +212,7 @@ class SubmissionService:
 
         if self._is_wjx_provider():
             if self._detect_completion_once(driver):
-                return self._build_success_outcome(stop_signal, thread_name=thread_name)
+                return self._build_success_outcome(driver, stop_signal, thread_name=thread_name)
             wait_seconds = max(1.0, float(POST_SUBMIT_URL_MAX_WAIT or 0.0) * 2.0)
         else:
             verification_outcome = self._check_submission_verification_after_submit(
@@ -210,7 +236,7 @@ class SubmissionService:
         completion_detected = self._wait_for_completion_page(driver, stop_signal, wait_seconds, poll_interval)
 
         if completion_detected:
-            return self._build_success_outcome(stop_signal, thread_name=thread_name)
+            return self._build_success_outcome(driver, stop_signal, thread_name=thread_name)
 
         if not completion_detected and not stop_signal.is_set():
             if _provider_submission_requires_verification(driver, provider=self.config.survey_provider):
@@ -255,7 +281,7 @@ class SubmissionService:
                 should_rotate_proxy=False,
             )
 
-        return self._build_success_outcome(stop_signal, thread_name=thread_name)
+        return self._build_success_outcome(driver, stop_signal, thread_name=thread_name)
 
 
 __all__ = ["SubmissionOutcome", "SubmissionService"]
