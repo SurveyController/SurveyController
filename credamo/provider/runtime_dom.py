@@ -11,11 +11,11 @@ from typing import Any, List, Optional, Tuple
 from software.network.browser import BrowserDriver
 
 
-_CREDAMO_DYNAMIC_WAIT_TIMEOUT_MS = 20000
-_CREDAMO_DYNAMIC_WAIT_POLL_SECONDS = 0.5
-_CREDAMO_PAGE_TRANSITION_TIMEOUT_MS = 12000
-_CREDAMO_DYNAMIC_REVEAL_TIMEOUT_MS = 2000
-_CREDAMO_LOADING_SHELL_EXTRA_WAIT_TIMEOUT_MS = 25000
+_CREDAMO_DYNAMIC_WAIT_TIMEOUT_MS = 6000
+_CREDAMO_DYNAMIC_WAIT_POLL_SECONDS = 0.15
+_CREDAMO_PAGE_TRANSITION_TIMEOUT_MS = 5000
+_CREDAMO_DYNAMIC_REVEAL_TIMEOUT_MS = 800
+_CREDAMO_LOADING_SHELL_EXTRA_WAIT_TIMEOUT_MS = 4000
 _QUESTION_NUMBER_RE = re.compile(r"\d+")
 _NEXT_BUTTON_MARKERS = ("下一页", "next", "继续")
 _SUBMIT_BUTTON_MARKERS = ("提交", "完成", "交卷", "submit", "finish", "done")
@@ -56,6 +56,54 @@ def _question_roots(page: Any) -> List[Any]:
             roots.dispose()
         except Exception:
             pass
+
+
+def _collect_question_root_snapshot(page: Any) -> List[dict[str, Any]]:
+    script = r"""
+() => {
+  const visible = (el, minWidth = 8, minHeight = 8) => {
+    if (!el) return false;
+    const style = window.getComputedStyle(el);
+    if (!style || style.display === 'none' || style.visibility === 'hidden') return false;
+    const rect = el.getBoundingClientRect();
+    return rect.width >= minWidth && rect.height >= minHeight;
+  };
+  const normalize = (text) => String(text || '').replace(/\s+/g, ' ').trim();
+  return Array.from(document.querySelectorAll('.answer-page .question')).map((root, index) => {
+    const titleNode = root.querySelector('.question-title, .qstTitle, .title, [class*="title"]');
+    const questionNo = root.querySelector('.question-title .qstNo');
+    return {
+      index,
+      id: String(root.getAttribute('id') || root.getAttribute('data-id') || '').trim(),
+      visible: visible(root),
+      title: normalize(titleNode?.innerText || titleNode?.textContent || ''),
+      rawNumber: normalize(questionNo?.textContent || ''),
+      text: normalize(root.innerText || root.textContent || '').slice(0, 240),
+    };
+  }).filter((item) => item.visible);
+}
+"""
+    try:
+        payload = page.evaluate(script) or []
+    except Exception:
+        return []
+    snapshot: List[dict[str, Any]] = []
+    if not isinstance(payload, list):
+        return snapshot
+    for item in payload:
+        if not isinstance(item, dict):
+            continue
+        snapshot.append(
+            {
+                "index": int(item.get("index") or 0),
+                "id": str(item.get("id") or "").strip(),
+                "visible": bool(item.get("visible")),
+                "title": str(item.get("title") or "").strip(),
+                "raw_number": str(item.get("rawNumber") or "").strip(),
+                "text": str(item.get("text") or "").strip(),
+            }
+        )
+    return snapshot
 
 
 def _page_loading_snapshot(page: Any) -> Tuple[str, str]:

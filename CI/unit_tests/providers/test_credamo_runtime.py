@@ -170,6 +170,46 @@ class CredamoRuntimeTests(unittest.TestCase):
         self.assertEqual(single_mock.call_count, 1)
         self.assertEqual(scale_mock.call_count, 1)
 
+    def test_brush_credamo_collects_runtime_snapshot_without_affecting_flow(self) -> None:
+        stop_signal = threading.Event()
+        state = SimpleNamespace(
+            stop_event=stop_signal,
+            update_thread_step=lambda *args, **kwargs: None,
+            update_thread_status=lambda *args, **kwargs: None,
+        )
+        config = SimpleNamespace(
+            question_config_index_map={8: ("single", 0)},
+            single_prob=[[-1]],
+            droplist_prob=[],
+            scale_prob=[],
+            multiple_prob=[],
+            texts=[],
+            answer_duration_range_seconds=[0, 0],
+        )
+        driver = SimpleNamespace(page=object())
+        q8 = self._FakeQuestionRoot(8)
+
+        with patch("credamo.provider.runtime._wait_for_question_roots", return_value=[q8]), \
+             patch("credamo.provider.runtime._collect_question_root_snapshot", return_value=[{"id": "q8"}]), \
+             patch("credamo.provider.runtime._wait_for_dynamic_question_roots", side_effect=[[q8], [q8]]), \
+             patch("credamo.provider.runtime._question_number_from_root", side_effect=lambda _page, root, _fallback: root.question_num), \
+             patch("credamo.provider.runtime._root_text", return_value="Q8"), \
+             patch("credamo.provider.runtime._navigation_action", return_value="submit"), \
+             patch("credamo.provider.runtime._click_submit", return_value=True), \
+             patch("credamo.provider.runtime._answer_single_like", return_value=True) as single_mock, \
+             patch("credamo.provider.runtime.simulate_answer_duration_delay", return_value=False), \
+             patch("credamo.provider.runtime.time.sleep"):
+            result = runtime.brush_credamo(
+                driver,
+                config,
+                state,
+                stop_signal=stop_signal,
+                thread_name="Worker-1",
+            )
+
+        self.assertTrue(result)
+        self.assertEqual(single_mock.call_count, 1)
+
     def test_brush_credamo_answers_matrix_with_row_weights(self) -> None:
         stop_signal = threading.Event()
         state = SimpleNamespace(

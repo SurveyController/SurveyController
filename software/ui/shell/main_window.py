@@ -320,7 +320,7 @@ class MainWindow(
         """窗口关闭时询问用户是否保存配置"""
         if getattr(self, "_close_request_confirmed", False):
             self._finalize_confirmed_close()
-            super().closeEvent(e)
+            e.accept()
             return
         e.ignore()
         self._schedule_deferred_close_confirmation()

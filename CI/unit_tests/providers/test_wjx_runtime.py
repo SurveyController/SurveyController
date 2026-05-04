@@ -7,6 +7,7 @@ from types import SimpleNamespace
 
 from wjx.provider import runtime
 from wjx.provider import runtime_dispatch
+from software.core.engine.dom_helpers import _driver_question_looks_like_reorder
 
 
 @contextmanager
@@ -35,6 +36,15 @@ class _FakeQuestionDiv:
 
     def find_elements(self, _by=None, _selector=None):
         return []
+
+
+class _FakeQuestionDivWithSelectors(_FakeQuestionDiv):
+    def __init__(self, question_type: str, selector_map=None, **kwargs) -> None:
+        super().__init__(question_type, **kwargs)
+        self.selector_map = dict(selector_map or {})
+
+    def find_elements(self, _by=None, selector=None):
+        return list(self.selector_map.get(selector, []))
 
 
 class _FakeDriver:
@@ -115,6 +125,18 @@ class WjxRuntimeTests(unittest.TestCase):
 
         self.assertEqual(calls, [7])
         self.assertEqual(indices["text"], 0)
+
+    def test_reorder_heuristic_does_not_misclassify_checkbox_list(self) -> None:
+        question_div = _FakeQuestionDivWithSelectors(
+            "4",
+            selector_map={
+                "ul li, ol li": [object(), object()],
+                ".ui-sortable, .ui-sortable-handle, [class*='sort']": [object()],
+                "input[type='checkbox'], input[type='radio'], .jqcheck, .jqradio, .ui-checkbox, .ui-radio": [object()],
+            },
+        )
+
+        self.assertFalse(_driver_question_looks_like_reorder(question_div))
 
     def test_dispatcher_routes_text_question_and_advances_text_index(self) -> None:
         dispatcher = runtime_dispatch._QuestionDispatcher()
@@ -233,6 +255,92 @@ class WjxRuntimeTests(unittest.TestCase):
         self.assertIn(("fill", 1), calls)
         self.assertIn(("fill", 2), calls)
         self.assertIn(("提交中", True), ctx.status_updates)
+
+    def test_brush_uses_page_snapshot_visibility_fast_path(self) -> None:
+        ctx = _FakeState(question_config_index_map={1: ("single", 0)})
+        driver = _FakeDriver({"#div1": _FakeQuestionDiv("3", displayed=False, text="Q1")})
+        calls: list[object] = []
+
+        def _fake_fill(*, question_num: int, **_kwargs):
+            calls.append(("fill", question_num))
+            return None
+
+        with ExitStack() as stack:
+            stack.enter_context(_patched_attr(runtime, "_wjx_detect", lambda *_args, **_kwargs: [1]))
+            stack.enter_context(_patched_attr(runtime, "_collect_visible_question_snapshot", lambda _driver: {1: {"visible": True, "type": "3", "title": "Q1"}}))
+            stack.enter_context(_patched_attr(runtime, "_is_headless_mode", lambda _ctx: True))
+            stack.enter_context(_patched_attr(runtime, "HEADLESS_PAGE_BUFFER_DELAY", 0.0))
+            stack.enter_context(_patched_attr(runtime, "_driver_question_looks_like_description", lambda *_args, **_kwargs: False))
+            stack.enter_context(_patched_attr(runtime, "_human_scroll_after_question", lambda *_args, **_kwargs: None))
+            stack.enter_context(_patched_attr(runtime, "has_configured_answer_duration", lambda _value: False))
+            stack.enter_context(_patched_attr(runtime, "simulate_answer_duration_delay", lambda *_args, **_kwargs: False))
+            stack.enter_context(_patched_attr(runtime._dispatcher, "fill", _fake_fill))
+            stack.enter_context(_patched_attr(runtime, "submit", lambda *_args, **_kwargs: calls.append("submit")))
+            result = runtime.brush(
+                driver,
+                ctx,
+                stop_signal=threading.Event(),
+                thread_name="Worker-1",
+                psycho_plan=None,
+            )
+
+        self.assertTrue(result)
+        self.assertIn(("fill", 1), calls)
+
+    def test_brush_refreshes_snapshot_after_skip_logic_changes_visibility(self) -> None:
+        ctx = _FakeState(question_config_index_map={1: ("single", 0), 3: ("single", 1)})
+        driver = _FakeDriver(
+            {
+                "#div1": _FakeQuestionDiv("3", displayed=True, text="Q1"),
+                "#div2": _FakeQuestionDiv("4", displayed=False, text="Q2"),
+                "#div3": _FakeQuestionDiv("3", displayed=True, text="Q3"),
+            }
+        )
+        calls: list[object] = []
+        snapshots = iter(
+            [
+                {
+                    1: {"visible": True, "type": "3", "title": "Q1"},
+                    2: {"visible": True, "type": "4", "title": "Q2"},
+                },
+                {
+                    1: {"visible": True, "type": "3", "title": "Q1"},
+                    3: {"visible": True, "type": "3", "title": "Q3"},
+                },
+                {
+                    1: {"visible": True, "type": "3", "title": "Q1"},
+                    3: {"visible": True, "type": "3", "title": "Q3"},
+                },
+            ]
+        )
+
+        def _fake_fill(*, question_num: int, **_kwargs):
+            calls.append(("fill", question_num))
+            return None
+
+        with ExitStack() as stack:
+            stack.enter_context(_patched_attr(runtime, "_wjx_detect", lambda *_args, **_kwargs: [3]))
+            stack.enter_context(_patched_attr(runtime, "_collect_visible_question_snapshot", lambda _driver: next(snapshots)))
+            stack.enter_context(_patched_attr(runtime, "_is_headless_mode", lambda _ctx: True))
+            stack.enter_context(_patched_attr(runtime, "HEADLESS_PAGE_BUFFER_DELAY", 0.0))
+            stack.enter_context(_patched_attr(runtime, "_driver_question_looks_like_description", lambda *_args, **_kwargs: False))
+            stack.enter_context(_patched_attr(runtime, "_human_scroll_after_question", lambda *_args, **_kwargs: None))
+            stack.enter_context(_patched_attr(runtime, "has_configured_answer_duration", lambda _value: False))
+            stack.enter_context(_patched_attr(runtime, "simulate_answer_duration_delay", lambda *_args, **_kwargs: False))
+            stack.enter_context(_patched_attr(runtime._dispatcher, "fill", _fake_fill))
+            stack.enter_context(_patched_attr(runtime, "submit", lambda *_args, **_kwargs: calls.append("submit")))
+            result = runtime.brush(
+                driver,
+                ctx,
+                stop_signal=threading.Event(),
+                thread_name="Worker-1",
+                psycho_plan=None,
+            )
+
+        self.assertTrue(result)
+        self.assertIn(("fill", 1), calls)
+        self.assertIn(("fill", 3), calls)
+        self.assertNotIn(("fill", 2), calls)
 
 
 if __name__ == "__main__":

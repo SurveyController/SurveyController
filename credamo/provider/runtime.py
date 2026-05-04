@@ -34,6 +34,7 @@ _abort_requested = _runtime_dom._abort_requested
 _click_element = _runtime_dom._click_element
 _click_navigation = _runtime_dom._click_navigation
 _click_submit_once = _runtime_dom._click_submit_once
+_collect_question_root_snapshot = _runtime_dom._collect_question_root_snapshot
 _element_text = _runtime_dom._element_text
 _input_value = _runtime_dom._input_value
 _is_checked = _runtime_dom._is_checked
@@ -172,15 +173,22 @@ def brush_credamo(
     page = _page(driver)
     total_steps = max(1, len(config.question_config_index_map))
     answered_steps = 0
+    run_started_at = time.perf_counter()
     try:
         state.update_thread_step(thread_name, 0, total_steps, status_text="答题中", running=True)
     except Exception:
         logging.info("初始化 Credamo 线程进度失败", exc_info=True)
 
     while not _abort_requested(active_stop):
+        page_scan_started_at = time.perf_counter()
         roots = _wait_for_question_roots(page, active_stop)
         if not roots:
             raise RuntimeError("Credamo 当前页未识别到题目")
+        logging.info(
+            "Credamo 当前页题目快照完成：count=%s elapsed=%.3fs",
+            len(_collect_question_root_snapshot(page)),
+            time.perf_counter() - page_scan_started_at,
+        )
 
         answered_keys: set[str] = set()
         page_fallback_start = answered_steps
@@ -217,6 +225,7 @@ def brush_credamo(
                 except Exception:
                     logging.info("更新 Credamo 线程进度失败", exc_info=True)
 
+                question_started_at = time.perf_counter()
                 if entry_type == "single":
                     weights = config.single_prob[config_index] if config_index < len(config.single_prob) else -1
                     _answer_single_like(page, root, weights, 0)
@@ -253,14 +262,26 @@ def brush_credamo(
                     _answer_text(root, text_config)
                 else:
                     logging.info("Credamo 第%s题暂未接入题型：%s", question_num, entry_type)
+                logging.info(
+                    "Credamo 题目处理耗时：question=%s type=%s elapsed=%.3fs",
+                    question_num,
+                    entry_type,
+                    time.perf_counter() - question_started_at,
+                )
                 answered_steps = min(total_steps, answered_steps + 1)
-                time.sleep(random.uniform(0.08, 0.22))
+                time.sleep(random.uniform(0.03, 0.08))
 
+            dynamic_wait_started_at = time.perf_counter()
             roots = _wait_for_dynamic_question_roots(
                 page,
                 answered_keys,
                 active_stop,
                 fallback_start=page_fallback_start,
+            )
+            logging.info(
+                "Credamo 动态显题等待完成：elapsed=%.3fs roots=%s",
+                time.perf_counter() - dynamic_wait_started_at,
+                len(roots or []),
             )
         navigation_action = _navigation_action(page)
         if navigation_action != "next":
@@ -270,10 +291,12 @@ def brush_credamo(
             state.update_thread_status(thread_name, "翻到下一页", running=True)
         except Exception:
             logging.info("更新 Credamo 线程状态失败：翻到下一页", exc_info=True)
+        transition_started_at = time.perf_counter()
         if not _click_navigation(page, "next"):
             raise RuntimeError("Credamo 下一页按钮未找到")
         if not _wait_for_page_change(page, previous_signature, active_stop):
             raise RuntimeError("Credamo 点击下一页后页面没有变化")
+        logging.info("Credamo 翻页耗时：elapsed=%.3fs", time.perf_counter() - transition_started_at)
 
     if has_configured_answer_duration(config.answer_duration_range_seconds):
         try:
@@ -292,4 +315,5 @@ def brush_credamo(
         state.update_thread_status(thread_name, "等待结果确认", running=True)
     except Exception:
         logging.info("更新 Credamo 线程状态失败：等待结果确认", exc_info=True)
+    logging.info("Credamo 整体答题耗时：elapsed=%.3fs", time.perf_counter() - run_started_at)
     return True

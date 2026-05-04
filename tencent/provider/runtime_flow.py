@@ -147,7 +147,7 @@ def _wait_for_page_transition(
     driver: BrowserDriver,
     current_first_question_id: str,
     next_first_question_id: str,
-    timeout_ms: int = 12000,
+    timeout_ms: int = 5000,
 ) -> None:
     page = _page(driver)
     current_selector = f'section.question[data-question-id="{current_first_question_id}"]'

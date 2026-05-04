@@ -11,7 +11,7 @@ def _driver_question_looks_like_reorder(question_div) -> bool:
     if question_div is None:
         return False
     try:
-        if question_div.find_elements(By.CSS_SELECTOR, ".sortnum, .sortnum-sel"):
+        if question_div.find_elements(By.CSS_SELECTOR, ".sortnum, .sortnum-sel, .ui-icon-number"):
             return True
     except Exception as exc:
         log_suppressed_exception("dom_helpers._driver_question_looks_like_reorder quick check", exc)
@@ -21,7 +21,15 @@ def _driver_question_looks_like_reorder(question_div) -> bool:
         has_sort_signature = bool(
             question_div.find_elements(By.CSS_SELECTOR, ".ui-sortable, .ui-sortable-handle, [class*='sort']")
         )
-        return has_list_items and has_sort_signature
+        if not (has_list_items and has_sort_signature):
+            return False
+        has_choice_inputs = bool(
+            question_div.find_elements(
+                By.CSS_SELECTOR,
+                "input[type='checkbox'], input[type='radio'], .jqcheck, .jqradio, .ui-checkbox, .ui-radio",
+            )
+        )
+        return not has_choice_inputs
     except Exception:
         return False
 

@@ -127,7 +127,13 @@ class TencentRuntimeTests(unittest.TestCase):
             stack.enter_context(_patched_attr(runtime, "_answer_qq_single", lambda *_args, **_kwargs: calls.append("single")))
             stack.enter_context(_patched_attr(runtime, "_answer_qq_text", lambda *_args, **_kwargs: calls.append("text")))
             stack.enter_context(_patched_attr(runtime, "_click_next_page_button", lambda *_args, **_kwargs: calls.append("next") or True))
-            stack.enter_context(_patched_attr(runtime, "_wait_for_page_transition", lambda *_args: calls.append(("transition", _args[1], _args[2]))))
+            stack.enter_context(
+                _patched_attr(
+                    runtime,
+                    "_wait_for_page_transition",
+                    lambda *_args, **_kwargs: calls.append(("transition", _args[1], _args[2])),
+                )
+            )
             stack.enter_context(_patched_attr(runtime, "submit", lambda *_args, **_kwargs: calls.append("submit")))
             result = runtime.brush_qq(
                 object(),
@@ -145,6 +151,54 @@ class TencentRuntimeTests(unittest.TestCase):
         self.assertIn(("transition", "page1-q1", "page2-q1"), calls)
         self.assertEqual(calls[-1], "submit")
         self.assertIn(("提交中", True), ctx.status_updates)
+
+    def test_brush_qq_prefers_page_snapshot_over_per_question_wait(self) -> None:
+        ctx = _FakeState(
+            {
+                1: _meta(1, page=1, provider_question_id="page1-q1"),
+                2: _meta(2, page=1, provider_question_id="page1-q2"),
+            },
+            {
+                1: ("single", 0),
+                2: ("text", 0),
+            },
+        )
+        calls: list[object] = []
+
+        with ExitStack() as stack:
+            stack.enter_context(_patched_attr(runtime, "_supports_page_snapshot", lambda _driver: True))
+            stack.enter_context(
+                _patched_attr(
+                    runtime,
+                    "_wait_for_question_visibility_map",
+                    lambda *_args, **_kwargs: {
+                        "page1-q1": {"attached": True, "visible": True},
+                        "page1-q2": {"attached": True, "visible": True},
+                    },
+                )
+            )
+            stack.enter_context(_patched_attr(runtime, "_wait_for_question_visible", lambda *_args, **_kwargs: calls.append("fallback-wait") or True))
+            stack.enter_context(_patched_attr(runtime, "_human_scroll_after_question", lambda *_args, **_kwargs: None))
+            stack.enter_context(_patched_attr(runtime, "dismiss_resume_dialog_if_present", lambda *_args, **_kwargs: None))
+            stack.enter_context(_patched_attr(runtime, "_is_headless_mode", lambda _ctx: True))
+            stack.enter_context(_patched_attr(runtime, "HEADLESS_PAGE_BUFFER_DELAY", 0.0))
+            stack.enter_context(_patched_attr(runtime, "has_configured_answer_duration", lambda _value: False))
+            stack.enter_context(_patched_attr(runtime, "simulate_answer_duration_delay", lambda *_args, **_kwargs: False))
+            stack.enter_context(_patched_attr(runtime, "_answer_qq_single", lambda *_args, **_kwargs: calls.append("single")))
+            stack.enter_context(_patched_attr(runtime, "_answer_qq_text", lambda *_args, **_kwargs: calls.append("text")))
+            stack.enter_context(_patched_attr(runtime, "submit", lambda *_args, **_kwargs: calls.append("submit")))
+            result = runtime.brush_qq(
+                object(),
+                object(),
+                ctx,
+                stop_signal=threading.Event(),
+                thread_name="Worker-1",
+                psycho_plan=None,
+            )
+
+        self.assertTrue(result)
+        self.assertNotIn("fallback-wait", calls)
+        self.assertEqual(calls, ["single", "text", "submit"])
 
     def test_brush_qq_aborts_during_final_duration_wait_before_submit(self) -> None:
         ctx = _FakeState({1: _meta(1)}, {1: ("single", 0)})
