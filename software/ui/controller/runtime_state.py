@@ -12,6 +12,7 @@ class RunControllerRuntimeState:
     """收口运行控制器里零散的生命周期状态。"""
 
     paused: bool = False
+    stopping: bool = False
     completion_cleanup_done: bool = False
     cleanup_scheduled: bool = False
     stopped_by_stop_run: bool = False

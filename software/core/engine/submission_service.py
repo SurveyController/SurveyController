@@ -92,8 +92,8 @@ class SubmissionService:
     ) -> SubmissionOutcome:
         self._mark_successful_submit_proxies(driver)
         grace_seconds = self._resolve_post_submit_close_grace_seconds()
-        if grace_seconds > 0 and not stop_signal.is_set():
-            time.sleep(grace_seconds)
+        if grace_seconds > 0 and stop_signal.wait(grace_seconds):
+            return SubmissionOutcome("aborted", FailureReason.USER_STOPPED, "任务已停止", False, True, False)
         should_stop = self.stop_policy.record_success(stop_signal, thread_name=thread_name)
         return SubmissionOutcome("success", None, "提交成功", True, should_stop, self.config.random_proxy_ip_enabled)
 
