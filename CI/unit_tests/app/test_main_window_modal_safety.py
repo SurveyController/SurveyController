@@ -83,6 +83,27 @@ class MainWindowModalSafetyTests(unittest.TestCase):
 
         self.assertEqual(callback_calls, ["done"])
 
+    def test_dispatch_to_ui_timeout_cancels_late_callback_execution(self) -> None:
+        window = _FakeDialogsWindow()
+        callback_calls: list[str] = []
+        scheduled: list = []
+
+        def callback():
+            callback_calls.append("done")
+            return 42
+
+        with patch.object(window, "_UI_DISPATCH_TIMEOUT_SECONDS", 0.01), \
+             patch("software.ui.shell.main_window_parts.dialogs.QThread.currentThread", return_value=object()), \
+             patch("software.ui.shell.main_window_parts.dialogs.QCoreApplication.instance", return_value=object()), \
+             patch("software.ui.shell.main_window_parts.dialogs.QTimer.singleShot", side_effect=lambda _ms, _receiver, func: scheduled.append(func)):
+            result = window._dispatch_to_ui(callback)
+
+        self.assertIsNone(result)
+        self.assertEqual(callback_calls, [])
+        self.assertEqual(len(scheduled), 1)
+        scheduled[0]()
+        self.assertEqual(callback_calls, [])
+
     def test_schedule_deferred_close_confirmation_retries_close_after_prompt(self) -> None:
         window = _FakeLifecycleWindow()
 

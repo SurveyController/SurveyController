@@ -11,6 +11,7 @@ from dataclasses import dataclass
 from typing import Any, Callable, List, Optional, Set, Tuple
 
 from software.app.config import BROWSER_PREFERENCE
+from software.core.engine.stop_signal import StopSignalLike
 from software.logging.log_utils import log_suppressed_exception
 from software.network.browser.async_bridge import (
     AsyncBridgeLoopThread,
@@ -546,7 +547,7 @@ class BrowserOwnerPool:
     def acquire_owner_lease(
         self,
         *,
-        stop_signal: Optional[threading.Event] = None,
+        stop_signal: Optional[StopSignalLike] = None,
         wait: bool = True,
     ) -> Optional[BrowserOwnerLease]:
         while True:

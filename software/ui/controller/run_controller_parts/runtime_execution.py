@@ -51,6 +51,8 @@ class RunControllerExecutionMixin:
         _execution_state: Optional[ExecutionState]
         _async_engine_client: Optional[AsyncEngineClient]
         _sleep_blocker: Any
+        _close_shutdown_lock: threading.Lock
+        _close_shutdown_thread: Optional[threading.Thread]
         survey_provider: str
         question_entries: List[Any]
         questions_info: List[SurveyQuestionMeta]
