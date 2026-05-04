@@ -71,6 +71,11 @@ class RunControllerExecutionMixin:
         def _paused_state(self, value: bool) -> None: ...
 
         @property
+        def _stopping(self) -> bool: ...
+        @_stopping.setter
+        def _stopping(self, value: bool) -> None: ...
+
+        @property
         def _completion_cleanup_done(self) -> bool: ...
         @_completion_cleanup_done.setter
         def _completion_cleanup_done(self, value: bool) -> None: ...
@@ -136,6 +141,7 @@ class RunControllerExecutionMixin:
         def _start_startup_status_check(self, config: RuntimeConfig) -> None: ...
         def _prepare_engine_state(self, proxy_pool: List[ProxyLease]) -> tuple[ExecutionConfig, ExecutionState]: ...
         def _reset_initialization_state(self) -> None: ...
+        def _finish_initialization_idle_state(self, status_text: str) -> None: ...
         def _build_initialization_logs(self) -> List[str]: ...
         def _emit_quick_bug_report_suggestion_if_needed(self) -> None: ...
 
@@ -216,8 +222,8 @@ class RunControllerExecutionMixin:
     def start_run(self, config: RuntimeConfig):  # noqa: C901
         logging.debug("收到启动请求")
 
-        if self.running or self._starting:
-            logging.warning("任务已在运行中，忽略重复启动请求")
+        if self.running or self._starting or self._initializing or self._stopping:
+            logging.warning("任务仍在运行或停止收尾中，忽略重复启动请求")
             return
 
         try:
@@ -244,6 +250,7 @@ class RunControllerExecutionMixin:
         self.stop_event = threading.Event()
         self.adapter = self._create_adapter(self.stop_event, random_ip_enabled=config.random_ip_enabled)
         self._paused_state = False
+        self._stopping = False
         self._completion_cleanup_done = False
         self._cleanup_scheduled = False
         self._stopped_by_stop_run = False
@@ -279,6 +286,7 @@ class RunControllerExecutionMixin:
         self._apply_sleep_blocker_for_run_start()
         self.running = True
         self._starting = False
+        self._stopping = False
         if emit_run_state:
             self.runStateChanged.emit(True)
         self._status_timer.start()
@@ -325,12 +333,14 @@ class RunControllerExecutionMixin:
             self._dispatch_to_ui_async(lambda: self._on_run_finished(adapter_snapshot))
             return
         self._schedule_cleanup(adapter_snapshot)
-        already_stopped = getattr(self, "_stopped_by_stop_run", False)
+        was_active = bool(self.running or self._stopping or self._initializing)
         self._stopped_by_stop_run = False
+        self._stopping = False
         self._status_timer.stop()
         self._release_sleep_blocker()
-        if not already_stopped:
-            self.running = False
+        self.running = False
+        self._async_engine_client = None
+        if was_active:
             self.runStateChanged.emit(False)
         self._emit_status()
         self._emit_quick_bug_report_suggestion_if_needed()
@@ -389,8 +399,10 @@ class RunControllerExecutionMixin:
         if gate_stop is not None:
             gate_stop.set()
         if self._initializing:
-            self._reset_initialization_state()
             self._prepared_execution_artifacts = None
+            self._stopping = False
+            self._finish_initialization_idle_state("已停止")
+            return
         try:
             self._status_timer.stop()
         except Exception:
@@ -405,14 +417,12 @@ class RunControllerExecutionMixin:
                 engine_client.resume_run()
             except Exception:
                 logging.debug("停止时恢复 async-first 内核暂停状态失败", exc_info=True)
-        self._release_sleep_blocker()
         self._schedule_cleanup()
         if self._paused_state:
             self._paused_state = False
             self.pauseStateChanged.emit(False, "")
-        self.running = False
+        self._stopping = True
         self._stopped_by_stop_run = True
-        self.runStateChanged.emit(False)
         self._emit_status()
     def _collect_shutdown_threads(self) -> List[threading.Thread]:
         seen: set[int] = set()
@@ -573,6 +583,12 @@ class RunControllerExecutionMixin:
         target = getattr(getattr(ctx, "config", None), "target_num", 0)
         fail = getattr(ctx, "cur_fail", 0)
         device_quota_fail_count = getattr(ctx, "device_quota_fail_count", 0)
+        terminal_category = ""
+        if ctx is not None:
+            try:
+                terminal_category = str(ctx.get_terminal_stop_snapshot()[0] or "").strip()
+            except Exception:
+                terminal_category = ""
         paused = False
         reason = ""
         try:
@@ -582,7 +598,14 @@ class RunControllerExecutionMixin:
             paused = False
             reason = ""
 
-        status_prefix = "已暂停" if paused else "已提交"
+        if self._stopping:
+            status_prefix = "正在停止"
+        elif paused:
+            status_prefix = "已暂停"
+        elif not self.running and terminal_category == "user_stopped":
+            status_prefix = "已停止"
+        else:
+            status_prefix = "已提交"
         status = f"{status_prefix} {current}/{target} 份 | 提交连续失败 {fail} 次"
         if int(device_quota_fail_count or 0) > 0:
             status = f"{status} | 设备限制拦截 {int(device_quota_fail_count or 0)} 次"

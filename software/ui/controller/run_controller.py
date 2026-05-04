@@ -97,6 +97,14 @@ class RunController(
         self._runtime_state.paused = bool(value)
 
     @property
+    def _stopping(self) -> bool:
+        return self._runtime_state.stopping
+
+    @_stopping.setter
+    def _stopping(self, value: bool) -> None:
+        self._runtime_state.stopping = bool(value)
+
+    @property
     def _completion_cleanup_done(self) -> bool:
         return self._runtime_state.completion_cleanup_done
 
