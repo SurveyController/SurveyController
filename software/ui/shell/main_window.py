@@ -35,6 +35,7 @@ from software.ui.controller import RunController
 from software.ui.shell.main_window_parts.dialogs import MainWindowDialogsMixin
 from software.ui.shell.main_window_parts.lifecycle import MainWindowLifecycleMixin
 from software.ui.shell.main_window_parts.lazy_pages import MainWindowLazyPagesMixin
+from software.ui.shell.main_window_parts.notifications import MainWindowNotificationsMixin
 from software.ui.shell.main_window_parts.update import MainWindowUpdateMixin
 from software.app.config import (
     APP_ICON_RELATIVE_PATH,
@@ -59,6 +60,7 @@ class MainWindow(
     MainWindowDialogsMixin,
     MainWindowLifecycleMixin,
     MainWindowLazyPagesMixin,
+    MainWindowNotificationsMixin,
     MainWindowUpdateMixin,
     MSFluentWindow,
 ):
@@ -89,6 +91,9 @@ class MainWindow(
         self._community_hint_setting_key = "community_card_request_badge_pending"
         self._community_hint_pending = False
         self._community_hint_badge = None
+        self._system_tray_icon = None
+        self._completion_notification_sent = False
+        self._failure_notification_sent = False
         self._async_dialog_refs = []
         self._contact_dialog = None
         self._contact_dialog_active = False
@@ -534,6 +539,7 @@ class MainWindow(
         self.controller.runFailed.connect(lambda msg: self._toast(msg, "error"))
         self.controller.runStateChanged.connect(self.dashboard.on_run_state_changed)
         self.controller.runStateChanged.connect(self.reverse_fill_page.on_run_state_changed)
+        self.controller.runStateChanged.connect(self._on_run_state_changed_for_notifications)
         self.controller.statusUpdated.connect(self.dashboard.update_status)
         self.controller.statusUpdated.connect(self.reverse_fill_page.update_status)
         self.controller.threadProgressUpdated.connect(self.dashboard.update_thread_progress)
@@ -548,6 +554,13 @@ class MainWindow(
             Qt.ConnectionType.QueuedConnection,
         )
         self.controller.on_ip_counter = self._on_random_ip_counter_update
+
+    @Slot(bool)
+    def _on_run_state_changed_for_notifications(self, running: bool) -> None:
+        if bool(running):
+            self._reset_run_notifications()
+            return
+        self._notify_run_failed_if_needed()
 
     def _register_popups(self):
         def handler(kind: str, title: str, message: str):

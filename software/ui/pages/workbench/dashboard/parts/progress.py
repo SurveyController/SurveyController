@@ -317,6 +317,10 @@ class DashboardProgressMixin:
         ):
             self._completion_notified = True
             self._toast("全部份数已完成", "success", duration=5000)
+            window = self.window()
+            notifier = getattr(window, "_notify_run_completed_if_needed", None)
+            if callable(notifier):
+                notifier()
             self.stop_btn.setEnabled(False)
             self.start_btn.setEnabled(True)
             self.start_btn.setText("重新开始")

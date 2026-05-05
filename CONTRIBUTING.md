@@ -105,6 +105,7 @@
 │   │   ├── browser/
 │   │   ├── http/
 │   │   └── proxy/
+│   ├── proxy_service/
 │   ├── providers/
 │   ├── system/
 │   ├── ui/
@@ -168,3 +169,9 @@
    └── utils/
 
 </details>
+
+## 代理 sidecar 说明
+
+- `software/network/proxy/` 现在主要负责代理配置、随机 IP 会话、UI 联动，以及通过本地 HTTP 调用 sidecar。
+- `software/proxy_service/` 是 Go 写的本地代理服务，负责真实代理池状态、分配、冷却、去重、TTL 过滤和健康检查。
+- Python 旧代理池逻辑已经开始收缩，不应继续往里面堆新的真实池状态。

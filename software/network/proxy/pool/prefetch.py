@@ -5,7 +5,7 @@ import threading
 from typing import List, Optional
 
 from software.core.task import ProxyLease
-from software.network.proxy.policy import get_effective_proxy_api_url
+from software.network.proxy.sidecar_manager import get_proxy_sidecar_client
 
 
 def prefetch_proxy_pool(
@@ -14,14 +14,7 @@ def prefetch_proxy_pool(
     stop_signal: Optional[threading.Event] = None,
 ) -> List[ProxyLease]:
     """预取一批代理 IP。"""
-    from software.network.proxy.api import fetch_proxy_batch
-
-    effective_url = proxy_api_url or get_effective_proxy_api_url()
-    proxy_pool = fetch_proxy_batch(
-        expected_count=max(1, expected_count),
-        proxy_url=effective_url,
-        notify_on_area_error=False,
-        stop_signal=stop_signal,
-    )
-    return proxy_pool
+    del proxy_api_url, stop_signal
+    get_proxy_sidecar_client().prefetch(max(1, expected_count))
+    return []
 

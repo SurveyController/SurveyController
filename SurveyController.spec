@@ -71,6 +71,10 @@ datas = [
     ('icon.ico', '.'),
 ] + qfw_datas + pyside_datas
 
+proxy_service_binary = os.path.join('software', 'proxy_service', 'proxy_service.exe')
+if os.path.isfile(proxy_service_binary):
+    datas.append((proxy_service_binary, '.'))
+
 pyside6_modules = [
     'PySide6.QtCore',
     'PySide6.QtGui',

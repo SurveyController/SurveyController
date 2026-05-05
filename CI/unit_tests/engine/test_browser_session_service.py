@@ -5,6 +5,17 @@ from types import SimpleNamespace
 from unittest.mock import patch
 from software.core.engine.browser_session_service import BrowserSessionService
 
+
+class _FakeSidecarClient:
+
+    def __init__(self) -> None:
+        self.release_calls: list[tuple[str, bool]] = []
+
+    def release_lease(self, *, thread_name: str, requeue: bool):
+        self.release_calls.append((thread_name, bool(requeue)))
+        return None
+
+
 class _FakeSemaphore:
 
     def __init__(self) -> None:
@@ -144,11 +155,14 @@ class BrowserSessionServiceTests:
         service = BrowserSessionService(config, state, gui_instance=None, thread_name='Worker-1')
         service.proxy_address = '127.0.0.1:8888'
         service.sem_acquired = True
-        service.dispose()
+        sidecar = _FakeSidecarClient()
+        with patch('software.core.engine.browser_session_service.get_proxy_sidecar_client', return_value=sidecar):
+            service.dispose()
         assert service.proxy_address is None
         assert not service.sem_acquired
         assert state.released_threads == ['Worker-1']
         assert state.semaphore.released == 1
+        assert sidecar.release_calls == [('Worker-1', False)]
 
     def test_dispose_unregisters_driver_and_releases_resources(self, make_managed_driver) -> None:
         state = _FakeState()
@@ -160,12 +174,15 @@ class BrowserSessionServiceTests:
         service.driver = fake_driver
         service.proxy_address = '127.0.0.1:8888'
         service.sem_acquired = True
-        service.dispose()
+        sidecar = _FakeSidecarClient()
+        with patch('software.core.engine.browser_session_service.get_proxy_sidecar_client', return_value=sidecar):
+            service.dispose()
         assert service.driver is None
         assert fake_driver.quit_calls == 1
         assert gui.active_drivers == []
         assert state.released_threads == ['Worker-1']
         assert state.semaphore.released == 1
+        assert sidecar.release_calls == [('Worker-1', False)]
 
     def test_dispose_skips_already_cleaned_driver(self, make_managed_driver) -> None:
         state = _FakeState()
@@ -178,13 +195,16 @@ class BrowserSessionServiceTests:
         service.driver = fake_driver
         service.proxy_address = '127.0.0.1:8888'
         service.sem_acquired = True
-        service.dispose()
+        sidecar = _FakeSidecarClient()
+        with patch('software.core.engine.browser_session_service.get_proxy_sidecar_client', return_value=sidecar):
+            service.dispose()
         assert service.driver is None
         assert service.proxy_address is None
         assert fake_driver.quit_calls == 0
         assert gui.active_drivers == []
         assert state.released_threads == ['Worker-1']
         assert state.semaphore.released == 1
+        assert sidecar.release_calls == [('Worker-1', False)]
 
     def test_shutdown_closes_browser_manager_and_clears_reference(self) -> None:
         state = _FakeState()

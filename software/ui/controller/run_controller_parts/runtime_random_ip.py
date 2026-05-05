@@ -20,6 +20,12 @@ from software.network.proxy.session import (
     sync_quota_snapshot_from_server,
 )
 from software.network.proxy import is_custom_proxy_api_active
+from software.network.proxy.sidecar_manager import (
+    ProxySidecarError,
+    ensure_proxy_sidecar_running,
+    stop_proxy_sidecar,
+    sync_proxy_sidecar_config,
+)
 from software.network.proxy.policy import get_random_ip_counter_snapshot_local
 from software.logging.log_utils import log_deduped_message, reset_deduped_log_message
 
@@ -236,8 +242,19 @@ class RunControllerRandomIPMixin:
             return enabled
         if not enabled:
             self._set_random_ip_enabled(adapter, False)
+            try:
+                stop_proxy_sidecar()
+            except Exception:
+                logging.info("关闭代理服务失败", exc_info=True)
             return False
         if is_custom_proxy_api_active():
+            try:
+                ensure_proxy_sidecar_running(force_restart=False)
+                sync_proxy_sidecar_config()
+            except ProxySidecarError as exc:
+                self._show_random_ip_message(adapter, "代理服务启动失败", f"代理服务启动失败，随机IP不可用：{exc}", level="error")
+                self._set_random_ip_enabled(adapter, False)
+                return False
             self._set_random_ip_enabled(adapter, True)
             self.refresh_random_ip_counter(adapter=adapter)
             return True
@@ -267,6 +284,13 @@ class RunControllerRandomIPMixin:
         self._apply_random_ip_counter(adapter, used=used_quota, total=total_quota, custom_api=False)
         if is_quota_exhausted({"authenticated": True, **snapshot}):
             self._show_random_ip_message(adapter, "提示", "随机IP已用额度已达到上限，请先补充额度后再启用。", level="warning")
+            self._set_random_ip_enabled(adapter, False)
+            return False
+        try:
+            ensure_proxy_sidecar_running(force_restart=False)
+            sync_proxy_sidecar_config()
+        except ProxySidecarError as exc:
+            self._show_random_ip_message(adapter, "代理服务启动失败", f"代理服务启动失败，随机IP不可用：{exc}", level="error")
             self._set_random_ip_enabled(adapter, False)
             return False
         self._set_random_ip_enabled(adapter, True)

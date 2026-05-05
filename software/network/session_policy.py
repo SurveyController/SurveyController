@@ -1,27 +1,20 @@
 """会话策略 - 代理切换与浏览器实例复用逻辑"""
 from typing import Any, Optional, Tuple
 import logging
-import threading
 
 from software.core.engine.stop_signal import StopSignalLike
 from software.core.task import ExecutionState, ProxyLease
-from software.network.proxy.pool import coerce_proxy_lease, mask_proxy_for_log
-from software.network.proxy.api import fetch_proxy_batch
-from software.network.proxy import get_proxy_required_ttl_seconds, proxy_lease_has_sufficient_ttl
+from software.network.proxy.pool import mask_proxy_for_log
+from software.network.proxy.sidecar_manager import (
+    ProxySidecarError,
+    ensure_proxy_sidecar_running,
+    restart_proxy_sidecar,
+)
+from software.network.proxy import get_proxy_required_ttl_seconds
 from software.io.config import _select_user_agent_from_ratios
 
 _PROXY_WAIT_POLL_SECONDS = 0.3
 _BAD_PROXY_COOLDOWN_SECONDS = 180.0
-
-
-def _active_proxy_addresses_locked(ctx: ExecutionState, *, exclude_thread_name: str = "") -> set[str]:
-    return ctx.active_proxy_addresses_locked(exclude_thread_name=exclude_thread_name)
-
-
-def _blocked_proxy_addresses_locked(ctx: ExecutionState, *, exclude_thread_name: str = "") -> set[str]:
-    blocked = _active_proxy_addresses_locked(ctx, exclude_thread_name=exclude_thread_name)
-    blocked.update(ctx.successful_proxy_addresses_locked())
-    return blocked
 
 
 def _record_bad_proxy_and_maybe_pause(
@@ -40,6 +33,15 @@ def _required_proxy_ttl_seconds(ctx: ExecutionState) -> int:
     return int(get_proxy_required_ttl_seconds(getattr(ctx.config, "answer_duration_range_seconds", (0, 0))))
 
 
+def _sidecar_client():
+    return ensure_proxy_sidecar_running(force_restart=False)
+
+
+def _ensure_sidecar_config_applied() -> None:
+    client = _sidecar_client()
+    client.apply_config(__import__("software.network.proxy.policy.settings", fromlist=["get_proxy_settings"]).get_proxy_settings())
+
+
 def _mark_proxy_temporarily_bad(
     ctx: ExecutionState,
     proxy_address: str,
@@ -50,66 +52,25 @@ def _mark_proxy_temporarily_bad(
     if not normalized:
         return
     ctx.mark_proxy_in_cooldown(normalized, cooldown_seconds)
-    _discard_unresponsive_proxy(ctx, normalized)
+    with ctx.lock:
+        ctx.config.proxy_ip_pool = [
+            lease
+            for lease in list(getattr(ctx.config, "proxy_ip_pool", []) or [])
+            if str(getattr(lease, "address", "") or "").strip() != normalized
+        ]
+    try:
+        _sidecar_client().mark_bad(
+            thread_name="",
+            proxy_address=normalized,
+            cooldown_seconds=float(cooldown_seconds or 0.0),
+        )
+    except ProxySidecarError as exc:
+        logging.warning("通知代理服务标记坏代理失败：%s", exc)
     logging.info(
         "代理进入冷却 %.0fs：%s",
         float(cooldown_seconds or 0.0),
         mask_proxy_for_log(normalized),
     )
-
-
-def _purge_unusable_proxy_pool_locked(ctx: ExecutionState) -> None:
-    ctx._purge_expired_proxy_cooldowns_locked()
-    required_ttl = _required_proxy_ttl_seconds(ctx)
-    kept = []
-    seen = set()
-    removed = 0
-    for item in list(ctx.config.proxy_ip_pool or []):
-        lease = coerce_proxy_lease(item)
-        if lease is None:
-            removed += 1
-            continue
-        if not lease.poolable:
-            removed += 1
-            continue
-        if lease.address in seen:
-            removed += 1
-            continue
-        if ctx._is_proxy_in_cooldown_locked(lease.address):
-            removed += 1
-            logging.info("已移除冷却中的代理：%s", mask_proxy_for_log(lease.address))
-            continue
-        if not proxy_lease_has_sufficient_ttl(lease, required_ttl_seconds=required_ttl):
-            removed += 1
-            logging.info("已丢弃即将过期的代理：%s", mask_proxy_for_log(lease.address))
-            continue
-        seen.add(lease.address)
-        kept.append(lease)
-    if removed:
-        logging.info("代理池已清理无效/重复代理 %s 个", removed)
-    ctx.config.proxy_ip_pool = kept
-    if removed:
-        ctx.notify_runtime_change()
-
-
-def _pop_available_proxy_lease_locked(ctx: ExecutionState) -> Optional[ProxyLease]:
-    _purge_unusable_proxy_pool_locked(ctx)
-    blocked_addresses = _blocked_proxy_addresses_locked(ctx)
-    while ctx.config.proxy_ip_pool:
-        lease = coerce_proxy_lease(ctx.config.proxy_ip_pool.pop(0))
-        if lease is None:
-            continue
-        if not proxy_lease_has_sufficient_ttl(lease, required_ttl_seconds=_required_proxy_ttl_seconds(ctx)):
-            logging.info("已跳过即将过期的代理：%s", mask_proxy_for_log(lease.address))
-            continue
-        if ctx._is_proxy_in_cooldown_locked(lease.address):
-            logging.info("已跳过冷却中的代理：%s", mask_proxy_for_log(lease.address))
-            continue
-        if lease.address in blocked_addresses:
-            logging.info("已跳过已占用或已成功使用过的代理：%s", mask_proxy_for_log(lease.address))
-            continue
-        return lease
-    return None
 
 
 def _mark_proxy_in_use(ctx: ExecutionState, thread_name: str, lease: Optional[ProxyLease]) -> Optional[str]:
@@ -162,71 +123,28 @@ def _select_proxy_for_session(
 ) -> Optional[str]:
     if not ctx.config.random_proxy_ip_enabled:
         return None
-    selected: Optional[ProxyLease] = None
-    with ctx.lock:
-        selected = _pop_available_proxy_lease_locked(ctx)
-    if selected is not None:
-        return _mark_proxy_in_use(ctx, thread_name, selected)
-
     ctx.register_proxy_waiter()
     try:
         while True:
             if _should_stop_proxy_wait(ctx, stop_signal):
                 return None
-            with ctx.lock:
-                selected = _pop_available_proxy_lease_locked(ctx)
-            if selected is not None:
-                return _mark_proxy_in_use(ctx, thread_name, selected)
-
-            # 代理池为空时，使用全局 fetch 锁避免多线程并发重复请求代理 API（会快速耗尽额度）
-            with ctx._proxy_fetch_lock:
+            try:
+                client = _sidecar_client()
+                client.apply_config(__import__("software.network.proxy.policy.settings", fromlist=["get_proxy_settings"]).get_proxy_settings())
                 with ctx.lock:
-                    selected = _pop_available_proxy_lease_locked(ctx)
-                    if selected is None:
-                        request_num = _resolve_proxy_request_num_locked(ctx)
-                    else:
-                        request_num = 0
-                if selected is not None:
-                    return _mark_proxy_in_use(ctx, thread_name, selected)
-
+                    request_num = _resolve_proxy_request_num_locked(ctx)
                 if request_num > 0:
+                    client.prefetch(request_num)
+                lease = client.acquire_lease(thread_name=thread_name, wait=bool(wait))
+                if lease is not None:
+                    return _mark_proxy_in_use(ctx, thread_name, lease)
+            except ProxySidecarError as exc:
+                logging.warning("获取随机代理失败：%s", exc)
+                if wait:
                     try:
-                        fetched = fetch_proxy_batch(expected_count=request_num, stop_signal=ctx.stop_event)
-                    except Exception as exc:
-                        logging.warning(f"获取随机代理失败：{exc}")
-                        fetched = None
-                    if fetched:
-                        selected = None
-                        with ctx.lock:
-                            _purge_unusable_proxy_pool_locked(ctx)
-                            _pool_leases = [coerce_proxy_lease(item) for item in ctx.config.proxy_ip_pool]
-                            existing = {lease.address for lease in _pool_leases if lease is not None}
-                            existing.update(_blocked_proxy_addresses_locked(ctx))
-                            required_ttl = _required_proxy_ttl_seconds(ctx)
-                            for item in fetched:
-                                lease = coerce_proxy_lease(item)
-                                if lease is None:
-                                    continue
-                                if not proxy_lease_has_sufficient_ttl(lease, required_ttl_seconds=required_ttl):
-                                    logging.info("已丢弃即将过期的新代理：%s", mask_proxy_for_log(lease.address))
-                                    continue
-                                if ctx._is_proxy_in_cooldown_locked(lease.address):
-                                    logging.info("已跳过冷却中的新代理：%s", mask_proxy_for_log(lease.address))
-                                    continue
-                                if selected is None:
-                                    if lease.address in existing:
-                                        logging.info("已跳过重复或正在占用的新代理：%s", mask_proxy_for_log(lease.address))
-                                        continue
-                                    selected = lease
-                                    existing.add(lease.address)
-                                    continue
-                                if not lease.poolable or lease.address in existing:
-                                    continue
-                                ctx.config.proxy_ip_pool.append(lease)
-                                existing.add(lease.address)
-                            ctx.notify_runtime_change()
-                        if selected is not None:
-                            return _mark_proxy_in_use(ctx, thread_name, selected)
+                        restart_proxy_sidecar()
+                    except Exception as restart_exc:
+                        logging.warning("重启代理服务失败：%s", restart_exc)
 
             if not wait:
                 return None
@@ -245,21 +163,21 @@ def _select_user_agent_for_session(ctx: ExecutionState) -> Tuple[Optional[str], 
 def _discard_unresponsive_proxy(ctx: ExecutionState, proxy_address: str) -> None:
     if not proxy_address:
         return
+    normalized = str(proxy_address or "").strip()
     with ctx.lock:
-        removed = False
-        normalized = str(proxy_address or "").strip()
-        retained = []
-        for item in list(ctx.config.proxy_ip_pool or []):
-            lease = coerce_proxy_lease(item)
-            if lease is None:
-                continue
-            if lease.address == normalized:
-                removed = True
-                continue
-            retained.append(lease)
-        ctx.config.proxy_ip_pool = retained
-        if removed:
-            logging.info(f"已移除无响应代理：{mask_proxy_for_log(proxy_address)}")
-            ctx.notify_runtime_change()
+        ctx.config.proxy_ip_pool = [
+            lease
+            for lease in list(getattr(ctx.config, "proxy_ip_pool", []) or [])
+            if str(getattr(lease, "address", "") or "").strip() != normalized
+        ]
+    try:
+        _sidecar_client().mark_bad(
+            thread_name="",
+            proxy_address=normalized,
+            cooldown_seconds=0.0,
+        )
+    except ProxySidecarError as exc:
+        logging.warning("移除无响应代理失败：%s", exc)
+    logging.info("已移除无响应代理：%s", mask_proxy_for_log(proxy_address))
 
 

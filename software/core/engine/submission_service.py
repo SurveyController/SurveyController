@@ -22,6 +22,7 @@ from software.core.engine.stop_signal import StopSignalLike
 from software.core.task import ExecutionConfig, ExecutionState
 from software.logging.log_utils import log_suppressed_exception
 from software.network.browser import BrowserDriver
+from software.network.proxy.sidecar_manager import ProxySidecarError, get_proxy_sidecar_client
 from software.providers.registry import (
     handle_submission_verification_detected_sync as _provider_handle_submission_verification_detected,
     submission_requires_verification_sync as _provider_submission_requires_verification,
@@ -60,6 +61,7 @@ class SubmissionService:
         return self._survey_provider_key() == "wjx"
 
     def _mark_successful_submit_proxies(self, driver: BrowserDriver) -> None:
+        thread_name = str(getattr(driver, "_thread_name", "") or "").strip()
         for attr_name in ("_session_proxy_address", "_submit_proxy_address"):
             proxy_address = str(getattr(driver, attr_name, "") or "").strip()
             if not proxy_address:
@@ -72,10 +74,28 @@ class SubmissionService:
                     exc,
                     level=logging.WARNING,
                 )
+            try:
+                get_proxy_sidecar_client().mark_success(
+                    thread_name=thread_name,
+                    proxy_address=proxy_address,
+                )
+            except ProxySidecarError as exc:
+                log_suppressed_exception(
+                    f"SubmissionService._mark_successful_submit_proxies sidecar {attr_name}",
+                    exc,
+                    level=logging.WARNING,
+                )
         try:
-            thread_name = str(getattr(driver, "_thread_name", "") or "").strip()
             if thread_name:
                 self.state.release_proxy_in_use(thread_name)
+                try:
+                    get_proxy_sidecar_client().release_lease(thread_name=thread_name, requeue=False)
+                except ProxySidecarError as exc:
+                    log_suppressed_exception(
+                        "SubmissionService._mark_successful_submit_proxies sidecar release_proxy_in_use",
+                        exc,
+                        level=logging.WARNING,
+                    )
         except Exception as exc:
             log_suppressed_exception(
                 "SubmissionService._mark_successful_submit_proxies release_proxy_in_use",

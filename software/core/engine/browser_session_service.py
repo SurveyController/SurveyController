@@ -19,6 +19,7 @@ from software.core.task import ExecutionConfig, ExecutionState
 from software.logging.log_utils import log_suppressed_exception
 from software.network.browser.owner_pool import BrowserOwnerLease, BrowserOwnerPool
 from software.network.proxy.pool import is_proxy_responsive
+from software.network.proxy.sidecar_manager import ProxySidecarError, get_proxy_sidecar_client
 from software.network.session_policy import (
     _discard_unresponsive_proxy,
     _record_bad_proxy_and_maybe_pause,
@@ -137,7 +138,7 @@ class BrowserSessionService:
         if not self.driver:
             self._release_owner_lease()
             if self.thread_name:
-                self.state.release_proxy_in_use(self.thread_name)
+                self._release_proxy_lease()
                 self.proxy_address = None
             if self.sem_acquired:
                 try:
@@ -153,7 +154,7 @@ class BrowserSessionService:
             self._unregister_driver(self.driver)
             self._release_owner_lease()
             if self.thread_name:
-                self.state.release_proxy_in_use(self.thread_name)
+                self._release_proxy_lease()
             self.proxy_address = None
             self.driver = None
             if self.sem_acquired:
@@ -173,7 +174,7 @@ class BrowserSessionService:
             self._release_owner_lease()
 
         if self.thread_name:
-            self.state.release_proxy_in_use(self.thread_name)
+            self._release_proxy_lease()
         self.proxy_address = None
 
         if self.sem_acquired:
@@ -211,6 +212,21 @@ class BrowserSessionService:
         except Exception as exc:
             log_suppressed_exception("BrowserSessionService._release_owner_lease", exc, level=logging.WARNING)
 
+    def _release_proxy_lease(self) -> None:
+        if not self.thread_name:
+            return
+        released_lease = None
+        try:
+            released_lease = self.state.release_proxy_in_use(self.thread_name)
+        except Exception as exc:
+            log_suppressed_exception("BrowserSessionService._release_proxy_lease state.release_proxy_in_use", exc, level=logging.WARNING)
+        if released_lease is None and not self.proxy_address:
+            return
+        try:
+            get_proxy_sidecar_client().release_lease(thread_name=self.thread_name, requeue=False)
+        except ProxySidecarError as exc:
+            log_suppressed_exception("BrowserSessionService._release_proxy_lease sidecar.release_lease", exc, level=logging.WARNING)
+
     def create_browser(
         self,
         preferred_browsers: list,
@@ -246,7 +262,7 @@ class BrowserSessionService:
                 logging.warning("提取到的代理质量过低，自动弃用更换下一个")
                 _discard_unresponsive_proxy(self.state, self.proxy_address)
                 if self.thread_name:
-                    self.state.release_proxy_in_use(self.thread_name)
+                    self._release_proxy_lease()
                 self.proxy_address = None
                 if self.config.random_proxy_ip_enabled:
                     if should_wait_for_proxy:
@@ -275,7 +291,7 @@ class BrowserSessionService:
                             self.sem_acquired = False
                             logging.info("等待 owner 容量时任务结束，已释放信号量")
                         if self.thread_name:
-                            self.state.release_proxy_in_use(self.thread_name)
+                            self._release_proxy_lease()
                         self.proxy_address = None
                         return None
                     self._browser_owner_lease = lease
@@ -310,7 +326,7 @@ class BrowserSessionService:
                     self.sem_acquired = False
                     logging.info("创建浏览器失败，已释放信号量")
                 if self.thread_name:
-                    self.state.release_proxy_in_use(self.thread_name)
+                    self._release_proxy_lease()
                 failed_proxy = self.proxy_address
                 self.proxy_address = None
                 self._release_owner_lease()

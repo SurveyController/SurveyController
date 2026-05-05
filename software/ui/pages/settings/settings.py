@@ -21,9 +21,11 @@ from software.app.config import (
     AUTO_SAVE_LOG_RETENTION_COUNT_SETTING_KEY,
     AUTO_SAVE_LOG_RETENTION_OPTIONS,
     AUTO_SAVE_LOGS_SETTING_KEY,
+    BACKGROUND_RUN_NOTIFICATION_SETTING_KEY,
     DEFAULT_DOWNLOAD_SOURCE,
     DEFAULT_AUTO_SAVE_LOG_RETENTION_COUNT,
     DEFAULT_AUTO_SAVE_LOGS,
+    DEFAULT_BACKGROUND_RUN_NOTIFICATIONS,
     DOWNLOAD_SOURCES,
     NAVIGATION_TEXT_VISIBLE_SETTING_KEY,
     app_settings,
@@ -93,6 +95,18 @@ class SettingsPage(ScrollArea):
             self.behavior_group,
         )
         self.prevent_sleep_card.setChecked(get_bool_from_qsettings(settings.value("prevent_sleep_during_run"), True))
+        self.background_run_notification_card = SwitchSettingCard(
+            FluentIcon.RINGER,
+            "后台运行时完成/失败通知",
+            "当程序不在前台时，任务完成或异常失败会弹出 Windows 通知",
+            self.behavior_group,
+        )
+        self.background_run_notification_card.setChecked(
+            get_bool_from_qsettings(
+                settings.value(BACKGROUND_RUN_NOTIFICATION_SETTING_KEY),
+                DEFAULT_BACKGROUND_RUN_NOTIFICATIONS,
+            )
+        )
         self.auto_save_logs_card = ExpandComboSwitchSettingCard(
             FluentIcon.DOCUMENT,
             "自动保存日志",
@@ -121,6 +135,7 @@ class SettingsPage(ScrollArea):
             self.auto_save_logs_combo.setCurrentIndex(retention_index)
         self.behavior_group.addSettingCard(self.ask_save_card)
         self.behavior_group.addSettingCard(self.prevent_sleep_card)
+        self.behavior_group.addSettingCard(self.background_run_notification_card)
         self.behavior_group.addSettingCard(self.auto_save_logs_card)
         layout.addWidget(self.behavior_group)
 
@@ -212,6 +227,15 @@ class SettingsPage(ScrollArea):
             scope="CONFIG",
             event="toggle_prevent_sleep_during_run",
             target="prevent_sleep_switch",
+            page="settings",
+            payload_factory=lambda checked: {"enabled": bool(checked)},
+        )
+        bind_logged_action(
+            self.background_run_notification_card.switchButton.checkedChanged,
+            self._on_background_run_notification_toggled,
+            scope="CONFIG",
+            event="toggle_background_run_notifications",
+            target="background_run_notification_switch",
             page="settings",
             payload_factory=lambda checked: {"enabled": bool(checked)},
         )
@@ -362,6 +386,19 @@ class SettingsPage(ScrollArea):
             payload={"enabled": bool(checked), "persist": persist},
         )
 
+    def _apply_background_run_notification_state(self, checked: bool, persist: bool = True):
+        settings = app_settings()
+        if persist:
+            settings.setValue(BACKGROUND_RUN_NOTIFICATION_SETTING_KEY, checked)
+        log_action(
+            "CONFIG",
+            "toggle_background_run_notifications",
+            "background_run_notification_switch",
+            "settings",
+            result="changed",
+            payload={"enabled": bool(checked), "persist": persist},
+        )
+
     def _apply_auto_save_logs_state(self, checked: bool, persist: bool = True):
         settings = app_settings()
         if persist:
@@ -445,6 +482,9 @@ class SettingsPage(ScrollArea):
     def _on_prevent_sleep_toggled(self, checked: bool):
         self._apply_prevent_sleep_state(checked)
 
+    def _on_background_run_notification_toggled(self, checked: bool):
+        self._apply_background_run_notification_state(checked)
+
     def _on_auto_save_logs_toggled(self, checked: bool):
         self._apply_auto_save_logs_state(checked)
 
@@ -472,6 +512,7 @@ class SettingsPage(ScrollArea):
             "window_topmost",
             "ask_save_on_close",
             "prevent_sleep_during_run",
+            BACKGROUND_RUN_NOTIFICATION_SETTING_KEY,
             AUTO_SAVE_LOGS_SETTING_KEY,
             AUTO_SAVE_LOG_RETENTION_COUNT_SETTING_KEY,
             "auto_check_update",
@@ -485,6 +526,7 @@ class SettingsPage(ScrollArea):
             "window_topmost": False,
             "ask_save_on_close": True,
             "prevent_sleep_during_run": True,
+            BACKGROUND_RUN_NOTIFICATION_SETTING_KEY: DEFAULT_BACKGROUND_RUN_NOTIFICATIONS,
             AUTO_SAVE_LOGS_SETTING_KEY: DEFAULT_AUTO_SAVE_LOGS,
             AUTO_SAVE_LOG_RETENTION_COUNT_SETTING_KEY: DEFAULT_AUTO_SAVE_LOG_RETENTION_COUNT,
             "auto_check_update": True,
@@ -494,6 +536,7 @@ class SettingsPage(ScrollArea):
         self._set_switch_state(self.topmost_card, defaults["window_topmost"])
         self._set_switch_state(self.ask_save_card, defaults["ask_save_on_close"])
         self._set_switch_state(self.prevent_sleep_card, defaults["prevent_sleep_during_run"])
+        self._set_switch_state(self.background_run_notification_card, defaults[BACKGROUND_RUN_NOTIFICATION_SETTING_KEY])
         self._set_switch_state(self.auto_save_logs_card, defaults[AUTO_SAVE_LOGS_SETTING_KEY])
         retention_index = self.auto_save_logs_combo.findData(defaults[AUTO_SAVE_LOG_RETENTION_COUNT_SETTING_KEY])
         if retention_index >= 0:
@@ -510,6 +553,7 @@ class SettingsPage(ScrollArea):
         self._apply_topmost_state(defaults["window_topmost"], persist=False)
         self._apply_ask_save_state(defaults["ask_save_on_close"], persist=False)
         self._apply_prevent_sleep_state(defaults["prevent_sleep_during_run"], persist=False)
+        self._apply_background_run_notification_state(defaults[BACKGROUND_RUN_NOTIFICATION_SETTING_KEY], persist=False)
         self._apply_auto_save_logs_state(defaults[AUTO_SAVE_LOGS_SETTING_KEY], persist=False)
         self._apply_auto_save_log_retention_count(defaults[AUTO_SAVE_LOG_RETENTION_COUNT_SETTING_KEY], persist=False)
         self._apply_auto_update_state(defaults["auto_check_update"], persist=False)

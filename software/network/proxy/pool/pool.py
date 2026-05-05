@@ -14,6 +14,7 @@ from software.app.config import (
     PROXY_TTL_GRACE_SECONDS,
 )
 from software.logging.log_utils import log_suppressed_exception
+from software.network.proxy.sidecar_manager import get_proxy_sidecar_client, ProxySidecarError
 from software.network.proxy.policy.source import (
     _to_non_negative_int,
     get_proxy_source,
@@ -233,7 +234,16 @@ def coerce_proxy_lease(item: Any, *, source: str = "") -> Optional[ProxyLease]:
 
 def is_proxy_responsive(proxy_address: str, *, skip_for_default: bool = True) -> bool:
     """公开的代理可用性检测接口。"""
-    return _proxy_is_responsive(proxy_address, skip_for_default=skip_for_default)
+    try:
+        return bool(
+            get_proxy_sidecar_client().check_health(
+                proxy_address,
+                skip_for_official=bool(skip_for_default),
+            )
+        )
+    except ProxySidecarError as exc:
+        logging.warning("代理服务健康检查失败，回退本地探测：%s", exc)
+        return _proxy_is_responsive(proxy_address, skip_for_default=skip_for_default)
 
 
 __all__ = [

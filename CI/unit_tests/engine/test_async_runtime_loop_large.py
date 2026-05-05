@@ -16,6 +16,15 @@ from software.network.browser import ProxyConnectionError
 from software.network.browser.async_owner_pool import _route_runtime_resource
 
 
+class _FakeSidecarClient:
+    def __init__(self) -> None:
+        self.release_calls: list[tuple[str, bool]] = []
+
+    def release_lease(self, *, thread_name: str, requeue: bool):
+        self.release_calls.append((thread_name, bool(requeue)))
+        return None
+
+
 class _FakeScheduler:
     def __init__(self, acquire_values=None) -> None:
         self.acquire_values = list(acquire_values or [1])
@@ -184,16 +193,19 @@ class AsyncRuntimeLoopLargeTests:
         state = ExecutionState(config=config)
         released: list[str] = []
         state.release_proxy_in_use = lambda thread_name: released.append(thread_name)
+        sidecar = _FakeSidecarClient()
         monkeypatch.setattr(runtime_loop, "_select_proxy_for_session", lambda *_args, **_kwargs: "http://1.1.1.1:80")
         monkeypatch.setattr(runtime_loop, "_record_bad_proxy_and_maybe_pause", lambda *_args, **_kwargs: False)
         monkeypatch.setattr(runtime_loop, "is_proxy_responsive", lambda proxy: False)
         monkeypatch.setattr(runtime_loop, "_discard_unresponsive_proxy", lambda *_args, **_kwargs: None)
         monkeypatch.setattr(runtime_loop, "_select_user_agent_for_session", lambda *_args, **_kwargs: ("UA", None))
+        monkeypatch.setattr(runtime_loop, "get_proxy_sidecar_client", lambda: sidecar)
         runner, _state, _ctx, _loop, _scheduler = _build_runner(config=config, state=state)
 
         proxy, ua = runner._select_session_proxy_and_ua()
         assert (proxy, ua) == (None, None)
         assert released == ["Slot-1"]
+        assert sidecar.release_calls == [("Slot-1", False)]
 
     @pytest.mark.asyncio
     async def test_open_session_sets_driver_metadata(self, monkeypatch) -> None:
@@ -217,11 +229,16 @@ class AsyncRuntimeLoopLargeTests:
         state.release_proxy_in_use = lambda thread_name: released.append(thread_name)
         runner.proxy_address = "http://1.1.1.1:80"
         session = _FakeSession()
+        sidecar = _FakeSidecarClient()
+        monkeypatch = pytest.MonkeyPatch()
+        monkeypatch.setattr(runtime_loop, "get_proxy_sidecar_client", lambda: sidecar)
 
         await runner._close_session(session)
+        monkeypatch.undo()
         assert session.close_calls == 1
         assert released == ["Slot-1"]
         assert runner.proxy_address is None
+        assert sidecar.release_calls == [("Slot-1", False)]
 
     @pytest.mark.asyncio
     async def test_load_survey_or_record_failure_covers_timed_mode_and_normal_failure(self, monkeypatch) -> None:

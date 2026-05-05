@@ -26,6 +26,7 @@ from software.core.task import ExecutionConfig, ExecutionState
 from software.network.browser import ProxyConnectionError
 from software.network.browser.async_owner_pool import AsyncBrowserOwnerPool, AsyncBrowserSession
 from software.network.proxy.pool import is_proxy_responsive
+from software.network.proxy.sidecar_manager import ProxySidecarError, get_proxy_sidecar_client
 from software.network.session_policy import (
     _discard_unresponsive_proxy,
     _mark_proxy_temporarily_bad,
@@ -212,6 +213,10 @@ class AsyncSlotRunner:
             logging.warning("提取到的代理质量过低，自动弃用更换下一个")
             _discard_unresponsive_proxy(self.state, proxy_address)
             self.state.release_proxy_in_use(self.slot_label)
+            try:
+                get_proxy_sidecar_client().release_lease(thread_name=self.slot_label, requeue=False)
+            except ProxySidecarError:
+                logging.info("释放 sidecar 代理占用失败", exc_info=True)
             return None, None
         ua_value, _ = _select_user_agent_for_session(self.state)
         return proxy_address, ua_value
@@ -241,6 +246,14 @@ class AsyncSlotRunner:
                 self.state.release_proxy_in_use(self.slot_label)
             except Exception:
                 logging.info("释放代理占用失败", exc_info=True)
+            try:
+                await asyncio.to_thread(
+                    get_proxy_sidecar_client().release_lease,
+                    thread_name=self.slot_label,
+                    requeue=False,
+                )
+            except ProxySidecarError:
+                logging.info("释放 sidecar 代理占用失败", exc_info=True)
         self.proxy_address = None
 
     async def _load_survey_or_record_failure(self, session: AsyncBrowserSession) -> bool:

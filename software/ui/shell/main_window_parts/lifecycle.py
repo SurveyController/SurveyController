@@ -10,6 +10,7 @@ from PySide6.QtWidgets import QFileDialog, QWidget
 from qfluentwidgets import MessageBox, PushButton
 
 from software.network.proxy.session import get_session_snapshot
+from software.network.proxy.sidecar_manager import stop_proxy_sidecar
 from software.app.config import app_settings, get_bool_from_qsettings
 from software.app.runtime_paths import get_runtime_directory
 from software.io.config import RuntimeConfig, build_runtime_config_snapshot
@@ -50,6 +51,10 @@ class MainWindowLifecycleMixin:
             self.controller.request_shutdown_for_close()
         except Exception as exc:
             log_suppressed_exception("closeEvent: self.controller.request_shutdown_for_close()", exc)
+        try:
+            stop_proxy_sidecar()
+        except Exception as exc:
+            log_suppressed_exception("closeEvent: stop_proxy_sidecar()", exc)
 
         try:
             if self._boot_splash:
@@ -72,6 +77,11 @@ class MainWindowLifecycleMixin:
             self._cancel_startup_update_check()
         except Exception as exc:
             log_suppressed_exception("closeEvent: self._cancel_startup_update_check()", exc)
+
+        try:
+            self._dispose_system_tray_icon()
+        except Exception as exc:
+            log_suppressed_exception("closeEvent: self._dispose_system_tray_icon()", exc)
 
         try:
             dialog = getattr(self, "_contact_dialog", None)
