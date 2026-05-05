@@ -184,3 +184,95 @@ class CredamoRuntimeTests:
             result = runtime.brush_credamo(driver, config, state, stop_signal=stop_signal, thread_name='Worker-1')
         assert result
         multiple_mock.assert_called_once_with(driver.page, root, [100.0, 100.0, 100.0, 100.0], min_limit=2, max_limit=3)
+
+    def test_runtime_patchpoint_wrappers_sync_and_delegate(self, restore_credamo_runtime_patchpoints) -> None:
+        page = object()
+        stop_signal = threading.Event()
+        root = object()
+        with patch('credamo.provider.runtime._DOM_WAIT_FOR_QUESTION_ROOTS', return_value=['r1']) as wait_roots, \
+             patch('credamo.provider.runtime._DOM_UNANSWERED_QUESTION_ROOTS', return_value=['r2']) as unanswered, \
+             patch('credamo.provider.runtime._DOM_WAIT_FOR_DYNAMIC_QUESTION_ROOTS', return_value=['r3']) as dynamic_roots, \
+             patch('credamo.provider.runtime._DOM_WAIT_FOR_PAGE_CHANGE', return_value=True) as wait_change, \
+             patch('credamo.provider.runtime._DOM_CLICK_SUBMIT', return_value=True) as click_submit, \
+             patch('credamo.provider.runtime._ANSWER_SINGLE_LIKE', return_value=True) as answer_single, \
+             patch('credamo.provider.runtime._ANSWER_MULTIPLE', return_value=True) as answer_multiple, \
+             patch('credamo.provider.runtime._ANSWER_TEXT', return_value=True) as answer_text, \
+             patch('credamo.provider.runtime._ANSWER_DROPDOWN', return_value=True) as answer_dropdown, \
+             patch('credamo.provider.runtime._ANSWER_SCALE', return_value=True) as answer_scale, \
+             patch('credamo.provider.runtime._ANSWER_MATRIX', return_value=True) as answer_matrix, \
+             patch('credamo.provider.runtime._ANSWER_ORDER', return_value=True) as answer_order:
+            assert runtime._wait_for_question_roots(page, stop_signal, timeout_ms=1) == ['r1']
+            assert runtime._unanswered_question_roots(page, ['a'], {'b'}, fallback_start=2) == ['r2']
+            assert runtime._wait_for_dynamic_question_roots(page, {'a'}, stop_signal, fallback_start=2) == ['r3']
+            assert runtime._wait_for_page_change(page, 'sig', stop_signal, timeout_ms=1)
+            assert runtime._click_submit(page, stop_signal, timeout_ms=1)
+            assert runtime._answer_single_like(page, root, [1], 0)
+            assert runtime._answer_multiple(page, root, [1], min_limit=1, max_limit=2)
+            assert runtime._answer_text(root, ['x'])
+            assert runtime._answer_dropdown(page, root, [1])
+            assert runtime._answer_scale(page, root, [1])
+            assert runtime._answer_matrix(page, root, [[1]], 3)
+            assert runtime._answer_order(page, root)
+
+        wait_roots.assert_called_once_with(page, stop_signal, timeout_ms=1)
+        unanswered.assert_called_once_with(page, ['a'], {'b'}, fallback_start=2)
+        dynamic_roots.assert_called_once_with(page, {'a'}, stop_signal, fallback_start=2)
+        wait_change.assert_called_once_with(page, 'sig', stop_signal, timeout_ms=1)
+        click_submit.assert_called_once_with(page, stop_signal, timeout_ms=1)
+        answer_single.assert_called_once_with(page, root, [1], 0)
+        answer_multiple.assert_called_once_with(page, root, [1], min_limit=1, max_limit=2)
+        answer_text.assert_called_once_with(root, ['x'])
+        answer_dropdown.assert_called_once_with(page, root, [1])
+        answer_scale.assert_called_once_with(page, root, [1])
+        answer_matrix.assert_called_once_with(page, root, [[1]], 3)
+        answer_order.assert_called_once_with(page, root)
+
+    def test_brush_credamo_handles_missing_roots_abort_unknown_type_and_submit_failures(self, restore_credamo_runtime_patchpoints) -> None:
+        stop_signal = threading.Event()
+        state = SimpleNamespace(stop_event=stop_signal, update_thread_step=lambda *args, **kwargs: None, update_thread_status=lambda *args, **kwargs: None)
+        driver = SimpleNamespace(page=object())
+
+        config_missing = SimpleNamespace(question_config_index_map={1: ('single', 0)}, single_prob=[-1], droplist_prob=[], scale_prob=[], multiple_prob=[], texts=[], answer_duration_range_seconds=[0, 0])
+        with patch('credamo.provider.runtime._wait_for_question_roots', return_value=[]):
+            try:
+                runtime.brush_credamo(driver, config_missing, state, stop_signal=stop_signal, thread_name='Worker-1')
+            except RuntimeError as exc:
+                assert '未识别到题目' in str(exc)
+            else:
+                raise AssertionError('expected RuntimeError')
+
+        stop_signal2 = threading.Event()
+        status_updates: list[tuple[str, bool]] = []
+        state2 = SimpleNamespace(
+            stop_event=stop_signal2,
+            update_thread_step=lambda *args, **kwargs: None,
+            update_thread_status=lambda _thread, status_text, *, running: status_updates.append((status_text, running)),
+        )
+        root = self._FakeQuestionRoot(9)
+        config_unknown = SimpleNamespace(question_config_index_map={9: ('mystery', 0)}, single_prob=[], droplist_prob=[], scale_prob=[], multiple_prob=[], texts=[], answer_duration_range_seconds=[0, 0])
+        with patch('credamo.provider.runtime._wait_for_question_roots', return_value=[root]), \
+             patch('credamo.provider.runtime._wait_for_dynamic_question_roots', side_effect=[[root], [root]]), \
+             patch('credamo.provider.runtime._question_number_from_root', side_effect=lambda _page, current_root, _fallback: current_root.question_num), \
+             patch('credamo.provider.runtime._root_text', return_value='Q9'), \
+             patch('credamo.provider.runtime._navigation_action', return_value='submit'), \
+             patch('credamo.provider.runtime.simulate_answer_duration_delay', return_value=True), \
+             patch('credamo.provider.runtime.time.sleep'):
+            assert not runtime.brush_credamo(driver, config_unknown, state2, stop_signal=stop_signal2, thread_name='Worker-2')
+        assert ('提交中', True) not in status_updates
+
+        config_submit_fail = SimpleNamespace(question_config_index_map={9: ('text', 0)}, single_prob=[], droplist_prob=[], scale_prob=[], multiple_prob=[], texts=[['x']], answer_duration_range_seconds=[0, 0])
+        with patch('credamo.provider.runtime._wait_for_question_roots', return_value=[root]), \
+             patch('credamo.provider.runtime._wait_for_dynamic_question_roots', side_effect=[[root], [root]]), \
+             patch('credamo.provider.runtime._question_number_from_root', side_effect=lambda _page, current_root, _fallback: current_root.question_num), \
+             patch('credamo.provider.runtime._root_text', return_value='Q9'), \
+             patch('credamo.provider.runtime._navigation_action', return_value='submit'), \
+             patch('credamo.provider.runtime._answer_text', return_value=True), \
+             patch('credamo.provider.runtime.simulate_answer_duration_delay', return_value=False), \
+             patch('credamo.provider.runtime._click_submit', return_value=False), \
+             patch('credamo.provider.runtime.time.sleep'):
+            try:
+                runtime.brush_credamo(driver, config_submit_fail, state, stop_signal=stop_signal, thread_name='Worker-3')
+            except RuntimeError as exc:
+                assert '提交按钮未找到' in str(exc)
+            else:
+                raise AssertionError('expected RuntimeError')
