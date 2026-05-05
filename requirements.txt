@@ -11,3 +11,4 @@ PySide6-Fluent-Widgets==1.11.1
 pyright
 pytest
 pytest-cov
+pytest-asyncio

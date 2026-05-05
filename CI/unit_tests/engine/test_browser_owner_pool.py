@@ -1,7 +1,6 @@
 from __future__ import annotations
 import threading
 import time
-import asyncio
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, Mock
 import pytest
@@ -41,30 +40,50 @@ class _BrokenPageBrowser:
     async def new_context(self, **_kwargs):
         return self.context
 
-def test_open_session_async_rebuilds_browser_once_after_disconnect() -> None:
+async def test_open_session_async_rebuilds_browser_once_after_disconnect() -> None:
+    owner = SimpleNamespace(
+        owner_id=1,
+        _headless=True,
+        _browser_pid=9527,
+        _ensure_browser_async=AsyncMock(
+            side_effect=[(_AlwaysClosedBrowser(), "edge"), (_HealthyBrowser(), "edge")],
+        ),
+        mark_broken=Mock(),
+        _shutdown_browser_async=AsyncMock(),
+    )
 
-    async def _exercise() -> tuple[object, object, str, int]:
-        owner = SimpleNamespace(owner_id=1, _headless=True, _browser_pid=9527, _ensure_browser_async=AsyncMock(side_effect=[(_AlwaysClosedBrowser(), 'edge'), (_HealthyBrowser(), 'edge')]), mark_broken=Mock(), _shutdown_browser_async=AsyncMock())
-        result = await AsyncBrowserOwner._open_session_async(owner, proxy_address='http://1.1.1.1:8000', user_agent='UA')
-        return (result, owner)
-    (context, page, browser_name, browser_pid), owner = asyncio.run(_exercise())
+    context, page, browser_name, browser_pid = await AsyncBrowserOwner._open_session_async(
+        owner,
+        proxy_address="http://1.1.1.1:8000",
+        user_agent="UA",
+    )
+
     assert isinstance(context, _FakeContext)
-    assert page == 'page-ok'
-    assert browser_name == 'edge'
+    assert page == "page-ok"
+    assert browser_name == "edge"
     assert browser_pid == 9527
     assert owner._ensure_browser_async.await_count == 2
     owner.mark_broken.assert_called_once()
     owner._shutdown_browser_async.assert_awaited_once()
 
-def test_open_session_async_closes_context_when_new_page_fails() -> None:
+async def test_open_session_async_closes_context_when_new_page_fails() -> None:
+    broken_context = _BrokenPageContext()
+    owner = SimpleNamespace(
+        owner_id=1,
+        _headless=True,
+        _browser_pid=9527,
+        _ensure_browser_async=AsyncMock(return_value=(_BrokenPageBrowser(broken_context), "edge")),
+        mark_broken=Mock(),
+        _shutdown_browser_async=AsyncMock(),
+    )
 
-    async def _exercise() -> tuple[_BrokenPageContext, SimpleNamespace]:
-        broken_context = _BrokenPageContext()
-        owner = SimpleNamespace(owner_id=1, _headless=True, _browser_pid=9527, _ensure_browser_async=AsyncMock(return_value=(_BrokenPageBrowser(broken_context), 'edge')), mark_broken=Mock(), _shutdown_browser_async=AsyncMock())
-        with pytest.raises(RuntimeError, match='new_page failed'):
-            await AsyncBrowserOwner._open_session_async(owner, proxy_address='http://1.1.1.1:8000', user_agent='UA')
-        return (broken_context, owner)
-    broken_context, owner = asyncio.run(_exercise())
+    with pytest.raises(RuntimeError, match="new_page failed"):
+        await AsyncBrowserOwner._open_session_async(
+            owner,
+            proxy_address="http://1.1.1.1:8000",
+            user_agent="UA",
+        )
+
     assert broken_context.close_calls == 1
     owner.mark_broken.assert_not_called()
     owner._shutdown_browser_async.assert_not_awaited()

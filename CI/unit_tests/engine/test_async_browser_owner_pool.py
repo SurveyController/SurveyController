@@ -1,5 +1,3 @@
-import asyncio
-
 from software.network.browser.async_owner_pool import _route_runtime_resource
 
 
@@ -25,27 +23,23 @@ class _FakeRoute:
         self.actions.append("fallback")
 
 
-def test_processjq_request_falls_through_to_specific_route() -> None:
-    async def _exercise() -> list[str]:
-        route = _FakeRoute()
+async def test_processjq_request_falls_through_to_specific_route() -> None:
+    route = _FakeRoute()
 
-        await _route_runtime_resource(
-            route,
-            _FakeRequest(url="https://www.wjx.cn/joinnew/processjq.ashx?x=1", resource_type="xhr"),
-        )
-        return route.actions
+    await _route_runtime_resource(
+        route,
+        _FakeRequest(url="https://www.wjx.cn/joinnew/processjq.ashx?x=1", resource_type="xhr"),
+    )
 
-    assert asyncio.run(_exercise()) == ["fallback"]
+    assert route.actions == ["fallback"]
 
 
-def test_runtime_route_aborts_heavy_resources() -> None:
-    async def _exercise() -> list[str]:
-        route = _FakeRoute()
+async def test_runtime_route_aborts_heavy_resources() -> None:
+    route = _FakeRoute()
 
-        await _route_runtime_resource(
-            route,
-            _FakeRequest(url="https://example.test/logo.png", resource_type="image"),
-        )
-        return route.actions
+    await _route_runtime_resource(
+        route,
+        _FakeRequest(url="https://example.test/logo.png", resource_type="image"),
+    )
 
-    assert asyncio.run(_exercise()) == ["abort"]
+    assert route.actions == ["abort"]

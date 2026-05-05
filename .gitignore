@@ -6,6 +6,8 @@
 .ruff_cache/
 desktop.ini
 .venv/
+.coverage
+coverage.xml
 AGENTS.md
 CLAUDE.md
 

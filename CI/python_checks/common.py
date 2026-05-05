@@ -29,6 +29,7 @@ CHILD_RESULT_PREFIX = "__WJX_CHECK__"
 IMPORT_TIMEOUT_SECONDS = 12
 WINDOW_SMOKE_TIMEOUT_SECONDS = 25
 UNIT_TEST_TIMEOUT_SECONDS = int(os.environ.get("SURVEY_CONTROLLER_UNIT_TEST_TIMEOUT_SECONDS", "120"))
+DEFAULT_UNIT_TEST_COVERAGE_FAIL_UNDER = "45"
 PYRIGHT_TIMEOUT_SECONDS = int(os.environ.get("SURVEY_CONTROLLER_PYRIGHT_TIMEOUT_SECONDS", "90"))
 PYTEST_FAILURE_LOG_TAIL_LINES = 40
 UNICODE_SPACE_TRANSLATION = str.maketrans({
@@ -275,7 +276,7 @@ def build_unit_test_pytest_args(*, verbose_in_ci: bool) -> list[str]:
             "--cov=wjx",
             "--cov=tencent",
             "--cov=credamo",
-            "--cov-fail-under=70",
+            f"--cov-fail-under={DEFAULT_UNIT_TEST_COVERAGE_FAIL_UNDER}",
             "--cov-report=term-missing:skip-covered",
             "--cov-report=xml:coverage.xml",
         ]

@@ -156,3 +156,82 @@ class BrowserDriverTests:
         driver, browser_name = browser_transient._create_transient_driver(headless=True, prefer_browsers=['edge'], proxy_address='http://127.0.0.1:8888', user_agent='UA-Test', window_position=None)
         assert browser_name == 'edge'
         assert driver.page is fake_page
+
+    def test_create_transient_driver_stops_playwright_when_browser_launch_fails(self, patch_attrs) -> None:
+
+        class _FakeChromium:
+            def launch(self, **_kwargs):
+                raise RuntimeError("launch failed")
+
+        class _FakePlaywright:
+            chromium = _FakeChromium()
+
+            def __init__(self) -> None:
+                self.stop_calls = 0
+
+            def stop(self) -> None:
+                self.stop_calls += 1
+
+        fake_pw = _FakePlaywright()
+        patch_attrs(
+            (browser_transient, '_start_playwright_runtime', lambda: fake_pw),
+            (browser_transient, '_build_launch_args', lambda **_kwargs: {'headless': True, 'args': []}),
+            (browser_transient, 'is_playwright_startup_environment_error', lambda exc: False),
+        )
+
+        with pytest.raises(RuntimeError, match='无法启动任何浏览器'):
+            browser_transient._create_transient_driver(
+                headless=True,
+                prefer_browsers=['edge'],
+                proxy_address=None,
+                user_agent=None,
+                window_position=None,
+            )
+
+        assert fake_pw.stop_calls == 1
+
+    def test_create_playwright_driver_restarts_manager_once_after_disconnect(self, patch_attrs) -> None:
+        fake_context = object()
+        fake_page = object()
+        fake_browser = object()
+
+        class _FakeManager:
+            def __init__(self) -> None:
+                self.restart_calls = 0
+                self.calls = 0
+
+            def new_context_session(self, **_kwargs):
+                self.calls += 1
+                if self.calls == 1:
+                    raise RuntimeError('Target page, context or browser has been closed')
+                return fake_context, fake_page, 'edge', fake_browser
+
+            def restart_browser(self, **_kwargs) -> None:
+                self.restart_calls += 1
+
+        manager = _FakeManager()
+        patch_attrs((browser_transient, '_is_browser_disconnected_error', lambda exc: 'closed' in str(exc).lower()))
+
+        driver, browser_name = browser_transient.create_playwright_driver(
+            manager=manager,
+            persistent_browser=True,
+            headless=True,
+        )
+
+        assert browser_name == 'edge'
+        assert driver.page is fake_page
+        assert manager.restart_calls == 1
+
+    def test_create_playwright_driver_uses_transient_path_when_requested(self, patch_attrs) -> None:
+        fake_driver = object()
+        patch_attrs(
+            (browser_transient, '_create_transient_driver', lambda **_kwargs: (fake_driver, 'edge')),
+        )
+
+        driver, browser_name = browser_transient.create_playwright_driver(
+            transient_launch=True,
+            persistent_browser=True,
+        )
+
+        assert driver is fake_driver
+        assert browser_name == 'edge'
