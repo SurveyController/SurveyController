@@ -22,7 +22,12 @@ from software.network.browser import BrowserDriver, By, NoSuchElementException
 from software.providers.contracts import SurveyQuestionMeta
 from software.providers.registry import parse_survey_sync
 from wjx.provider.detection import detect as _wjx_detect
-from wjx.provider.navigation import _click_next_page_button, _human_scroll_after_question
+from wjx.provider.navigation import (
+    _click_next_page_button,
+    _human_scroll_after_question,
+    dismiss_resume_dialog_if_present,
+    try_click_start_answer_button,
+)
 from wjx.provider.questions.multiple import multiple as _multiple_impl
 from wjx.provider.questions.single import single as _single_impl
 from wjx.provider.questions.text import (
@@ -167,6 +172,21 @@ def _update_abort_status(ctx: ExecutionState, thread_name: str) -> None:
         ctx.update_thread_status(thread_name, "已中断", running=False)
     except Exception:
         logging.info("更新线程状态失败：已中断", exc_info=True)
+
+
+def _prepare_runtime_entry_gate(
+    driver: BrowserDriver,
+    active_stop: Optional[threading.Event],
+) -> bool:
+    """进入问卷运行时前，先处理续答弹窗和开屏说明页。"""
+    dismiss_resume_dialog_if_present(driver, timeout=0.2, stop_signal=active_stop)
+    start_clicked = try_click_start_answer_button(driver, timeout=0.35, stop_signal=active_stop)
+    if not start_clicked:
+        return True
+    if active_stop:
+        return not active_stop.wait(0.15)
+    time.sleep(0.15)
+    return True
 
 
 def _fallback_unknown_question(
@@ -707,13 +727,17 @@ def brush(
 ) -> bool:
     """批量填写一份问卷；返回 True 代表完整提交，False 代表过程中被用户打断。"""
     normalized_thread_name = str(thread_name or threading.current_thread().name or "Worker-?").strip() or "Worker-?"
-    if stop_signal and stop_signal.is_set():
+    active_stop = stop_signal or ctx.stop_event
+    if active_stop and active_stop.is_set():
+        _update_abort_status(ctx, normalized_thread_name)
+        return False
+    if not _prepare_runtime_entry_gate(driver, active_stop):
         _update_abort_status(ctx, normalized_thread_name)
         return False
     return _brush_with_metadata(
         driver,
         ctx,
-        stop_signal=stop_signal,
+        stop_signal=active_stop,
         thread_name=normalized_thread_name,
         psycho_plan=psycho_plan,
     )

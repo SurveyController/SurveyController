@@ -156,6 +156,52 @@ class WjxRuntimeTests:
         assert ('fill', 2) in calls
         assert ('提交中', True) in ctx.status_updates
 
+    def test_brush_without_intro_gate_starts_answering_immediately(self, patch_attrs) -> None:
+        ctx = _FakeState(
+            question_config_index_map={1: ('single', 0)},
+            questions_metadata={1: SurveyQuestionMeta(num=1, title='Q1', type_code='3', page=1)},
+        )
+        driver = _FakeDriver({'#div1': _FakeQuestionDiv('3', text='Q1')})
+        calls: list[object] = []
+
+        def _fake_fill(*, question_num: int, **_kwargs):
+            calls.append(('fill', question_num))
+            return None
+
+        patch_attrs(
+            (runtime, 'dismiss_resume_dialog_if_present', lambda *_args, **_kwargs: calls.append('dismiss_resume')),
+            (runtime, 'try_click_start_answer_button', lambda *_args, **_kwargs: calls.append('try_start_gate') or False),
+            (runtime, '_refresh_visible_question_snapshot', lambda _driver, **_kwargs: {1: {'visible': True, 'type': '3', 'title': 'Q1'}}),
+            (runtime, '_is_headless_mode', lambda _ctx: True),
+            (runtime, 'HEADLESS_PAGE_BUFFER_DELAY', 0.0),
+            (runtime, '_driver_question_looks_like_description', lambda *_args, **_kwargs: False),
+            (runtime, '_human_scroll_after_question', lambda *_args, **_kwargs: None),
+            (runtime, 'has_configured_answer_duration', lambda _value: False),
+            (runtime, 'simulate_answer_duration_delay', lambda *_args, **_kwargs: False),
+            (runtime._dispatcher, 'fill', _fake_fill),
+            (runtime, 'submit', lambda *_args, **_kwargs: calls.append('submit')),
+        )
+
+        result = runtime.brush(driver, ctx, stop_signal=threading.Event(), thread_name='Worker-1', psycho_plan=None)
+
+        assert result
+        assert calls[:2] == ['dismiss_resume', 'try_start_gate']
+        assert ('fill', 1) in calls
+        assert calls[-1] == 'submit'
+
+    def test_prepare_runtime_entry_gate_uses_short_timeouts(self, patch_attrs) -> None:
+        calls: list[tuple[str, float | None]] = []
+
+        patch_attrs(
+            (runtime, 'dismiss_resume_dialog_if_present', lambda _driver, timeout=0.0, **_kwargs: calls.append(('resume', timeout)) or False),
+            (runtime, 'try_click_start_answer_button', lambda _driver, timeout=0.0, **_kwargs: calls.append(('start', timeout)) or False),
+        )
+
+        result = runtime._prepare_runtime_entry_gate(object(), None)
+
+        assert result is True
+        assert calls == [('resume', 0.2), ('start', 0.35)]
+
     def test_brush_uses_page_snapshot_visibility_fast_path(self, patch_attrs) -> None:
         ctx = _FakeState(question_config_index_map={1: ('single', 0)}, questions_metadata={1: SurveyQuestionMeta(num=1, title='Q1', type_code='3', page=1)})
         driver = _FakeDriver({'#div1': _FakeQuestionDiv('3', displayed=False, text='Q1')})
