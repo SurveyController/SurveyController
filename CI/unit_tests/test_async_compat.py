@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import asyncio
+import concurrent.futures
+import threading
 from concurrent.futures import Future
 from types import SimpleNamespace
 
@@ -138,6 +140,36 @@ class AsyncLoopPortalTests:
         assert portal.find_route_wrapper(target, callback) is first
         loop.close()
 
+    def test_run_rejects_blocking_on_same_thread_and_run_with_timeout_cancels(self) -> None:
+        loop = asyncio.new_event_loop()
+        portal = async_compat.AsyncLoopPortal(loop)
+        portal._thread_id = threading.get_ident()
+
+        async def _sample():
+            return 'ok'
+
+        coro = _sample()
+        with pytest.raises(RuntimeError, match='阻塞等待自身协程'):
+            portal.run(coro)
+        assert coro.cr_frame is None
+
+        portal._thread_id = -1
+        future: Future[str] = Future()
+
+        def _fake_run_coroutine_threadsafe(coro, _loop):
+            coro.close()
+            return future
+
+        monkeypatch = pytest.MonkeyPatch()
+        monkeypatch.setattr(asyncio, 'run_coroutine_threadsafe', _fake_run_coroutine_threadsafe)
+        try:
+            with pytest.raises(concurrent.futures.TimeoutError):
+                portal.run_with_timeout(_FakeAwaitable(), timeout=0.0)
+            assert future.cancelled() is True
+        finally:
+            monkeypatch.undo()
+            loop.close()
+
 
 class AsyncCompatFacadeTests:
     def test_async_compat_object_and_method_wrap_values(self, monkeypatch) -> None:
@@ -157,6 +189,25 @@ class AsyncCompatFacadeTests:
         assert wrapped["ok"] == [1, 2]
         obj.value = "y"
         assert target.value == "y"
+        loop.close()
+
+    def test_async_compat_object_marks_owner_broken_on_attr_error(self, monkeypatch) -> None:
+        loop = asyncio.new_event_loop()
+        portal = async_compat.AsyncLoopPortal(loop)
+        owner = SimpleNamespace(broken=False, mark_broken=lambda: setattr(owner, 'broken', True))
+
+        class _BrokenTarget:
+            @property
+            def child(self):
+                raise RuntimeError('disconnect')
+
+        monkeypatch.setattr(portal, "run", lambda awaitable: asyncio.run(awaitable) if asyncio.iscoroutine(awaitable) else awaitable)
+        monkeypatch.setattr(async_compat, "_is_browser_disconnected_error", lambda exc: 'disconnect' in str(exc))
+
+        obj = async_compat.AsyncCompatObject(portal, _BrokenTarget(), owner=owner)
+        with pytest.raises(RuntimeError, match='disconnect'):
+            _ = obj.child
+        assert owner.broken is True
         loop.close()
 
     def test_async_compat_element_supports_find_and_click_fallbacks(self, monkeypatch) -> None:
@@ -258,4 +309,52 @@ class AsyncCompatFacadeTests:
 
         with pytest.raises(ProxyConnectionError):
             driver.get("https://example.com")
+        loop.close()
+
+    def test_async_browser_driver_misc_fallbacks_and_force_terminate_paths(self, monkeypatch) -> None:
+        loop = asyncio.new_event_loop()
+        portal = async_compat.AsyncLoopPortal(loop)
+        page = _AsyncHandle()
+        context = _AsyncHandle()
+        driver = async_compat.AsyncBrowserDriver(
+            portal=portal,
+            owner=None,
+            context=context,
+            page=page,
+            browser_name="edge",
+            browser_pid=123,
+        )
+        driver.browser_pids = {123, 456}
+
+        def _raise_for_meta(awaitable):
+            if asyncio.iscoroutine(awaitable):
+                awaitable.close()
+            raise RuntimeError("meta boom")
+
+        monkeypatch.setattr(portal, "run", _raise_for_meta)
+        assert driver.execute_script("return 1;") is None
+        assert driver.current_url == ""
+        assert driver.page_source == ""
+        assert driver.title == ""
+
+        calls: list[str] = []
+        monkeypatch.setattr(async_compat, "build_local_text_subprocess_kwargs", lambda: {})
+
+        class _Result:
+            def __init__(self, returncode, stdout, stderr) -> None:
+                self.returncode = returncode
+                self.stdout = stdout
+                self.stderr = stderr
+
+        results = iter([
+            _Result(0, "ok", ""),
+            _Result(1, "", "找不到进程"),
+        ])
+
+        monkeypatch.setattr(async_compat.subprocess, "run", lambda *args, **kwargs: calls.append(str(args[0])) or next(results))
+        assert driver._force_terminate_browser_process_tree() is True
+
+        driver.browser_pids = set()
+        driver.browser_pid = None
+        assert driver._force_terminate_browser_process_tree() is False
         loop.close()

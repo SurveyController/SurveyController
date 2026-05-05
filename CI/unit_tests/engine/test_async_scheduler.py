@@ -35,3 +35,21 @@ async def test_scheduler_delays_requeued_token() -> None:
         assert await asyncio.wait_for(delayed, timeout=1.0) == token
     finally:
         await scheduler.close()
+
+
+async def test_scheduler_close_unblocks_waiters_and_ignores_non_requeue_release() -> None:
+    scheduler = AsyncScheduler(concurrency=1)
+    try:
+        token = await scheduler.acquire()
+        assert token is not None
+
+        waiter = asyncio.create_task(scheduler.acquire())
+        await asyncio.sleep(0.01)
+        assert not waiter.done()
+
+        await scheduler.release(token, requeue=False)
+        await scheduler.close()
+
+        assert await asyncio.wait_for(waiter, timeout=1.0) is None
+    finally:
+        await scheduler.close()

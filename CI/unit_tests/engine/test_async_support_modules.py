@@ -88,6 +88,24 @@ class AsyncRunContextTests:
 
         assert captured == [{"value": 1}]
 
+    @pytest.mark.asyncio
+    async def test_wait_if_paused_returns_when_stop_requested(self) -> None:
+        stop_event = asyncio.Event()
+        pause_event = asyncio.Event()
+        pause_event.set()
+        ctx = AsyncRunContext(
+            state=SimpleNamespace(),
+            stop_event=stop_event,
+            pause_event=pause_event,
+        )
+
+        async def _request_stop() -> None:
+            await asyncio.sleep(0.01)
+            stop_event.set()
+
+        await asyncio.gather(ctx.wait_if_paused(), _request_stop())
+        assert ctx.stop_requested() is True
+
 
 class ThreadEventProxyTests:
     def test_set_and_clear_use_loop_threadsafe_callback_when_loop_open(self) -> None:
@@ -145,3 +163,19 @@ class ThreadEventProxyTests:
         finally:
             loop.close()
 
+    def test_wait_returns_false_after_timeout(self, monkeypatch) -> None:
+        loop = asyncio.new_event_loop()
+        try:
+            proxy = ThreadEventProxy(asyncio.Event(), loop=loop)
+            future: Future[bool] = Future()
+            future.set_result(False)
+
+            def _fake_run_coroutine_threadsafe(coro, _loop):
+                coro.close()
+                return future
+
+            monkeypatch.setattr(asyncio, "run_coroutine_threadsafe", _fake_run_coroutine_threadsafe)
+
+            assert proxy.wait(timeout=0.01) is False
+        finally:
+            loop.close()

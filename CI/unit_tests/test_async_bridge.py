@@ -1,6 +1,7 @@
 from __future__ import annotations
 import threading
 import time
+from types import SimpleNamespace
 from unittest.mock import patch
 import pytest
 from software.network.browser.async_bridge import AsyncBridgeLoopThread, AsyncObjectProxy
@@ -173,3 +174,40 @@ def test_start_raises_when_background_loop_initialization_fails() -> None:
         with pytest.raises(RuntimeError, match='启动失败'):
             bridge.start()
     bridge.stop()
+
+
+def test_call_soon_is_noop_after_bridge_closed() -> None:
+    bridge = AsyncBridgeLoopThread(name='BridgeCallSoonClosed')
+    bridge.stop()
+
+    bridge.call_soon(lambda: (_ for _ in ()).throw(AssertionError('should not run')))
+
+
+def test_get_attr_marks_owner_broken_on_disconnect() -> None:
+    bridge = AsyncBridgeLoopThread(name='BridgeDisconnectAttr')
+    owner = SimpleNamespace(mark_broken=lambda: setattr(owner, 'broken', True), broken=False)
+
+    class _BrokenPage:
+        @property
+        def title(self):
+            raise RuntimeError('disconnected')
+
+    try:
+        with patch('software.network.browser.async_bridge._is_browser_disconnected_error', lambda exc: 'disconnected' in str(exc)):
+            proxy = AsyncObjectProxy(bridge, _BrokenPage(), owner=owner)
+            with pytest.raises(RuntimeError, match='disconnected'):
+                _ = proxy.title
+        assert owner.broken is True
+    finally:
+        bridge.stop()
+
+
+def test_close_bridge_loop_safely_swallows_stop_errors() -> None:
+    from software.network.browser.async_bridge import close_bridge_loop_safely
+
+    loop_thread = SimpleNamespace(stop=lambda: (_ for _ in ()).throw(RuntimeError('stop boom')))
+    captured: list[str] = []
+    with patch('software.network.browser.async_bridge.log_suppressed_exception', lambda where, exc, **_kwargs: captured.append(f'{where}:{exc}')):
+        close_bridge_loop_safely(loop_thread)
+
+    assert captured == ['async_bridge.close_bridge_loop_safely:stop boom']
