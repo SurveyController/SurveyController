@@ -17,10 +17,17 @@ from software.network.browser.async_owner_pool import _route_runtime_resource
 
 
 class _FakeScheduler:
-    async def acquire(self):
-        return 1
+    def __init__(self, acquire_values=None) -> None:
+        self.acquire_values = list(acquire_values or [1])
+        self.release_calls: list[dict[str, object]] = []
 
-    async def release(self, *_args, **_kwargs):
+    async def acquire(self):
+        if not self.acquire_values:
+            return None
+        return self.acquire_values.pop(0)
+
+    async def release(self, token_id, **kwargs):
+        self.release_calls.append({"token_id": token_id, **kwargs})
         return None
 
 
@@ -75,24 +82,25 @@ def _build_runner(*, config: ExecutionConfig | None = None, state: ExecutionStat
         stop_event=stop_event,
         pause_event=asyncio.Event(),
     )
+    scheduler = _FakeScheduler()
     runner = AsyncSlotRunner(
         slot_id=1,
         config=config,
         state=state,
         run_context=run_context,
-        scheduler=_FakeScheduler(),
+        scheduler=scheduler,
         browser_pool=_FakeBrowserPool(),
         gui_instance=SimpleNamespace(active_drivers=[]),
     )
     runner.stop_policy = _FakeStopPolicy()
     runner.submission_service = SimpleNamespace(finalize_after_submit=lambda *_args, **_kwargs: None)
-    return runner, state, run_context, loop
+    return runner, state, run_context, loop, scheduler
 
 
 class AsyncRuntimeLoopLargeTests:
     @pytest.mark.asyncio
     async def test_should_stop_loop_honors_stop_event(self) -> None:
-        runner, _state, _ctx, _loop = _build_runner(stop_set=True)
+        runner, _state, _ctx, _loop, _scheduler = _build_runner(stop_set=True)
 
         assert await runner._should_stop_loop() is True
 
@@ -100,13 +108,13 @@ class AsyncRuntimeLoopLargeTests:
     async def test_should_stop_loop_honors_target_num(self) -> None:
         config = ExecutionConfig(target_num=2, survey_provider="wjx")
         state = ExecutionState(config=config, cur_num=2)
-        runner, _state, _ctx, _loop = _build_runner(config=config, state=state)
+        runner, _state, _ctx, _loop, _scheduler = _build_runner(config=config, state=state)
 
         assert await runner._should_stop_loop() is True
 
     @pytest.mark.asyncio
     async def test_sleep_or_stop_handles_zero_delay_and_timeout(self) -> None:
-        runner, _state, _ctx, _loop = _build_runner()
+        runner, _state, _ctx, _loop, _scheduler = _build_runner()
 
         assert await runner._sleep_or_stop(0) is False
         assert await runner._sleep_or_stop(0.001) is False
@@ -114,7 +122,7 @@ class AsyncRuntimeLoopLargeTests:
     @pytest.mark.asyncio
     async def test_resolve_dispatch_delay_seconds_covers_zero_fixed_and_random(self, monkeypatch) -> None:
         config = ExecutionConfig(submit_interval_range_seconds=[0, 0], survey_provider="wjx")
-        runner, _state, _ctx, _loop = _build_runner(config=config)
+        runner, _state, _ctx, _loop, _scheduler = _build_runner(config=config)
         assert runner._resolve_dispatch_delay_seconds() == 0.0
 
         config.submit_interval_range_seconds = [2, 2]
@@ -126,7 +134,7 @@ class AsyncRuntimeLoopLargeTests:
 
     @pytest.mark.asyncio
     async def test_prepare_round_context_returns_false_when_stop_requested(self) -> None:
-        runner, _state, ctx, _loop = _build_runner(stop_set=True)
+        runner, _state, ctx, _loop, _scheduler = _build_runner(stop_set=True)
 
         assert await runner._prepare_round_context() is False
         assert ctx.stop_event.is_set()
@@ -148,7 +156,7 @@ class AsyncRuntimeLoopLargeTests:
         monkeypatch.setattr(runtime_loop, "ensure_joint_psychometric_answer_plan", lambda _config: SimpleNamespace(sample_count=2))
         real_sleep = asyncio.sleep
         monkeypatch.setattr(runtime_loop.asyncio, "sleep", lambda _seconds: real_sleep(0))
-        runner, _state, _ctx, _loop = _build_runner(config=config, state=state)
+        runner, _state, _ctx, _loop, _scheduler = _build_runner(config=config, state=state)
 
         assert await runner._prepare_round_context() is True
         assert released == ["reverse"]
@@ -164,7 +172,7 @@ class AsyncRuntimeLoopLargeTests:
         state.mark_terminal_stop = lambda category, *, failure_reason, message: terminal.append((category, failure_reason, message))
         state.release_joint_sample = lambda *_args, **_kwargs: None
         monkeypatch.setattr(runtime_loop, "ensure_joint_psychometric_answer_plan", lambda _config: SimpleNamespace(sample_count=2))
-        runner, _state, ctx, _loop = _build_runner(config=config, state=state)
+        runner, _state, ctx, _loop, _scheduler = _build_runner(config=config, state=state)
 
         assert await runner._prepare_round_context() is False
         assert terminal[0][0] == "reverse_fill_exhausted"
@@ -181,7 +189,7 @@ class AsyncRuntimeLoopLargeTests:
         monkeypatch.setattr(runtime_loop, "is_proxy_responsive", lambda proxy: False)
         monkeypatch.setattr(runtime_loop, "_discard_unresponsive_proxy", lambda *_args, **_kwargs: None)
         monkeypatch.setattr(runtime_loop, "_select_user_agent_for_session", lambda *_args, **_kwargs: ("UA", None))
-        runner, _state, _ctx, _loop = _build_runner(config=config, state=state)
+        runner, _state, _ctx, _loop, _scheduler = _build_runner(config=config, state=state)
 
         proxy, ua = runner._select_session_proxy_and_ua()
         assert (proxy, ua) == (None, None)
@@ -191,7 +199,7 @@ class AsyncRuntimeLoopLargeTests:
     async def test_open_session_sets_driver_metadata(self, monkeypatch) -> None:
         session = _FakeSession(driver=SimpleNamespace())
         browser_pool = _FakeBrowserPool(session=session)
-        runner, state, _ctx, _loop = _build_runner()
+        runner, state, _ctx, _loop, _scheduler = _build_runner()
         runner.browser_pool = browser_pool
         monkeypatch.setattr(asyncio, "to_thread", lambda func, *args, **kwargs: asyncio.sleep(0, result=func(*args, **kwargs)))
         monkeypatch.setattr(runner, "_select_session_proxy_and_ua", lambda: ("http://1.1.1.1:80", "UA"))
@@ -204,7 +212,7 @@ class AsyncRuntimeLoopLargeTests:
 
     @pytest.mark.asyncio
     async def test_close_session_releases_proxy_and_resets_address(self) -> None:
-        runner, state, _ctx, _loop = _build_runner()
+        runner, state, _ctx, _loop, _scheduler = _build_runner()
         released: list[str] = []
         state.release_proxy_in_use = lambda thread_name: released.append(thread_name)
         runner.proxy_address = "http://1.1.1.1:80"
@@ -218,7 +226,7 @@ class AsyncRuntimeLoopLargeTests:
     @pytest.mark.asyncio
     async def test_load_survey_or_record_failure_covers_timed_mode_and_normal_failure(self, monkeypatch) -> None:
         config = ExecutionConfig(timed_mode_enabled=True, survey_provider="wjx")
-        runner, _state, ctx, _loop = _build_runner(config=config)
+        runner, _state, ctx, _loop, _scheduler = _build_runner(config=config)
         session = _FakeSession(driver=SimpleNamespace())
 
         monkeypatch.setattr(asyncio, "to_thread", lambda func, *args, **kwargs: asyncio.sleep(0, result=func(*args, **kwargs)))
@@ -236,7 +244,7 @@ class AsyncRuntimeLoopLargeTests:
     async def test_handle_device_quota_limit_updates_status_and_optional_gui_handler(self, monkeypatch) -> None:
         config = ExecutionConfig(random_proxy_ip_enabled=True, survey_provider="wjx")
         gui_calls: list[object] = []
-        runner, _state, ctx, _loop = _build_runner(config=config)
+        runner, _state, ctx, _loop, _scheduler = _build_runner(config=config)
         runner.gui_instance = SimpleNamespace(handle_random_ip_submission=lambda stop_signal: gui_calls.append(stop_signal))
         monkeypatch.setattr(runtime_loop, "_provider_is_device_quota_limit_page", lambda *_args, **_kwargs: asyncio.sleep(0, result=True))
         monkeypatch.setattr(asyncio, "to_thread", lambda func, *args, **kwargs: asyncio.sleep(0, result=func(*args, **kwargs)))
@@ -245,7 +253,7 @@ class AsyncRuntimeLoopLargeTests:
         assert ctx.stop_event.is_set()
         assert gui_calls == []
 
-        runner, _state, _ctx, _loop = _build_runner(config=config)
+        runner, _state, _ctx, _loop, _scheduler = _build_runner(config=config)
         runner.stop_policy = _FakeStopPolicy()
         runner.stop_policy.record_failure = lambda *_args, **_kwargs: False
         runner.gui_instance = SimpleNamespace(handle_random_ip_submission=lambda stop_signal: gui_calls.append(stop_signal))
@@ -257,7 +265,7 @@ class AsyncRuntimeLoopLargeTests:
     async def test_wait_for_next_unique_proxy_and_handle_proxy_unavailable(self, monkeypatch) -> None:
         config = ExecutionConfig(random_proxy_ip_enabled=True, fail_threshold=2, num_threads=4, survey_provider="wjx")
         state = ExecutionState(config=config)
-        runner, _state, _ctx, _loop = _build_runner(config=config, state=state)
+        runner, _state, _ctx, _loop, _scheduler = _build_runner(config=config, state=state)
         monkeypatch.setattr(asyncio, "to_thread", lambda func, *args, **kwargs: asyncio.sleep(0, result=func(*args, **kwargs)))
         state.wait_for_runtime_change = lambda **_kwargs: False
 
@@ -269,7 +277,7 @@ class AsyncRuntimeLoopLargeTests:
 
     @pytest.mark.asyncio
     async def test_handle_proxy_connection_error_and_ai_runtime_error_delegate_to_handlers(self, monkeypatch) -> None:
-        runner, _state, _ctx, _loop = _build_runner()
+        runner, _state, _ctx, _loop, _scheduler = _build_runner()
         captured: dict[str, object] = {}
 
         monkeypatch.setattr(
@@ -283,6 +291,119 @@ class AsyncRuntimeLoopLargeTests:
         monkeypatch.setattr(asyncio, "to_thread", lambda func, *args, **kwargs: asyncio.sleep(0, result=func(*args, **kwargs)))
         monkeypatch.setattr(runtime_loop, "_handle_ai_runtime_error_impl", lambda exc, *_args, **_kwargs: str(exc) == "ai boom")
         assert await runner._handle_ai_runtime_error(AIRuntimeError("ai boom")) is True
+
+    @pytest.mark.asyncio
+    async def test_run_finishes_cleanly_when_scheduler_returns_none(self) -> None:
+        runner, state, _ctx, _loop, scheduler = _build_runner()
+        scheduler.acquire_values = [None]
+        state.release_joint_sample = lambda *_args, **_kwargs: None
+        state.release_reverse_fill_sample = lambda *_args, **_kwargs: None
+        finished: list[tuple[str, str]] = []
+        state.mark_thread_finished = lambda thread_name, *, status_text: finished.append((thread_name, status_text))
+
+        await runner.run()
+
+        assert scheduler.release_calls == []
+        assert finished == [("Slot-1", "已停止")]
+
+    @pytest.mark.asyncio
+    async def test_run_success_path_requeues_scheduler_with_delay(self, monkeypatch) -> None:
+        runner, state, _ctx, _loop, scheduler = _build_runner()
+        scheduler.acquire_values = [7, None]
+        state.release_joint_sample = lambda *_args, **_kwargs: None
+        state.release_reverse_fill_sample = lambda *_args, **_kwargs: None
+        state.mark_thread_finished = lambda *_args, **_kwargs: None
+        monkeypatch.setattr(runtime_loop, "fill_survey", lambda *_args, **_kwargs: asyncio.sleep(0, result=True))
+        monkeypatch.setattr(runner, "_prepare_round_context", lambda: asyncio.sleep(0, result=True))
+        session = _FakeSession(driver=SimpleNamespace())
+        monkeypatch.setattr(runner, "_open_session", lambda: asyncio.sleep(0, result=session))
+        monkeypatch.setattr(runner, "_load_survey_or_record_failure", lambda _session: asyncio.sleep(0, result=True))
+        monkeypatch.setattr(runner, "_handle_device_quota_limit", lambda _session: asyncio.sleep(0, result=False))
+        monkeypatch.setattr(runner, "_finalize_after_submit", lambda _session: asyncio.sleep(0, result=SimpleNamespace(status="success", should_rotate_proxy=False, should_stop=False)))
+        monkeypatch.setattr(runner, "_resolve_dispatch_delay_seconds", lambda: 1.5)
+
+        await runner.run()
+
+        assert scheduler.release_calls[0]["token_id"] == 7
+        assert scheduler.release_calls[0]["requeue"] is True
+        assert scheduler.release_calls[0]["delay_seconds"] == 1.5
+        assert session.close_calls == 1
+
+    @pytest.mark.asyncio
+    async def test_run_aborted_finalize_breaks_without_requeue(self, monkeypatch) -> None:
+        runner, state, _ctx, _loop, scheduler = _build_runner()
+        scheduler.acquire_values = [3]
+        state.release_joint_sample = lambda *_args, **_kwargs: None
+        state.release_reverse_fill_sample = lambda *_args, **_kwargs: None
+        state.mark_thread_finished = lambda *_args, **_kwargs: None
+        monkeypatch.setattr(runtime_loop, "fill_survey", lambda *_args, **_kwargs: asyncio.sleep(0, result=True))
+        monkeypatch.setattr(runner, "_prepare_round_context", lambda: asyncio.sleep(0, result=True))
+        monkeypatch.setattr(runner, "_open_session", lambda: asyncio.sleep(0, result=_FakeSession(driver=SimpleNamespace())))
+        monkeypatch.setattr(runner, "_load_survey_or_record_failure", lambda _session: asyncio.sleep(0, result=True))
+        monkeypatch.setattr(runner, "_handle_device_quota_limit", lambda _session: asyncio.sleep(0, result=False))
+        release_flags: list[bool] = []
+        monkeypatch.setattr(runner, "_release_round_resources", lambda *, requeue_reverse_fill: release_flags.append(requeue_reverse_fill))
+        monkeypatch.setattr(runner, "_finalize_after_submit", lambda _session: asyncio.sleep(0, result=SimpleNamespace(status="aborted", should_rotate_proxy=False, should_stop=True)))
+
+        await runner.run()
+
+        assert release_flags == [True]
+        assert scheduler.release_calls[0]["requeue"] is False
+
+    @pytest.mark.asyncio
+    async def test_run_airuntime_error_releases_resources_and_requeues(self, monkeypatch) -> None:
+        runner, state, _ctx, _loop, scheduler = _build_runner()
+        scheduler.acquire_values = [5, None]
+        state.release_joint_sample = lambda *_args, **_kwargs: None
+        state.release_reverse_fill_sample = lambda *_args, **_kwargs: None
+        state.mark_thread_finished = lambda *_args, **_kwargs: None
+        monkeypatch.setattr(runtime_loop, "fill_survey", lambda *_args, **_kwargs: (_ for _ in ()).throw(AIRuntimeError("ai bad")))
+        monkeypatch.setattr(runner, "_prepare_round_context", lambda: asyncio.sleep(0, result=True))
+        monkeypatch.setattr(runner, "_open_session", lambda: asyncio.sleep(0, result=_FakeSession(driver=SimpleNamespace())))
+        monkeypatch.setattr(runner, "_load_survey_or_record_failure", lambda _session: asyncio.sleep(0, result=True))
+        monkeypatch.setattr(runner, "_handle_device_quota_limit", lambda _session: asyncio.sleep(0, result=False))
+        monkeypatch.setattr(runner, "_handle_ai_runtime_error", lambda exc: asyncio.sleep(0, result=False))
+        release_flags: list[bool] = []
+        monkeypatch.setattr(runner, "_release_round_resources", lambda *, requeue_reverse_fill: release_flags.append(requeue_reverse_fill))
+
+        await runner.run()
+
+        assert release_flags == [True]
+        assert scheduler.release_calls[0]["requeue"] is True
+
+    @pytest.mark.asyncio
+    async def test_run_proxy_connection_error_breaks_when_handler_requests_stop(self, monkeypatch) -> None:
+        runner, state, _ctx, _loop, scheduler = _build_runner()
+        scheduler.acquire_values = [9]
+        state.release_joint_sample = lambda *_args, **_kwargs: None
+        state.release_reverse_fill_sample = lambda *_args, **_kwargs: None
+        state.mark_thread_finished = lambda *_args, **_kwargs: None
+        monkeypatch.setattr(runner, "_prepare_round_context", lambda: asyncio.sleep(0, result=True))
+        monkeypatch.setattr(runner, "_open_session", lambda: asyncio.sleep(0, result=_FakeSession(driver=SimpleNamespace())))
+        monkeypatch.setattr(runner, "_load_survey_or_record_failure", lambda _session: (_ for _ in ()).throw(ProxyConnectionError("proxy bad")))
+        monkeypatch.setattr(runner, "_handle_proxy_connection_error", lambda _session: True)
+
+        await runner.run()
+
+        assert scheduler.release_calls[0]["requeue"] is False
+
+    @pytest.mark.asyncio
+    async def test_run_generic_exception_records_failure_and_requeues(self, monkeypatch) -> None:
+        runner, state, _ctx, _loop, scheduler = _build_runner()
+        scheduler.acquire_values = [11, None]
+        state.release_joint_sample = lambda *_args, **_kwargs: None
+        state.release_reverse_fill_sample = lambda *_args, **_kwargs: None
+        state.mark_thread_finished = lambda *_args, **_kwargs: None
+        monkeypatch.setattr(runner, "_prepare_round_context", lambda: (_ for _ in ()).throw(RuntimeError("boom")))
+        release_flags: list[bool] = []
+        monkeypatch.setattr(runner, "_release_round_resources", lambda *, requeue_reverse_fill: release_flags.append(requeue_reverse_fill))
+        runner.stop_policy.record_failure = lambda *_args, **_kwargs: False
+        monkeypatch.setattr(runtime_loop.traceback, "print_exc", lambda: None)
+
+        await runner.run()
+
+        assert release_flags == [True]
+        assert scheduler.release_calls[0]["requeue"] is True
 
 
 class AsyncOwnerPoolLargeTests:
@@ -306,3 +427,22 @@ class AsyncOwnerPoolLargeTests:
         await _route_runtime_resource(_Route(), SimpleNamespace(url="https://example.com/app.js", resource_type="script"))
 
         assert actions == ["fallback", "abort", "abort", "fallback"]
+
+    @pytest.mark.asyncio
+    async def test_async_browser_owner_pool_retries_on_disconnected_owner(self, monkeypatch) -> None:
+        import software.network.browser.async_owner_pool as async_owner_pool_module
+        from software.network.browser.async_owner_pool import AsyncBrowserOwnerPool, BrowserPoolConfig
+
+        portal = SimpleNamespace()
+        pool = AsyncBrowserOwnerPool(
+            config=BrowserPoolConfig(owner_count=2, contexts_per_owner=1, logical_concurrency=2),
+            portal=portal,  # type: ignore[arg-type]
+            headless=True,
+        )
+        disconnected = RuntimeError("Target page, context or browser has been closed")
+        monkeypatch.setattr(pool._owners[0], "open_session", lambda **_kwargs: (_ for _ in ()).throw(disconnected))
+        monkeypatch.setattr(pool._owners[1], "open_session", lambda **_kwargs: asyncio.sleep(0, result=SimpleNamespace(owner_id=2, browser_name="edge")))
+        monkeypatch.setattr(async_owner_pool_module, "_is_browser_disconnected_error", lambda exc: "closed" in str(exc).lower())
+
+        session = await pool.open_session(proxy_address=None, user_agent=None)
+        assert session.owner_id == 2
