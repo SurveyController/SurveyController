@@ -271,11 +271,19 @@ def handle_submission_verification_detected(
     stop_signal: Optional[threading.Event],
 ) -> None:
     """统一处理问卷星提交后命中阿里云智能验证后的策略。"""
-    if bool(getattr(ctx, "random_proxy_ip_enabled", False)):
+    config = getattr(ctx, "config", None)
+    random_proxy_ip_enabled = bool(
+        getattr(ctx, "random_proxy_ip_enabled", getattr(config, "random_proxy_ip_enabled", False))
+    )
+    pause_on_aliyun_captcha = bool(
+        getattr(ctx, "pause_on_aliyun_captcha", getattr(config, "pause_on_aliyun_captcha", True))
+    )
+
+    if random_proxy_ip_enabled:
         logging.warning("随机IP模式命中问卷星阿里云智能验证：按配置仅记录日志，不暂停、不弹窗。")
         return
 
-    if not bool(getattr(ctx, "pause_on_aliyun_captcha", True)):
+    if not pause_on_aliyun_captcha:
         logging.warning("检测到问卷星阿里云智能验证：pause_on_aliyun_captcha=False，仅记录告警。")
         return
 
