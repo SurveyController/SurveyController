@@ -9,7 +9,7 @@
 __VERSION__ = "3.1.2"
 
 # GitHub 仓库配置
-GITHUB_OWNER = "hungryM0"
+GITHUB_OWNER = "SurveyController"
 GITHUB_REPO = "SurveyController"
 
 # 以下常量基于上述配置自动生成，一般无需修改

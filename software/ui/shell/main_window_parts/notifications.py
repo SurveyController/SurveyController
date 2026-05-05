@@ -2,10 +2,10 @@
 from __future__ import annotations
 
 import logging
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, cast
 
-from PySide6.QtCore import Qt
-from PySide6.QtGui import QIcon
+from PySide6.QtCore import QObject, Qt
+from PySide6.QtGui import QGuiApplication, QIcon
 from PySide6.QtWidgets import QApplication, QSystemTrayIcon
 
 from software.app.config import (
@@ -25,6 +25,7 @@ class MainWindowNotificationsMixin:
         _completion_notification_sent: bool
         _failure_notification_sent: bool
         _base_window_title: str
+        _system_tray_icon: QSystemTrayIcon | None
         controller: object
 
         def isVisible(self) -> bool: ...
@@ -33,7 +34,7 @@ class MainWindowNotificationsMixin:
         def windowIcon(self) -> QIcon: ...
 
     def _ensure_system_tray_icon(self) -> QSystemTrayIcon | None:
-        tray = getattr(self, "_system_tray_icon", None)
+        tray = cast(QSystemTrayIcon | None, getattr(self, "_system_tray_icon", None))
         if tray is not None:
             return tray
         if not QSystemTrayIcon.isSystemTrayAvailable():
@@ -46,7 +47,7 @@ class MainWindowNotificationsMixin:
         if icon.isNull():
             return None
 
-        tray = QSystemTrayIcon(icon, self)
+        tray = QSystemTrayIcon(icon, cast(QObject, self))
         tray.setToolTip(str(getattr(self, "_base_window_title", "SurveyController") or "SurveyController"))
         tray.show()
         self._system_tray_icon = tray
@@ -68,7 +69,8 @@ class MainWindowNotificationsMixin:
         app = QApplication.instance()
         if app is not None:
             try:
-                if app.applicationState() != Qt.ApplicationState.ApplicationActive:
+                gui_app = cast(QGuiApplication, app)
+                if gui_app.applicationState() != Qt.ApplicationState.ApplicationActive:
                     return True
             except Exception:
                 pass

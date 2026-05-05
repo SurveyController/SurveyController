@@ -29,6 +29,13 @@ class _FakeLifecycleWindow(MainWindowLifecycleMixin):
         self.confirm_result = True
         self.cleanup_called = 0
         self._skip_save_on_close = False
+        self._random_ip_quota_auto_sync_timer = type("_Timer", (), {"stop": lambda _self: None})()
+        self.controller = type("_Controller", (), {"request_shutdown_for_close": lambda _self: None})()
+        self._boot_splash = None
+        self._log_page = None
+        self._contact_dialog = None
+        self._async_dialog_refs = []
+        self._system_tray_disposed = 0
 
     def close(self) -> None:
         self.close_called += 1
@@ -36,8 +43,14 @@ class _FakeLifecycleWindow(MainWindowLifecycleMixin):
     def _confirm_close_with_optional_save(self) -> bool:
         return self.confirm_result
 
-    def _cleanup_runtime_resources_on_close(self) -> None:
-        self.cleanup_called += 1
+    def _stop_update_check_worker(self) -> None:
+        pass
+
+    def _cancel_startup_update_check(self) -> None:
+        pass
+
+    def _dispose_system_tray_icon(self) -> None:
+        self._system_tray_disposed += 1
 
 class _FakeUpdateWindow(MainWindowUpdateMixin):
 
@@ -108,9 +121,16 @@ class MainWindowModalSafetyTests:
     def test_finalize_confirmed_close_runs_cleanup_once(self) -> None:
         window = _FakeLifecycleWindow()
         window._close_request_confirmed = True
-        window._finalize_confirmed_close()
+        with patch.object(window, "_cleanup_runtime_resources_on_close", side_effect=lambda: setattr(window, "cleanup_called", window.cleanup_called + 1)):
+            window._finalize_confirmed_close()
         assert not window._close_request_confirmed
         assert window.cleanup_called == 1
+
+    def test_cleanup_runtime_resources_invokes_system_tray_dispose(self) -> None:
+        window = _FakeLifecycleWindow()
+        with patch("software.ui.shell.main_window_parts.lifecycle.stop_proxy_sidecar"):
+            window._cleanup_runtime_resources_on_close()
+        assert window._system_tray_disposed == 1
 
     def test_update_notification_is_deferred_to_next_tick(self) -> None:
         window = _FakeUpdateWindow()
