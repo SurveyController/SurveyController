@@ -82,6 +82,15 @@ class WjxQuestionTextTests:
         assert text_module._summarize_multi_text_sources(["配置", "AI", "配置"]) == "混合(配置/AI)"
         assert text_module._summarize_multi_text_sources([]) == "配置"
 
+    def test_log_text_answer_uses_preview(self, patch_attrs) -> None:
+        messages: list[tuple[tuple[object, ...], dict[str, object]]] = []
+        patch_attrs((text_module.logging, "info", lambda *args, **kwargs: messages.append((args, kwargs))))
+
+        text_module._log_text_answer(5, "标题", "配置", ["甲", ""])
+
+        assert messages
+        assert "来源=%s 标题=%s 答案=%s" in messages[0][0][0]
+
     def test_fill_text_question_input_uses_send_keys_for_normal_input(self) -> None:
         driver = _FakeTextDriver()
         element = _FakeTextElement(attrs={"readonly": ""})
@@ -101,6 +110,15 @@ class WjxQuestionTextTests:
         assert element.cleared == 0
         assert element.sent_keys == []
         assert len(driver.scripts) == 1
+
+    def test_fill_contenteditable_element_updates_by_script_and_send_keys(self) -> None:
+        driver = _FakeTextDriver()
+        element = _FakeTextElement(tag_name="div", attrs={"contenteditable": "true"})
+
+        text_module.fill_contenteditable_element(driver, element, "富文本答案")
+
+        assert element.sent_keys == ["富文本答案"]
+        assert len(driver.scripts) == 2
 
     def test_count_visible_text_inputs_skips_hidden_and_textedit_shadow_input(self) -> None:
         shadow_label = _FakeTextElement(tag_name="span", attrs={"class": "textedit"})
@@ -149,6 +167,11 @@ class WjxQuestionTextTests:
         verify_input = _FakeTextElement(attrs={"verify": "腾讯地图定位"})
         verify_div = _FakeTextElement(children={"input[verify], .get_Local input, input": [verify_input]})
         assert text_module.driver_question_is_location(verify_div)
+
+    def test_driver_question_is_location_returns_false_when_no_marker(self) -> None:
+        normal_div = _FakeTextElement(children={"input[verify], .get_Local input, input": [_FakeTextElement()]})
+
+        assert not text_module.driver_question_is_location(normal_div)
 
     def test_should_mark_as_multi_text_respects_type_count_and_location(self) -> None:
         assert text_module.should_mark_as_multi_text("1", 0, 2, False)
@@ -232,3 +255,63 @@ class WjxQuestionTextTests:
         )
 
         assert captured == [((3, "text"), {"text_answer": "甲 | 乙"})]
+
+    def test_text_handles_reverse_fill_single_text_branch(self, patch_attrs) -> None:
+        captured: list[tuple[tuple[object, ...], dict[str, object]]] = []
+        calls: list[str] = []
+        patch_attrs(
+            (
+                text_module,
+                "resolve_current_reverse_fill_answer",
+                lambda _ctx, _current: SimpleNamespace(
+                    kind=text_module.REVERSE_FILL_KIND_TEXT,
+                    text_value="反填答案",
+                ),
+            ),
+            (text_module, "_handle_single_text", lambda _driver, _current, answer: calls.append(answer)),
+            (text_module, "_log_text_answer", lambda *_args, **_kwargs: None),
+            (text_module, "record_answer", lambda *args, **kwargs: captured.append((args, kwargs))),
+        )
+
+        text_module.text(
+            _FakeTextDriver(),
+            6,
+            0,
+            texts_config=[],
+            texts_prob_config=[],
+            text_entry_types_config=[],
+            task_ctx=object(),
+        )
+
+        assert calls == ["反填答案"]
+        assert captured == [((6, "text"), {"text_answer": "反填答案"})]
+
+    def test_text_ai_single_text_branch_records_generated_answer(self, patch_attrs) -> None:
+        captured: list[tuple[tuple[object, ...], dict[str, object]]] = []
+        calls: list[str] = []
+        patch_attrs(
+            (text_module, "resolve_current_reverse_fill_answer", lambda _ctx, _current: None),
+            (text_module, "weighted_index", lambda _weights: 0),
+            (text_module, "count_prefixed_text_inputs", lambda *_args, **_kwargs: 0),
+            (text_module, "resolve_dynamic_text_token", lambda value: value),
+            (text_module, "resolve_question_title_for_ai", lambda _driver, _current, fallback: fallback or "题目标题"),
+            (text_module, "generate_ai_answer", lambda *_args, **_kwargs: "AI答案"),
+            (text_module, "_handle_single_text", lambda _driver, _current, answer: calls.append(answer)),
+            (text_module, "_log_text_answer", lambda *_args, **_kwargs: None),
+            (text_module, "record_answer", lambda *args, **kwargs: captured.append((args, kwargs))),
+        )
+
+        text_module.text(
+            _FakeTextDriver(),
+            10,
+            0,
+            texts_config=[["配置答案"]],
+            texts_prob_config=[[1.0]],
+            text_entry_types_config=["text"],
+            text_ai_flags=[True],
+            text_titles=["AI标题"],
+            task_ctx=object(),
+        )
+
+        assert calls == ["AI答案"]
+        assert captured == [((10, "text"), {"text_answer": "AI答案"})]

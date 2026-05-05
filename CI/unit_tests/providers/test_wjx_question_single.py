@@ -77,9 +77,23 @@ class WjxQuestionSingleTests:
         assert single_module._looks_like_single_option(option)
         assert single_module._extract_single_option_text(option) == "标签文本"
 
+    def test_looks_like_single_option_accepts_nested_radio(self) -> None:
+        option = _FakeSingleElement(children={
+            "input[type='radio'], .jqradio, a.jqradio, .jqradiowrapper": [_FakeSingleElement()]
+        })
+
+        assert single_module._looks_like_single_option(option)
+
     def test_single_option_selected_uses_js_result(self) -> None:
         driver = _FakeSingleDriver(execute_script_result=True)
         assert single_module._is_single_option_selected(driver, _FakeSingleElement())
+
+    def test_single_option_selected_returns_false_on_js_error(self) -> None:
+        class _BrokenDriver(_FakeSingleDriver):
+            def execute_script(self, script: str, *args):
+                raise RuntimeError("boom")
+
+        assert not single_module._is_single_option_selected(_BrokenDriver(), _FakeSingleElement())
 
     def test_single_option_free_text_detection_and_required_check(self) -> None:
         free_text = _FakeSingleElement(attrs={"type": "text"})
@@ -91,6 +105,11 @@ class WjxQuestionSingleTests:
 
         assert single_module._single_option_has_free_text_input(target)
         assert single_module._single_option_free_text_input_is_required(driver, target)
+
+    def test_single_option_has_free_text_input_returns_false_when_only_select_exists(self) -> None:
+        target = _FakeSingleElement(children={"select": [_FakeSingleElement()]})
+
+        assert not single_module._single_option_has_free_text_input(target)
 
     def test_extract_attached_select_options_skips_placeholder(self) -> None:
         option1 = _FakeSingleElement(text="请选择", attrs={"value": ""})
@@ -178,6 +197,40 @@ class WjxQuestionSingleTests:
 
         assert recorded == [((7, "single"), {"selected_indices": [1], "selected_texts": ["选项B"]})]
 
+    def test_single_main_flow_skips_out_of_range_reverse_fill(self, patch_attrs) -> None:
+        option1 = _FakeSingleElement(text="选项A")
+        driver = _FakeSingleDriver(find_elements_map={
+            (single_module.By.CSS_SELECTOR, "#div7 > div.ui-controlgroup > div"): [option1],
+            (single_module.By.CSS_SELECTOR, "#div7 .ui-controlgroup > div.ui-radio"): [],
+            (single_module.By.CSS_SELECTOR, "#div7 .ui-controlgroup > div"): [],
+            (single_module.By.XPATH, '//*[@id="div7"]//div[contains(@class,"ui-radio")]'): [],
+            (single_module.By.XPATH, '//*[@id="div7"]//li[.//input[@type="radio"] or .//a[contains(@class,"jqradio")]]'): [],
+            (single_module.By.XPATH, '//*[@id="div7"]//label[.//input[@type="radio"]]'): [],
+        })
+        recorded: list[tuple[tuple[object, ...], dict[str, object]]] = []
+        patch_attrs(
+            (single_module, "_looks_like_single_option", lambda _elem: True),
+            (single_module, "_extract_single_option_text", lambda elem: elem.text),
+            (single_module, "normalize_droplist_probs", lambda _config, length: [1.0 / length] * length),
+            (
+                single_module,
+                "resolve_current_reverse_fill_answer",
+                lambda _ctx, _current: SimpleNamespace(kind=single_module.REVERSE_FILL_KIND_CHOICE, choice_index=3),
+            ),
+            (single_module, "record_answer", lambda *args, **kwargs: recorded.append((args, kwargs))),
+        )
+
+        single_module.single(
+            driver,
+            7,
+            0,
+            single_prob_config=[[1.0]],
+            single_option_fill_texts_config=[],
+            task_ctx=object(),
+        )
+
+        assert recorded == []
+
     def test_single_main_flow_fills_required_free_text_and_attached_select(self, patch_attrs) -> None:
         option = _FakeSingleElement(text="其他")
         driver = _FakeSingleDriver(find_elements_map={
@@ -222,3 +275,40 @@ class WjxQuestionSingleTests:
 
         assert fill_calls == ["无"]
         assert recorded == [((8, "single"), {"selected_indices": [0], "selected_texts": ["其他 / 北京"]})]
+
+    def test_single_main_flow_skips_when_click_not_effective(self, patch_attrs) -> None:
+        option = _FakeSingleElement(text="选项A")
+        driver = _FakeSingleDriver(find_elements_map={
+            (single_module.By.CSS_SELECTOR, "#div9 > div.ui-controlgroup > div"): [option],
+            (single_module.By.CSS_SELECTOR, "#div9 .ui-controlgroup > div.ui-radio"): [],
+            (single_module.By.CSS_SELECTOR, "#div9 .ui-controlgroup > div"): [],
+            (single_module.By.XPATH, '//*[@id="div9"]//div[contains(@class,"ui-radio")]'): [],
+            (single_module.By.XPATH, '//*[@id="div9"]//li[.//input[@type="radio"] or .//a[contains(@class,"jqradio")]]'): [],
+            (single_module.By.XPATH, '//*[@id="div9"]//label[.//input[@type="radio"]]'): [],
+        })
+        recorded: list[tuple[tuple[object, ...], dict[str, object]]] = []
+        patch_attrs(
+            (single_module, "_looks_like_single_option", lambda _elem: True),
+            (single_module, "_extract_single_option_text", lambda elem: elem.text),
+            (single_module, "normalize_droplist_probs", lambda _config, _length: [1.0]),
+            (single_module, "resolve_current_reverse_fill_answer", lambda _ctx, _current: None),
+            (single_module, "apply_persona_boost", lambda _texts, probs: probs),
+            (single_module, "apply_single_like_consistency", lambda probs, _current: probs),
+            (single_module, "weighted_index", lambda _weights: 0),
+            (single_module, "_click_single_option", lambda *_args, **_kwargs: False),
+            (single_module, "record_answer", lambda *args, **kwargs: recorded.append((args, kwargs))),
+            (single_module, "resolve_distribution_probabilities", lambda probs, _len, _ctx, _current: probs),
+            (single_module, "record_pending_distribution_choice", lambda *_args, **_kwargs: None),
+            (single_module, "is_strict_ratio_question", lambda *_args, **_kwargs: False),
+        )
+
+        single_module.single(
+            driver,
+            9,
+            0,
+            single_prob_config=[[1.0]],
+            single_option_fill_texts_config=[[]],
+            task_ctx=object(),
+        )
+
+        assert recorded == []

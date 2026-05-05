@@ -177,6 +177,43 @@ class CredamoParserTests:
         assert question['forced_option_index'] == 0
         assert question['forced_option_text'] == '非常不满意'
 
+    def test_helper_parsers_cover_arithmetic_counts_and_forced_texts(self) -> None:
+        assert parser._safe_eval_arithmetic_expression("100 + 20 / 2") == 110.0
+        assert parser._safe_eval_arithmetic_expression("1/0") is None
+        assert parser._parse_count_token("十二") == 12
+        assert parser._parse_count_token("abc") is None
+        assert parser._extract_forced_texts('请填写：“你好”', extra_fragments=['请填写：“你好”']) == ['你好']
+        assert parser._extract_arithmetic_option("请问100+100等于多少", ["300", "200", "500"])[0] == 1
+
+    def test_extract_multi_select_limits_clamps_and_merges_range(self) -> None:
+        min_limit, max_limit = parser._extract_multi_select_limits(
+            "请至少选三项，最多选十项，也可以选择2-4项",
+            option_count=4,
+            extra_fragments=["最少选两项"],
+        )
+
+        assert min_limit == 3
+        assert max_limit == 4
+
+    def test_normalize_question_defaults_blank_text_title_and_rating_max(self) -> None:
+        question = parser._normalize_question(
+            {
+                'question_num': '',
+                'title': '',
+                'question_kind': 'scale',
+                'provider_type': 'scale',
+                'option_texts': ['1', '2', '3'],
+                'text_inputs': 0,
+                'page': 1,
+                'question_id': 'question-5',
+            },
+            fallback_num=5,
+        )
+
+        assert question['title'] == 'Q5'
+        assert question['type_code'] == '5'
+        assert question['rating_max'] == 3
+
     def test_default_builder_locks_credamo_force_select_question(self) -> None:
         entries = build_default_question_entries([{'num': 7, 'title': '本题检测是否认真作答，请选 非常不满意', 'type_code': '3', 'options': 4, 'option_texts': ['非常不满意', '不满意', '满意', '非常满意'], 'provider': 'credamo', 'provider_question_id': 'question-7', 'provider_page_id': '1', 'forced_option_index': 0, 'forced_option_text': '非常不满意'}], survey_url='https://www.credamo.com/answer.html#/s/demo')
         assert len(entries) == 1
@@ -212,6 +249,20 @@ class CredamoParserTests:
             current, discovered = parser._collect_current_page_until_stable(page, page_number=1)
         assert [question['num'] for question in current] == [8, 9]
         assert [question['num'] for question in discovered] == [8, 9]
+
+    def test_append_unseen_questions_and_page_signature_helpers(self) -> None:
+        questions = [{'provider_question_id': 'q1', 'title': 'Q1'}, {'provider_question_id': 'q2', 'title': 'Q2'}]
+        seen = {'page:1|id:q1|num:1|title:Q1'}
+        target = [{'provider_question_id': 'q1', 'title': 'Q1'}]
+
+        added = parser._append_unseen_questions(target, seen, [
+            {'provider_page_id': '1', 'provider_question_id': 'q1', 'num': 1, 'title': 'Q1'},
+            {'provider_page_id': '1', 'provider_question_id': 'q2', 'num': 2, 'title': 'Q2'},
+        ])
+
+        assert parser._extract_page_signature(questions) == (('q1', 'Q1'), ('q2', 'Q2'))
+        assert added == 1
+        assert target[-1]['title'] == 'Q2'
 
     def test_question_dedupe_key_does_not_trust_reused_credamo_dom_id(self) -> None:
         q8 = {'provider_page_id': '2', 'provider_question_id': 'question-0', 'num': 8, 'title': '请问100+100等于多少'}

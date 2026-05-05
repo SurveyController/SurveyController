@@ -4,6 +4,9 @@ from wjx.provider.html_parser import parse_survey_questions_from_html
 
 
 class WjxHtmlParserTests:
+    def test_parse_survey_questions_from_html_returns_empty_when_container_missing(self) -> None:
+        assert parse_survey_questions_from_html("<html><body><div>无题目</div></body></html>") == []
+
     def test_parse_survey_questions_from_html_extracts_basic_question_metadata(self) -> None:
         html = """
         <html>
@@ -138,3 +141,44 @@ class WjxHtmlParserTests:
         assert multi_text["text_input_labels"] == ["姓名", "电话"]
         assert multi_text["is_multi_text"]
         assert multi_text["is_text_like"]
+
+    def test_parse_survey_questions_from_html_falls_back_to_nested_topic_divs_and_slider_matrix(self) -> None:
+        html = """
+        <html>
+          <body>
+            <div id="divQuestion">
+              <fieldset>
+                <section>
+                  <div topic="9" id="div9" type="2">
+                    <div class="topichtml">9. 位置题</div>
+                    <input verify="腾讯地图定位" />
+                  </div>
+                  <div topic="10" id="div10" type="6">
+                    <div class="topichtml">10. 滑块矩阵</div>
+                    <tr class="rowtitletr"><td class="title"><span class="itemTitleSpan">体验</span></td></tr>
+                    <tr class="rowtitletr"><td class="title"><span class="itemTitleSpan">价格</span></td></tr>
+                    <div class="ruler"><span class="cm" data-value="1"></span><span class="cm" data-value="5"></span></div>
+                    <input class="ui-slider-input" rowid="1" min="1" max="5" step="1" />
+                    <input class="ui-slider-input" rowid="2" min="1" max="5" step="1" />
+                    <div class="rangeslider"></div>
+                    <div class="rangeslider"></div>
+                  </div>
+                </section>
+              </fieldset>
+            </div>
+          </body>
+        </html>
+        """
+
+        questions = parse_survey_questions_from_html(html)
+
+        location = questions[0]
+        assert location["is_location"]
+        assert location["type_code"] == "2"
+        assert location["text_inputs"] == 0
+
+        slider_matrix = questions[1]
+        assert slider_matrix["is_slider_matrix"]
+        assert slider_matrix["slider_min"] == 1.0
+        assert slider_matrix["slider_max"] == 5.0
+        assert slider_matrix["slider_step"] == 1.0
