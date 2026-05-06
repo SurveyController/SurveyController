@@ -24,6 +24,38 @@ def _postprocess_matrix_option_texts(option_texts: List[str]) -> List[str]:
         cleaned.append(text)
     return cleaned
 
+
+def _extract_matrix_header_texts(table) -> List[str]:
+    """从矩阵表格中挑出真正的表头行，避免把行标题或作答行误当成列标题。"""
+    if table is None:
+        return []
+
+    best_texts: List[str] = []
+    best_score = 0
+    try:
+        rows = table.find_all("tr")
+    except Exception:
+        rows = []
+    for row in rows:
+        try:
+            if row.find(["input", "select", "textarea"]):
+                continue
+            cells = row.find_all(["td", "th"])
+        except Exception:
+            continue
+        if len(cells) <= 1:
+            continue
+        raw_texts = [_normalize_html_text(cell.get_text(" ", strip=True)) for cell in cells]
+        non_empty_texts = [text for text in raw_texts if text]
+        score = len(non_empty_texts)
+        if score < 2:
+            continue
+        # 保留最早出现、信息量最多的一行；常见情况是表头比分组说明行拥有更多列文本。
+        if score > best_score:
+            best_score = score
+            best_texts = non_empty_texts
+    return best_texts
+
 def _collect_matrix_option_texts(soup, question_div, question_number: int) -> Tuple[int, List[str], List[str]]:
     option_texts: List[str] = []
     matrix_rows = 0
@@ -205,17 +237,8 @@ def _collect_matrix_option_texts(soup, question_div, question_number: int) -> Tu
                     row_texts = merged
         except Exception as exc:
             log_suppressed_exception("survey.parser._collect_matrix_rows merge", exc, level=logging.ERROR)
-    header_row = soup.find(id=f"drv{question_number}_1") if soup else None
-    if header_row:
-        cells = header_row.find_all("td")
-        if len(cells) > 1:
-            option_texts = [_normalize_html_text(td.get_text(" ", strip=True)) for td in cells[1:]]
-            option_texts = [text for text in option_texts if text]
     if not option_texts and table:
-        header_cells = table.find_all("th")
-        if len(header_cells) > 1:
-            option_texts = [_normalize_html_text(th.get_text(" ", strip=True)) for th in header_cells[1:]]
-            option_texts = [text for text in option_texts if text]
+        option_texts = _extract_matrix_header_texts(table)
     raw_option_texts = list(option_texts)
     option_texts = _postprocess_matrix_option_texts(option_texts)
     # 表头文本缺失时，按已识别的列数补数字标题。
