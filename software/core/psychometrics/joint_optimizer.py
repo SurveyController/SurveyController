@@ -451,7 +451,7 @@ def build_joint_psychometric_answer_plan(config: "ExecutionConfig") -> Optional[
         return None
 
     try:
-        target_alpha = normalize_target_alpha(getattr(config, "psycho_target_alpha", 0.9))
+        target_alpha = normalize_target_alpha(getattr(config, "psycho_target_alpha", 0.85))
     except Exception:
         target_alpha = normalize_target_alpha(None)
 

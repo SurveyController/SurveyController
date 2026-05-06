@@ -109,7 +109,7 @@ def provider_run_context(
             int(reserved_sample_index or 0) + 1,
             len(active_dimensions),
             len(getattr(joint_sample_plan, "choices", {}) or {}),
-            float(getattr(config, "psycho_target_alpha", 0.9) or 0.9),
+            float(getattr(config, "psycho_target_alpha", 0.85) or 0.85),
             ",".join(active_dimensions[:5]) if active_dimensions else "无",
         )
         for diagnostic in diagnostics.values():
@@ -137,7 +137,7 @@ def provider_run_context(
             "本轮启用心理测量计划：维度数=%d，题目数=%d，目标α=%.2f，维度=%s",
             dimension_count,
             len(getattr(resolved_plan, "items", []) or []),
-            float(getattr(config, "psycho_target_alpha", 0.9) or 0.9),
+            float(getattr(config, "psycho_target_alpha", 0.85) or 0.85),
             dimension_summary,
         )
 

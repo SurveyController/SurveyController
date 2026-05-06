@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 from typing import Any, Dict, List, Optional
 
 from software.core.questions.meta_helpers import (
@@ -13,6 +14,65 @@ from software.core.questions.schema import QuestionEntry
 from software.providers.contracts import SurveyQuestionMeta, ensure_survey_question_meta
 
 __all__ = ["validate_question_config"]
+
+
+_TEXT_MIN_LENGTH_PATTERNS = (
+    re.compile(r"(?:至少|最少|不少于|不低于)\s*(\d+)\s*(?:个)?(?:字|字符|汉字)"),
+    re.compile(r"(\d+)\s*(?:个)?(?:字|字符|汉字)\s*(?:以上|起)"),
+)
+
+
+def _extract_text_min_length(*fragments: Any) -> Optional[int]:
+    """从题干/说明里提取填空题最少字数要求。"""
+    limits: List[int] = []
+    for fragment in fragments:
+        text = str(fragment or "").strip()
+        if not text:
+            continue
+        for pattern in _TEXT_MIN_LENGTH_PATTERNS:
+            for match in pattern.finditer(text):
+                try:
+                    limits.append(int(match.group(1)))
+                except Exception:
+                    continue
+    return max(limits) if limits else None
+
+
+def _is_text_ai_enabled(entry: QuestionEntry) -> bool:
+    question_type = str(getattr(entry, "question_type", "") or "").strip()
+    if question_type == "text":
+        return bool(getattr(entry, "ai_enabled", False))
+    if question_type == "multi_text":
+        blank_flags = getattr(entry, "multi_text_blank_ai_flags", []) or []
+        return bool(getattr(entry, "ai_enabled", False)) or (bool(blank_flags) and all(bool(flag) for flag in blank_flags))
+    return False
+
+
+def _text_answer_too_short_indexes(entry: QuestionEntry, min_length: int) -> List[tuple[int, int]]:
+    issues: List[tuple[int, int]] = []
+    for answer_index, raw_answer in enumerate(list(getattr(entry, "texts", []) or []), start=1):
+        answer = str(raw_answer or "").strip()
+        if len(answer) < min_length:
+            issues.append((answer_index, len(answer)))
+    return issues
+
+
+def _text_random_mode_label(raw_mode: Any) -> str:
+    mode = str(raw_mode or "").strip().lower()
+    return {
+        "name": "随机姓名",
+        "mobile": "随机手机号",
+        "id_card": "随机身份证号",
+        "integer": "随机整数",
+    }.get(mode, "随机处理")
+
+
+def _display_question_num(raw_num: Any, question_info: Optional[SurveyQuestionMeta]) -> Any:
+    if question_info is not None:
+        display_num = getattr(question_info, "display_num", None)
+        if display_num not in (None, ""):
+            return display_num
+    return raw_num
 
 
 def validate_question_config(
@@ -61,9 +121,11 @@ def validate_question_config(
         except Exception:
             normalized_question_num = idx + 1
 
+        question_info = question_info_map.get(normalized_question_num)
+        display_question_num = _display_question_num(question_num, question_info)
+
         if question_type == "multiple":
             multi_min_limit: Optional[int] = None
-            question_info = question_info_map.get(normalized_question_num)
             if question_info:
                 multi_min_limit = question_info.multi_min_limit
 
@@ -72,14 +134,14 @@ def validate_question_config(
                 positive_count = count_positive_weights(probs)
                 if positive_count <= 0:
                     errors.append(
-                        f"第 {question_num} 题（多选题）配置无效：\n"
+                        f"第 {display_question_num} 题（多选题）配置无效：\n"
                         "  - 当前所有选项概率都小于等于 0%\n"
                         "  - 请至少将 1 个选项的概率设为大于 0%"
                     )
                     continue
                 if multi_min_limit is not None and multi_min_limit > 0 and positive_count < multi_min_limit:
                     errors.append(
-                        f"第 {question_num} 题（多选题）配置冲突：\n"
+                        f"第 {display_question_num} 题（多选题）配置冲突：\n"
                         f"  - 题目要求最少选择 {multi_min_limit} 项\n"
                         f"  - 但只有 {positive_count} 个选项的概率大于 0%\n"
                         f"  - 请至少将 {multi_min_limit} 个选项的概率设为大于 0%"
@@ -89,11 +151,38 @@ def validate_question_config(
                 # 正概率选项数超过题目上限就提前拦截启动，否则像“4个候选项，
                 # 题目最多选3项”这种正常配置会被误杀。
 
+        if question_type in ("text", "multi_text") and question_info and not _is_text_ai_enabled(entry):
+            min_text_length = _extract_text_min_length(question_info.title, question_info.description)
+            if min_text_length is not None and min_text_length > 0:
+                text_random_mode = str(getattr(entry, "text_random_mode", "") or "").strip().lower()
+                if question_type == "text" and text_random_mode not in ("", "none"):
+                    errors.append(
+                        f"第 {display_question_num} 题（填空题）配置冲突：\n"
+                        f"  - 题目要求答案最少 {min_text_length} 字\n"
+                        f"  - 当前选择的是{_text_random_mode_label(text_random_mode)}，无法保证达到字数要求\n"
+                        "  - 请改用足够长的答案列表，或启用 AI 作答"
+                    )
+                else:
+                    short_indexes = _text_answer_too_short_indexes(entry, min_text_length)
+                    if short_indexes:
+                        detail = "、".join(
+                            f"第 {answer_index} 个答案 {actual_length} 字"
+                            for answer_index, actual_length in short_indexes[:5]
+                        )
+                        if len(short_indexes) > 5:
+                            detail += f" 等 {len(short_indexes)} 个答案"
+                        errors.append(
+                            f"第 {display_question_num} 题（填空题）配置冲突：\n"
+                            f"  - 题目要求答案最少 {min_text_length} 字\n"
+                            f"  - 但答案列表里 {detail}，达不到要求\n"
+                            "  - 请改长答案，或启用 AI 作答"
+                        )
+
         configured_weights = _pick_config_weights(entry)
         if question_type in ("single", "dropdown", "scale", "score") and isinstance(configured_weights, list):
             if configured_weights and count_positive_weights(configured_weights) <= 0:
                 errors.append(
-                    f"第 {question_num} 题（{question_type}）配置无效：\n"
+                    f"第 {display_question_num} 题（{question_type}）配置无效：\n"
                     "  - 当前所有选项配比都小于等于 0\n"
                     "  - 请至少将 1 个选项的配比设为大于 0"
                 )
@@ -102,21 +191,21 @@ def validate_question_config(
             invalid_rows = find_all_zero_matrix_rows(configured_weights)
             if invalid_rows == [0]:
                 errors.append(
-                    f"第 {question_num} 题（矩阵题）配置无效：\n"
+                    f"第 {display_question_num} 题（矩阵题）配置无效：\n"
                     "  - 当前所有选项配比都小于等于 0\n"
                     "  - 请至少将 1 个选项的配比设为大于 0"
                 )
             else:
                 for row_idx in invalid_rows:
                     errors.append(
-                        f"第 {question_num} 题（矩阵题）配置无效：\n"
+                        f"第 {display_question_num} 题（矩阵题）配置无效：\n"
                         f"  - 第 {row_idx} 行所有选项配比都小于等于 0\n"
                         "  - 请至少将 1 个选项的配比设为大于 0"
                     )
 
         for cfg_idx, option_text in find_all_zero_attached_selects(getattr(entry, "attached_option_selects", []) or []):
             errors.append(
-                f"第 {question_num} 题（嵌入式下拉）配置无效：\n"
+                f"第 {display_question_num} 题（嵌入式下拉）配置无效：\n"
                 f"  - 第 {cfg_idx} 组（{option_text or '未命名选项'}）所有配比都小于等于 0\n"
                 "  - 请至少将 1 个选项的配比设为大于 0"
             )

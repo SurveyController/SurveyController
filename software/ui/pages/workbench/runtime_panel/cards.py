@@ -740,7 +740,7 @@ class ReliabilitySettingCard(ExpandGroupSettingCard):
     def get_alpha(self) -> float:
         """读取并裁剪目标 Alpha 值，落在允许范围内。
 
-         输入非法或为空时回退到 0.9。
+         输入非法或为空时回退到 0.85。
         """
         return normalize_target_alpha((self.alphaEdit.text() or "").strip())
 

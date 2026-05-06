@@ -13,7 +13,7 @@ from software.providers.contracts import SurveyQuestionMeta, ensure_survey_quest
 from software.ui.widgets.no_wheel import NoWheelSlider
 
 from .constants import _get_entry_type_label
-from .utils import _apply_label_color, _bind_slider_input, _configure_wrapped_text_label, _shorten_text
+from .utils import _apply_label_color, _bind_slider_input, _configure_wrapped_text_label, _shorten_text, resolve_display_question_num
 
 
 class WizardCardsMixin:
@@ -115,7 +115,7 @@ class WizardCardsMixin:
         return ensure_survey_question_meta({}, index=idx + 1)
     def _format_question_label(self, idx: int) -> str:
         info = self._get_entry_info(idx)
-        qnum = str(info.get("num") or "").strip()
+        qnum = resolve_display_question_num(info, idx + 1)
         return f"第{qnum or idx + 1}题"
     def _find_info_by_question_num(self, question_num: int) -> SurveyQuestionMeta:
         for info in self.info:
@@ -400,7 +400,7 @@ class WizardCardsMixin:
         row_texts: List[str] = []
         multi_min_limit: Optional[int] = None
         multi_max_limit: Optional[int] = None
-        qnum = str(info_entry.get("num") or "")
+        qnum = str(resolve_display_question_num(info_entry, idx + 1) or "")
         title_text = str(info_entry.get("title") or "")
         opt_raw = info_entry.get("option_texts")
         if isinstance(opt_raw, list):

@@ -105,7 +105,7 @@ class RuntimePage(ScrollArea):
 
         self.reliability_card = ReliabilitySettingCard(parent=run_group)
         self.reliability_card.setChecked(True)
-        self.reliability_card.set_alpha(0.9)
+        self.reliability_card.set_alpha(0.85)
 
         self.headless_card = SwitchSettingCard(
             FluentIcon.SPEED_HIGH,
@@ -549,7 +549,7 @@ class RuntimePage(ScrollArea):
         self._sync_random_ua(self.random_ua_card.switchButton.isChecked())
         self.reliability_card.switchButton.setChecked(getattr(cfg, "reliability_mode_enabled", True))
         try:
-            self.reliability_card.set_alpha(getattr(cfg, "psycho_target_alpha", 0.9))
+            self.reliability_card.set_alpha(getattr(cfg, "psycho_target_alpha", 0.85))
             self.reliability_card._sync_enabled(self.reliability_card.switchButton.isChecked())
         except Exception as exc:
             log_suppressed_exception("apply_config: reliability_card.set_alpha", exc, level=logging.INFO)

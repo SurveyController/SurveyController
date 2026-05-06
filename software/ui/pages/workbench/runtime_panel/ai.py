@@ -431,7 +431,6 @@ class RuntimeAISection(QObject):
         if not current_prompt or current_prompt == previous_default:
             self._ai_system_prompt = next_default
             self.ai_prompt_card.set_prompt_text(self._ai_system_prompt, default_prompt=next_default)
-            save_ai_settings(system_prompt=self._ai_system_prompt)
         else:
             self.ai_prompt_card.set_default_prompt(next_default)
         self._last_ai_mode = ai_mode
@@ -494,7 +493,8 @@ class RuntimeAISection(QObject):
         if self._ai_loading:
             return
         self._ai_system_prompt = self.ai_prompt_card.prompt_text()
-        save_ai_settings(system_prompt=self._ai_system_prompt)
+        if self._get_current_ai_mode() != "free":
+            save_ai_settings(system_prompt=self._ai_system_prompt)
 
     def _on_ai_test_clicked(self):
         """测试 AI 连接"""
@@ -508,7 +508,7 @@ class RuntimeAISection(QObject):
             base_url=self.ai_baseurl_edit.text(),
             api_protocol="auto",
             model=self._get_current_model_value(),
-            system_prompt=self._ai_system_prompt,
+            system_prompt=self._ai_system_prompt if self._get_current_ai_mode() != "free" else None,
         )
         self._set_ai_test_loading(True)
         self._ai_test_thread = QThread()

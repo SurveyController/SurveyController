@@ -41,6 +41,22 @@ from .html_parser_rules import (
 __all__ = ["_normalize_html_text", "extract_survey_title_from_html", "parse_survey_questions_from_html"]
 
 
+def _question_div_is_initially_hidden(question_div) -> bool:
+    if question_div is None:
+        return False
+    style_text = str(question_div.get("style") or "").lower()
+    hidden_attr = str(question_div.get("hidden") or "").strip().lower()
+    class_text = " ".join(question_div.get("class") or []).lower() if question_div.get("class") else ""
+    return (
+        "display:none" in style_text
+        or "display: none" in style_text
+        or "visibility:hidden" in style_text
+        or "visibility: hidden" in style_text
+        or hidden_attr in {"hidden", "true", "1"}
+        or "display-none" in class_text
+    )
+
+
 def parse_survey_questions_from_html(html: str) -> List[Dict[str, Any]]:
     """从 HTML 解析问卷题目列表"""
     if not BeautifulSoup:
@@ -58,6 +74,7 @@ def parse_survey_questions_from_html(html: str) -> List[Dict[str, Any]]:
         if not question_divs:
             question_divs = fieldset.find_all("div", attrs={"topic": True})
         current_display_num: Optional[int] = None
+        visible_question_counter = 0
         for question_div in question_divs:
             raw_heading_text = _extract_display_heading_text(question_div)
             question_number = _extract_question_number_from_div(question_div)
@@ -82,6 +99,11 @@ def parse_survey_questions_from_html(html: str) -> List[Dict[str, Any]]:
                 display_num = current_display_num
             elif display_num > 0:
                 current_display_num = display_num
+            if not _question_div_is_initially_hidden(question_div):
+                visible_question_counter += 1
+                if display_num is None or display_num != visible_question_counter:
+                    display_num = visible_question_counter
+                    current_display_num = display_num
             title_text = _extract_question_title(question_div, question_number)
             (
                 option_texts,

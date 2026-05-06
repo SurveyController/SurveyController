@@ -10,6 +10,7 @@ from qfluentwidgets.components.widgets.tool_tip import ItemViewToolTipDelegate, 
 
 from software.providers.contracts import SurveyQuestionMeta
 from software.ui.helpers.fluent_tooltip import install_tooltip_filters
+from .utils import resolve_display_question_num
 
 def _color_with_alpha(color: QColor, alpha: int) -> QColor:
     copied = QColor(color)
@@ -347,7 +348,7 @@ class WizardNavigationMixin:
     def _build_navigation_tooltips(self) -> List[str]:
         labels: List[str] = []
         for idx in range(len(self._question_cards)):
-            qnum = str(self._get_entry_info(idx).get("num") or "").strip()
+            qnum = resolve_display_question_num(self._get_entry_info(idx), idx + 1)
             labels.append(f"第{qnum or idx + 1}题")
         return labels
     def _update_navigation_pager_geometry(self) -> None:

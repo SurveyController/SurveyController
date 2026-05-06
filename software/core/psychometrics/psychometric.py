@@ -10,7 +10,7 @@ from software.core.psychometrics.utils import randn, z_to_category
 
 logger = logging.getLogger(__name__)
 
-DEFAULT_TARGET_ALPHA = 0.9
+DEFAULT_TARGET_ALPHA = 0.85
 MIN_TARGET_ALPHA = 0.60
 MAX_TARGET_ALPHA = 0.95
 
@@ -190,7 +190,7 @@ class DimensionPsychometricPlan:
 
 def build_psychometric_plan(
     psycho_items: List[Any],
-    target_alpha: float = 0.9,
+    target_alpha: float = 0.85,
 ) -> Optional[PsychometricPlan]:
     """构建信效度生成计划"""
     if not psycho_items:
@@ -255,7 +255,7 @@ def build_psychometric_plan(
 
 def build_dimension_psychometric_plan(
     grouped_items: Dict[str, List[Any]],
-    target_alpha: float = 0.9,
+    target_alpha: float = 0.85,
 ) -> Optional[DimensionPsychometricPlan]:
     """按维度分别构建心理测量计划。"""
     if not grouped_items:

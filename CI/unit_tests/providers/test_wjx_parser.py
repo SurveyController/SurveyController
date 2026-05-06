@@ -110,6 +110,37 @@ class WjxParserTests:
         assert title == "标题"
         assert not browser_used["value"]
 
+    def test_parse_wjx_survey_keeps_http_fast_path_even_when_static_page_has_hidden_questions(self, patch_attrs) -> None:
+        static_html = """
+        <html><body>
+          <div id="divQuestion">
+            <fieldset>
+              <div id="div20" topic="20" type="5" style="display:none;"><div class="topicnumber">20.</div></div>
+              <div id="div23" topic="23" type="2"><div class="topicnumber">23.</div></div>
+            </fieldset>
+          </div>
+        </body></html>
+        """
+        browser_used = {"value": False}
+
+        @contextmanager
+        def fake_pool():
+            browser_used["value"] = True
+            yield _FakeBrowserDriver("<html></html>")
+
+        patch_attrs(
+            (wjx_parser.http_client, "get", lambda *_args, **_kwargs: _FakeHttpResponse(static_html)),
+            (wjx_parser, "parse_survey_questions_from_html", lambda _html: [{"num": 23, "display_num": 22, "title": "Q23", "type_code": "2"}]),
+            (wjx_parser, "extract_survey_title_from_html", lambda _html: "标题"),
+            (wjx_parser, "acquire_parse_browser_session", fake_pool),
+        )
+
+        info, title = wjx_parser.parse_wjx_survey("https://www.wjx.cn/vm/demo.aspx")
+
+        assert info == [{"num": 23, "display_num": 22, "title": "Q23", "type_code": "2"}]
+        assert title == "标题"
+        assert not browser_used["value"]
+
     def test_parse_wjx_survey_raises_combined_environment_message(self, patch_attrs) -> None:
         http_exc = OSError("socket blocked")
         http_exc.winerror = 10013

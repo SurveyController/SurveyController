@@ -143,8 +143,11 @@ def _load_ai_settings_from_store() -> Dict[str, Any]:
         store.value(f"{_AI_SETTINGS_KEY_PREFIX}api_protocol", settings["api_protocol"])
     )
     settings["model"] = str(store.value(f"{_AI_SETTINGS_KEY_PREFIX}model", settings["model"]) or "").strip()
-    prompt = str(store.value(f"{_AI_SETTINGS_KEY_PREFIX}system_prompt", settings["system_prompt"]) or "").strip()
-    settings["system_prompt"] = prompt or get_default_system_prompt(settings["ai_mode"])
+    if settings["ai_mode"] == AI_MODE_FREE:
+        settings["system_prompt"] = DEFAULT_SYSTEM_PROMPT_FREE
+    else:
+        prompt = str(store.value(f"{_AI_SETTINGS_KEY_PREFIX}system_prompt", settings["system_prompt"]) or "").strip()
+        settings["system_prompt"] = prompt or get_default_system_prompt(settings["ai_mode"])
     return settings
 
 
@@ -156,7 +159,10 @@ def _persist_ai_settings(settings: Dict[str, Any]) -> None:
     store.setValue(f"{_AI_SETTINGS_KEY_PREFIX}base_url", settings["base_url"])
     store.setValue(f"{_AI_SETTINGS_KEY_PREFIX}api_protocol", settings["api_protocol"])
     store.setValue(f"{_AI_SETTINGS_KEY_PREFIX}model", settings["model"])
-    store.setValue(f"{_AI_SETTINGS_KEY_PREFIX}system_prompt", settings["system_prompt"])
+    if settings["ai_mode"] == AI_MODE_FREE:
+        store.remove(f"{_AI_SETTINGS_KEY_PREFIX}system_prompt")
+    else:
+        store.setValue(f"{_AI_SETTINGS_KEY_PREFIX}system_prompt", settings["system_prompt"])
     store.sync()
 
 
@@ -204,8 +210,11 @@ def save_ai_settings(
     settings["base_url"] = str(settings.get("base_url") or "").strip()
     settings["api_protocol"] = _normalize_custom_api_protocol(settings.get("api_protocol"))
     settings["model"] = str(settings.get("model") or "").strip()
-    prompt = str(settings.get("system_prompt") or "").strip()
-    settings["system_prompt"] = prompt or get_default_system_prompt(settings["ai_mode"])
+    if settings["ai_mode"] == AI_MODE_FREE:
+        settings["system_prompt"] = DEFAULT_SYSTEM_PROMPT_FREE
+    else:
+        prompt = str(settings.get("system_prompt") or "").strip()
+        settings["system_prompt"] = prompt or get_default_system_prompt(settings["ai_mode"])
     _persist_ai_settings(settings)
 
 

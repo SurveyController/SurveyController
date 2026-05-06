@@ -131,6 +131,28 @@ def _extract_display_question_number(raw_title: Any) -> Optional[int]:
 def _extract_display_heading_text(question_div) -> str:
     if question_div is None:
         return ""
+    try:
+        field_label = question_div.find(class_="field-label")
+    except Exception:
+        field_label = None
+    if field_label is not None:
+        parts: List[str] = []
+        for class_name in ("topicnumber", "topichtml"):
+            try:
+                element = field_label.find(class_=class_name)
+            except Exception:
+                element = None
+            if element is None:
+                continue
+            try:
+                text = element.get_text(" ", strip=True)
+            except Exception:
+                text = ""
+            text = _normalize_html_text(text)
+            if text:
+                parts.append(text)
+        if parts:
+            return _normalize_html_text(" ".join(parts))
     for class_name in ("topichtml", "field-label", "qtypetip"):
         try:
             title_element = question_div.find(class_=class_name)

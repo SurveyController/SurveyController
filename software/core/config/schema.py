@@ -36,7 +36,7 @@ class RuntimeConfig:
     fail_stop_enabled: bool = True
     pause_on_aliyun_captcha: bool = True
     reliability_mode_enabled: bool = True
-    psycho_target_alpha: float = 0.9
+    psycho_target_alpha: float = 0.85
     headless_mode: bool = True
     ai_mode: str = "free"
     ai_provider: str = "deepseek"

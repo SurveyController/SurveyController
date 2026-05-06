@@ -28,6 +28,22 @@ class WjxHtmlParserHelperTests:
         assert html_parser_common._cleanup_question_title(" 1. 【单选题】 题目标题 ") == "题目标题"
         assert html_parser_common._extract_display_question_number("* 18. 题目") == 18
 
+    def test_extract_display_heading_text_includes_split_topic_number(self) -> None:
+        soup = _soup(
+            """
+            <div id="div23" topic="23" type="2">
+              <div class="field-label">
+                <span class="req">*</span>
+                <div class="topicnumber">22.</div>
+                <div class="topichtml">请评价培训和实习</div>
+              </div>
+            </div>
+            """
+        )
+        heading = html_parser_common._extract_display_heading_text(soup.div)
+        assert heading == "22. 请评价培训和实习"
+        assert html_parser_common._extract_display_question_number(heading) == 22
+
     def test_count_text_inputs_and_extract_labels_from_mixed_nodes(self) -> None:
         soup = _soup(
             """

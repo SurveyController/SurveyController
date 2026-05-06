@@ -10,7 +10,7 @@ from qfluentwidgets import SearchLineEdit, isDarkTheme
 from software.providers.contracts import SurveyQuestionMeta
 
 from .constants import _get_entry_type_label
-from .utils import _apply_label_color, _shorten_text
+from .utils import _apply_label_color, _shorten_text, resolve_display_question_num
 
 def _color_with_alpha(color: QColor, alpha: int) -> QColor:
     copied = QColor(color)
@@ -161,7 +161,7 @@ class WizardSearchMixin:
             return cached
 
         info = self._get_entry_info(idx)
-        chunks: List[str] = [str(info.get("num") or idx + 1)]
+        chunks: List[str] = [str(resolve_display_question_num(info, idx + 1) or idx + 1)]
         for _label, text in self._iter_searchable_sections(idx):
             chunks.append(text)
 
@@ -204,7 +204,7 @@ class WizardSearchMixin:
     def _build_search_result_item(self, idx: int, keyword: str) -> QListWidgetItem:
         info = self._get_entry_info(idx)
         entry = self.entries[idx] if 0 <= idx < len(self.entries) else None
-        qnum = str(info.get("num") or idx + 1)
+        qnum = str(resolve_display_question_num(info, idx + 1) or idx + 1)
         type_text = _get_entry_type_label(entry) if entry is not None else "题目"
         title_text = str(info.get("title") or getattr(entry, "question_title", "") or "").strip()
         title_preview = _shorten_text(title_text or f"[{type_text}]", 48)
@@ -260,7 +260,7 @@ class WizardSearchMixin:
         self._last_search_match_cursor = match_cursor
 
         info = self._get_entry_info(target_idx)
-        qnum = str(info.get("num") or target_idx + 1)
+        qnum = str(resolve_display_question_num(info, target_idx + 1) or target_idx + 1)
         self._set_search_status(
             f"匹配 {len(matches)} 题，当前定位到第{qnum}题（{match_cursor + 1}/{len(matches)}）",
             "#0f6cbd",

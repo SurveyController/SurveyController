@@ -48,3 +48,34 @@ class QuestionValidationTests:
         assert result is not None
         assert '嵌入式下拉' in result
         assert '其他' in result
+
+    def test_text_validation_blocks_answer_shorter_than_min_length_hint(self) -> None:
+        entry = QuestionEntry(question_type='text', probabilities=[1.0], texts=['无'], question_num=4)
+        result = validate_question_config([entry], [{'num': 4, 'title': '请简述个人发展目标（最少30字）'}])
+        assert result is not None
+        assert '最少 30 字' in result
+        assert '启用 AI 作答' in result
+
+    def test_text_validation_allows_ai_for_min_length_hint(self) -> None:
+        entry = QuestionEntry(question_type='text', probabilities=[1.0], texts=['无'], question_num=4, ai_enabled=True)
+        result = validate_question_config([entry], [{'num': 4, 'title': '请简述个人发展目标（最少30字）'}])
+        assert result is None
+
+    def test_text_validation_blocks_random_mode_for_min_length_hint(self) -> None:
+        entry = QuestionEntry(question_type='text', probabilities=[1.0], texts=['无'], question_num=4, text_random_mode='name')
+        result = validate_question_config([entry], [{'num': 4, 'title': '请简述个人发展目标（至少30字）'}])
+        assert result is not None
+        assert '随机姓名' in result
+
+    def test_text_validation_reads_min_length_from_description(self) -> None:
+        entry = QuestionEntry(question_type='text', probabilities=[1.0], texts=['短答案'], question_num=8)
+        result = validate_question_config([entry], [{'num': 8, 'title': '开放题', 'description': '答案需10字以上'}])
+        assert result is not None
+        assert '最少 10 字' in result
+
+    def test_validation_uses_display_num_in_error_message(self) -> None:
+        entry = QuestionEntry(question_type='text', probabilities=[1.0], texts=['无'], question_num=23)
+        result = validate_question_config([entry], [{'num': 23, 'display_num': 22, 'title': '简要评价（最少30字）'}])
+        assert result is not None
+        assert '第 22 题' in result
+        assert '第 23 题' not in result

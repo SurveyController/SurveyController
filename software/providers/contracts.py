@@ -24,6 +24,7 @@ __all__ = [
 class SurveyQuestionMeta:
     num: int
     title: str
+    display_num: Optional[int] = None
     description: str = ""
     type_code: str = "0"
     options: int = 0
@@ -140,6 +141,7 @@ def survey_question_meta_to_dict(question: SurveyQuestionMeta) -> Dict[str, Any]
     return {
         "num": int(question.num),
         "title": str(question.title or "").strip(),
+        "display_num": question.display_num,
         "description": str(question.description or "").strip(),
         "type_code": str(question.type_code or "0").strip() or "0",
         "options": int(question.options or 0),
@@ -188,6 +190,13 @@ def _normalize_question(question: SurveyQuestionInput, provider: str, index: int
     normalized = dict(_survey_question_input_to_dict(question) or {})
     page_number = _as_int(normalized.get("page"), 1, minimum=1)
     question_number = _as_int(normalized.get("num"), index, minimum=1)
+    raw_display_num = normalized.get("display_num")
+    display_number: Optional[int] = None
+    if raw_display_num not in (None, ""):
+        try:
+            display_number = int(raw_display_num)
+        except Exception:
+            display_number = None
     option_count = _as_int(normalized.get("options"), len(_normalize_text_list(normalized.get("option_texts"))), minimum=0)
     row_count = _as_int(normalized.get("rows"), len(_normalize_text_list(normalized.get("row_texts"))) or 1, minimum=1)
 
@@ -225,6 +234,7 @@ def _normalize_question(question: SurveyQuestionInput, provider: str, index: int
     return SurveyQuestionMeta(
         num=question_number,
         title=str(normalized.get("title") or "").strip(),
+        display_num=display_number,
         description=str(normalized.get("description") or "").strip(),
         type_code=str(normalized.get("type_code") or "0").strip() or "0",
         options=option_count,

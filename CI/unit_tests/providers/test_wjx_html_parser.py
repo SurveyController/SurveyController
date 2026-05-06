@@ -142,6 +142,149 @@ class WjxHtmlParserTests:
         assert multi_text["is_multi_text"]
         assert multi_text["is_text_like"]
 
+    def test_parse_survey_questions_keeps_internal_num_when_explicit_display_num_matches_visible_order(self) -> None:
+        html = """
+        <html>
+          <body>
+            <div id="divQuestion">
+              <fieldset>
+                <div topic="23" id="div23" type="2">
+                  <div class="field-label">
+                    <span class="req">*</span>
+                    <div class="topicnumber">1.</div>
+                    <div class="topichtml">请您对培训和实习进行简要评价：<span>（最少30字）</span></div>
+                  </div>
+                  <textarea id="q23" minword="30" name="q23"></textarea>
+                </div>
+              </fieldset>
+            </div>
+          </body>
+        </html>
+        """
+
+        questions = parse_survey_questions_from_html(html)
+
+        assert questions[0]["num"] == 23
+        assert questions[0]["display_num"] == 1
+        assert questions[0]["title"] == "请您对培训和实习进行简要评价： （最少30字）"
+
+    def test_parse_survey_questions_recalculates_display_num_when_previous_question_is_hidden(self) -> None:
+        html = """
+        <html>
+          <body>
+            <div id="divQuestion">
+              <fieldset>
+                <div topic="20" id="div20" type="5" style="display:none;">
+                  <div class="field-label">
+                    <div class="topicnumber">20.</div>
+                    <div class="topichtml">隐藏题</div>
+                  </div>
+                </div>
+                <div topic="21" id="div21" type="4">
+                  <div class="field-label">
+                    <div class="topicnumber">21.</div>
+                    <div class="topichtml">显示题一</div>
+                  </div>
+                </div>
+                <div topic="23" id="div23" type="2">
+                  <div class="field-label">
+                    <div class="topicnumber">23.</div>
+                    <div class="topichtml">显示题二</div>
+                  </div>
+                  <textarea id="q23" name="q23"></textarea>
+                </div>
+              </fieldset>
+            </div>
+          </body>
+        </html>
+        """
+
+        questions = parse_survey_questions_from_html(html)
+
+        assert questions[0]["num"] == 20
+        assert questions[0]["display_num"] == 20
+        assert questions[1]["num"] == 21
+        assert questions[1]["display_num"] == 1
+        assert questions[2]["num"] == 23
+        assert questions[2]["display_num"] == 2
+
+    def test_parse_survey_questions_matches_shifted_visible_numbering_after_hidden_question(self) -> None:
+        question_blocks = []
+        for num in range(1, 20):
+            question_blocks.append(
+                f"""
+                <div topic="{num}" id="div{num}" type="3">
+                  <div class="field-label">
+                    <div class="topicnumber">{num}.</div>
+                    <div class="topichtml">题目{num}</div>
+                  </div>
+                  <div class="ui-controlgroup"><div><span class="label">A</span></div></div>
+                </div>
+                """
+            )
+        question_blocks.append(
+            """
+            <div topic="20" id="div20" type="5" style="display:none;">
+              <div class="field-label">
+                <div class="topicnumber">20.</div>
+                <div class="topichtml">隐藏题</div>
+              </div>
+            </div>
+            """
+        )
+        question_blocks.append(
+            """
+            <div topic="21" id="div21" type="4">
+              <div class="field-label">
+                <div class="topicnumber">21.</div>
+                <div class="topichtml">题目21</div>
+              </div>
+              <div class="ui-controlgroup"><div><span class="label">A</span></div></div>
+            </div>
+            """
+        )
+        question_blocks.append(
+            """
+            <div topic="22" id="div22" type="3">
+              <div class="field-label">
+                <div class="topicnumber">22.</div>
+                <div class="topichtml">题目22</div>
+              </div>
+              <div class="ui-controlgroup"><div><span class="label">A</span></div></div>
+            </div>
+            """
+        )
+        question_blocks.append(
+            """
+            <div topic="23" id="div23" type="2">
+              <div class="field-label">
+                <div class="topicnumber">23.</div>
+                <div class="topichtml">题目23</div>
+              </div>
+              <textarea id="q23" name="q23"></textarea>
+            </div>
+            """
+        )
+        html = f"""
+        <html>
+          <body>
+            <div id="divQuestion">
+              <fieldset>
+                {''.join(question_blocks)}
+              </fieldset>
+            </div>
+          </body>
+        </html>
+        """
+
+        questions = parse_survey_questions_from_html(html)
+        by_num = {item["num"]: item for item in questions}
+
+        assert by_num[20]["display_num"] == 20
+        assert by_num[21]["display_num"] == 20
+        assert by_num[22]["display_num"] == 21
+        assert by_num[23]["display_num"] == 22
+
     def test_parse_survey_questions_from_html_falls_back_to_nested_topic_divs_and_slider_matrix(self) -> None:
         html = """
         <html>

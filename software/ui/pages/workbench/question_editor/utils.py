@@ -92,6 +92,27 @@ def _normalize_question_num(raw: Any) -> Optional[int]:
         return None
 
 
+def resolve_display_question_num(info: Any, fallback: Any = None) -> Optional[int]:
+    display_num = None
+    try:
+        display_num = info.get("display_num") if hasattr(info, "get") else getattr(info, "display_num", None)
+    except Exception:
+        display_num = None
+    normalized = _normalize_question_num(display_num)
+    if normalized is not None:
+        return normalized
+
+    raw_num = None
+    try:
+        raw_num = info.get("num") if hasattr(info, "get") else getattr(info, "num", None)
+    except Exception:
+        raw_num = None
+    normalized = _normalize_question_num(raw_num)
+    if normalized is not None:
+        return normalized
+    return _normalize_question_num(fallback)
+
+
 def _normalize_question_title(raw: Any) -> str:
     try:
         text = str(raw or "").strip()
@@ -149,6 +170,9 @@ def _build_entry_info_fallback(entry: QuestionEntry) -> SurveyQuestionMeta:
     question_num = _normalize_question_num(getattr(entry, "question_num", None))
     if question_num is not None:
         info["num"] = question_num
+    display_num = _normalize_question_num(getattr(entry, "display_question_num", None))
+    if display_num is not None:
+        info["display_num"] = display_num
     provider_question_id = str(getattr(entry, "provider_question_id", None) or "").strip()
     if provider_question_id:
         info["provider_question_id"] = provider_question_id

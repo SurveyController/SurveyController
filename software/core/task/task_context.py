@@ -50,7 +50,7 @@ class ExecutionConfig:
     questions_metadata: Dict[int, SurveyQuestionMeta] = field(default_factory=dict)
     joint_psychometric_answer_plan: Optional[Any] = None
 
-    psycho_target_alpha: float = 0.9
+    psycho_target_alpha: float = 0.85
 
     headless_mode: bool = False
     browser_preference: List[str] = field(default_factory=list)
