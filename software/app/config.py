@@ -415,28 +415,5 @@ _ENGLISH_MULTI_MIN_PATTERNS = (
     re.compile(r"(?:at\s+least|min(?:imum)?\s*)\s*(\d+)", re.IGNORECASE),
 )
 
-# ==================== 下载源配置 ====================
-DOWNLOAD_SOURCES = {
-    "official": {
-        "label": "官方服务器（推荐）",
-        "api_prefix": "",  # API 不修改
-        "download_prefix": "",  # 不使用前缀拼接
-        "direct_download_url": "https://dl.hungrym0.top/SurveyController_latest_setup.exe",
-    },
-    "github": {
-        "label": "GitHub 原始地址",
-        "api_prefix": "",  # 不修改 API 地址
-        "download_prefix": "",  # 不修改下载地址
-    },
-    "ghfast": {
-        "label": "ghfast.top 镜像",
-        "api_prefix": "",
-        "download_prefix": "https://ghfast.top/",
-    },
-    "ghproxy": {
-        "label": "ghproxy.net 镜像",
-        "api_prefix": "",  # API 不走镜像
-        "download_prefix": "https://ghproxy.net/",
-    },
-}
-DEFAULT_DOWNLOAD_SOURCE = "official"
+# ==================== 更新配置 ====================
+VELOPACK_FEED_URL = "https://dl.hungrym0.top/surveycontroller/win/stable/"

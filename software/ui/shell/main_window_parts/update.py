@@ -3,7 +3,6 @@ from __future__ import annotations
 
 import logging
 import re
-import subprocess
 from typing import TYPE_CHECKING, cast
 
 from PySide6.QtCore import QObject, QThread, QTimer, Qt
@@ -551,11 +550,11 @@ class MainWindowUpdateMixin:
         self._show_download_toast(0, show_spinner=True)
 
     def _cancel_download(self):
-        """取消下载"""
+        """取消本次自动安装流程。"""
         self._download_cancelled = True
         log_action("UPDATE", "download_update", "download_toast", "main_window", result="cancelled")
         self._close_download_toast()
-        self._toast("下载已取消", "warning")
+        self._toast("已停止本次自动更新", "warning")
 
     def _close_download_toast(self):
         """安全关闭下载进度Toast"""
@@ -574,75 +573,68 @@ class MainWindowUpdateMixin:
         """从后台线程安全地发送下载进度信号"""
         self.downloadProgress.emit(downloaded, total, speed)
 
-    def _on_download_finished(self, downloaded_file: str):
+    def _on_download_finished(self, update_payload: object):
         """下载完成后在主线程显示弹窗"""
         from software.update.updater import UpdateManager
 
+        payload = update_payload if isinstance(update_payload, dict) else {}
+        version = str(payload.get("version", "") or "").strip()
+        velopack_update = payload.get("_velopack_update")
+        if velopack_update is None:
+            self.show_message_dialog("更新失败", "更新包信息无效，请稍后重试", level="error")
+            return
+
         should_launch = self.show_confirm_dialog(
             "更新完成",
-            f"新版本已下载到:\n{downloaded_file}\n\n是否立即安装新版本？",
+            f"新版本 v{version or '未知'} 已下载完成。\n\n是否立即退出并安装更新？",
         )
-        UpdateManager.schedule_running_executable_deletion(downloaded_file)
         if should_launch:
             log_action(
                 "UPDATE",
-                "launch_downloaded_update",
-                "downloaded_update",
+                "apply_downloaded_update",
+                "velopack_update",
                 "main_window",
                 result="confirmed",
-                payload={"file": downloaded_file},
+                payload={"version": version or "unknown"},
             )
             try:
-                subprocess.Popen([downloaded_file])
                 self._skip_save_on_close = True
+                UpdateManager.apply_downloaded_update(velopack_update)
                 log_action(
                     "UPDATE",
-                    "launch_downloaded_update",
-                    "downloaded_update",
+                    "apply_downloaded_update",
+                    "velopack_update",
                     "main_window",
                     result="started",
-                    payload={"file": downloaded_file},
+                    payload={"version": version or "unknown"},
                 )
                 self.close()
             except Exception as exc:
-                logging.error("[UPDATE] failed to launch downloaded update")
+                logging.error("[UPDATE] failed to apply downloaded update")
                 log_action(
                     "UPDATE",
-                    "launch_downloaded_update",
-                    "downloaded_update",
+                    "apply_downloaded_update",
+                    "velopack_update",
                     "main_window",
                     result="failed",
                     level=logging.ERROR,
-                    payload={"file": downloaded_file},
+                    payload={"version": version or "unknown"},
                     detail=exc,
                 )
-                self.show_message_dialog("启动失败", f"无法启动新版本: {exc}", level="error")
+                self.show_message_dialog("安装失败", f"无法应用更新：{exc}", level="error")
         else:
             log_action(
                 "UPDATE",
-                "launch_downloaded_update",
-                "downloaded_update",
+                "apply_downloaded_update",
+                "velopack_update",
                 "main_window",
                 result="deferred",
-                payload={"file": downloaded_file},
+                payload={"version": version or "unknown"},
             )
 
     def _on_download_failed(self, error_msg: str):
         """下载失败后在主线程显示弹窗"""
         if not getattr(self, "_download_cancelled", False):
             self.show_message_dialog("更新失败", error_msg, level="error")
-
-    def _on_download_source_switched(self, new_source_key: str):
-        """下载源切换时更新设置页面的下拉框"""
-        try:
-            # 更新设置页面的下拉框
-            if hasattr(self, "_settings_page") and self._settings_page and hasattr(self._settings_page, "download_source_combo"):
-                idx = self._settings_page.download_source_combo.findData(new_source_key)
-                if idx >= 0:
-                    self._settings_page.download_source_combo.blockSignals(True)
-                    self._settings_page.download_source_combo.setCurrentIndex(idx)
-                    self._settings_page.download_source_combo.blockSignals(False)
-        except Exception:
-            logging.warning("切换下载源后同步 UI 状态失败", exc_info=True)
 
 

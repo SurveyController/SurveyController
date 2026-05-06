@@ -12,7 +12,7 @@ from software.core.config.codec import (
     serialize_runtime_config,
 )
 from software.core.config.schema import RuntimeConfig
-from software.app.runtime_paths import get_runtime_directory
+from software.app.user_paths import get_default_runtime_config_path
 
 __all__ = [
     "_sanitize_filename",
@@ -32,7 +32,7 @@ def _sanitize_filename(value: Optional[str], max_length: int = 80) -> str:
 
 
 def _default_config_path() -> str:
-    return os.path.join(get_runtime_directory(), "config.json")
+    return get_default_runtime_config_path()
 
 
 def build_default_config_filename(survey_title: Optional[str] = None) -> str:

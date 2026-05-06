@@ -12,7 +12,7 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import Any, Callable, Deque, List, Optional
 
-from software.app.config import LOG_BUFFER_CAPACITY, LOG_FORMAT, LOG_DIR_NAME
+from software.app.config import LOG_BUFFER_CAPACITY, LOG_FORMAT
 from software.app.config import (
     AUTO_SAVE_LOG_RETENTION_COUNT_SETTING_KEY,
     AUTO_SAVE_LOG_RETENTION_OPTIONS,
@@ -23,6 +23,7 @@ from software.app.config import (
     get_bool_from_qsettings,
     get_int_from_qsettings,
 )
+from software.app.user_paths import get_user_logs_directory
 
 
 ORIGINAL_STDOUT = sys.stdout
@@ -423,9 +424,8 @@ _root_logger.setLevel(logging.INFO)
 
 
 def _create_session_log_file_path() -> str:
-    from software.app.runtime_paths import get_runtime_directory
-
-    logs_dir = _ensure_logs_dir(get_runtime_directory())
+    logs_dir = get_user_logs_directory()
+    os.makedirs(logs_dir, exist_ok=True)
     file_name = datetime.now().strftime("session_%Y%m%d_%H%M%S.log")
     return os.path.join(logs_dir, file_name)
 
@@ -539,7 +539,15 @@ def _dispatch_popup(kind: str, title: str, message: str, default: Any = None) ->
 
 
 def _ensure_logs_dir(runtime_directory: str) -> str:
-    logs_dir = os.path.join(runtime_directory, LOG_DIR_NAME)
+    normalized = os.path.abspath(str(runtime_directory or "").strip())
+    if not normalized:
+        raise ValueError("runtime_directory 不能为空")
+
+    candidate_name = os.path.basename(normalized).lower()
+    if candidate_name == "logs":
+        logs_dir = normalized
+    else:
+        logs_dir = os.path.join(normalized, "logs")
     os.makedirs(logs_dir, exist_ok=True)
     return logs_dir
 

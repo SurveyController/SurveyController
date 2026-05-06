@@ -42,7 +42,12 @@
 ## 开始使用
 
 > [!TIP]
-> **安装包：** 前往 [发行版](https://github.com/SurveyController/SurveyController/releases/latest) 中下载已打包好的安装包
+> **安装包：** 前往 [发行版](https://github.com/SurveyController/SurveyController/releases/latest) 下载 `SurveyController_<版本>_setup.exe`
+
+> [!NOTE]
+> Windows 安装版现已切到 Velopack 更新链路。
+> 第一次从旧版 Inno Setup 安装迁移过来时，需要手动安装一次新版安装包；
+> 之后应用内更新会走增量更新，不再每次重下完整安装器。
 
 ### 从源码运行
 
@@ -57,6 +62,21 @@ python SurveyController.py
 ```
 
 **环境要求：** Windows 10/11，Python 3.11+，Git，Microsoft Edge
+
+### 安装版更新说明
+
+1. 旧版 Inno Setup 用户：先手动安装一次新的 Velopack 安装包。
+2. 新安装包首次启动时，会自动尝试搬迁旧版 `config.json`、`configs/`、`logs/` 数据。
+3. 之后应用内更新会从 `https://dl.hungrym0.top/surveycontroller/win/stable/` 检查并下载差分更新。
+
+### 用户数据目录
+
+- 配置文件：`%AppData%\SurveyController\config.json`
+- 配置目录：`%AppData%\SurveyController\configs`
+- 日志目录：`%LocalAppData%\SurveyController\logs`
+- 缓存目录：`%LocalAppData%\SurveyController\cache`
+
+现在这些内容不再写到安装目录里。以前那种“装在哪就往哪写”的方式很容易被权限问题狠狠干翻，这次已经一并处理掉。
 
 ---
 

@@ -7,7 +7,7 @@ from typing import TYPE_CHECKING, Any, cast
 
 from PySide6.QtWidgets import QFileDialog, QWidget
 
-from software.app.runtime_paths import get_runtime_directory
+from software.app.user_paths import get_user_config_directory
 from software.io.config import build_default_config_filename, build_runtime_config_snapshot
 from software.logging.action_logger import log_action
 from software.logging.log_utils import log_suppressed_exception
@@ -45,7 +45,7 @@ class DashboardConfigIOMixin:
             )
             self._toast(f"无法打开配置列表：{exc}", "error")
     def _on_load_config(self):
-        configs_dir = os.path.join(get_runtime_directory(), "configs")
+        configs_dir = get_user_config_directory()
         if not os.path.exists(configs_dir):
             os.makedirs(configs_dir, exist_ok=True)
         path, _ = QFileDialog.getOpenFileName(cast(QWidget, self), "载入配置", configs_dir, "JSON 文件 (*.json);;所有文件 (*.*)")
@@ -115,7 +115,7 @@ class DashboardConfigIOMixin:
             questions_info=self.question_page.questions_info,
         )
         self.controller.config = cfg
-        configs_dir = os.path.join(get_runtime_directory(), "configs")
+        configs_dir = get_user_config_directory()
         os.makedirs(configs_dir, exist_ok=True)
         default_name = build_default_config_filename(self._survey_title)
         default_path = os.path.join(configs_dir, default_name)

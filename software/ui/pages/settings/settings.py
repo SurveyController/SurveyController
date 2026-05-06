@@ -21,10 +21,8 @@ from software.app.config import (
     AUTO_SAVE_LOG_RETENTION_COUNT_SETTING_KEY,
     AUTO_SAVE_LOG_RETENTION_OPTIONS,
     AUTO_SAVE_LOGS_SETTING_KEY,
-    DEFAULT_DOWNLOAD_SOURCE,
     DEFAULT_AUTO_SAVE_LOG_RETENTION_COUNT,
     DEFAULT_AUTO_SAVE_LOGS,
-    DOWNLOAD_SOURCES,
     NAVIGATION_TEXT_VISIBLE_SETTING_KEY,
     TASK_RESULT_WINDOWS_NOTIFICATION_SETTING_KEY,
     app_settings,
@@ -36,7 +34,6 @@ from software.logging.log_utils import log_suppressed_exception
 from software.integrations.ai import reset_ai_settings
 from software.providers.survey_cache import clear_survey_parse_cache
 from software.ui.widgets.setting_cards import (
-    ComboSettingCard,
     ExpandComboSwitchSettingCard,
     SwitchSettingCard,
 )
@@ -143,22 +140,7 @@ class SettingsPage(ScrollArea):
             self.update_group,
         )
         self.auto_update_card.setChecked(get_bool_from_qsettings(settings.value("auto_check_update"), True))
-        self.download_source_card = ComboSettingCard(
-            FluentIcon.DOWNLOAD,
-            "下载源",
-            "选择用于下载更新的源（如果下载速度较慢，可以尝试切换到其他源）",
-            180,
-            self.update_group,
-        )
-        self.download_source_combo = self.download_source_card.comboBox
-        for key, source in DOWNLOAD_SOURCES.items():
-            self.download_source_combo.addItem(source["label"], userData=key)
-        saved_source = str(settings.value("download_source", DEFAULT_DOWNLOAD_SOURCE)).strip()
-        idx = self.download_source_combo.findData(saved_source)
-        if idx >= 0:
-            self.download_source_combo.setCurrentIndex(idx)
         self.update_group.addSettingCard(self.auto_update_card)
-        self.update_group.addSettingCard(self.download_source_card)
         layout.addWidget(self.update_group)
 
         self.tools_group = SettingCardGroup("系统工具", self.view)
@@ -289,16 +271,6 @@ class SettingsPage(ScrollArea):
             target="auto_update_switch",
             page="settings",
             payload_factory=lambda checked: {"enabled": bool(checked)},
-        )
-        bind_logged_action(
-            self.download_source_combo.currentIndexChanged,
-            self._on_download_source_changed,
-            scope="CONFIG",
-            event="change_download_source",
-            target="download_source_combo",
-            page="settings",
-            payload_factory=lambda _index: {"source": self.download_source_combo.currentData()},
-            forward_signal_args=False,
         )
 
     def _set_switch_state(self, card, checked: bool):
@@ -512,7 +484,6 @@ class SettingsPage(ScrollArea):
             AUTO_SAVE_LOGS_SETTING_KEY,
             AUTO_SAVE_LOG_RETENTION_COUNT_SETTING_KEY,
             "auto_check_update",
-            "download_source",
         ):
             settings.remove(key)
         reset_ai_settings()
@@ -526,7 +497,6 @@ class SettingsPage(ScrollArea):
             AUTO_SAVE_LOGS_SETTING_KEY: DEFAULT_AUTO_SAVE_LOGS,
             AUTO_SAVE_LOG_RETENTION_COUNT_SETTING_KEY: DEFAULT_AUTO_SAVE_LOG_RETENTION_COUNT,
             "auto_check_update": True,
-            "download_source": DEFAULT_DOWNLOAD_SOURCE,
         }
         self._set_switch_state(self.navigation_text_card, defaults[NAVIGATION_TEXT_VISIBLE_SETTING_KEY])
         self._set_switch_state(self.topmost_card, defaults["window_topmost"])
@@ -540,11 +510,6 @@ class SettingsPage(ScrollArea):
             self.auto_save_logs_combo.setCurrentIndex(retention_index)
             self.auto_save_logs_combo.blockSignals(False)
         self._set_switch_state(self.auto_update_card, defaults["auto_check_update"])
-        download_index = self.download_source_combo.findData(defaults["download_source"])
-        if download_index >= 0:
-            self.download_source_combo.blockSignals(True)
-            self.download_source_combo.setCurrentIndex(download_index)
-            self.download_source_combo.blockSignals(False)
         self._apply_navigation_text_state(defaults[NAVIGATION_TEXT_VISIBLE_SETTING_KEY], persist=False)
         self._apply_topmost_state(defaults["window_topmost"], persist=False)
         self._apply_ask_save_state(defaults["ask_save_on_close"], persist=False)
@@ -597,16 +562,3 @@ class SettingsPage(ScrollArea):
             payload={"removed_count": removed_count},
         )
 
-    def _on_download_source_changed(self):
-        idx = self.download_source_combo.currentIndex()
-        source_key = str(self.download_source_combo.itemData(idx)) if idx >= 0 else DEFAULT_DOWNLOAD_SOURCE
-        settings = app_settings()
-        settings.setValue("download_source", source_key)
-        log_action(
-            "CONFIG",
-            "change_download_source",
-            "download_source_combo",
-            "settings",
-            result="changed",
-            payload={"source": source_key},
-        )

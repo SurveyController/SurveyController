@@ -1,0 +1,29 @@
+from __future__ import annotations
+
+import os
+
+import software.app.user_paths as user_paths
+
+
+class UserPathsTests:
+    def test_windows_user_paths_follow_expected_layout(self, monkeypatch) -> None:
+        monkeypatch.setenv("APPDATA", r"C:\Users\Test\AppData\Roaming")
+        monkeypatch.setenv("LOCALAPPDATA", r"C:\Users\Test\AppData\Local")
+
+        assert user_paths.get_user_config_root().replace("\\", "/") == "C:/Users/Test/AppData/Roaming/SurveyController"
+        assert user_paths.get_user_config_directory().replace("\\", "/") == "C:/Users/Test/AppData/Roaming/SurveyController/configs"
+        assert user_paths.get_user_local_data_root().replace("\\", "/") == "C:/Users/Test/AppData/Local/SurveyController"
+        assert user_paths.get_user_logs_directory().replace("\\", "/") == "C:/Users/Test/AppData/Local/SurveyController/logs"
+        assert user_paths.get_user_cache_directory().replace("\\", "/") == "C:/Users/Test/AppData/Local/SurveyController/cache"
+        assert user_paths.get_user_updates_directory().replace("\\", "/") == "C:/Users/Test/AppData/Local/SurveyController/updates"
+        assert user_paths.get_default_runtime_config_path().replace("\\", "/") == "C:/Users/Test/AppData/Roaming/SurveyController/config.json"
+
+    def test_ensure_user_data_directories_creates_expected_tree(self, monkeypatch, tmp_path) -> None:
+        monkeypatch.setenv("APPDATA", str(tmp_path / "Roaming"))
+        monkeypatch.setenv("LOCALAPPDATA", str(tmp_path / "Local"))
+
+        created = user_paths.ensure_user_data_directories()
+
+        assert created
+        for path in created:
+            assert os.path.isdir(path)

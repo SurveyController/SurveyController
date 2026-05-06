@@ -11,7 +11,10 @@ from qfluentwidgets import MessageBox, PushButton
 
 from software.network.proxy.session import get_session_snapshot
 from software.app.config import app_settings, get_bool_from_qsettings
-from software.app.runtime_paths import get_runtime_directory
+from software.app.user_paths import (
+    get_user_config_directory,
+    get_user_local_data_root,
+)
 from software.io.config import RuntimeConfig, build_runtime_config_snapshot
 from software.logging.log_utils import (
     finalize_session_log_persistence,
@@ -91,7 +94,7 @@ class MainWindowLifecycleMixin:
 
     def _persist_last_session_log(self) -> None:
         try:
-            finalize_session_log_persistence(get_runtime_directory())
+            finalize_session_log_persistence(get_user_local_data_root())
         except Exception as exc:
             logging.warning("保存日志失败: %s", exc)
 
@@ -105,7 +108,7 @@ class MainWindowLifecycleMixin:
         return cfg
 
     def _save_config_via_dialog(self, cfg) -> bool:
-        configs_dir = os.path.join(get_runtime_directory(), "configs")
+        configs_dir = get_user_config_directory()
         os.makedirs(configs_dir, exist_ok=True)
         parent_widget = cast(QWidget, self)
         path, _ = QFileDialog.getSaveFileName(
@@ -202,11 +205,15 @@ class MainWindowLifecycleMixin:
         self._cleanup_runtime_resources_on_close()
 
     def _load_saved_config(self):
-        cfg = RuntimeConfig()
+        try:
+            cfg = self.controller.load_saved_config(strict=False)
+        except Exception as exc:
+            logging.warning("加载默认配置失败: %s", exc)
+            cfg = RuntimeConfig()
         self.runtime_page.apply_config(cfg)
         self.dashboard.apply_config(cfg)
-        self.question_page.set_entries(cfg.question_entries or [], self.controller.questions_info)
-        self.strategy_page.set_questions_info(self.controller.questions_info)
+        self.question_page.set_entries(cfg.question_entries or [], cfg.questions_info or [])
+        self.strategy_page.set_questions_info(cfg.questions_info or [])
         self.strategy_page.set_entries(self.question_page.entries, self.question_page.entry_questions_info)
         self.strategy_page.set_rules(getattr(cfg, "answer_rules", []) or [])
         self.strategy_page.set_dimension_groups(getattr(cfg, "dimension_groups", []) or [])

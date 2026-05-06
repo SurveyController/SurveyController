@@ -51,30 +51,35 @@
 │       └── wrangler.toml
 ├── CLAUDE.md
 ├── CODE_OF_CONDUCT.md
-├── configs/
 ├── CONTRIBUTING.md
 ├── credamo/
 │   └── provider/
 ├── desktop.ini
 ├── icon.ico
 ├── LICENSE
-├── logs/
 ├── pytest.ini
 ├── README.md
 ├── requirements.txt
 ├── rthook_pyside6.py
 ├── Setup/
+│   ├── LICENSE/
+│   ├── 使用教程.docx
+│   ├── 使用教程.pdf
+│   ├── bg.bmp
 │   ├── ChineseSimplified.isl
-│   └── LICENSE/
+│   ├── icon.bmp
+│   └── sign.pfx
 ├── SurveyController.py
 ├── SurveyController.spec
 ├── software/
 │   ├── app/
 │   │   ├── browser_probe.py
 │   │   ├── config.py
+│   │   ├── legacy_data_migration.py
 │   │   ├── main.py
 │   │   ├── runtime_paths.py
 │   │   ├── settings_store.py
+│   │   ├── user_paths.py
 │   │   └── version.py
 │   ├── assets/
 │   │   ├── area.txt
@@ -168,3 +173,25 @@
    └── utils/
 
 </details>
+
+## 打包与更新
+
+- Windows 安装版现在使用 `PyInstaller + Velopack`。
+- `SurveyController.spec` 继续输出 `dist/lib` 目录包，不改 `onefile`。
+- GitHub Actions 会调用 `vpk pack` 生成：
+  - `SurveyController_<tag>_setup.exe`
+  - `releases.stable.json`
+  - `*-full.nupkg`
+  - `*-delta.nupkg`
+- 应用内更新主 feed 固定为 `https://dl.hungrym0.top/surveycontroller/win/stable/`。
+- GitHub Releases 仍会同步这些资产，但客户端不再把 GitHub 当更新源。
+
+## 用户数据目录
+
+- 仓库里的 `configs/`、`logs/` 现在只保留为源码环境/历史结构参考，不再是安装版运行时写入位置。
+- 安装版运行时改为写入：
+  - `%AppData%\SurveyController\config.json`
+  - `%AppData%\SurveyController\configs`
+  - `%LocalAppData%\SurveyController\logs`
+  - `%LocalAppData%\SurveyController\cache`
+- `software/app/runtime_paths.py` 现在只负责“安装目录/只读资源目录”，别再把它当可写目录用。

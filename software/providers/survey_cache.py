@@ -14,7 +14,7 @@ from typing import Any, Callable, Optional
 from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
 from software.app.config import DEFAULT_HTTP_HEADERS
-from software.app.runtime_paths import get_runtime_directory
+from software.app.user_paths import get_user_cache_directory
 from software.providers.common import (
     SURVEY_PROVIDER_CREDAMO,
     SURVEY_PROVIDER_QQ,
@@ -115,7 +115,7 @@ def _cache_key(url: str) -> str:
 
 
 def _cache_directory() -> str:
-    return os.path.join(get_runtime_directory(), "configs", _CACHE_DIR_NAME)
+    return os.path.join(get_user_cache_directory(), _CACHE_DIR_NAME)
 
 
 def _cache_path(url: str) -> str:

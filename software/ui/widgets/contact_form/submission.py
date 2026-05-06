@@ -15,7 +15,10 @@ from PySide6.QtWidgets import QWidget
 from qfluentwidgets import InfoBar, InfoBarPosition, MessageBox
 
 from software.app.config import CONTACT_API_URL
-from software.app.runtime_paths import get_runtime_directory
+from software.app.user_paths import (
+    get_fatal_crash_log_path,
+    get_user_local_data_root,
+)
 from software.app.version import __VERSION__
 from software.io.config import RuntimeConfig, save_config
 from software.logging.log_utils import (
@@ -186,7 +189,7 @@ class ContactFormSubmissionMixin:
         path = os.path.join(tempfile.gettempdir(), file_name)
         try:
             export_full_log_to_file(
-                get_runtime_directory(),
+                get_user_local_data_root(),
                 path,
                 fallback_records=LOG_BUFFER_HANDLER.get_records(),
             )
@@ -197,7 +200,7 @@ class ContactFormSubmissionMixin:
 
     @staticmethod
     def _fatal_crash_log_payload() -> Optional[tuple[str, tuple[str, bytes, str]]]:
-        path = os.path.join(get_runtime_directory(), "logs", "fatal_crash.log")
+        path = get_fatal_crash_log_path()
         if not os.path.exists(path):
             return None
         if os.path.getsize(path) <= 0:

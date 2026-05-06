@@ -20,8 +20,12 @@ from software.logging.log_utils import (
     export_full_log_to_file,
     log_suppressed_exception,
 )
-from software.app.runtime_paths import get_runtime_directory
 from software.app.config import LOG_BUFFER_CAPACITY, LOG_REFRESH_INTERVAL_MS
+from software.app.user_paths import (
+    get_last_session_log_path,
+    get_user_local_data_root,
+    get_user_logs_directory,
+)
 from software.ui.widgets.log_highlighter import LogHighlighter
 
 
@@ -229,9 +233,9 @@ class LogPage(QWidget):
 
     def save_logs(self):
         try:
-            runtime_directory = get_runtime_directory()
+            runtime_directory = get_user_local_data_root()
             default_name = datetime.now().strftime("log_%Y%m%d_%H%M%S.txt")
-            default_path = os.path.join(runtime_directory, "logs", default_name)
+            default_path = os.path.join(get_user_logs_directory(), default_name)
 
             selected_path, _ = QFileDialog.getSaveFileName(
                 self,
@@ -315,13 +319,13 @@ class LogPage(QWidget):
     def _load_last_session_logs(self):
         """加载上次会话的日志"""
         try:
-            log_path = os.path.join(get_runtime_directory(), "logs", "last_session.log")
+            log_path = get_last_session_log_path()
             if os.path.exists(log_path):
                 with open(log_path, "r", encoding="utf-8") as f:
                     content = f.read()
                 if content.strip():
                     self.log_view.setPlainText(content)
         except Exception as exc:
-            log_suppressed_exception("_load_last_session_logs: log_path = os.path.join(get_runtime_directory(), \"logs\", \"last_session.log\")", exc, level=logging.WARNING)
+            log_suppressed_exception("_load_last_session_logs", exc, level=logging.WARNING)
 
 

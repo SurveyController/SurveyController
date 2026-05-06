@@ -7,14 +7,37 @@ from PySide6.QtCore import qInstallMessageHandler, QtMsgType
 from PySide6.QtGui import QFont
 from PySide6.QtWidgets import QApplication
 
-from software.app.config import LOG_DIR_NAME
-from software.app.runtime_paths import get_runtime_directory
+from software.app.legacy_data_migration import ensure_legacy_data_migrated
+from software.app.user_paths import (
+    ensure_user_data_directories,
+    get_fatal_crash_log_path,
+)
 from software.logging.log_utils import setup_logging
 import software.network.http as http_client
 from software.ui.helpers.qfluent_compat import install_qfluentwidgets_animation_guards
 
+try:  # pragma: no cover - 缺依赖时仅禁用更新框架接入
+    import velopack
+except Exception:  # pragma: no cover
+    velopack = None
+
 
 _FAULT_HANDLER_STREAM = None
+
+
+def _run_velopack_startup() -> None:
+    """在安装版启动早期接入 Velopack 生命周期。"""
+    if not getattr(sys, "frozen", False):
+        return
+    if velopack is None:
+        return
+
+    try:
+        app = velopack.App()
+        app.set_auto_apply_on_startup(False)
+        app.run()
+    except Exception:
+        return
 
 
 def _enable_fault_handler() -> None:
@@ -25,9 +48,9 @@ def _enable_fault_handler() -> None:
         return
 
     try:
-        logs_dir = os.path.join(get_runtime_directory(), LOG_DIR_NAME)
+        fault_log_path = get_fatal_crash_log_path()
+        logs_dir = os.path.dirname(fault_log_path)
         os.makedirs(logs_dir, exist_ok=True)
-        fault_log_path = os.path.join(logs_dir, "fatal_crash.log")
         _FAULT_HANDLER_STREAM = open(fault_log_path, "a", encoding="utf-8", buffering=1)
         faulthandler.enable(_FAULT_HANDLER_STREAM, all_threads=True)
     except Exception:
@@ -75,8 +98,11 @@ def main():
         if special_exit_code is not None:
             sys.exit(int(special_exit_code))
 
+    _run_velopack_startup()
+    ensure_user_data_directories()
     _enable_fault_handler()
     setup_logging()
+    ensure_legacy_data_migrated()
 
     qInstallMessageHandler(_qt_message_handler)
     app = QApplication(sys.argv)

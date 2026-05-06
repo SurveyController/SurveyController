@@ -22,7 +22,7 @@ from qfluentwidgets import (
     isDarkTheme,
 )
 
-from software.app.runtime_paths import get_runtime_directory
+from software.app.user_paths import get_user_config_directory
 from software.ui.helpers.fluent_tooltip import install_tooltip_filter
 
 
@@ -121,7 +121,7 @@ class ConfigDrawer(QWidget):
 
     def refresh(self):
         """重新扫描 configs 目录并刷新列表。"""
-        configs_dir = os.path.join(get_runtime_directory(), "configs")
+        configs_dir = get_user_config_directory()
         os.makedirs(configs_dir, exist_ok=True)
 
         files: List[tuple] = []
@@ -145,7 +145,7 @@ class ConfigDrawer(QWidget):
         self._update_empty_state()
 
     def _open_config_folder(self):
-        configs_dir = os.path.join(get_runtime_directory(), "configs")
+        configs_dir = get_user_config_directory()
         os.makedirs(configs_dir, exist_ok=True)
         try:
             os.startfile(configs_dir)
