@@ -531,7 +531,7 @@ class MainWindow(
             self._on_survey_parse_failed,
             Qt.ConnectionType.QueuedConnection,
         )
-        self.controller.runFailed.connect(lambda msg: self._toast(msg, "error"))
+        self.controller.runFailed.connect(self._on_run_failed)
         self.controller.runStateChanged.connect(self.dashboard.on_run_state_changed)
         self.controller.runStateChanged.connect(self.reverse_fill_page.on_run_state_changed)
         self.controller.statusUpdated.connect(self.dashboard.update_status)
@@ -600,6 +600,12 @@ class MainWindow(
             self.dashboard._open_wizard_after_parse = False
             return
         self.dashboard._open_wizard_after_parse = False
+
+    def _on_run_failed(self, msg: str) -> None:
+        text = str(msg or "")
+        self._toast(text, "error")
+        if not self.isActiveWindow():
+            self.show_task_result_windows_notification("任务失败", text)
 
     def _open_quota_request_form(self) -> bool:
         return self._open_contact_dialog(default_type="额度申请", lock_message_type=True)

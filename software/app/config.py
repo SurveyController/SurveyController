@@ -28,6 +28,7 @@ get_int_from_qsettings = _get_int_from_qsettings
 NAVIGATION_TEXT_VISIBLE_SETTING_KEY = "navigation_selected_text_visible"
 AUTO_SAVE_LOGS_SETTING_KEY = "auto_save_logs"
 AUTO_SAVE_LOG_RETENTION_COUNT_SETTING_KEY = "auto_save_log_retention_count"
+TASK_RESULT_WINDOWS_NOTIFICATION_SETTING_KEY = "task_result_windows_notification"
 DEFAULT_AUTO_SAVE_LOGS = True
 DEFAULT_AUTO_SAVE_LOG_RETENTION_COUNT = 10
 AUTO_SAVE_LOG_RETENTION_OPTIONS = (3, 5, 10, 20, 30, 50)

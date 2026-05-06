@@ -127,7 +127,56 @@ class WjxRuntimeTests:
         assert not runtime._question_requires_snapshot_refresh(None)
         assert runtime._question_requires_snapshot_refresh(SimpleNamespace(has_jump=True))
         assert runtime._question_requires_snapshot_refresh(SimpleNamespace(has_dependent_display_logic=True))
-        assert runtime._question_requires_snapshot_refresh(SimpleNamespace(has_display_condition=True))
+        assert not runtime._question_requires_snapshot_refresh(SimpleNamespace(has_display_condition=True))
+
+    def test_question_refresh_candidate_numbers_prefers_next_question_and_control_targets(self) -> None:
+        question_meta = SimpleNamespace(
+            jump_rules=[{"jumpto": 8}],
+            controls_display_targets=[{"target_question_num": 5}, {"target_question_num": "9"}],
+        )
+        page_questions = [
+            SurveyQuestionMeta(num=1, title='Q1', type_code='3', page=1),
+            SurveyQuestionMeta(num=2, title='Q2', type_code='3', page=1),
+            SurveyQuestionMeta(num=3, title='Q3', type_code='3', page=1),
+        ]
+
+        assert runtime._question_refresh_candidate_numbers(question_meta, page_questions, 0) == [2, 5, 8, 9]
+
+    def test_refresh_snapshot_if_visibility_changed_only_refreshes_when_candidate_visibility_differs(self, monkeypatch) -> None:
+        driver = _FakeDriver({
+            '#div2': _FakeQuestionDiv('3', displayed=True),
+            '#div5': _FakeQuestionDiv('3', displayed=False),
+        })
+        refresh_calls: list[str] = []
+        monkeypatch.setattr(runtime, '_refresh_visible_question_snapshot', lambda _driver, *, reason: refresh_calls.append(reason) or {2: {'visible': True, 'type': '3', 'title': 'Q2'}, 5: {'visible': False, 'type': '3', 'title': 'Q5'}})
+
+        snapshot, changed = runtime._refresh_snapshot_if_visibility_changed(
+            driver,
+            {2: {'visible': True, 'type': '3', 'title': 'Q2'}, 5: {'visible': False, 'type': '3', 'title': 'Q5'}},
+            [2, 5],
+            reason='test',
+        )
+
+        assert not changed
+        assert snapshot[2]['visible']
+        assert refresh_calls == []
+
+        driver2 = _FakeDriver({
+            '#div2': _FakeQuestionDiv('3', displayed=True),
+            '#div5': _FakeQuestionDiv('3', displayed=True),
+        })
+        monkeypatch.setattr(runtime, '_refresh_visible_question_snapshot', lambda _driver, *, reason: refresh_calls.append(reason) or {2: {'visible': True, 'type': '3', 'title': 'Q2'}, 5: {'visible': True, 'type': '3', 'title': 'Q5'}})
+
+        snapshot2, changed2 = runtime._refresh_snapshot_if_visibility_changed(
+            driver2,
+            {2: {'visible': True, 'type': '3', 'title': 'Q2'}, 5: {'visible': False, 'type': '3', 'title': 'Q5'}},
+            [2, 5],
+            reason='test-refresh',
+        )
+
+        assert changed2
+        assert snapshot2[5]['visible']
+        assert refresh_calls == ['test-refresh']
 
     def test_update_abort_status_swallows_status_update_failure(self) -> None:
         ctx = SimpleNamespace(update_thread_status=Mock(side_effect=RuntimeError('fail')))

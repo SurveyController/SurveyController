@@ -163,8 +163,98 @@ def _question_requires_snapshot_refresh(question_meta: SurveyQuestionMeta | None
     return bool(
         getattr(question_meta, "has_jump", False)
         or getattr(question_meta, "has_dependent_display_logic", False)
-        or getattr(question_meta, "has_display_condition", False)
     )
+
+
+def _question_refresh_candidate_numbers(
+    question_meta: SurveyQuestionMeta | None,
+    page_questions: list[SurveyQuestionMeta],
+    question_index: int,
+) -> list[int]:
+    candidates: set[int] = set()
+    if question_index + 1 < len(page_questions):
+        try:
+            next_question_num = int(getattr(page_questions[question_index + 1], "num", 0) or 0)
+        except Exception:
+            next_question_num = 0
+        if next_question_num > 0:
+            candidates.add(next_question_num)
+
+    if question_meta is None:
+        return sorted(candidates)
+
+    for rule in list(getattr(question_meta, "jump_rules", []) or []):
+        if not isinstance(rule, dict):
+            continue
+        try:
+            jumpto_num = int(rule.get("jumpto") or 0)
+        except Exception:
+            jumpto_num = 0
+        if jumpto_num > 0:
+            candidates.add(jumpto_num)
+
+    for target in list(getattr(question_meta, "controls_display_targets", []) or []):
+        if not isinstance(target, dict):
+            continue
+        try:
+            target_question_num = int(target.get("target_question_num") or 0)
+        except Exception:
+            target_question_num = 0
+        if target_question_num > 0:
+            candidates.add(target_question_num)
+
+    return sorted(candidates)
+
+
+def _refresh_snapshot_if_visibility_changed(
+    driver: BrowserDriver,
+    snapshot: Dict[int, Dict[str, Any]],
+    candidate_numbers: Iterable[int],
+    *,
+    reason: str,
+) -> tuple[Dict[int, Dict[str, Any]], bool]:
+    normalized_candidates: list[int] = []
+    for raw_num in candidate_numbers:
+        try:
+            question_num = int(raw_num)
+        except Exception:
+            continue
+        if question_num > 0:
+            normalized_candidates.append(question_num)
+    if not normalized_candidates:
+        return snapshot, False
+
+    changed = False
+    for question_num in sorted(set(normalized_candidates)):
+        snapshot_item = snapshot.get(question_num) if isinstance(snapshot, dict) else None
+        question_div = None
+        try:
+            question_div = driver.find_element(By.CSS_SELECTOR, f"#div{question_num}")
+        except Exception:
+            question_div = None
+        dom_visible = False
+        if question_div is not None:
+            for attempt in range(2):
+                try:
+                    if question_div.is_displayed():
+                        dom_visible = True
+                        break
+                except Exception:
+                    dom_visible = False
+                    break
+                if attempt < 1:
+                    time.sleep(0.04)
+        snapshot_visible = bool(isinstance(snapshot_item, dict) and bool(snapshot_item.get("visible")))
+        if dom_visible == snapshot_visible:
+            continue
+        changed = True
+        break
+
+    if not changed:
+        return snapshot, False
+
+    refreshed = _refresh_visible_question_snapshot(driver, reason=reason)
+    return refreshed, True
 
 
 def _update_abort_status(ctx: ExecutionState, thread_name: str) -> None:
@@ -616,7 +706,7 @@ def _brush_with_metadata(
 
             snapshot_item = snapshot.get(question_num) if isinstance(snapshot, dict) else None
             question_visible = _question_is_visible(question_div, snapshot_item)
-            if not question_visible and question_index + 1 < len(page_questions):
+            if not question_visible and (question_index + 1 < len(page_questions) or bool(getattr(question_meta, "has_display_condition", False))):
                 refreshed = _refresh_visible_question_snapshot(driver, reason=f"question_{question_num}_expected_visible_miss")
                 if _refresh_metadata_when_snapshot_drifts(ctx, refreshed):
                     page_plan = _build_metadata_page_plan(ctx)
@@ -660,20 +750,18 @@ def _brush_with_metadata(
                 psycho_plan=psycho_plan,
             )
 
-            should_refresh_after_dispatch = _question_requires_snapshot_refresh(question_meta)
-            if not should_refresh_after_dispatch and question_index + 1 < len(page_questions):
-                next_question_num = int(getattr(page_questions[question_index + 1], "num", 0) or 0)
-                next_snapshot_item = snapshot.get(next_question_num) if isinstance(snapshot, dict) else None
-                next_question_div = None
-                try:
-                    next_question_div = driver.find_element(By.CSS_SELECTOR, f"#div{next_question_num}")
-                except Exception:
-                    next_question_div = None
-                if not _question_is_visible(next_question_div, next_snapshot_item):
-                    should_refresh_after_dispatch = True
+            if _question_requires_snapshot_refresh(question_meta):
+                candidate_numbers = _question_refresh_candidate_numbers(question_meta, page_questions, question_index)
+                refreshed, did_refresh = _refresh_snapshot_if_visibility_changed(
+                    driver,
+                    snapshot,
+                    candidate_numbers,
+                    reason=f"question_{question_num}_display_logic",
+                )
+            else:
+                refreshed, did_refresh = snapshot, False
 
-            if should_refresh_after_dispatch:
-                refreshed = _refresh_visible_question_snapshot(driver, reason=f"question_{question_num}_display_logic")
+            if did_refresh:
                 previous_visible = _snapshot_visible_numbers(snapshot)
                 current_visible = _snapshot_visible_numbers(refreshed)
                 if _refresh_metadata_when_snapshot_drifts(ctx, refreshed):

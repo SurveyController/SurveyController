@@ -6,8 +6,12 @@ import threading
 from typing import Any, Callable, Dict, cast
 
 from PySide6.QtCore import QObject, QCoreApplication, QThread, QTimer
+from PySide6.QtGui import QGuiApplication
+from PySide6.QtWidgets import QApplication
 from PySide6.QtWidgets import QDialog
 from qfluentwidgets import InfoBar, InfoBarPosition, MessageBox
+
+from software.app.config import TASK_RESULT_WINDOWS_NOTIFICATION_SETTING_KEY, app_settings, get_bool_from_qsettings
 from software.logging.action_logger import log_action
 
 
@@ -66,6 +70,47 @@ class MainWindowDialogsMixin:
             func()
             return
         QTimer.singleShot(0, self._qt_timer_context(), func)
+
+    def _is_window_activated(self) -> bool:
+        try:
+            if not self.isVisible() or self.isMinimized():
+                return False
+        except Exception:
+            return False
+        try:
+            window = cast(Any, self.window())
+            if window is not None and hasattr(window, "isActiveWindow") and window.isActiveWindow():
+                return True
+        except Exception:
+            pass
+        try:
+            active = QApplication.activeWindow() or QGuiApplication.focusWindow()
+            return active is not None
+        except Exception:
+            return False
+
+    def _should_show_task_result_windows_notification(self) -> bool:
+        settings = app_settings()
+        return get_bool_from_qsettings(
+            settings.value(TASK_RESULT_WINDOWS_NOTIFICATION_SETTING_KEY),
+            True,
+        ) and not self._is_window_activated()
+
+    def show_task_result_windows_notification(self, title: str, message: str) -> None:
+        if not self._should_show_task_result_windows_notification():
+            return
+        try:
+            from PySide6.QtWidgets import QSystemTrayIcon
+        except Exception:
+            return
+
+        tray = getattr(self, "_task_result_tray_icon", None)
+        if tray is None:
+            tray = QSystemTrayIcon(self)
+            tray.setIcon(self.windowIcon())
+            tray.setVisible(True)
+            self._task_result_tray_icon = tray
+        tray.showMessage(str(title or ""), str(message or ""), QSystemTrayIcon.MessageIcon.Information, 5000)
 
     def _track_async_dialog(self, dialog: QDialog) -> None:
         dialogs = getattr(self, "_async_dialog_refs", None)

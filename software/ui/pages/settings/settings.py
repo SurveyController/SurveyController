@@ -26,6 +26,7 @@ from software.app.config import (
     DEFAULT_AUTO_SAVE_LOGS,
     DOWNLOAD_SOURCES,
     NAVIGATION_TEXT_VISIBLE_SETTING_KEY,
+    TASK_RESULT_WINDOWS_NOTIFICATION_SETTING_KEY,
     app_settings,
     get_bool_from_qsettings,
     get_int_from_qsettings,
@@ -93,6 +94,15 @@ class SettingsPage(ScrollArea):
             self.behavior_group,
         )
         self.prevent_sleep_card.setChecked(get_bool_from_qsettings(settings.value("prevent_sleep_during_run"), True))
+        self.task_result_notification_card = SwitchSettingCard(
+            FluentIcon.INFO,
+            "后台任务完成/失败时通知",
+            "当程序不在前台时，任务完成或失败会弹出 Windows 通知",
+            self.behavior_group,
+        )
+        self.task_result_notification_card.setChecked(
+            get_bool_from_qsettings(settings.value(TASK_RESULT_WINDOWS_NOTIFICATION_SETTING_KEY), True)
+        )
         self.auto_save_logs_card = ExpandComboSwitchSettingCard(
             FluentIcon.DOCUMENT,
             "自动保存日志",
@@ -121,6 +131,7 @@ class SettingsPage(ScrollArea):
             self.auto_save_logs_combo.setCurrentIndex(retention_index)
         self.behavior_group.addSettingCard(self.ask_save_card)
         self.behavior_group.addSettingCard(self.prevent_sleep_card)
+        self.behavior_group.addSettingCard(self.task_result_notification_card)
         self.behavior_group.addSettingCard(self.auto_save_logs_card)
         layout.addWidget(self.behavior_group)
 
@@ -212,6 +223,15 @@ class SettingsPage(ScrollArea):
             scope="CONFIG",
             event="toggle_prevent_sleep_during_run",
             target="prevent_sleep_switch",
+            page="settings",
+            payload_factory=lambda checked: {"enabled": bool(checked)},
+        )
+        bind_logged_action(
+            self.task_result_notification_card.switchButton.checkedChanged,
+            self._on_task_result_notification_toggled,
+            scope="CONFIG",
+            event="toggle_task_result_windows_notification",
+            target="task_result_notification_switch",
             page="settings",
             payload_factory=lambda checked: {"enabled": bool(checked)},
         )
@@ -362,6 +382,19 @@ class SettingsPage(ScrollArea):
             payload={"enabled": bool(checked), "persist": persist},
         )
 
+    def _apply_task_result_notification_state(self, checked: bool, persist: bool = True):
+        settings = app_settings()
+        if persist:
+            settings.setValue(TASK_RESULT_WINDOWS_NOTIFICATION_SETTING_KEY, checked)
+        log_action(
+            "CONFIG",
+            "toggle_task_result_windows_notification",
+            "task_result_notification_switch",
+            "settings",
+            result="changed",
+            payload={"enabled": bool(checked), "persist": persist},
+        )
+
     def _apply_auto_save_logs_state(self, checked: bool, persist: bool = True):
         settings = app_settings()
         if persist:
@@ -445,6 +478,9 @@ class SettingsPage(ScrollArea):
     def _on_prevent_sleep_toggled(self, checked: bool):
         self._apply_prevent_sleep_state(checked)
 
+    def _on_task_result_notification_toggled(self, checked: bool):
+        self._apply_task_result_notification_state(checked)
+
     def _on_auto_save_logs_toggled(self, checked: bool):
         self._apply_auto_save_logs_state(checked)
 
@@ -472,6 +508,7 @@ class SettingsPage(ScrollArea):
             "window_topmost",
             "ask_save_on_close",
             "prevent_sleep_during_run",
+            TASK_RESULT_WINDOWS_NOTIFICATION_SETTING_KEY,
             AUTO_SAVE_LOGS_SETTING_KEY,
             AUTO_SAVE_LOG_RETENTION_COUNT_SETTING_KEY,
             "auto_check_update",
@@ -485,6 +522,7 @@ class SettingsPage(ScrollArea):
             "window_topmost": False,
             "ask_save_on_close": True,
             "prevent_sleep_during_run": True,
+            TASK_RESULT_WINDOWS_NOTIFICATION_SETTING_KEY: True,
             AUTO_SAVE_LOGS_SETTING_KEY: DEFAULT_AUTO_SAVE_LOGS,
             AUTO_SAVE_LOG_RETENTION_COUNT_SETTING_KEY: DEFAULT_AUTO_SAVE_LOG_RETENTION_COUNT,
             "auto_check_update": True,
@@ -494,6 +532,7 @@ class SettingsPage(ScrollArea):
         self._set_switch_state(self.topmost_card, defaults["window_topmost"])
         self._set_switch_state(self.ask_save_card, defaults["ask_save_on_close"])
         self._set_switch_state(self.prevent_sleep_card, defaults["prevent_sleep_during_run"])
+        self._set_switch_state(self.task_result_notification_card, defaults[TASK_RESULT_WINDOWS_NOTIFICATION_SETTING_KEY])
         self._set_switch_state(self.auto_save_logs_card, defaults[AUTO_SAVE_LOGS_SETTING_KEY])
         retention_index = self.auto_save_logs_combo.findData(defaults[AUTO_SAVE_LOG_RETENTION_COUNT_SETTING_KEY])
         if retention_index >= 0:
@@ -510,6 +549,7 @@ class SettingsPage(ScrollArea):
         self._apply_topmost_state(defaults["window_topmost"], persist=False)
         self._apply_ask_save_state(defaults["ask_save_on_close"], persist=False)
         self._apply_prevent_sleep_state(defaults["prevent_sleep_during_run"], persist=False)
+        self._apply_task_result_notification_state(defaults[TASK_RESULT_WINDOWS_NOTIFICATION_SETTING_KEY], persist=False)
         self._apply_auto_save_logs_state(defaults[AUTO_SAVE_LOGS_SETTING_KEY], persist=False)
         self._apply_auto_save_log_retention_count(defaults[AUTO_SAVE_LOG_RETENTION_COUNT_SETTING_KEY], persist=False)
         self._apply_auto_update_state(defaults["auto_check_update"], persist=False)

@@ -68,10 +68,12 @@ class DashboardProgressMixin:
         _main_progress_indeterminate: bool
         _last_device_quota_fail_count: int
         _progress_paused_visual: bool
+        _show_task_result_windows_notification: Any
 
         def _sync_start_button_state(self, running: Optional[bool] = None) -> None: ...
         def _has_question_entries(self) -> bool: ...
         def _toast(self, text: str, level: str = "info", duration: int = 2000, show_progress: bool = False) -> Optional[Any]: ...
+        def show_task_result_windows_notification(self, title: str, message: str) -> None: ...
         def _on_start_clicked(self) -> None: ...
         def window(self) -> Any: ...
 
@@ -317,6 +319,10 @@ class DashboardProgressMixin:
         ):
             self._completion_notified = True
             self._toast("全部份数已完成", "success", duration=5000)
+            try:
+                self.window().show_task_result_windows_notification("任务完成", "全部份数已完成")
+            except Exception:
+                pass
             self.stop_btn.setEnabled(False)
             self.start_btn.setEnabled(True)
             self.start_btn.setText("重新开始")
@@ -559,6 +565,13 @@ class DashboardProgressMixin:
                     "warning",
                     2200,
                 )
+                try:
+                    self.window().show_task_result_windows_notification(
+                        "任务失败",
+                        f"任务结束，设备填写次数上限拦截 {quota_fail_count} 次",
+                    )
+                except Exception:
+                    pass
 
     def on_pause_state_changed(self, paused: bool, reason: str = ""):
         self._last_pause_reason = str(reason or "")
