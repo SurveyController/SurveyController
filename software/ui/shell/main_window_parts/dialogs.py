@@ -3,10 +3,10 @@ from __future__ import annotations
 
 import logging
 import threading
-from typing import Any, Callable, Dict, cast
+from typing import TYPE_CHECKING, Any, Callable, Dict, cast
 
 from PySide6.QtCore import QObject, QCoreApplication, QThread, QTimer
-from PySide6.QtGui import QGuiApplication
+from PySide6.QtGui import QGuiApplication, QIcon
 from PySide6.QtWidgets import QApplication
 from PySide6.QtWidgets import QDialog
 from qfluentwidgets import InfoBar, InfoBarPosition, MessageBox
@@ -19,6 +19,16 @@ class MainWindowDialogsMixin:
     """为主窗口提供线程安全的消息提示与确认对话框。"""
 
     _UI_DISPATCH_TIMEOUT_SECONDS = 5.0
+
+    if TYPE_CHECKING:
+        _task_result_tray_icon: Any
+        _async_dialog_refs: Any
+
+        def thread(self) -> QThread: ...
+        def isVisible(self) -> bool: ...
+        def isMinimized(self) -> bool: ...
+        def window(self) -> Any: ...
+        def windowIcon(self) -> QIcon: ...
 
     def _qt_timer_context(self) -> QObject:
         """声明该 mixin 只用于 QObject 宿主，统一提供定时器回调上下文。"""
@@ -106,7 +116,7 @@ class MainWindowDialogsMixin:
 
         tray = getattr(self, "_task_result_tray_icon", None)
         if tray is None:
-            tray = QSystemTrayIcon(self)
+            tray = QSystemTrayIcon(cast(QObject, self))
             tray.setIcon(self.windowIcon())
             tray.setVisible(True)
             self._task_result_tray_icon = tray

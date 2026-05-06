@@ -178,6 +178,30 @@ class WjxRuntimeTests:
         assert snapshot2[5]['visible']
         assert refresh_calls == ['test-refresh']
 
+    def test_ensure_question_snapshot_visibility_refreshes_only_on_dom_mismatch(self, monkeypatch) -> None:
+        driver = _FakeDriver({'#div2': _FakeQuestionDiv('3', displayed=False)})
+        refresh_calls: list[str] = []
+        monkeypatch.setattr(runtime, '_refresh_visible_question_snapshot', lambda _driver, *, reason: refresh_calls.append(reason) or {2: {'visible': False, 'type': '3', 'title': 'Q2'}})
+
+        snapshot = runtime._ensure_question_snapshot_visibility(
+            driver,
+            {2: {'visible': False, 'type': '3', 'title': 'Q2'}},
+            question_num=2,
+            reason='no-refresh',
+        )
+        assert snapshot[2]['visible'] is False
+        assert refresh_calls == []
+
+        driver2 = _FakeDriver({'#div2': _FakeQuestionDiv('3', displayed=True)})
+        refreshed = runtime._ensure_question_snapshot_visibility(
+            driver2,
+            {2: {'visible': False, 'type': '3', 'title': 'Q2'}},
+            question_num=2,
+            reason='need-refresh',
+        )
+        assert refreshed[2]['visible'] is False
+        assert refresh_calls == ['need-refresh']
+
     def test_update_abort_status_swallows_status_update_failure(self) -> None:
         ctx = SimpleNamespace(update_thread_status=Mock(side_effect=RuntimeError('fail')))
 
@@ -472,6 +496,30 @@ class WjxRuntimeTests:
 
         assert runtime._brush_with_detect_fallback(driver, ctx, thread_name='Worker-1', psycho_plan=None)
         assert calls == [('dispatch', 1), 'submit']
+
+    def test_brush_detect_fallback_does_not_refresh_snapshot_for_every_question(self, monkeypatch) -> None:
+        ctx = _FakeState()
+        driver = _FakeDriver({
+            '#div1': _FakeQuestionDiv('3', displayed=True, text='Q1'),
+            '#div2': _FakeQuestionDiv('3', displayed=True, text='Q2'),
+            '#div3': _FakeQuestionDiv('3', displayed=True, text='Q3'),
+        })
+        refresh_reasons: list[str] = []
+        monkeypatch.setattr(runtime, '_wjx_detect', lambda *_args, **_kwargs: [3])
+        monkeypatch.setattr(runtime, '_refresh_visible_question_snapshot', lambda _driver, **kwargs: refresh_reasons.append(kwargs['reason']) or {
+            1: {'visible': True, 'type': '3', 'title': 'Q1'},
+            2: {'visible': True, 'type': '3', 'title': 'Q2'},
+            3: {'visible': True, 'type': '3', 'title': 'Q3'},
+        })
+        monkeypatch.setattr(runtime, '_is_headless_mode', lambda _ctx: True)
+        monkeypatch.setattr(runtime, 'HEADLESS_PAGE_BUFFER_DELAY', 0.0)
+        monkeypatch.setattr(runtime, '_driver_question_looks_like_description', lambda *_args, **_kwargs: False)
+        monkeypatch.setattr(runtime, '_run_question_dispatch', lambda *_args, **_kwargs: None)
+        monkeypatch.setattr(runtime, '_finalize_page', lambda *_args, **_kwargs: True)
+        monkeypatch.setattr(runtime, 'submit', lambda *_args, **_kwargs: None)
+
+        assert runtime._brush_with_detect_fallback(driver, ctx, thread_name='Worker-1', psycho_plan=None)
+        assert refresh_reasons == ['fallback_page_1']
 
     def test_brush_with_metadata_falls_back_when_no_page_plan(self, monkeypatch) -> None:
         ctx = _FakeState()

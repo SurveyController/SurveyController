@@ -510,6 +510,37 @@ def _run_question_dispatch(
     )
 
 
+def _ensure_question_snapshot_visibility(
+    driver: BrowserDriver,
+    snapshot: Dict[int, Dict[str, Any]],
+    *,
+    question_num: int,
+    reason: str,
+) -> Dict[int, Dict[str, Any]]:
+    snapshot_item = snapshot.get(question_num) if isinstance(snapshot, dict) else None
+    question_div = None
+    try:
+        question_div = driver.find_element(By.CSS_SELECTOR, f"#div{question_num}")
+    except Exception:
+        question_div = None
+    dom_visible = False
+    if question_div is not None:
+        for attempt in range(2):
+            try:
+                if question_div.is_displayed():
+                    dom_visible = True
+                    break
+            except Exception:
+                dom_visible = False
+                break
+            if attempt < 1:
+                time.sleep(0.04)
+    snapshot_visible = bool(isinstance(snapshot_item, dict) and bool(snapshot_item.get("visible")))
+    if dom_visible == snapshot_visible:
+        return snapshot
+    return _refresh_visible_question_snapshot(driver, reason=reason)
+
+
 def _brush_with_detect_fallback(
     driver: BrowserDriver,
     ctx: ExecutionState,
@@ -549,8 +580,6 @@ def _brush_with_detect_fallback(
             if _abort_requested():
                 _update_abort_status(ctx, thread_name)
                 return False
-            if current_question_number > 0:
-                page_snapshot = _refresh_visible_question_snapshot(driver, reason=f"fallback_question_{current_question_number}")
             current_question_number += 1
             if total_steps > 0:
                 try:
@@ -573,6 +602,15 @@ def _brush_with_detect_fallback(
 
             snapshot_item = page_snapshot.get(current_question_number) if isinstance(page_snapshot, dict) else None
             question_visible = _question_is_visible(question_div, snapshot_item)
+            if not question_visible:
+                page_snapshot = _ensure_question_snapshot_visibility(
+                    driver,
+                    page_snapshot,
+                    question_num=current_question_number,
+                    reason=f"fallback_question_{current_question_number}_visibility_miss",
+                )
+                snapshot_item = page_snapshot.get(current_question_number) if isinstance(page_snapshot, dict) else None
+                question_visible = _question_is_visible(question_div, snapshot_item)
             question_type = str((snapshot_item or {}).get("type") or "").strip() if isinstance(snapshot_item, dict) else ""
             if not question_type:
                 question_type = question_div.get_attribute("type")
