@@ -1,0 +1,31 @@
+# 开发环境
+*.code-workspace
+.claude/
+.codex/
+.playwright-mcp/
+.ruff_cache/
+desktop.ini
+.venv/
+.coverage
+coverage.xml
+AGENTS.md
+CLAUDE.md
+
+# 编译环境
+/build/
+/dist/
+/Setup/*.exe
+/Setup/*.pfx
+/Setup/*.docx
+/Setup/*.pdf
+
+# 运行环境
+__pycache__/
+.pytest_cache/
+*.pyc
+%SystemDrive%/
+/configs/
+/logs/
+/worker/.dev.vars
+/worker/.env
+/worker/.wrangler/

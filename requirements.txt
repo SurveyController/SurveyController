@@ -1,0 +1,14 @@
+playwright
+zxing-cpp
+Pillow
+numpy==2.3.5
+openpyxl
+httpx>=0.27,<1
+packaging
+beautifulsoup4
+PySide6==6.8.3
+PySide6-Fluent-Widgets==1.11.1
+pyright
+pytest
+pytest-cov
+pytest-asyncio

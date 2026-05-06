@@ -1,0 +1,169 @@
+name: Build Release Installer
+
+on:
+  release:
+    types: [published]
+
+permissions:
+  contents: write
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
+  R2_LATEST_KEY: "SurveyController_latest_setup.exe"
+
+concurrency:
+  group: build-release-installer-${{ github.event.release.id }}
+  cancel-in-progress: false
+
+jobs:
+  build-and-publish:
+    name: Build And Publish Installer
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v5
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.11"
+          cache: "pip"
+          cache-dependency-path: requirements.txt
+
+      - name: Install Python dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements.txt pyinstaller
+
+      - name: Show Python and PyInstaller version
+        shell: powershell
+        run: |
+          python --version
+          python -m PyInstaller --version
+
+      - name: Install Inno Setup
+        shell: powershell
+        run: choco install innosetup --yes --no-progress
+
+      - name: Resolve release metadata
+        id: release_meta
+        shell: powershell
+        run: |
+          $tag = "${{ github.event.release.tag_name }}"
+          $assetName = "SurveyController_${tag}_setup.exe"
+          $assetPath = Join-Path "${{ github.workspace }}" "Setup\$assetName"
+          "tag=$tag" >> $env:GITHUB_OUTPUT
+          "asset_name=$assetName" >> $env:GITHUB_OUTPUT
+          "asset_path=$assetPath" >> $env:GITHUB_OUTPUT
+
+      - name: Build PyInstaller bundle
+        shell: powershell
+        run: |
+          Remove-Item -Recurse -Force build, dist -ErrorAction SilentlyContinue
+          python -m PyInstaller SurveyController.spec --noconfirm --clean
+
+      - name: Build Inno Setup installer
+        shell: powershell
+        run: |
+          $tag = "${{ steps.release_meta.outputs.tag }}"
+          $iscc = "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe"
+          if (-not (Test-Path $iscc)) {
+            throw "ISCC.exe not found: $iscc"
+          }
+          & $iscc "/DMyReleaseTag=$tag" "Setup\InnoSetup.iss"
+
+      - name: Verify installer output
+        shell: powershell
+        run: |
+          $assetPath = "${{ steps.release_meta.outputs.asset_path }}"
+          if (-not (Test-Path $assetPath)) {
+            throw "Installer not found: $assetPath"
+          }
+          Get-Item $assetPath | Format-List FullName, Length, LastWriteTime
+
+      - name: Upload workflow artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ steps.release_meta.outputs.asset_name }}
+          path: ${{ steps.release_meta.outputs.asset_path }}
+          if-no-files-found: error
+
+      - name: Upload installer to GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: powershell
+        run: |
+          gh release upload "${{ steps.release_meta.outputs.tag }}" "${{ steps.release_meta.outputs.asset_path }}" --clobber --repo "${{ github.repository }}"
+
+      - name: Normalize R2 endpoint
+        id: r2_endpoint
+        shell: powershell
+        env:
+          R2_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID }}
+        run: |
+          $raw = "${env:R2_ACCOUNT_ID}"
+          $raw = $raw -replace '^https?://', ''
+          $raw = $raw.Split('/')[0]
+          $raw = $raw -replace '\.r2\.cloudflarestorage\.com$', ''
+          if ([string]::IsNullOrWhiteSpace($raw)) {
+            throw "R2_ACCOUNT_ID is empty or invalid"
+          }
+          "endpoint=https://$raw.r2.cloudflarestorage.com" >> $env:GITHUB_OUTPUT
+
+      - name: Ensure AWS CLI is available
+        shell: powershell
+        run: |
+          $aws = Get-Command aws -ErrorAction SilentlyContinue
+          if (-not $aws) {
+            choco install awscli --yes --no-progress
+            $aws = Get-Command aws -ErrorAction SilentlyContinue
+          }
+          if (-not $aws) {
+            throw "aws CLI is not available"
+          }
+          aws --version
+
+      - name: Upload latest installer to R2
+        shell: powershell
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          AWS_DEFAULT_REGION: auto
+          AWS_RETRY_MODE: standard
+          AWS_MAX_ATTEMPTS: "3"
+          R2_BUCKET: ${{ secrets.R2_BUCKET }}
+        run: |
+          $file = "${{ steps.release_meta.outputs.asset_path }}"
+          aws s3 cp $file "s3://${env:R2_BUCKET}/${env:R2_LATEST_KEY}" `
+            --cache-control "no-cache, no-store, must-revalidate" `
+            --content-type "application/vnd.microsoft.portable-executable" `
+            --endpoint-url "${{ steps.r2_endpoint.outputs.endpoint }}"
+
+      - name: Upload versioned installer to R2
+        shell: powershell
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          AWS_DEFAULT_REGION: auto
+          AWS_RETRY_MODE: standard
+          AWS_MAX_ATTEMPTS: "3"
+          R2_BUCKET: ${{ secrets.R2_BUCKET }}
+        run: |
+          $file = "${{ steps.release_meta.outputs.asset_path }}"
+          aws s3 cp $file "s3://${env:R2_BUCKET}/SurveyController_${{ steps.release_meta.outputs.tag }}.exe" `
+            --cache-control "public, max-age=31536000, immutable" `
+            --content-type "application/vnd.microsoft.portable-executable" `
+            --endpoint-url "${{ steps.r2_endpoint.outputs.endpoint }}"
+
+      - name: Show release download URLs
+        shell: powershell
+        run: |
+          Write-Host "Release asset:"
+          Write-Host "https://github.com/${{ github.repository }}/releases/tag/${{ steps.release_meta.outputs.tag }}"
+          Write-Host ""
+          Write-Host "Latest:"
+          Write-Host "https://dl.hungrym0.top/${env:R2_LATEST_KEY}"
+          Write-Host ""
+          Write-Host "Versioned:"
+          Write-Host "https://dl.hungrym0.top/SurveyController_${{ steps.release_meta.outputs.tag }}.exe"
