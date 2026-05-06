@@ -12,12 +12,15 @@ from software.app.config import DEFAULT_FILL_TEXT
 from software.network.browser.parse_pool import acquire_parse_browser_session
 from software.providers.common import SURVEY_PROVIDER_CREDAMO
 from credamo.provider.runtime_dom import _looks_like_loading_shell, _page_loading_snapshot, _wait_for_question_roots
+<<<<<<< HEAD
 from credamo.provider._nav_common import (
     _NEXT_BUTTON_MARKERS,
     _SUBMIT_BUTTON_MARKERS,
     _click_navigation_impl,
     _detect_navigation_action as _detect_navigation_action_common,
 )
+=======
+>>>>>>> aa2599c10157bb3f4694164cada5b32fa5ad00a8
 
 _QUESTION_NUMBER_RE = re.compile(r"^\s*(?:Q|题目?)\s*(\d+)\b", re.IGNORECASE)
 _TYPE_ONLY_TITLE_RE = re.compile(r"^\s*\[[^\]]+\]\s*$")
@@ -54,6 +57,11 @@ _MAX_DYNAMIC_REVEAL_ROUNDS = 20
 _PARSE_POLL_SECONDS = 0.2
 _PARSE_PAGE_WAIT_SECONDS = 8.0
 _DYNAMIC_REVEAL_WAIT_SECONDS = 2.0
+<<<<<<< HEAD
+=======
+_NEXT_BUTTON_MARKERS = ("下一页", "next", "继续")
+_SUBMIT_BUTTON_MARKERS = ("提交", "完成", "交卷", "submit", "finish", "done")
+>>>>>>> aa2599c10157bb3f4694164cada5b32fa5ad00a8
 _MATRIX_HEADER_TEXT_SELECTORS = (
     "thead th",
     ".matrix-title",
@@ -446,9 +454,12 @@ def _infer_type_code(question: Dict[str, Any]) -> str:
         return "1"
     if option_count >= 2:
         return "3"
+<<<<<<< HEAD
     # No interactive elements detected — likely a section header, not a question
     if not question_kind and option_count == 0 and text_input_count == 0:
         return "0"
+=======
+>>>>>>> aa2599c10157bb3f4694164cada5b32fa5ad00a8
     return "1"
 
 
@@ -574,6 +585,7 @@ def _extract_questions_from_current_page(page: Any, *, page_number: int) -> List
     if (!el) return false;
     const style = window.getComputedStyle(el);
     if (!style || style.display === 'none' || style.visibility === 'hidden') return false;
+<<<<<<< HEAD
     if (parseFloat(style.opacity || '1') < 0.1) return false;
     const rect = el.getBoundingClientRect();
     return rect.width >= minWidth && rect.height >= minHeight;
@@ -591,6 +603,11 @@ def _extract_questions_from_current_page(page: Any, *, page_number: int) -> List
     }
     return true;
   };
+=======
+    const rect = el.getBoundingClientRect();
+    return rect.width >= minWidth && rect.height >= minHeight;
+  };
+>>>>>>> aa2599c10157bb3f4694164cada5b32fa5ad00a8
   const clean = (value) => String(value || '').replace(/\s+/g, ' ').trim();
   const uniqueTexts = (values) => {
     const seen = new Set();
@@ -686,6 +703,7 @@ def _extract_questions_from_current_page(page: Any, *, page_number: int) -> List
   roots.forEach((root, index) => {
     if (!visible(root)) return;
 
+<<<<<<< HEAD
     // Skip section headers: no interactive elements and no visible editable inputs
     const interactiveSelector = '.single-choice, .multi-choice, .rank-order, .scale, .nps-item, .el-rate__item, .pc-dropdown, .el-select, input[type="radio"], input[type="checkbox"], [role="radio"], [role="checkbox"]';
     if (!root.querySelector(interactiveSelector)) {
@@ -699,10 +717,13 @@ def _extract_questions_from_current_page(page: Any, *, page_number: int) -> List
       if (realInputs.length === 0) return;
     }
 
+=======
+>>>>>>> aa2599c10157bb3f4694164cada5b32fa5ad00a8
     const editableInputs = Array.from(
       root.querySelectorAll(
         'textarea, input:not([readonly])[type="text"], input:not([readonly])[type="search"], input:not([readonly])[type="number"], input:not([readonly])[type="tel"], input:not([readonly])[type="email"], input:not([readonly]):not([type])'
       )
+<<<<<<< HEAD
     ).filter((node) => {
       if (!inputVisible(node)) return false;
       // Exclude textareas inside rich-text containers (description boxes, not fill-in-blank)
@@ -715,6 +736,9 @@ def _extract_questions_from_current_page(page: Any, *, page_number: int) -> List
       }
       return true;
     });
+=======
+    ).filter((node) => visible(node, 4, 4));
+>>>>>>> aa2599c10157bb3f4694164cada5b32fa5ad00a8
     const allInputs = Array.from(root.querySelectorAll('input, textarea, [role="radio"], [role="checkbox"]'));
 
     const detectedMatrixRows = matrixRows(root);
@@ -839,6 +863,7 @@ def _locator_is_visible(locator: Any) -> bool:
         return False
 
 
+<<<<<<< HEAD
 def _parser_text_fn(locator: Any) -> str:
     return _text_content(locator)
 
@@ -869,6 +894,80 @@ def _click_navigation(page: Any, action: str) -> bool:
         attr_fn=_parser_attr_fn,
         scroll_fn=lambda item: item.scroll_into_view_if_needed(timeout=1000),
     )
+=======
+def _detect_navigation_action(page: Any) -> Optional[str]:
+    locator = page.locator("button, a, [role='button'], input[type='button'], input[type='submit']")
+    count = _locator_count(locator)
+    found_next = False
+    for index in range(count):
+        item = locator.nth(index)
+        if not _locator_is_visible(item):
+            continue
+        text = _text_content(item) or _normalize_text(item.get_attribute("value"))
+        lowered = text.casefold()
+        if any(marker in lowered for marker in _SUBMIT_BUTTON_MARKERS):
+            return "submit"
+        if any(marker in lowered for marker in _NEXT_BUTTON_MARKERS):
+            found_next = True
+    return "next" if found_next else None
+
+
+def _click_navigation(page: Any, action: str) -> bool:
+    primary_button = page.locator("#credamo-submit-btn").first
+    if _locator_count(primary_button) > 0 and _locator_is_visible(primary_button):
+        try:
+            primary_text = (_text_content(primary_button) or _normalize_text(primary_button.get_attribute("value"))).casefold()
+        except Exception:
+            primary_text = ""
+        if action == "next" and any(marker in primary_text for marker in _NEXT_BUTTON_MARKERS):
+            try:
+                primary_button.click(timeout=3000)
+                return True
+            except Exception:
+                try:
+                    handle = primary_button.element_handle(timeout=1000)
+                    if handle is not None and bool(page.evaluate("el => { el.click(); return true; }", handle)):
+                        return True
+                except Exception:
+                    pass
+        if action == "submit" and any(marker in primary_text for marker in _SUBMIT_BUTTON_MARKERS):
+            try:
+                primary_button.click(timeout=3000)
+                return True
+            except Exception:
+                try:
+                    handle = primary_button.element_handle(timeout=1000)
+                    if handle is not None and bool(page.evaluate("el => { el.click(); return true; }", handle)):
+                        return True
+                except Exception:
+                    pass
+
+    targets = _NEXT_BUTTON_MARKERS if action == "next" else _SUBMIT_BUTTON_MARKERS
+    locator = page.locator("button, a, [role='button'], input[type='button'], input[type='submit']")
+    count = _locator_count(locator)
+    for index in range(count):
+        item = locator.nth(index)
+        if not _locator_is_visible(item):
+            continue
+        text = (_text_content(item) or _normalize_text(item.get_attribute("value"))).casefold()
+        if not any(marker in text for marker in targets):
+            continue
+        try:
+            item.scroll_into_view_if_needed(timeout=1000)
+        except Exception:
+            pass
+        try:
+            item.click(timeout=3000)
+            return True
+        except Exception:
+            try:
+                handle = item.element_handle(timeout=1000)
+                if handle is not None and bool(page.evaluate("el => { el.click(); return true; }", handle)):
+                    return True
+            except Exception:
+                continue
+    return False
+>>>>>>> aa2599c10157bb3f4694164cada5b32fa5ad00a8
 
 
 def _extract_page_signature(questions: List[Dict[str, Any]]) -> Tuple[Tuple[str, str], ...]:
@@ -949,10 +1048,17 @@ def _prime_question_for_next(page: Any, root: Any, question: Dict[str, Any]) -> 
     elif kind in {"scale", "5", "score"}:
         _answer_scale(page, root, scale_weights)
     elif kind in {"order", "11"}:
+<<<<<<< HEAD
         _answer_order(page, root, first_option_weights)
     else:
         forced_texts = question.get("forced_texts") if isinstance(question.get("forced_texts"), list) else []
         _answer_text(page, root, forced_texts or [DEFAULT_FILL_TEXT])
+=======
+        _answer_order(page, root)
+    else:
+        forced_texts = question.get("forced_texts") if isinstance(question.get("forced_texts"), list) else []
+        _answer_text(root, forced_texts or [DEFAULT_FILL_TEXT])
+>>>>>>> aa2599c10157bb3f4694164cada5b32fa5ad00a8
 
 
 def _prime_page_for_next(

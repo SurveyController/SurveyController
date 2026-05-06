@@ -55,6 +55,7 @@ _text_inputs = _runtime_dom._text_inputs
 _resolve_forced_choice_index = _runtime_answerers._resolve_forced_choice_index
 
 
+<<<<<<< HEAD
 _DOM_SYNC_NAMES = [
     "_abort_requested",
     "_click_navigation",
@@ -90,13 +91,43 @@ def _sync_runtime_dom_patch_points() -> None:
     _mod = __import__(__name__, fromlist=["_"])
     for name in _DOM_SYNC_NAMES:
         setattr(_runtime_dom, name, getattr(_mod, name))
+=======
+def _sync_runtime_dom_patch_points() -> None:
+    """让 runtime.py 上的补丁同步到底层 DOM 模块。"""
+    _runtime_dom._abort_requested = _abort_requested
+    _runtime_dom._click_navigation = _click_navigation
+    _runtime_dom._click_submit_once = _click_submit_once
+    _runtime_dom._locator_is_visible = _locator_is_visible
+    _runtime_dom._looks_like_loading_shell = _looks_like_loading_shell
+    _runtime_dom._navigation_action = _navigation_action
+    _runtime_dom._page_loading_snapshot = _page_loading_snapshot
+    _runtime_dom._question_number_from_root = _question_number_from_root
+    _runtime_dom._question_roots = _question_roots
+    _runtime_dom._question_signature = _question_signature
+    _runtime_dom._root_text = _root_text
+>>>>>>> aa2599c10157bb3f4694164cada5b32fa5ad00a8
 
 
 def _sync_runtime_answerer_patch_points() -> None:
     """让 runtime.py 上的补丁同步到底层题型作答模块。"""
+<<<<<<< HEAD
     _mod = __import__(__name__, fromlist=["_"])
     for name in _ANSWERER_SYNC_NAMES:
         setattr(_runtime_answerers, name, getattr(_mod, name))
+=======
+    _runtime_answerers._click_element = _click_element
+    _runtime_answerers._element_text = _element_text
+    _runtime_answerers._input_value = _input_value
+    _runtime_answerers._is_checked = _is_checked
+    _runtime_answerers._option_click_targets = _option_click_targets
+    _runtime_answerers._option_inputs = _option_inputs
+    _runtime_answerers._question_title_text = _question_title_text
+    _runtime_answerers._resolve_forced_choice_index = _resolve_forced_choice_index
+    _runtime_answerers._root_text = _root_text
+    _runtime_answerers._text_inputs = _text_inputs
+    _runtime_answerers.normalize_droplist_probs = normalize_droplist_probs
+    _runtime_answerers.weighted_index = weighted_index
+>>>>>>> aa2599c10157bb3f4694164cada5b32fa5ad00a8
 
 
 def _wait_for_question_roots(page: Any, stop_signal: Optional[threading.Event], **kwargs: Any):
@@ -147,6 +178,7 @@ def _answer_multiple(
     )
 
 
+<<<<<<< HEAD
 def _answer_text(
     page: Any,
     root: Any,
@@ -165,6 +197,11 @@ def _answer_text(
         ai_enabled=ai_enabled,
         question_title=question_title,
     )
+=======
+def _answer_text(root: Any, text_config: Any) -> bool:
+    _sync_runtime_answerer_patch_points()
+    return _ANSWER_TEXT(root, text_config)
+>>>>>>> aa2599c10157bb3f4694164cada5b32fa5ad00a8
 
 
 def _answer_dropdown(page: Any, root: Any, weights: Any) -> bool:
@@ -182,6 +219,7 @@ def _answer_matrix(page: Any, root: Any, weights: Any, start_index: int = 0) -> 
     return _ANSWER_MATRIX(page, root, weights, start_index)
 
 
+<<<<<<< HEAD
 def _answer_order(page: Any, root: Any, weights: Any = None) -> bool:
     _sync_runtime_answerer_patch_points()
     return _ANSWER_ORDER(page, root, weights)
@@ -254,6 +292,11 @@ def _try_fix_unanswered_questions(
         elif kind in {"text", "multi_text"}:
             _answer_text(page, root, [DEFAULT_FILL_TEXT])
         time.sleep(random.uniform(0.1, 0.3))
+=======
+def _answer_order(page: Any, root: Any) -> bool:
+    _sync_runtime_answerer_patch_points()
+    return _ANSWER_ORDER(page, root)
+>>>>>>> aa2599c10157bb3f4694164cada5b32fa5ad00a8
 
 
 def brush_credamo(
@@ -356,6 +399,7 @@ def brush_credamo(
                     _answer_order(page, root)
                 elif entry_type in {"text", "multi_text"}:
                     text_config = config.texts[config_index] if config_index < len(config.texts) else [DEFAULT_FILL_TEXT]
+<<<<<<< HEAD
                     ai_enabled = bool(config.text_ai_flags[config_index]) if config_index < len(config.text_ai_flags) else False
                     question_title = str(config.text_titles[config_index] or "") if config_index < len(config.text_titles) else ""
                     _answer_text(
@@ -366,6 +410,9 @@ def brush_credamo(
                         ai_enabled=ai_enabled,
                         question_title=question_title,
                     )
+=======
+                    _answer_text(root, text_config)
+>>>>>>> aa2599c10157bb3f4694164cada5b32fa5ad00a8
                 else:
                     logging.info("Credamo 第%s题暂未接入题型：%s", question_num, entry_type)
                 logging.info(
@@ -421,6 +468,7 @@ def brush_credamo(
         state.update_thread_status(thread_name, "等待结果确认", running=True)
     except Exception:
         logging.info("更新 Credamo 线程状态失败：等待结果确认", exc_info=True)
+<<<<<<< HEAD
 
     # Post-submit validation: check for error messages like "请回答此问题"
     from credamo.provider.submission import detect_post_submit_errors
@@ -458,5 +506,7 @@ def brush_credamo(
                 pass
             return False
 
+=======
+>>>>>>> aa2599c10157bb3f4694164cada5b32fa5ad00a8
     logging.info("Credamo 整体答题耗时：elapsed=%.3fs", time.perf_counter() - run_started_at)
     return True

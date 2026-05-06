@@ -8,7 +8,11 @@ from typing import Any, List, Optional, Set
 
 import software.network.http as http_client
 from software.core.task import ProxyLease
+<<<<<<< HEAD
 from software.network.proxy.session.auth import extract_proxy, format_random_ip_error, reset_device_identity, activate_trial
+=======
+from software.network.proxy.session.auth import extract_proxy, format_random_ip_error
+>>>>>>> aa2599c10157bb3f4694164cada5b32fa5ad00a8
 from software.app.config import (
     DEFAULT_HTTP_HEADERS,
     PROXY_MAX_PROXIES,
@@ -395,6 +399,7 @@ def _fetch_new_proxy_batch(
                     continue
             except Exception as exc:
                 message = format_random_ip_error(exc)
+<<<<<<< HEAD
                 # 额度耗尽时自动轮换设备身份并重新领取试用
                 if "额度" in message or "insufficient_quota" in str(getattr(exc, "detail", "")):
                     logging.warning("额度耗尽，尝试自动轮换设备身份...")
@@ -405,6 +410,8 @@ def _fetch_new_proxy_batch(
                         continue
                     except Exception as retry_exc:
                         logging.warning("设备身份轮换后重试失败：%s", retry_exc)
+=======
+>>>>>>> aa2599c10157bb3f4694164cada5b32fa5ad00a8
                 errors.append(message)
                 break
         if not fetched:

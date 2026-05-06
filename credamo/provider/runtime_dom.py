@@ -10,19 +10,30 @@ from typing import Any, List, Optional, Tuple
 
 from software.network.browser import BrowserDriver
 
+<<<<<<< HEAD
 from ._nav_common import (
     _NEXT_BUTTON_MARKERS,
     _SUBMIT_BUTTON_MARKERS,
     _click_navigation_impl,
     _detect_navigation_action as _detect_navigation_action_common,
 )
+=======
+>>>>>>> aa2599c10157bb3f4694164cada5b32fa5ad00a8
 
 _CREDAMO_DYNAMIC_WAIT_TIMEOUT_MS = 6000
 _CREDAMO_DYNAMIC_WAIT_POLL_SECONDS = 0.15
 _CREDAMO_PAGE_TRANSITION_TIMEOUT_MS = 5000
+<<<<<<< HEAD
 _CREDAMO_DYNAMIC_REVEAL_TIMEOUT_MS = 2000
 _CREDAMO_LOADING_SHELL_EXTRA_WAIT_TIMEOUT_MS = 4000
 _QUESTION_NUMBER_RE = re.compile(r"\d+")
+=======
+_CREDAMO_DYNAMIC_REVEAL_TIMEOUT_MS = 800
+_CREDAMO_LOADING_SHELL_EXTRA_WAIT_TIMEOUT_MS = 4000
+_QUESTION_NUMBER_RE = re.compile(r"\d+")
+_NEXT_BUTTON_MARKERS = ("下一页", "next", "继续")
+_SUBMIT_BUTTON_MARKERS = ("提交", "完成", "交卷", "submit", "finish", "done")
+>>>>>>> aa2599c10157bb3f4694164cada5b32fa5ad00a8
 
 
 def _page(driver: BrowserDriver) -> Any:
@@ -43,6 +54,7 @@ def _question_roots(page: Any) -> List[Any]:
     const rect = el.getBoundingClientRect();
     return rect.width >= minWidth && rect.height >= minHeight;
   };
+<<<<<<< HEAD
   const interactiveSelector = '.single-choice, .multi-choice, .rank-order, .scale, .nps-item, .el-rate__item, .pc-dropdown, .el-select, input[type="radio"], input[type="checkbox"], [role="radio"], [role="checkbox"]';
   const inputSelector = 'textarea, input:not([readonly])[type="text"], input:not([readonly])[type="search"], input:not([readonly])[type="number"], input:not([readonly])[type="tel"], input:not([readonly])[type="email"], input:not([readonly]):not([type])';
   const roots = [];
@@ -59,6 +71,11 @@ def _question_roots(page: Any) -> List[Any]:
       });
       if (!hasRealInput) return;
     }
+=======
+  const roots = [];
+  Array.from(document.querySelectorAll('.answer-page .question')).forEach((root) => {
+    if (!visible(root)) return;
+>>>>>>> aa2599c10157bb3f4694164cada5b32fa5ad00a8
     roots.push(root);
   });
   return roots;
@@ -86,6 +103,7 @@ def _collect_question_root_snapshot(page: Any) -> List[dict[str, Any]]:
     return rect.width >= minWidth && rect.height >= minHeight;
   };
   const normalize = (text) => String(text || '').replace(/\s+/g, ' ').trim();
+<<<<<<< HEAD
   const interactiveSelector = '.single-choice, .multi-choice, .rank-order, .scale, .nps-item, .el-rate__item, .pc-dropdown, .el-select, input[type="radio"], input[type="checkbox"], [role="radio"], [role="checkbox"]';
   const inputSelector = 'textarea, input:not([readonly])[type="text"], input:not([readonly])[type="search"], input:not([readonly])[type="number"], input:not([readonly])[type="tel"], input:not([readonly])[type="email"], input:not([readonly]):not([type])';
   return Array.from(document.querySelectorAll('.answer-page .question')).map((root, index) => {
@@ -101,17 +119,28 @@ def _collect_question_root_snapshot(page: Any) -> List[dict[str, Any]]:
       });
       if (!hasRealInput) return null;
     }
+=======
+  return Array.from(document.querySelectorAll('.answer-page .question')).map((root, index) => {
+>>>>>>> aa2599c10157bb3f4694164cada5b32fa5ad00a8
     const titleNode = root.querySelector('.question-title, .qstTitle, .title, [class*="title"]');
     const questionNo = root.querySelector('.question-title .qstNo');
     return {
       index,
       id: String(root.getAttribute('id') || root.getAttribute('data-id') || '').trim(),
+<<<<<<< HEAD
       visible: true,
+=======
+      visible: visible(root),
+>>>>>>> aa2599c10157bb3f4694164cada5b32fa5ad00a8
       title: normalize(titleNode?.innerText || titleNode?.textContent || ''),
       rawNumber: normalize(questionNo?.textContent || ''),
       text: normalize(root.innerText || root.textContent || '').slice(0, 240),
     };
+<<<<<<< HEAD
   }).filter((item) => item !== null);
+=======
+  }).filter((item) => item.visible);
+>>>>>>> aa2599c10157bb3f4694164cada5b32fa5ad00a8
 }
 """
     try:
@@ -236,6 +265,7 @@ def _question_kind_from_root(page: Any, root: Any) -> str:
     if (!node) return false;
     const style = window.getComputedStyle(node);
     if (!style || style.display === 'none' || style.visibility === 'hidden') return false;
+<<<<<<< HEAD
     if (parseFloat(style.opacity || '1') < 0.1) return false;
     const rect = node.getBoundingClientRect();
     return rect.width >= minWidth && rect.height >= minHeight;
@@ -265,10 +295,16 @@ def _question_kind_from_root(page: Any, root: Any) -> str:
     });
     if (realInputs.length === 0) return '';
   }
+=======
+    const rect = node.getBoundingClientRect();
+    return rect.width >= minWidth && rect.height >= minHeight;
+  };
+>>>>>>> aa2599c10157bb3f4694164cada5b32fa5ad00a8
   const editableInputs = Array.from(
     el.querySelectorAll(
       'textarea, input:not([readonly])[type="text"], input:not([readonly])[type="search"], input:not([readonly])[type="number"], input:not([readonly])[type="tel"], input:not([readonly])[type="email"], input:not([readonly]):not([type])'
     )
+<<<<<<< HEAD
   ).filter((node) => {
     if (!inputVisible(node)) return false;
     // Exclude textareas inside rich-text containers (description boxes)
@@ -281,6 +317,9 @@ def _question_kind_from_root(page: Any, root: Any) -> str:
     }
     return true;
   });
+=======
+  ).filter((node) => visible(node));
+>>>>>>> aa2599c10157bb3f4694164cada5b32fa5ad00a8
   if (el.querySelector('.multi-choice, input[type="checkbox"], [role="checkbox"]')) return 'multiple';
   if (el.querySelector('.pc-dropdown, .el-select')) return 'dropdown';
   if (el.querySelector('.scale, .nps-item, .el-rate__item')) return 'scale';
@@ -416,13 +455,18 @@ def _option_click_targets(root: Any, kind: str) -> List[Any]:
 
 def _text_inputs(root: Any) -> List[Any]:
     try:
+<<<<<<< HEAD
         all_inputs = root.query_selector_all(
+=======
+        return root.query_selector_all(
+>>>>>>> aa2599c10157bb3f4694164cada5b32fa5ad00a8
             "textarea, input:not([readonly])[type='text'], input:not([readonly])[type='search'], "
             "input:not([readonly])[type='number'], input:not([readonly])[type='tel'], "
             "input:not([readonly])[type='email'], input:not([readonly]):not([type])"
         )
     except Exception:
         return []
+<<<<<<< HEAD
     # Filter out description textareas and "其他" option inputs
     filtered = []
     for inp in all_inputs:
@@ -443,6 +487,8 @@ def _text_inputs(root: Any) -> List[Any]:
             pass
         filtered.append(inp)
     return filtered
+=======
+>>>>>>> aa2599c10157bb3f4694164cada5b32fa5ad00a8
 
 
 def _normalize_runtime_text(value: Any) -> str:
@@ -490,6 +536,7 @@ def _locator_is_visible(locator: Any) -> bool:
         return False
 
 
+<<<<<<< HEAD
 def _text_fn(locator: Any) -> str:
     try:
         return str(locator.text_content(timeout=500) or "").strip()
@@ -533,6 +580,103 @@ def _click_navigation(page: Any, action: str) -> bool:
         attr_fn=_attr_fn,
         scroll_fn=lambda item: item.scroll_into_view_if_needed(timeout=1500),
     )
+=======
+def _navigation_action(page: Any) -> Optional[str]:
+    locator = page.locator("button, a, [role='button'], input[type='button'], input[type='submit']")
+    try:
+        count = int(locator.count())
+    except Exception:
+        count = 0
+    found_next = False
+    for index in range(count):
+        item = locator.nth(index)
+        if not _locator_is_visible(item):
+            continue
+        try:
+            text = str(item.text_content(timeout=500) or "").strip()
+        except Exception:
+            text = ""
+        if not text:
+            try:
+                text = str(item.get_attribute("value") or "").strip()
+            except Exception:
+                text = ""
+        lowered = text.casefold()
+        if any(marker in lowered for marker in _SUBMIT_BUTTON_MARKERS):
+            return "submit"
+        if any(marker in lowered for marker in _NEXT_BUTTON_MARKERS):
+            found_next = True
+    return "next" if found_next else None
+
+
+def _click_navigation(page: Any, action: str) -> bool:
+    primary_button = page.locator("#credamo-submit-btn").first
+    try:
+        primary_count = int(primary_button.count())
+    except Exception:
+        primary_count = 0
+    if primary_count > 0 and _locator_is_visible(primary_button):
+        try:
+            primary_text = str(primary_button.text_content(timeout=500) or "").strip()
+        except Exception:
+            primary_text = ""
+        if not primary_text:
+            try:
+                primary_text = str(primary_button.get_attribute("value") or "").strip()
+            except Exception:
+                primary_text = ""
+        lowered_primary = primary_text.casefold()
+        targets = _NEXT_BUTTON_MARKERS if action == "next" else _SUBMIT_BUTTON_MARKERS
+        if any(marker in lowered_primary for marker in targets):
+            try:
+                primary_button.click(timeout=3000)
+                return True
+            except Exception:
+                try:
+                    handle = primary_button.element_handle(timeout=1000)
+                    if handle is not None and bool(page.evaluate("el => { el.click(); return true; }", handle)):
+                        return True
+                except Exception:
+                    pass
+
+    targets = _NEXT_BUTTON_MARKERS if action == "next" else _SUBMIT_BUTTON_MARKERS
+    locator = page.locator("button, a, [role='button'], input[type='button'], input[type='submit']")
+    try:
+        count = int(locator.count())
+    except Exception:
+        count = 0
+    for index in range(count):
+        item = locator.nth(index)
+        if not _locator_is_visible(item):
+            continue
+        try:
+            text = str(item.text_content(timeout=500) or "").strip()
+        except Exception:
+            text = ""
+        if not text:
+            try:
+                text = str(item.get_attribute("value") or "").strip()
+            except Exception:
+                text = ""
+        lowered = text.casefold()
+        if not any(marker in lowered for marker in targets):
+            continue
+        try:
+            item.scroll_into_view_if_needed(timeout=1500)
+        except Exception:
+            pass
+        try:
+            item.click(timeout=3000)
+            return True
+        except Exception:
+            try:
+                handle = item.element_handle(timeout=1000)
+                if handle is not None and bool(page.evaluate("el => { el.click(); return true; }", handle)):
+                    return True
+            except Exception:
+                continue
+    return False
+>>>>>>> aa2599c10157bb3f4694164cada5b32fa5ad00a8
 
 
 def _wait_for_page_change(

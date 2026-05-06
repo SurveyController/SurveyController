@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import re
 import time
+<<<<<<< HEAD
 from dataclasses import dataclass, field
 from typing import Any, List, Optional
 
@@ -15,6 +16,12 @@ class PostSubmitError:
     error_text: str
     unanswered_question_ids: List[str] = field(default_factory=list)
 
+=======
+from typing import Any, Optional
+
+from software.network.browser import BrowserDriver
+
+>>>>>>> aa2599c10157bb3f4694164cada5b32fa5ad00a8
 _COMPLETION_MARKERS = (
     "答卷已经提交",
     "已提交",
@@ -62,6 +69,7 @@ _SELECTION_VALIDATION_PATTERNS = (
     re.compile(r"(?:请|需)?(?:选择|选)\s*\d+\s*(?:[-~～至到]\s*\d+)\s*(?:个)?(?:选项|答案|项)"),
     re.compile(r"(?:还需|还要|还差)\s*(?:选择|选)\s*\d+\s*(?:个)?(?:选项|答案|项)"),
 )
+<<<<<<< HEAD
 _UNANSWERED_QUESTION_PATTERNS = (
     re.compile(r"请回答此问题"),
     re.compile(r"请(?:完成|填写|回答|作答)"),
@@ -69,6 +77,8 @@ _UNANSWERED_QUESTION_PATTERNS = (
     re.compile(r"(?:此题|该题|本题)(?:未答|未填写|未回答|未完成)"),
 )
 _QUESTION_ERROR_SELECTOR = ".question-error, .el-form-item__error, .el-message--error"
+=======
+>>>>>>> aa2599c10157bb3f4694164cada5b32fa5ad00a8
 _COMPLETION_URL_MARKERS = ("complete", "success", "finish", "done", "submitted", "result")
 _ACTION_SELECTORS = (
     "#credamo-submit-btn",
@@ -123,6 +133,7 @@ def _looks_like_selection_validation(text: str) -> bool:
     return any(pattern.search(normalized) for pattern in _SELECTION_VALIDATION_PATTERNS)
 
 
+<<<<<<< HEAD
 def _looks_like_unanswered_error(text: str) -> bool:
     normalized = str(text or "").strip()
     if not normalized:
@@ -218,6 +229,8 @@ return (() => {
     )
 
 
+=======
+>>>>>>> aa2599c10157bb3f4694164cada5b32fa5ad00a8
 def _contains_completion_marker(text: str) -> bool:
     normalized = str(text or "").lower()
     return any(marker.lower() in normalized for marker in _COMPLETION_MARKERS)

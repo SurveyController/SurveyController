@@ -249,12 +249,21 @@ def _answer_qq_text(
     if ai_enabled:
         try:
             generated = generate_ai_answer(ai_prompt, question_type="fill_blank", blank_count=1)
+<<<<<<< HEAD
             if isinstance(generated, list):
                 selected_answer = str(generated[0]).strip() if generated else DEFAULT_FILL_TEXT
             else:
                 selected_answer = str(generated or "").strip() or DEFAULT_FILL_TEXT
         except AIRuntimeError as exc:
             logging.warning("腾讯问卷第%d题 AI 生成失败，回退到配置答案：%s", current, exc)
+=======
+        except AIRuntimeError as exc:
+            raise AIRuntimeError(f"腾讯问卷第{current}题 AI 生成失败：{exc}") from exc
+        if isinstance(generated, list):
+            selected_answer = str(generated[0]).strip() if generated else DEFAULT_FILL_TEXT
+        else:
+            selected_answer = str(generated or "").strip() or DEFAULT_FILL_TEXT
+>>>>>>> aa2599c10157bb3f4694164cada5b32fa5ad00a8
     if not _fill_text_question(driver, str(question.provider_question_id or ""), selected_answer):
         logging.warning("腾讯问卷第%d题（文本）填写失败。", current)
         return

@@ -208,7 +208,11 @@ class CredamoRuntimeTests:
             assert runtime._click_submit(page, stop_signal, timeout_ms=1)
             assert runtime._answer_single_like(page, root, [1], 0)
             assert runtime._answer_multiple(page, root, [1], min_limit=1, max_limit=2)
+<<<<<<< HEAD
             assert runtime._answer_text(page, root, ['x'])
+=======
+            assert runtime._answer_text(root, ['x'])
+>>>>>>> aa2599c10157bb3f4694164cada5b32fa5ad00a8
             assert runtime._answer_dropdown(page, root, [1])
             assert runtime._answer_scale(page, root, [1])
             assert runtime._answer_matrix(page, root, [[1]], 3)
@@ -221,11 +225,19 @@ class CredamoRuntimeTests:
         click_submit.assert_called_once_with(page, stop_signal, timeout_ms=1)
         answer_single.assert_called_once_with(page, root, [1], 0)
         answer_multiple.assert_called_once_with(page, root, [1], min_limit=1, max_limit=2)
+<<<<<<< HEAD
         answer_text.assert_called_once_with(page, root, ['x'], question_num=0, ai_enabled=False, question_title='')
         answer_dropdown.assert_called_once_with(page, root, [1])
         answer_scale.assert_called_once_with(page, root, [1])
         answer_matrix.assert_called_once_with(page, root, [[1]], 3)
         answer_order.assert_called_once_with(page, root, None)
+=======
+        answer_text.assert_called_once_with(root, ['x'])
+        answer_dropdown.assert_called_once_with(page, root, [1])
+        answer_scale.assert_called_once_with(page, root, [1])
+        answer_matrix.assert_called_once_with(page, root, [[1]], 3)
+        answer_order.assert_called_once_with(page, root)
+>>>>>>> aa2599c10157bb3f4694164cada5b32fa5ad00a8
 
     def test_brush_credamo_handles_missing_roots_abort_unknown_type_and_submit_failures(self, restore_credamo_runtime_patchpoints) -> None:
         stop_signal = threading.Event()
@@ -260,7 +272,11 @@ class CredamoRuntimeTests:
             assert not runtime.brush_credamo(driver, config_unknown, state2, stop_signal=stop_signal2, thread_name='Worker-2')
         assert ('提交中', True) not in status_updates
 
+<<<<<<< HEAD
         config_submit_fail = SimpleNamespace(question_config_index_map={9: ('text', 0)}, single_prob=[], droplist_prob=[], scale_prob=[], multiple_prob=[], texts=[['x']], text_ai_flags=[False], text_titles=[''], answer_duration_range_seconds=[0, 0])
+=======
+        config_submit_fail = SimpleNamespace(question_config_index_map={9: ('text', 0)}, single_prob=[], droplist_prob=[], scale_prob=[], multiple_prob=[], texts=[['x']], answer_duration_range_seconds=[0, 0])
+>>>>>>> aa2599c10157bb3f4694164cada5b32fa5ad00a8
         with patch('credamo.provider.runtime._wait_for_question_roots', return_value=[root]), \
              patch('credamo.provider.runtime._wait_for_dynamic_question_roots', side_effect=[[root], [root]]), \
              patch('credamo.provider.runtime._question_number_from_root', side_effect=lambda _page, current_root, _fallback: current_root.question_num), \

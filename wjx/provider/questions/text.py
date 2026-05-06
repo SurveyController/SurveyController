@@ -415,11 +415,16 @@ def text(
     if entry_kind == "text" and ai_enabled:
         try:
             title = resolve_question_title_for_ai(driver, current, fallback_title)
+<<<<<<< HEAD
             ai_answer = generate_ai_answer(
+=======
+            selected_answer = generate_ai_answer(
+>>>>>>> aa2599c10157bb3f4694164cada5b32fa5ad00a8
                 title,
                 question_type="fill_blank",
                 blank_count=1,
             )
+<<<<<<< HEAD
             if isinstance(ai_answer, list):
                 selected_answer = str(ai_answer[0]).strip() if ai_answer else DEFAULT_FILL_TEXT
             else:
@@ -430,19 +435,36 @@ def text(
             return
         except AIRuntimeError as exc:
             logging.warning("第%d题 AI 填空失败，回退到配置答案：%s", current, exc)
+=======
+        except AIRuntimeError as exc:
+            raise AIRuntimeError(f"第{current}题 AI 生成失败：{exc}") from exc
+        if isinstance(selected_answer, list):
+            selected_answer = str(selected_answer[0]).strip() if selected_answer else DEFAULT_FILL_TEXT
+        _handle_single_text(driver, current, selected_answer)
+        _log_text_answer(current, title or fallback_title, "AI", selected_answer)
+        record_answer(current, "text", text_answer=selected_answer)
+        return
+>>>>>>> aa2599c10157bb3f4694164cada5b32fa5ad00a8
 
     # 多项填空题AI模式
     if entry_kind == "multi_text" and ai_enabled:
         blank_count = max(1, int(resolve_multi_blank_count(driver, current) or 1))
         title = fallback_title
+<<<<<<< HEAD
         ai_succeeded = False
         try:
             title = resolve_question_title_for_ai(driver, current, fallback_title)
             ai_result = generate_ai_answer(
+=======
+        try:
+            title = resolve_question_title_for_ai(driver, current, fallback_title)
+            selected_answer = generate_ai_answer(
+>>>>>>> aa2599c10157bb3f4694164cada5b32fa5ad00a8
                 title,
                 question_type="multi_fill_blank",
                 blank_count=blank_count,
             )
+<<<<<<< HEAD
             applied_values, applied_sources = _handle_multi_text(driver, current, ai_result, default_source="AI")
             _log_text_answer(current, title or fallback_title, _summarize_multi_text_sources(applied_sources), applied_values)
             record_answer(current, "text", text_answer=" | ".join(applied_values))
@@ -450,18 +472,37 @@ def text(
         except AIRuntimeError as exc:
             logging.warning("第%d题多项填空 AI 失败，回退到配置答案：%s", current, exc)
         if not ai_succeeded:
+=======
+        except AIRuntimeError as exc:
+            logging.warning("第%d题多项填空批量 AI 失败，回退逐空 AI：%s", current, exc)
+            fallback_blank_ai_flags = [bool(flag) for flag in (blank_ai_flags or [])]
+            if not any(fallback_blank_ai_flags):
+                fallback_blank_ai_flags = [True] * max(1, int(blank_count or 1))
+>>>>>>> aa2599c10157bb3f4694164cada5b32fa5ad00a8
             applied_values, applied_sources = _handle_multi_text(
                 driver,
                 current,
                 selected_answer,
                 blank_modes,
+<<<<<<< HEAD
                 blank_ai_flags,
+=======
+                fallback_blank_ai_flags,
+>>>>>>> aa2599c10157bb3f4694164cada5b32fa5ad00a8
                 blank_int_ranges,
                 title,
                 default_source="配置",
             )
             _log_text_answer(current, title or fallback_title, _summarize_multi_text_sources(applied_sources), applied_values)
             record_answer(current, "text", text_answer=" | ".join(applied_values))
+<<<<<<< HEAD
+=======
+            return
+        applied_values, applied_sources = _handle_multi_text(driver, current, selected_answer, default_source="AI")
+        _log_text_answer(current, title or fallback_title, _summarize_multi_text_sources(applied_sources), applied_values)
+        record_text_answer = " | ".join(applied_values)
+        record_answer(current, "text", text_answer=record_text_answer)
+>>>>>>> aa2599c10157bb3f4694164cada5b32fa5ad00a8
         return
 
     if entry_kind == "multi_text":

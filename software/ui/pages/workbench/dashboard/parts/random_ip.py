@@ -251,6 +251,12 @@ class DashboardRandomIPMixin:
         unknown_local_quota = has_unknown_local_quota(snapshot)
         used = max(0.0, float(count or 0.0))
         total = max(0.0, float(limit or 0.0))
+<<<<<<< HEAD
+=======
+        quota_exhausted = is_quota_exhausted(
+            {"authenticated": authenticated, "user_id": int(snapshot.get("user_id") or 0), "used_quota": used, "total_quota": total}
+        )
+>>>>>>> aa2599c10157bb3f4694164cada5b32fa5ad00a8
         self.card_btn.setEnabled(True)
         self.card_btn.setText("申请额度")
         self.card_btn.setIcon(FluentIcon.FINGERPRINT)
@@ -281,6 +287,7 @@ class DashboardRandomIPMixin:
             self._update_ip_low_infobar(count, limit, custom_api)
             self._update_ip_cost_infobar(custom_api)
             return
+<<<<<<< HEAD
         if is_quota_exhausted({"authenticated": True, "used_quota": used, "total_quota": total}):
             self._sync_random_ip_usage_ring(mode="error", percent=100, format_text="额度用尽")
             self.card_btn.setToolTip("当前随机IP额度已用完，请补充额度后再使用。")
@@ -297,11 +304,26 @@ class DashboardRandomIPMixin:
         percent = 0 if total <= 0 else max(0, min(int(round((used / total) * 100)), 100))
         self._sync_random_ip_usage_ring(
             mode="normal",
+=======
+        quota_text = f"{format_quota_value(used)}/{format_quota_value(total)}"
+        percent = 0 if total <= 0 else max(0, min(int(round((used / total) * 100)), 100))
+        self._sync_random_ip_usage_ring(
+            mode="error" if quota_exhausted else "normal",
+>>>>>>> aa2599c10157bb3f4694164cada5b32fa5ad00a8
             percent=percent,
             format_text=quota_text,
         )
         self._update_ip_low_infobar(count, limit, custom_api)
         self._update_ip_cost_infobar(custom_api)
+<<<<<<< HEAD
+=======
+        if quota_exhausted and self.random_ip_cb.isChecked():
+            self.random_ip_cb.blockSignals(True)
+            self.random_ip_cb.setChecked(False)
+            self.random_ip_cb.blockSignals(False)
+            self._sync_random_ip_toggle_presentation(False)
+            self.controller.set_runtime_ui_state(random_ip_enabled=False)
+>>>>>>> aa2599c10157bb3f4694164cada5b32fa5ad00a8
 
     def _sync_random_ip_usage_ring(self, *, mode: str, percent: int, format_text: str) -> None:
         try:

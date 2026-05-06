@@ -79,12 +79,25 @@ def _ensure_loaded() -> None:
         if _session_loaded:
             return
         settings = _get_settings()
+<<<<<<< HEAD
         # 每次启动生成全新 device_id，绕过后端设备绑定限制
         device_id = uuid.uuid4().hex
         set_secret(_DEVICE_SECRET_KEY, device_id)
         device_from = "rotated"
         # 不加载旧 user_id，强制重新领取试用
         loaded_user_id = 0
+=======
+        device_secret = read_secret(_DEVICE_SECRET_KEY)
+        device_id = device_secret.value.strip()
+        device_from = "secure_store"
+        if not device_id:
+            device_id = str(settings.value(_settings_key("device_id")) or "").strip()
+            device_from = "settings" if device_id else "generated"
+        if not device_id:
+            device_id = uuid.uuid4().hex
+            set_secret(_DEVICE_SECRET_KEY, device_id)
+        loaded_user_id = _to_non_negative_int(settings.value(_settings_key("user_id")), 0)
+>>>>>>> aa2599c10157bb3f4694164cada5b32fa5ad00a8
         loaded_remaining_quota = _to_non_negative_quota(settings.value(_settings_key("remaining_quota")), 0.0)
         loaded_total_quota = _to_non_negative_quota(settings.value(_settings_key("total_quota")), loaded_remaining_quota)
         loaded_used_quota = _to_non_negative_quota(
@@ -112,10 +125,21 @@ def _ensure_loaded() -> None:
         )
         _session = loaded_session
         _session_loaded = True
+<<<<<<< HEAD
         _log_session_event(
             logging.INFO,
             "启动加载完成",
             loaded_session,
+=======
+        log_level = logging.INFO
+        if device_secret.status not in {"ok", "not_found"}:
+            log_level = logging.WARNING
+        _log_session_event(
+            log_level,
+            "启动加载完成",
+            loaded_session,
+            device_secret=device_secret.status,
+>>>>>>> aa2599c10157bb3f4694164cada5b32fa5ad00a8
             device_from=device_from,
             settings_user_id=loaded_user_id,
         )
@@ -228,6 +252,7 @@ def clear_session(*, reason: str = "unspecified") -> None:
         settings.sync()
         _log_session_event(logging.WARNING, "本地会话已清空", previous_session, reason=reason)
 
+<<<<<<< HEAD
 
 def reset_device_identity() -> str:
     """重置设备身份：生成新 device_id、清空会话，返回新 device_id。"""
@@ -247,6 +272,8 @@ def reset_device_identity() -> str:
         _log_session_event(logging.INFO, "设备身份已重置", _session, new_device_id=new_device_id)
         return new_device_id
 
+=======
+>>>>>>> aa2599c10157bb3f4694164cada5b32fa5ad00a8
 def has_authenticated_session() -> bool:
     session = _read_session()
     return _has_complete_session(session)
@@ -281,6 +308,7 @@ def has_unknown_local_quota(snapshot: Optional[Dict[str, Any]] = None) -> bool:
     return user_id > 0 and total_quota <= 0 and used_quota <= 0
 
 def is_quota_exhausted(snapshot: Optional[Dict[str, Any]] = None) -> bool:
+<<<<<<< HEAD
     """判断当前随机IP额度是否已用尽。"""
     payload = snapshot if isinstance(snapshot, dict) else get_session_snapshot()
     if not bool(payload.get("authenticated")):
@@ -290,6 +318,16 @@ def is_quota_exhausted(snapshot: Optional[Dict[str, Any]] = None) -> bool:
         return False
     used_quota = _to_non_negative_quota(payload.get("used_quota"), 0.0)
     return used_quota >= total_quota
+=======
+    payload = snapshot if isinstance(snapshot, dict) else get_session_snapshot()
+    if not bool(payload.get("authenticated")):
+        return False
+    if "quota_known" in payload and not bool(payload.get("quota_known")):
+        return False
+    total_quota = _to_non_negative_quota(payload.get("total_quota"), 0.0)
+    used_quota = _to_non_negative_quota(payload.get("used_quota"), 0.0)
+    return total_quota > 0 and used_quota >= total_quota
+>>>>>>> aa2599c10157bb3f4694164cada5b32fa5ad00a8
 
 def format_random_ip_error(exc: BaseException) -> str:
     if not isinstance(exc, RandomIPAuthError):

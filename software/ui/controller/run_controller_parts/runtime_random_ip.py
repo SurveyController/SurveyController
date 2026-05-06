@@ -17,7 +17,10 @@ from software.network.proxy.session import (
     has_authenticated_session,
     is_quota_exhausted,
     load_session_for_startup,
+<<<<<<< HEAD
     reset_device_identity,
+=======
+>>>>>>> aa2599c10157bb3f4694164cada5b32fa5ad00a8
     sync_quota_snapshot_from_server,
 )
 from software.network.proxy import is_custom_proxy_api_active
@@ -215,6 +218,7 @@ class RunControllerRandomIPMixin:
             self._show_random_ip_message(adapter, "试用已领取", "已领取免费试用，随机IP账号已绑定到当前设备。", level="info")
         return True, False
     def _ensure_random_ip_ready(self, adapter: Optional[Any]) -> bool:
+<<<<<<< HEAD
         # 每次都尝试领取试用（device_id 已在启动时轮换，后端会视为新设备）
         activated, should_fallback_to_form = self._try_activate_random_ip_trial(adapter)
         if activated:
@@ -226,6 +230,13 @@ class RunControllerRandomIPMixin:
             activated, _ = self._try_activate_random_ip_trial(adapter)
             if activated:
                 return True
+=======
+        if has_authenticated_session():
+            return True
+        activated, should_fallback_to_form = self._try_activate_random_ip_trial(adapter)
+        if activated:
+            return True
+>>>>>>> aa2599c10157bb3f4694164cada5b32fa5ad00a8
         if not should_fallback_to_form:
             return False
         if not adapter:
@@ -233,8 +244,13 @@ class RunControllerRandomIPMixin:
         try:
             return bool(adapter.open_quota_request_form())
         except Exception:
+<<<<<<< HEAD
             logging.info("随机IP额度申请入口失败", exc_info=True)
             self._show_random_ip_message(adapter, "需要申请额度", '请在"联系开发者"中提交随机IP额度申请。', level="warning")
+=======
+            logging.info("打开随机IP额度申请入口失败", exc_info=True)
+            self._show_random_ip_message(adapter, "需要申请额度", "请在“联系开发者”中提交随机IP额度申请。", level="warning")
+>>>>>>> aa2599c10157bb3f4694164cada5b32fa5ad00a8
             return False
     def toggle_random_ip(self, enabled: bool, *, adapter: Optional[Any] = None) -> bool:
         adapter = adapter or getattr(self, "adapter", None)
@@ -251,7 +267,10 @@ class RunControllerRandomIPMixin:
         if not self._ensure_random_ip_ready(adapter):
             self._set_random_ip_enabled(adapter, False)
             return False
+<<<<<<< HEAD
         # activate_trial 已成功，直接读取本地额度快照
+=======
+>>>>>>> aa2599c10157bb3f4694164cada5b32fa5ad00a8
         _count, _limit, _ = get_random_ip_counter_snapshot_local()
         self._apply_random_ip_counter(
             adapter,
@@ -259,6 +278,27 @@ class RunControllerRandomIPMixin:
             total=float(_limit or 0.0),
             custom_api=False,
         )
+<<<<<<< HEAD
+=======
+        try:
+            self._set_random_ip_loading(adapter, True, "正在同步服务端额度...")
+            snapshot = sync_quota_snapshot_from_server()
+        except Exception as exc:
+            message = format_random_ip_error(exc)
+            self._show_random_ip_message(adapter, "随机IP暂不可用", message, level="warning")
+            self._set_random_ip_enabled(adapter, False)
+            self.refresh_random_ip_counter(adapter=adapter)
+            return False
+        finally:
+            self._set_random_ip_loading(adapter, False, "")
+
+        used_quota, total_quota = self._resolve_counter_snapshot_values(snapshot)
+        self._apply_random_ip_counter(adapter, used=used_quota, total=total_quota, custom_api=False)
+        if is_quota_exhausted({"authenticated": True, **snapshot}):
+            self._show_random_ip_message(adapter, "提示", "随机IP已用额度已达到上限，请先补充额度后再启用。", level="warning")
+            self._set_random_ip_enabled(adapter, False)
+            return False
+>>>>>>> aa2599c10157bb3f4694164cada5b32fa5ad00a8
         self._set_random_ip_enabled(adapter, True)
         return True
     def handle_random_ip_submission(self, *, stop_signal: Optional[threading.Event], adapter: Optional[Any] = None) -> None:

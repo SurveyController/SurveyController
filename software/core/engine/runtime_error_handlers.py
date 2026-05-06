@@ -13,9 +13,12 @@ from software.core.task import ExecutionConfig, ExecutionState
 FREE_AI_TIMEOUT_FAIL_THRESHOLD = 5
 
 
+<<<<<<< HEAD
 FREE_AI_ERROR_FAIL_THRESHOLD = 3
 
 
+=======
+>>>>>>> aa2599c10157bb3f4694164cada5b32fa5ad00a8
 def handle_ai_runtime_error(
     exc: AIRuntimeError,
     stop_signal: StopSignalLike,
@@ -43,6 +46,7 @@ def handle_ai_runtime_error(
             logging.error("免费 AI 连续超时达到阈值，任务停止：%s", exc, exc_info=True)
         return bool(stopped)
 
+<<<<<<< HEAD
     # 免费 AI 非超时错误：允许重试，不立即停止
     if is_free_ai_runtime_error(exc):
         logging.warning("免费 AI 调用失败，本轮丢弃并继续下一轮：%s", exc)
@@ -69,6 +73,15 @@ def handle_ai_runtime_error(
         "ai_runtime",
         failure_reason=FailureReason.FILL_FAILED.value,
         message=str(exc),
+=======
+    logging.error("AI 填空失败，已停止任务：%s", exc, exc_info=True)
+    stop_category = "free_ai_unstable" if is_free_ai_runtime_error(exc) else "ai_runtime"
+    stop_message = "目前免费AI不稳定，请稍后再试" if stop_category == "free_ai_unstable" else str(exc)
+    state.mark_terminal_stop(
+        stop_category,
+        failure_reason=FailureReason.FILL_FAILED.value,
+        message=stop_message,
+>>>>>>> aa2599c10157bb3f4694164cada5b32fa5ad00a8
     )
     if not stop_signal.is_set():
         stop_signal.set()

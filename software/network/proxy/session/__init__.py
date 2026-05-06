@@ -14,7 +14,10 @@ from software.network.proxy.session.auth import (
     has_unknown_local_quota,
     is_quota_exhausted,
     load_session_for_startup,
+<<<<<<< HEAD
     reset_device_identity,
+=======
+>>>>>>> aa2599c10157bb3f4694164cada5b32fa5ad00a8
     sync_quota_snapshot_from_server,
 )
 
@@ -32,6 +35,9 @@ __all__ = [
     "has_unknown_local_quota",
     "is_quota_exhausted",
     "load_session_for_startup",
+<<<<<<< HEAD
     "reset_device_identity",
+=======
+>>>>>>> aa2599c10157bb3f4694164cada5b32fa5ad00a8
     "sync_quota_snapshot_from_server",
 ]

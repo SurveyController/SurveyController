@@ -110,6 +110,7 @@ class SubmissionService:
             log_suppressed_exception("SubmissionService._detect_completion_once", exc, level=logging.WARNING)
             return False
 
+<<<<<<< HEAD
     def _detect_validation_error(self, driver: BrowserDriver) -> Optional[str]:
         """Check for validation error messages (e.g., '请回答此问题') after submit."""
         try:
@@ -124,6 +125,8 @@ class SubmissionService:
         except Exception:
             return None
 
+=======
+>>>>>>> aa2599c10157bb3f4694164cada5b32fa5ad00a8
     def _wait_for_completion_page(
         self,
         driver: BrowserDriver,
@@ -244,6 +247,7 @@ class SubmissionService:
             ):
                 return self._handle_detected_submission_verification(driver, stop_signal, gui_instance, thread_name=thread_name)
 
+<<<<<<< HEAD
             # Check for validation errors (e.g., "请回答此问题")
             if not stop_signal.is_set():
                 validation_error = self._detect_validation_error(driver)
@@ -258,6 +262,8 @@ class SubmissionService:
                         should_rotate_proxy=False,
                     )
 
+=======
+>>>>>>> aa2599c10157bb3f4694164cada5b32fa5ad00a8
             wait_seconds = max(3.0, float(POST_SUBMIT_URL_MAX_WAIT or 0.0) * 6.0)
 
         poll_interval = max(0.05, float(POST_SUBMIT_URL_POLL_INTERVAL or 0.1))

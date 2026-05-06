@@ -21,7 +21,10 @@ from software.network.proxy.session import (
     format_random_ip_error,
     get_device_id,
     get_session_snapshot,
+<<<<<<< HEAD
     reset_device_identity,
+=======
+>>>>>>> aa2599c10157bb3f4694164cada5b32fa5ad00a8
 )
 
 logger = logging.getLogger(__name__)
@@ -276,6 +279,7 @@ def call_free_ai_api(
     system_prompt: str = "",
     timeout: int = _AI_REQUEST_TIMEOUT_SECONDS,
 ) -> List[str]:
+<<<<<<< HEAD
     # 自动重试：如果调用失败，轮换设备身份后重试一次
     last_exc: Optional[Exception] = None
     for attempt in range(2):
@@ -310,6 +314,8 @@ def _call_free_ai_api_once(
     system_prompt: str = "",
     timeout: int = _AI_REQUEST_TIMEOUT_SECONDS,
 ) -> List[str]:
+=======
+>>>>>>> aa2599c10157bb3f4694164cada5b32fa5ad00a8
     user_id, device_id = _ensure_free_ai_identity()
     _log_free_ai_request_start(
         user_id=user_id,

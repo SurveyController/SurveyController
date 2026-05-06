@@ -30,6 +30,7 @@ def get_random_ip_counter_snapshot_local() -> tuple[float, float, bool]:
 
 
 def normalize_random_ip_enabled_value(desired_enabled: bool) -> bool:
+<<<<<<< HEAD
     """校验随机IP是否可启用：未认证或额度用尽时强制关闭。"""
     if not desired_enabled:
         return False
@@ -38,4 +39,18 @@ def normalize_random_ip_enabled_value(desired_enabled: bool) -> bool:
     if is_quota_exhausted():
         return False
     return True
+=======
+    if not desired_enabled:
+        return False
+    from software.network.proxy.policy.source import is_custom_proxy_source
+
+    if is_custom_proxy_source():
+        return True
+    if not has_authenticated_session():
+        return False
+    snapshot = get_session_snapshot()
+    if has_unknown_local_quota(snapshot):
+        return True
+    return not is_quota_exhausted(snapshot)
+>>>>>>> aa2599c10157bb3f4694164cada5b32fa5ad00a8
 

@@ -27,6 +27,7 @@ from .runtime_dom import (
 )
 
 
+<<<<<<< HEAD
 def _visible_text_inputs(page: Any, root: Any) -> List[Any]:
     """Return only truly visible text inputs, filtering out hidden ones and description boxes."""
     script = r"""
@@ -73,6 +74,8 @@ def _visible_text_inputs(page: Any, root: Any) -> List[Any]:
     return [all_inputs[i] for i in visible_indices if i < len(all_inputs)]
 
 
+=======
+>>>>>>> aa2599c10157bb3f4694164cada5b32fa5ad00a8
 def _resolve_forced_choice_index(page: Any, root: Any, option_texts: List[str]) -> Optional[int]:
     if not option_texts:
         return None
@@ -294,6 +297,7 @@ def _answer_multiple(
     return clicked
 
 
+<<<<<<< HEAD
 def _answer_text(
     page: Any,
     root: Any,
@@ -338,6 +342,13 @@ def _answer_text(
         except Exception as exc:
             logging.warning("Credamo 第%s题 AI 多项填空失败，回退到配置答案：%s", question_num, exc)
 
+=======
+def _answer_text(root: Any, text_config: Any) -> bool:
+    inputs = _text_inputs(root)
+    if not inputs:
+        return False
+    values = text_config if isinstance(text_config, list) and text_config else [DEFAULT_FILL_TEXT]
+>>>>>>> aa2599c10157bb3f4694164cada5b32fa5ad00a8
     changed = False
     for index, input_element in enumerate(inputs):
         value = get_fill_text_from_config(values, index) or DEFAULT_FILL_TEXT
@@ -533,13 +544,18 @@ def _answer_matrix(page: Any, root: Any, weights: Any, start_index: int = 0) -> 
     return clicked
 
 
+<<<<<<< HEAD
 def _answer_order(page: Any, root: Any, weights: Any = None) -> bool:
+=======
+def _answer_order(page: Any, root: Any) -> bool:
+>>>>>>> aa2599c10157bb3f4694164cada5b32fa5ad00a8
     try:
         items = root.query_selector_all(".rank-order .choice-row, .choice-row")
     except Exception:
         items = []
     if not items:
         return False
+<<<<<<< HEAD
     count = len(items)
     if isinstance(weights, (list, tuple)) and len(weights) == count and any(w > 0 for w in weights):
         remaining = list(range(count))
@@ -564,6 +580,10 @@ def _answer_order(page: Any, root: Any, weights: Any = None) -> bool:
     else:
         order = list(range(count))
         random.shuffle(order)
+=======
+    order = list(range(len(items)))
+    random.shuffle(order)
+>>>>>>> aa2599c10157bb3f4694164cada5b32fa5ad00a8
     clicked = False
     for index in order:
         clicked = _click_element(page, items[index]) or clicked

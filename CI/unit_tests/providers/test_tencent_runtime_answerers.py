@@ -170,10 +170,16 @@ class TencentRuntimeAnswerersTests:
         runtime_answerers._answer_qq_text(object(), question, 0, ctx_ai)
         assert recorded == [((9, "text"), {"text_answer": "AI答案"})]
 
+<<<<<<< HEAD
         recorded.clear()
         monkeypatch.setattr(runtime_answerers, "generate_ai_answer", lambda *_args, **_kwargs: (_ for _ in ()).throw(runtime_answerers.AIRuntimeError("boom")))
         runtime_answerers._answer_qq_text(object(), question, 0, ctx_ai)
         assert recorded == [((9, "text"), {"text_answer": "配置"})]
+=======
+        monkeypatch.setattr(runtime_answerers, "generate_ai_answer", lambda *_args, **_kwargs: (_ for _ in ()).throw(runtime_answerers.AIRuntimeError("boom")))
+        with pytest.raises(runtime_answerers.AIRuntimeError, match="腾讯问卷第9题 AI 生成失败"):
+            runtime_answerers._answer_qq_text(object(), question, 0, ctx_ai)
+>>>>>>> aa2599c10157bb3f4694164cada5b32fa5ad00a8
 
     def test_answer_qq_matrix_and_star_cover_row_flow_and_return_next_index(self, monkeypatch) -> None:
         ctx = _ctx(question_dimension_map={10: "D10"})

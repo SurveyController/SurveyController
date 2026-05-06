@@ -11,7 +11,10 @@ from typing import Any, Optional
 from software.core.engine.failure_reason import FailureReason
 from software.core.engine.stop_signal import StopSignalLike
 from software.core.task import ExecutionConfig, ExecutionState
+<<<<<<< HEAD
 from software.network.session_policy import reset_bad_proxy_count
+=======
+>>>>>>> aa2599c10157bb3f4694164cada5b32fa5ad00a8
 
 
 class RunStopPolicy:
@@ -142,7 +145,10 @@ class RunStopPolicy:
                 self.state.cur_num += 1
                 self.state.cur_fail = 0
                 self.state.proxy_unavailable_fail_count = 0
+<<<<<<< HEAD
                 reset_bad_proxy_count(self.state)
+=======
+>>>>>>> aa2599c10157bb3f4694164cada5b32fa5ad00a8
                 record_thread_success = True
                 logging.info(
                     "[OK] 已填写%s份 - 连续失败%s次 - %s",

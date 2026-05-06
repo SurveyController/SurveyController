@@ -28,6 +28,7 @@ def _record_bad_proxy_and_maybe_pause(
     ctx: ExecutionState,
     gui_instance: Optional[Any],
 ) -> bool:
+<<<<<<< HEAD
     """记录代理不可用事件，连续失败达到阈值时触发暂停。"""
     ctx._bad_proxy_count = getattr(ctx, "_bad_proxy_count", 0) + 1
     count = ctx._bad_proxy_count
@@ -50,6 +51,16 @@ def reset_bad_proxy_count(ctx: ExecutionState) -> None:
         logging.info("代理连续失败计数已重置")
 
 
+=======
+    """
+    记录代理不可用事件。
+    现阶段不再根据代理异常次数自动暂停任务，统一由提交连续失败止损控制。
+    """
+    _ = ctx, gui_instance
+    return False
+
+
+>>>>>>> aa2599c10157bb3f4694164cada5b32fa5ad00a8
 def _required_proxy_ttl_seconds(ctx: ExecutionState) -> int:
     return int(get_proxy_required_ttl_seconds(getattr(ctx.config, "answer_duration_range_seconds", (0, 0))))
 

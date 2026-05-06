@@ -282,6 +282,7 @@ def configure_probabilities(
                         raise ValueError(f"多项填空题第{blank_idx + 1}个空位的随机整数范围未设置完整")
             if entry.question_type == "text":
                 ai_enabled = bool(getattr(entry, "ai_enabled", False))
+<<<<<<< HEAD
                 # 当 AI 已配置且用户未手动禁用时，自动启用 AI 填空
                 if not ai_enabled:
                     try:
@@ -290,10 +291,13 @@ def configure_probabilities(
                             ai_enabled = True
                     except Exception:
                         pass
+=======
+>>>>>>> aa2599c10157bb3f4694164cada5b32fa5ad00a8
             elif entry.question_type == "multi_text":
                 ai_enabled = bool(getattr(entry, "ai_enabled", False)) or (
                     bool(normalized_blank_ai_flags) and all(normalized_blank_ai_flags)
                 )
+<<<<<<< HEAD
                 # 当 AI 已配置且用户未手动禁用时，自动启用 AI 填空
                 if not ai_enabled:
                     try:
@@ -302,6 +306,8 @@ def configure_probabilities(
                             ai_enabled = True
                     except Exception:
                         pass
+=======
+>>>>>>> aa2599c10157bb3f4694164cada5b32fa5ad00a8
             else:
                 ai_enabled = False
             if entry.question_type == "text" and text_random_mode in (_TEXT_RANDOM_NAME, _TEXT_RANDOM_MOBILE, _TEXT_RANDOM_ID_CARD, _TEXT_RANDOM_INTEGER):

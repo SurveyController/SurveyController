@@ -199,11 +199,18 @@ class CredamoRuntimeAnswerersTests:
             del value, timeout
             raise RuntimeError("fill failed")
         bad.fill = bad_fill  # type: ignore[assignment]
+<<<<<<< HEAD
         page = object()
         root = object()
         monkeypatch.setattr(runtime_answerers, "_visible_text_inputs", lambda _page, _root: [good, bad])
 
         assert runtime_answerers._answer_text(page, root, ["甲", "乙"])
+=======
+        root = object()
+        monkeypatch.setattr(runtime_answerers, "_text_inputs", lambda _root: [good, bad])
+
+        assert runtime_answerers._answer_text(root, ["甲", "乙"])
+>>>>>>> aa2599c10157bb3f4694164cada5b32fa5ad00a8
         assert good.filled == ["甲"]
         assert bad.typed == ["乙"]
 
