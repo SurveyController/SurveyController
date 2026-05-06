@@ -6,7 +6,7 @@ import logging
 import os
 import shutil
 from dataclasses import dataclass
-from typing import Any, Optional
+from typing import Any, Optional, cast
 
 from software.app.user_paths import (
     ensure_user_data_directories,
@@ -43,9 +43,16 @@ def _read_json_file(path: str) -> dict[str, Any]:
     return payload if isinstance(payload, dict) else {}
 
 
+def _require_winreg():
+    if winreg is None:  # pragma: no cover - 非 Windows 环境不会走到这里
+        raise RuntimeError("winreg is unavailable on this platform")
+    return cast(Any, winreg)
+
+
 def _read_reg_string(key, value_name: str) -> str:
+    registry = _require_winreg()
     try:
-        value, _ = winreg.QueryValueEx(key, value_name)
+        value, _ = registry.QueryValueEx(key, value_name)
     except FileNotFoundError:
         return ""
     except OSError:
@@ -72,21 +79,22 @@ def _candidate_matches(subkey_name: str, display_name: str) -> bool:
 def _iter_uninstall_subkeys():
     if winreg is None:  # pragma: no cover - 非 Windows 环境直接跳过
         return
+    registry = _require_winreg()
 
-    access_variants = [winreg.KEY_READ]
-    if hasattr(winreg, "KEY_WOW64_64KEY"):
-        access_variants.append(winreg.KEY_READ | winreg.KEY_WOW64_64KEY)
-    if hasattr(winreg, "KEY_WOW64_32KEY"):
-        access_variants.append(winreg.KEY_READ | winreg.KEY_WOW64_32KEY)
+    access_variants = [registry.KEY_READ]
+    if hasattr(registry, "KEY_WOW64_64KEY"):
+        access_variants.append(registry.KEY_READ | registry.KEY_WOW64_64KEY)
+    if hasattr(registry, "KEY_WOW64_32KEY"):
+        access_variants.append(registry.KEY_READ | registry.KEY_WOW64_32KEY)
 
-    for hive in (winreg.HKEY_CURRENT_USER, winreg.HKEY_LOCAL_MACHINE):
+    for hive in (registry.HKEY_CURRENT_USER, registry.HKEY_LOCAL_MACHINE):
         for access in access_variants:
             try:
-                with winreg.OpenKey(hive, _UNINSTALL_ROOT, 0, access) as uninstall_key:
-                    subkey_count = winreg.QueryInfoKey(uninstall_key)[0]
+                with registry.OpenKey(hive, _UNINSTALL_ROOT, 0, access) as uninstall_key:
+                    subkey_count = registry.QueryInfoKey(uninstall_key)[0]
                     for index in range(subkey_count):
                         try:
-                            yield hive, winreg.EnumKey(uninstall_key, index), access
+                            yield hive, registry.EnumKey(uninstall_key, index), access
                         except OSError:
                             continue
             except OSError:
@@ -94,9 +102,10 @@ def _iter_uninstall_subkeys():
 
 
 def _find_legacy_install_directory() -> str:
+    registry = _require_winreg()
     for hive, subkey_name, access in _iter_uninstall_subkeys() or ():
         try:
-            with winreg.OpenKey(hive, fr"{_UNINSTALL_ROOT}\{subkey_name}", 0, access) as app_key:
+            with registry.OpenKey(hive, fr"{_UNINSTALL_ROOT}\{subkey_name}", 0, access) as app_key:
                 display_name = _read_reg_string(app_key, "DisplayName")
                 if not _candidate_matches(subkey_name, display_name):
                     continue

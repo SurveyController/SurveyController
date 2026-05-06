@@ -4,7 +4,7 @@ from __future__ import annotations
 import logging
 import re
 from threading import Thread
-from typing import Any, Callable, Optional
+from typing import Any, Callable, Optional, cast
 
 import software.network.http as http_client
 from software.app.config import VELOPACK_FEED_URL
@@ -20,6 +20,12 @@ try:  # pragma: no cover - 缺依赖时统一走 unknown
     import velopack
 except Exception:  # pragma: no cover
     velopack = None
+
+
+def _get_velopack_module() -> Optional[Any]:
+    if velopack is None:
+        return None
+    return cast(Any, velopack)
 
 
 def _preview_release_notes(text: str, limit: int) -> str:
@@ -57,10 +63,11 @@ def _normalize_release_release_notes(asset: Any) -> str:
 
 
 def _safe_create_update_manager():
-    if velopack is None:
+    velopack_module = _get_velopack_module()
+    if velopack_module is None:
         return None
     try:
-        return velopack.UpdateManager(VELOPACK_FEED_URL)
+        return velopack_module.UpdateManager(VELOPACK_FEED_URL)
     except Exception as exc:
         logging.info("当前环境未安装到 Velopack，跳过更新管理器初始化: %s", exc)
         return None

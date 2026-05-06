@@ -2,6 +2,7 @@
 import faulthandler
 import os
 import sys
+from typing import Any, Optional, cast
 
 from PySide6.QtCore import qInstallMessageHandler, QtMsgType
 from PySide6.QtGui import QFont
@@ -25,15 +26,22 @@ except Exception:  # pragma: no cover
 _FAULT_HANDLER_STREAM = None
 
 
+def _get_velopack_module() -> Optional[Any]:
+    if velopack is None:
+        return None
+    return cast(Any, velopack)
+
+
 def _run_velopack_startup() -> None:
     """在安装版启动早期接入 Velopack 生命周期。"""
     if not getattr(sys, "frozen", False):
         return
-    if velopack is None:
+    velopack_module = _get_velopack_module()
+    if velopack_module is None:
         return
 
     try:
-        app = velopack.App()
+        app = velopack_module.App()
         app.set_auto_apply_on_startup(False)
         app.run()
     except Exception:
