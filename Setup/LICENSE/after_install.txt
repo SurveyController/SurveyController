@@ -79,7 +79,7 @@
   获取技术支持
 ───────────────────────────────────────────────────────────────────────
 
-  项目主页：   https://github.com/hungryM0/SurveyController
+  项目主页：   https://github.com/SurveyController/SurveyController
 
   使用文档：   在 GitHub 仓库的自述文件中查看详细说明
 

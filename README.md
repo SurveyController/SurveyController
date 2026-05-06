@@ -3,13 +3,13 @@
   <h1>SurveyController</h1>
   
   [![Status](https://status.hungrym0.top/api/badge/12/status)](https://status.hungrym0.top/status/surveycontroller)
-  [![GitHub Stars](https://img.shields.io/github/stars/hungryM0/SurveyController?style=flat&logo=github&color=yellow)](https://github.com/hungryM0/SurveyController/stargazers)
-  [![Contributors](https://img.shields.io/github/contributors/hungryM0/SurveyController?style=flat&logo=github)](https://github.com/hungryM0/SurveyController/graphs/contributors)
-  [![GitHub Release](https://img.shields.io/github/v/release/hungryM0/SurveyController?style=flat&logo=github&color=blue)](https://github.com/hungryM0/SurveyController/releases/latest)
-  ![Downloads](https://img.shields.io/github/downloads/hungryM0/SurveyController/total?style=flat&logo=github&color=green)
-  [![Issues](https://img.shields.io/github/issues/hungryM0/SurveyController?style=flat&logo=github)](https://github.com/hungryM0/SurveyController/issues)
+  [![GitHub Stars](https://img.shields.io/github/stars/SurveyController/SurveyController?style=flat&logo=github&color=yellow)](https://github.com/SurveyController/SurveyController/stargazers)
+  [![Contributors](https://img.shields.io/github/contributors/SurveyController/SurveyController?style=flat&logo=github)](https://github.com/SurveyController/SurveyController/graphs/contributors)
+  [![GitHub Release](https://img.shields.io/github/v/release/SurveyController/SurveyController?style=flat&logo=github&color=blue)](https://github.com/SurveyController/SurveyController/releases/latest)
+  ![Downloads](https://img.shields.io/github/downloads/SurveyController/SurveyController/total?style=flat&logo=github&color=green)
+  [![Issues](https://img.shields.io/github/issues/SurveyController/SurveyController?style=flat&logo=github)](https://github.com/SurveyController/SurveyController/issues)
   [![Python](https://img.shields.io/badge/Python-3.11+-3776AB?style=flat&logo=python&logoColor=white)](https://www.python.org/)
-  [![License](https://img.shields.io/github/license/hungryM0/SurveyController?style=flat&color=orange)](./LICENSE)
+  [![License](https://img.shields.io/github/license/SurveyController/SurveyController?style=flat&color=orange)](./LICENSE)
 
   <p><strong>一站式问卷自动化处理程序，适配问卷星、腾讯问卷、Credamo见数平台</strong></p>
   <p>支持指定ip填写地区、信度系数、作答时长与分布比例</p>
@@ -21,7 +21,7 @@
 
 > [!NOTE]
 > 我们正计划用 Go 重写该项目，以便部署在无图形化界面的服务器环境中。
-> 感兴趣的开发者可以查看 [hungryM0/SurveyController-Go](https://github.com/hungryM0/SurveyController-go) 仓库，欢迎参与贡献！
+> 感兴趣的开发者可以查看 [SurveyController/SurveyConsole](https://github.com/SurveyController/SurveyConsole) 仓库，欢迎参与贡献！
 
 <img width="689" height="626" alt="gui" src="/assets/gui.png" />
 
@@ -42,7 +42,7 @@
 ## 开始使用
 
 > [!TIP]
-> **安装包：** 前往 [发行版](https://github.com/hungryM0/SurveyController/releases/latest) 中下载已打包好的安装包
+> **安装包：** 前往 [发行版](https://github.com/SurveyController/SurveyController/releases/latest) 中下载已打包好的安装包
 
 ### 从源码运行
 
@@ -50,7 +50,7 @@
 
 克隆、安装依赖、运行源码：
 ```bash
-git clone https://github.com/hungryM0/SurveyController.git
+git clone https://github.com/SurveyController/SurveyController.git
 cd SurveyController
 pip install -r requirements.txt
 python SurveyController.py
@@ -84,7 +84,7 @@ python SurveyController.py
 
 ## Mac 系统支持
 
-如果你需要查看支持 macOS 系统的源码，请切换到 [mac 分支](https://github.com/hungryM0/SurveyController/tree/mac)。
+如果你需要查看支持 macOS 系统的源码，请切换到 [mac 分支](https://github.com/SurveyController/SurveyController/tree/mac)。
 
 **该分支由社区维护，不受长期支持。**
 
@@ -133,4 +133,4 @@ python SurveyController.py
 
 ## Star History
 
-[![Star History Chart](https://api.star-history.com/svg?repos=hungryM0/SurveyController&type=date&legend=top-left)](https://www.star-history.com/#hungryM0/SurveyController&type=date&legend=top-left)
+[![Star History Chart](https://api.star-history.com/svg?repos=SurveyController/SurveyController&type=date&legend=top-left)](https://www.star-history.com/#SurveyController/SurveyController&type=date&legend=top-left)
