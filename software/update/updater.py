@@ -3,12 +3,13 @@ from __future__ import annotations
 
 import logging
 import re
+import webbrowser
 from threading import Thread
 from typing import Any, Callable, Optional, cast
 
 import software.network.http as http_client
 from software.app.config import VELOPACK_FEED_URL
-from software.app.version import __VERSION__, GITHUB_RELEASES_URL, GITHUB_RELEASE_TAG_URL
+from software.app.version import __VERSION__, GITHUB_API_URL, GITHUB_RELEASES_URL, GITHUB_RELEASE_TAG_URL
 from software.logging.action_logger import log_action
 
 try:
@@ -127,6 +128,71 @@ def _resolve_release_notes(update_info: Any, version_text: str) -> str:
     return str(github_release.get("body", "") or "").strip()
 
 
+def _fetch_latest_github_release() -> Optional[dict[str, Any]]:
+    try:
+        response = http_client.get(
+            GITHUB_API_URL,
+            headers={"Accept": "application/vnd.github.v3+json"},
+            timeout=(10, 30),
+        )
+        response.raise_for_status()
+        payload = response.json()
+        if isinstance(payload, dict):
+            return payload
+    except Exception as exc:
+        logging.warning("获取最新发行版失败: %s", exc)
+    return None
+
+
+def _build_github_update_result(current_version: str) -> dict[str, Any]:
+    github_release = _fetch_latest_github_release()
+    if not github_release:
+        return {"has_update": False, "status": "unknown", "current_version": current_version}
+
+    latest_version = str(github_release.get("tag_name", "")).lstrip("v").strip()
+    latest_parsed = _parse_version_text(latest_version)
+    current_parsed = _parse_version_text(current_version)
+    release_notes = str(github_release.get("body", "") or "").strip()
+
+    if latest_parsed is None or current_parsed is None:
+        return {
+            "has_update": False,
+            "status": "unknown",
+            "current_version": current_version,
+            "latest_version": latest_version,
+            "release_notes": release_notes,
+        }
+
+    if latest_parsed > current_parsed:
+        return {
+            "has_update": True,
+            "status": "outdated",
+            "version": latest_version,
+            "latest_version": latest_version,
+            "release_notes": release_notes,
+            "current_version": current_version,
+            "manual_only": True,
+            "manual_release_url": str(github_release.get("html_url", "") or "").strip() or f"{GITHUB_RELEASE_TAG_URL}/v{latest_version}",
+        }
+
+    if current_parsed > latest_parsed:
+        return {
+            "has_update": False,
+            "status": "preview",
+            "current_version": current_version,
+            "latest_version": latest_version,
+            "release_notes": release_notes,
+        }
+
+    return {
+        "has_update": False,
+        "status": "latest",
+        "current_version": current_version,
+        "latest_version": latest_version,
+        "release_notes": release_notes,
+    }
+
+
 def _safe_create_update_manager():
     velopack_module = _get_velopack_module()
     if velopack_module is None:
@@ -165,7 +231,7 @@ class UpdateManager:
 
         manager = _safe_create_update_manager()
         if manager is None:
-            return {"has_update": False, "status": "unknown", "current_version": current_version}
+            return _build_github_update_result(current_version)
 
         try:
             installed_version = str(manager.get_current_version() or current_version).strip() or current_version
@@ -262,13 +328,15 @@ def show_update_notification(gui) -> None:
         payload={"version": info.get("version", "unknown")},
     )
     release_notes_preview = _preview_release_notes(info.get("release_notes", ""), 300)
-    manual_release_url = f"{GITHUB_RELEASE_TAG_URL}/v{info.get('version', '')}"
+    manual_release_url = str(info.get("manual_release_url", "") or "").strip() or f"{GITHUB_RELEASE_TAG_URL}/v{info.get('version', '')}"
+    manual_only = bool(info.get("manual_only", False))
+    action_line = "是否要立即前往发布页下载更新？" if manual_only else "是否要立即下载更新？"
     msg = (
         f"检测到新版本 v{info['version']}\n"
         f"当前版本 v{info['current_version']}\n\n"
         f"发布说明:\n{release_notes_preview}\n\n"
         f"如果自动更新失败，可手动前往发布页下载安装：\n{manual_release_url}\n\n"
-        f"是否要立即下载更新？"
+        f"{action_line}"
     )
 
     if gui.show_confirm_dialog("检查到更新", msg):
@@ -280,7 +348,10 @@ def show_update_notification(gui) -> None:
             result="accepted",
             payload={"version": info.get("version", "unknown")},
         )
-        perform_update(gui)
+        if manual_only:
+            webbrowser.open(manual_release_url)
+        else:
+            perform_update(gui)
     else:
         log_action(
             "UPDATE",

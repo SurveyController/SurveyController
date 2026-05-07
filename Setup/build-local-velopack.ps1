@@ -1,8 +1,5 @@
 [CmdletBinding()]
 param(
-    [Parameter(Mandatory = $true)]
-    [string]$Version,
-
     [Parameter(Mandatory = $false)]
     [string]$Channel = "stable",
 
@@ -59,9 +56,27 @@ function ConvertTo-PackVersion {
     return $normalized
 }
 
+function Get-AppVersionFromPythonFile {
+    param([string]$RepoRoot)
+
+    $versionFile = Join-Path $RepoRoot "software\app\version.py"
+    if (-not (Test-Path $versionFile)) {
+        throw ("Version file not found: {0}" -f $versionFile)
+    }
+
+    $content = Get-Content $versionFile -Raw -Encoding UTF8
+    $match = [regex]::Match($content, '__VERSION__\s*=\s*"(?<version>[^"]+)"')
+    if (-not $match.Success) {
+        throw ("Could not read __VERSION__ from: {0}" -f $versionFile)
+    }
+
+    return $match.Groups["version"].Value
+}
+
 $repoRoot = Resolve-RepoRoot
-$packVersion = ConvertTo-PackVersion -RawVersion $Version
-$tagName = if ($Version.StartsWith("v", [System.StringComparison]::OrdinalIgnoreCase)) { $Version } else { "v$packVersion" }
+$appVersion = Get-AppVersionFromPythonFile -RepoRoot $repoRoot
+$packVersion = ConvertTo-PackVersion -RawVersion $appVersion
+$tagName = if ($appVersion.StartsWith("v", [System.StringComparison]::OrdinalIgnoreCase)) { $appVersion } else { "v$packVersion" }
 $releaseDir = Join-Path $repoRoot $OutputDir
 $distDir = Join-Path $repoRoot "dist"
 $buildDir = Join-Path $repoRoot "build"
@@ -83,6 +98,7 @@ if (Test-Path $toolPath) {
 Assert-CommandAvailable -Name "vpk" -InstallHint "Run: dotnet tool install -g vpk"
 
 Write-Host ("Repo root: {0}" -f $repoRoot)
+Write-Host ("App version: {0}" -f $appVersion)
 Write-Host ("Pack version: {0}" -f $packVersion)
 Write-Host ("Channel: {0}" -f $Channel)
 Write-Host ("Output dir: {0}" -f $releaseDir)
