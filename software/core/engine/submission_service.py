@@ -23,6 +23,7 @@ from software.core.task import ExecutionConfig, ExecutionState
 from software.logging.log_utils import log_suppressed_exception
 from software.network.browser import BrowserDriver
 from software.providers.registry import (
+    attempt_submission_recovery_sync as _provider_attempt_submission_recovery,
     handle_submission_verification_detected_sync as _provider_handle_submission_verification_detected,
     submission_requires_verification_sync as _provider_submission_requires_verification,
     submission_validation_message_sync as _provider_submission_validation_message,
@@ -199,6 +200,30 @@ class SubmissionService:
             logging.warning("提交后安全验证检测过程出现异常：%s", exc)
         return None
 
+    def _attempt_submission_recovery(
+        self,
+        driver: BrowserDriver,
+        stop_signal: StopSignalLike,
+        gui_instance: Any,
+        *,
+        thread_name: str,
+    ) -> bool:
+        try:
+            recovered = _provider_attempt_submission_recovery(
+                driver,
+                self.state,
+                gui_instance,
+                stop_signal,
+                provider=self.config.survey_provider,
+                thread_name=thread_name,
+            )
+        except Exception as exc:
+            logging.warning("提交后自动补答恢复失败：%s", exc)
+            return False
+        if recovered:
+            logging.info("提交后自动补答已执行，准备重新等待完成页。")
+        return bool(recovered)
+
     def finalize_after_submit(
         self,
         driver: BrowserDriver,
@@ -262,6 +287,37 @@ class SubmissionService:
                 completion_detected = self._detect_completion_once(driver)
             except Exception:
                 completion_detected = False
+
+        if not completion_detected and not stop_signal.is_set():
+            recovered = self._attempt_submission_recovery(
+                driver,
+                stop_signal,
+                gui_instance,
+                thread_name=thread_name,
+            )
+            if recovered and not stop_signal.is_set():
+                recovery_wait_seconds = max(2.0, float(POST_SUBMIT_URL_MAX_WAIT or 0.0) * 4.0)
+                recovery_poll = max(0.05, float(POST_SUBMIT_URL_POLL_INTERVAL or 0.1))
+                completion_detected = self._wait_for_completion_page(
+                    driver,
+                    stop_signal,
+                    recovery_wait_seconds,
+                    recovery_poll,
+                )
+                if not completion_detected and not stop_signal.is_set():
+                    verification_outcome = self._check_submission_verification_after_submit(
+                        driver,
+                        stop_signal,
+                        gui_instance,
+                        thread_name=thread_name,
+                    )
+                    if verification_outcome is not None:
+                        return verification_outcome
+                if not completion_detected and not stop_signal.is_set():
+                    try:
+                        completion_detected = self._detect_completion_once(driver)
+                    except Exception:
+                        completion_detected = False
 
         if not completion_detected:
             stopped = self.stop_policy.record_failure(

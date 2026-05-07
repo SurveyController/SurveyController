@@ -15,6 +15,7 @@ PagePredicateHook = Callable[[Any], bool]
 ValidationMessageHook = Callable[[Any], str]
 WaitVerificationHook = Callable[..., bool]
 VerificationDetectedHook = Callable[[Any, Any, Any], None]
+SubmissionRecoveryHook = Callable[..., bool]
 
 
 def _return_false(*_args: Any, **_kwargs: Any) -> bool:
@@ -38,6 +39,7 @@ class ProviderAdapterHooks:
     submission_validation_message: ValidationMessageHook = _return_empty_text
     wait_for_submission_verification: WaitVerificationHook = _return_false
     handle_submission_verification_detected: VerificationDetectedHook = _noop
+    attempt_submission_recovery: SubmissionRecoveryHook = _return_false
     consume_submission_success_signal: PagePredicateHook = _return_false
     is_device_quota_limit_page: PagePredicateHook = _return_false
 
@@ -144,6 +146,45 @@ class CallableProviderAdapter:
 
     async def handle_submission_verification_detected_async(self, ctx: Any, gui_instance: Any, stop_signal: Any) -> None:
         await asyncio.to_thread(self.handle_submission_verification_detected, ctx, gui_instance, stop_signal)
+
+    def attempt_submission_recovery(
+        self,
+        driver: Any,
+        ctx: Any,
+        gui_instance: Any,
+        stop_signal: Any,
+        *,
+        thread_name: str = "",
+    ) -> bool:
+        return bool(
+            self._hooks.attempt_submission_recovery(
+                driver,
+                ctx,
+                gui_instance,
+                stop_signal,
+                thread_name=thread_name,
+            )
+        )
+
+    async def attempt_submission_recovery_async(
+        self,
+        driver: Any,
+        ctx: Any,
+        gui_instance: Any,
+        stop_signal: Any,
+        *,
+        thread_name: str = "",
+    ) -> bool:
+        return bool(
+            await asyncio.to_thread(
+                self.attempt_submission_recovery,
+                driver,
+                ctx,
+                gui_instance,
+                stop_signal,
+                thread_name=thread_name,
+            )
+        )
 
     def consume_submission_success_signal(self, driver: Any) -> bool:
         return bool(self._hooks.consume_submission_success_signal(driver))

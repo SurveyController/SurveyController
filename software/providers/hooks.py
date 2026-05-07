@@ -93,3 +93,24 @@ def build_action_hook(target: HookTarget):
 
     return _action
 
+
+def build_submission_recovery_hook(target: HookTarget):
+    def _recovery(
+        driver: Any,
+        ctx: Any,
+        gui_instance: Any,
+        stop_signal: Any,
+        *,
+        thread_name: str = "",
+    ) -> bool:
+        return bool(
+            _load_hook(target)(
+                driver,
+                ctx,
+                gui_instance,
+                stop_signal,
+                thread_name=thread_name,
+            )
+        )
+
+    return _recovery

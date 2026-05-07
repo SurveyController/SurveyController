@@ -50,6 +50,57 @@ def _build_initial_indices() -> Dict[str, int]:
     }
 
 
+def _build_runtime_page_question_plan(
+    page_questions: Iterable[SurveyQuestionMeta],
+) -> list[dict[str, Any]]:
+    plan: list[dict[str, Any]] = []
+    for meta in page_questions:
+        if meta is None:
+            continue
+        try:
+            question_num = int(getattr(meta, "num", 0) or 0)
+        except Exception:
+            question_num = 0
+        if question_num <= 0:
+            continue
+        plan.append(
+            {
+                "question_num": question_num,
+                "type_code": str(getattr(meta, "type_code", "") or "").strip(),
+                "required": bool(getattr(meta, "required", False)),
+            }
+        )
+    return plan
+
+
+def _store_runtime_page_context(
+    driver: BrowserDriver,
+    *,
+    page_number: int,
+    page_questions: Iterable[SurveyQuestionMeta],
+    indices: Dict[str, int],
+) -> None:
+    try:
+        driver._wjx_runtime_page_number = int(page_number)
+    except Exception:
+        pass
+    try:
+        driver._wjx_runtime_page_questions = _build_runtime_page_question_plan(page_questions)
+    except Exception:
+        driver._wjx_runtime_page_questions = []
+    try:
+        driver._wjx_runtime_indices_snapshot = dict(indices or {})
+    except Exception:
+        driver._wjx_runtime_indices_snapshot = {}
+
+
+def _store_runtime_psycho_plan(driver: BrowserDriver, psycho_plan: Optional[Any]) -> None:
+    try:
+        driver._wjx_runtime_psycho_plan = psycho_plan
+    except Exception:
+        pass
+
+
 def _collect_visible_question_snapshot(driver: BrowserDriver) -> Dict[int, Dict[str, Any]]:
     try:
         payload = driver.execute_script(
@@ -510,6 +561,78 @@ def _run_question_dispatch(
     )
 
 
+def refill_required_questions_on_current_page(
+    driver: BrowserDriver,
+    ctx: ExecutionState,
+    *,
+    question_numbers: Iterable[int],
+    thread_name: str,
+    psycho_plan: Optional[Any] = None,
+) -> int:
+    target_numbers: list[int] = []
+    for raw_num in question_numbers:
+        try:
+            question_num = int(raw_num)
+        except Exception:
+            continue
+        if question_num > 0 and question_num not in target_numbers:
+            target_numbers.append(question_num)
+    if not target_numbers:
+        return 0
+
+    metadata = _question_metadata_map(ctx)
+    snapshot = _refresh_visible_question_snapshot(driver, reason="submission_recovery_refill")
+    indices = dict(getattr(driver, "_wjx_runtime_indices_snapshot", {}) or {})
+    if not indices:
+        indices = _build_initial_indices()
+    filled_count = 0
+    for question_num in target_numbers:
+        question_meta = metadata.get(question_num)
+        if question_meta is None:
+            logging.warning("WJX 提交补答跳过：第%s题缺少题目元数据。", question_num)
+            continue
+        try:
+            question_div = driver.find_element(By.CSS_SELECTOR, f"#div{question_num}")
+        except Exception:
+            logging.warning("WJX 提交补答跳过：第%s题未定位到题目容器。", question_num)
+            continue
+        snapshot_item = snapshot.get(question_num) if isinstance(snapshot, dict) else None
+        if not _question_is_visible(question_div, snapshot_item):
+            logging.info("WJX 提交补答跳过：第%s题当前未显示。", question_num)
+            continue
+
+        question_type = str((snapshot_item or {}).get("type") or "").strip() if isinstance(snapshot_item, dict) else ""
+        if not question_type:
+            try:
+                question_type = str(question_div.get_attribute("type") or "").strip()
+            except Exception:
+                question_type = str(getattr(question_meta, "type_code", "") or "").strip()
+        if not question_type:
+            logging.warning("WJX 提交补答跳过：第%s题缺少 type。", question_num)
+            continue
+        if _driver_question_looks_like_description(question_div, question_type):
+            continue
+
+        _run_question_dispatch(
+            driver,
+            ctx,
+            question_num=question_num,
+            question_type=question_type,
+            question_div=question_div,
+            indices=indices,
+            psycho_plan=psycho_plan,
+        )
+        filled_count += 1
+
+    driver._wjx_runtime_indices_snapshot = dict(indices)
+    if filled_count > 0:
+        try:
+            ctx.update_thread_status(thread_name, "补答必答题", running=True)
+        except Exception:
+            logging.info("更新线程状态失败：补答必答题", exc_info=True)
+    return filled_count
+
+
 def _ensure_question_snapshot_visibility(
     driver: BrowserDriver,
     snapshot: Dict[int, Dict[str, Any]],
@@ -565,6 +688,7 @@ def _brush_with_detect_fallback(
     active_stop = stop_signal or ctx.stop_event
     runtime_config = ctx.config
     run_started_at = time.perf_counter()
+    _store_runtime_psycho_plan(driver, psycho_plan)
 
     def _abort_requested() -> bool:
         return bool(active_stop and active_stop.is_set())
@@ -575,6 +699,12 @@ def _brush_with_detect_fallback(
 
     total_pages = len(questions_per_page)
     for page_index, questions_count in enumerate(questions_per_page):
+        _store_runtime_page_context(
+            driver,
+            page_number=page_index + 1,
+            page_questions=[],
+            indices=indices,
+        )
         page_snapshot = _refresh_visible_question_snapshot(driver, reason=f"fallback_page_{page_index + 1}")
         for _ in range(1, questions_count + 1):
             if _abort_requested():
@@ -710,6 +840,12 @@ def _brush_with_metadata(
         if _refresh_metadata_when_snapshot_drifts(ctx, snapshot):
             page_plan = _build_metadata_page_plan(ctx)
         page_questions = [meta for candidate_page, questions in page_plan if candidate_page == page_number for meta in questions]
+        _store_runtime_page_context(
+            driver,
+            page_number=page_number,
+            page_questions=page_questions,
+            indices=indices,
+        )
         question_index = 0
 
         while question_index < len(page_questions):
@@ -814,6 +950,12 @@ def _brush_with_metadata(
                         sorted(current_visible),
                     )
 
+            _store_runtime_page_context(
+                driver,
+                page_number=page_number,
+                page_questions=page_questions,
+                indices=indices,
+            )
             question_index += 1
 
         if not _finalize_page(

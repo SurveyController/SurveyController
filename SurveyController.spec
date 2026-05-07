@@ -286,8 +286,18 @@ def _cleanup_binaries(b_name):
 
 def _cleanup_datas(d_name):
     norm = d_name.replace('\\', '/')
-    # 不要裁剪 playwright 的数据文件，避免误删运行时必需资源
-    # （历史上这里删 *.json 会导致 Playwright 初始化异常）
+    # 第一刀只裁 Playwright 的展示/工具资源，不碰 server/client/chromium 等核心运行链。
+    if norm.startswith('playwright/driver/package/lib/vite/'):
+        return True
+    if norm.startswith('playwright/driver/package/lib/tools/'):
+        return True
+    if norm.startswith('playwright/driver/package/types/'):
+        return True
+    if norm in {
+        'playwright/driver/package/api.json',
+        'playwright/driver/package/protocol.yml',
+    }:
+        return True
     return False
 
 a.binaries = [b for b in a.binaries if not _cleanup_binaries(b[0])]

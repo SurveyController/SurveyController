@@ -22,6 +22,7 @@ from software.providers.hooks import (
     build_fill_hook,
     build_parse_hook,
     build_predicate_hook,
+    build_submission_recovery_hook,
     build_text_hook,
     build_wait_from_predicate_hook,
     build_wait_hook,
@@ -51,6 +52,7 @@ _WJX_SUBMISSION_REQUIRES_VERIFICATION: HookTarget = ("wjx.provider.submission", 
 _WJX_SUBMISSION_VALIDATION_MESSAGE: HookTarget = ("wjx.provider.submission", "submission_validation_message")
 _WJX_WAIT_FOR_SUBMISSION_VERIFICATION: HookTarget = ("wjx.provider.submission", "wait_for_submission_verification")
 _WJX_HANDLE_SUBMISSION_VERIFICATION_DETECTED: HookTarget = ("wjx.provider.submission", "handle_submission_verification_detected")
+_WJX_ATTEMPT_SUBMISSION_RECOVERY: HookTarget = ("wjx.provider.submission", "attempt_submission_recovery")
 _WJX_IS_DEVICE_QUOTA_LIMIT_PAGE: HookTarget = ("wjx.provider.submission", "is_device_quota_limit_page")
 
 _QQ_IS_COMPLETION_PAGE: HookTarget = ("tencent.provider.runtime_flow", "qq_is_completion_page")
@@ -78,6 +80,7 @@ _PROVIDER_REGISTRY = {
             submission_validation_message=build_text_hook(_WJX_SUBMISSION_VALIDATION_MESSAGE),
             wait_for_submission_verification=build_wait_hook(_WJX_WAIT_FOR_SUBMISSION_VERIFICATION),
             handle_submission_verification_detected=build_action_hook(_WJX_HANDLE_SUBMISSION_VERIFICATION_DETECTED),
+            attempt_submission_recovery=build_submission_recovery_hook(_WJX_ATTEMPT_SUBMISSION_RECOVERY),
             is_device_quota_limit_page=build_predicate_hook(_WJX_IS_DEVICE_QUOTA_LIMIT_PAGE),
         ),
     ),
@@ -265,6 +268,46 @@ def wait_for_submission_verification_sync(
     )
 
 
+async def attempt_submission_recovery(
+    driver: Any,
+    ctx: Any,
+    gui_instance: Any,
+    stop_signal: Any,
+    *,
+    provider: Optional[str] = None,
+    thread_name: str = "",
+) -> bool:
+    return bool(
+        await _get_provider_adapter(provider=provider).attempt_submission_recovery_async(
+            driver,
+            ctx,
+            gui_instance,
+            stop_signal,
+            thread_name=thread_name,
+        )
+    )
+
+
+def attempt_submission_recovery_sync(
+    driver: Any,
+    ctx: Any,
+    gui_instance: Any,
+    stop_signal: Any,
+    *,
+    provider: Optional[str] = None,
+    thread_name: str = "",
+) -> bool:
+    return bool(
+        _get_provider_adapter(provider=provider).attempt_submission_recovery(
+            driver,
+            ctx,
+            gui_instance,
+            stop_signal,
+            thread_name=thread_name,
+        )
+    )
+
+
 async def handle_submission_verification_detected(
     ctx: Any,
     gui_instance: Any,
@@ -322,6 +365,8 @@ __all__ = [
     "detect_survey_provider",
     "parse_survey",
     "parse_survey_sync",
+    "attempt_submission_recovery",
+    "attempt_submission_recovery_sync",
     "fill_survey",
     "fill_survey_sync",
     "is_completion_page",
