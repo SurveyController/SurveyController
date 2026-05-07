@@ -462,7 +462,7 @@ def _trigger_aliyun_captcha_stop(
             if threading.current_thread() is not threading.main_thread():
                 return
 
-            from software.network.proxy.policy import get_random_ip_counter_snapshot_local
+            from software.network.proxy.policy.source import get_random_ip_counter_snapshot_local
             from software.network.proxy.session import has_authenticated_session, is_quota_exhausted
 
             is_enabled = bool(gui_instance.is_random_ip_enabled()) if gui_instance else False
