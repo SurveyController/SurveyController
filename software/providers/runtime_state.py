@@ -25,17 +25,39 @@ class ProviderRuntimeStateStore(Generic[StateT]):
         self._factory = factory
         self._lock = threading.RLock()
         self._states: "weakref.WeakKeyDictionary[object, StateT]" = weakref.WeakKeyDictionary()
+        self._fallback_states: Dict[int, StateT] = {}
+
+    @staticmethod
+    def _driver_identity(driver: object) -> int:
+        return id(driver)
+
+    @staticmethod
+    def _supports_weakref(driver: object) -> bool:
+        try:
+            weakref.ref(driver)
+        except TypeError:
+            return False
+        return True
 
     def get_or_create(self, driver: Any) -> StateT:
         if driver is None:
             raise ValueError("driver 不能为空")
         key = cast(object, driver)
         with self._lock:
-            existing = self._states.get(key)
+            if self._supports_weakref(key):
+                existing = self._states.get(key)
+                if existing is not None:
+                    return existing
+                state = self._factory()
+                self._states[key] = state
+                return state
+
+            identity = self._driver_identity(key)
+            existing = self._fallback_states.get(identity)
             if existing is not None:
                 return existing
             state = self._factory()
-            self._states[key] = state
+            self._fallback_states[identity] = state
             return state
 
     def peek(self, driver: Any) -> Optional[StateT]:
@@ -43,18 +65,23 @@ class ProviderRuntimeStateStore(Generic[StateT]):
             return None
         key = cast(object, driver)
         with self._lock:
-            return self._states.get(key)
+            if self._supports_weakref(key):
+                return self._states.get(key)
+            return self._fallback_states.get(self._driver_identity(key))
 
     def clear(self, driver: Any) -> None:
         if driver is None:
             return
         key = cast(object, driver)
         with self._lock:
-            self._states.pop(key, None)
+            if self._supports_weakref(key):
+                self._states.pop(key, None)
+                return
+            self._fallback_states.pop(self._driver_identity(key), None)
 
     def snapshot_size(self) -> int:
         with self._lock:
-            return len(self._states)
+            return len(self._states) + len(self._fallback_states)
 
 
 _STATE_STORES: Dict[str, ProviderRuntimeStateStore[Any]] = {}
