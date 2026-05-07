@@ -49,12 +49,12 @@ class UpdateHelperTests:
         manager = MagicMock()
         manager.get_current_version.return_value = "3.1.2"
         manager.check_for_updates.return_value = None
-        with patch.object(updater, "_safe_create_update_manager", return_value=manager):
+        with patch.object(updater, "_safe_create_update_manager", return_value=manager), patch.object(updater, "__VERSION__", "3.1.2"):
             result = updater.UpdateManager.check_updates()
         assert result == {"has_update": False, "status": "latest", "current_version": "3.1.2"}
 
     def test_check_updates_returns_outdated_when_release_exists(self) -> None:
-        asset = SimpleNamespace(Version="3.2.0", NotesMarkdown="修复一堆破事")
+        asset = SimpleNamespace(Version="3.2.0", NotesMarkdown="修复一堆破事", Size=123456)
         manager = MagicMock()
         manager.get_current_version.return_value = "3.1.2"
         manager.check_for_updates.return_value = SimpleNamespace(TargetFullRelease=asset)
@@ -64,6 +64,7 @@ class UpdateHelperTests:
         assert result["has_update"] is True
         assert result["version"] == "3.2.0"
         assert result["release_notes"] == "修复一堆破事"
+        assert result["package_size"] == 123456
 
     def test_check_updates_falls_back_to_github_release_body_when_velopack_notes_missing(self) -> None:
         asset = SimpleNamespace(Version="3.2.0", NotesMarkdown="", NotesHtml="")

@@ -30,6 +30,8 @@
 │   │   ├── ruff_check.py
 │   │   ├── unit_test_check.py
 │   │   └── window_smoke_check.py
+│   ├── release_tools/
+│   │   └── trim_velopack_feed.py
 │   ├── python_ci.py
 │   ├── unit_tests/
 │   │   ├── app/
@@ -171,13 +173,3 @@
 ```
 
 </details>
-
-## 用户数据目录
-
-- 仓库里的 `configs/`、`logs/` 现在只保留为源码环境/历史结构参考，不再是安装版运行时写入位置。
-- 安装版运行时改为写入：
-  - `%AppData%\SurveyController\config.json`
-  - `%AppData%\SurveyController\configs`
-  - `%LocalAppData%\SurveyController\logs`
-  - `%LocalAppData%\SurveyController\cache`
-- `software/app/runtime_paths.py` 现在只负责“安装目录/只读资源目录”，别再把它当可写目录用。

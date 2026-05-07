@@ -513,8 +513,11 @@ class MainWindowUpdateMixin:
 
         # 更新详情标签
         if hasattr(self, "_download_detail_label") and self._download_detail_label:
-            detail = f"{self._format_size(downloaded)} / {self._format_size(total)}"
-            if speed > 0:
+            if total == 100 and speed <= 0:
+                detail = f"{max(0, min(100, int(downloaded or 0)))}%"
+            else:
+                detail = f"{self._format_size(downloaded)} / {self._format_size(total)}"
+            if speed > 0 and total != 100:
                 detail += f" | {self._format_speed(speed)}"
             self._download_detail_label.setText(detail)
 

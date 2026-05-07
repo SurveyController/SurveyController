@@ -9,6 +9,7 @@ permissions:
 
 env:
   R2_FEED_PREFIX: "surveycontroller/win/stable"
+  VELOPACK_KEEP_FULL_VERSIONS: "6"
 
 concurrency:
   group: build-release-installer-${{ github.event.release.id }}
@@ -22,6 +23,35 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v5
+
+      - name: Download previous Velopack feed
+        shell: powershell
+        continue-on-error: true
+        run: |
+          $releaseDir = Join-Path "${{ github.workspace }}" "Releases"
+          New-Item -ItemType Directory -Path $releaseDir -Force | Out-Null
+          $feedBase = "https://dl.hungrym0.top/${env:R2_FEED_PREFIX}"
+          $manifestPath = Join-Path $releaseDir "releases.stable.json"
+          try {
+            Invoke-WebRequest -Uri "$feedBase/releases.stable.json" -OutFile $manifestPath -UseBasicParsing
+            $manifest = Get-Content $manifestPath -Raw | ConvertFrom-Json
+            $assets = @($manifest.Assets)
+            foreach ($asset in $assets) {
+              $fileName = [string]$asset.FileName
+              if ([string]::IsNullOrWhiteSpace($fileName)) {
+                continue
+              }
+              Invoke-WebRequest -Uri "$feedBase/$fileName" -OutFile (Join-Path $releaseDir $fileName) -UseBasicParsing
+            }
+            foreach ($extraName in @("assets.stable.json", "RELEASES-stable")) {
+              try {
+                Invoke-WebRequest -Uri "$feedBase/$extraName" -OutFile (Join-Path $releaseDir $extraName) -UseBasicParsing
+              } catch {
+              }
+            }
+          } catch {
+            Write-Host "No previous feed downloaded: $($_.Exception.Message)"
+          }
 
       - name: Set up Python
         uses: actions/setup-python@v6
@@ -74,7 +104,7 @@ jobs:
       - name: Build PyInstaller bundle
         shell: powershell
         run: |
-          Remove-Item -Recurse -Force build, dist, Releases -ErrorAction SilentlyContinue
+          Remove-Item -Recurse -Force build, dist -ErrorAction SilentlyContinue
           python -m PyInstaller SurveyController.spec --noconfirm --clean
 
       - name: Build Velopack release package
@@ -93,6 +123,14 @@ jobs:
             --delta "BestSpeed" `
             --channel "${{ steps.release_meta.outputs.channel }}" `
             --outputDir $releaseDir
+
+      - name: Trim Velopack feed history
+        shell: powershell
+        run: |
+          python CI/release_tools/trim_velopack_feed.py `
+            --release-dir "${{ steps.release_meta.outputs.release_dir }}" `
+            --channel "${{ steps.release_meta.outputs.channel }}" `
+            --keep-full "${env:VELOPACK_KEEP_FULL_VERSIONS}"
 
       - name: Rename setup installer
         shell: powershell
@@ -195,6 +233,35 @@ jobs:
               --cache-control $cacheControl `
               --content-type $contentType `
               --endpoint-url "${{ steps.r2_endpoint.outputs.endpoint }}"
+          }
+
+      - name: Remove old R2 feed assets
+        shell: powershell
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          AWS_DEFAULT_REGION: auto
+          AWS_RETRY_MODE: standard
+          AWS_MAX_ATTEMPTS: "3"
+          R2_BUCKET: ${{ secrets.R2_BUCKET }}
+        run: |
+          $releaseDir = "${{ steps.release_meta.outputs.release_dir }}"
+          $keepNames = New-Object 'System.Collections.Generic.HashSet[string]' ([System.StringComparer]::OrdinalIgnoreCase)
+          Get-ChildItem $releaseDir -File | ForEach-Object { [void]$keepNames.Add($_.Name) }
+          $listing = aws s3 ls "s3://${env:R2_BUCKET}/${env:R2_FEED_PREFIX}/" --endpoint-url "${{ steps.r2_endpoint.outputs.endpoint }}"
+          foreach ($line in $listing) {
+            $parts = $line -split '\s+', 4
+            if ($parts.Count -lt 4) {
+              continue
+            }
+            $name = $parts[3].Trim()
+            if ([string]::IsNullOrWhiteSpace($name)) {
+              continue
+            }
+            if ($keepNames.Contains($name)) {
+              continue
+            }
+            aws s3 rm "s3://${env:R2_BUCKET}/${env:R2_FEED_PREFIX}/$name" --endpoint-url "${{ steps.r2_endpoint.outputs.endpoint }}"
           }
 
       - name: Upload latest setup alias to R2 root

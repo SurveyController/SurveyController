@@ -40,6 +40,52 @@ function Resolve-RepoRoot {
     return (Resolve-Path (Join-Path $scriptRoot "..")).Path
 }
 
+function Get-PreviousReleaseDir {
+    param(
+        [string]$RepoRoot,
+        [string]$Channel
+    )
+
+    $candidate = Join-Path $RepoRoot ("build\velopack-baseline\{0}" -f $Channel)
+    New-Item -ItemType Directory -Path $candidate -Force | Out-Null
+    return $candidate
+}
+
+function Copy-PreviousReleasePackages {
+    param(
+        [string]$SourceDir,
+        [string]$TargetDir
+    )
+
+    if (-not (Test-Path $SourceDir)) {
+        return
+    }
+
+    Get-ChildItem -Path $SourceDir -File -Filter "*.nupkg" -ErrorAction SilentlyContinue | ForEach-Object {
+        Copy-Item -LiteralPath $_.FullName -Destination (Join-Path $TargetDir $_.Name) -Force
+    }
+
+    $releaseFiles = @(
+        Get-ChildItem -Path $SourceDir -File -Filter "releases.*.json" -ErrorAction SilentlyContinue
+        Get-ChildItem -Path $SourceDir -File -Filter "assets.*.json" -ErrorAction SilentlyContinue
+        Get-ChildItem -Path $SourceDir -File -Filter "RELEASES-*" -ErrorAction SilentlyContinue
+    )
+    foreach ($file in $releaseFiles) {
+        Copy-Item -LiteralPath $file.FullName -Destination (Join-Path $TargetDir $file.Name) -Force
+    }
+}
+
+function Save-ReleasePackagesForNextBuild {
+    param(
+        [string]$SourceDir,
+        [string]$TargetDir
+    )
+
+    New-Item -ItemType Directory -Path $TargetDir -Force | Out-Null
+    Get-ChildItem -Path $TargetDir -File -ErrorAction SilentlyContinue | Remove-Item -Force -ErrorAction SilentlyContinue
+    Copy-PreviousReleasePackages -SourceDir $SourceDir -TargetDir $TargetDir
+}
+
 function ConvertTo-PackVersion {
     param([string]$RawVersion)
 
@@ -78,6 +124,7 @@ $appVersion = Get-AppVersionFromPythonFile -RepoRoot $repoRoot
 $packVersion = ConvertTo-PackVersion -RawVersion $appVersion
 $tagName = if ($appVersion.StartsWith("v", [System.StringComparison]::OrdinalIgnoreCase)) { $appVersion } else { "v$packVersion" }
 $releaseDir = Join-Path $repoRoot $OutputDir
+$previousReleaseDir = Get-PreviousReleaseDir -RepoRoot $repoRoot -Channel $Channel
 $distDir = Join-Path $repoRoot "dist"
 $buildDir = Join-Path $repoRoot "build"
 $packDir = Join-Path $distDir "lib"
@@ -105,7 +152,7 @@ Write-Host ("Output dir: {0}" -f $releaseDir)
 
 if (-not $SkipClean) {
     Write-Step "Clean old artifacts"
-    foreach ($path in @($buildDir, $distDir, $releaseDir)) {
+    foreach ($path in @($distDir, $releaseDir)) {
         if (Test-Path $path) {
             Remove-Item -Recurse -Force $path
         }
@@ -136,6 +183,7 @@ if (-not (Test-Path $iconPath)) {
 
 Write-Step "Run vpk pack"
 New-Item -ItemType Directory -Path $releaseDir -Force | Out-Null
+Copy-PreviousReleasePackages -SourceDir $previousReleaseDir -TargetDir $releaseDir
 Push-Location $repoRoot
 try {
     $vpkArgs = @(
@@ -182,6 +230,9 @@ if (-not $SkipRenameSetup) {
     Write-Step "Rename setup executable"
     Move-Item -LiteralPath $generatedSetup -Destination $renamedSetup -Force
 }
+
+Write-Step "Cache release packages for next build"
+Save-ReleasePackagesForNextBuild -SourceDir $releaseDir -TargetDir $previousReleaseDir
 
 Write-Step "Build finished"
 Get-ChildItem $releaseDir | Sort-Object Name | Format-Table Name, Length, LastWriteTime -AutoSize

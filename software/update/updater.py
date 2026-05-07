@@ -208,6 +208,10 @@ def _build_update_result_from_release(update_info: Any, current_version: str) ->
     target_release = getattr(update_info, "TargetFullRelease", None)
     latest_version = str(getattr(target_release, "Version", "") or "").strip()
     release_notes = _resolve_release_notes(update_info, latest_version)
+    try:
+        package_size = int(getattr(target_release, "Size", 0) or 0)
+    except Exception:
+        package_size = 0
     return {
         "has_update": True,
         "status": "outdated",
@@ -215,6 +219,7 @@ def _build_update_result_from_release(update_info: Any, current_version: str) ->
         "latest_version": latest_version,
         "release_notes": release_notes,
         "current_version": current_version,
+        "package_size": max(package_size, 0),
         "_velopack_update": update_info,
     }
 
@@ -377,17 +382,28 @@ def perform_update(
     if velopack_update is None:
         gui.downloadFailed.emit("当前更新信息无效，请稍后重试")
         return
+    try:
+        package_size = int(update_payload.get("package_size", 0) or 0)
+    except Exception:
+        package_size = 0
 
     gui._download_cancelled = False
 
-    def update_progress(downloaded: int, total: int, speed: float = 0) -> None:
+    def update_progress(percent: int, total: int, speed: float = 0) -> None:
+        normalized_percent = max(0, min(100, int(percent or 0)))
+        if package_size > 0:
+            downloaded = min(package_size, int(package_size * normalized_percent / 100))
+            total_value = package_size
+        else:
+            downloaded = normalized_percent
+            total_value = 100
         try:
-            gui._emit_download_progress(downloaded, total, speed)
+            gui._emit_download_progress(downloaded, total_value, speed)
         except Exception:
             logging.info("GUI 进度回调失败", exc_info=True)
         if on_progress is not None:
             try:
-                on_progress(downloaded, total, speed)
+                on_progress(downloaded, total_value, speed)
             except Exception:
                 logging.info("更新进度回调失败", exc_info=True)
 
