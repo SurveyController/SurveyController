@@ -13,6 +13,7 @@ from software.core.modes.duration_control import has_configured_answer_duration,
 from software.core.questions.utils import normalize_droplist_probs, weighted_index
 from software.core.task import ExecutionConfig, ExecutionState
 from software.network.browser import BrowserDriver
+from credamo.provider.runtime_state import get_credamo_runtime_state
 
 from . import runtime_answerers as _runtime_answerers
 from . import runtime_dom as _runtime_dom
@@ -168,22 +169,27 @@ def brush_credamo(
     thread_name: str,
     psycho_plan: Optional[Any] = None,
 ) -> bool:
-    del psycho_plan
     active_stop = stop_signal or state.stop_event
     page = _page(driver)
     total_steps = max(1, len(config.question_config_index_map))
     answered_steps = 0
+    page_index = 0
+    runtime_state = get_credamo_runtime_state(driver)
+    runtime_state.psycho_plan = psycho_plan
     try:
         state.update_thread_step(thread_name, 0, total_steps, status_text="答题中", running=True)
     except Exception:
         logging.info("初始化 Credamo 线程进度失败", exc_info=True)
 
     while not _abort_requested(active_stop):
+        page_index += 1
+        runtime_state.page_index = page_index
         roots = _wait_for_question_roots(page, active_stop)
         if not roots:
             raise RuntimeError("Credamo 当前页未识别到题目")
 
         answered_keys: set[str] = set()
+        runtime_state.answered_question_keys = []
         page_fallback_start = answered_steps
         while not _abort_requested(active_stop):
             pending_roots = _unanswered_question_roots(page, roots, answered_keys, fallback_start=page_fallback_start)
@@ -199,6 +205,7 @@ def brush_credamo(
                     return False
 
                 answered_keys.add(question_key)
+                runtime_state.answered_question_keys = list(answered_keys)
                 config_entry = config.question_config_index_map.get(question_num)
                 if config_entry is None:
                     fallback_kind = _question_kind_from_root(page, root)
@@ -267,6 +274,7 @@ def brush_credamo(
         if navigation_action != "next":
             break
         previous_signature = _question_signature(page)
+        runtime_state.last_page_signature = previous_signature
         try:
             state.update_thread_status(thread_name, "翻到下一页", running=True)
         except Exception:

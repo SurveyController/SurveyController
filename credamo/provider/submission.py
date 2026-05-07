@@ -2,11 +2,13 @@
 
 from __future__ import annotations
 
+import logging
 import re
 import time
 from typing import Any, Optional
 
 from software.network.browser import BrowserDriver
+from credamo.provider.runtime_state import peek_credamo_runtime_state
 
 _COMPLETION_MARKERS = (
     "答卷已经提交",
@@ -66,6 +68,20 @@ _ACTION_SELECTORS = (
     "input[type='button']",
     "[role='button']",
 )
+
+
+def _runtime_context_summary(driver: BrowserDriver) -> str:
+    state = peek_credamo_runtime_state(driver)
+    if state is None:
+        return ""
+    page_index = max(0, int(getattr(state, "page_index", 0) or 0))
+    answered_keys = [str(item or "").strip() for item in list(getattr(state, "answered_question_keys", []) or []) if str(item or "").strip()]
+    parts: list[str] = []
+    if page_index > 0:
+        parts.append(f"page={page_index}")
+    if answered_keys:
+        parts.append(f"answered={len(answered_keys)}")
+    return " ".join(parts)
 
 
 def _body_text(driver: BrowserDriver) -> str:
@@ -163,15 +179,24 @@ def submission_requires_verification(driver: BrowserDriver) -> bool:
     if _looks_like_selection_validation(feedback_text):
         return False
     if feedback_text and _contains_verification_marker(feedback_text):
+        runtime_context = _runtime_context_summary(driver)
+        if runtime_context:
+            logging.info("Credamo 提交命中验证提示：%s", runtime_context)
         return True
     text = _body_text(driver)
     if _contains_completion_marker(text):
         return False
-    return _contains_verification_marker(text)
+    matched = _contains_verification_marker(text)
+    if matched:
+        runtime_context = _runtime_context_summary(driver)
+        if runtime_context:
+            logging.info("Credamo 页面正文命中验证提示：%s", runtime_context)
+    return matched
 
 
 def submission_validation_message(driver: Optional[BrowserDriver] = None) -> str:
-    del driver
+    if driver is not None:
+        _runtime_context_summary(driver)
     return "Credamo 见数提交命中验证码/安全验证，当前版本暂不支持自动处理"
 
 
@@ -196,6 +221,7 @@ def handle_submission_verification_detected(ctx: Any, gui_instance: Any, stop_si
 
 
 def consume_submission_success_signal(driver: BrowserDriver) -> bool:
+    _runtime_context_summary(driver)
     return is_completion_page(driver)
 
 

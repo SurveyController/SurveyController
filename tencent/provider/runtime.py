@@ -15,6 +15,7 @@ from software.network.browser import BrowserDriver, NoSuchElementException
 from software.core.engine.navigation import _human_scroll_after_question
 from software.core.engine.runtime_control import _is_headless_mode
 from tencent.provider.navigation import _click_next_page_button, dismiss_resume_dialog_if_present
+from tencent.provider.runtime_state import get_qq_runtime_state
 from tencent.provider.submission import submit
 
 from .runtime_answerers import (
@@ -67,6 +68,8 @@ def brush_qq(
     active_stop = stop_signal or ctx.stop_event
     step_index = 0
     headless_mode = _is_headless_mode(ctx)
+    runtime_state = get_qq_runtime_state(driver)
+    runtime_state.psycho_plan = psycho_plan
 
     dismiss_resume_dialog_if_present(driver, timeout=1.5, stop_signal=active_stop)
 
@@ -83,6 +86,9 @@ def brush_qq(
                 timeout_ms=_QQ_PAGE_READY_TIMEOUT_MS,
                 require_any_visible=True,
             )
+        runtime_state.page_index = page_index + 1
+        runtime_state.page_question_ids = list(page_question_ids)
+        runtime_state.visibility_snapshot = dict(page_snapshot or {})
         for question in questions:
             if _abort_requested():
                 try:

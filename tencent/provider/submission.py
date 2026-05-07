@@ -17,6 +17,23 @@ from software.core.engine.runtime_control import _is_headless_mode, _sleep_with_
 from software.core.questions.utils import extract_text_from_element as _extract_text_from_element
 from software.core.task import ExecutionState
 from software.network.browser import By, BrowserDriver, NoSuchElementException
+from tencent.provider.runtime_state import peek_qq_runtime_state
+
+
+def _runtime_context_summary(driver: BrowserDriver) -> str:
+    state = peek_qq_runtime_state(driver)
+    if state is None:
+        return ""
+    page_index = max(0, int(getattr(state, "page_index", 0) or 0))
+    question_ids = [str(item or "").strip() for item in list(getattr(state, "page_question_ids", []) or []) if str(item or "").strip()]
+    if page_index <= 0 and not question_ids:
+        return ""
+    parts: list[str] = []
+    if page_index > 0:
+        parts.append(f"page={page_index}")
+    if question_ids:
+        parts.append(f"questions={question_ids}")
+    return " ".join(parts)
 
 
 def _click_submit_button(driver: BrowserDriver, max_wait: float = 10.0) -> bool:
@@ -153,6 +170,9 @@ def submit(
 
     clicked = _click_submit_button(driver, max_wait=10.0)
     if not clicked:
+        runtime_context = _runtime_context_summary(driver)
+        if runtime_context:
+            logging.warning("腾讯问卷提交按钮未找到：%s", runtime_context)
         raise NoSuchElementException("Submit button not found")
     if settle_delay > 0:
         time.sleep(settle_delay)
@@ -160,12 +180,12 @@ def submit(
 
 
 def consume_submission_success_signal(driver: BrowserDriver) -> bool:
-    del driver
+    _runtime_context_summary(driver)
     return False
 
 
 def is_device_quota_limit_page(driver: BrowserDriver) -> bool:
-    del driver
+    _runtime_context_summary(driver)
     return False
 
 
