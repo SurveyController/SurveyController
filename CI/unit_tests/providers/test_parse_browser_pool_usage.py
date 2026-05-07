@@ -44,7 +44,8 @@ class _FakeDriver:
         def locator(self, _selector: str):
             return self.locator_obj
 
-    def get(self, _url: str, _timeout: int=20000, _wait_until: str='domcontentloaded') -> None:
+    def get(self, url: str, timeout: int=20000, wait_until: str='domcontentloaded') -> None:
+        _ = url, timeout, wait_until
         return None
 
     @property

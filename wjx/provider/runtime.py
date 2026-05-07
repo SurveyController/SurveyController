@@ -34,9 +34,12 @@ from wjx.provider.questions.text import (
     count_visible_text_inputs as _count_visible_text_inputs_driver,
     text as _text_impl,
 )
-from wjx.provider.runtime_dispatch import _dispatcher
+from wjx.provider import runtime_dispatch as _runtime_dispatch
 from wjx.provider.runtime_state import get_wjx_runtime_state
 from wjx.provider.submission import submit
+
+_dispatcher = _runtime_dispatch._dispatcher
+_question_title_for_log = _runtime_dispatch._question_title_for_log
 
 
 def _build_initial_indices() -> Dict[str, int]:
