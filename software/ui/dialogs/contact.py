@@ -5,7 +5,7 @@ from PySide6.QtCore import Qt, QTimer
 from PySide6.QtCore import QObject
 from PySide6.QtWidgets import QDialog, QVBoxLayout
 
-from software.ui.widgets.contact_form import ContactForm
+from software.ui.widgets.contact_form.widget import ContactForm
 
 
 class ContactDialog(QDialog):

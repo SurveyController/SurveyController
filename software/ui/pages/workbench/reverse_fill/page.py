@@ -58,11 +58,13 @@ from software.providers.common import (
 )
 from software.providers.contracts import SurveyQuestionMeta, ensure_survey_question_metas
 from software.ui.helpers.fluent_tooltip import install_tooltip_filter
-from software.ui.pages.workbench.shared import RandomIpToggleRow, SurveyClipboardMixin, SurveyEntryCard
+from software.ui.pages.workbench.shared.clipboard import SurveyClipboardMixin
+from software.ui.pages.workbench.shared.random_ip_toggle_row import RandomIpToggleRow
+from software.ui.pages.workbench.shared.survey_entry_card import SurveyEntryCard
 from software.ui.widgets.no_wheel import NoWheelSpinBox
 
 if TYPE_CHECKING:
-    from software.ui.controller import RunController
+    from software.ui.controller.run_controller import RunController
 
 
 _FORMAT_CHOICES = [

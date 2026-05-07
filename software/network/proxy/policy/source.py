@@ -1,7 +1,16 @@
 """代理源和配置管理 - 代理源切换、地区设置、API覆盖、占用时长"""
 import logging
 import threading
+from dataclasses import dataclass
 from typing import Any, Optional, Set, Tuple
+
+from software.network.proxy.session.auth import (
+    get_quota_snapshot,
+    get_session_snapshot,
+    has_authenticated_session,
+    has_unknown_local_quota,
+    is_quota_exhausted,
+)
 
 from software.app.config import (
     IP_EXTRACT_ENDPOINT,
@@ -32,6 +41,17 @@ _ORDINARY_POOL_PROVINCE_CODES: Set[str] = {
     "410000", "420000", "430000", "440000", "460000", "500000", "510000",
     "610000", "620000", "640000",
 }
+
+
+@dataclass(frozen=True)
+class ProxySettings:
+    """当前代理配置快照。"""
+
+    source: str
+    custom_api_url: str
+    area_code: Optional[str]
+    default_area_code: str
+    occupy_minute: int
 
 
 # ==================== 代理源 get/set ====================
@@ -116,6 +136,36 @@ def get_proxy_minute_by_answer_seconds(total_seconds: int) -> int:
 def get_quota_cost_by_minute(minute: int) -> int:
     safe_minute = int(minute) if int(minute) in PROXY_MINUTE_OPTIONS else 1
     return int(PROXY_QUOTA_COST_MAP.get(safe_minute, 1))
+
+
+def get_random_ip_limit() -> float:
+    snapshot = get_session_snapshot()
+    total_quota = float(snapshot.get("total_quota") or 0.0)
+    return max(0.0, total_quota)
+
+
+def get_random_ip_counter_snapshot_local() -> tuple[float, float, bool]:
+    if is_custom_proxy_source():
+        return 0, 0, True
+
+    if has_authenticated_session():
+        snapshot = get_quota_snapshot()
+        return float(snapshot["used_quota"]), float(snapshot["total_quota"]), False
+
+    return 0.0, 0.0, False
+
+
+def normalize_random_ip_enabled_value(desired_enabled: bool) -> bool:
+    if not desired_enabled:
+        return False
+    if is_custom_proxy_source():
+        return True
+    if not has_authenticated_session():
+        return False
+    snapshot = get_session_snapshot()
+    if has_unknown_local_quota(snapshot):
+        return True
+    return not is_quota_exhausted(snapshot)
 
 
 def set_proxy_occupy_minute_by_answer_duration(answer_duration_range_seconds: Optional[Tuple[int, int]]) -> int:
@@ -233,6 +283,40 @@ def set_proxy_api_override(api_url: Optional[str]) -> str:
     with _config_lock:
         _proxy_api_url_override = cleaned or None
     return get_effective_proxy_api_url()
+
+
+def get_proxy_settings() -> ProxySettings:
+    """读取当前代理配置。"""
+    return ProxySettings(
+        source=normalize_proxy_source(get_proxy_source()),
+        custom_api_url=get_custom_proxy_api_override(),
+        area_code=get_proxy_area_code(),
+        default_area_code=get_default_proxy_area_code(),
+        occupy_minute=int(get_proxy_occupy_minute() or 1),
+    )
+
+
+def apply_proxy_source_settings(source: str, *, custom_api_url: Optional[str] = None) -> ProxySettings:
+    """统一更新代理源与自定义 API 地址。"""
+    normalized = normalize_proxy_source(source)
+    if normalized == PROXY_SOURCE_CUSTOM:
+        set_proxy_api_override(custom_api_url if custom_api_url else None)
+    else:
+        set_proxy_api_override(None)
+    set_proxy_source(normalized)
+    return get_proxy_settings()
+
+
+def apply_proxy_area_code(area_code: Optional[str]) -> ProxySettings:
+    """统一更新地区覆盖。"""
+    set_proxy_area_code(area_code)
+    return get_proxy_settings()
+
+
+def apply_custom_proxy_api(custom_api_url: Optional[str]) -> ProxySettings:
+    """统一更新自定义代理 API 地址。"""
+    set_proxy_api_override(custom_api_url if custom_api_url else None)
+    return get_proxy_settings()
 
 
 # ==================== 工具函数 ====================

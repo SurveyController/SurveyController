@@ -1,19 +1,11 @@
 """代理策略与配置门面。"""
 
-from software.network.proxy.policy.quota import (
-    get_random_ip_counter_snapshot_local,
-    get_random_ip_limit,
-    normalize_random_ip_enabled_value,
-)
-from software.network.proxy.policy.settings import (
+from software.network.proxy.policy.source import (
+    PROXY_SOURCE_BENEFIT,
     ProxySettings,
     apply_custom_proxy_api,
     apply_proxy_area_code,
     apply_proxy_source_settings,
-    get_proxy_settings,
-)
-from software.network.proxy.policy.source import (
-    PROXY_SOURCE_BENEFIT,
     get_custom_proxy_api_override,
     get_default_proxy_area_code,
     get_effective_proxy_api_url,
@@ -21,14 +13,18 @@ from software.network.proxy.policy.source import (
     get_proxy_minute_by_answer_seconds,
     get_proxy_occupy_minute,
     get_proxy_required_seconds_by_answer_seconds,
+    get_proxy_settings,
     get_proxy_source,
     get_proxy_upstream,
     get_quota_cost_by_minute,
+    get_random_ip_counter_snapshot_local,
+    get_random_ip_limit,
     has_custom_proxy_api_override,
     is_custom_proxy_api_active,
     is_custom_proxy_source,
     is_official_proxy_source,
     normalize_proxy_source,
+    normalize_random_ip_enabled_value,
     set_proxy_api_override,
     set_proxy_area_code,
     set_proxy_occupy_minute_by_answer_duration,

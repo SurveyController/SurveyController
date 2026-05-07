@@ -18,7 +18,7 @@ from qfluentwidgets import (
 )
 
 from software.app.config import HEADLESS_MAX_THREADS, NON_HEADLESS_MAX_THREADS
-from software.ui.controller import RunController
+from software.ui.controller.run_controller import RunController
 from software.ui.pages.workbench.runtime_panel.ai import RuntimeAISection
 from software.ui.pages.workbench.runtime_panel.cards import (
     RandomIPSettingCard,
