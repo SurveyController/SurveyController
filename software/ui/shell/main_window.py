@@ -483,7 +483,7 @@ class MainWindow(
             self._open_contact_dialog(default_type="报错反馈", lock_message_type=True)
 
     def _notify_free_ai_unstable(self) -> None:
-        self._toast("目前免费AI不稳定，请稍后再试", "warning", duration=3500)
+        self._toast("AI 填空连续失败，请稍后再试", "warning", duration=3500)
 
     def _center_on_screen(self):
         """窗口居中显示，适配多显示器与缩放。"""

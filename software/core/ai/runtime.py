@@ -1,5 +1,6 @@
 """AI 运行时辅助函数 - 调用 AI 模型生成答案"""
 import re
+import time
 from typing import Optional, Union, List
 import logging
 from software.logging.log_utils import log_suppressed_exception
@@ -13,6 +14,24 @@ from software.app.config import _HTML_SPACE_RE
 
 class AIRuntimeError(RuntimeError):
     """AI 填空运行时错误（需要终止任务）。"""
+
+
+_AI_FILL_MAX_ATTEMPTS = 4
+_AI_FILL_RETRY_BACKOFF_SECONDS = 0.4
+
+
+def _is_retryable_ai_generation_error(error: Exception) -> bool:
+    text = str(error or "").strip().lower()
+    if not text:
+        return True
+    non_retryable_markers = (
+        "题干为空",
+        "无法获取",
+        "请先配置 api key",
+        "ai 配置不完整",
+        "ai配置不完整",
+    )
+    return not any(marker in text for marker in non_retryable_markers)
 
 
 def is_free_ai_runtime_error(error: object) -> bool:
@@ -110,31 +129,46 @@ def generate_ai_answer(
     except Exception as exc:
         log_suppressed_exception("generate_ai_answer: from software.core.persona.context import build_ai_context_prompt", exc, level=logging.WARNING)
 
-    try:
-        answer = generate_answer(
-            cleaned,
-            question_type=question_type,
-            blank_count=blank_count,
-        )
-    except Exception as exc:
-        raise AIRuntimeError(f"AI 调用失败：{exc}") from exc
-    if question_type == "multi_fill_blank":
-        if not isinstance(answer, list):
+    last_error: Exception | None = None
+    for attempt in range(1, _AI_FILL_MAX_ATTEMPTS + 1):
+        try:
+            answer = generate_answer(
+                cleaned,
+                question_type=question_type,
+                blank_count=blank_count,
+            )
+            if question_type == "multi_fill_blank":
+                if not isinstance(answer, list):
+                    if not answer or not str(answer).strip():
+                        raise AIRuntimeError("AI 未返回有效答案")
+                    return str(answer).strip()
+                cleaned_answers: List[str] = []
+                for item in answer:
+                    text = str(item or "").strip()
+                    if not text:
+                        raise AIRuntimeError("AI 返回的多项填空答案包含空值")
+                    cleaned_answers.append(text)
+                if not cleaned_answers:
+                    raise AIRuntimeError("AI 未返回有效答案")
+                return cleaned_answers
             if not answer or not str(answer).strip():
                 raise AIRuntimeError("AI 未返回有效答案")
             return str(answer).strip()
-        cleaned_answers: List[str] = []
-        for item in answer:
-            text = str(item or "").strip()
-            if not text:
-                raise AIRuntimeError("AI 返回的多项填空答案包含空值")
-            cleaned_answers.append(text)
-        if not cleaned_answers:
-            raise AIRuntimeError("AI 未返回有效答案")
-        return cleaned_answers
-    if not answer or not str(answer).strip():
-        raise AIRuntimeError("AI 未返回有效答案")
-    return str(answer).strip()
+        except Exception as exc:
+            last_error = exc
+            if attempt >= _AI_FILL_MAX_ATTEMPTS or not _is_retryable_ai_generation_error(exc):
+                raise AIRuntimeError(f"AI 调用失败：{exc}") from exc
+            logging.warning(
+                "AI 生成失败，准备重试 | attempt=%s/%s | question_type=%s | error=%s",
+                attempt,
+                _AI_FILL_MAX_ATTEMPTS,
+                question_type,
+                exc,
+            )
+            time.sleep(_AI_FILL_RETRY_BACKOFF_SECONDS)
+    if last_error is not None:
+        raise AIRuntimeError(f"AI 调用失败：{last_error}") from last_error
+    raise AIRuntimeError("AI 调用失败：未知错误")
 
 
 

@@ -311,9 +311,7 @@ def call_free_ai_api(
         response = _execute_ai_request_with_retry("free_ai", _send_request)
     except Exception as exc:
         if _is_ai_timeout_exception(exc):
-            raise FreeAITimeoutError(
-                "免费 AI 调用超时，已重试 2 次仍失败"
-            ) from exc
+            raise FreeAITimeoutError("免费 AI 调用超时") from exc
         raise
     status_code = int(getattr(response, "status_code", 0) or 0)
     if status_code != 200:

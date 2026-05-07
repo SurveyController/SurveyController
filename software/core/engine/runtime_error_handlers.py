@@ -6,11 +6,12 @@ import logging
 import threading
 from typing import Any, Callable
 
-from software.core.ai.runtime import AIRuntimeError, is_ai_timeout_runtime_error, is_free_ai_runtime_error
+from software.core.ai.runtime import AIRuntimeError, is_ai_timeout_runtime_error
 from software.core.engine.failure_reason import FailureReason
 from software.core.engine.stop_signal import StopSignalLike
 from software.core.task import ExecutionConfig, ExecutionState
-FREE_AI_TIMEOUT_FAIL_THRESHOLD = 5
+AI_FILL_FAIL_THRESHOLD = 5
+FREE_AI_TIMEOUT_FAIL_THRESHOLD = AI_FILL_FAIL_THRESHOLD
 
 
 def handle_ai_runtime_error(
@@ -22,35 +23,28 @@ def handle_ai_runtime_error(
     state: ExecutionState,
 ) -> bool:
     if is_ai_timeout_runtime_error(exc):
-        logging.warning("免费 AI 调用超时，本轮丢弃并继续下一轮：%s", exc)
-        stopped = stop_policy.record_failure(
-            stop_signal,
-            thread_name=thread_name,
-            failure_reason=FailureReason.FILL_FAILED,
-            status_text="免费AI超时",
-            log_message=(
-                f"免费AI调用超时，本轮按失败处理；连续达到 {FREE_AI_TIMEOUT_FAIL_THRESHOLD} 次才停止：{exc}"
-            ),
-            threshold_override=FREE_AI_TIMEOUT_FAIL_THRESHOLD,
-            terminal_stop_category="free_ai_unstable",
-            force_stop_when_threshold_reached=True,
-            consume_reverse_fill_attempt=False,
-        )
-        if stopped:
-            logging.error("免费 AI 连续超时达到阈值，任务停止：%s", exc, exc_info=True)
-        return bool(stopped)
+        logging.warning("AI 调用超时，本轮丢弃并继续下一轮：%s", exc)
+        status_text = "AI超时"
+        log_message = f"AI调用超时，本轮按失败处理；连续达到 {AI_FILL_FAIL_THRESHOLD} 次才停止：{exc}"
+    else:
+        logging.warning("AI 填空失败，本轮丢弃并继续下一轮：%s", exc, exc_info=True)
+        status_text = "AI失败"
+        log_message = f"AI填空失败，本轮按失败处理；连续达到 {AI_FILL_FAIL_THRESHOLD} 次才停止：{exc}"
 
-    logging.error("AI 填空失败，已停止任务：%s", exc, exc_info=True)
-    stop_category = "free_ai_unstable" if is_free_ai_runtime_error(exc) else "ai_runtime"
-    stop_message = "目前免费AI不稳定，请稍后再试" if stop_category == "free_ai_unstable" else str(exc)
-    state.mark_terminal_stop(
-        stop_category,
-        failure_reason=FailureReason.FILL_FAILED.value,
-        message=stop_message,
+    stopped = stop_policy.record_failure(
+        stop_signal,
+        thread_name=thread_name,
+        failure_reason=FailureReason.FILL_FAILED,
+        status_text=status_text,
+        log_message=log_message,
+        threshold_override=AI_FILL_FAIL_THRESHOLD,
+        terminal_stop_category="free_ai_unstable",
+        force_stop_when_threshold_reached=True,
+        consume_reverse_fill_attempt=False,
     )
-    if not stop_signal.is_set():
-        stop_signal.set()
-    return True
+    if stopped:
+        logging.error("AI 连续失败达到阈值，任务停止：%s", exc, exc_info=True)
+    return bool(stopped)
 
 
 def handle_proxy_connection_error(
@@ -89,6 +83,7 @@ def handle_proxy_connection_error(
 
 
 __all__ = [
+    "AI_FILL_FAIL_THRESHOLD",
     "FREE_AI_TIMEOUT_FAIL_THRESHOLD",
     "handle_ai_runtime_error",
     "handle_proxy_connection_error",
