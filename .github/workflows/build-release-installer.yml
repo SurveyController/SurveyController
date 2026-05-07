@@ -196,6 +196,25 @@ jobs:
               --cache-control $cacheControl `
               --content-type $contentType `
               --endpoint-url "${{ steps.r2_endpoint.outputs.endpoint }}"
+
+      - name: Upload latest setup alias to R2 root
+        shell: powershell
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          AWS_DEFAULT_REGION: auto
+          AWS_RETRY_MODE: standard
+          AWS_MAX_ATTEMPTS: "3"
+          R2_BUCKET: ${{ secrets.R2_BUCKET }}
+        run: |
+          $setupPath = "${{ steps.release_meta.outputs.setup_path }}"
+          if (-not (Test-Path $setupPath)) {
+            throw "Setup installer not found: $setupPath"
+          }
+          aws s3 cp $setupPath "s3://${env:R2_BUCKET}/SurveyController_latest_setup.exe" `
+            --cache-control "no-cache, no-store, must-revalidate" `
+            --content-type "application/vnd.microsoft.portable-executable" `
+            --endpoint-url "${{ steps.r2_endpoint.outputs.endpoint }}"
           }
 
       - name: Show release download URLs
@@ -209,3 +228,6 @@ jobs:
           Write-Host ""
           Write-Host "Setup installer:"
           Write-Host "https://dl.hungrym0.top/${env:R2_FEED_PREFIX}/${{ steps.release_meta.outputs.setup_name }}"
+          Write-Host ""
+          Write-Host "Latest setup alias:"
+          Write-Host "https://dl.hungrym0.top/SurveyController_latest_setup.exe"
