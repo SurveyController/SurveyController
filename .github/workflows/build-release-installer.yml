@@ -215,7 +215,6 @@ jobs:
             --cache-control "no-cache, no-store, must-revalidate" `
             --content-type "application/vnd.microsoft.portable-executable" `
             --endpoint-url "${{ steps.r2_endpoint.outputs.endpoint }}"
-          }
 
       - name: Show release download URLs
         shell: powershell
