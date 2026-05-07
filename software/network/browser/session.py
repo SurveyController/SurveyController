@@ -26,11 +26,6 @@ class BrowserDriver(Protocol):
     session_id: str
     browser_pid: Optional[int]
     browser_pids: Set[int]
-    _wjx_runtime_page_number: int
-    _wjx_runtime_page_questions: list[Any]
-    _wjx_runtime_indices_snapshot: dict[str, int]
-    _wjx_runtime_psycho_plan: Any
-    _wjx_submission_recovery_attempts: int
 
     def find_element(self, by: str, value: str) -> Any: ...
 
@@ -92,11 +87,6 @@ class PlaywrightDriver:
         self._owner_thread_name = threading.current_thread().name or "UnnamedThread"
         self._cleanup_done = False
         self._cleanup_lock = threading.Lock()
-        self._wjx_runtime_page_number = 0
-        self._wjx_runtime_page_questions: list[Any] = []
-        self._wjx_runtime_indices_snapshot: dict[str, int] = {}
-        self._wjx_runtime_psycho_plan: Any = None
-        self._wjx_submission_recovery_attempts = 0
 
     @staticmethod
     def _extract_browser_pid(browser: Optional[Browser]) -> Optional[int]:

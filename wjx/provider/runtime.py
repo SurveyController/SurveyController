@@ -35,6 +35,7 @@ from wjx.provider.questions.text import (
     text as _text_impl,
 )
 from wjx.provider.runtime_dispatch import _dispatcher, _question_title_for_log
+from wjx.provider.runtime_state import get_wjx_runtime_state
 from wjx.provider.submission import submit
 
 
@@ -80,25 +81,15 @@ def _store_runtime_page_context(
     page_questions: Iterable[SurveyQuestionMeta],
     indices: Dict[str, int],
 ) -> None:
-    try:
-        driver._wjx_runtime_page_number = int(page_number)
-    except Exception:
-        pass
-    try:
-        driver._wjx_runtime_page_questions = _build_runtime_page_question_plan(page_questions)
-    except Exception:
-        driver._wjx_runtime_page_questions = []
-    try:
-        driver._wjx_runtime_indices_snapshot = dict(indices or {})
-    except Exception:
-        driver._wjx_runtime_indices_snapshot = {}
+    state = get_wjx_runtime_state(driver)
+    state.page_number = int(page_number or 0)
+    state.page_questions = _build_runtime_page_question_plan(page_questions)
+    state.indices_snapshot = dict(indices or {})
 
 
 def _store_runtime_psycho_plan(driver: BrowserDriver, psycho_plan: Optional[Any]) -> None:
-    try:
-        driver._wjx_runtime_psycho_plan = psycho_plan
-    except Exception:
-        pass
+    state = get_wjx_runtime_state(driver)
+    state.psycho_plan = psycho_plan
 
 
 def _collect_visible_question_snapshot(driver: BrowserDriver) -> Dict[int, Dict[str, Any]]:
@@ -567,7 +558,8 @@ def refill_required_questions_on_current_page(
 
     metadata = _question_metadata_map(ctx)
     snapshot = _refresh_visible_question_snapshot(driver, reason="submission_recovery_refill")
-    indices = dict(getattr(driver, "_wjx_runtime_indices_snapshot", {}) or {})
+    runtime_state = get_wjx_runtime_state(driver)
+    indices = dict(runtime_state.indices_snapshot or {})
     if not indices:
         indices = _build_initial_indices()
     filled_count = 0
@@ -608,7 +600,7 @@ def refill_required_questions_on_current_page(
         )
         filled_count += 1
 
-    driver._wjx_runtime_indices_snapshot = dict(indices)
+    runtime_state.indices_snapshot = dict(indices)
     if filled_count > 0:
         try:
             ctx.update_thread_status(thread_name, "补答必答题", running=True)

@@ -20,6 +20,7 @@ from wjx.provider._submission_core import (
 from software.core.task import ExecutionState
 from software.logging.log_utils import log_popup_confirm, log_popup_warning
 from software.network.browser import By, BrowserDriver
+from wjx.provider.runtime_state import get_wjx_runtime_state
 
 _ALIYUN_CAPTCHA_MESSAGE = "检测到问卷星阿里云智能验证，当前版本暂不支持自动处理，请更换或启用随机 IP 后重试。"
 _ALIYUN_CAPTCHA_DOM_IDS = (
@@ -430,7 +431,8 @@ def attempt_submission_recovery(
     if not _page_looks_like_wjx_questionnaire(driver):
         return False
 
-    recovery_attempts = int(getattr(driver, "_wjx_submission_recovery_attempts", 0) or 0)
+    runtime_state = get_wjx_runtime_state(driver)
+    recovery_attempts = int(runtime_state.submission_recovery_attempts or 0)
     if recovery_attempts >= 1:
         return False
 
@@ -438,7 +440,7 @@ def attempt_submission_recovery(
     if hint is None:
         return False
 
-    runtime_page_questions = list(getattr(driver, "_wjx_runtime_page_questions", []) or [])
+    runtime_page_questions = list(runtime_state.page_questions or [])
     current_page_required: list[int] = []
     for item in runtime_page_questions:
         if not isinstance(item, dict):
@@ -474,13 +476,13 @@ def attempt_submission_recovery(
         ctx,
         question_numbers=target_questions,
         thread_name=thread_name or "Worker-?",
-        psycho_plan=getattr(driver, "_wjx_runtime_psycho_plan", None),
+        psycho_plan=runtime_state.psycho_plan,
     )
     if filled_count <= 0:
         logging.warning("WJX 提交补救失败：未成功补答任何题目。questions=%s", target_questions)
         return False
 
-    driver._wjx_submission_recovery_attempts = recovery_attempts + 1
+    runtime_state.submission_recovery_attempts = recovery_attempts + 1
     submit(driver, ctx=ctx, stop_signal=stop_signal)
     return True
 
