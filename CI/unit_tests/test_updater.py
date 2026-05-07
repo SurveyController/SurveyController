@@ -37,6 +37,47 @@ class UpdateHelperTests:
         assert result["version"] == "3.2.0"
         assert result["release_notes"] == "修复一堆破事"
 
+    def test_check_updates_falls_back_to_github_release_body_when_velopack_notes_missing(self) -> None:
+        asset = SimpleNamespace(Version="3.2.0", NotesMarkdown="", NotesHtml="")
+        manager = MagicMock()
+        manager.get_current_version.return_value = "3.1.2"
+        manager.check_for_updates.return_value = SimpleNamespace(TargetFullRelease=asset)
+        with (
+            patch.object(updater, "_safe_create_update_manager", return_value=manager),
+            patch.object(updater, "_fetch_github_release_by_tag", return_value={"body": "GitHub 里的发行说明"}),
+        ):
+            result = updater.UpdateManager.check_updates()
+        assert result["status"] == "outdated"
+        assert result["release_notes"] == "GitHub 里的发行说明"
+
+    def test_check_updates_falls_back_to_release_list_when_tag_lookup_missing(self) -> None:
+        asset = SimpleNamespace(Version="3.2.0", NotesMarkdown="", NotesHtml="")
+        manager = MagicMock()
+        manager.get_current_version.return_value = "3.1.2"
+        manager.check_for_updates.return_value = SimpleNamespace(TargetFullRelease=asset)
+        with (
+            patch.object(updater, "_safe_create_update_manager", return_value=manager),
+            patch.object(updater, "_fetch_github_release_by_tag", return_value=None),
+            patch.object(updater, "_fetch_github_release_from_list", return_value={"body": "列表里的发行说明"}),
+        ):
+            result = updater.UpdateManager.check_updates()
+        assert result["status"] == "outdated"
+        assert result["release_notes"] == "列表里的发行说明"
+
+    def test_check_updates_keeps_empty_notes_when_github_release_body_missing(self) -> None:
+        asset = SimpleNamespace(Version="3.2.0", NotesMarkdown="", NotesHtml="")
+        manager = MagicMock()
+        manager.get_current_version.return_value = "3.1.2"
+        manager.check_for_updates.return_value = SimpleNamespace(TargetFullRelease=asset)
+        with (
+            patch.object(updater, "_safe_create_update_manager", return_value=manager),
+            patch.object(updater, "_fetch_github_release_by_tag", return_value=None),
+            patch.object(updater, "_fetch_github_release_from_list", return_value=None),
+        ):
+            result = updater.UpdateManager.check_updates()
+        assert result["status"] == "outdated"
+        assert result["release_notes"] == ""
+
     def test_check_updates_returns_preview_when_local_version_is_newer(self) -> None:
         manager = MagicMock()
         manager.get_current_version.return_value = "3.1.1"

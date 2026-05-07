@@ -62,6 +62,71 @@ def _normalize_release_release_notes(asset: Any) -> str:
     return html
 
 
+def _normalize_release_tag(version_text: str) -> str:
+    normalized = str(version_text or "").strip()
+    if not normalized:
+        return ""
+    return normalized if normalized.lower().startswith("v") else f"v{normalized}"
+
+
+def _fetch_github_release_by_tag(version_text: str) -> Optional[dict[str, Any]]:
+    tag_name = _normalize_release_tag(version_text)
+    if not tag_name:
+        return None
+    try:
+        response = http_client.get(
+            f"{GITHUB_RELEASES_URL}/tags/{tag_name}",
+            headers={"Accept": "application/vnd.github.v3+json"},
+            timeout=(10, 30),
+        )
+        response.raise_for_status()
+        payload = response.json()
+        if isinstance(payload, dict):
+            return payload
+    except Exception as exc:
+        logging.warning("按标签获取发行版说明失败: %s", exc)
+    return None
+
+
+def _fetch_github_release_from_list(version_text: str) -> Optional[dict[str, Any]]:
+    normalized_tag = _normalize_release_tag(version_text)
+    if not normalized_tag:
+        return None
+    try:
+        response = http_client.get(
+            GITHUB_RELEASES_URL,
+            headers={"Accept": "application/vnd.github.v3+json"},
+            timeout=(10, 30),
+        )
+        response.raise_for_status()
+        payload = response.json()
+    except Exception as exc:
+        logging.warning("从发行版列表回退获取说明失败: %s", exc)
+        return None
+    if not isinstance(payload, list):
+        return None
+    for release in payload:
+        if not isinstance(release, dict):
+            continue
+        tag_name = _normalize_release_tag(release.get("tag_name", ""))
+        if tag_name == normalized_tag:
+            return release
+    return None
+
+
+def _resolve_release_notes(update_info: Any, version_text: str) -> str:
+    target_release = getattr(update_info, "TargetFullRelease", None)
+    release_notes = _normalize_release_release_notes(target_release)
+    if release_notes:
+        return release_notes
+    github_release = _fetch_github_release_by_tag(version_text)
+    if not github_release:
+        github_release = _fetch_github_release_from_list(version_text)
+    if not github_release:
+        return ""
+    return str(github_release.get("body", "") or "").strip()
+
+
 def _safe_create_update_manager():
     velopack_module = _get_velopack_module()
     if velopack_module is None:
@@ -76,7 +141,7 @@ def _safe_create_update_manager():
 def _build_update_result_from_release(update_info: Any, current_version: str) -> dict[str, Any]:
     target_release = getattr(update_info, "TargetFullRelease", None)
     latest_version = str(getattr(target_release, "Version", "") or "").strip()
-    release_notes = _normalize_release_release_notes(target_release)
+    release_notes = _resolve_release_notes(update_info, latest_version)
     return {
         "has_update": True,
         "status": "outdated",

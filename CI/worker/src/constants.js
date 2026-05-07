@@ -9,6 +9,6 @@ export const JSON_HEADERS = {
   "Access-Control-Allow-Origin": "*",
 };
 
-export const DEFAULT_GITHUB_OWNER = "hungryM0";
+export const DEFAULT_GITHUB_OWNER = "SurveyController";
 export const DEFAULT_GITHUB_REPO = "SurveyController";
 export const GITHUB_API_VERSION = "2022-11-28";
