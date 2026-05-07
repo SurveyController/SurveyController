@@ -415,12 +415,6 @@ def _handle_attached_select(
             matched_idx = weighted_index([1.0] * len(select_options))
     option_value, option_text = select_options[matched_idx]
     if _select_attached_option_via_js(driver, select_element, option_value, option_text):
-        logging.info(
-            "单选题第%s题第%s项命中嵌入式下拉，已自动选择：%s",
-            current,
-            selected_option_index_zero_based + 1,
-            option_text or option_value or "未知选项",
-        )
         return option_text or option_value or None
     logging.warning(
         "单选题第%s题第%s项的嵌入式下拉选择失败，页面可能仍会判定未作答。",
@@ -566,18 +560,6 @@ def single(
     if not fill_value and has_free_text_input:
         if free_text_required:
             fill_value = DEFAULT_FILL_TEXT
-            logging.info(
-                "单选题第%s题第%s项检测到必填附加填空但未配置文本，已自动使用默认值“%s”。",
-                current,
-                selected_option,
-                DEFAULT_FILL_TEXT,
-            )
-        else:
-            logging.info(
-                "单选题第%s题第%s项附加填空不是必填，且未配置文本，本次保持留空。",
-                current,
-                selected_option,
-            )
     attached_selects_config = (
         single_attached_selects_config[index]
         if single_attached_selects_config and index < len(single_attached_selects_config)

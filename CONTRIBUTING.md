@@ -71,7 +71,6 @@
 ├── SurveyController.spec
 ├── software/
 │   ├── app/
-│   │   ├── browser_probe.py
 │   │   ├── config.py
 │   │   ├── legacy_data_migration.py
 │   │   ├── main.py

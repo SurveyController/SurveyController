@@ -1,22 +1,9 @@
 from __future__ import annotations
 from types import SimpleNamespace
 from unittest.mock import patch
-from software.app.browser_probe import _kill_process_tree
 from software.network.browser.session import PlaywrightDriver
 from software.network.browser.subprocess_utils import build_local_text_subprocess_kwargs
 from software.network.browser.transient import list_browser_pids
-
-class _RunningProcess:
-    pid = 4321
-
-    def __init__(self) -> None:
-        self.killed = False
-
-    def poll(self):
-        return None
-
-    def kill(self) -> None:
-        self.killed = True
 
 class BrowserSubprocessUtilsTests:
 
@@ -26,16 +13,6 @@ class BrowserSubprocessUtilsTests:
         assert kwargs['text'] == True
         assert kwargs['errors'] == 'replace'
         assert kwargs['encoding'] == 'cp936'
-
-    def test_kill_process_tree_uses_local_text_decode_settings(self) -> None:
-        process = _RunningProcess()
-        with patch('software.app.browser_probe.subprocess.run', return_value=SimpleNamespace(returncode=0, stdout='', stderr='')) as run_mock, patch('software.app.browser_probe.build_local_text_subprocess_kwargs', return_value={'text': True, 'encoding': 'cp936', 'errors': 'replace'}):
-            _kill_process_tree(process)
-        assert process.killed
-        _, kwargs = run_mock.call_args
-        assert kwargs['encoding'] == 'cp936'
-        assert kwargs['errors'] == 'replace'
-        assert kwargs['text'] == True
 
     def test_list_browser_pids_uses_local_text_decode_settings(self) -> None:
         tasklist_output = '"msedge.exe","1234","Console","1","12,000 K"\n'

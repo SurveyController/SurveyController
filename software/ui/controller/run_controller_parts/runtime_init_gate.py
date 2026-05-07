@@ -1,4 +1,4 @@
-"""RunController 轻量初始化门禁与启动提示逻辑。"""
+"""RunController 启动提示与运行前状态辅助逻辑。"""
 from __future__ import annotations
 
 import copy
@@ -6,7 +6,6 @@ import logging
 import threading
 from typing import TYPE_CHECKING, Any, Dict, List, Optional
 
-from software.app.browser_probe import BrowserProbeResult, run_browser_probe_subprocess
 from software.app.config import DEFAULT_HTTP_HEADERS
 from software.core.task import ExecutionConfig, ExecutionState, ProxyLease
 from software.integrations.ai.client import AI_MODE_FREE, get_ai_settings
@@ -15,7 +14,6 @@ import software.network.http as http_client
 from .runtime_preparation import PreparedExecutionArtifacts
 
 from .runtime_constants import (
-    BROWSER_PROBE_TIMEOUT_SECONDS,
     STARTUP_HINT_DURATION_MS,
     STARTUP_STATUS_TIMEOUT_SECONDS,
     STATUS_MONITOR_FREE_AI,
@@ -87,12 +85,8 @@ class RunControllerInitializationMixin:
         _startup_status_check_lock: threading.Lock
         _startup_status_check_active: bool
         survey_title: str
-        custom_confirm_dialog_handler: Optional[Any]
-        confirm_dialog_handler: Optional[Any]
-        runStateChanged: Any
         statusUpdated: Any
         threadProgressUpdated: Any
-        runFailed: Any
         startupHintEmitted: Any
 
         @property
@@ -148,7 +142,6 @@ class RunControllerInitializationMixin:
             emit_run_state: bool = True,
         ) -> None: ...
         def _emit_status(self) -> None: ...
-        def _dispatch_to_ui_async(self, callback: Any) -> None: ...
 
     def _prepare_engine_state(self, proxy_pool: List[ProxyLease]) -> tuple[ExecutionConfig, ExecutionState]:
         """从已准备好的模板构建本次任务的 ExecutionConfig 与 ExecutionState。"""
@@ -159,44 +152,6 @@ class RunControllerInitializationMixin:
         execution_config.proxy_ip_pool = list(proxy_pool) if execution_config.random_proxy_ip_enabled else []
         execution_state = ExecutionState(config=execution_config, stop_event=self.stop_event)
         return execution_config, execution_state
-
-    def _should_use_initialization_gate(self, config: RuntimeConfig) -> bool:
-        headless_mode = bool(getattr(config, "headless_mode", False))
-        thread_count = max(1, int(getattr(config, "threads", 1) or 1))
-        return headless_mode and thread_count > 1
-
-    def _build_initialization_plan(self, config: RuntimeConfig) -> List[Dict[str, str]]:
-        if not self._should_use_initialization_gate(config):
-            return []
-        return [{"key": "playwright", "label": "初始化浏览器环境（快速检查）"}]
-
-    def _find_init_step_label(self, step_key: str) -> str:
-        key = str(step_key or "").strip()
-        if not key:
-            return ""
-        for item in list(getattr(self, "_init_steps", []) or []):
-            if str(item.get("key") or "") == key:
-                return str(item.get("label") or "")
-        return ""
-
-    def _setup_initialization_progress(self, config: RuntimeConfig) -> None:
-        self._init_steps = self._build_initialization_plan(config)
-        self._init_completed_steps = set()
-        self._init_current_step_key = ""
-        self._set_initialization_stage("playwright", "初始化浏览器环境（快速检查）")
-
-    def _set_initialization_stage(self, step_key: str, stage_text: str = "") -> None:
-        key = str(step_key or "").strip()
-        prev = str(getattr(self, "_init_current_step_key", "") or "")
-        completed = set(getattr(self, "_init_completed_steps", set()) or set())
-        if prev and prev != key:
-            completed.add(prev)
-        if key and key in completed:
-            completed.discard(key)
-        self._init_completed_steps = completed
-        self._init_current_step_key = key
-        label = self._find_init_step_label(key)
-        self._init_stage_text = str(stage_text or label or "正在初始化")
 
     def _build_initialization_logs(self) -> List[str]:
         steps = list(getattr(self, "_init_steps", []) or [])
@@ -297,130 +252,7 @@ class RunControllerInitializationMixin:
         if self.stop_event.is_set():
             self._starting = False
             return
-
-        if not self._should_use_initialization_gate(config):
-            self._start_workers_with_proxy_pool(config, list(proxy_pool))
-            return
-
-        self.running = True
-        self._starting = False
-        self._initializing = True
-        self._setup_initialization_progress(config)
-        self._execution_state = None
-        self.runStateChanged.emit(True)
-        self._status_timer.start()
-        self._emit_status()
-
-        gate_stop_event = threading.Event()
-        self._init_gate_stop_event = gate_stop_event
-        gate_thread = threading.Thread(
-            target=self._run_initialization_gate,
-            args=(config, list(proxy_pool), gate_stop_event),
-            daemon=True,
-            name="InitGate",
-        )
-        self._init_gate_thread = gate_thread
-        gate_thread.start()
-
-    def _run_initialization_gate(
-        self,
-        config: RuntimeConfig,
-        proxy_pool: List[ProxyLease],
-        gate_stop_event: threading.Event,
-    ) -> None:
-        if self.stop_event.is_set() or gate_stop_event.is_set():
-            return
-
-        try:
-            probe_result = run_browser_probe_subprocess(
-                headless=bool(getattr(config, "headless_mode", False)),
-                browser_preference=list(getattr(config, "browser_preference", []) or []),
-                timeout_seconds=BROWSER_PROBE_TIMEOUT_SECONDS,
-                cancel_event=gate_stop_event,
-            )
-        except Exception as exc:
-            logging.error("浏览器快速检查执行失败", exc_info=True)
-            probe_result = BrowserProbeResult(
-                ok=False,
-                error_kind="probe_failed",
-                message=f"浏览器环境快速检查失败：{exc}",
-            )
-
-        if self.stop_event.is_set() or gate_stop_event.is_set() or probe_result.error_kind == "cancelled":
-            return
-
-        if probe_result.ok:
-            self._dispatch_to_ui_async(lambda: self._start_after_init_success(config, list(proxy_pool)))
-            return
-
-        self._dispatch_to_ui_async(
-            lambda result=probe_result, run_config=config, pool=list(proxy_pool): self._handle_browser_probe_failure(
-                run_config,
-                pool,
-                result,
-            )
-        )
-
-    def _build_browser_probe_failure_message(self, result: BrowserProbeResult) -> str:
-        lines = [
-            "浏览器环境快速检查没有通过。",
-            "",
-            f"失败原因：{str(result.message or '未知错误')}",
-        ]
-        if int(result.elapsed_ms or 0) > 0:
-            lines.append(f"检查耗时：{int(result.elapsed_ms)} ms")
-        if str(result.browser or "").strip():
-            lines.append(f"已尝试浏览器：{str(result.browser).strip()}")
-        warnings = self._snapshot_startup_service_warnings()
-        if warnings:
-            lines.append("")
-            lines.append("另外，当前相关服务也有异常提示：")
-            for item in warnings:
-                lines.append(f"- {item}")
-        lines.append("")
-        lines.append("你可以停止启动，避免直接硬跑；如果你想继续试，也可以仍按原配置继续。")
-        return "\n".join(lines)
-
-    def _handle_browser_probe_failure(
-        self,
-        config: RuntimeConfig,
-        proxy_pool: List[ProxyLease],
-        result: BrowserProbeResult,
-    ) -> None:
-        if self.stop_event.is_set():
-            self._cancel_initialization_startup()
-            return
-
-        message = self._build_browser_probe_failure_message(result)
-        continue_run = False
-        fallback_handler = None
-        handler = getattr(self, "custom_confirm_dialog_handler", None)
-        if callable(handler):
-            try:
-                continue_run = bool(
-                    handler(
-                        "浏览器环境快速检查失败",
-                        message,
-                        "仍按原配置继续",
-                        "停止启动",
-                    )
-                )
-            except Exception:
-                logging.warning("显示浏览器快检失败确认框失败", exc_info=True)
-        else:
-            fallback_handler = getattr(self, "confirm_dialog_handler", None)
-            if not callable(fallback_handler):
-                fallback_handler = None
-        if not continue_run and fallback_handler is not None:
-            try:
-                continue_run = bool(fallback_handler("浏览器环境快速检查失败", message))
-            except Exception:
-                logging.warning("显示默认确认框失败", exc_info=True)
-
-        if continue_run:
-            self._start_after_init_success(config, proxy_pool)
-            return
-        self._cancel_initialization_startup()
+        self._start_workers_with_proxy_pool(config, list(proxy_pool))
 
     def _reset_initialization_state(self) -> None:
         self._initializing = False
@@ -451,13 +283,6 @@ class RunControllerInitializationMixin:
                 "initializing": False,
             }
         )
-
-    def _start_after_init_success(self, config: RuntimeConfig, proxy_pool: List[ProxyLease]) -> None:
-        if self.stop_event.is_set():
-            self._reset_initialization_state()
-            return
-        self._reset_initialization_state()
-        self._start_workers_with_proxy_pool(config, proxy_pool, emit_run_state=False)
 
     def _cancel_initialization_startup(self) -> None:
         self._finish_initialization_idle_state("已取消启动")

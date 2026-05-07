@@ -1,6 +1,5 @@
 """RunController runtime 拆分后的共享常量。"""
 
-BROWSER_PROBE_TIMEOUT_SECONDS = 10
 STARTUP_STATUS_TIMEOUT_SECONDS = 5
 STARTUP_HINT_DURATION_MS = 4200
 STATUS_PAGE_BASE_URL = "https://status.hungrym0.top"

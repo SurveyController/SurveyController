@@ -36,9 +36,7 @@ def _preview_text_answer(value: Optional[Any], limit: int = 80) -> str:
 
 
 def _log_text_answer(current: int, title: str, source: str, selected_answer: Optional[Any]) -> None:
-    title_text = str(title or "").strip() or f"第{current}题"
-    preview = _preview_text_answer(selected_answer)
-    logging.info("第%d题填空已作答：来源=%s 标题=%s 答案=%s", current, source, title_text, preview)
+    return
 
 
 def _summarize_multi_text_sources(sources: Optional[List[str]]) -> str:

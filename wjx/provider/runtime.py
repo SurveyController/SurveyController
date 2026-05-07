@@ -154,15 +154,7 @@ def _collect_visible_question_snapshot(driver: BrowserDriver) -> Dict[int, Dict[
 
 
 def _refresh_visible_question_snapshot(driver: BrowserDriver, *, reason: str) -> Dict[int, Dict[str, Any]]:
-    started_at = time.perf_counter()
-    snapshot = _collect_visible_question_snapshot(driver)
-    logging.info(
-        "WJX 页面题目快照刷新：reason=%s count=%s elapsed=%.3fs",
-        reason,
-        len(snapshot),
-        time.perf_counter() - started_at,
-    )
-    return snapshot
+    return _collect_visible_question_snapshot(driver)
 
 
 def _snapshot_visible_numbers(snapshot: Dict[int, Dict[str, Any]]) -> set[int]:
@@ -532,7 +524,6 @@ def _run_question_dispatch(
     psycho_plan: Optional[Any],
 ) -> None:
     config_entry = ctx.config.question_config_index_map.get(question_num)
-    question_started_at = time.perf_counter()
     dispatch_result = _dispatcher.fill(
         driver=driver,
         question_type=question_type,
@@ -553,12 +544,6 @@ def _run_question_dispatch(
             question_div=question_div,
             indices=indices,
         )
-    logging.info(
-        "WJX 题目处理耗时：question=%s type=%s elapsed=%.3fs",
-        question_num,
-        question_type,
-        time.perf_counter() - question_started_at,
-    )
 
 
 def refill_required_questions_on_current_page(
@@ -598,7 +583,6 @@ def refill_required_questions_on_current_page(
             continue
         snapshot_item = snapshot.get(question_num) if isinstance(snapshot, dict) else None
         if not _question_is_visible(question_div, snapshot_item):
-            logging.info("WJX 提交补答跳过：第%s题当前未显示。", question_num)
             continue
 
         question_type = str((snapshot_item or {}).get("type") or "").strip() if isinstance(snapshot_item, dict) else ""
@@ -687,7 +671,6 @@ def _brush_with_detect_fallback(
     current_question_number = 0
     active_stop = stop_signal or ctx.stop_event
     runtime_config = ctx.config
-    run_started_at = time.perf_counter()
     _store_runtime_psycho_plan(driver, psycho_plan)
 
     def _abort_requested() -> bool:
@@ -745,22 +728,11 @@ def _brush_with_detect_fallback(
             if not question_type:
                 question_type = question_div.get_attribute("type")
             if question_type is None:
-                logging.info("跳过第%d题（type 属性为空）", current_question_number)
                 continue
             if _driver_question_looks_like_description(question_div, question_type):
-                title = _question_title_for_log(driver, current_question_number, question_div)
-                if title:
-                    logging.info("跳过第%d题（说明页/阅读材料，type=%s，标题=%s）", current_question_number, question_type, title)
-                else:
-                    logging.info("跳过第%d题（说明页/阅读材料，type=%s）", current_question_number, question_type)
                 continue
 
             if not question_visible:
-                title = _question_title_for_log(driver, current_question_number, question_div)
-                if title:
-                    logging.info("跳过第%d题（未显示，type=%s，标题=%s）", current_question_number, question_type, title)
-                else:
-                    logging.info("跳过第%d题（未显示，type=%s）", current_question_number, question_type)
                 continue
 
             _run_question_dispatch(
@@ -796,7 +768,6 @@ def _brush_with_detect_fallback(
         ctx.update_thread_status(thread_name, "等待结果确认", running=True)
     except Exception:
         logging.info("更新线程状态失败：等待结果确认", exc_info=True)
-    logging.info("WJX 整体答题耗时（fallback）：elapsed=%.3fs", time.perf_counter() - run_started_at)
     return True
 
 
@@ -824,7 +795,6 @@ def _brush_with_metadata(
     indices = _build_initial_indices()
     progress_step = 0
     total_steps = sum(len(question_list) for _, question_list in page_plan)
-    run_started_at = time.perf_counter()
 
     try:
         ctx.update_thread_step(thread_name, 0, total_steps, status_text="答题中", running=True)
@@ -890,7 +860,6 @@ def _brush_with_metadata(
                 question_visible = _question_is_visible(question_div, snapshot_item)
 
             if question_div is None or not question_visible:
-                logging.info("跳过第%d题（缓存存在但当前未显示）", question_num)
                 question_index += 1
                 continue
 
@@ -901,16 +870,10 @@ def _brush_with_metadata(
                 except Exception:
                     question_type = str(getattr(question_meta, "type_code", "") or "").strip()
             if not question_type:
-                logging.info("跳过第%d题（type 属性为空）", question_num)
                 question_index += 1
                 continue
 
             if _driver_question_looks_like_description(question_div, question_type):
-                title = _question_title_for_log(driver, question_num, question_div)
-                if title:
-                    logging.info("跳过第%d题（说明页/阅读材料，type=%s，标题=%s）", question_num, question_type, title)
-                else:
-                    logging.info("跳过第%d题（说明页/阅读材料，type=%s）", question_num, question_type)
                 question_index += 1
                 continue
 
@@ -936,19 +899,10 @@ def _brush_with_metadata(
                 refreshed, did_refresh = snapshot, False
 
             if did_refresh:
-                previous_visible = _snapshot_visible_numbers(snapshot)
-                current_visible = _snapshot_visible_numbers(refreshed)
                 if _refresh_metadata_when_snapshot_drifts(ctx, refreshed):
                     page_plan = _build_metadata_page_plan(ctx)
                     page_questions = [meta for candidate_page, questions in page_plan if candidate_page == page_number for meta in questions]
                 snapshot = refreshed
-                if previous_visible != current_visible:
-                    logging.info(
-                        "WJX 题目显隐发生变化：question=%s before=%s after=%s",
-                        question_num,
-                        sorted(previous_visible),
-                        sorted(current_visible),
-                    )
 
             _store_runtime_page_context(
                 driver,
@@ -981,7 +935,6 @@ def _brush_with_metadata(
         ctx.update_thread_status(thread_name, "等待结果确认", running=True)
     except Exception:
         logging.info("更新线程状态失败：等待结果确认", exc_info=True)
-    logging.info("WJX 整体答题耗时：elapsed=%.3fs", time.perf_counter() - run_started_at)
     return True
 
 

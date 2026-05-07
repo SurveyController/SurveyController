@@ -1,7 +1,5 @@
 from __future__ import annotations
 from threading import Event, Lock
-from unittest.mock import patch
-from software.app.browser_probe import BrowserProbeResult
 from software.core.task import ExecutionConfig
 from software.io.config import RuntimeConfig
 from software.providers.contracts import SurveyQuestionMeta
@@ -18,9 +16,9 @@ class _DummyInitGate(RunControllerInitializationMixin):
         self.worker_threads = [object()]
         self._execution_state = object()
         self._init_stage_text = '正在初始化'
-        self._init_steps = [{'key': 'playwright', 'label': '初始化浏览器环境（快速检查）'}]
-        self._init_completed_steps = {'playwright'}
-        self._init_current_step_key = 'playwright'
+        self._init_steps = []
+        self._init_completed_steps = set()
+        self._init_current_step_key = ''
         self._init_gate_stop_event = Event()
         self._status_timer = _FakeTimer()
         self._prepared_execution_artifacts = None
@@ -94,25 +92,6 @@ class RuntimeInitGateTests:
     def setup_method(self, method) -> None:
         self.mixin = _DummyInitGate()
 
-    def test_gate_only_enabled_for_headless_multi_thread(self) -> None:
-        config = RuntimeConfig()
-        config.headless_mode = True
-        config.threads = 2
-        assert self.mixin._should_use_initialization_gate(config)
-        config.threads = 1
-        assert not self.mixin._should_use_initialization_gate(config)
-        config.headless_mode = False
-        config.threads = 3
-        assert not self.mixin._should_use_initialization_gate(config)
-
-    def test_initialization_plan_only_keeps_browser_quick_check(self) -> None:
-        config = RuntimeConfig()
-        config.headless_mode = True
-        config.threads = 2
-        assert self.mixin._build_initialization_plan(config) == [{'key': 'playwright', 'label': '初始化浏览器环境（快速检查）'}]
-        config.threads = 1
-        assert self.mixin._build_initialization_plan(config) == []
-
     def test_cancel_initialization_resets_ui_to_idle_state(self) -> None:
         self.mixin._cancel_initialization_startup()
         assert not self.mixin.running
@@ -142,14 +121,6 @@ class RuntimeInitGateTests:
         lines = self.mixin._build_initialization_logs()
         assert lines == ['当前阶段：正在检查浏览器', '[√] 浏览器快检', '[>] 预热']
 
-    def test_build_browser_probe_failure_message_includes_warning_snapshot(self) -> None:
-        self.mixin._startup_service_warnings = ['免费AI填空 当前状态异常']
-        message = self.mixin._build_browser_probe_failure_message(BrowserProbeResult(ok=False, browser='edge', message='启动失败', elapsed_ms=123))
-        assert '启动失败' in message
-        assert '检查耗时：123 ms' in message
-        assert '已尝试浏览器：edge' in message
-        assert '免费AI填空 当前状态异常' in message
-
     def test_start_with_initialization_gate_bypasses_gate_for_single_thread(self) -> None:
         config = RuntimeConfig()
         config.headless_mode = True
@@ -159,27 +130,14 @@ class RuntimeInitGateTests:
         assert self.mixin.started_workers[0][1] == ['proxy-a']
         assert self.mixin.started_workers[0][2]
 
-    def test_start_with_initialization_gate_sets_up_background_thread(self) -> None:
+    def test_start_with_initialization_gate_starts_workers_directly(self) -> None:
         config = RuntimeConfig()
         config.headless_mode = True
         config.threads = 2
-        created_threads: list[_FakeThread] = []
-
-        def build_thread(*, target=None, args=(), daemon: bool=False, name: str='') -> _FakeThread:
-            thread = _FakeThread(target=target, args=args, daemon=daemon, name=name)
-            created_threads.append(thread)
-            return thread
-        with patch('software.ui.controller.run_controller_parts.runtime_init_gate.threading.Thread', side_effect=build_thread):
-            self.mixin._start_with_initialization_gate(config, proxy_pool=['proxy-a'])
-        assert self.mixin.running
-        assert not self.mixin._starting
-        assert self.mixin._initializing
-        assert self.mixin.run_state_events == [True]
-        assert self.mixin._status_timer.started
-        assert self.mixin.emit_status_calls == 1
-        assert len(created_threads) == 1
-        assert created_threads[0].started
-        assert created_threads[0].name == 'InitGate'
+        self.mixin._start_with_initialization_gate(config, proxy_pool=['proxy-a'])
+        assert len(self.mixin.started_workers) == 1
+        assert self.mixin.started_workers[0][1] == ['proxy-a']
+        assert self.mixin.started_workers[0][2]
 
     def test_prepare_engine_state_clones_prepared_template_and_injects_proxy_pool(self) -> None:
         template = ExecutionConfig(survey_provider='qq', num_threads=3, random_proxy_ip_enabled=True, questions_metadata={1: SurveyQuestionMeta(num=1, title='Q1')}, single_prob=[[1.0, 0.0]])
@@ -191,20 +149,3 @@ class RuntimeInitGateTests:
         assert execution_state.config == execution_config
         template.single_prob[0][0] = 0.0
         assert execution_config.single_prob[0][0] == 1.0
-
-    def test_run_initialization_gate_dispatches_success_callback(self) -> None:
-        config = RuntimeConfig()
-        config.headless_mode = True
-        config.threads = 2
-        with patch('software.ui.controller.run_controller_parts.runtime_init_gate.run_browser_probe_subprocess', return_value=BrowserProbeResult(ok=True, browser='edge')):
-            self.mixin._run_initialization_gate(config, ['proxy-a'], Event())
-        assert len(self.mixin.dispatched_callbacks) == 1
-        assert len(self.mixin.started_workers) == 1
-        assert self.mixin.started_workers[0][1] == ['proxy-a']
-        assert not self.mixin.started_workers[0][2]
-
-    def test_handle_browser_probe_failure_cancels_startup_when_user_declines(self) -> None:
-        config = RuntimeConfig()
-        self.mixin._handle_browser_probe_failure(config, ['proxy-a'], BrowserProbeResult(ok=False, browser='edge', message='启动失败', elapsed_ms=12))
-        assert not self.mixin.running
-        assert self.mixin.status_events[-1] == ('已取消启动', 0, 0)
