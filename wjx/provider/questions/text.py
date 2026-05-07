@@ -36,7 +36,13 @@ def _preview_text_answer(value: Optional[Any], limit: int = 80) -> str:
 
 
 def _log_text_answer(current: int, title: str, source: str, selected_answer: Optional[Any]) -> None:
-    return
+    logging.info(
+        "WJX 第%d题填空作答：来源=%s 标题=%s 答案=%s",
+        current,
+        str(source or "").strip() or "配置",
+        str(title or "").strip() or f"第{current}题",
+        _preview_text_answer(selected_answer),
+    )
 
 
 def _summarize_multi_text_sources(sources: Optional[List[str]]) -> str:

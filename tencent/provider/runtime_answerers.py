@@ -70,7 +70,16 @@ def _log_qq_matrix_row_choice(
     resolved_probabilities: Any,
     raw_probabilities: Any,
 ) -> None:
-    return
+    selected_text = option_texts[selected_index] if 0 <= selected_index < len(option_texts) else ""
+    weight_text = _resolve_selected_weight_text(selected_index, resolved_probabilities, raw_probabilities)
+    logging.info(
+        "腾讯问卷第%d题矩阵题作答：第%d行 -> 选项[%d] %s（权重=%s）",
+        current,
+        row_number,
+        selected_index,
+        selected_text or "未知选项",
+        weight_text,
+    )
 
 
 def _answer_qq_single(

@@ -26,6 +26,11 @@ class BrowserDriver(Protocol):
     session_id: str
     browser_pid: Optional[int]
     browser_pids: Set[int]
+    _wjx_runtime_page_number: int
+    _wjx_runtime_page_questions: list[Any]
+    _wjx_runtime_indices_snapshot: dict[str, int]
+    _wjx_runtime_psycho_plan: Any
+    _wjx_submission_recovery_attempts: int
 
     def find_element(self, by: str, value: str) -> Any: ...
 

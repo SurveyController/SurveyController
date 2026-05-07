@@ -85,6 +85,7 @@ class RunControllerInitializationMixin:
         _startup_status_check_lock: threading.Lock
         _startup_status_check_active: bool
         survey_title: str
+        runStateChanged: Any
         statusUpdated: Any
         threadProgressUpdated: Any
         startupHintEmitted: Any
