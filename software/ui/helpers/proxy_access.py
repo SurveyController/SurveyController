@@ -6,7 +6,7 @@ from software.network.proxy.areas import (
     load_benefit_supported_areas,
     load_supported_area_codes,
 )
-from software.network.proxy.policy import (
+from software.network.proxy.policy.source import (
     PROXY_SOURCE_BENEFIT,
     apply_custom_proxy_api,
     apply_proxy_area_code,

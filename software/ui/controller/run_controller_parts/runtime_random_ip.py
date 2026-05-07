@@ -20,7 +20,7 @@ from software.network.proxy.session import (
     sync_quota_snapshot_from_server,
 )
 from software.network.proxy import is_custom_proxy_api_active
-from software.network.proxy.policy import get_random_ip_counter_snapshot_local
+from software.network.proxy.policy.source import get_random_ip_counter_snapshot_local
 from software.logging.log_utils import log_deduped_message, reset_deduped_log_message
 
 _RANDOM_IP_SYNC_FAILURE_LOG_KEY = "random_ip_quota_sync_failure"

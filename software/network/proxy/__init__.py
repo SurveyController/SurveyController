@@ -8,7 +8,7 @@ from software.network.proxy.api import (
     get_status,
     test_custom_proxy_api,
 )
-from software.network.proxy.policy import (
+from software.network.proxy.policy.source import (
     PROXY_SOURCE_BENEFIT,
     ProxySettings,
     apply_custom_proxy_api,
