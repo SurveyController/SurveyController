@@ -30,7 +30,7 @@ def _set_value_if_changed(widget: Any, value: int) -> None:
         widget.setValue(value)
 
 if TYPE_CHECKING:
-    from software.ui.controller import RunController
+    from software.ui.controller.run_controller import RunController
 
 
 class DashboardProgressMixin:

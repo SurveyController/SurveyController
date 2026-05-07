@@ -43,15 +43,17 @@ from software.ui.pages.workbench.dashboard.parts.progress import DashboardProgre
 from software.ui.pages.workbench.dashboard.parts.random_ip import DashboardRandomIPMixin
 from software.ui.pages.workbench.dashboard.parts.run_actions import DashboardRunActionsMixin
 from software.ui.pages.workbench.dashboard.parts.survey_parse import DashboardSurveyParseMixin
-from software.ui.pages.workbench.shared import RandomIpToggleRow, SurveyClipboardMixin, SurveyEntryCard
+from software.ui.pages.workbench.shared.clipboard import SurveyClipboardMixin
+from software.ui.pages.workbench.shared.random_ip_toggle_row import RandomIpToggleRow
+from software.ui.pages.workbench.shared.survey_entry_card import SurveyEntryCard
 from software.ui.helpers.fluent_tooltip import install_tooltip_filter
 from software.ui.widgets.config_drawer import ConfigDrawer
 from software.ui.widgets.full_width_infobar import FullWidthInfoBar
 from software.ui.widgets.no_wheel import NoWheelSpinBox
-from software.ui.controller import RunController
+from software.ui.controller.run_controller import RunController
 from software.ui.pages.workbench.question_editor.page import QuestionPage
-from software.ui.pages.workbench.runtime_panel import RuntimePage
-from software.ui.pages.workbench.strategy import QuestionStrategyPage
+from software.ui.pages.workbench.runtime_panel.main import RuntimePage
+from software.ui.pages.workbench.strategy.page import QuestionStrategyPage
 
 class DashboardPage(
     SurveyClipboardMixin,

@@ -34,9 +34,9 @@ from software.ui.helpers.proxy_access import (
 )
 if TYPE_CHECKING:
     from qfluentwidgets import BodyLabel, ProgressRing, PushButton, TogglePushButton
-    from software.ui.controller import RunController
-    from software.ui.pages.workbench.runtime_panel import RuntimePage
-    from software.ui.pages.workbench.shared import RandomIpToggleRow
+    from software.ui.controller.run_controller import RunController
+    from software.ui.pages.workbench.runtime_panel.main import RuntimePage
+    from software.ui.pages.workbench.shared.random_ip_toggle_row import RandomIpToggleRow
     from software.ui.widgets.full_width_infobar import FullWidthInfoBar
 
 

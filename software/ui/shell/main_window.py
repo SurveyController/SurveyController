@@ -23,15 +23,15 @@ from qfluentwidgets import (
 )
 from shiboken6 import isValid
 
-from software.ui.pages.workbench.dashboard import DashboardPage
-from software.ui.pages.workbench.reverse_fill import ReverseFillPage
-from software.ui.pages.workbench.runtime_panel import RuntimePage
+from software.ui.pages.workbench.dashboard.page import DashboardPage
+from software.ui.pages.workbench.reverse_fill.page import ReverseFillPage
+from software.ui.pages.workbench.runtime_panel.main import RuntimePage
 from software.ui.pages.workbench.question_editor.page import QuestionPage
-from software.ui.pages.workbench.strategy import QuestionStrategyPage
+from software.ui.pages.workbench.strategy.page import QuestionStrategyPage
 
 from software.ui.dialogs.contact import ContactDialog
 
-from software.ui.controller import RunController
+from software.ui.controller.run_controller import RunController
 from software.ui.shell.main_window_parts.dialogs import MainWindowDialogsMixin
 from software.ui.shell.main_window_parts.lifecycle import MainWindowLifecycleMixin
 from software.ui.shell.main_window_parts.lazy_pages import MainWindowLazyPagesMixin

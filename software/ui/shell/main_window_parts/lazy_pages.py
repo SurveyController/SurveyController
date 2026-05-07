@@ -18,10 +18,10 @@ from PySide6.QtWidgets import QWidget
 
 if TYPE_CHECKING:
     from PySide6.QtWidgets import QStackedWidget
-    from software.ui.pages.workbench.dashboard import DashboardPage
-    from software.ui.pages.workbench.reverse_fill import ReverseFillPage
-    from software.ui.pages.workbench.runtime_panel import RuntimePage
-    from software.ui.pages.workbench.strategy import QuestionStrategyPage
+    from software.ui.pages.workbench.dashboard.page import DashboardPage
+    from software.ui.pages.workbench.reverse_fill.page import ReverseFillPage
+    from software.ui.pages.workbench.runtime_panel.main import RuntimePage
+    from software.ui.pages.workbench.strategy.page import QuestionStrategyPage
 
 
 class MainWindowLazyPagesMixin:
@@ -117,7 +117,7 @@ class MainWindowLazyPagesMixin:
     def _get_log_page(self):
         """懒加载日志页面"""
         if self._log_page is None:
-            from software.ui.pages.workbench.log_panel import LogPage
+            from software.ui.pages.workbench.log_panel.page import LogPage
 
             self._log_page = LogPage(self)
             self._log_page.setObjectName("logs")

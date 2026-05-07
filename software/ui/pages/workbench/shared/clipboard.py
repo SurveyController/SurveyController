@@ -12,7 +12,7 @@ from PySide6.QtGui import QClipboard, QDragEnterEvent, QDropEvent, QImage
 from PySide6.QtWidgets import QFileDialog, QWidget
 
 from software.app.user_paths import get_user_local_data_root
-from software.io.qr import decode_qrcode
+from software.io.qr.utils import decode_qrcode
 from software.logging.log_utils import log_suppressed_exception
 
 

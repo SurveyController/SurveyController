@@ -551,7 +551,7 @@ class IpUsagePage(ScrollArea):
 
         def _do():
             try:
-                from software.io.reports import get_usage_summary
+                from software.io.reports.ip_usage_log import get_usage_summary
 
                 summary = get_usage_summary()
                 self._dataLoaded.emit(summary, "")
