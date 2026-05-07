@@ -18,6 +18,7 @@ CLAUDE.md
 /Setup/*.pfx
 /Setup/*.docx
 /Setup/*.pdf
+/Releases/
 
 # 运行环境
 __pycache__/

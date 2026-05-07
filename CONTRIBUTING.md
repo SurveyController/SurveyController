@@ -3,8 +3,6 @@
 感谢愿意改进本项目！在开始之前，请先阅读 [行为准则](CODE_OF_CONDUCT.md)。
 
 ## 快速开始
-- **交流**：首选 GitHub Issues，或加入 QQ 群（见 README）。
-- **参考**：服务接口信息统一改为在线查阅，优先看 API 文档：https://api-wjx.hungrym0.top/api/document
 - **环境**：Python 3.11+，Windows 10/11。执行 `pip install -r requirements.txt` 安装依赖。
 
 <details>
@@ -171,20 +169,9 @@
    │       └── text.py
    ├── ui/
    └── utils/
+```
 
 </details>
-
-## 打包与更新
-
-- Windows 安装版现在使用 `PyInstaller + Velopack`。
-- `SurveyController.spec` 继续输出 `dist/lib` 目录包，不改 `onefile`。
-- GitHub Actions 会调用 `vpk pack` 生成：
-  - `SurveyController_<tag>_setup.exe`
-  - `releases.stable.json`
-  - `*-full.nupkg`
-  - `*-delta.nupkg`
-- 应用内更新主 feed 固定为 `https://dl.hungrym0.top/surveycontroller/win/stable/`。
-- GitHub Releases 仍会同步这些资产，但客户端不再把 GitHub 当更新源。
 
 ## 用户数据目录
 
