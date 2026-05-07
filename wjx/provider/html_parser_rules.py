@@ -93,6 +93,7 @@ def _collect_multi_limit_text_fragments(question_div) -> List[str]:
 
 def _extract_multiple_choice_limits(question_div, question_number: int) -> Tuple[Optional[int], Optional[int]]:
     """从多选题 HTML 中提取选择数量限制（最少/最多）"""
+    _ = question_number
     if question_div is None:
         return None, None
 
@@ -179,6 +180,7 @@ def _extract_question_metadata_from_html(soup, question_div, question_number: in
 
 def _extract_jump_rules_from_html(question_div, question_number: int, option_texts: List[str]) -> Tuple[bool, List[Dict[str, Any]]]:
     """从静态 HTML 中提取跳题逻辑。"""
+    _ = question_number
     has_jump_attr = str(question_div.get("hasjump") or "").strip() == "1"
     jump_rules: List[Dict[str, Any]] = []
     option_idx = 0
@@ -213,6 +215,7 @@ def _extract_jump_rules_from_html(question_div, question_number: int, option_tex
 
 def _extract_display_conditions_from_html(question_div, question_number: int) -> Tuple[bool, List[Dict[str, Any]]]:
     """从静态 HTML 中提取按答案显示/隐藏题目的条件逻辑。"""
+    _ = question_number
     relation_raw = str(question_div.get("relation") or "").strip()
     if not relation_raw:
         return False, []

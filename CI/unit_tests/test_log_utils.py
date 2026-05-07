@@ -8,7 +8,7 @@ from software.logging.log_utils import LogBufferEntry, export_full_log_to_file, 
 
 class LogUtilsTests:
 
-    def teardown_method(self, method) -> None:
+    def teardown_method(self, _method) -> None:
         reset_deduped_log_message('test_random_ip_sync_failure')
         handler = getattr(log_utils, '_SESSION_LOG_HANDLER', None)
         if handler is not None:

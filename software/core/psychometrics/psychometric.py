@@ -162,6 +162,7 @@ class PsychometricPlan:
         return self.choices.get(key)
 
     def is_distribution_locked(self, question_index: int, row_index: Optional[int] = None) -> bool:
+        _ = question_index, row_index
         return False
 
 
@@ -185,6 +186,7 @@ class DimensionPsychometricPlan:
         return plan.get_choice(question_index, row_index)
 
     def is_distribution_locked(self, question_index: int, row_index: Optional[int] = None) -> bool:
+        _ = question_index, row_index
         return False
 
 

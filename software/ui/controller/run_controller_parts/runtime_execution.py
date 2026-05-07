@@ -275,6 +275,7 @@ class RunControllerExecutionMixin:
         *,
         emit_run_state: bool = True,
     ) -> None:
+        _ = config
         execution_config, execution_state = self._prepare_engine_state(proxy_pool)
         worker_count = max(1, int(execution_config.num_threads or 1))
         execution_state.ensure_worker_threads(worker_count, prefix="Slot")

@@ -36,6 +36,7 @@ class SessionPolicyTests:
         ctx.config.proxy_ip_pool = [expiring, usable]
 
         def has_ttl(lease: ProxyLease | None, *, required_ttl_seconds: int) -> bool:
+            _ = required_ttl_seconds
             return bool(lease and lease.address == usable.address)
         with patch.object(session_policy, 'get_proxy_required_ttl_seconds', return_value=0), patch.object(session_policy, 'proxy_lease_has_sufficient_ttl', side_effect=has_ttl):
             selected = session_policy._pop_available_proxy_lease_locked(ctx)

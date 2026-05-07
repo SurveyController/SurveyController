@@ -32,7 +32,6 @@ from .runtime_flow import (
     _wait_for_page_transition,
 )
 from .runtime_interactions import (
-    _collect_question_visibility_map,
     _is_question_visible,
     _supports_page_snapshot,
     _wait_for_question_visibility_map,

@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-from types import SimpleNamespace
 
 from software.core.questions.schema import QuestionEntry, _infer_option_count
 

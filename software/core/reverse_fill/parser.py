@@ -195,6 +195,7 @@ def parse_choice_answer(
     export_format: str,
     option_texts: List[Any],
 ) -> Optional[ReverseFillAnswer]:
+    _ = question_type
     if is_reverse_fill_blank(raw_value):
         return None
     text = normalize_reverse_fill_text(raw_value)

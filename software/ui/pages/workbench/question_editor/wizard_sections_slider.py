@@ -382,6 +382,7 @@ class WizardSectionsSliderMixin:
 
             def _make_slider_cb(_seg=_preset_seg, _flag=_applying_preset):
                 def _cb(value):
+                    _ = value
                     if _flag[0]:
                         return
                     if _seg.currentRouteKey() != "custom":

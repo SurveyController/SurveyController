@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-from concurrent.futures import Future
-from types import SimpleNamespace
 
 import pytest
 

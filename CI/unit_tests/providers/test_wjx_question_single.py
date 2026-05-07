@@ -90,7 +90,7 @@ class WjxQuestionSingleTests:
 
     def test_single_option_selected_returns_false_on_js_error(self) -> None:
         class _BrokenDriver(_FakeSingleDriver):
-            def execute_script(self, script: str, *args):
+            def execute_script(self, _script: str, *_args):
                 raise RuntimeError("boom")
 
         assert not single_module._is_single_option_selected(_BrokenDriver(), _FakeSingleElement())

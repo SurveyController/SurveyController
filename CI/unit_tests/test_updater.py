@@ -60,7 +60,7 @@ class UpdateHelperTests:
         def on_progress(downloaded: int, total: int, speed: float) -> None:
             progress_values.append((downloaded, total, speed))
 
-        def fake_download(update_info, callback):
+        def fake_download(_update_info, callback):
             callback(5)
             callback(100)
 

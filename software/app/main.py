@@ -88,6 +88,7 @@ def _disable_fault_handler() -> None:
 
 def _qt_message_handler(mode, context, message):
     """过滤 Qt 警告消息"""
+    _ = context
     if "QFont::setPointSize" in message:
         return
     if mode == QtMsgType.QtWarningMsg:

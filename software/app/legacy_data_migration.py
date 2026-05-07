@@ -6,7 +6,7 @@ import logging
 import os
 import shutil
 from dataclasses import dataclass
-from typing import Any, Optional, cast
+from typing import Any, cast
 
 from software.app.user_paths import (
     ensure_user_data_directories,

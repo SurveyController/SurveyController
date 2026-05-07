@@ -4,7 +4,7 @@ from software.integrations.ai.protocols import _extract_chat_completion_text, _e
 
 class AIProtocolTests:
 
-    def setup_method(self, method) -> None:
+    def setup_method(self, _method) -> None:
         save_ai_settings(ai_mode=AI_MODE_PROVIDER, provider='custom', api_key='test-key', base_url='https://example.com/v1', api_protocol='responses', model='demo-model', system_prompt='测试提示词')
 
     def test_resolve_custom_endpoint_appends_protocol_suffix(self) -> None:

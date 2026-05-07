@@ -1,6 +1,5 @@
 from __future__ import annotations
 import threading
-from types import SimpleNamespace
 from software.core.engine.failure_reason import FailureReason
 from software.core.engine.run_stop_policy import RunStopPolicy
 from software.core.reverse_fill.schema import ReverseFillSampleRow, ReverseFillSpec

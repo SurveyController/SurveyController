@@ -89,7 +89,7 @@ class _FakeThread:
 
 class RuntimeInitGateTests:
 
-    def setup_method(self, method) -> None:
+    def setup_method(self, _method) -> None:
         self.mixin = _DummyInitGate()
 
     def test_cancel_initialization_resets_ui_to_idle_state(self) -> None:

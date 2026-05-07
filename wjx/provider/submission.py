@@ -72,6 +72,7 @@ class SubmissionRecoveryHint:
 
 def submission_validation_message(driver: Optional[BrowserDriver] = None) -> str:
     """返回问卷星提交流程的风控提示文案。"""
+    _ = driver
     return _ALIYUN_CAPTCHA_MESSAGE
 
 

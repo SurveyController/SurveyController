@@ -56,6 +56,7 @@ class ConfettiOverlay(QWidget):
     ]
 
     def __init__(self, parent=None):
+        _ = parent
         super().__init__(None)  # 顶层窗口，不挂父控件，避免子控件透明属性崩溃
         self.setWindowFlags(
             Qt.WindowType.FramelessWindowHint |
@@ -112,6 +113,7 @@ class ConfettiOverlay(QWidget):
             self.update()
 
     def paintEvent(self, event):
+        _ = event
         if not self._particles:
             return
         painter = QPainter(self)
@@ -224,6 +226,7 @@ class ChartOverlay(QWidget):
         self._anim.start()
 
     def paintEvent(self, event):
+        _ = event
         if self._opacity < 0.01 or not self.plot_area.isValid():
             return
 
@@ -506,6 +509,7 @@ class IpUsagePage(ScrollArea):
         qconfig.themeChanged.connect(self._apply_chart_theme)
 
     def _apply_chart_theme(self, *args) -> None:
+        _ = args
         dark = isDarkTheme()
         axis_label_color = QColor(220, 225, 235) if dark else QColor(85, 90, 100)
         axis_line_color = QColor(255, 255, 255, 65) if dark else QColor(0, 0, 0, 65)

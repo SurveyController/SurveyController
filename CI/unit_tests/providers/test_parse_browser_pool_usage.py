@@ -26,16 +26,16 @@ class _FakeDriver:
             def first(self) -> '_FakeDriver._FakePage._FakeLocator':
                 return self
 
-            def text_content(self, timeout: int=0) -> str:
+            def text_content(self, _timeout: int=0) -> str:
                 return ''
 
-        def wait_for_selector(self, *args, **kwargs) -> None:
+        def wait_for_selector(self, *_args, **_kwargs) -> None:
             return None
 
-        def wait_for_load_state(self, *args, **kwargs) -> None:
+        def wait_for_load_state(self, *_args, **_kwargs) -> None:
             return None
 
-        def evaluate(self, *args, **kwargs):
+        def evaluate(self, *_args, **_kwargs):
             return self._owner._payload
 
         def title(self) -> str:
@@ -44,7 +44,7 @@ class _FakeDriver:
         def locator(self, _selector: str):
             return self.locator_obj
 
-    def get(self, url: str, timeout: int=20000, wait_until: str='domcontentloaded') -> None:
+    def get(self, _url: str, _timeout: int=20000, _wait_until: str='domcontentloaded') -> None:
         return None
 
     @property

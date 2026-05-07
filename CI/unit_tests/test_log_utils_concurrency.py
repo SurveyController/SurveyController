@@ -7,7 +7,7 @@ from software.logging.log_utils import LogBufferHandler
 
 class LogBufferHandlerConcurrencyTests:
 
-    def teardown_method(self, method) -> None:
+    def teardown_method(self, _method) -> None:
         handler = getattr(self, '_handler', None)
         if handler is not None:
             handler.stop()

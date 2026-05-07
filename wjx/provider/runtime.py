@@ -34,7 +34,7 @@ from wjx.provider.questions.text import (
     count_visible_text_inputs as _count_visible_text_inputs_driver,
     text as _text_impl,
 )
-from wjx.provider.runtime_dispatch import _dispatcher, _question_title_for_log
+from wjx.provider.runtime_dispatch import _dispatcher
 from wjx.provider.runtime_state import get_wjx_runtime_state
 from wjx.provider.submission import submit
 
@@ -145,6 +145,7 @@ def _collect_visible_question_snapshot(driver: BrowserDriver) -> Dict[int, Dict[
 
 
 def _refresh_visible_question_snapshot(driver: BrowserDriver, *, reason: str) -> Dict[int, Dict[str, Any]]:
+    _ = reason
     return _collect_visible_question_snapshot(driver)
 
 

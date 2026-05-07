@@ -42,51 +42,6 @@ def _resolve_selected_weight_text(
     return "随机"
 
 
-def _extract_matrix_column_texts(driver: BrowserDriver, current: int, expected_count: int) -> List[str]:
-    column_texts: List[str] = []
-    try:
-        header_cells = driver.find_elements(By.CSS_SELECTOR, f"#drv{current}_1 > td")
-    except Exception:
-        header_cells = []
-    if len(header_cells) > 1:
-        for cell in header_cells[1:]:
-            try:
-                text = str(cell.text or "").strip()
-            except Exception:
-                text = ""
-            column_texts.append(" ".join(text.split()))
-    if not any(column_texts):
-        try:
-            header_cells = driver.find_elements(By.CSS_SELECTOR, f"#divRefTab{current} th")
-        except Exception:
-            header_cells = []
-        if len(header_cells) > 1:
-            column_texts = []
-            for cell in header_cells[1:]:
-                try:
-                    text = str(cell.text or "").strip()
-                except Exception:
-                    text = ""
-                column_texts.append(" ".join(text.split()))
-    if expected_count > 0:
-        if len(column_texts) < expected_count:
-            column_texts.extend("" for _ in range(expected_count - len(column_texts)))
-        elif len(column_texts) > expected_count:
-            column_texts = column_texts[:expected_count]
-    return column_texts
-
-
-def _log_matrix_row_choice(
-    current: int,
-    row_number: int,
-    selected_index: int,
-    column_text: str,
-    resolved_probabilities: Union[List[float], int, float, None],
-    raw_probabilities: Any,
-) -> None:
-    return
-
-
 def _collect_slider_matrix_inputs(driver: BrowserDriver, current: int):
     try:
         return driver.find_elements(By.CSS_SELECTOR, f"#div{current} input.ui-slider-input[rowid]")
@@ -348,14 +303,6 @@ def _fill_slider_matrix(
                 len(candidate_values),
                 row_index=row_offset,
             )
-        _log_matrix_row_choice(
-            current,
-            row_offset + 1,
-            selected_index,
-            str(selected_value),
-            row_probabilities,
-            raw_probabilities,
-        )
         record_answer(current, "matrix", selected_indices=[selected_index], row_index=row_offset)
     return index + len(slider_inputs)
 
@@ -393,7 +340,6 @@ def matrix(
     if len(column_elements) <= 1:
         return index
     candidate_columns = list(range(2, len(column_elements) + 1))
-    column_texts = _extract_matrix_column_texts(driver, current, len(candidate_columns))
     resolved_question_index = question_index if question_index is not None else current
     strict_ratio_question = is_strict_ratio_question(task_ctx, resolved_question_index)
     reverse_fill_answer = resolve_current_reverse_fill_answer(task_ctx, current)
@@ -466,14 +412,6 @@ def matrix(
                 len(candidate_columns),
                 row_index=row_index - 1,
             )
-        _log_matrix_row_choice(
-            current,
-            row_index,
-            selected_column - 2,
-            column_texts[selected_column - 2] if selected_column - 2 < len(column_texts) else "",
-            row_probabilities,
-            raw_probabilities,
-        )
         # 记录统计数据：行索引 (0-based)，列索引 (0-based，减去表头偏移)
         record_answer(current, "matrix", selected_indices=[selected_column - 2], row_index=row_index - 1)
     return index

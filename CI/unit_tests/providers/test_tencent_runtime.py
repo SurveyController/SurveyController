@@ -1,8 +1,6 @@
 from __future__ import annotations
 import pytest
 import threading
-from contextlib import ExitStack, contextmanager
-from types import SimpleNamespace
 from software.providers.contracts import SurveyQuestionMeta
 from tencent.provider import runtime
 

@@ -83,6 +83,7 @@ class DashboardSurveyParseMixin:
         )
     def _on_survey_parsed(self, info: list, title: str):
         """问卷解析成功的处理（仅负责关闭进度条和记录结果，向导弹出由 MainWindow 处理）"""
+        _ = title
         # 关闭进度消息条
         if self._progress_infobar:
             try:

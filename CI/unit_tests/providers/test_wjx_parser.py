@@ -24,10 +24,10 @@ class _FakeBrowserDriver:
         self.get_calls: list[tuple[str, int, str]] = []
 
     class _FakePage:
-        def wait_for_selector(self, *args, **kwargs) -> None:
+        def wait_for_selector(self, *_args, **_kwargs) -> None:
             return None
 
-        def wait_for_load_state(self, *args, **kwargs) -> None:
+        def wait_for_load_state(self, *_args, **_kwargs) -> None:
             return None
 
     def get(self, url: str, timeout: int = 20000, wait_until: str = "domcontentloaded") -> None:

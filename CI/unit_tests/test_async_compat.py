@@ -40,7 +40,7 @@ class _AsyncHandle:
     async def bounding_box(self):
         return self.bounding_box_value
 
-    async def evaluate(self, script: str, args=None):
+    async def evaluate(self, script: str, _args=None):
         self.actions.append(("evaluate", script))
         if "window.location.href" in script:
             return self.url

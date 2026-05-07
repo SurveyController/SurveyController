@@ -557,14 +557,13 @@ class DashboardPage(
             # 保存引用以便后续关闭
             self._progress_infobar = infobar
             return infobar
+        # 普通InfoBar（不带进度条）
+        if kind == "success":
+            InfoBar.success("", text, parent=parent, position=InfoBarPosition.TOP, duration=duration)
+        elif kind == "warning":
+            InfoBar.warning("", text, parent=parent, position=InfoBarPosition.TOP, duration=duration)
+        elif kind == "error":
+            InfoBar.error("", text, parent=parent, position=InfoBarPosition.TOP, duration=duration)
         else:
-            # 普通InfoBar（不带进度条）
-            if kind == "success":
-                InfoBar.success("", text, parent=parent, position=InfoBarPosition.TOP, duration=duration)
-            elif kind == "warning":
-                InfoBar.warning("", text, parent=parent, position=InfoBarPosition.TOP, duration=duration)
-            elif kind == "error":
-                InfoBar.error("", text, parent=parent, position=InfoBarPosition.TOP, duration=duration)
-            else:
-                InfoBar.info("", text, parent=parent, position=InfoBarPosition.TOP, duration=duration)
-            return None
+            InfoBar.info("", text, parent=parent, position=InfoBarPosition.TOP, duration=duration)
+        return None

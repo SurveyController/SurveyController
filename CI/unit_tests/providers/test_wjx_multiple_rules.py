@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-from typing import Any
 
 from wjx.provider.questions import multiple_rules
 

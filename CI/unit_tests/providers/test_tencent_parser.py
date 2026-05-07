@@ -100,6 +100,7 @@ class TencentParserTests:
         calls: list[str] = []
 
         def fake_request(_survey_id, endpoint, *, hash_value, headers, extra_params=None):
+            _ = hash_value, headers
             locale = (extra_params or {}).get("locale")
             calls.append(f"{endpoint}:{locale or ''}")
             if endpoint == "session":

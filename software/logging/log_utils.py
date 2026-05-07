@@ -677,16 +677,19 @@ def export_full_log_to_file(
 
 def log_popup_error(title: str, message: str, **kwargs: Any):
     """Error popup routed to the active UI handler (if any)."""
+    _ = kwargs
     return _dispatch_popup("error", title, message, default=False)
 
 
 def log_popup_warning(title: str, message: str, **kwargs: Any):
     """Warning popup routed to the active UI handler (if any)."""
+    _ = kwargs
     return _dispatch_popup("warning", title, message, default=True)
 
 
 def log_popup_confirm(title: str, message: str, **kwargs: Any) -> bool:
     """Confirmation dialog routed to the active UI handler (if any)."""
+    _ = kwargs
     return bool(_dispatch_popup("confirm", title, message, default=False))
 
 

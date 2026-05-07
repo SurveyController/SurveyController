@@ -1,7 +1,6 @@
 from __future__ import annotations
 import pytest
 import threading
-from contextlib import ExitStack
 from types import MethodType, SimpleNamespace
 from unittest.mock import MagicMock
 import software.core.engine.execution_loop as execution_loop_module
@@ -25,6 +24,7 @@ class _FakePreloadedPool:
         self.warm_async_calls.append((list(preferred_browsers or []), int(window_x_pos), int(window_y_pos)))
 
     def acquire(self, _stop_signal: threading.Event, *, wait: bool=True):
+        _ = wait
         self.acquire_calls += 1
         return self.next_lease
 
@@ -299,7 +299,7 @@ class ExecutionLoopTests:
         session = make_browser_session(driver=make_navigation_driver())
         outcome = SimpleNamespace(status='success', should_stop=True)
 
-        def _prepare_round_context(self, _stop_signal, *, thread_name: str, session) -> bool:
+        def _prepare_round_context(_self, _stop_signal, *, thread_name: str, session) -> bool:
             del thread_name, session
             return True
         patch_attrs(
@@ -324,7 +324,7 @@ class ExecutionLoopTests:
         session = make_browser_session(driver=make_navigation_driver())
         outcome = SimpleNamespace(status='failure', should_stop=False)
 
-        def _prepare_round_context(self, _stop_signal, *, thread_name: str, session) -> bool:
+        def _prepare_round_context(_self, _stop_signal, *, thread_name: str, session) -> bool:
             del thread_name, session
             return True
         patch_attrs(
@@ -356,7 +356,7 @@ class ExecutionLoopTests:
         loop = ExecutionLoop(config, state)
         loop.stop_policy = _FakeStopPolicy(stop_on_failure=True)
 
-        def _proxy_failure(self, *_args, **_kwargs):
+        def _proxy_failure(_self, *_args, **_kwargs):
             stop_signal.set()
             raise execution_loop_module.ProxyConnectionError('boom')
         loop._load_survey_or_record_failure = MethodType(_proxy_failure, loop)
@@ -374,7 +374,7 @@ class ExecutionLoopTests:
         outcome = SimpleNamespace(status='success', should_stop=True)
         _FakePreloadedPool.last_created = None
 
-        def _prepare_round_context(self, _stop_signal, *, thread_name: str, session=None) -> bool:
+        def _prepare_round_context(_self, _stop_signal, *, thread_name: str, session=None) -> bool:
             del thread_name, session
             return True
 

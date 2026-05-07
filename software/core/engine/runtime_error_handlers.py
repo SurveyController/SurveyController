@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import logging
-import threading
 from typing import Any, Callable
 
 from software.core.ai.runtime import AIRuntimeError, is_ai_timeout_runtime_error
@@ -22,6 +21,7 @@ def handle_ai_runtime_error(
     stop_policy: Any,
     state: ExecutionState,
 ) -> bool:
+    _ = state
     if is_ai_timeout_runtime_error(exc):
         logging.warning("AI 调用超时，本轮丢弃并继续下一轮：%s", exc)
         status_text = "AI超时"

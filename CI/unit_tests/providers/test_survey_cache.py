@@ -14,7 +14,7 @@ class SurveyCacheTests:
         survey_cache.get_user_cache_directory = lambda: temp_dir
         return original_cache_directory
 
-    def teardown_method(self, method) -> None:
+    def teardown_method(self, _method) -> None:
         survey_cache.clear_survey_parse_cache()
 
     def test_same_fingerprint_reuses_cached_definition(self) -> None:
@@ -74,11 +74,11 @@ class SurveyCacheTests:
             original_runtime_directory = self._patch_cache_directory(temp_dir)
             original_fetch_fingerprint = survey_cache._fetch_remote_fingerprint
 
-            def parser(url: str):
+            def parser(_url: str):
                 title = titles.pop(0)
                 return build_survey_definition('wjx', title, [{'num': 1, 'title': title, 'type_code': '3'}])
 
-            def next_fingerprint(url: str, provider: str) -> str:
+            def next_fingerprint(_url: str, _provider: str) -> str:
                 return fingerprints.pop(0)
             try:
                 survey_cache._fetch_remote_fingerprint = next_fingerprint
@@ -132,7 +132,7 @@ class SurveyCacheTests:
             now_values = [1000, 1000 + survey_cache._CREDAMO_TTL_SECONDS + 1, 2000]
             titles = ['旧见数', '新见数']
 
-            def parser(url: str):
+            def parser(_url: str):
                 title = titles.pop(0)
                 return build_survey_definition('credamo', title, [{'num': 1, 'title': title, 'type_code': '3'}])
             try:

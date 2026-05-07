@@ -14,10 +14,10 @@ class CredamoParserTests:
             self.text = text
             self.visible = visible
 
-        def is_visible(self, timeout: int=0) -> bool:
+        def is_visible(self, _timeout: int=0) -> bool:
             return self.visible
 
-        def text_content(self, timeout: int=0) -> str:
+        def text_content(self, _timeout: int=0) -> str:
             return self.text
 
         def get_attribute(self, _name: str) -> str:
@@ -53,10 +53,10 @@ class CredamoParserTests:
         def goto(self, url: str, wait_until: str, timeout: int) -> None:
             self.goto_calls.append((url, wait_until, timeout))
 
-        def reload(self, wait_until: str, timeout: int) -> None:
+        def reload(self, _wait_until: str, _timeout: int) -> None:
             self.reload_calls += 1
 
-        def wait_for_load_state(self, _state: str, timeout: int) -> None:
+        def wait_for_load_state(self, _state: str, _timeout: int) -> None:
             self.wait_calls += 1
 
     def test_infer_type_code_uses_page_block_kind(self) -> None:

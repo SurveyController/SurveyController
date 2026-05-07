@@ -23,7 +23,7 @@ def _write_workbook(rows: list[list[object]]) -> str:
 
 class WjxReverseFillTests:
 
-    def teardown_method(self, method) -> None:
+    def teardown_method(self, _method) -> None:
         for path in getattr(self, '_temp_paths', []):
             try:
                 os.remove(path)

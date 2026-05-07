@@ -1,7 +1,6 @@
 """会话策略 - 代理切换与浏览器实例复用逻辑"""
 from typing import Any, Optional, Tuple
 import logging
-import threading
 
 from software.core.engine.stop_signal import StopSignalLike
 from software.core.task import ExecutionState, ProxyLease

@@ -23,7 +23,7 @@ class _FakeBrowserSessionService:
 
 class PreloadedSessionPoolTests:
 
-    def setup_method(self, method) -> None:
+    def setup_method(self, _method) -> None:
         _FakeBrowserSessionService.instances = []
 
     def test_warm_async_builds_ready_session_and_acquire_returns_preloaded_lease(self, patch_attrs) -> None:
