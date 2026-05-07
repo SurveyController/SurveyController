@@ -34,6 +34,59 @@ def _collect_scale_options(question_div) -> List:
     return []
 
 
+def _resolve_scale_click_target(option):
+    try:
+        anchors = option.find_elements(By.CSS_SELECTOR, "a[val], a.rate-off, a.rate-on, a[class*='rate-']")
+    except Exception:
+        anchors = []
+    for anchor in anchors:
+        try:
+            if anchor.is_displayed():
+                return anchor
+        except Exception:
+            return anchor
+    return option
+
+
+def _read_scale_value(option, selected_index: int) -> str:
+    candidates = [option]
+    try:
+        candidates.extend(option.find_elements(By.CSS_SELECTOR, "a[val], [val]"))
+    except Exception:
+        pass
+    for candidate in candidates:
+        for attr_name in ("val", "value", "data-value"):
+            try:
+                raw_value = str(candidate.get_attribute(attr_name) or "").strip()
+            except Exception:
+                raw_value = ""
+            if raw_value:
+                return raw_value
+    return str(selected_index + 1)
+
+
+def _sync_scale_hidden_value(driver: BrowserDriver, current: int, value: str) -> None:
+    try:
+        driver.execute_script(
+            """
+            const qid = arguments[0];
+            const value = arguments[1];
+            const input = document.getElementById(`q${qid}`);
+            if (!input || input.value) return false;
+            try { input.value = value; } catch (e) {}
+            try { input.setAttribute('value', value); } catch (e) {}
+            ['input','change','blur'].forEach(name => {
+                try { input.dispatchEvent(new Event(name, { bubbles: true })); } catch (e) {}
+            });
+            return true;
+            """,
+            current,
+            value,
+        )
+    except Exception as exc:
+        log_suppressed_exception("scale: sync hidden value", exc, level=logging.ERROR)
+
+
 def scale(
     driver: BrowserDriver,
     current: int,
@@ -94,7 +147,8 @@ def scale(
         selected_index = max(0, len(scale_options) - 1)
     if selected_index < 0:
         return
-    target = scale_options[selected_index]
+    selected_option = scale_options[selected_index]
+    target = _resolve_scale_click_target(selected_option)
     try:
         target.click()
     except Exception:
@@ -102,6 +156,7 @@ def scale(
             driver.execute_script("arguments[0].click();", target)
         except Exception as exc:
             log_suppressed_exception("scale: driver.execute_script(\"arguments[0].click();\", target)", exc, level=logging.ERROR)
+    _sync_scale_hidden_value(driver, current, _read_scale_value(selected_option, selected_index))
     if forced_index is None:
         record_pending_distribution_choice(
             task_ctx,

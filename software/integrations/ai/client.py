@@ -116,7 +116,21 @@ def generate_answer(
         raise RuntimeError("硅基流动需要先配置模型名称")
 
     request_url = f"{_normalize_endpoint_url(base_url)}{_CHAT_COMPLETIONS_SUFFIX}"
-    return call_chat_completions(request_url, api_key, model, question_title, system_prompt)
+    timeout_seconds = int(provider_config.get("timeout_seconds") or 15)
+    max_concurrent_requests = int(provider_config.get("max_concurrent_requests") or 0)
+    max_request_attempts = int(provider_config.get("max_request_attempts") or 2)
+    return call_chat_completions(
+        request_url,
+        api_key,
+        model,
+        question_title,
+        system_prompt,
+        include_sampling_params=bool(provider_config.get("include_sampling_params", True)),
+        provider_key=provider,
+        max_concurrent_requests=max_concurrent_requests,
+        max_request_attempts=max_request_attempts,
+        timeout=timeout_seconds,
+    )
 
 
 def test_connection() -> str:

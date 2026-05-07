@@ -57,6 +57,21 @@ def _question_div_is_initially_hidden(question_div) -> bool:
     )
 
 
+def _question_div_is_required(question_div) -> bool:
+    if question_div is None:
+        return False
+    for attr_name in ("req", "required", "aria-required"):
+        raw_value = str(question_div.get(attr_name) or "").strip().lower()
+        if raw_value in {"1", "true", "required", "yes"}:
+            return True
+    try:
+        if question_div.select_one(".field-label .req, .req"):
+            return True
+    except Exception:
+        return False
+    return False
+
+
 def parse_survey_questions_from_html(html: str) -> List[Dict[str, Any]]:
     """从 HTML 解析问卷题目列表"""
     if not BeautifulSoup:
@@ -169,6 +184,7 @@ def parse_survey_questions_from_html(html: str) -> List[Dict[str, Any]]:
                 "num": question_number,
                 "display_num": display_num,
                 "title": title_text,
+                "required": _question_div_is_required(question_div),
                 "type_code": type_code,
                 "options": option_count,
                 "rows": matrix_rows,

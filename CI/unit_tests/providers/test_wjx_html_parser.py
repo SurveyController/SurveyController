@@ -167,6 +167,7 @@ class WjxHtmlParserTests:
         assert questions[0]["num"] == 23
         assert questions[0]["display_num"] == 1
         assert questions[0]["title"] == "请您对培训和实习进行简要评价： （最少30字）"
+        assert questions[0]["required"] is True
 
     def test_parse_survey_questions_recalculates_display_num_when_previous_question_is_hidden(self) -> None:
         html = """

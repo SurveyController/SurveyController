@@ -397,7 +397,7 @@ def resolve_option_fill_text_from_config(
     ai_prompt += "\n请只输出最终要填写的内容，不要解释。"
 
     try:
-        answer = generate_ai_answer(ai_prompt, question_type="fill_blank")
+        answer = generate_ai_answer(ai_prompt, question_type="fill_blank", min_words=8)
     except AIRuntimeError as exc:
         raise AIRuntimeError(f"第{question_number}题附加填空 AI 生成失败：{exc}") from exc
     return str(answer).strip()
@@ -422,29 +422,57 @@ def fill_option_additional_text(driver: BrowserDriver, question_number: int, opt
     if option_elements and 0 <= option_index_zero_based < len(option_elements):
         option_element = option_elements[option_index_zero_based]
         try:
-            candidate_inputs.extend(option_element.find_elements(By.CSS_SELECTOR, "input[type='text'], input[type='search'], textarea"))
+            candidate_inputs.extend(
+                option_element.find_elements(
+                    By.CSS_SELECTOR,
+                    "input[type='text'], input[type='search'], input.OtherText, textarea, input[rel], textarea[rel]",
+                )
+            )
         except Exception as exc:
             log_suppressed_exception("questions.utils.fill_option_additional_text inputs", exc, level=logging.ERROR)
         try:
-            candidate_inputs.extend(option_element.find_elements(By.CSS_SELECTOR, ".ui-other input, .ui-other textarea"))
+            candidate_inputs.extend(option_element.find_elements(By.CSS_SELECTOR, ".ui-other input, .ui-other textarea, .ui-text input, .ui-text textarea"))
         except Exception as exc:
             log_suppressed_exception("questions.utils.fill_option_additional_text other inputs", exc, level=logging.ERROR)
+        if not candidate_inputs:
+            try:
+                rel_value = ""
+                rel_sources = option_element.find_elements(By.CSS_SELECTOR, "input[rel], a[rel], span[rel]")
+                for rel_source in rel_sources:
+                    rel_value = str(rel_source.get_attribute("rel") or "").strip()
+                    if rel_value:
+                        break
+                if rel_value:
+                    rel_input = question_div.find_element(By.CSS_SELECTOR, f"#{rel_value}")
+                    candidate_inputs.append(rel_input)
+            except Exception:
+                pass
     if not candidate_inputs:
         try:
-            candidate_inputs = question_div.find_elements(By.CSS_SELECTOR, ".ui-other input, .ui-other textarea")
+            candidate_inputs = question_div.find_elements(By.CSS_SELECTOR, ".ui-other input, .ui-other textarea, .ui-text input, .ui-text textarea")
         except Exception:
             candidate_inputs = []
     if not candidate_inputs:
         try:
-            candidate_inputs = question_div.find_elements(By.CSS_SELECTOR, "input[type='text'], input[type='search'], textarea")
+            candidate_inputs = question_div.find_elements(By.CSS_SELECTOR, "input[type='text'], input[type='search'], input.OtherText, textarea")
         except Exception:
             candidate_inputs = []
     for input_element in candidate_inputs:
         try:
             if not input_element.is_displayed():
-                continue
+                driver.execute_script(
+                    """
+                    const input = arguments[0];
+                    if (!input) return;
+                    const wrapper = input.closest ? input.closest('.ui-text, .ui-other') : null;
+                    if (wrapper) {
+                        try { wrapper.style.display = 'block'; } catch (e) {}
+                    }
+                    """,
+                    input_element,
+                )
         except Exception:
-            continue
+            pass
         try:
             smooth_scroll_to_element(driver, input_element, 'center')
         except Exception as exc:
@@ -455,10 +483,46 @@ def fill_option_additional_text(driver: BrowserDriver, question_number: int, opt
             log_suppressed_exception("questions.utils.fill_option_additional_text clear", exc, level=logging.ERROR)
         try:
             input_element.send_keys(text)
+            try:
+                driver.execute_script(
+                    """
+                    const input = arguments[0];
+                    const value = arguments[1];
+                    if (!input) return;
+                    try { input.value = value; } catch (e) {}
+                    try { input.setAttribute('value', value); } catch (e) {}
+                    ['input','change','blur','keyup','keydown'].forEach(name => {
+                        try { input.dispatchEvent(new Event(name, { bubbles: true })); } catch (e) {}
+                    });
+                    """,
+                    input_element,
+                    text,
+                )
+            except Exception as exc:
+                log_suppressed_exception("questions.utils.fill_option_additional_text dispatch", exc, level=logging.ERROR)
             time.sleep(0.05)
             return
         except Exception:
-            continue
+            try:
+                driver.execute_script(
+                    """
+                    const input = arguments[0];
+                    const value = arguments[1];
+                    if (!input) return false;
+                    try { input.value = value; } catch (e) {}
+                    try { input.setAttribute('value', value); } catch (e) {}
+                    ['input','change','blur','keyup','keydown'].forEach(name => {
+                        try { input.dispatchEvent(new Event(name, { bubbles: true })); } catch (e) {}
+                    });
+                    return true;
+                    """,
+                    input_element,
+                    text,
+                )
+                time.sleep(0.05)
+                return
+            except Exception:
+                continue
 
 
 def smooth_scroll_to_element(driver: BrowserDriver, element, block: str = 'center', full_simulation_active: bool = False) -> None:

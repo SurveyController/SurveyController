@@ -376,6 +376,35 @@ class WjxRuntimeTests:
 
         assert fallback_calls == [(4, '3')]
 
+    def test_refill_required_questions_uses_mapped_index_without_mutating_snapshot_indices(self, monkeypatch) -> None:
+        question_div = _FakeQuestionDiv('3', displayed=True)
+        driver = _FakeDriver({'#div1': question_div})
+        ctx = _FakeState(
+            question_config_index_map={1: ('single', 0)},
+            questions_metadata={1: SurveyQuestionMeta(num=1, title='Q1', type_code='3', page=1, required=True)},
+        )
+        state = runtime.get_wjx_runtime_state(driver)
+        state.indices_snapshot = {'single': 6, 'text': 0, 'dropdown': 0, 'multiple': 0, 'matrix': 0, 'scale': 0, 'slider': 0}
+        dispatch_calls: list[tuple[int, dict[str, int]]] = []
+        monkeypatch.setattr(runtime, '_refresh_visible_question_snapshot', lambda *_args, **_kwargs: {1: {'visible': True, 'type': '3', 'title': 'Q1'}})
+        monkeypatch.setattr(runtime, '_driver_question_looks_like_description', lambda *_args, **_kwargs: False)
+        monkeypatch.setattr(
+            runtime,
+            '_run_question_dispatch',
+            lambda _driver, _ctx, *, question_num, question_type, question_div, indices, psycho_plan: dispatch_calls.append((question_num, dict(indices))),
+        )
+
+        filled = runtime.refill_required_questions_on_current_page(
+            driver,
+            ctx,
+            question_numbers=[1],
+            thread_name='Worker-1',
+        )
+
+        assert filled == 1
+        assert dispatch_calls == [(1, {'single': 0, 'text': 0, 'dropdown': 0, 'multiple': 0, 'matrix': 0, 'scale': 0, 'slider': 0})]
+        assert state.indices_snapshot['single'] == 6
+
     def _build_dispatcher_ctx(self) -> _FakeState:
         return _FakeState(question_dimension_map={3: 'D1', 5: 'D2'})
 

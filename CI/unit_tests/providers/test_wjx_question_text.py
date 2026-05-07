@@ -99,7 +99,7 @@ class WjxQuestionTextTests:
 
         assert element.cleared == 1
         assert element.sent_keys == ["你好"]
-        assert driver.scripts == []
+        assert len(driver.scripts) == 1
 
     def test_fill_text_question_input_uses_js_for_readonly_input(self) -> None:
         driver = _FakeTextDriver()
@@ -119,6 +119,12 @@ class WjxQuestionTextTests:
 
         assert element.sent_keys == ["富文本答案"]
         assert len(driver.scripts) == 2
+
+    def test_ensure_min_word_answer_extends_short_answer(self) -> None:
+        answer = text_module.ensure_min_word_answer("AI答案", 30, "请简述您的个人发展目标和计划")
+
+        assert answer.startswith("AI答案")
+        assert text_module._visible_text_length(answer) >= 30
 
     def test_count_visible_text_inputs_skips_hidden_and_textedit_shadow_input(self) -> None:
         shadow_label = _FakeTextElement(tag_name="span", attrs={"class": "textedit"})
@@ -296,6 +302,7 @@ class WjxQuestionTextTests:
             (text_module, "resolve_dynamic_text_token", lambda value: value),
             (text_module, "resolve_question_title_for_ai", lambda _driver, _current, fallback: fallback or "题目标题"),
             (text_module, "generate_ai_answer", lambda *_args, **_kwargs: "AI答案"),
+            (text_module, "resolve_text_min_word_count", lambda *_args, **_kwargs: 30),
             (text_module, "_handle_single_text", lambda _driver, _current, answer: calls.append(answer)),
             (text_module, "_log_text_answer", lambda *_args, **_kwargs: None),
             (text_module, "record_answer", lambda *args, **kwargs: captured.append((args, kwargs))),
@@ -313,5 +320,7 @@ class WjxQuestionTextTests:
             task_ctx=object(),
         )
 
-        assert calls == ["AI答案"]
-        assert captured == [((10, "text"), {"text_answer": "AI答案"})]
+        assert calls
+        assert calls[0].startswith("AI答案")
+        assert text_module._visible_text_length(calls[0]) >= 30
+        assert captured == [((10, "text"), {"text_answer": calls[0]})]

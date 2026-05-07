@@ -511,8 +511,7 @@ class WizardSectionsTextMixin:
 
         # 控制「添加答案组」按钮：所有填空都启用AI时禁用该按钮（答案列表无用）
         def update_add_btn_state():
-            all_ai = all(blank_ai_checkboxes[i].isChecked() for i in range(blank_count))
-            add_btn.setEnabled(not all_ai)
+            self._sync_multi_text_add_button_state(idx)
 
         for _ai_cb in blank_ai_checkboxes:
             _ai_cb.checkedChanged.connect(lambda _checked, f=update_add_btn_state: f())
