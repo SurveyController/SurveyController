@@ -140,7 +140,7 @@ class CredamoRuntimeTests:
         correct = self._FakeChoiceElement('200')
         root = SimpleNamespace()
         page = SimpleNamespace(evaluate=lambda script, element: bool(getattr(element, 'checked', False)))
-        with patch('credamo.provider.runtime._option_inputs', return_value=[wrong, correct]), patch('credamo.provider.runtime._option_click_targets', return_value=[]), patch('credamo.provider.runtime._resolve_forced_choice_index', return_value=1), patch('credamo.provider.runtime.normalize_droplist_probs', return_value=[100.0, 0.0]), patch('credamo.provider.runtime.weighted_index', return_value=0):
+        with patch('credamo.provider.runtime._option_inputs', return_value=[wrong, correct]), patch('credamo.provider.runtime._option_click_targets', return_value=[]), patch('credamo.provider.runtime._resolve_forced_choice_index', return_value=1), patch('credamo.provider.runtime._click_element', side_effect=lambda _page, element: bool(getattr(element, 'click', lambda: None)() is None) or bool(getattr(element, 'checked', False))), patch('credamo.provider.runtime.normalize_droplist_probs', return_value=[100.0, 0.0]), patch('credamo.provider.runtime.weighted_index', return_value=0):
             answered = runtime._answer_single_like(page, root, [100.0, 0.0], 2)
         assert answered
         assert not wrong.checked

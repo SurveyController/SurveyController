@@ -73,6 +73,13 @@ def _sync_runtime_dom_patch_points() -> None:
 
 def _sync_runtime_answerer_patch_points() -> None:
     """让 runtime.py 上的补丁同步到底层题型作答模块。"""
+    _runtime_answerers._answer_dropdown = _ANSWER_DROPDOWN
+    _runtime_answerers._answer_matrix = _ANSWER_MATRIX
+    _runtime_answerers._answer_multiple = _ANSWER_MULTIPLE
+    _runtime_answerers._answer_order = _ANSWER_ORDER
+    _runtime_answerers._answer_scale = _ANSWER_SCALE
+    _runtime_answerers._answer_single_like = _ANSWER_SINGLE_LIKE
+    _runtime_answerers._answer_text = _ANSWER_TEXT
     _runtime_answerers._click_element = _click_element
     _runtime_answerers._element_text = _element_text
     _runtime_answerers._input_value = _input_value
