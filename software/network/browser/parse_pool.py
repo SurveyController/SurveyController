@@ -50,13 +50,15 @@ def acquire_parse_browser_session(
     if lease is None:
         raise RuntimeError("解析浏览器池当前不可用")
 
-    driver: Optional[BrowserDriver] = None
+    driver: BrowserDriver | None = None
     try:
         driver = lease.owner.open_session(
             proxy_address=proxy_address,
             user_agent=user_agent,
             lease=lease,
         )
+        if driver is None:
+            raise RuntimeError("解析浏览器会话创建失败")
         yield driver
     finally:
         if driver is not None:

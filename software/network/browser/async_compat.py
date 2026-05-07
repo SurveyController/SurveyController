@@ -379,6 +379,11 @@ class AsyncBrowserDriver:
         self.browser_pids: Set[int] = {self.browser_pid} if self.browser_pid else set()
         self._cleanup_done = False
         self._cleanup_lock = threading.Lock()
+        self._wjx_runtime_page_number = 0
+        self._wjx_runtime_page_questions: list[Any] = []
+        self._wjx_runtime_indices_snapshot: dict[str, int] = {}
+        self._wjx_runtime_psycho_plan: Any = None
+        self._wjx_submission_recovery_attempts = 0
 
     def find_element(self, by: str, value: str) -> AsyncCompatElement:
         handle = self._portal.run(self._page.query_selector(_build_selector(by, value)))
