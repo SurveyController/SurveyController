@@ -160,6 +160,102 @@ def _answer_order(page: Any, root: Any) -> bool:
     return _ANSWER_ORDER(page, root)
 
 
+def _answer_root_by_meta(
+    page: Any,
+    root: Any,
+    question_num: int,
+    config: ExecutionConfig,
+) -> bool:
+    config_entry = config.question_config_index_map.get(question_num)
+    if config_entry is None:
+        logging.info("Credamo 第%s题缺少配置映射，无法补答。", question_num)
+        return False
+    entry_type, config_index = config_entry
+    if entry_type == "single":
+        weights = config.single_prob[config_index] if config_index < len(config.single_prob) else -1
+        return bool(_answer_single_like(page, root, weights, 0))
+    if entry_type in {"scale", "score"}:
+        weights = config.scale_prob[config_index] if config_index < len(config.scale_prob) else -1
+        return bool(_answer_scale(page, root, weights))
+    if entry_type == "matrix":
+        question_meta = config.questions_metadata.get(question_num) if hasattr(config, "questions_metadata") else None
+        row_count = max(1, int(getattr(question_meta, "rows", 1) or 1))
+        row_weights = []
+        for row_offset in range(row_count):
+            matrix_index = config_index + row_offset
+            row_weights.append(config.matrix_prob[matrix_index] if matrix_index < len(config.matrix_prob) else -1)
+        return bool(_answer_matrix(page, root, row_weights, config_index))
+    if entry_type == "dropdown":
+        weights = config.droplist_prob[config_index] if config_index < len(config.droplist_prob) else -1
+        return bool(_answer_dropdown(page, root, weights))
+    if entry_type == "multiple":
+        weights = config.multiple_prob[config_index] if config_index < len(config.multiple_prob) else []
+        question_meta = config.questions_metadata.get(question_num)
+        min_limit = getattr(question_meta, "multi_min_limit", None) if question_meta is not None else None
+        max_limit = getattr(question_meta, "multi_max_limit", None) if question_meta is not None else None
+        return bool(
+            _answer_multiple(
+                page,
+                root,
+                weights,
+                min_limit=min_limit,
+                max_limit=max_limit,
+            )
+        )
+    if entry_type == "order":
+        return bool(_answer_order(page, root))
+    if entry_type in {"text", "multi_text"}:
+        text_config = config.texts[config_index] if config_index < len(config.texts) else [DEFAULT_FILL_TEXT]
+        return bool(_answer_text(root, text_config))
+    logging.info("Credamo 第%s题暂未接入补答题型：%s", question_num, entry_type)
+    return False
+
+
+def refill_required_questions_on_current_page(
+    driver: BrowserDriver,
+    config: ExecutionConfig,
+    *,
+    question_numbers: list[int],
+    thread_name: str,
+    state: Optional[ExecutionState] = None,
+) -> int:
+    normalized_numbers: list[int] = []
+    for raw_num in list(question_numbers or []):
+        try:
+            question_num = int(raw_num)
+        except Exception:
+            continue
+        if question_num > 0 and question_num not in normalized_numbers:
+            normalized_numbers.append(question_num)
+    if not normalized_numbers:
+        return 0
+
+    page = _page(driver)
+    roots = _question_roots(page)
+    if not roots:
+        return 0
+    root_by_number: dict[int, Any] = {}
+    for local_index, root in enumerate(roots, start=1):
+        question_num = _question_number_from_root(page, root, local_index)
+        if question_num > 0 and question_num not in root_by_number:
+            root_by_number[question_num] = root
+
+    filled_count = 0
+    for question_num in normalized_numbers:
+        root = root_by_number.get(question_num)
+        if root is None:
+            logging.info("Credamo 第%s题当前页未识别到题目节点，跳过补答。", question_num)
+            continue
+        if state is not None:
+            try:
+                state.update_thread_status(thread_name or "Worker-?", f"补答第{question_num}题", running=True)
+            except Exception:
+                logging.info("更新 Credamo 线程状态失败：补答第%s题", question_num, exc_info=True)
+        if _answer_root_by_meta(page, root, question_num, config):
+            filled_count += 1
+    return filled_count
+
+
 def brush_credamo(
     driver: BrowserDriver,
     config: ExecutionConfig,

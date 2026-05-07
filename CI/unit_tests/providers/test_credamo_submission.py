@@ -1,7 +1,9 @@
 from unittest.mock import patch
 from typing import Any
+from types import SimpleNamespace
 
 from credamo.provider import submission
+from software.core.task import ExecutionConfig, ExecutionState
 
 
 class _FakeDriver:
@@ -13,7 +15,7 @@ class _FakeDriver:
         self.browser_pids: set[int] = set()
         self.body_text = body_text
         self.current_url = current_url
-        self.page = None
+        self.page: Any = None
         self.page_source = ""
         self.title = ""
 
@@ -97,3 +99,48 @@ class CredamoSubmissionTests:
         driver = _FakeDriver(body_text='感谢您的参与')
         with patch('credamo.provider.submission._visible_feedback_text', return_value=''), patch('credamo.provider.submission._has_visible_action_controls', return_value=True):
             assert not submission.is_completion_page(driver)
+
+    def test_attempt_submission_recovery_refills_questions_and_resubmits_once(self, patch_attrs) -> None:
+        driver = _FakeDriver(body_text='请填写必答题')
+        driver.page = object()
+        state = ExecutionState(config=ExecutionConfig(survey_provider='credamo'))
+        runtime_state = SimpleNamespace(submission_recovery_attempts=0)
+        refill_calls: list[list[int]] = []
+        submit_calls: list[Any] = []
+        patch_attrs(
+            (submission, "submission_requires_verification", lambda _driver: False),
+            (submission, "get_credamo_runtime_state", lambda _driver: runtime_state),
+            (submission, "_extract_submission_recovery_hint", lambda _driver: submission.SubmissionRecoveryHint((2, 5), "当前页存在未作答题目")),
+            (submission, "_page", lambda _driver: "page"),
+        )
+
+        from credamo.provider import runtime as credamo_runtime
+
+        with patch.object(credamo_runtime, "refill_required_questions_on_current_page", side_effect=lambda _driver, config, *, question_numbers, thread_name, state=None: refill_calls.append(list(question_numbers)) or 2), patch.object(credamo_runtime, "_click_submit", side_effect=lambda page, stop_signal=None: submit_calls.append((page, stop_signal)) or True):
+            recovered = submission.attempt_submission_recovery(driver, state, None, None, thread_name="Worker-2")
+
+        assert recovered is True
+        assert int(runtime_state.submission_recovery_attempts) == 1
+        assert refill_calls == [[2, 5]]
+        assert submit_calls == [("page", None)]
+
+    def test_attempt_submission_recovery_stops_when_refill_failed(self, patch_attrs) -> None:
+        driver = _FakeDriver(body_text='请填写必答题')
+        driver.page = object()
+        state = ExecutionState(config=ExecutionConfig(survey_provider='credamo'))
+        runtime_state = SimpleNamespace(submission_recovery_attempts=0)
+        patch_attrs(
+            (submission, "submission_requires_verification", lambda _driver: False),
+            (submission, "get_credamo_runtime_state", lambda _driver: runtime_state),
+            (submission, "_extract_submission_recovery_hint", lambda _driver: submission.SubmissionRecoveryHint((2,), "当前页存在未作答题目")),
+            (submission, "_page", lambda _driver: "page"),
+        )
+
+        from credamo.provider import runtime as credamo_runtime
+
+        with patch.object(credamo_runtime, "refill_required_questions_on_current_page", return_value=0), patch.object(credamo_runtime, "_click_submit") as submit_mock:
+            recovered = submission.attempt_submission_recovery(driver, state, None, None, thread_name="Worker-2")
+
+        assert recovered is False
+        assert int(runtime_state.submission_recovery_attempts) == 0
+        submit_mock.assert_not_called()

@@ -59,6 +59,7 @@ _QQ_IS_COMPLETION_PAGE: HookTarget = ("tencent.provider.runtime_flow", "qq_is_co
 _QQ_SUBMISSION_REQUIRES_VERIFICATION: HookTarget = ("tencent.provider.runtime_flow", "qq_submission_requires_verification")
 _QQ_SUBMISSION_VALIDATION_MESSAGE: HookTarget = ("tencent.provider.runtime_flow", "qq_submission_validation_message")
 _QQ_CONSUME_SUBMISSION_SUCCESS_SIGNAL: HookTarget = ("tencent.provider.submission", "consume_submission_success_signal")
+_QQ_ATTEMPT_SUBMISSION_RECOVERY: HookTarget = ("tencent.provider.submission", "attempt_submission_recovery")
 _QQ_IS_DEVICE_QUOTA_LIMIT_PAGE: HookTarget = ("tencent.provider.submission", "is_device_quota_limit_page")
 
 _CREDAMO_IS_COMPLETION_PAGE: HookTarget = ("credamo.provider.submission", "is_completion_page")
@@ -67,6 +68,7 @@ _CREDAMO_SUBMISSION_VALIDATION_MESSAGE: HookTarget = ("credamo.provider.submissi
 _CREDAMO_WAIT_FOR_SUBMISSION_VERIFICATION: HookTarget = ("credamo.provider.submission", "wait_for_submission_verification")
 _CREDAMO_HANDLE_SUBMISSION_VERIFICATION_DETECTED: HookTarget = ("credamo.provider.submission", "handle_submission_verification_detected")
 _CREDAMO_CONSUME_SUBMISSION_SUCCESS_SIGNAL: HookTarget = ("credamo.provider.submission", "consume_submission_success_signal")
+_CREDAMO_ATTEMPT_SUBMISSION_RECOVERY: HookTarget = ("credamo.provider.submission", "attempt_submission_recovery")
 _CREDAMO_IS_DEVICE_QUOTA_LIMIT_PAGE: HookTarget = ("credamo.provider.submission", "is_device_quota_limit_page")
 
 
@@ -93,6 +95,7 @@ _PROVIDER_REGISTRY = {
             submission_requires_verification=build_predicate_hook(_QQ_SUBMISSION_REQUIRES_VERIFICATION),
             submission_validation_message=build_text_hook(_QQ_SUBMISSION_VALIDATION_MESSAGE),
             wait_for_submission_verification=build_wait_from_predicate_hook(_QQ_SUBMISSION_REQUIRES_VERIFICATION),
+            attempt_submission_recovery=build_submission_recovery_hook(_QQ_ATTEMPT_SUBMISSION_RECOVERY),
             consume_submission_success_signal=build_predicate_hook(_QQ_CONSUME_SUBMISSION_SUCCESS_SIGNAL),
             is_device_quota_limit_page=build_predicate_hook(_QQ_IS_DEVICE_QUOTA_LIMIT_PAGE),
         ),
@@ -107,6 +110,7 @@ _PROVIDER_REGISTRY = {
             submission_validation_message=build_text_hook(_CREDAMO_SUBMISSION_VALIDATION_MESSAGE),
             wait_for_submission_verification=build_wait_hook(_CREDAMO_WAIT_FOR_SUBMISSION_VERIFICATION),
             handle_submission_verification_detected=build_action_hook(_CREDAMO_HANDLE_SUBMISSION_VERIFICATION_DETECTED),
+            attempt_submission_recovery=build_submission_recovery_hook(_CREDAMO_ATTEMPT_SUBMISSION_RECOVERY),
             consume_submission_success_signal=build_predicate_hook(_CREDAMO_CONSUME_SUBMISSION_SUCCESS_SIGNAL),
             is_device_quota_limit_page=build_predicate_hook(_CREDAMO_IS_DEVICE_QUOTA_LIMIT_PAGE),
         ),

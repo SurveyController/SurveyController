@@ -39,10 +39,102 @@ from .runtime_interactions import (
     _wait_for_question_visible,
 )
 
-__all__ = ["brush_qq"]
+__all__ = ["brush_qq", "refill_required_questions_on_current_page"]
 _QQ_PAGE_READY_TIMEOUT_MS = 2500
 _QQ_SINGLE_QUESTION_FALLBACK_TIMEOUT_MS = 1800
 _QQ_PAGE_TRANSITION_TIMEOUT_MS = 5000
+
+
+def _answer_question_by_meta(
+    driver: BrowserDriver,
+    question: Any,
+    ctx: ExecutionState,
+    *,
+    psycho_plan: Optional[Any],
+) -> bool:
+    config_entry = ctx.config.question_config_index_map.get(int(question.num or 0))
+    if not config_entry:
+        logging.warning("腾讯问卷第%d题缺少配置映射，无法补答。", int(question.num or 0))
+        return False
+    entry_type, config_index = config_entry
+    if entry_type == "single":
+        _answer_qq_single(driver, question, config_index, ctx)
+        return True
+    if entry_type == "multiple":
+        _answer_qq_multiple(driver, question, config_index, ctx)
+        return True
+    if entry_type == "dropdown":
+        _answer_qq_dropdown(driver, question, config_index, ctx, psycho_plan=psycho_plan)
+        return True
+    if entry_type in {"text", "multi_text"}:
+        _answer_qq_text(driver, question, config_index, ctx)
+        return True
+    if entry_type in {"scale", "score"}:
+        _answer_qq_score_like(driver, question, config_index, ctx, psycho_plan=psycho_plan)
+        return True
+    if entry_type == "matrix":
+        if question.provider_type == "matrix_star":
+            _answer_qq_matrix_star(driver, question, config_index, ctx, psycho_plan=psycho_plan)
+        else:
+            _answer_qq_matrix(driver, question, config_index, ctx, psycho_plan=psycho_plan)
+        return True
+    logging.warning("腾讯问卷第%d题暂未接入补答题型：%s", int(question.num or 0), entry_type)
+    return False
+
+
+def refill_required_questions_on_current_page(
+    driver: BrowserDriver,
+    ctx: ExecutionState,
+    *,
+    question_numbers: list[int],
+    thread_name: str,
+    psycho_plan: Optional[Any],
+) -> int:
+    normalized_numbers: list[int] = []
+    for raw_num in list(question_numbers or []):
+        try:
+            question_num = int(raw_num)
+        except Exception:
+            continue
+        if question_num > 0 and question_num not in normalized_numbers:
+            normalized_numbers.append(question_num)
+    if not normalized_numbers:
+        return 0
+
+    runtime_state = get_qq_runtime_state(driver)
+    page_question_ids = {
+        str(item or "").strip()
+        for item in list(runtime_state.page_question_ids or [])
+        if str(item or "").strip()
+    }
+    visible_snapshot = dict(runtime_state.visibility_snapshot or {})
+    filled_count = 0
+    for question_num in normalized_numbers:
+        question = ctx.config.questions_metadata.get(question_num)
+        if question is None:
+            logging.warning("腾讯问卷第%d题缺少题目元数据，无法补答。", question_num)
+            continue
+        question_id = str(question.provider_question_id or "").strip()
+        if page_question_ids and question_id and question_id not in page_question_ids:
+            logging.info("腾讯问卷第%d题不在当前页快照里，跳过补答。", question_num)
+            continue
+        if question_id:
+            snapshot_item = visible_snapshot.get(question_id) if isinstance(visible_snapshot, dict) else None
+            visible = bool((snapshot_item or {}).get("visible")) if isinstance(snapshot_item, dict) else False
+            if not visible:
+                visible = _wait_for_question_visible(driver, question_id, timeout_ms=_QQ_SINGLE_QUESTION_FALLBACK_TIMEOUT_MS)
+            if not visible:
+                logging.warning("腾讯问卷第%d题当前页不可见，无法补答。", question_num)
+                continue
+        try:
+            ctx.update_thread_status(thread_name or "Worker-?", f"补答第{question_num}题", running=True)
+        except Exception:
+            logging.info("更新线程状态失败：补答第%d题", question_num, exc_info=True)
+        if _answer_question_by_meta(driver, question, ctx, psycho_plan=psycho_plan):
+            filled_count += 1
+    return filled_count
+
+
 def brush_qq(
     driver: BrowserDriver,
     config: ExecutionConfig,

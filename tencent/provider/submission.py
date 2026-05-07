@@ -5,7 +5,8 @@ from __future__ import annotations
 import logging
 import threading
 import time
-from typing import Optional
+from dataclasses import dataclass
+from typing import Any, Optional
 
 from software.app.config import (
     HEADLESS_SUBMIT_CLICK_SETTLE_DELAY,
@@ -17,7 +18,14 @@ from software.core.engine.runtime_control import _is_headless_mode, _sleep_with_
 from software.core.questions.utils import extract_text_from_element as _extract_text_from_element
 from software.core.task import ExecutionState
 from software.network.browser import By, BrowserDriver, NoSuchElementException
+from tencent.provider.runtime_flow import QQ_VALIDATION_MARKERS, qq_submission_requires_verification
 from tencent.provider.runtime_state import peek_qq_runtime_state
+
+
+@dataclass(frozen=True)
+class SubmissionRecoveryHint:
+    question_numbers: tuple[int, ...]
+    message: str
 
 
 def _runtime_context_summary(driver: BrowserDriver) -> str:
@@ -34,6 +42,94 @@ def _runtime_context_summary(driver: BrowserDriver) -> str:
     if question_ids:
         parts.append(f"questions={question_ids}")
     return " ".join(parts)
+
+
+def _extract_submission_recovery_hint(driver: BrowserDriver) -> Optional[SubmissionRecoveryHint]:
+    script = r"""
+return (() => {
+    const visible = (el) => {
+        if (!el) return false;
+        const style = window.getComputedStyle(el);
+        if (!style) return false;
+        if (style.display === 'none' || style.visibility === 'hidden' || style.opacity === '0') return false;
+        const rect = el.getBoundingClientRect();
+        return rect.width > 0 && rect.height > 0;
+    };
+    const normalize = (text) => String(text || '').replace(/\s+/g, ' ').trim();
+    const markers = ['请选择', '请填写', '为必答题', '此题必填', '请先完成'];
+    const selectors = ['.error', '.question-error', '.t-form__error', '.t-message', '[class*="error"]'];
+    const messages = [];
+    const questionNumbers = [];
+
+    const pushQuestionNumber = (node) => {
+        const section = node?.closest?.('section.question[data-question-id]');
+        if (!section) return;
+        const rawNum = normalize(section.getAttribute('data-question-index') || section.getAttribute('data-index') || '');
+        const numMatch = rawNum.match(/\d+/);
+        if (numMatch) {
+            const value = Number.parseInt(numMatch[0], 10);
+            if (value > 0 && !questionNumbers.includes(value)) {
+                questionNumbers.push(value);
+                return;
+            }
+        }
+        const titleNode = section.querySelector('.question-title, .title, [class*="title"], legend, h3');
+        const titleText = normalize(titleNode?.innerText || titleNode?.textContent || section.innerText || '');
+        const titleMatch = titleText.match(/(?:^|\D)(\d{1,4})(?:[\.、\s]|$)/);
+        if (!titleMatch) return;
+        const value = Number.parseInt(titleMatch[1], 10);
+        if (value > 0 && !questionNumbers.includes(value)) {
+            questionNumbers.push(value);
+        }
+    };
+
+    for (const sel of selectors) {
+        for (const node of document.querySelectorAll(sel)) {
+            if (!visible(node)) continue;
+            const text = normalize(node.innerText || node.textContent || '');
+            if (!text) continue;
+            if (!markers.some((marker) => text.includes(marker))) continue;
+            messages.push(text);
+            pushQuestionNumber(node);
+        }
+    }
+
+    return {
+        questionNumbers,
+        messages: Array.from(new Set(messages)).slice(0, 5),
+    };
+})();
+"""
+    try:
+        payload = driver.execute_script(script) or {}
+    except Exception:
+        payload = {}
+    if not isinstance(payload, dict):
+        return None
+
+    question_numbers: list[int] = []
+    for raw_num in list(payload.get("questionNumbers") or []):
+        try:
+            question_num = int(raw_num)
+        except Exception:
+            continue
+        if question_num > 0 and question_num not in question_numbers:
+            question_numbers.append(question_num)
+
+    messages: list[str] = []
+    for raw_message in list(payload.get("messages") or []):
+        text = str(raw_message or "").strip()
+        if not text:
+            continue
+        if not any(marker in text for marker in QQ_VALIDATION_MARKERS):
+            continue
+        if text not in messages:
+            messages.append(text)
+
+    if not question_numbers and not messages:
+        return None
+    message = " | ".join(messages[:3]).strip() or "提交后检测到未作答提示"
+    return SubmissionRecoveryHint(tuple(question_numbers), message)
 
 
 def _click_submit_button(driver: BrowserDriver, max_wait: float = 10.0) -> bool:
@@ -189,8 +285,78 @@ def is_device_quota_limit_page(driver: BrowserDriver) -> bool:
     return False
 
 
+def attempt_submission_recovery(
+    driver: BrowserDriver,
+    ctx: ExecutionState,
+    gui_instance: Optional[Any],
+    stop_signal: Optional[threading.Event],
+    *,
+    thread_name: str = "",
+) -> bool:
+    del gui_instance
+    if stop_signal and stop_signal.is_set():
+        return False
+    if qq_submission_requires_verification(driver):
+        return False
+
+    runtime_state = peek_qq_runtime_state(driver)
+    if runtime_state is None:
+        return False
+    recovery_attempts = int(getattr(runtime_state, "submission_recovery_attempts", 0) or 0)
+    if recovery_attempts >= 1:
+        return False
+
+    hint = _extract_submission_recovery_hint(driver)
+    if hint is None:
+        return False
+
+    target_questions: list[int] = []
+    for question_num in hint.question_numbers:
+        if question_num > 0 and question_num not in target_questions:
+            target_questions.append(question_num)
+    if not target_questions:
+        current_page_numbers: list[int] = []
+        page_question_ids = {
+            str(item or "").strip()
+            for item in list(getattr(runtime_state, "page_question_ids", []) or [])
+            if str(item or "").strip()
+        }
+        for question_num, question in sorted((ctx.config.questions_metadata or {}).items()):
+            question_id = str(getattr(question, "provider_question_id", "") or "").strip()
+            if question_id and question_id in page_question_ids and bool(getattr(question, "required", False)):
+                current_page_numbers.append(int(question_num))
+        target_questions = current_page_numbers
+    if not target_questions:
+        logging.warning("腾讯问卷提交补救放弃：识别到校验提示，但当前页没有可补题目。message=%s", hint.message)
+        return False
+
+    logging.warning("腾讯问卷提交命中未作答提示，准备补答并重提：questions=%s message=%s", target_questions, hint.message)
+    try:
+        ctx.update_thread_status(thread_name or "Worker-?", "补答必答题", running=True)
+    except Exception:
+        logging.info("更新线程状态失败：补答必答题", exc_info=True)
+
+    from tencent.provider.runtime import refill_required_questions_on_current_page
+
+    filled_count = refill_required_questions_on_current_page(
+        driver,
+        ctx,
+        question_numbers=target_questions,
+        thread_name=thread_name or "Worker-?",
+        psycho_plan=getattr(runtime_state, "psycho_plan", None),
+    )
+    if filled_count <= 0:
+        logging.warning("腾讯问卷提交补救失败：未成功补答任何题目。questions=%s", target_questions)
+        return False
+
+    runtime_state.submission_recovery_attempts = recovery_attempts + 1
+    submit(driver, ctx=ctx, stop_signal=stop_signal)
+    return True
+
+
 __all__ = [
     "_click_submit_button",
+    "attempt_submission_recovery",
     "consume_submission_success_signal",
     "is_device_quota_limit_page",
     "submit",

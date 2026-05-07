@@ -5,10 +5,13 @@ from __future__ import annotations
 import logging
 import re
 import time
+from dataclasses import dataclass
 from typing import Any, Optional
 
 from software.network.browser import BrowserDriver
-from credamo.provider.runtime_state import peek_credamo_runtime_state
+from software.core.task import ExecutionState
+from credamo.provider.runtime_dom import _page, _question_number_from_root, _question_roots, _unanswered_question_roots
+from credamo.provider.runtime_state import get_credamo_runtime_state, peek_credamo_runtime_state
 
 _COMPLETION_MARKERS = (
     "答卷已经提交",
@@ -70,6 +73,12 @@ _ACTION_SELECTORS = (
 )
 
 
+@dataclass(frozen=True)
+class SubmissionRecoveryHint:
+    question_numbers: tuple[int, ...]
+    message: str
+
+
 def _runtime_context_summary(driver: BrowserDriver) -> str:
     state = peek_credamo_runtime_state(driver)
     if state is None:
@@ -116,6 +125,98 @@ return (() => {{
         return str(driver.execute_script(script) or "")
     except Exception:
         return ""
+
+
+def _extract_submission_recovery_hint(driver: BrowserDriver) -> Optional[SubmissionRecoveryHint]:
+    script = f"""
+return (() => {{
+    const visible = (el) => {{
+        if (!el) return false;
+        const style = window.getComputedStyle(el);
+        if (!style) return false;
+        if (style.display === 'none' || style.visibility === 'hidden' || style.opacity === '0') return false;
+        const rect = el.getBoundingClientRect();
+        return rect.width > 0 && rect.height > 0;
+    }};
+    const normalize = (text) => String(text || '').replace(/\\s+/g, ' ').trim();
+    const selectors = {list(_VISIBLE_FEEDBACK_SELECTORS)!r};
+    const messages = [];
+    const questionNumbers = [];
+
+    const pushQuestionNumber = (node) => {{
+        const root = node?.closest?.('.answer-page .question');
+        if (!root) return;
+        const titleNode = root.querySelector('.question-title, .qstTitle, .title, [class*="title"]');
+        const rawTitle = normalize(titleNode?.innerText || titleNode?.textContent || root.innerText || '');
+        const match = rawTitle.match(/(?:^|\\D)(\\d{{1,4}})(?:[\\.、\\s]|$)/);
+        if (!match) return;
+        const value = Number.parseInt(match[1], 10);
+        if (value > 0 && !questionNumbers.includes(value)) {{
+            questionNumbers.push(value);
+        }}
+    }};
+
+    for (const sel of selectors) {{
+        for (const node of document.querySelectorAll(sel)) {{
+            if (!visible(node)) continue;
+            const text = normalize(node.innerText || node.textContent || '');
+            if (!text) continue;
+            messages.push(text);
+            pushQuestionNumber(node);
+        }}
+    }}
+
+    return {{
+        questionNumbers,
+        messages: Array.from(new Set(messages)).slice(0, 6),
+    }};
+}})();
+"""
+    try:
+        payload = driver.execute_script(script) or {}
+    except Exception:
+        payload = {}
+    if not isinstance(payload, dict):
+        return None
+
+    question_numbers: list[int] = []
+    for raw_num in list(payload.get("questionNumbers") or []):
+        try:
+            question_num = int(raw_num)
+        except Exception:
+            continue
+        if question_num > 0 and question_num not in question_numbers:
+            question_numbers.append(question_num)
+
+    messages: list[str] = []
+    for raw_message in list(payload.get("messages") or []):
+        text = str(raw_message or "").strip()
+        if not text:
+            continue
+        if _looks_like_selection_validation(text) or "必填" in text or "请选择" in text or "请填写" in text:
+            if text not in messages:
+                messages.append(text)
+
+    page = getattr(driver, "page", None)
+    runtime_state = peek_credamo_runtime_state(driver)
+    if page is not None:
+        answered_keys = set(getattr(runtime_state, "answered_question_keys", []) or [])
+        try:
+            roots = _question_roots(page)
+        except Exception:
+            roots = []
+        pending = _unanswered_question_roots(page, roots, answered_keys) if roots else []
+        for root, fallback_num, _question_key in pending:
+            question_num = _question_number_from_root(page, root, fallback_num)
+            if question_num > 0 and question_num not in question_numbers:
+                question_numbers.append(question_num)
+        if pending and not messages:
+            messages.append("当前页存在未作答题目")
+
+    if not question_numbers and not messages:
+        return None
+    message = " | ".join(messages[:3]).strip() or "提交后检测到未作答提示"
+    return SubmissionRecoveryHint(tuple(question_numbers), message)
 
 
 def _looks_like_selection_validation(text: str) -> bool:
@@ -228,4 +329,58 @@ def consume_submission_success_signal(driver: BrowserDriver) -> bool:
 def is_device_quota_limit_page(driver: BrowserDriver) -> bool:
     text = _body_text(driver)
     return "已达上限" in text or "次数已满" in text or "名额已满" in text
+
+
+def attempt_submission_recovery(
+    driver: BrowserDriver,
+    ctx: ExecutionState,
+    gui_instance: Any,
+    stop_signal: Any,
+    *,
+    thread_name: str = "",
+) -> bool:
+    del gui_instance
+    if stop_signal is not None and stop_signal.is_set():
+        return False
+    if submission_requires_verification(driver):
+        return False
+
+    runtime_state = get_credamo_runtime_state(driver)
+    recovery_attempts = int(runtime_state.submission_recovery_attempts or 0)
+    if recovery_attempts >= 1:
+        return False
+
+    hint = _extract_submission_recovery_hint(driver)
+    if hint is None:
+        return False
+
+    target_questions: list[int] = []
+    for question_num in hint.question_numbers:
+        if question_num > 0 and question_num not in target_questions:
+            target_questions.append(question_num)
+    if not target_questions:
+        return False
+
+    logging.warning("Credamo 提交命中未作答提示，准备补答并重提：questions=%s message=%s", target_questions, hint.message)
+    try:
+        ctx.update_thread_status(thread_name or "Worker-?", "补答必答题", running=True)
+    except Exception:
+        logging.info("更新 Credamo 线程状态失败：补答必答题", exc_info=True)
+
+    from credamo.provider.runtime import _click_submit, refill_required_questions_on_current_page
+
+    filled_count = refill_required_questions_on_current_page(
+        driver,
+        ctx.config,
+        question_numbers=target_questions,
+        thread_name=thread_name or "Worker-?",
+        state=ctx,
+    )
+    if filled_count <= 0:
+        logging.warning("Credamo 提交补救失败：未成功补答任何题目。questions=%s", target_questions)
+        return False
+
+    runtime_state.submission_recovery_attempts = recovery_attempts + 1
+    page = _page(driver)
+    return bool(page is not None and _click_submit(page, stop_signal))
 

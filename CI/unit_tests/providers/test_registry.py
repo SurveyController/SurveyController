@@ -28,7 +28,11 @@ async def test_parse_survey_routes_detected_provider_through_cache_loader() -> N
 async def test_fill_survey_uses_provider_run_context_and_selected_adapter() -> None:
     state = ExecutionState(config=ExecutionConfig(survey_provider=SURVEY_PROVIDER_WJX))
     status_updates: list[tuple[str, bool]] = []
-    state.update_thread_status = lambda _thread_name, status_text, *, running: status_updates.append((status_text, running))
+    def _capture_update_thread_status(thread_name: str, status_text: str, *, running: bool | None = None) -> None:
+        del thread_name
+        status_updates.append((status_text, bool(running)))
+
+    state.update_thread_status = _capture_update_thread_status
     adapter = registry._PROVIDER_REGISTRY[SURVEY_PROVIDER_WJX]
 
     @contextmanager
@@ -76,3 +80,21 @@ async def test_wait_for_submission_verification_routes_timeout_and_stop_signal()
 
     assert result is True
     wait_mock.assert_called_once_with(driver, timeout=9, stop_signal='stop')
+
+async def test_attempt_submission_recovery_routes_to_selected_provider() -> None:
+    adapter = registry._PROVIDER_REGISTRY[SURVEY_PROVIDER_CREDAMO]
+    driver = object()
+    ctx = object()
+
+    with patch.object(adapter, "attempt_submission_recovery", return_value=True) as recovery_mock:
+        result = await registry.attempt_submission_recovery(
+            driver,
+            ctx,
+            "gui",
+            "stop",
+            provider=SURVEY_PROVIDER_CREDAMO,
+            thread_name="Worker-7",
+        )
+
+    assert result is True
+    recovery_mock.assert_called_once_with(driver, ctx, "gui", "stop", thread_name="Worker-7")

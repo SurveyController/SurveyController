@@ -1,10 +1,54 @@
 from __future__ import annotations
+
 import threading
-from types import SimpleNamespace
+from typing import Any
 from unittest.mock import patch
+
 from software.core.engine.failure_reason import FailureReason
 from software.core.engine.submission_service import SubmissionOutcome, SubmissionService
 from software.core.task import ExecutionConfig, ExecutionState
+
+
+class _FakeDriver:
+    def __init__(self, current_url: str = "https://example.com/form") -> None:
+        self.browser_name = "edge"
+        self.session_id = "test-session"
+        self.browser_pid: int | None = None
+        self.browser_pids: set[int] = set()
+        self.current_url = current_url
+        self.page = None
+        self.page_source = ""
+        self.title = ""
+        self._session_proxy_address = ""
+        self._submit_proxy_address = ""
+        self._thread_name = ""
+
+    def find_element(self, *_args, **_kwargs):
+        raise RuntimeError("unused")
+
+    def find_elements(self, *_args, **_kwargs):
+        return []
+
+    def execute_script(self, script: str, *args: Any):
+        del script
+        del args
+        return None
+
+    def get(self, *_args, **_kwargs) -> None:
+        return None
+
+    def set_window_size(self, *_args, **_kwargs) -> None:
+        return None
+
+    def refresh(self) -> None:
+        return None
+
+    def mark_cleanup_done(self) -> bool:
+        return True
+
+    def quit(self) -> None:
+        return None
+
 
 class SubmissionServiceTests:
 
@@ -14,7 +58,7 @@ class SubmissionServiceTests:
         service = SubmissionService(config, state, make_stop_policy_mock())
         stop_signal = make_mock_event(is_set=True)
         with patch('software.core.engine.submission_service.time.time', side_effect=[0.0, 0.0]):
-            completed = service._wait_for_completion_page(driver=SimpleNamespace(current_url='https://example.com/form'), stop_signal=stop_signal, max_wait_seconds=3, poll_interval=0.1)
+            completed = service._wait_for_completion_page(driver=_FakeDriver('https://example.com/form'), stop_signal=stop_signal, max_wait_seconds=3, poll_interval=0.1)
         assert not completed
 
     def test_finalize_after_submit_returns_fast_success_when_completion_is_detected_immediately(self, make_mock_event, make_stop_policy_mock) -> None:
@@ -23,7 +67,9 @@ class SubmissionServiceTests:
         stop_policy = make_stop_policy_mock(record_success_return=False)
         service = SubmissionService(config, state, stop_policy)
         stop_signal = make_mock_event()
-        driver = SimpleNamespace(_session_proxy_address='http://1.1.1.1:8000', _thread_name='Worker-1')
+        driver = _FakeDriver()
+        driver._session_proxy_address = 'http://1.1.1.1:8000'
+        driver._thread_name = 'Worker-1'
         with patch.object(service, '_detect_completion_once', return_value=True), patch('software.core.engine.submission_service.random.uniform', return_value=0.2):
             outcome = service.finalize_after_submit(driver, stop_signal=stop_signal, gui_instance=None, thread_name='Worker-1')
         assert outcome.status == 'success'
@@ -41,7 +87,10 @@ class SubmissionServiceTests:
         stop_policy = make_stop_policy_mock(record_success_return=False)
         service = SubmissionService(config, state, stop_policy)
         stop_signal = make_mock_event()
-        driver = SimpleNamespace(current_url='https://example.com/complete', _session_proxy_address='http://1.1.1.1:8000', _submit_proxy_address='http://2.2.2.2:8000', _thread_name='Worker-1')
+        driver = _FakeDriver('https://example.com/complete')
+        driver._session_proxy_address = 'http://1.1.1.1:8000'
+        driver._submit_proxy_address = 'http://2.2.2.2:8000'
+        driver._thread_name = 'Worker-1'
         with patch('software.core.engine.submission_service._provider_submission_requires_verification', return_value=False), patch('software.core.engine.submission_service._provider_wait_for_submission_verification', return_value=False), patch.object(service, '_wait_for_completion_page', side_effect=[False, False]), patch('software.core.engine.submission_service.random.uniform', return_value=0.2), patch('software.core.engine.submission_service.time.sleep'):
             outcome = service.finalize_after_submit(driver, stop_signal=stop_signal, gui_instance=None, thread_name='Worker-1')
         assert outcome.status == 'success'
@@ -53,7 +102,7 @@ class SubmissionServiceTests:
         stop_policy = make_stop_policy_mock()
         service = SubmissionService(config, state, stop_policy)
         stop_signal = make_mock_event(wait_return=True)
-        driver = object()
+        driver = _FakeDriver()
         with patch('software.core.engine.submission_service.random.uniform', return_value=0.2):
             outcome = service.finalize_after_submit(driver, stop_signal=stop_signal, gui_instance=None, thread_name='Worker-1')
         assert outcome.status == 'aborted'
@@ -68,8 +117,9 @@ class SubmissionServiceTests:
         stop_policy = make_stop_policy_mock(record_success_return=False)
         service = SubmissionService(config, state, stop_policy)
         stop_signal = make_mock_event()
+        driver = _FakeDriver()
         with patch.object(service, '_detect_completion_once', return_value=True) as detect_mock, patch('software.core.engine.submission_service._provider_wait_for_submission_verification') as verification_wait_mock, patch('software.core.engine.submission_service._provider_submission_requires_verification') as verification_mock, patch('software.core.engine.submission_service.random.uniform', return_value=0.2), patch('software.core.engine.submission_service.time.sleep'):
-            outcome = service.finalize_after_submit(object(), stop_signal=stop_signal, gui_instance=None, thread_name='Worker-1')
+            outcome = service.finalize_after_submit(driver, stop_signal=stop_signal, gui_instance=None, thread_name='Worker-1')
         assert outcome.status == 'success'
         assert outcome.completion_detected
         detect_mock.assert_called_once()
@@ -83,8 +133,9 @@ class SubmissionServiceTests:
         stop_policy = make_stop_policy_mock(record_success_return=True)
         service = SubmissionService(config, state, stop_policy)
         stop_signal = make_mock_event()
+        driver = _FakeDriver()
         with patch.object(service, '_detect_completion_once', return_value=False), patch.object(service, '_wait_for_completion_page', return_value=True) as wait_mock, patch('software.core.engine.submission_service._provider_submission_requires_verification') as verification_mock, patch('software.core.engine.submission_service._provider_wait_for_submission_verification') as verification_wait_mock, patch('software.core.engine.submission_service.random.uniform', return_value=0.2), patch('software.core.engine.submission_service.time.sleep'):
-            outcome = service.finalize_after_submit(object(), stop_signal=stop_signal, gui_instance=None, thread_name='Worker-1')
+            outcome = service.finalize_after_submit(driver, stop_signal=stop_signal, gui_instance=None, thread_name='Worker-1')
         assert outcome.status == 'success'
         assert outcome.completion_detected
         wait_mock.assert_called_once()
@@ -99,7 +150,7 @@ class SubmissionServiceTests:
         stop_policy = make_stop_policy_mock(record_failure_return=True)
         service = SubmissionService(config, state, stop_policy)
         stop_signal = make_mock_event()
-        driver = SimpleNamespace(current_url='https://example.com/form')
+        driver = _FakeDriver('https://example.com/form')
         with patch('software.core.engine.submission_service._provider_submission_requires_verification', return_value=False), patch('software.core.engine.submission_service._provider_wait_for_submission_verification', return_value=False), patch.object(service, '_wait_for_completion_page', side_effect=[False, False]), patch('software.core.engine.submission_service.duration_control.is_survey_completion_page', return_value=False), patch('software.core.engine.submission_service.random.uniform', return_value=0.2):
             outcome = service.finalize_after_submit(driver, stop_signal=stop_signal, gui_instance=None, thread_name='Worker-1')
         assert outcome.status == 'failure'
@@ -115,7 +166,7 @@ class SubmissionServiceTests:
         stop_policy = make_stop_policy_mock(record_success_return=True)
         service = SubmissionService(config, state, stop_policy)
         stop_signal = make_mock_event()
-        driver = SimpleNamespace(current_url='https://example.com/complete')
+        driver = _FakeDriver('https://example.com/complete')
         with patch('software.core.engine.submission_service._provider_submission_requires_verification', return_value=False), patch('software.core.engine.submission_service._provider_wait_for_submission_verification', return_value=False), patch.object(service, '_wait_for_completion_page', side_effect=[False, False]), patch('software.core.engine.submission_service.random.uniform', return_value=0.2), patch('software.core.engine.submission_service.time.sleep'):
             outcome = service.finalize_after_submit(driver, stop_signal=stop_signal, gui_instance=None, thread_name='Worker-1')
         assert outcome.status == 'success'
@@ -129,7 +180,7 @@ class SubmissionServiceTests:
         stop_policy = make_stop_policy_mock(record_success_return=False)
         service = SubmissionService(config, state, stop_policy)
         stop_signal = make_mock_event()
-        driver = SimpleNamespace(current_url='https://example.com/form')
+        driver = _FakeDriver('https://example.com/form')
         with patch('software.core.engine.submission_service._provider_submission_requires_verification', return_value=False), patch('software.core.engine.submission_service._provider_wait_for_submission_verification', return_value=False), patch.object(service, '_wait_for_completion_page', side_effect=[False, False]), patch('software.core.engine.submission_service.duration_control.is_survey_completion_page', return_value=True), patch('software.core.engine.submission_service.random.uniform', return_value=0.2), patch('software.core.engine.submission_service.time.sleep'):
             outcome = service.finalize_after_submit(driver, stop_signal=stop_signal, gui_instance=None, thread_name='Worker-1')
         assert outcome.status == 'success'
@@ -143,7 +194,7 @@ class SubmissionServiceTests:
         stop_policy = make_stop_policy_mock(record_failure_return=True)
         service = SubmissionService(config, state, stop_policy)
         stop_signal = make_mock_event()
-        driver = object()
+        driver = _FakeDriver()
         with patch('software.core.engine.submission_service._provider_submission_requires_verification', return_value=True), patch('software.core.engine.submission_service._provider_submission_validation_message', return_value='命中腾讯安全验证'), patch('software.core.engine.submission_service._provider_handle_submission_verification_detected') as handle_mock, patch('software.core.engine.submission_service.random.uniform', return_value=0.2):
             outcome = service.finalize_after_submit(driver, stop_signal=stop_signal, gui_instance=object(), thread_name='Worker-1')
         assert outcome.status == 'failure'
@@ -160,8 +211,9 @@ class SubmissionServiceTests:
         service = SubmissionService(config, state, stop_policy)
         stop_signal = make_mock_event()
         expected = SubmissionOutcome(status='failure', failure_reason=FailureReason.SUBMISSION_VERIFICATION_REQUIRED, message='命中智能验证', completion_detected=False, should_stop=True, should_rotate_proxy=False)
+        driver = _FakeDriver('https://example.com/form')
         with patch('software.core.engine.submission_service._provider_submission_requires_verification', return_value=False), patch.object(service, '_check_submission_verification_after_submit', side_effect=[None, expected]), patch.object(service, '_wait_for_completion_page', side_effect=[False, False]), patch('software.core.engine.submission_service.random.uniform', return_value=0.2):
-            outcome = service.finalize_after_submit(SimpleNamespace(current_url='https://example.com/form'), stop_signal=stop_signal, gui_instance=None, thread_name='Worker-1')
+            outcome = service.finalize_after_submit(driver, stop_signal=stop_signal, gui_instance=None, thread_name='Worker-1')
         assert outcome.status == 'failure'
         assert outcome.failure_reason == FailureReason.SUBMISSION_VERIFICATION_REQUIRED
         stop_policy.record_failure.assert_not_called()
@@ -172,5 +224,19 @@ class SubmissionServiceTests:
         service = SubmissionService(config, state, make_stop_policy_mock())
         stop_signal = make_mock_event()
         with patch('software.core.engine.submission_service._provider_wait_for_submission_verification', side_effect=RuntimeError('boom')):
-            outcome = service._check_submission_verification_after_submit(driver=object(), stop_signal=stop_signal, gui_instance=None, thread_name='Worker-1')
+            outcome = service._check_submission_verification_after_submit(driver=_FakeDriver(), stop_signal=stop_signal, gui_instance=None, thread_name='Worker-1')
         assert outcome is None
+
+    def test_finalize_after_submit_retries_once_after_provider_recovery(self, make_mock_event, make_stop_policy_mock) -> None:
+        config = ExecutionConfig(headless_mode=False, survey_provider='qq')
+        state = ExecutionState(config=config)
+        stop_policy = make_stop_policy_mock(record_success_return=False)
+        service = SubmissionService(config, state, stop_policy)
+        stop_signal = make_mock_event()
+        driver = _FakeDriver('https://example.com/form')
+        with patch('software.core.engine.submission_service._provider_submission_requires_verification', return_value=False), patch.object(service, '_check_submission_verification_after_submit', return_value=None), patch.object(service, '_wait_for_completion_page', side_effect=[False, False, True]), patch.object(service, '_attempt_submission_recovery', return_value=True) as recovery_mock, patch('software.core.engine.submission_service.random.uniform', return_value=0.2), patch('software.core.engine.submission_service.time.sleep'):
+            outcome = service.finalize_after_submit(driver, stop_signal=stop_signal, gui_instance=None, thread_name='Worker-1')
+        assert outcome.status == 'success'
+        assert outcome.completion_detected
+        recovery_mock.assert_called_once_with(driver, stop_signal, None, thread_name='Worker-1')
+        stop_policy.record_success.assert_called_once_with(stop_signal, thread_name='Worker-1')
