@@ -47,8 +47,22 @@ _WJX_MISSING_ANSWER_MARKERS = (
     "请选择",
     "请填写",
     "必答题",
+    "请回答此题",
+    "小于最小输入字数",
+    "最小输入字数",
+    "当前字数",
+    "不少于",
+    "最少",
+)
+_WJX_BODY_FALLBACK_MARKERS = (
+    "此题未作答",
+    "本题未作答",
+    "请选择",
+    "请填写",
+    "请回答此题",
 )
 _WJX_MISSING_ANSWER_SELECTORS = (
+    ".errorMessage",
     ".error",
     ".field-error",
     ".data__error",
@@ -58,6 +72,7 @@ _WJX_MISSING_ANSWER_SELECTORS = (
     ".validate-error",
     ".layui-layer-content",
 )
+_MAX_SUBMISSION_RECOVERY_ATTEMPTS = 3
 
 
 class AliyunCaptchaBypassError(RuntimeError):
@@ -184,8 +199,28 @@ def _extract_missing_answer_hint(driver: BrowserDriver) -> Optional[SubmissionRe
                 return rect.width > 0 && rect.height > 0;
             };
             const normalize = (text) => String(text || '').replace(/\s+/g, ' ').trim();
-            const markers = ['此题未作答', '本题未作答', '请选择', '请填写', '必答题'];
+            const markers = [
+                '此题未作答',
+                '本题未作答',
+                '请选择',
+                '请填写',
+                '必答题',
+                '请回答此题',
+                '小于最小输入字数',
+                '最小输入字数',
+                '当前字数',
+                '不少于',
+                '最少',
+            ];
+            const bodyFallbackMarkers = [
+                '此题未作答',
+                '本题未作答',
+                '请选择',
+                '请填写',
+                '请回答此题',
+            ];
             const selectors = [
+                '.errorMessage',
                 '.error',
                 '.field-error',
                 '.data__error',
@@ -200,7 +235,7 @@ def _extract_missing_answer_hint(driver: BrowserDriver) -> Optional[SubmissionRe
 
             const pushQuestionNumber = (node) => {
                 if (!node) return;
-                const root = node.closest('#divQuestion [topic], #divQuestion div[id^="div"]');
+                const root = node.closest('#divQuestion [topic], #divQuestion div[id^="div"], [topic], div[id^="div"]');
                 if (!root) return;
                 const rawTopic = String(root.getAttribute('topic') || '').trim();
                 const idMatch = String(root.getAttribute('id') || '').trim().match(/^div(\d+)$/);
@@ -212,6 +247,25 @@ def _extract_missing_answer_hint(driver: BrowserDriver) -> Optional[SubmissionRe
                 }
             };
 
+            const pushQuestionNumbersFromText = (text) => {
+                const normalized = normalize(text);
+                if (!normalized) return;
+                const patterns = [
+                    /第\s*(\d+)\s*题/g,
+                    /题号\s*(\d+)/g,
+                    /q(?:uestion)?\s*(\d+)/ig,
+                ];
+                for (const pattern of patterns) {
+                    let match = null;
+                    while ((match = pattern.exec(normalized)) !== null) {
+                        const value = Number.parseInt(match[1], 10);
+                        if (value > 0 && !questionNumbers.includes(value)) {
+                            questionNumbers.push(value);
+                        }
+                    }
+                }
+            };
+
             for (const sel of selectors) {
                 for (const node of document.querySelectorAll(sel)) {
                     if (!visible(node)) continue;
@@ -220,13 +274,30 @@ def _extract_missing_answer_hint(driver: BrowserDriver) -> Optional[SubmissionRe
                     if (!markers.some((marker) => text.includes(marker))) continue;
                     messages.push(text);
                     pushQuestionNumber(node);
+                    pushQuestionNumbersFromText(text);
                 }
             }
 
-            for (const marker of markers) {
+            for (const node of document.querySelectorAll('#divQuestion [topic], #divQuestion div[id^="div"], [topic], div[id^="div"]')) {
+                if (!visible(node)) continue;
+                const styleText = String(node.getAttribute('style') || '').toLowerCase();
+                const hasErrorBorder = styleText.includes('255, 64, 64') || styleText.includes('#ff4040') || styleText.includes('red');
+                const visibleError = Array.from(node.querySelectorAll('.errorMessage, .error, .field-error, .validate-error'))
+                    .find((err) => visible(err) && normalize(err.innerText || err.textContent || ''));
+                if (!hasErrorBorder && !visibleError) continue;
+                const text = normalize(visibleError ? (visibleError.innerText || visibleError.textContent || '') : (node.innerText || node.textContent || ''));
+                if (!text) continue;
+                if (!markers.some((marker) => text.includes(marker))) continue;
+                messages.push(text);
+                pushQuestionNumber(node);
+                pushQuestionNumbersFromText(text);
+            }
+
+            for (const marker of bodyFallbackMarkers) {
                 const bodyText = normalize(document.body?.innerText || '');
                 if (bodyText.includes(marker) && !messages.some((item) => item.includes(marker))) {
                     messages.push(marker);
+                    pushQuestionNumbersFromText(bodyText);
                 }
             }
 
@@ -262,7 +333,7 @@ def _extract_missing_answer_hint(driver: BrowserDriver) -> Optional[SubmissionRe
         if text not in messages:
             messages.append(text)
 
-    if not question_numbers and not messages:
+    if not question_numbers:
         return None
     message = " | ".join(messages[:3]).strip() or "提交后检测到未作答提示"
     return SubmissionRecoveryHint(tuple(question_numbers), message)
@@ -434,7 +505,7 @@ def attempt_submission_recovery(
 
     runtime_state = get_wjx_runtime_state(driver)
     recovery_attempts = int(runtime_state.submission_recovery_attempts or 0)
-    if recovery_attempts >= 1:
+    if recovery_attempts >= _MAX_SUBMISSION_RECOVERY_ATTEMPTS:
         return False
 
     hint = _extract_missing_answer_hint(driver)
@@ -459,12 +530,16 @@ def attempt_submission_recovery(
         if question_num > 0 and question_num not in target_questions:
             target_questions.append(question_num)
     if not target_questions:
-        target_questions = list(current_page_required)
-    if not target_questions:
-        logging.warning("WJX 提交补救放弃：已识别未作答提示，但当前页没有可补的必答题。message=%s", hint.message)
+        logging.warning("WJX 提交补救放弃：已识别提交提示，但没有定位到具体题号。message=%s", hint.message)
         return False
 
-    logging.warning("WJX 提交命中未作答提示，准备补答并重提：questions=%s message=%s", target_questions, hint.message)
+    logging.warning(
+        "WJX 提交命中未作答提示，准备补答并重提：round=%s/%s questions=%s message=%s",
+        recovery_attempts + 1,
+        _MAX_SUBMISSION_RECOVERY_ATTEMPTS,
+        target_questions,
+        hint.message,
+    )
     try:
         ctx.update_thread_status(thread_name or "Worker-?", "补答必答题", running=True)
     except Exception:

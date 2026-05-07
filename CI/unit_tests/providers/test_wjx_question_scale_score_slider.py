@@ -25,6 +25,9 @@ class _FakeClickable:
     def get_attribute(self, name: str):
         return self.attributes.get(name)
 
+    def is_displayed(self) -> bool:
+        return True
+
     def find_elements(self, _by, selector: str):
         return list(self.selector_map.get(selector, []))
 
@@ -201,9 +204,33 @@ class WjxScaleQuestionTests:
         scale_module.scale(driver, 3, 0, scale_prob_config=[[1, 9]], task_ctx=object())
 
         assert option.click_calls == 1
-        assert len(driver.executed_scripts) == 1
+        assert len(driver.executed_scripts) == 2
+        assert driver.executed_scripts[0][0] == "arguments[0].click();"
         assert pending_calls == [(object(), 3, 0, 1)] or len(pending_calls) == 1
         assert answer_calls == [((3, "scale"), {"selected_indices": [0]})] or answer_calls == [((3, "scale"), {"selected_indices": [1]})]
+
+    def test_scale_clicks_anchor_and_syncs_hidden_value(self, monkeypatch) -> None:
+        anchor = _FakeClickable()
+        anchor.attributes["val"] = "5"
+        option = _FakeClickable()
+        option.selector_map["a[val], a.rate-off, a.rate-on, a[class*='rate-']"] = [anchor]
+        option.selector_map["a[val], [val]"] = [anchor]
+        driver = _FakeScaleScoreDriver(
+            _FakeQuestionDiv(selector_map={".scale-rating ul li": [option]})
+        )
+        monkeypatch.setattr(scale_module, "normalize_droplist_probs", lambda probabilities, count: [1.0][:count])
+        monkeypatch.setattr(scale_module, "apply_single_like_consistency", lambda probs, _current: probs)
+        monkeypatch.setattr(scale_module, "resolve_distribution_probabilities", lambda probs, *_args, **_kwargs: probs)
+        monkeypatch.setattr(scale_module, "get_tendency_index", lambda *_args, **_kwargs: 0)
+        monkeypatch.setattr(scale_module, "resolve_current_reverse_fill_answer", lambda *_args, **_kwargs: None)
+        monkeypatch.setattr(scale_module, "record_pending_distribution_choice", lambda *args: None)
+        monkeypatch.setattr(scale_module, "record_answer", lambda *args, **kwargs: None)
+
+        scale_module.scale(driver, 6, 0, scale_prob_config=[[1]], task_ctx=object())
+
+        assert anchor.click_calls == 1
+        assert option.click_calls == 0
+        assert driver.executed_scripts[-1][1] == (6, "5")
 
     def test_scale_forced_reverse_fill_skips_distribution_record_and_clamps_index(self, monkeypatch) -> None:
         option_a = _FakeClickable(text="A")

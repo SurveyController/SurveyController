@@ -206,6 +206,9 @@ class WizardSectionsCommonMixin:
             return
         self._sync_option_fill_state(state)
     def _on_option_fill_ai_toggled(self, state: Dict[str, Any], checked: bool) -> None:
+        if getattr(self, "_bulk_ai_applying", False):
+            self._sync_option_fill_state(state)
+            return
         ai_cb = state.get("ai_cb")
         if checked and not self._ensure_ai_checkbox_ready(ai_cb):
             self._sync_option_fill_state(state)
@@ -215,6 +218,9 @@ class WizardSectionsCommonMixin:
             if list_radio is not None:
                 list_radio.setChecked(True)
         self._sync_option_fill_state(state)
+        sync_bulk = getattr(self, "_sync_bulk_ai_switch_state", None)
+        if callable(sync_bulk):
+            sync_bulk()
     def _set_text_answer_enabled(self, idx: int, enabled: bool) -> None:
         container = self.text_container_map.get(idx)
         if container:
@@ -299,6 +305,8 @@ class WizardSectionsCommonMixin:
             self.text_random_mode_map[idx] = mode
         self._sync_text_section_state(idx)
     def _on_entry_ai_toggled(self, idx: int, checked: bool) -> None:
+        if getattr(self, "_bulk_ai_applying", False):
+            return
         random_mode = self.text_random_mode_map.get(idx, _TEXT_RANDOM_NONE)
         if checked and not self._ensure_ai_checkbox_ready(self.ai_check_map.get(idx)):
             cb = self.ai_check_map.get(idx)
@@ -313,6 +321,9 @@ class WizardSectionsCommonMixin:
             if list_radio is not None:
                 list_radio.setChecked(True)
         self._sync_text_section_state(idx)
+        sync_bulk = getattr(self, "_sync_bulk_ai_switch_state", None)
+        if callable(sync_bulk):
+            sync_bulk()
     def _ensure_ai_checkbox_ready(self, checkbox: Any) -> bool:
         if checkbox is None:
             return False
@@ -323,7 +334,13 @@ class WizardSectionsCommonMixin:
         checkbox.blockSignals(False)
         return False
     def _on_multi_text_blank_ai_toggled(self, checkbox: Any, checked: bool, sync_func: Any) -> None:
+        if getattr(self, "_bulk_ai_applying", False):
+            sync_func()
+            return
         if checked and not self._ensure_ai_checkbox_ready(checkbox):
             sync_func()
             return
         sync_func()
+        sync_bulk = getattr(self, "_sync_bulk_ai_switch_state", None)
+        if callable(sync_bulk):
+            sync_bulk()

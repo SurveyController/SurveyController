@@ -34,6 +34,12 @@ def _is_retryable_ai_generation_error(error: Exception) -> bool:
     return not any(marker in text for marker in non_retryable_markers)
 
 
+def _max_attempts_for_ai_generation_error(error: Exception) -> int:
+    if is_ai_timeout_runtime_error(error):
+        return 2
+    return _AI_FILL_MAX_ATTEMPTS
+
+
 def is_free_ai_runtime_error(error: object) -> bool:
     if is_ai_timeout_runtime_error(error):
         return True
@@ -115,10 +121,21 @@ def generate_ai_answer(
     *,
     question_type: str = "fill_blank",
     blank_count: Optional[int] = None,
+    min_words: Optional[int] = None,
 ) -> Union[str, List[str]]:
     cleaned = _cleanup_question_title(question_title)
     if not cleaned:
         raise AIRuntimeError("题干为空，无法调用 AI")
+    try:
+        normalized_min_words = int(min_words or 0)
+    except Exception:
+        normalized_min_words = 0
+    if normalized_min_words > 0 and question_type == "fill_blank":
+        cleaned = (
+            f"{cleaned}\n\n"
+            f"作答要求：答案至少{normalized_min_words}字，内容自然具体，"
+            "不要少于字数要求，只输出最终答案。"
+        )
 
     # 注入画像和上下文信息，让 AI 答案与前面的作答保持一致
     try:
@@ -156,12 +173,13 @@ def generate_ai_answer(
             return str(answer).strip()
         except Exception as exc:
             last_error = exc
-            if attempt >= _AI_FILL_MAX_ATTEMPTS or not _is_retryable_ai_generation_error(exc):
+            max_attempts = _max_attempts_for_ai_generation_error(exc)
+            if attempt >= max_attempts or not _is_retryable_ai_generation_error(exc):
                 raise AIRuntimeError(f"AI 调用失败：{exc}") from exc
             logging.warning(
                 "AI 生成失败，准备重试 | attempt=%s/%s | question_type=%s | error=%s",
                 attempt,
-                _AI_FILL_MAX_ATTEMPTS,
+                max_attempts,
                 question_type,
                 exc,
             )

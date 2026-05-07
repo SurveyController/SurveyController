@@ -113,6 +113,9 @@ class QuestionWizardDialog(
         self._search_status_label: Optional[BodyLabel] = None
         self._search_popup: Optional[QListWidget] = None
         self._screen_change_bound = False
+        self._bulk_ai_switch: Optional[SwitchButton] = None
+        self._bulk_ai_label: Optional[BodyLabel] = None
+        self._bulk_ai_applying = False
 
         layout = QVBoxLayout(self)
         layout.setContentsMargins(24, 20, 24, 20)
@@ -175,10 +178,28 @@ class QuestionWizardDialog(
         _master_seg.setCurrentItem("custom")
         master_row.addWidget(_master_seg)
         master_row.addStretch(1)
+
+        if self._has_ai_fill_entries():
+            ai_master_lbl = BodyLabel("填空 AI：", container)
+            ai_master_lbl.setStyleSheet("font-size: 13px;")
+            _apply_label_color(ai_master_lbl, "#444444", "#e0e0e0")
+            ai_master_switch = SwitchButton(container)
+            ai_master_switch.setOnText("")
+            ai_master_switch.setOffText("")
+            ai_master_status = BodyLabel("一键启用所有填空 AI", container)
+            ai_master_status.setStyleSheet("font-size: 13px;")
+            _apply_label_color(ai_master_status, "#666666", "#bfbfbf")
+            master_row.addWidget(ai_master_lbl)
+            master_row.addWidget(ai_master_switch)
+            master_row.addWidget(ai_master_status)
+            self._bulk_ai_switch = ai_master_switch
+            self._bulk_ai_label = ai_master_status
+            ai_master_switch.checkedChanged.connect(self._on_bulk_ai_toggled)
         inner.addLayout(master_row)
 
         for idx, entry in enumerate(self.entries):
             self._question_cards.append(self._build_entry_card(idx, entry, container, inner))
+        self._sync_bulk_ai_switch_state()
 
         self._master_applying = False
 
@@ -482,3 +503,110 @@ class QuestionWizardDialog(
                 raw = ""
             result[idx] = raw or None
         return result
+
+    def _has_ai_fill_entries(self) -> bool:
+        for entry in self.entries:
+            if getattr(entry, "question_type", "") in ("text", "multi_text"):
+                return True
+            fillable_indices = getattr(entry, "fillable_option_indices", None)
+            if isinstance(fillable_indices, list) and fillable_indices:
+                return True
+        return False
+
+    def _on_bulk_ai_toggled(self, checked: bool) -> None:
+        if self._bulk_ai_applying:
+            return
+        if checked and not self._ensure_bulk_ai_ready():
+            self._set_bulk_ai_checked(False)
+            return
+        self._apply_bulk_ai_to_text_entries(bool(checked))
+
+    def _ensure_bulk_ai_ready(self) -> bool:
+        from software.ui.helpers.ai_fill import ensure_ai_ready
+
+        return ensure_ai_ready(self.window() or self)
+
+    def _set_bulk_ai_checked(self, checked: bool) -> None:
+        if self._bulk_ai_switch is None:
+            return
+        self._bulk_ai_applying = True
+        try:
+            self._bulk_ai_switch.setChecked(bool(checked))
+        finally:
+            self._bulk_ai_applying = False
+
+    def _apply_bulk_ai_to_text_entries(self, checked: bool) -> None:
+        self._bulk_ai_applying = True
+        try:
+            for idx, cb in self.ai_check_map.items():
+                random_mode = self.text_random_mode_map.get(idx, _TEXT_RANDOM_NONE)
+                if checked and random_mode != _TEXT_RANDOM_NONE:
+                    list_radio = self.text_random_list_radio_map.get(idx)
+                    self.text_random_mode_map[idx] = _TEXT_RANDOM_NONE
+                    if list_radio is not None:
+                        list_radio.setChecked(True)
+                cb.setChecked(bool(checked))
+                self._sync_text_section_state(idx)
+
+            for idx, checkboxes in getattr(self, "multi_text_blank_ai_checkboxes", {}).items():
+                for cb in checkboxes:
+                    cb.setChecked(bool(checked))
+                self._sync_multi_text_add_button_state(idx)
+
+            for state_map in self.option_fill_state_map.values():
+                for state in state_map.values():
+                    ai_cb = state.get("ai_cb")
+                    if ai_cb is None:
+                        continue
+                    if checked:
+                        list_radio = state.get("radios", {}).get("list")
+                        if list_radio is not None:
+                            list_radio.setChecked(True)
+                    ai_cb.setChecked(bool(checked))
+                    self._sync_option_fill_state(state)
+        finally:
+            self._bulk_ai_applying = False
+        self._sync_bulk_ai_switch_state()
+
+    def _sync_bulk_ai_switch_state(self) -> None:
+        if self._bulk_ai_switch is None:
+            return
+        total = 0
+        enabled = 0
+        for idx, entry in enumerate(self.entries):
+            if getattr(entry, "question_type", "") == "text" and idx in self.ai_check_map:
+                total += 1
+                if self.ai_check_map[idx].isChecked():
+                    enabled += 1
+            elif getattr(entry, "question_type", "") == "multi_text":
+                checkboxes = list(getattr(self, "multi_text_blank_ai_checkboxes", {}).get(idx, []) or [])
+                total += len(checkboxes)
+                enabled += sum(1 for cb in checkboxes if cb.isChecked())
+
+        for state_map in self.option_fill_state_map.values():
+            for state in state_map.values():
+                ai_cb = state.get("ai_cb")
+                if ai_cb is None:
+                    continue
+                total += 1
+                if ai_cb.isChecked():
+                    enabled += 1
+
+        checked = total > 0 and enabled == total
+        self._set_bulk_ai_checked(checked)
+        if self._bulk_ai_label is not None:
+            if total <= 0:
+                self._bulk_ai_label.setText("当前没有可启用 AI 的填空项")
+            elif enabled <= 0:
+                self._bulk_ai_label.setText(f"一键启用所有填空 AI（共 {total} 项）")
+            elif enabled == total:
+                self._bulk_ai_label.setText(f"已启用全部 {total} 项填空 AI")
+            else:
+                self._bulk_ai_label.setText(f"已启用 {enabled}/{total} 项填空 AI")
+
+    def _sync_multi_text_add_button_state(self, idx: int) -> None:
+        add_btn = self.text_add_btn_map.get(idx)
+        checkboxes = list(getattr(self, "multi_text_blank_ai_checkboxes", {}).get(idx, []) or [])
+        if add_btn is None or not checkboxes:
+            return
+        add_btn.setEnabled(not all(cb.isChecked() for cb in checkboxes))

@@ -87,6 +87,7 @@ class RuntimeAISection(QObject):
         "qwen": "https://help.aliyun.com/zh/model-studio/get-api-key",
         "siliconflow": "https://docs.siliconflow.cn/cn/userguide/quickstart#2-%E6%9F%A5%E7%9C%8B%E6%A8%A1%E5%9E%8B%E5%88%97%E8%A1%A8%E5%92%8C%E6%A8%A1%E5%9E%8B%E8%AF%A6%E6%83%85",
         "volces": "https://www.volcengine.com/docs/82379/1399008?lang=zh#da0e9d90",
+        "mimo": "https://platform.xiaomimimo.com/#/token-plan",
         "custom": "https://platform.openai.com/docs/api-reference/introduction",
     }
 
@@ -280,8 +281,7 @@ class RuntimeAISection(QObject):
 
     def update_config(self, cfg: RuntimeConfig):
         cfg.ai_mode = self._get_current_ai_mode()
-        idx = self.ai_provider_combo.currentIndex()
-        cfg.ai_provider = str(self.ai_provider_combo.itemData(idx)) if idx >= 0 else "deepseek"
+        cfg.ai_provider = self._get_current_provider_key()
         cfg.ai_api_key = self.ai_apikey_edit.text().strip()
         cfg.ai_base_url = self.ai_baseurl_edit.text().strip()
         cfg.ai_api_protocol = "auto"
@@ -302,6 +302,11 @@ class RuntimeAISection(QObject):
         idx = self.ai_mode_combo.currentIndex()
         mode = str(self.ai_mode_combo.itemData(idx)) if idx >= 0 else "free"
         return mode if mode in self._AI_MODES else "free"
+
+    def _get_current_provider_key(self) -> str:
+        idx = self.ai_provider_combo.currentIndex()
+        provider_key = str(self.ai_provider_combo.itemData(idx)) if idx >= 0 else "deepseek"
+        return provider_key if provider_key in AI_PROVIDERS else "deepseek"
 
     def _set_ai_test_loading(self, loading: bool):
         self.ai_test_spinner.setVisible(loading)
@@ -333,8 +338,7 @@ class RuntimeAISection(QObject):
         """根据当前模式与提供商更新 AI 配置项的可见性和推荐模型"""
         ai_mode = self._get_current_ai_mode()
         is_free_mode = ai_mode == "free"
-        idx = self.ai_provider_combo.currentIndex()
-        provider_key = str(self.ai_provider_combo.itemData(idx)) if idx >= 0 else "deepseek"
+        provider_key = self._get_current_provider_key()
         is_custom = provider_key == "custom"
         self.ai_free_mode_bar.setVisible(is_free_mode)
         self.ai_privacy_bar.setVisible(not is_free_mode)
@@ -351,6 +355,7 @@ class RuntimeAISection(QObject):
         default_model = provider_config.get("default_model", "")
         
         # 控制显示哪个输入控件
+        current_model = self._get_current_model_value()
         self.ai_model_combo.setVisible(not is_custom)
         self.ai_model_edit.setVisible(is_custom)
         
@@ -372,6 +377,8 @@ class RuntimeAISection(QObject):
             if not self._ai_loading:
                 self.ai_model_combo.setText(default_model)
                 save_ai_settings(model=default_model)
+            elif not current_model and default_model:
+                self.ai_model_combo.setText(default_model)
         
         self._update_ai_doc_link(provider_key)
 
@@ -441,8 +448,7 @@ class RuntimeAISection(QObject):
         """AI 提供商选择变化"""
         if self._ai_loading:
             return
-        idx = self.ai_provider_combo.currentIndex()
-        provider_key = str(self.ai_provider_combo.itemData(idx)) if idx >= 0 else "deepseek"
+        provider_key = self._get_current_provider_key()
         save_ai_settings(provider=provider_key)
         self._update_ai_visibility()
 
@@ -504,6 +510,7 @@ class RuntimeAISection(QObject):
             return
         save_ai_settings(
             ai_mode=self._get_current_ai_mode(),
+            provider=self._get_current_provider_key(),
             api_key=self.ai_apikey_edit.text(),
             base_url=self.ai_baseurl_edit.text(),
             api_protocol="auto",

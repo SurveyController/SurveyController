@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import logging
+import threading
 import time
 from typing import Any, Dict, Iterable
 from urllib.parse import urlsplit, urlunsplit
@@ -17,6 +18,8 @@ _AI_REQUEST_TIMEOUT_SECONDS = 15
 _AI_MAX_RETRY_ATTEMPTS = 2
 _AI_RETRYABLE_STATUS_CODES = frozenset({429, 502, 503, 504})
 _AI_RETRY_BACKOFF_SECONDS = 1.0
+_AI_PROVIDER_SEMAPHORES: Dict[str, threading.BoundedSemaphore] = {}
+_AI_PROVIDER_SEMAPHORES_LOCK = threading.Lock()
 
 logger = logging.getLogger(__name__)
 
@@ -35,6 +38,40 @@ __all__ = [
     "call_chat_completions",
     "call_responses_api",
 ]
+
+
+def _normalize_request_attempts(value: Any) -> int:
+    try:
+        attempts = int(value)
+    except Exception:
+        attempts = _AI_MAX_RETRY_ATTEMPTS
+    return max(1, min(4, attempts))
+
+
+def _normalize_timeout_seconds(value: Any) -> int:
+    try:
+        timeout = int(value)
+    except Exception:
+        timeout = _AI_REQUEST_TIMEOUT_SECONDS
+    return max(5, min(120, timeout))
+
+
+def _provider_semaphore(provider_key: str, max_concurrent_requests: int):
+    try:
+        limit = int(max_concurrent_requests)
+    except Exception:
+        limit = 0
+    if limit <= 0:
+        return None
+    limit = max(1, min(16, limit))
+    normalized_key = str(provider_key or "default").strip().lower() or "default"
+    semaphore_key = f"{normalized_key}:{limit}"
+    with _AI_PROVIDER_SEMAPHORES_LOCK:
+        semaphore = _AI_PROVIDER_SEMAPHORES.get(semaphore_key)
+        if semaphore is None:
+            semaphore = threading.BoundedSemaphore(limit)
+            _AI_PROVIDER_SEMAPHORES[semaphore_key] = semaphore
+        return semaphore
 
 
 def _normalize_endpoint_url(raw_url: str) -> str:
@@ -167,21 +204,22 @@ def _is_ai_timeout_exception(exc: Exception) -> bool:
     return isinstance(exc, (http_client.Timeout, http_client.ConnectTimeout, http_client.ReadTimeout))
 
 
-def _execute_ai_request_with_retry(request_name: str, request_func):
+def _execute_ai_request_with_retry(request_name: str, request_func, *, max_attempts: int = _AI_MAX_RETRY_ATTEMPTS):
     last_error: Exception | None = None
-    for attempt in range(1, _AI_MAX_RETRY_ATTEMPTS + 1):
+    attempts = _normalize_request_attempts(max_attempts)
+    for attempt in range(1, attempts + 1):
         try:
             return request_func()
         except Exception as exc:
             last_error = exc
-            should_retry = attempt < _AI_MAX_RETRY_ATTEMPTS and _should_retry_ai_request(exc)
+            should_retry = attempt < attempts and _should_retry_ai_request(exc)
             if not should_retry:
                 raise
             logger.warning(
                 "AI 请求临时失败，准备重试 | request=%s | attempt=%s/%s | error=%s",
                 request_name,
                 attempt,
-                _AI_MAX_RETRY_ATTEMPTS,
+                attempts,
                 exc,
             )
             time.sleep(_AI_RETRY_BACKOFF_SECONDS)
@@ -196,6 +234,11 @@ def call_chat_completions(
     model: str,
     question: str,
     system_prompt: str,
+    *,
+    include_sampling_params: bool = True,
+    provider_key: str = "",
+    max_concurrent_requests: int = 0,
+    max_request_attempts: int = _AI_MAX_RETRY_ATTEMPTS,
     timeout: int = _AI_REQUEST_TIMEOUT_SECONDS,
 ) -> str:
     headers = {
@@ -208,14 +251,36 @@ def call_chat_completions(
             {"role": "system", "content": system_prompt},
             {"role": "user", "content": f"请简短回答这个问卷问题：{question}"},
         ],
-        "max_tokens": 200,
-        "temperature": 0.7,
     }
+    if include_sampling_params:
+        payload["max_tokens"] = 200
+        payload["temperature"] = 0.7
+    request_timeout = _normalize_timeout_seconds(timeout)
+    semaphore = _provider_semaphore(provider_key, max_concurrent_requests)
+
+    def _post_request():
+        return http_client.post(
+            url,
+            headers=headers,
+            json=payload,
+            timeout=request_timeout,
+            proxies={},
+        ).raise_for_status()
+
     try:
-        resp = _execute_ai_request_with_retry(
-            "chat_completions",
-            lambda: http_client.post(url, headers=headers, json=payload, timeout=timeout, proxies={}).raise_for_status(),
-        )
+        if semaphore is None:
+            resp = _execute_ai_request_with_retry(
+                "chat_completions",
+                _post_request,
+                max_attempts=max_request_attempts,
+            )
+        else:
+            with semaphore:
+                resp = _execute_ai_request_with_retry(
+                    "chat_completions",
+                    _post_request,
+                    max_attempts=max_request_attempts,
+                )
         data = resp.json()
         return _extract_chat_completion_text(data)
     except Exception as exc:
@@ -228,6 +293,8 @@ def call_responses_api(
     model: str,
     question: str,
     system_prompt: str,
+    *,
+    max_request_attempts: int = _AI_MAX_RETRY_ATTEMPTS,
     timeout: int = _AI_REQUEST_TIMEOUT_SECONDS,
 ) -> str:
     headers = {
@@ -241,10 +308,12 @@ def call_responses_api(
         "max_output_tokens": 200,
         "temperature": 0.7,
     }
+    request_timeout = _normalize_timeout_seconds(timeout)
     try:
         resp = _execute_ai_request_with_retry(
             "responses",
-            lambda: http_client.post(url, headers=headers, json=payload, timeout=timeout, proxies={}).raise_for_status(),
+            lambda: http_client.post(url, headers=headers, json=payload, timeout=request_timeout, proxies={}).raise_for_status(),
+            max_attempts=max_request_attempts,
         )
         data = resp.json()
         return _extract_responses_text(data)

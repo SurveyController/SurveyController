@@ -54,13 +54,32 @@ class PlaywrightElement:
     def click(self) -> None:
         last_exc: Optional[Exception] = None
         try:
-            self._handle.click()
+            box = self._handle.bounding_box()
+        except Exception:
+            box = None
+        if not box:
+            try:
+                self._handle.evaluate("el => { el.click(); return true; }")
+                return
+            except Exception as exc:
+                last_exc = exc
+                log_suppressed_exception("browser_element.PlaywrightElement.click hidden js fallback", exc, level=logging.WARNING)
+        try:
+            self._handle.click(timeout=1200)
             return
         except Exception as exc:
             last_exc = exc
+            text = str(exc or "").lower()
+            if "intercepts pointer events" in text or "timeout" in text:
+                try:
+                    self._handle.evaluate("el => { el.click(); return true; }")
+                    return
+                except Exception as js_exc:
+                    last_exc = js_exc
+                    log_suppressed_exception("browser_element.PlaywrightElement.click fast js fallback", js_exc, level=logging.WARNING)
             try:
                 self._handle.scroll_into_view_if_needed()
-                self._handle.click()
+                self._handle.click(timeout=1200)
                 return
             except Exception as exc:
                 last_exc = exc
@@ -75,6 +94,16 @@ class PlaywrightElement:
             raise last_exc
 
     def clear(self) -> None:
+        if not self.is_displayed():
+            try:
+                self._handle.evaluate(
+                    "el => { el.value = ''; el.setAttribute('value', ''); "
+                    "['input','change','blur','keyup','keydown'].forEach(name => "
+                    "{ try { el.dispatchEvent(new Event(name, {bubbles:true})); } catch(e) {} }); }"
+                )
+                return
+            except Exception as exc:
+                log_suppressed_exception("browser_element.PlaywrightElement.clear hidden js fallback", exc, level=logging.WARNING)
         try:
             self._handle.fill("")
             return
@@ -90,6 +119,17 @@ class PlaywrightElement:
 
     def send_keys(self, value: str) -> None:
         text = "" if value is None else str(value)
+        if not self.is_displayed():
+            try:
+                self._handle.evaluate(
+                    "(el, value) => { el.value = value; el.setAttribute('value', value); "
+                    "['input','change','blur','keyup','keydown'].forEach(name => "
+                    "{ try { el.dispatchEvent(new Event(name, {bubbles:true})); } catch(e) {} }); return true; }",
+                    text,
+                )
+                return
+            except Exception as exc:
+                log_suppressed_exception("browser_element.PlaywrightElement.send_keys hidden js fallback", exc, level=logging.WARNING)
         try:
             self._handle.fill(text)
             return
