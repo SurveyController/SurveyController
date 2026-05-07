@@ -4,7 +4,7 @@ param(
     [string]$Version,
 
     [Parameter(Mandatory = $false)]
-    [string]$Channel = "amd64",
+    [string]$Channel = "stable",
 
     [Parameter(Mandatory = $false)]
     [string]$OutputDir = "Releases",

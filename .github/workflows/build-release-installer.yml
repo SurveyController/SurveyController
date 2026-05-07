@@ -8,7 +8,6 @@ permissions:
   contents: write
 
 env:
-  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
   R2_FEED_PREFIX: "surveycontroller/win/stable"
 
 concurrency:
@@ -18,7 +17,7 @@ concurrency:
 jobs:
   build-and-publish:
     name: Build And Publish Installer
-    runs-on: windows-latest
+    runs-on: windows-2025-vs2026
 
     steps:
       - name: Checkout repository
@@ -129,7 +128,7 @@ jobs:
           Get-ChildItem $releaseDir | Format-Table Name, Length, LastWriteTime
 
       - name: Upload workflow artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: velopack-release-assets
           path: ${{ steps.release_meta.outputs.release_dir }}
@@ -196,6 +195,7 @@ jobs:
               --cache-control $cacheControl `
               --content-type $contentType `
               --endpoint-url "${{ steps.r2_endpoint.outputs.endpoint }}"
+          }
 
       - name: Upload latest setup alias to R2 root
         shell: powershell
