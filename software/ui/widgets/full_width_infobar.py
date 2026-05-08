@@ -1,4 +1,5 @@
 """Full-width InfoBar widget."""
+
 from PySide6.QtCore import QEvent, QSize, QTimer
 from PySide6.QtWidgets import QSizePolicy
 from qfluentwidgets import InfoBar

@@ -5,7 +5,12 @@ from __future__ import annotations
 from typing import Any, cast
 
 from PySide6.QtWidgets import QHBoxLayout, QWidget
-from qfluentwidgets import BodyLabel, FluentIcon, IndeterminateProgressRing, TogglePushButton
+from qfluentwidgets import (
+    BodyLabel,
+    FluentIcon,
+    IndeterminateProgressRing,
+    TogglePushButton,
+)
 
 
 class RandomIpToggleRow(QWidget):

@@ -1,4 +1,5 @@
 """MainWindow 懒加载页面与导航相关方法。"""
+
 from __future__ import annotations
 
 import logging
@@ -18,17 +19,17 @@ from PySide6.QtWidgets import QWidget
 
 if TYPE_CHECKING:
     from PySide6.QtWidgets import QStackedWidget
-    from software.ui.pages.workbench.dashboard import DashboardPage
-    from software.ui.pages.workbench.reverse_fill import ReverseFillPage
-    from software.ui.pages.workbench.runtime_panel import RuntimePage
-    from software.ui.pages.workbench.strategy import QuestionStrategyPage
+    from software.ui.pages.workbench.dashboard.page import DashboardPage
+    from software.ui.pages.workbench.reverse_fill.page import ReverseFillPage
+    from software.ui.pages.workbench.runtime_panel.main import RuntimePage
+    from software.ui.pages.workbench.strategy.page import QuestionStrategyPage
 
 
 class MainWindowLazyPagesMixin:
     """主窗口中与页面懒加载、导航切换相关的方法集合。"""
 
     if TYPE_CHECKING:
-        # 以下属性由 FluentWindow / MainWindow 主类提供，仅用于 Pylance 类型检查
+        # 以下属性由 FluentWindow / MainWindow 主类提供。
         dashboard: DashboardPage
         runtime_page: RuntimePage
         strategy_page: QuestionStrategyPage
@@ -40,10 +41,30 @@ class MainWindowLazyPagesMixin:
         close: Any  # 继承自 QWidget
 
     def _init_navigation(self):
-        self.addSubInterface(self.dashboard, FluentIcon.HOME, "概览", position=NavigationItemPosition.TOP)
-        self.addSubInterface(self.runtime_page, FluentIcon.DEVELOPER_TOOLS, "运行参数", position=NavigationItemPosition.TOP)
-        self.addSubInterface(self.strategy_page, FluentIcon.DICTIONARY_ADD, "题目策略", position=NavigationItemPosition.TOP)
-        self.addSubInterface(self.reverse_fill_page, FluentIcon.SYNC, "反填", position=NavigationItemPosition.TOP)
+        self.addSubInterface(
+            self.dashboard,
+            FluentIcon.HOME,
+            "概览",
+            position=NavigationItemPosition.TOP,
+        )
+        self.addSubInterface(
+            self.runtime_page,
+            FluentIcon.DEVELOPER_TOOLS,
+            "运行参数",
+            position=NavigationItemPosition.TOP,
+        )
+        self.addSubInterface(
+            self.strategy_page,
+            FluentIcon.DICTIONARY_ADD,
+            "题目策略",
+            position=NavigationItemPosition.TOP,
+        )
+        self.addSubInterface(
+            self.reverse_fill_page,
+            FluentIcon.SYNC,
+            "反填",
+            position=NavigationItemPosition.TOP,
+        )
         self._show_reverse_fill_preview_badge()
         self.navigationInterface.addItem(
             routeKey="logs",
@@ -117,7 +138,7 @@ class MainWindowLazyPagesMixin:
     def _get_log_page(self):
         """懒加载日志页面"""
         if self._log_page is None:
-            from software.ui.pages.workbench.log_panel import LogPage
+            from software.ui.pages.workbench.log_panel.page import LogPage
 
             self._log_page = LogPage(self)
             self._log_page.setObjectName("logs")
@@ -200,12 +221,16 @@ class MainWindowLazyPagesMixin:
 
         # 更新日志
         changelog_action = Action(FluentIcon.HISTORY, "更新日志")
-        changelog_action.triggered.connect(lambda: self._switch_to_more_page(self._get_changelog_page()))
+        changelog_action.triggered.connect(
+            lambda: self._switch_to_more_page(self._get_changelog_page())
+        )
         menu.addAction(changelog_action)
 
         # IP 使用记录
         ip_usage_action = Action(FluentIcon.CALENDAR, "IP 使用记录")
-        ip_usage_action.triggered.connect(lambda: self._switch_to_more_page(self._get_ip_usage_page()))
+        ip_usage_action.triggered.connect(
+            lambda: self._switch_to_more_page(self._get_ip_usage_page())
+        )
         menu.addAction(ip_usage_action)
 
         # 捐助
@@ -238,6 +263,3 @@ class MainWindowLazyPagesMixin:
             self.navigationInterface.setCurrentItem("about_menu")
         except Exception:
             logging.info("同步更多侧边栏高亮失败", exc_info=True)
-
-
-

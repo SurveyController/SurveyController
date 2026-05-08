@@ -5,7 +5,7 @@ import threading
 from typing import List, Optional
 
 from software.core.task import ProxyLease
-from software.network.proxy.policy import get_effective_proxy_api_url
+from software.network.proxy.policy.source import get_effective_proxy_api_url
 
 
 def prefetch_proxy_pool(

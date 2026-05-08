@@ -1,4 +1,5 @@
 """MainWindow 生命周期与配置落盘相关方法。"""
+
 from __future__ import annotations
 
 import logging
@@ -21,6 +22,7 @@ from software.logging.log_utils import (
     log_suppressed_exception,
 )
 
+
 class MainWindowLifecycleMixin:
     """收口主窗口的保存、启动恢复、标题刷新与关闭清理。"""
 
@@ -35,7 +37,7 @@ class MainWindowLifecycleMixin:
         _close_request_pending: bool
         _close_request_confirmed: bool
         dashboard: Any
-        question_page: Any
+        workbench_state: Any
         runtime_page: Any
         strategy_page: Any
         controller: Any
@@ -43,16 +45,21 @@ class MainWindowLifecycleMixin:
         def close(self) -> bool: ...
         def _stop_update_check_worker(self) -> None: ...
         def _cancel_startup_update_check(self) -> None: ...
+
     def _cleanup_runtime_resources_on_close(self) -> None:
         try:
             self._random_ip_quota_auto_sync_timer.stop()
         except Exception as exc:
-            log_suppressed_exception("closeEvent: self._random_ip_quota_auto_sync_timer.stop()", exc)
+            log_suppressed_exception(
+                "closeEvent: self._random_ip_quota_auto_sync_timer.stop()", exc
+            )
 
         try:
             self.controller.request_shutdown_for_close()
         except Exception as exc:
-            log_suppressed_exception("closeEvent: self.controller.request_shutdown_for_close()", exc)
+            log_suppressed_exception(
+                "closeEvent: self.controller.request_shutdown_for_close()", exc
+            )
 
         try:
             if self._boot_splash:
@@ -101,8 +108,8 @@ class MainWindowLifecycleMixin:
     def _collect_current_config_snapshot(self):
         cfg = build_runtime_config_snapshot(
             self.dashboard._build_config(),
-            question_entries=self.question_page.get_entries(),
-            questions_info=self.question_page.questions_info,
+            question_entries=self.workbench_state.get_entries(),
+            questions_info=self.workbench_state.questions_info,
         )
         self.controller.config = cfg
         return cfg
@@ -160,7 +167,11 @@ class MainWindowLifecycleMixin:
             ):
                 self.controller.stop_run()
         except Exception as exc:
-            log_suppressed_exception("_confirm_close_with_optional_save: self.controller.stop_run()", exc, level=logging.WARNING)
+            log_suppressed_exception(
+                "_confirm_close_with_optional_save: stop_run",
+                exc,
+                level=logging.WARNING,
+            )
 
         if reply == 1 or reply is True:
             try:
@@ -169,7 +180,11 @@ class MainWindowLifecycleMixin:
                     return False
             except Exception as exc:
                 logging.error("保存配置失败: %s", exc, exc_info=True)
-                error_box = MessageBox("错误", f"保存配置失败：{exc}\n\n是否继续退出？", parent_widget)
+                error_box = MessageBox(
+                    "错误",
+                    f"保存配置失败：{exc}\n\n是否继续退出？",
+                    parent_widget,
+                )
                 error_box.yesButton.setText("退出")
                 error_box.cancelButton.setText("取消")
                 if not error_box.exec():
@@ -196,7 +211,11 @@ class MainWindowLifecycleMixin:
                 self.close()
             except Exception as exc:
                 self._close_request_confirmed = False
-                log_suppressed_exception("_schedule_deferred_close_confirmation: self.close()", exc, level=logging.WARNING)
+                log_suppressed_exception(
+                    "_schedule_deferred_close_confirmation: self.close()",
+                    exc,
+                    level=logging.WARNING,
+                )
 
         QTimer.singleShot(0, parent_widget, _continue_close)
 
@@ -212,9 +231,12 @@ class MainWindowLifecycleMixin:
             cfg = RuntimeConfig()
         self.runtime_page.apply_config(cfg)
         self.dashboard.apply_config(cfg)
-        self.question_page.set_entries(cfg.question_entries or [], cfg.questions_info or [])
+        self.workbench_state.set_entries(cfg.question_entries or [], cfg.questions_info or [])
         self.strategy_page.set_questions_info(cfg.questions_info or [])
-        self.strategy_page.set_entries(self.question_page.entries, self.question_page.entry_questions_info)
+        self.strategy_page.set_entries(
+            self.workbench_state.entries,
+            self.workbench_state.entry_questions_info,
+        )
         self.strategy_page.set_rules(getattr(cfg, "answer_rules", []) or [])
         self.strategy_page.set_dimension_groups(getattr(cfg, "dimension_groups", []) or [])
         self.controller.refresh_random_ip_counter()
@@ -223,7 +245,11 @@ class MainWindowLifecycleMixin:
         try:
             self.dashboard.update_random_ip_counter(count, limit, custom_api)
         except Exception as exc:
-            log_suppressed_exception("_on_random_ip_counter_update dashboard", exc, level=logging.WARNING)
+            log_suppressed_exception(
+                "_on_random_ip_counter_update dashboard",
+                exc,
+                level=logging.WARNING,
+            )
         self._refresh_title_random_ip_user_id()
 
     def _refresh_title_random_ip_user_id(self) -> None:
@@ -234,7 +260,11 @@ class MainWindowLifecycleMixin:
             authenticated = bool(snapshot.get("authenticated"))
             user_id = int(snapshot.get("user_id") or 0)
         except Exception as exc:
-            log_suppressed_exception("_refresh_title_random_ip_user_id snapshot", exc, level=logging.WARNING)
+            log_suppressed_exception(
+                "_refresh_title_random_ip_user_id snapshot",
+                exc,
+                level=logging.WARNING,
+            )
 
         suffix = ""
         if authenticated and user_id > 0:
@@ -247,6 +277,8 @@ class MainWindowLifecycleMixin:
             title_label.setText(f"{self._base_window_title}{suffix}")
             title_label.adjustSize()
         except Exception as exc:
-            log_suppressed_exception("_refresh_title_random_ip_user_id render", exc, level=logging.WARNING)
-
-
+            log_suppressed_exception(
+                "_refresh_title_random_ip_user_id render",
+                exc,
+                level=logging.WARNING,
+            )

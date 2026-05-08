@@ -1,9 +1,16 @@
 """QFluentWidgets 稳定性补丁。"""
+
 from __future__ import annotations
 
 from typing import Any, cast
 
-from PySide6.QtCore import QAbstractAnimation, QByteArray, QEvent, QParallelAnimationGroup, QPropertyAnimation
+from PySide6.QtCore import (
+    QAbstractAnimation,
+    QByteArray,
+    QEvent,
+    QParallelAnimationGroup,
+    QPropertyAnimation,
+)
 from shiboken6 import isValid
 
 
@@ -15,7 +22,11 @@ def install_qfluentwidgets_animation_guards() -> None:
     except Exception:
         return
 
-    if getattr(IndeterminateProgressBar, "_surveycontroller_resume_guard_installed", False):
+    if getattr(
+        IndeterminateProgressBar,
+        "_surveycontroller_resume_guard_installed",
+        False,
+    ):
         _install_infobar_manager_guards(InfoBarManager)
         return
 
@@ -57,7 +68,10 @@ def install_qfluentwidgets_animation_guards() -> None:
 
 def _install_infobar_manager_guards(info_bar_manager_cls) -> None:
     """为 InfoBar 管理器补充已销毁对象保护，避免双重关闭时崩溃。"""
-    manager_classes = {info_bar_manager_cls, *getattr(info_bar_manager_cls, "managers", {}).values()}
+    manager_classes = {
+        info_bar_manager_cls,
+        *getattr(info_bar_manager_cls, "managers", {}).values(),
+    }
     pending_classes = [
         manager_cls
         for manager_cls in manager_classes
@@ -274,6 +288,7 @@ def set_indeterminate_progress_ring_active(ring: Any, active: bool) -> None:
             ring.hide()
         except Exception:
             pass
+
 
 __all__ = [
     "install_qfluentwidgets_animation_guards",

@@ -1,4 +1,5 @@
 """题目配置常量定义"""
+
 from typing import Dict
 
 from software.core.questions.config import QuestionEntry
@@ -22,7 +23,7 @@ STRATEGY_CHOICES = [
     ("custom", "自定义配比"),
 ]
 
-TYPE_LABEL_MAP: Dict[str, str] = {value: label for value, label in TYPE_CHOICES}
+TYPE_LABEL_MAP: Dict[str, str] = dict(TYPE_CHOICES)
 TYPE_LABEL_MAP.update(
     {
         "multi_text": "多项填空题",
@@ -37,5 +38,3 @@ def _get_entry_type_label(entry: QuestionEntry) -> str:
 
 def _get_type_label(q_type: str) -> str:
     return TYPE_LABEL_MAP.get(q_type, q_type)
-
-

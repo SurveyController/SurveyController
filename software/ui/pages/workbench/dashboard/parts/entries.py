@@ -1,4 +1,5 @@
 """DashboardPage 题目表格与批量编辑相关方法。"""
+
 from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any, Dict, List, Optional
@@ -8,18 +9,34 @@ from PySide6.QtWidgets import QDialog, QTableWidgetItem, QTableWidget
 from qfluentwidgets import MessageBox
 
 from software.core.questions.config import QuestionEntry
-from software.core.questions.utils import describe_random_int_range, parse_random_int_token
+from software.core.questions.utils import (
+    describe_random_int_range,
+    parse_random_int_token,
+)
 from software.providers.contracts import SurveyQuestionMeta
-from software.ui.pages.workbench.question_editor.constants import _get_entry_type_label
-from software.ui.pages.workbench.question_editor.wizard_dialog import QuestionWizardDialog
-from software.ui.pages.workbench.question_editor.psycho_config import PSYCHO_SUPPORTED_TYPES
+from software.ui.pages.workbench.question_editor.constants import (
+    _get_entry_type_label,
+)
+from software.ui.pages.workbench.question_editor.wizard_dialog import (
+    QuestionWizardDialog,
+)
+from software.ui.pages.workbench.question_editor.psycho_config import (
+    PSYCHO_SUPPORTED_TYPES,
+)
 from software.ui.pages.workbench.strategy.utils import entry_dimension_label
 
 _TEXT_RANDOM_NAME_TOKEN = "__RANDOM_NAME__"
 _TEXT_RANDOM_MOBILE_TOKEN = "__RANDOM_MOBILE__"
 
 
-def _set_table_text(table: QTableWidget, row: int, column: int, text: str, *, align_center: bool = False) -> None:
+def _set_table_text(
+    table: QTableWidget,
+    row: int,
+    column: int,
+    text: str,
+    *,
+    align_center: bool = False,
+) -> None:
     item = table.item(row, column)
     if item is None:
         item = QTableWidgetItem(text)
@@ -31,6 +48,8 @@ def _set_table_text(table: QTableWidget, row: int, column: int, text: str, *, al
         item.setText(text)
     if align_center:
         item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
+
+
 _TEXT_RANDOM_ID_CARD_TOKEN = "__RANDOM_ID_CARD__"
 
 
@@ -51,7 +70,11 @@ def _pretty_text_answer(value: Any) -> str:
 def question_summary(entry: QuestionEntry) -> str:
     """生成题目配置摘要"""
     bias = getattr(entry, "psycho_bias", "custom") or "custom"
-    if getattr(entry, "question_type", "") in PSYCHO_SUPPORTED_TYPES and bias in ("left", "center", "right"):
+    if getattr(entry, "question_type", "") in PSYCHO_SUPPORTED_TYPES and bias in (
+        "left",
+        "center",
+        "right",
+    ):
         bias_text = {"left": "偏左", "center": "居中", "right": "偏右"}.get(bias, bias)
         return f"倾向预设: {bias_text}"
 
@@ -65,14 +88,20 @@ def question_summary(entry: QuestionEntry) -> str:
             if random_mode == "id_card":
                 return "答案: 随机身份证号"
             if random_mode == "integer":
-                return f"答案: 随机整数({describe_random_int_range(getattr(entry, 'text_random_int_range', []))})"
+                int_range = getattr(entry, "text_random_int_range", [])
+                range_text = describe_random_int_range(int_range)
+                return f"答案: 随机整数({range_text})"
         else:
             blank_modes = list(getattr(entry, "multi_text_blank_modes", []) or [])
             blank_ai_flags = list(getattr(entry, "multi_text_blank_ai_flags", []) or [])
             blank_int_ranges = list(getattr(entry, "multi_text_blank_int_ranges", []) or [])
             if blank_modes or blank_ai_flags:
                 config_parts: List[str] = []
-                blank_count = max(len(blank_modes), len(blank_ai_flags), len(blank_int_ranges))
+                blank_count = max(
+                    len(blank_modes),
+                    len(blank_ai_flags),
+                    len(blank_int_ranges),
+                )
                 for idx in range(blank_count):
                     if idx < len(blank_ai_flags) and blank_ai_flags[idx]:
                         config_parts.append(f"填空{idx + 1}: AI")
@@ -86,7 +115,8 @@ def question_summary(entry: QuestionEntry) -> str:
                         config_parts.append(f"填空{idx + 1}: 随机身份证号")
                     elif mode == "integer":
                         int_range = blank_int_ranges[idx] if idx < len(blank_int_ranges) else []
-                        config_parts.append(f"填空{idx + 1}: 随机整数({describe_random_int_range(int_range)})")
+                        range_text = describe_random_int_range(int_range)
+                        config_parts.append(f"填空{idx + 1}: 随机整数({range_text})")
                 if config_parts:
                     summary = " | ".join(config_parts[:2])
                     if len(config_parts) > 2:
@@ -97,7 +127,7 @@ def question_summary(entry: QuestionEntry) -> str:
             preview = [_pretty_text_answer(text) for text in texts[:2]]
             summary = f"答案: {' | '.join(preview)}"
             if len(texts) > 2:
-                summary += f" (+{len(texts)-2})"
+                summary += f" (+{len(texts) - 2})"
             if entry.question_type == "text" and getattr(entry, "ai_enabled", False):
                 summary += " | AI"
             return summary
@@ -116,9 +146,11 @@ def question_summary(entry: QuestionEntry) -> str:
     if entry.custom_weights and not isinstance(entry.custom_weights[0], list):
         weights = entry.custom_weights
         if entry.question_type == "multiple":
-            summary = f"自定义概率: {','.join(f'{int(w)}%' for w in weights[:4] if isinstance(w, (int, float)))}"
+            values = [f"{int(w)}%" for w in weights[:4] if isinstance(w, (int, float))]
+            summary = f"自定义概率: {','.join(values)}"
         else:
-            summary = f"自定义配比: {','.join(str(int(w)) for w in weights[:4] if isinstance(w, (int, float)))}"
+            values = [str(int(w)) for w in weights[:4] if isinstance(w, (int, float))]
+            summary = f"自定义配比: {','.join(values)}"
         if len(weights) > 4:
             summary += "..."
         return summary
@@ -141,7 +173,7 @@ class DashboardEntriesMixin:
     """题目配置表与编辑向导相关方法。"""
 
     if TYPE_CHECKING:
-        question_page: Any
+        workbench_state: Any
         _toast: Any
         entry_table: Any
         count_label: Any
@@ -152,30 +184,31 @@ class DashboardEntriesMixin:
         controller: Any
 
     def _show_add_question_dialog(self):
-        """新增题目 - 委托给 QuestionPage"""
-        self.question_page._add_entry()
-        self._refresh_entry_table()
+        if self.workbench_state.open_add_question_dialog(self.window() or self):
+            self._refresh_entry_table()
 
     def _edit_selected_entries(self):
         selected_rows = self._checked_rows()
         if not selected_rows:
             self._toast("请先勾选要编辑的题目", "warning")
             return
-        entries = self.question_page.get_entries()
-        info = self.question_page.entry_questions_info or []
+        entries = self.workbench_state.get_entries()
+        info = self.workbench_state.entry_questions_info or []
         selected_rows = [row for row in sorted(set(selected_rows)) if 0 <= row < len(entries)]
         if not selected_rows:
             self._toast("未找到可编辑的题目", "warning")
             return
         selected_entries = [entries[row] for row in selected_rows]
         selected_info = [info[row] if row < len(info) else {} for row in selected_rows]
-        if self._run_question_wizard(
+        if self.run_question_wizard(
             selected_entries,
             selected_info,
         ):
             self._refresh_entry_table()
 
-    def _apply_wizard_results(self, entries: List[QuestionEntry], dlg: QuestionWizardDialog) -> None:
+    def _apply_wizard_results(
+        self, entries: List[QuestionEntry], dlg: QuestionWizardDialog
+    ) -> None:
         def _normalize_weights(raw: Any) -> Any:
             if isinstance(raw, list) and any(isinstance(item, (list, tuple)) for item in raw):
                 cleaned: List[List[float]] = []
@@ -214,7 +247,9 @@ class DashboardEntriesMixin:
         for idx, random_mode in random_mode_updates.items():
             if 0 <= idx < len(entries):
                 entry = entries[idx]
-                entry.text_random_mode = str(random_mode or "none") if entry.question_type == "text" else "none"
+                entry.text_random_mode = (
+                    str(random_mode or "none") if entry.question_type == "text" else "none"
+                )
         text_random_int_range_updates = dlg.get_text_random_int_ranges()
         for idx, int_range in text_random_int_range_updates.items():
             if 0 <= idx < len(entries):
@@ -224,7 +259,9 @@ class DashboardEntriesMixin:
         for idx, enabled in ai_updates.items():
             if 0 <= idx < len(entries):
                 entry = entries[idx]
-                entry.ai_enabled = bool(enabled) if entry.question_type in ("text", "multi_text") else False
+                entry.ai_enabled = (
+                    bool(enabled) if entry.question_type in ("text", "multi_text") else False
+                )
         attached_select_updates = dlg.get_attached_select_results()
         for idx, attached_configs in attached_select_updates.items():
             if 0 <= idx < len(entries):
@@ -251,7 +288,7 @@ class DashboardEntriesMixin:
             if 0 <= idx < len(entries):
                 entries[idx].psycho_bias = bias
 
-    def _run_question_wizard(
+    def run_question_wizard(
         self,
         entries: List[QuestionEntry],
         info: List[SurveyQuestionMeta | Dict[str, Any]],
@@ -295,15 +332,15 @@ class DashboardEntriesMixin:
         if not box.exec():
             return
 
-        entries = self.question_page.get_entries()
+        entries = self.workbench_state.get_entries()
         for row in sorted(selected_rows, reverse=True):
             if 0 <= row < len(entries):
                 entries.pop(row)
-        self.question_page.set_entries(entries, self.question_page.questions_info)
+        self.workbench_state.set_entries(entries, self.workbench_state.questions_info)
         self._refresh_entry_table()
 
     def _clear_all_entries(self):
-        entries = self.question_page.get_entries()
+        entries = self.workbench_state.get_entries()
         count = len(entries)
         if count <= 0:
             self._toast("当前没有可清空的题目", "warning")
@@ -319,11 +356,11 @@ class DashboardEntriesMixin:
         if not box.exec():
             return
 
-        self.question_page.set_entries([], [])
+        self.workbench_state.set_entries([], [])
         self._refresh_entry_table()
 
     def _refresh_entry_table(self):
-        entries = self.question_page.get_entries()
+        entries = self.workbench_state.get_entries()
         table = self.entry_table
         previous_updates_enabled = table.updatesEnabled()
         previous_sorting_enabled = table.isSortingEnabled()
@@ -335,7 +372,13 @@ class DashboardEntriesMixin:
             self.count_label.setText(f"{len(entries)} 题")
             for idx, entry in enumerate(entries):
                 _set_table_text(table, idx, 0, str(idx + 1), align_center=True)
-                _set_table_text(table, idx, 1, _get_entry_type_label(entry), align_center=True)
+                _set_table_text(
+                    table,
+                    idx,
+                    1,
+                    _get_entry_type_label(entry),
+                    align_center=True,
+                )
                 _set_table_text(table, idx, 2, question_dimension(entry), align_center=True)
                 _set_table_text(table, idx, 3, question_summary(entry))
         finally:
@@ -346,4 +389,3 @@ class DashboardEntriesMixin:
 
     def _checked_rows(self) -> List[int]:
         return [idx.row() for idx in self.entry_table.selectionModel().selectedRows()]
-

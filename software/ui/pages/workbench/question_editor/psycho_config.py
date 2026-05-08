@@ -1,4 +1,5 @@
 """倾向预设配置：常量与权重生成工具函数"""
+
 from typing import List
 
 
@@ -15,8 +16,9 @@ BIAS_PRESET_CHOICES = [
 
 
 def build_bias_weights(option_count: int, bias: str) -> List[float]:
-    """根据倾向方向生成一组权重（归一化到 0-100，使用指数曲线使倾向更激进）。"""
+    """根据倾向方向生成归一化权重。"""
     import math
+
     count = max(1, int(option_count or 1))
     if count == 1:
         return [100.0]

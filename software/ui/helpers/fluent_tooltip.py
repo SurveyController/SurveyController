@@ -1,4 +1,5 @@
 """Fluent tooltip 辅助工具。"""
+
 from __future__ import annotations
 
 from typing import Iterable, Optional

@@ -1,4 +1,5 @@
 """服务条款对话框。"""
+
 from PySide6.QtCore import Qt, QSize
 from PySide6.QtGui import QGuiApplication
 from qfluentwidgets import (
@@ -24,11 +25,7 @@ def _read_legal_text(relative_path: str) -> str:
         with open(full_path, "r", encoding="utf-8") as file:
             return file.read().strip()
     except OSError:
-        return (
-            "【文件缺失】\n\n"
-            f"未找到条款文件：{relative_path}\n"
-            "请检查安装包是否完整。"
-        )
+        return f"【文件缺失】\n\n未找到条款文件：{relative_path}\n请检查安装包是否完整。"
 
 
 def _load_terms_content() -> str:
@@ -73,9 +70,7 @@ class TermsOfServiceDialog(MessageBoxBase):
 
         self.contentWidget = BodyLabel(self.widget)
         self.contentWidget.setWordWrap(True)
-        self.contentWidget.setTextInteractionFlags(
-            Qt.TextInteractionFlag.TextSelectableByMouse
-        )
+        self.contentWidget.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
         self.contentWidget.setText(_load_terms_content())
         self.contentWidget.setStyleSheet(
             """

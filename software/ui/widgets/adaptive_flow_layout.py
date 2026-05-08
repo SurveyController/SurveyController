@@ -4,7 +4,7 @@ QFluentWidgets added ``AdaptiveFlowLayout`` in newer versions, but this project
 currently pins/uses an older ``qfluentwidgets`` that doesn't ship it.
 
 This implementation is intentionally small and focused:
-- Computes the number of columns based on available width and a minimum item width
+- Computes column count from available width and minimum item width
 - Wraps items to next row automatically
 - Makes each item in a row share the same width (adaptive grid feel)
 

@@ -3,7 +3,6 @@ from __future__ import annotations
 
 import logging
 import threading
-import uuid
 from urllib.parse import urlsplit
 from dataclasses import replace
 from typing import Any, Dict, List, Optional
@@ -11,6 +10,7 @@ from typing import Any, Dict, List, Optional
 from software.app.config import AUTH_BONUS_CLAIM_ENDPOINT, AUTH_TRIAL_ENDPOINT, IP_EXTRACT_ENDPOINT
 from software.app.settings_store import app_settings
 from software.logging.log_utils import log_suppressed_exception
+from software.system.device_fingerprint import build_stable_device_id
 from software.system.secure_store import read_secret, set_secret
 
 from .client import (
@@ -86,7 +86,7 @@ def _ensure_loaded() -> None:
             device_id = str(settings.value(_settings_key("device_id")) or "").strip()
             device_from = "settings" if device_id else "generated"
         if not device_id:
-            device_id = uuid.uuid4().hex
+            device_id = build_stable_device_id()
             set_secret(_DEVICE_SECRET_KEY, device_id)
         loaded_user_id = _to_non_negative_int(settings.value(_settings_key("user_id")), 0)
         loaded_remaining_quota = _to_non_negative_quota(settings.value(_settings_key("remaining_quota")), 0.0)

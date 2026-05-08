@@ -49,7 +49,7 @@ def _driver_question_looks_like_numeric_scale(question_div) -> bool:
         except Exception:
             text = ""
         if not text:
-            for attr in ("title", "aria-label", "val", "value"):
+            for attr in ("title", "aria-label", "val", "value", "dval", "data-value", "data-val"):
                 try:
                     raw = anchor.get_attribute(attr) or ""
                 except Exception:

@@ -145,3 +145,64 @@ class UpdateHelperTests:
         with patch.object(updater, "_safe_create_update_manager", return_value=manager):
             updater.UpdateManager.apply_downloaded_update(update_info)
         manager.wait_exit_then_apply_updates.assert_called_once_with(update_info, silent=True, restart=True)
+
+    def test_build_github_update_result_returns_unknown_when_version_cannot_be_parsed(self) -> None:
+        with (
+            patch.object(updater, "__VERSION__", "3.1.2"),
+            patch.object(updater, "_fetch_latest_github_release", return_value={"tag_name": "???", "body": "说明"}),
+        ):
+            result = updater._build_github_update_result("3.1.2")
+        assert result["status"] == "unknown"
+        assert result["latest_version"] == "???"
+
+    def test_get_all_releases_returns_empty_when_request_fails(self) -> None:
+        with patch.object(updater.http_client, "get", side_effect=RuntimeError("boom")):
+            assert updater.UpdateManager.get_all_releases() == []
+
+    def test_get_all_releases_normalizes_payload(self) -> None:
+        response = MagicMock()
+        response.json.return_value = [
+            {
+                "tag_name": "v3.2.0",
+                "name": "稳定版",
+                "body": "修复说明",
+                "published_at": "2026-05-08T00:00:00Z",
+                "prerelease": False,
+                "html_url": "https://example.com/release",
+            }
+        ]
+        with patch.object(updater.http_client, "get", return_value=response):
+            result = updater.UpdateManager.get_all_releases()
+        assert result == [
+            {
+                "version": "3.2.0",
+                "name": "稳定版",
+                "body": "修复说明",
+                "published_at": "2026-05-08T00:00:00Z",
+                "prerelease": False,
+                "html_url": "https://example.com/release",
+            }
+        ]
+
+    def test_show_update_notification_opens_browser_for_manual_only_update(self) -> None:
+        gui = SimpleNamespace(
+            update_info={
+                "version": "3.2.0",
+                "current_version": "3.1.2",
+                "release_notes": "修了几个坑",
+                "manual_only": True,
+                "manual_release_url": "https://example.com/release",
+            },
+            show_confirm_dialog=MagicMock(return_value=True),
+        )
+        with patch.object(updater, "log_action"), patch.object(updater.webbrowser, "open") as open_mock:
+            updater.show_update_notification(gui)
+        open_mock.assert_called_once_with("https://example.com/release")
+
+    def test_perform_update_emits_invalid_message_when_payload_missing_velopack_update(self) -> None:
+        gui = SimpleNamespace(
+            update_info={"version": "3.2.0"},
+            downloadFailed=SimpleNamespace(emit=MagicMock()),
+        )
+        updater.perform_update(gui)
+        gui.downloadFailed.emit.assert_called_once()

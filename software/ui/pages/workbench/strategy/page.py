@@ -1,4 +1,5 @@
 """题目策略页：条件规则 + 维度分组。"""
+
 from __future__ import annotations
 
 import copy
@@ -27,7 +28,10 @@ from qfluentwidgets import (
 )
 
 from software.core.questions.consistency import sanitize_answer_rules
-from software.providers.contracts import SurveyQuestionMeta, ensure_survey_question_metas
+from software.providers.contracts import (
+    SurveyQuestionMeta,
+    ensure_survey_question_metas,
+)
 
 from .dimension_panel import DimensionGroupingPanel
 from .rule_dialog import (
@@ -68,7 +72,12 @@ class ConditionRulePanel(QWidget):
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(12)
 
-        layout.addWidget(BodyLabel("按前题答案去约束后题选项。规则列表里越靠后，冲突时优先级越高。", self))
+        layout.addWidget(
+            BodyLabel(
+                "按前题答案去约束后题选项。规则列表里越靠后，冲突时优先级越高。",
+                self,
+            )
+        )
 
         btn_row = QHBoxLayout()
         self.add_btn = PrimaryPushButton("新增条件规则", self)
@@ -84,7 +93,14 @@ class ConditionRulePanel(QWidget):
         self.table.setRowCount(0)
         self.table.setColumnCount(6)
         self.table.setHorizontalHeaderLabels(
-            ["条件题目", "条件类型", "条件选项", "目标题目", "动作类型", "目标选项"]
+            [
+                "条件题目",
+                "条件类型",
+                "条件选项",
+                "目标题目",
+                "动作类型",
+                "目标选项",
+            ]
         )
         self.table.verticalHeader().setVisible(False)
         self.table.setSelectionBehavior(TableWidget.SelectionBehavior.SelectRows)
@@ -122,23 +138,47 @@ class ConditionRulePanel(QWidget):
     def get_rules(self) -> List[Dict[str, Any]]:
         return copy.deepcopy(self._rules)
 
-    def _sanitize_rules(self, rules: List[Dict[str, Any]], show_removed_toast: bool = False) -> List[Dict[str, Any]]:
+    def _sanitize_rules(
+        self, rules: List[Dict[str, Any]], show_removed_toast: bool = False
+    ) -> List[Dict[str, Any]]:
         sanitized, stats = sanitize_answer_rules(rules or [], self._questions_info or None)
         if show_removed_toast and stats.get("unsupported", 0):
             count = int(stats["unsupported"])
-            suffix = "已自动移除 1 条不再支持的条件规则" if count == 1 else f"已自动移除 {count} 条不再支持的条件规则"
+            suffix = (
+                "已自动移除 1 条不再支持的条件规则"
+                if count == 1
+                else f"已自动移除 {count} 条不再支持的条件规则"
+            )
             self._toast(suffix, "warning")
         return sanitized
 
     def _toast(self, message: str, level: str = "warning") -> None:
         parent = self.window() or self
         if level == "error":
-            InfoBar.error("", message, parent=parent, position=InfoBarPosition.TOP, duration=2200)
+            InfoBar.error(
+                "",
+                message,
+                parent=parent,
+                position=InfoBarPosition.TOP,
+                duration=2200,
+            )
             return
         if level == "success":
-            InfoBar.success("", message, parent=parent, position=InfoBarPosition.TOP, duration=1800)
+            InfoBar.success(
+                "",
+                message,
+                parent=parent,
+                position=InfoBarPosition.TOP,
+                duration=1800,
+            )
             return
-        InfoBar.warning("", message, parent=parent, position=InfoBarPosition.TOP, duration=2200)
+        InfoBar.warning(
+            "",
+            message,
+            parent=parent,
+            position=InfoBarPosition.TOP,
+            duration=2200,
+        )
 
     def _selected_rows(self) -> List[int]:
         selection = self.table.selectionModel()
@@ -158,7 +198,10 @@ class ConditionRulePanel(QWidget):
     def _on_add_rule(self) -> None:
         selectable = self._get_selectable_questions()
         if len(selectable) < 2:
-            self._toast("当前问卷可用题目不足（需要至少 2 道单选/多选/量表/评价/矩阵题）", "warning")
+            self._toast(
+                "当前问卷可用题目不足（需要至少 2 道单选/多选/量表/评价/矩阵题）",
+                "warning",
+            )
             return
         dialog = ConditionRuleDialog(self._questions_info, parent=self.window() or self)
         if dialog.exec() != ConditionRuleDialog.DialogCode.Accepted:
@@ -262,20 +305,54 @@ class ConditionRulePanel(QWidget):
                 condition_options = to_int_list(rule.get("condition_option_indices"))
                 target_options = to_int_list(rule.get("target_option_indices"))
                 raw_cri = rule.get("condition_row_index")
-                condition_row_index: Optional[int] = to_int(raw_cri, -1) if raw_cri is not None else None
+                condition_row_index: Optional[int] = (
+                    to_int(raw_cri, -1) if raw_cri is not None else None
+                )
                 if condition_row_index is not None and condition_row_index < 0:
                     condition_row_index = None
                 raw_tri = rule.get("target_row_index")
-                target_row_index: Optional[int] = to_int(raw_tri, -1) if raw_tri is not None else None
+                target_row_index: Optional[int] = (
+                    to_int(raw_tri, -1) if raw_tri is not None else None
+                )
                 if target_row_index is not None and target_row_index < 0:
                     target_row_index = None
 
-                _set_table_text(self.table, row, 0, self._question_label_by_num(condition_num, condition_row_index))
-                _set_table_text(self.table, row, 1, CONDITION_MODE_LABELS.get(condition_mode, condition_mode))
-                _set_table_text(self.table, row, 2, self._option_label_text(condition_num, condition_options))
-                _set_table_text(self.table, row, 3, self._question_label_by_num(target_num, target_row_index))
-                _set_table_text(self.table, row, 4, ACTION_MODE_LABELS.get(action_mode, action_mode))
-                _set_table_text(self.table, row, 5, self._option_label_text(target_num, target_options))
+                _set_table_text(
+                    self.table,
+                    row,
+                    0,
+                    self._question_label_by_num(condition_num, condition_row_index),
+                )
+                _set_table_text(
+                    self.table,
+                    row,
+                    1,
+                    CONDITION_MODE_LABELS.get(condition_mode, condition_mode),
+                )
+                _set_table_text(
+                    self.table,
+                    row,
+                    2,
+                    self._option_label_text(condition_num, condition_options),
+                )
+                _set_table_text(
+                    self.table,
+                    row,
+                    3,
+                    self._question_label_by_num(target_num, target_row_index),
+                )
+                _set_table_text(
+                    self.table,
+                    row,
+                    4,
+                    ACTION_MODE_LABELS.get(action_mode, action_mode),
+                )
+                _set_table_text(
+                    self.table,
+                    row,
+                    5,
+                    self._option_label_text(target_num, target_options),
+                )
         finally:
             self.table.blockSignals(False)
             self.table.setSortingEnabled(previous_sorting_enabled)
@@ -339,7 +416,11 @@ class QuestionStrategyPage(ScrollArea):
         self.rule_panel.set_questions_info(questions)
         self.dimension_panel.set_entries(self.dimension_panel._entries, questions)
 
-    def set_entries(self, entries: Sequence[Any], info: Optional[Sequence[SurveyQuestionMeta]] = None) -> None:
+    def set_entries(
+        self,
+        entries: Sequence[Any],
+        info: Optional[Sequence[SurveyQuestionMeta]] = None,
+    ) -> None:
         self.dimension_panel.set_entries(entries, info)
 
     def set_rules(self, rules: Sequence[Dict[str, Any]]) -> None:

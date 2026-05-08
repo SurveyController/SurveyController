@@ -6,7 +6,7 @@ from qfluentwidgets import BodyLabel, Slider as QfSlider
 
 
 class RatioSlider(QWidget):
-    """三联动占比滑块 - 拖动任意一个滑块时，自动调整其他两个滑块使总和保持100%"""
+    """三联动占比滑块。"""
 
     valueChanged = Signal(dict)  # 发射 {"key1": value1, "key2": value2, "key3": value3}
 

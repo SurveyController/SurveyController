@@ -1,4 +1,5 @@
 """向导题型配置共享状态与小部件辅助。"""
+
 from html import escape
 from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple, cast
 
@@ -8,7 +9,11 @@ from PySide6.QtWidgets import QWidget
 from qfluentwidgets import BodyLabel, LineEdit, isDarkTheme
 
 from software.core.questions.config import QuestionEntry
-from software.core.questions.utils import OPTION_FILL_AI_TOKEN, parse_random_int_token, try_parse_random_int_range
+from software.core.questions.utils import (
+    OPTION_FILL_AI_TOKEN,
+    parse_random_int_token,
+    try_parse_random_int_range,
+)
 from software.ui.helpers.ai_fill import ensure_ai_ready
 from software.ui.widgets.no_wheel import NoWheelSlider
 
@@ -38,6 +43,7 @@ def _apply_ai_label_state_style(label: BodyLabel) -> None:
     label.setStyleSheet(
         f"QLabel {{ color: {active_color}; }} QLabel:disabled {{ color: {disabled_color}; }}"
     )
+
 
 class WizardSectionsCommonMixin:
     if TYPE_CHECKING:
@@ -69,6 +75,7 @@ class WizardSectionsCommonMixin:
         if total <= 0:
             return [100.0 / count] * count
         return [(item / total) * 100.0 for item in cleaned]
+
     @staticmethod
     def _format_ratio_percent(value: float) -> str:
         rounded = round(float(value), 1)
@@ -76,6 +83,7 @@ class WizardSectionsCommonMixin:
         if text.endswith(".0"):
             text = text[:-2]
         return f"{text}%"
+
     @staticmethod
     def _pick_ratio_color(value: float) -> str:
         if value < 10:
@@ -85,7 +93,10 @@ class WizardSectionsCommonMixin:
         if value < 50:
             return "#ffb900"
         return "#107c10"
-    def _build_ratio_preview_text(self, option_names: List[str], percentages: List[float], prefix: str) -> str:
+
+    def _build_ratio_preview_text(
+        self, option_names: List[str], percentages: List[float], prefix: str
+    ) -> str:
         if not percentages:
             return f"{prefix}暂无"
         normalized_names: List[str] = []
@@ -100,6 +111,7 @@ class WizardSectionsCommonMixin:
             colored_percent = f"<span style='color:{percent_color};'>{percent_text}</span>"
             chunks.append(f"{normalized_names[idx]} {colored_percent}")
         return f"{prefix}{'｜'.join(chunks)}"
+
     def _refresh_ratio_preview_label(
         self,
         label: BodyLabel,
@@ -109,8 +121,11 @@ class WizardSectionsCommonMixin:
     ) -> None:
         percentages = self._compute_ratio_percentages([slider.value() for slider in sliders])
         label.setText(self._build_ratio_preview_text(option_names, percentages, prefix))
+
     @staticmethod
-    def _create_integer_range_edit(parent: QWidget, initial_value: Optional[int], placeholder: str) -> LineEdit:
+    def _create_integer_range_edit(
+        parent: QWidget, initial_value: Optional[int], placeholder: str
+    ) -> LineEdit:
         edit = LineEdit(parent)
         edit.setFixedWidth(88)
         edit.setAlignment(Qt.AlignmentFlag.AlignCenter)
@@ -119,18 +134,22 @@ class WizardSectionsCommonMixin:
         if initial_value is not None:
             edit.setText(str(int(initial_value)))
         return edit
+
     @staticmethod
-    def _resolve_text_random_int_range(entry: QuestionEntry) -> Tuple[Optional[int], Optional[int]]:
+    def _resolve_text_random_int_range(
+        entry: QuestionEntry,
+    ) -> Tuple[Optional[int], Optional[int]]:
         raw_range = getattr(entry, "text_random_int_range", []) or []
         if raw_range:
             parsed = try_parse_random_int_range(raw_range)
             if parsed is not None:
                 return parsed
-        for raw in (entry.texts or []):
+        for raw in entry.texts or []:
             parsed = parse_random_int_token(raw)
             if parsed is not None:
                 return parsed
         return None, None
+
     @staticmethod
     def _normalize_fillable_option_indices(raw_indices: Any, option_count: int) -> List[int]:
         if not isinstance(raw_indices, list):
@@ -148,6 +167,7 @@ class WizardSectionsCommonMixin:
             seen.add(index)
             normalized.append(index)
         return normalized
+
     @staticmethod
     def _resolve_option_fill_mode(raw_value: Any) -> Tuple[str, bool]:
         text = str(raw_value or "").strip()
@@ -164,12 +184,16 @@ class WizardSectionsCommonMixin:
         if parse_random_int_token(text) is not None:
             return _TEXT_RANDOM_INTEGER, False
         return _TEXT_RANDOM_NONE, False
+
     @staticmethod
-    def _resolve_option_fill_int_range(raw_value: Any) -> Tuple[Optional[int], Optional[int]]:
+    def _resolve_option_fill_int_range(
+        raw_value: Any,
+    ) -> Tuple[Optional[int], Optional[int]]:
         parsed = parse_random_int_token(raw_value)
         if parsed is None:
             return None, None
         return parsed
+
     def _sync_option_fill_state(self, state: Dict[str, Any]) -> None:
         mode_group = state.get("group")
         fill_edit = state.get("edit")
@@ -201,10 +225,12 @@ class WizardSectionsCommonMixin:
         if ai_label is not None:
             ai_label.setEnabled(True)
             ai_label.setToolTip("运行时命中该选项后会调用 AI 生成补充内容")
+
     def _on_option_fill_mode_toggled(self, state: Dict[str, Any], checked: bool) -> None:
         if not checked:
             return
         self._sync_option_fill_state(state)
+
     def _on_option_fill_ai_toggled(self, state: Dict[str, Any], checked: bool) -> None:
         ai_cb = state.get("ai_cb")
         if checked and not self._ensure_ai_checkbox_ready(ai_cb):
@@ -215,6 +241,7 @@ class WizardSectionsCommonMixin:
             if list_radio is not None:
                 list_radio.setChecked(True)
         self._sync_option_fill_state(state)
+
     def _set_text_answer_enabled(self, idx: int, enabled: bool) -> None:
         container = self.text_container_map.get(idx)
         if container:
@@ -222,12 +249,22 @@ class WizardSectionsCommonMixin:
         add_btn = self.text_add_btn_map.get(idx)
         if add_btn:
             add_btn.setEnabled(enabled)
+
     @staticmethod
     def _resolve_text_random_mode(entry: QuestionEntry) -> str:
-        mode = str(getattr(entry, "text_random_mode", _TEXT_RANDOM_NONE) or _TEXT_RANDOM_NONE).strip().lower()
-        if mode in (_TEXT_RANDOM_NAME, _TEXT_RANDOM_MOBILE, _TEXT_RANDOM_ID_CARD, _TEXT_RANDOM_INTEGER):
+        mode = (
+            str(getattr(entry, "text_random_mode", _TEXT_RANDOM_NONE) or _TEXT_RANDOM_NONE)
+            .strip()
+            .lower()
+        )
+        if mode in (
+            _TEXT_RANDOM_NAME,
+            _TEXT_RANDOM_MOBILE,
+            _TEXT_RANDOM_ID_CARD,
+            _TEXT_RANDOM_INTEGER,
+        ):
             return mode
-        for raw in (entry.texts or []):
+        for raw in entry.texts or []:
             token = str(raw or "").strip()
             if token == _TEXT_RANDOM_NAME_TOKEN:
                 return _TEXT_RANDOM_NAME
@@ -238,6 +275,7 @@ class WizardSectionsCommonMixin:
             if parse_random_int_token(token) is not None:
                 return _TEXT_RANDOM_INTEGER
         return _TEXT_RANDOM_NONE
+
     def _sync_text_section_state(self, idx: int) -> None:
         random_mode = self.text_random_mode_map.get(idx, _TEXT_RANDOM_NONE)
         ai_cb = self.ai_check_map.get(idx)
@@ -251,7 +289,13 @@ class WizardSectionsCommonMixin:
         random_max_edit = self.text_random_int_max_edit_map.get(idx)
 
         def _set_random_controls_enabled(enabled: bool, tooltip: str = "") -> None:
-            for cb in (random_list_radio, random_name_cb, random_mobile_cb, random_id_card_cb, random_integer_cb):
+            for cb in (
+                random_list_radio,
+                random_name_cb,
+                random_mobile_cb,
+                random_id_card_cb,
+                random_integer_cb,
+            ):
                 if cb is None:
                     continue
                 cb.setEnabled(enabled)
@@ -294,10 +338,12 @@ class WizardSectionsCommonMixin:
         _set_random_controls_enabled(True)
         _set_integer_range_enabled(False)
         self._set_text_answer_enabled(idx, True)
+
     def _on_text_random_mode_toggled(self, idx: int, mode: str, checked: bool) -> None:
         if checked:
             self.text_random_mode_map[idx] = mode
         self._sync_text_section_state(idx)
+
     def _on_entry_ai_toggled(self, idx: int, checked: bool) -> None:
         random_mode = self.text_random_mode_map.get(idx, _TEXT_RANDOM_NONE)
         if checked and not self._ensure_ai_checkbox_ready(self.ai_check_map.get(idx)):
@@ -313,6 +359,7 @@ class WizardSectionsCommonMixin:
             if list_radio is not None:
                 list_radio.setChecked(True)
         self._sync_text_section_state(idx)
+
     def _ensure_ai_checkbox_ready(self, checkbox: Any) -> bool:
         if checkbox is None:
             return False
@@ -322,6 +369,7 @@ class WizardSectionsCommonMixin:
         checkbox.setChecked(False)
         checkbox.blockSignals(False)
         return False
+
     def _on_multi_text_blank_ai_toggled(self, checkbox: Any, checked: bool, sync_func: Any) -> None:
         if checked and not self._ensure_ai_checkbox_ready(checkbox):
             sync_func()

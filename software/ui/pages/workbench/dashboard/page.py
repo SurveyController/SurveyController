@@ -1,4 +1,5 @@
 """主控制面板：卡片式配置区 + 底部状态条（不包含日志）"""
+
 import threading
 from typing import Optional
 import logging
@@ -36,22 +37,44 @@ from qfluentwidgets import (
     DrillInTransitionStackedWidget,
 )
 
-from software.ui.pages.workbench.dashboard.cards import DashboardActionCard, RuntimeSettingsHintCard
-from software.ui.pages.workbench.dashboard.parts.config_io import DashboardConfigIOMixin
-from software.ui.pages.workbench.dashboard.parts.entries import DashboardEntriesMixin
-from software.ui.pages.workbench.dashboard.parts.progress import DashboardProgressMixin
-from software.ui.pages.workbench.dashboard.parts.random_ip import DashboardRandomIPMixin
-from software.ui.pages.workbench.dashboard.parts.run_actions import DashboardRunActionsMixin
-from software.ui.pages.workbench.dashboard.parts.survey_parse import DashboardSurveyParseMixin
-from software.ui.pages.workbench.shared import RandomIpToggleRow, SurveyClipboardMixin, SurveyEntryCard
+from software.ui.pages.workbench.dashboard.cards import (
+    DashboardActionCard,
+    RuntimeSettingsHintCard,
+)
+from software.ui.pages.workbench.dashboard.parts.config_io import (
+    DashboardConfigIOMixin,
+)
+from software.ui.pages.workbench.dashboard.parts.entries import (
+    DashboardEntriesMixin,
+)
+from software.ui.pages.workbench.dashboard.parts.progress import (
+    DashboardProgressMixin,
+)
+from software.ui.pages.workbench.dashboard.parts.random_ip import (
+    DashboardRandomIPMixin,
+)
+from software.ui.pages.workbench.dashboard.parts.run_actions import (
+    DashboardRunActionsMixin,
+)
+from software.ui.pages.workbench.dashboard.parts.survey_parse import (
+    DashboardSurveyParseMixin,
+)
+from software.ui.pages.workbench.shared.clipboard import SurveyClipboardMixin
+from software.ui.pages.workbench.shared.random_ip_toggle_row import (
+    RandomIpToggleRow,
+)
+from software.ui.pages.workbench.shared.survey_entry_card import (
+    SurveyEntryCard,
+)
 from software.ui.helpers.fluent_tooltip import install_tooltip_filter
 from software.ui.widgets.config_drawer import ConfigDrawer
 from software.ui.widgets.full_width_infobar import FullWidthInfoBar
 from software.ui.widgets.no_wheel import NoWheelSpinBox
-from software.ui.controller import RunController
-from software.ui.pages.workbench.question_editor.page import QuestionPage
-from software.ui.pages.workbench.runtime_panel import RuntimePage
-from software.ui.pages.workbench.strategy import QuestionStrategyPage
+from software.ui.controller.run_controller import RunController
+from software.ui.pages.workbench.runtime_panel.main import RuntimePage
+from software.ui.pages.workbench.strategy.page import QuestionStrategyPage
+from software.ui.pages.workbench.session import WorkbenchState
+
 
 class DashboardPage(
     SurveyClipboardMixin,
@@ -72,7 +95,7 @@ class DashboardPage(
     def __init__(
         self,
         controller: RunController,
-        question_page: QuestionPage,
+        workbench_state: WorkbenchState,
         runtime_page: RuntimePage,
         strategy_page: QuestionStrategyPage,
         parent=None,
@@ -80,9 +103,10 @@ class DashboardPage(
         super().__init__(parent)
         self.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, False)
         self.controller = controller
-        self.question_page = question_page
+        self.workbench_state = workbench_state
         self.runtime_page = runtime_page
         self.strategy_page = strategy_page
+        self.run_coordinator = None
         self._open_wizard_after_parse = False
         self._survey_title = ""
         self._last_pause_reason = ""
@@ -113,6 +137,9 @@ class DashboardPage(
         self._refresh_ip_cost_infobar()
         self._init_random_ip_status_refresh()
 
+    def set_run_coordinator(self, coordinator) -> None:
+        self.run_coordinator = coordinator
+
     def _build_ui(self):
         outer = QVBoxLayout(self)
         outer.setContentsMargins(12, 10, 12, 10)
@@ -139,7 +166,9 @@ class DashboardPage(
         )
         self._ip_low_infobar.hide()
         self._ip_low_infobar.closeButton.clicked.connect(self._on_ip_low_infobar_closed)
-        self._ip_low_contact_link = HyperlinkButton(FluentIcon.LINK, "", "前往申请", self._ip_low_infobar)
+        self._ip_low_contact_link = HyperlinkButton(
+            FluentIcon.LINK, "", "前往申请", self._ip_low_infobar
+        )
         self._ip_low_contact_link.clicked.connect(
             lambda: self._open_contact_dialog(default_type="额度申请", lock_message_type=True)
         )
@@ -152,7 +181,11 @@ class DashboardPage(
         self.load_cfg_action = Action(FluentIcon.DOCUMENT, "载入配置", self.config_command_bar)
         self.save_cfg_action = Action(FluentIcon.SAVE, "保存配置", self.config_command_bar)
         self.config_command_bar.addActions(
-            [self.config_list_action, self.load_cfg_action, self.save_cfg_action]
+            [
+                self.config_list_action,
+                self.load_cfg_action,
+                self.save_cfg_action,
+            ]
         )
         self.config_command_bar.resizeToSuitableWidth()
         survey_entry = SurveyEntryCard(
@@ -246,8 +279,12 @@ class DashboardPage(
         self.random_ip_status_dot.setFixedSize(10, 10)
         self.random_ip_status_label = BodyLabel("服务状态检查中", self.random_ip_status_row)
         self.random_ip_status_label.setStyleSheet("color: #6b6b6b; font-size: 12px;")
-        random_ip_status_layout.addWidget(self.random_ip_status_dot, 0, Qt.AlignmentFlag.AlignVCenter)
-        random_ip_status_layout.addWidget(self.random_ip_status_label, 0, Qt.AlignmentFlag.AlignVCenter)
+        random_ip_status_layout.addWidget(
+            self.random_ip_status_dot, 0, Qt.AlignmentFlag.AlignVCenter
+        )
+        random_ip_status_layout.addWidget(
+            self.random_ip_status_label, 0, Qt.AlignmentFlag.AlignVCenter
+        )
         quota_layout.addWidget(self.random_ip_status_row, 0, Qt.AlignmentFlag.AlignHCenter)
 
         self.random_ip_usage_ring = ProgressRing(self.random_ip_quota_card)
@@ -277,7 +314,9 @@ class DashboardPage(
             duration=-1,
             parent=exec_card,
         )
-        self._ip_cost_adjust_link = HyperlinkButton(FluentIcon.LINK, "", "前往调整作答时长", self._ip_cost_infobar)
+        self._ip_cost_adjust_link = HyperlinkButton(
+            FluentIcon.LINK, "", "前往调整作答时长", self._ip_cost_infobar
+        )
         self._ip_cost_adjust_link.clicked.connect(self._go_to_runtime_answer_duration)
         self._ip_cost_infobar.addWidget(self._ip_cost_adjust_link)
         self._ip_cost_infobar.hide()
@@ -286,7 +325,10 @@ class DashboardPage(
         self._ip_benefit_infobar = FullWidthInfoBar(
             icon=InfoBarIcon.SUCCESS,
             title="",
-            content="当前使用的是限时福利代理源，仅支持 1 分钟以内的作答时长，按 0.5 倍消耗速率扣减随机IP额度。",
+            content=(
+                "当前使用的是限时福利代理源，仅支持 1 分钟以内的"
+                "作答时长，按 0.5 倍消耗速率扣减随机IP额度。"
+            ),
             orient=Qt.Orientation.Horizontal,
             isClosable=False,
             position=InfoBarPosition.NONE,
@@ -357,7 +399,7 @@ class DashboardPage(
         self.entry_table.setEditTriggers(TableWidget.EditTrigger.NoEditTriggers)
         self.entry_table.setAlternatingRowColors(True)
         self.entry_table.setMinimumHeight(360)
-        # 设置列宽策略：第0列序号固定60px，第1列类型固定140px，第2列维度固定140px，第3列策略自动拉伸
+        # 设置列宽策略：序号、类型、维度固定，策略列自动拉伸。
         header = self.entry_table.horizontalHeader()
         header.setSectionResizeMode(0, header.ResizeMode.Fixed)
         header.setSectionResizeMode(1, header.ResizeMode.Fixed)
@@ -437,8 +479,12 @@ class DashboardPage(
         )
         self._bind_progress_events()
         self.thread_view_seg.currentItemChanged.connect(self._on_thread_view_changed)
-        self.target_spin.valueChanged.connect(lambda v: self.controller.set_runtime_ui_state(target=int(v)))
-        self.thread_spin.valueChanged.connect(lambda v: self.controller.set_runtime_ui_state(threads=int(v)))
+        self.target_spin.valueChanged.connect(
+            lambda v: self.controller.set_runtime_ui_state(target=int(v))
+        )
+        self.thread_spin.valueChanged.connect(
+            lambda v: self.controller.set_runtime_ui_state(threads=int(v))
+        )
         self.random_ip_cb.toggled.connect(self._on_random_ip_toggled)
         bind_logged_action(
             self.card_btn.clicked,
@@ -471,6 +517,7 @@ class DashboardPage(
         self.controller.randomIpLoadingChanged.connect(self.set_random_ip_loading)
         # 监听剪贴板变化，自动处理粘贴的图片
         from PySide6.QtWidgets import QApplication
+
         clipboard = QApplication.clipboard()
         clipboard.dataChanged.connect(self._on_clipboard_changed)
         # CommandBar Actions
@@ -484,13 +531,29 @@ class DashboardPage(
         # 连接 IP 余额检查信号
         self._ipBalanceChecked.connect(self._on_ip_balance_checked)
         try:
-            self.question_page.entriesChanged.connect(self._on_question_entries_changed)
+            self.workbench_state.entriesChanged.connect(self._on_question_entries_changed)
         except Exception as exc:
-            log_suppressed_exception("_bind_events: self.question_page.entriesChanged.connect(self._on_question_entries_changed)", exc, level=logging.WARNING)
+            context = (
+                "_bind_events: self.workbench_state.entriesChanged.connect("
+                "self._on_question_entries_changed)"
+            )
+            log_suppressed_exception(
+                context,
+                exc,
+                level=logging.WARNING,
+            )
         try:
             self.strategy_page.strategyChanged.connect(self._on_strategy_page_changed)
         except Exception as exc:
-            log_suppressed_exception("_bind_events: self.strategy_page.strategyChanged.connect(self._on_strategy_page_changed)", exc, level=logging.WARNING)
+            context = (
+                "_bind_events: self.strategy_page.strategyChanged.connect("
+                "self._on_strategy_page_changed)"
+            )
+            log_suppressed_exception(
+                context,
+                exc,
+                level=logging.WARNING,
+            )
         self._randomIpHeartbeatUpdated.connect(self._apply_random_ip_heartbeat_status)
 
     def resizeEvent(self, event):
@@ -498,11 +561,15 @@ class DashboardPage(
         try:
             self.config_drawer.sync_to_parent()
         except Exception as exc:
-            log_suppressed_exception("resizeEvent: self.config_drawer.sync_to_parent()", exc, level=logging.WARNING)
+            log_suppressed_exception(
+                "resizeEvent: self.config_drawer.sync_to_parent()",
+                exc,
+                level=logging.WARNING,
+            )
 
     def _has_question_entries(self) -> bool:
         try:
-            return bool(self.question_page.get_entries())
+            return bool(self.workbench_state.has_question_entries())
         except Exception:
             return False
 
@@ -516,21 +583,34 @@ class DashboardPage(
         QDesktopServices.openUrl(QUrl(self.STATUS_PAGE_URL))
 
     def _on_question_entries_changed(self, _count: int):
-        self.strategy_page.set_entries(self.question_page.entries, self.question_page.entry_questions_info)
+        self.strategy_page.set_entries(
+            self.workbench_state.entries,
+            self.workbench_state.entry_questions_info,
+        )
         self._refresh_entry_table()
         self._sync_start_button_state()
 
     def _on_strategy_page_changed(self):
         self._refresh_entry_table()
 
-    def _toast(self, text: str, level: str = "info", duration: int = 2000, show_progress: bool = False):
+    def _toast(
+        self,
+        text: str,
+        level: str = "info",
+        duration: int = 2000,
+        show_progress: bool = False,
+    ):
         """显示消息提示"""
         # 如果之前有进度消息条正在显示，先关闭它
         if self._progress_infobar:
             try:
                 self._progress_infobar.close()
             except Exception as exc:
-                log_suppressed_exception("_toast: self._progress_infobar.close()", exc, level=logging.WARNING)
+                log_suppressed_exception(
+                    "_toast: self._progress_infobar.close()",
+                    exc,
+                    level=logging.WARNING,
+                )
             self._progress_infobar = None
 
         parent = self.window() or self
@@ -540,13 +620,37 @@ class DashboardPage(
         if show_progress:
             # 创建InfoBar实例
             if kind == "success":
-                infobar = InfoBar.success("", text, parent=parent, position=InfoBarPosition.TOP, duration=duration)
+                infobar = InfoBar.success(
+                    "",
+                    text,
+                    parent=parent,
+                    position=InfoBarPosition.TOP,
+                    duration=duration,
+                )
             elif kind == "warning":
-                infobar = InfoBar.warning("", text, parent=parent, position=InfoBarPosition.TOP, duration=duration)
+                infobar = InfoBar.warning(
+                    "",
+                    text,
+                    parent=parent,
+                    position=InfoBarPosition.TOP,
+                    duration=duration,
+                )
             elif kind == "error":
-                infobar = InfoBar.error("", text, parent=parent, position=InfoBarPosition.TOP, duration=duration)
+                infobar = InfoBar.error(
+                    "",
+                    text,
+                    parent=parent,
+                    position=InfoBarPosition.TOP,
+                    duration=duration,
+                )
             else:
-                infobar = InfoBar.info("", text, parent=parent, position=InfoBarPosition.TOP, duration=duration)
+                infobar = InfoBar.info(
+                    "",
+                    text,
+                    parent=parent,
+                    position=InfoBarPosition.TOP,
+                    duration=duration,
+                )
 
             # 添加转圈的加载动画
             spinner = IndeterminateProgressRing()
@@ -559,11 +663,35 @@ class DashboardPage(
             return infobar
         # 普通InfoBar（不带进度条）
         if kind == "success":
-            InfoBar.success("", text, parent=parent, position=InfoBarPosition.TOP, duration=duration)
+            InfoBar.success(
+                "",
+                text,
+                parent=parent,
+                position=InfoBarPosition.TOP,
+                duration=duration,
+            )
         elif kind == "warning":
-            InfoBar.warning("", text, parent=parent, position=InfoBarPosition.TOP, duration=duration)
+            InfoBar.warning(
+                "",
+                text,
+                parent=parent,
+                position=InfoBarPosition.TOP,
+                duration=duration,
+            )
         elif kind == "error":
-            InfoBar.error("", text, parent=parent, position=InfoBarPosition.TOP, duration=duration)
+            InfoBar.error(
+                "",
+                text,
+                parent=parent,
+                position=InfoBarPosition.TOP,
+                duration=duration,
+            )
         else:
-            InfoBar.info("", text, parent=parent, position=InfoBarPosition.TOP, duration=duration)
+            InfoBar.info(
+                "",
+                text,
+                parent=parent,
+                position=InfoBarPosition.TOP,
+                duration=duration,
+            )
         return None

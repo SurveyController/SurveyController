@@ -8,19 +8,59 @@ import logging
 import sys
 from pathlib import Path
 
+for _stream in (sys.stdout, sys.stderr):
+    _reconfigure = getattr(_stream, "reconfigure", None)
+    if callable(_reconfigure):
+        _reconfigure(encoding="utf-8", errors="replace")
+
 ROOT_DIR = Path(__file__).resolve().parents[2]
 if str(ROOT_DIR) not in sys.path:
     sys.path.insert(0, str(ROOT_DIR))
 
-from software.core.engine.async_engine import AsyncEngineClient
-from software.core.task import ExecutionState
-from software.io.config import load_config
-from software.ui.controller.run_controller_parts.runtime_preparation import prepare_execution_artifacts
+from software.core.config.schema import RuntimeConfig  # noqa: E402
+from software.core.engine.async_engine import AsyncEngineClient  # noqa: E402
+from software.core.questions.config import build_default_question_entries  # noqa: E402
+from software.core.task import ExecutionState  # noqa: E402
+from software.providers.registry import parse_survey_sync  # noqa: E402
+from software.ui.controller.run_controller_parts.runtime_preparation import prepare_execution_artifacts  # noqa: E402
+
+
+def _build_live_test_config(url: str, *, headless: bool) -> RuntimeConfig:
+    normalized_url = str(url or "").strip()
+    if not normalized_url:
+        raise ValueError("问卷链接为空")
+
+    definition = parse_survey_sync(normalized_url)
+    questions_info = [question for question in definition.questions if not question.is_description]
+    question_entries = build_default_question_entries(
+        questions_info,
+        survey_url=normalized_url,
+    )
+
+    config = RuntimeConfig(
+        url=normalized_url,
+        survey_title=definition.title or "",
+        survey_provider=definition.provider,
+        target=1,
+        threads=1,
+        submit_interval=(0, 0),
+        answer_duration=(0, 0),
+        timed_mode_enabled=False,
+        random_ip_enabled=False,
+        random_ua_enabled=False,
+        fail_stop_enabled=True,
+        reliability_mode_enabled=True,
+        headless_mode=headless,
+        reverse_fill_enabled=False,
+    )
+    config.questions_info = list(questions_info)
+    config.question_entries = list(question_entries)
+    return config
 
 
 def main() -> int:
     parser = argparse.ArgumentParser()
-    parser.add_argument("--config", required=True)
+    parser.add_argument("--url", required=True)
     parser.add_argument("--timeout", type=float, default=180.0)
     parser.add_argument("--headed", action="store_true")
     args = parser.parse_args()
@@ -29,18 +69,7 @@ def main() -> int:
         level=logging.INFO,
         format="%(asctime)s %(levelname)s %(message)s",
     )
-    config = load_config(args.config, strict=True)
-    config.target = 1
-    config.threads = 1
-    config.submit_interval = (0, 0)
-    config.answer_duration = (0, 0)
-    config.random_ip_enabled = False
-    config.random_ua_enabled = False
-    config.fail_stop_enabled = True
-    if args.headed:
-        config.headless_mode = False
-    else:
-        config.headless_mode = True
+    config = _build_live_test_config(args.url, headless=not bool(args.headed))
 
     prepared = prepare_execution_artifacts(config, fallback_survey_title=config.survey_title)
     execution_config = prepared.execution_config_template

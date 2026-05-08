@@ -1,4 +1,5 @@
 """运行参数页 - 专属设置卡片组件（随机IP、随机UA、定时模式等）"""
+
 import logging
 from typing import Optional
 
@@ -97,7 +98,12 @@ class RandomIPSettingCard(ExpandGroupSettingCard):
     """随机IP设置卡 - 包含代理源选择"""
 
     def __init__(self, parent=None):
-        super().__init__(FluentIcon.GLOBE, "随机 IP", "使用代理 IP 来模拟不同地区的访问，并绕过智能验证", parent)
+        super().__init__(
+            FluentIcon.GLOBE,
+            "随机 IP",
+            "使用代理 IP 来模拟不同地区的访问，并绕过智能验证",
+            parent,
+        )
 
         # 开关
         self.loadingRing = IndeterminateProgressRing(self)
@@ -133,8 +139,10 @@ class RandomIPSettingCard(ExpandGroupSettingCard):
         source_row.addWidget(source_label)
         source_row.addStretch(1)
         self.proxyTrialLink = HyperlinkButton(
-            FluentIcon.LINK, "https://www.ipzan.com?pid=v6bf6iabg",
-            "API免费试用", self._groupContainer
+            FluentIcon.LINK,
+            "https://www.ipzan.com?pid=v6bf6iabg",
+            "API免费试用",
+            self._groupContainer,
         )
         self.proxyTrialLink.hide()
         source_row.addWidget(self.proxyTrialLink)
@@ -157,7 +165,8 @@ class RandomIPSettingCard(ExpandGroupSettingCard):
         layout.addWidget(self.areaRow)
 
         self.benefitHintLabel = BodyLabel(
-            "限时福利仅支持 1 分钟以内的作答时长，且只能支持少部分特定城市。如有更高需求请切换至默认或自备代理源",
+            "限时福利仅支持 1 分钟以内的作答时长，"
+            "且只能支持少部分特定城市。如有更高需求请切换至默认或自备代理源",
             self._groupContainer,
         )
         self.benefitHintLabel.setStyleSheet("color: #D46B08; font-size: 12px;")
@@ -236,7 +245,16 @@ class RandomIPSettingCard(ExpandGroupSettingCard):
     def _get_selected_source(self) -> str:
         idx = self.proxyCombo.currentIndex()
         source = str(self.proxyCombo.itemData(idx)) if idx >= 0 else _PROXY_SOURCE_DEFAULT
-        return source if source in {_PROXY_SOURCE_DEFAULT, _PROXY_SOURCE_BENEFIT, _PROXY_SOURCE_CUSTOM} else _PROXY_SOURCE_DEFAULT
+        return (
+            source
+            if source
+            in {
+                _PROXY_SOURCE_DEFAULT,
+                _PROXY_SOURCE_BENEFIT,
+                _PROXY_SOURCE_CUSTOM,
+            }
+            else _PROXY_SOURCE_DEFAULT
+        )
 
     @staticmethod
     def _collect_area_codes(area_data: list) -> set[str]:
@@ -280,6 +298,7 @@ class RandomIPSettingCard(ExpandGroupSettingCard):
                 self.set_area_code(current_area)
         # 刷新布局 - 重新触发展开/收起来更新高度
         from PySide6.QtCore import QTimer
+
         QTimer.singleShot(0, self._refreshLayout)
 
     def _start_benefit_area_prefetch(self, force_refresh: bool = False) -> None:
@@ -320,7 +339,11 @@ class RandomIPSettingCard(ExpandGroupSettingCard):
 
     def _load_area_options(self, source: Optional[str] = None):
         source = str(source or self._get_selected_source() or _PROXY_SOURCE_DEFAULT).strip().lower()
-        if source not in {_PROXY_SOURCE_DEFAULT, _PROXY_SOURCE_BENEFIT, _PROXY_SOURCE_CUSTOM}:
+        if source not in {
+            _PROXY_SOURCE_DEFAULT,
+            _PROXY_SOURCE_BENEFIT,
+            _PROXY_SOURCE_CUSTOM,
+        }:
             source = _PROXY_SOURCE_DEFAULT
         self._area_source = source
         try:
@@ -342,7 +365,11 @@ class RandomIPSettingCard(ExpandGroupSettingCard):
         self._province_index_by_code = {}
 
         self.provinceCombo.clear()
-        if source == _PROXY_SOURCE_BENEFIT or self._supported_has_all or not self._supported_area_codes:
+        if (
+            source == _PROXY_SOURCE_BENEFIT
+            or self._supported_has_all
+            or not self._supported_area_codes
+        ):
             self.provinceCombo.addItem("不限制", userData="")
         for item in self._area_data:
             code = str(item.get("code") or "")
@@ -356,12 +383,19 @@ class RandomIPSettingCard(ExpandGroupSettingCard):
         self.cityCombo.clear()
         self.cityCombo.setEnabled(False)
 
-    def _populate_cities(self, province_code: str, preferred_city_code: Optional[str] = None) -> None:
+    def _populate_cities(
+        self, province_code: str, preferred_city_code: Optional[str] = None
+    ) -> None:
         self.cityCombo.clear()
         is_municipality = province_code in _MUNICIPALITY_PROVINCE_CODES
         is_benefit = self._area_source == _PROXY_SOURCE_BENEFIT
         # 直辖市不显示"全省/全市"，直接用"市辖区"代表全市
-        if (not is_benefit) and not is_municipality and province_code and province_code in self._supported_area_codes:
+        if (
+            (not is_benefit)
+            and not is_municipality
+            and province_code
+            and province_code in self._supported_area_codes
+        ):
             self.cityCombo.addItem("全省/全市", userData=province_code)
         cities = self._cities_by_province.get(province_code, [])
         if is_benefit and cities:
@@ -377,7 +411,7 @@ class RandomIPSettingCard(ExpandGroupSettingCard):
             if idx >= 0:
                 self.cityCombo.setCurrentIndex(idx)
             elif is_municipality and self.cityCombo.count() > 0:
-                # 直辖市找不到 preferred_city_code（如省级码110000）时，回退到第一项（市辖区）
+                # 直辖市找不到市级码时，回退到第一项。
                 self.cityCombo.setCurrentIndex(0)
 
     def _on_province_changed(self):
@@ -474,7 +508,13 @@ class RandomIPSettingCard(ExpandGroupSettingCard):
 
         api_url = self.customApiEdit.text().strip()
         if not api_url:
-            InfoBar.warning("", "请先输入API地址", parent=self.window(), position=InfoBarPosition.TOP, duration=3000)
+            InfoBar.warning(
+                "",
+                "请先输入API地址",
+                parent=self.window(),
+                position=InfoBarPosition.TOP,
+                duration=3000,
+            )
             return
 
         # 显示加载状态
@@ -512,21 +552,38 @@ class RandomIPSettingCard(ExpandGroupSettingCard):
         if success:
             if error:
                 self.testApiStatus.setText("⚠")
-                self.testApiStatus.setStyleSheet("color: orange; font-size: 16px; font-weight: bold;")
+                self.testApiStatus.setStyleSheet(
+                    "color: orange; font-size: 16px; font-weight: bold;"
+                )
                 logging.warning(f"API检测成功但有警告: {error}")
-                InfoBar.warning("API检测警告", error, parent=self.window(), position=InfoBarPosition.TOP, duration=5000)
+                InfoBar.warning(
+                    "API检测警告",
+                    error,
+                    parent=self.window(),
+                    position=InfoBarPosition.TOP,
+                    duration=5000,
+                )
             else:
                 self.testApiStatus.setText("✔")
-                self.testApiStatus.setStyleSheet("color: green; font-size: 16px; font-weight: bold;")
+                self.testApiStatus.setStyleSheet(
+                    "color: green; font-size: 16px; font-weight: bold;"
+                )
                 logging.info(f"API检测成功，获取到 {len(proxies)} 个代理")
         else:
             self.testApiStatus.setText("✖")
             self.testApiStatus.setStyleSheet("color: red; font-size: 16px; font-weight: bold;")
             logging.error(f"API检测失败: {error}")
-            InfoBar.error("API检测失败", error, parent=self.window(), position=InfoBarPosition.TOP, duration=5000)
+            InfoBar.error(
+                "API检测失败",
+                error,
+                parent=self.window(),
+                position=InfoBarPosition.TOP,
+                duration=5000,
+            )
 
         # 3秒后恢复按钮
         from PySide6.QtCore import QTimer
+
         QTimer.singleShot(3000, self._reset_test_button)
 
     def _reset_test_button(self):
@@ -553,6 +610,7 @@ class RandomIPSettingCard(ExpandGroupSettingCard):
         代理源选择始终可用，方便用户在额度耗尽时切换到自定义代理源。
         """
         from PySide6.QtWidgets import QGraphicsOpacityEffect
+
         self.areaRow.setEnabled(bool(enabled))
         self.proxyCombo.setEnabled(True)
         self.customApiRow.setEnabled(True)
@@ -579,6 +637,7 @@ class TimedModeSettingCard(SettingCard):
     def __init__(self, icon, title, content, parent=None):
         super().__init__(icon, title, content, parent)
         from PySide6.QtCore import QSize
+
         self.helpButton = TransparentToolButton(FluentIcon.INFO, self)
         self.helpButton.setFixedSize(18, 18)
         self.helpButton.setIconSize(QSize(14, 14))
@@ -609,7 +668,12 @@ class RandomUASettingCard(ExpandGroupSettingCard):
     """随机UA设置卡 - 包含设备类型占比配置"""
 
     def __init__(self, parent=None):
-        super().__init__(FluentIcon.ROBOT, "随机 UA", "模拟不同的 User-Agent，例如微信环境或浏览器直链环境", parent)
+        super().__init__(
+            FluentIcon.ROBOT,
+            "随机 UA",
+            "模拟不同的 User-Agent，例如微信环境或浏览器直链环境",
+            parent,
+        )
 
         # 开关
         self.switchButton = SwitchButton(self, IndicatorPosition.RIGHT)
@@ -624,19 +688,23 @@ class RandomUASettingCard(ExpandGroupSettingCard):
         layout.setSpacing(16)
 
         # 提示信息
-        hint_label = BodyLabel("配置不同设备类型的访问占比，三个滑块占比总和必须为 100%", self._groupContainer)
+        hint_label = BodyLabel(
+            "配置不同设备类型的访问占比，三个滑块占比总和必须为 100%",
+            self._groupContainer,
+        )
         hint_label.setStyleSheet("color: #606060; font-size: 12px;")
         layout.addWidget(hint_label)
 
         # 三联动占比滑块
         from software.ui.widgets.ratio_slider import RatioSlider
+
         self.ratioSlider = RatioSlider(
             labels={
                 "wechat": "微信访问占比",
                 "mobile": "手机访问占比",
                 "pc": "链接访问占比",
             },
-            parent=self._groupContainer
+            parent=self._groupContainer,
         )
         layout.addWidget(self.ratioSlider)
 
@@ -654,6 +722,7 @@ class RandomUASettingCard(ExpandGroupSettingCard):
 
     def setUAEnabled(self, enabled):
         from PySide6.QtWidgets import QGraphicsOpacityEffect
+
         self._groupContainer.setEnabled(bool(enabled))
         effect = self._groupContainer.graphicsEffect()
         if effect is None:
@@ -674,6 +743,7 @@ class ReliabilitySettingCard(ExpandGroupSettingCard):
     """
     信效度设置卡 - 开关 + 目标 Alpha 输入框
     """
+
     def __init__(self, parent=None):
         super().__init__(
             FluentIcon.CERTIFICATE,
@@ -701,9 +771,10 @@ class ReliabilitySettingCard(ExpandGroupSettingCard):
 
         alpha_label = BodyLabel("目标 Cronbach's α 系数", self._groupContainer)
         self.alphaEdit = LineEdit(self._groupContainer)
-        self.alphaEdit.setPlaceholderText(
+        placeholder = (
             f"{MIN_TARGET_ALPHA:.2f} - {MAX_TARGET_ALPHA:.2f}（默认 {DEFAULT_TARGET_ALPHA:g}）"
         )
+        self.alphaEdit.setPlaceholderText(placeholder)
         self.alphaEdit.setFixedWidth(120)
         self.alphaEdit.setFixedHeight(36)
         self.alphaEdit.setText(f"{DEFAULT_TARGET_ALPHA:g}")
@@ -740,7 +811,7 @@ class ReliabilitySettingCard(ExpandGroupSettingCard):
     def get_alpha(self) -> float:
         """读取并裁剪目标 Alpha 值，落在允许范围内。
 
-         输入非法或为空时回退到 0.85。
+        输入非法或为空时回退到 0.85。
         """
         return normalize_target_alpha((self.alphaEdit.text() or "").strip())
 
@@ -753,6 +824,7 @@ class ReliabilitySettingCard(ExpandGroupSettingCard):
             text = f"{DEFAULT_TARGET_ALPHA:g}"
         if self.alphaEdit.text() != text:
             self.alphaEdit.setText(text)
+
 
 class TimeRangeSettingCard(SettingCard):
     """时间设置卡 - 使用普通数字输入框（秒）"""
@@ -812,7 +884,9 @@ class TimeRangeSettingCard(SettingCard):
 
     def getValue(self) -> int:
         """获取当前秒数"""
-        value = self._clamp_value(self._parse_digits(self.inputEdit.text(), fallback=self._current_value))
+        value = self._clamp_value(
+            self._parse_digits(self.inputEdit.text(), fallback=self._current_value)
+        )
         self._current_value = value
         return value
 
@@ -828,6 +902,3 @@ class TimeRangeSettingCard(SettingCard):
             self.inputEdit.blockSignals(False)
         if value != previous:
             self.valueChanged.emit(value)
-
-
-

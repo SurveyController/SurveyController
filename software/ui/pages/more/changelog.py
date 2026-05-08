@@ -1,4 +1,5 @@
 """更新日志页面"""
+
 import threading
 from datetime import datetime
 
@@ -19,11 +20,12 @@ from qfluentwidgets import (
     DrillInTransitionStackedWidget,
 )
 
-from software.io.markdown import strip_markdown
+from software.io.markdown.utils import strip_markdown
 
 
 class ReleaseListItem(CardWidget):
     """发行版列表项"""
+
     itemClicked = Signal(dict)
 
     def __init__(self, release: dict, parent=None):
@@ -94,8 +96,10 @@ class ReleaseListItem(CardWidget):
 
 # ─────────────────────── 列表页（内部用） ───────────────────────
 
+
 class _ChangelogListPage(ScrollArea):
     """更新日志列表子页（由 ChangelogPage 托管）"""
+
     _releasesLoaded = Signal(list)
     detailRequested = Signal(dict)
 
@@ -143,6 +147,7 @@ class _ChangelogListPage(ScrollArea):
         def _do_load():
             try:
                 from software.update.updater import UpdateManager
+
                 releases = UpdateManager.get_all_releases()
                 self._releasesLoaded.emit(releases)
             except Exception:
@@ -174,8 +179,10 @@ class _ChangelogListPage(ScrollArea):
 
 # ─────────────────────── 详情页（内部用） ───────────────────────
 
+
 class _ChangelogDetailPage(ScrollArea):
     """更新日志详情子页（由 ChangelogPage 托管）"""
+
     backRequested = Signal()
 
     def __init__(self, parent=None):
@@ -225,7 +232,11 @@ class _ChangelogDetailPage(ScrollArea):
         <style>
             body { line-height: 1.9; font-size: 14px; }
             p { margin-bottom: 10px; line-height: 1.9; }
-            ul, ol { margin-top: 6px; margin-bottom: 10px; padding-left: 24px; }
+            ul, ol {
+                margin-top: 6px;
+                margin-bottom: 10px;
+                padding-left: 24px;
+            }
             li { margin-bottom: 6px; line-height: 1.9; }
             h1, h2, h3, h4, h5, h6 { margin-top: 14px; margin-bottom: 10px; }
         </style>
@@ -245,11 +256,13 @@ class _ChangelogDetailPage(ScrollArea):
 
 # ─────────────────────── 组合页（对外暴露） ───────────────────────
 
+
 class ChangelogPage(QWidget):
     """
     更新日志主页面：内部用 DrillInTransitionStackedWidget 管理
     列表子页和详情子页，对外仍是一个普通 QWidget。
     """
+
     def __init__(self, parent=None):
         super().__init__(parent)
         self._scroll_pos = 0
@@ -286,5 +299,3 @@ class ChangelogPage(QWidget):
         saved = self._scroll_pos
         # 等动画结束后恢复滚动位置（DrillIn 动画约 333ms）
         QTimer.singleShot(380, lambda: self._list_page.restore_scroll_pos(saved))
-
-

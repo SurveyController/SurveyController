@@ -1,10 +1,18 @@
-"""AddPreviewMixin：配置预览区 UI 构建方法，供 QuestionAddDialog 通过多继承引入。"""
+"""AddPreviewMixin：配置预览区 UI 构建方法。"""
+
 import logging
 from typing import Any
 
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import QWidget, QVBoxLayout, QHBoxLayout, QLayout
-from qfluentwidgets import SubtitleLabel, BodyLabel, CardWidget, PushButton, LineEdit, CheckBox
+from qfluentwidgets import (
+    SubtitleLabel,
+    BodyLabel,
+    CardWidget,
+    PushButton,
+    LineEdit,
+    CheckBox,
+)
 
 from software.ui.widgets.no_wheel import NoWheelSlider
 from software.app.config import DEFAULT_FILL_TEXT
@@ -149,7 +157,9 @@ class AddPreviewMixin:
         self.preview_layout.addWidget(card)
         self.preview_layout.addStretch(1)
 
-    def _rebuild_text_preview(self, card: CardWidget, card_layout: QVBoxLayout, q_type: str) -> None:
+    def _rebuild_text_preview(
+        self, card: CardWidget, card_layout: QVBoxLayout, q_type: str
+    ) -> None:
         hint = BodyLabel("答案列表（随机选择一个填入）：", card)
         hint.setStyleSheet("font-size: 12px;")
         _apply_label_color(hint, "#666666", "#bfbfbf")
@@ -218,8 +228,13 @@ class AddPreviewMixin:
         card_layout.addLayout(btn_row)
         self._update_text_answer_count()
 
-    def _rebuild_matrix_preview(self, card: CardWidget, card_layout: QVBoxLayout,
-                                option_count: int, rows: int) -> None:
+    def _rebuild_matrix_preview(
+        self,
+        card: CardWidget,
+        card_layout: QVBoxLayout,
+        option_count: int,
+        rows: int,
+    ) -> None:
         hint = BodyLabel("矩阵量表：每一行都需要单独设置配比", card)
         hint.setStyleSheet("font-size: 12px;")
         _apply_label_color(hint, "#666666", "#bfbfbf")
@@ -275,7 +290,9 @@ class AddPreviewMixin:
             _apply_label_color(hint_random, "#888888", "#b0b0b0")
             card_layout.addWidget(hint_random)
 
-    def _rebuild_order_preview(self, card: CardWidget, card_layout: QVBoxLayout, option_count: int) -> None:
+    def _rebuild_order_preview(
+        self, card: CardWidget, card_layout: QVBoxLayout, option_count: int
+    ) -> None:
         hint = BodyLabel("排序题无需设置配比，执行时会随机排序。", card)
         hint.setStyleSheet("font-size: 12px;")
         _apply_label_color(hint, "#666666", "#bfbfbf")
@@ -298,8 +315,13 @@ class AddPreviewMixin:
             list_layout.addWidget(more)
         card_layout.addWidget(list_container)
 
-    def _rebuild_slider_preview(self, card: CardWidget, card_layout: QVBoxLayout,
-                                q_type: str, option_count: int) -> None:
+    def _rebuild_slider_preview(
+        self,
+        card: CardWidget,
+        card_layout: QVBoxLayout,
+        q_type: str,
+        option_count: int,
+    ) -> None:
         is_multiple = q_type == "multiple"
         is_slider = q_type == "slider"
         strategy = self._resolve_strategy()
@@ -348,7 +370,14 @@ class AddPreviewMixin:
 
             slider = NoWheelSlider(Qt.Orientation.Horizontal, opt_widget)
             slider.setRange(0, 100)
-            slider.setValue(int(min(slider.maximum(), max(slider.minimum(), self._slider_values[idx]))))
+            slider.setValue(
+                int(
+                    min(
+                        slider.maximum(),
+                        max(slider.minimum(), self._slider_values[idx]),
+                    )
+                )
+            )
             slider.setMinimumWidth(200)
             opt_layout.addWidget(slider, 1)
 
@@ -367,7 +396,9 @@ class AddPreviewMixin:
             if is_multiple:
                 percent_label = BodyLabel("%", opt_widget)
                 percent_label.setFixedWidth(12)
-                percent_label.setAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
+                percent_label.setAlignment(
+                    Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter
+                )
                 _apply_label_color(percent_label, "#666666", "#bfbfbf")
                 opt_layout.addWidget(percent_label)
 
@@ -376,5 +407,3 @@ class AddPreviewMixin:
         if strategy == "random":
             sliders_container.setEnabled(False)
         card_layout.addWidget(sliders_container)
-
-

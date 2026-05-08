@@ -1,4 +1,5 @@
 """应用程序设置页面"""
+
 import sys
 import subprocess
 import logging
@@ -71,7 +72,9 @@ class SettingsPage(ScrollArea):
             "开启后程序窗口将始终保持在最上层",
             self.appearance_group,
         )
-        self.topmost_card.setChecked(get_bool_from_qsettings(settings.value("window_topmost"), False))
+        self.topmost_card.setChecked(
+            get_bool_from_qsettings(settings.value("window_topmost"), False)
+        )
         self.appearance_group.addSettingCard(self.navigation_text_card)
         self.appearance_group.addSettingCard(self.topmost_card)
         layout.addWidget(self.appearance_group)
@@ -83,14 +86,18 @@ class SettingsPage(ScrollArea):
             "关闭窗口时提示是否保存当前配置",
             self.behavior_group,
         )
-        self.ask_save_card.setChecked(get_bool_from_qsettings(settings.value("ask_save_on_close"), True))
+        self.ask_save_card.setChecked(
+            get_bool_from_qsettings(settings.value("ask_save_on_close"), True)
+        )
         self.prevent_sleep_card = SwitchSettingCard(
             FluentIcon.HISTORY,
             "执行期间阻止自动休眠",
             "任务运行时阻止电脑因为长时间无操作而自动休眠，任务结束后会自动恢复",
             self.behavior_group,
         )
-        self.prevent_sleep_card.setChecked(get_bool_from_qsettings(settings.value("prevent_sleep_during_run"), True))
+        self.prevent_sleep_card.setChecked(
+            get_bool_from_qsettings(settings.value("prevent_sleep_during_run"), True)
+        )
         self.task_result_notification_card = SwitchSettingCard(
             FluentIcon.INFO,
             "后台任务完成/失败时通知",
@@ -98,7 +105,10 @@ class SettingsPage(ScrollArea):
             self.behavior_group,
         )
         self.task_result_notification_card.setChecked(
-            get_bool_from_qsettings(settings.value(TASK_RESULT_WINDOWS_NOTIFICATION_SETTING_KEY), True)
+            get_bool_from_qsettings(
+                settings.value(TASK_RESULT_WINDOWS_NOTIFICATION_SETTING_KEY),
+                True,
+            )
         )
         self.auto_save_logs_card = ExpandComboSwitchSettingCard(
             FluentIcon.DOCUMENT,
@@ -110,7 +120,10 @@ class SettingsPage(ScrollArea):
             parent=self.behavior_group,
         )
         self.auto_save_logs_card.setChecked(
-            get_bool_from_qsettings(settings.value(AUTO_SAVE_LOGS_SETTING_KEY), DEFAULT_AUTO_SAVE_LOGS)
+            get_bool_from_qsettings(
+                settings.value(AUTO_SAVE_LOGS_SETTING_KEY),
+                DEFAULT_AUTO_SAVE_LOGS,
+            )
         )
         self.auto_save_logs_combo = self.auto_save_logs_card.comboBox
         for count in AUTO_SAVE_LOG_RETENTION_OPTIONS:
@@ -123,7 +136,9 @@ class SettingsPage(ScrollArea):
         )
         retention_index = self.auto_save_logs_combo.findData(saved_retention)
         if retention_index < 0:
-            retention_index = self.auto_save_logs_combo.findData(DEFAULT_AUTO_SAVE_LOG_RETENTION_COUNT)
+            retention_index = self.auto_save_logs_combo.findData(
+                DEFAULT_AUTO_SAVE_LOG_RETENTION_COUNT
+            )
         if retention_index >= 0:
             self.auto_save_logs_combo.setCurrentIndex(retention_index)
         self.behavior_group.addSettingCard(self.ask_save_card)
@@ -139,7 +154,9 @@ class SettingsPage(ScrollArea):
             "新版本将更加稳定并拥有更多功能（建议启用此选项）",
             self.update_group,
         )
-        self.auto_update_card.setChecked(get_bool_from_qsettings(settings.value("auto_check_update"), True))
+        self.auto_update_card.setChecked(
+            get_bool_from_qsettings(settings.value("auto_check_update"), True)
+        )
         self.update_group.addSettingCard(self.auto_update_card)
         layout.addWidget(self.update_group)
 
@@ -305,7 +322,12 @@ class SettingsPage(ScrollArea):
                 if hasattr(nav, "setSelectedTextVisible"):
                     nav.setSelectedTextVisible(bool(checked))
             except Exception as exc:
-                log_suppressed_exception("_apply_navigation_text_state: nav.setSelectedTextVisible(bool(checked))", exc, level=logging.WARNING)
+                context = "_apply_navigation_text_state: nav.setSelectedTextVisible(bool(checked))"
+                log_suppressed_exception(
+                    context,
+                    exc,
+                    level=logging.WARNING,
+                )
 
     def _apply_topmost_state(self, checked: bool, persist: bool = True):
         settings = app_settings()
@@ -412,17 +434,33 @@ class SettingsPage(ScrollArea):
         self._apply_navigation_text_state(checked)
 
     def _restart_program(self):
-        box = MessageBox("重启程序", "确定要重新启动程序吗？\n未保存的配置将会丢失。", self.window() or self)
+        box = MessageBox(
+            "重启程序",
+            "确定要重新启动程序吗？\n未保存的配置将会丢失。",
+            self.window() or self,
+        )
         box.yesButton.setText("确定")
         box.cancelButton.setText("取消")
         if box.exec():
-            log_action("UI", "restart_program", "restart_card", "settings", result="confirmed")
+            log_action(
+                "UI",
+                "restart_program",
+                "restart_card",
+                "settings",
+                result="confirmed",
+            )
             try:
                 win = self.window()
                 if hasattr(win, "_skip_save_on_close"):
                     setattr(win, "_skip_save_on_close", True)
                 subprocess.Popen([sys.executable] + sys.argv)
-                log_action("UI", "restart_program", "restart_card", "settings", result="started")
+                log_action(
+                    "UI",
+                    "restart_program",
+                    "restart_card",
+                    "settings",
+                    result="started",
+                )
                 QApplication.quit()
             except Exception as exc:
                 log_action(
@@ -434,9 +472,21 @@ class SettingsPage(ScrollArea):
                     level=logging.ERROR,
                     detail=exc,
                 )
-                InfoBar.error("", f"重启失败：{exc}", parent=self.window(), position=InfoBarPosition.TOP, duration=3000)
+                InfoBar.error(
+                    "",
+                    f"重启失败：{exc}",
+                    parent=self.window(),
+                    position=InfoBarPosition.TOP,
+                    duration=3000,
+                )
         else:
-            log_action("UI", "restart_program", "restart_card", "settings", result="cancelled")
+            log_action(
+                "UI",
+                "restart_program",
+                "restart_card",
+                "settings",
+                result="cancelled",
+            )
 
     def _on_auto_update_toggled(self, checked: bool):
         self._apply_auto_update_state(checked)
@@ -466,13 +516,29 @@ class SettingsPage(ScrollArea):
         self._apply_auto_save_log_retention_count(keep_count)
 
     def _on_reset_ui_settings(self):
-        box = MessageBox("恢复默认设置", "确定要恢复默认设置吗？\n这将还原所有设置项到初始状态。", self.window() or self)
+        box = MessageBox(
+            "恢复默认设置",
+            "确定要恢复默认设置吗？\n这将还原所有设置项到初始状态。",
+            self.window() or self,
+        )
         box.yesButton.setText("恢复")
         box.cancelButton.setText("取消")
         if not box.exec():
-            log_action("CONFIG", "reset_ui_settings", "reset_ui_card", "settings", result="cancelled")
+            log_action(
+                "CONFIG",
+                "reset_ui_settings",
+                "reset_ui_card",
+                "settings",
+                result="cancelled",
+            )
             return
-        log_action("CONFIG", "reset_ui_settings", "reset_ui_card", "settings", result="confirmed")
+        log_action(
+            "CONFIG",
+            "reset_ui_settings",
+            "reset_ui_card",
+            "settings",
+            result="confirmed",
+        )
 
         settings = app_settings()
         for key in (
@@ -495,32 +561,59 @@ class SettingsPage(ScrollArea):
             "prevent_sleep_during_run": True,
             TASK_RESULT_WINDOWS_NOTIFICATION_SETTING_KEY: True,
             AUTO_SAVE_LOGS_SETTING_KEY: DEFAULT_AUTO_SAVE_LOGS,
-            AUTO_SAVE_LOG_RETENTION_COUNT_SETTING_KEY: DEFAULT_AUTO_SAVE_LOG_RETENTION_COUNT,
+            AUTO_SAVE_LOG_RETENTION_COUNT_SETTING_KEY: (DEFAULT_AUTO_SAVE_LOG_RETENTION_COUNT),
             "auto_check_update": True,
         }
-        self._set_switch_state(self.navigation_text_card, defaults[NAVIGATION_TEXT_VISIBLE_SETTING_KEY])
+        self._set_switch_state(
+            self.navigation_text_card,
+            defaults[NAVIGATION_TEXT_VISIBLE_SETTING_KEY],
+        )
         self._set_switch_state(self.topmost_card, defaults["window_topmost"])
         self._set_switch_state(self.ask_save_card, defaults["ask_save_on_close"])
         self._set_switch_state(self.prevent_sleep_card, defaults["prevent_sleep_during_run"])
-        self._set_switch_state(self.task_result_notification_card, defaults[TASK_RESULT_WINDOWS_NOTIFICATION_SETTING_KEY])
+        self._set_switch_state(
+            self.task_result_notification_card,
+            defaults[TASK_RESULT_WINDOWS_NOTIFICATION_SETTING_KEY],
+        )
         self._set_switch_state(self.auto_save_logs_card, defaults[AUTO_SAVE_LOGS_SETTING_KEY])
-        retention_index = self.auto_save_logs_combo.findData(defaults[AUTO_SAVE_LOG_RETENTION_COUNT_SETTING_KEY])
+        retention_index = self.auto_save_logs_combo.findData(
+            defaults[AUTO_SAVE_LOG_RETENTION_COUNT_SETTING_KEY]
+        )
         if retention_index >= 0:
             self.auto_save_logs_combo.blockSignals(True)
             self.auto_save_logs_combo.setCurrentIndex(retention_index)
             self.auto_save_logs_combo.blockSignals(False)
         self._set_switch_state(self.auto_update_card, defaults["auto_check_update"])
-        self._apply_navigation_text_state(defaults[NAVIGATION_TEXT_VISIBLE_SETTING_KEY], persist=False)
+        self._apply_navigation_text_state(
+            defaults[NAVIGATION_TEXT_VISIBLE_SETTING_KEY], persist=False
+        )
         self._apply_topmost_state(defaults["window_topmost"], persist=False)
         self._apply_ask_save_state(defaults["ask_save_on_close"], persist=False)
         self._apply_prevent_sleep_state(defaults["prevent_sleep_during_run"], persist=False)
-        self._apply_task_result_notification_state(defaults[TASK_RESULT_WINDOWS_NOTIFICATION_SETTING_KEY], persist=False)
+        self._apply_task_result_notification_state(
+            defaults[TASK_RESULT_WINDOWS_NOTIFICATION_SETTING_KEY],
+            persist=False,
+        )
         self._apply_auto_save_logs_state(defaults[AUTO_SAVE_LOGS_SETTING_KEY], persist=False)
-        self._apply_auto_save_log_retention_count(defaults[AUTO_SAVE_LOG_RETENTION_COUNT_SETTING_KEY], persist=False)
+        self._apply_auto_save_log_retention_count(
+            defaults[AUTO_SAVE_LOG_RETENTION_COUNT_SETTING_KEY], persist=False
+        )
         self._apply_auto_update_state(defaults["auto_check_update"], persist=False)
-        InfoBar.success("", "已恢复默认设置", parent=self.window(), position=InfoBarPosition.TOP, duration=2000)
+        InfoBar.success(
+            "",
+            "已恢复默认设置",
+            parent=self.window(),
+            position=InfoBarPosition.TOP,
+            duration=2000,
+        )
 
-        log_action("CONFIG", "reset_ui_settings", "reset_ui_card", "settings", result="success")
+        log_action(
+            "CONFIG",
+            "reset_ui_settings",
+            "reset_ui_card",
+            "settings",
+            result="success",
+        )
 
     def _on_clear_survey_parse_cache(self):
         box = MessageBox(
@@ -531,10 +624,22 @@ class SettingsPage(ScrollArea):
         box.yesButton.setText("删除")
         box.cancelButton.setText("取消")
         if not box.exec():
-            log_action("CONFIG", "clear_survey_parse_cache", "clear_survey_cache_card", "settings", result="cancelled")
+            log_action(
+                "CONFIG",
+                "clear_survey_parse_cache",
+                "clear_survey_cache_card",
+                "settings",
+                result="cancelled",
+            )
             return
 
-        log_action("CONFIG", "clear_survey_parse_cache", "clear_survey_cache_card", "settings", result="confirmed")
+        log_action(
+            "CONFIG",
+            "clear_survey_parse_cache",
+            "clear_survey_cache_card",
+            "settings",
+            result="confirmed",
+        )
         try:
             removed_count = clear_survey_parse_cache()
         except Exception as exc:
@@ -547,12 +652,32 @@ class SettingsPage(ScrollArea):
                 level=logging.ERROR,
                 detail=exc,
             )
-            log_suppressed_exception("_on_clear_survey_parse_cache: clear_survey_parse_cache()", exc, level=logging.ERROR)
-            InfoBar.error("", f"删除问卷解析缓存失败：{exc}", parent=self.window(), position=InfoBarPosition.TOP, duration=3000)
+            log_suppressed_exception(
+                "_on_clear_survey_parse_cache: clear_survey_parse_cache()",
+                exc,
+                level=logging.ERROR,
+            )
+            InfoBar.error(
+                "",
+                f"删除问卷解析缓存失败：{exc}",
+                parent=self.window(),
+                position=InfoBarPosition.TOP,
+                duration=3000,
+            )
             return
 
-        detail = "没有可删除的问卷解析缓存" if removed_count <= 0 else f"已删除 {removed_count} 项问卷解析缓存"
-        InfoBar.success("", detail, parent=self.window(), position=InfoBarPosition.TOP, duration=2500)
+        detail = (
+            "没有可删除的问卷解析缓存"
+            if removed_count <= 0
+            else f"已删除 {removed_count} 项问卷解析缓存"
+        )
+        InfoBar.success(
+            "",
+            detail,
+            parent=self.window(),
+            position=InfoBarPosition.TOP,
+            duration=2500,
+        )
         log_action(
             "CONFIG",
             "clear_survey_parse_cache",
@@ -561,4 +686,3 @@ class SettingsPage(ScrollArea):
             result="success",
             payload={"removed_count": removed_count},
         )
-

@@ -1,4 +1,5 @@
 """UI 辅助函数"""
+
 from collections.abc import Mapping, Sequence
 from typing import Any, Dict, List, Optional, Tuple
 
@@ -8,8 +9,14 @@ from PySide6.QtWidgets import QLabel, QSizePolicy
 from qfluentwidgets import LineEdit
 
 from software.core.questions.config import QuestionEntry
-from software.providers.common import SURVEY_PROVIDER_WJX, normalize_survey_provider
-from software.providers.contracts import SurveyQuestionMeta, ensure_survey_question_meta
+from software.providers.common import (
+    SURVEY_PROVIDER_WJX,
+    normalize_survey_provider,
+)
+from software.providers.contracts import (
+    SurveyQuestionMeta,
+    ensure_survey_question_meta,
+)
 from software.ui.widgets.no_wheel import NoWheelSlider
 
 
@@ -25,7 +32,7 @@ def _shorten_text(text: str, limit: int = 80) -> str:
 def _apply_label_color(label: QLabel, light: str, dark: str) -> None:
     """为标签设置浅色/深色主题颜色。"""
     try:
-        getattr(label, 'setTextColor')(QColor(light), QColor(dark))
+        getattr(label, "setTextColor")(QColor(light), QColor(dark))
     except AttributeError:
         style = label.styleSheet() or ""
         style = style.strip()
@@ -95,7 +102,9 @@ def _normalize_question_num(raw: Any) -> Optional[int]:
 def resolve_display_question_num(info: Any, fallback: Any = None) -> Optional[int]:
     display_num = None
     try:
-        display_num = info.get("display_num") if hasattr(info, "get") else getattr(info, "display_num", None)
+        display_num = (
+            info.get("display_num") if hasattr(info, "get") else getattr(info, "display_num", None)
+        )
     except Exception:
         display_num = None
     normalized = _normalize_question_num(display_num)
@@ -133,14 +142,18 @@ def _normalize_provider_key(raw_provider: Any, raw_question_id: Any) -> Optional
 
 def _build_entry_info_fallback(entry: QuestionEntry) -> SurveyQuestionMeta:
     info: Dict[str, Any] = {
-        "provider": normalize_survey_provider(getattr(entry, "survey_provider", None), default=SURVEY_PROVIDER_WJX),
+        "provider": normalize_survey_provider(
+            getattr(entry, "survey_provider", None),
+            default=SURVEY_PROVIDER_WJX,
+        ),
         "title": str(getattr(entry, "question_title", None) or "").strip(),
         "question_type": str(getattr(entry, "question_type", None) or "").strip(),
         "options": int(max(0, getattr(entry, "option_count", 0) or 0)),
         "rows": int(max(1, getattr(entry, "rows", 1) or 1)),
         "is_location": bool(getattr(entry, "is_location", False)),
         "is_multi_text": str(getattr(entry, "question_type", "") or "").strip() == "multi_text",
-        "is_text_like": str(getattr(entry, "question_type", "") or "").strip() in {"text", "multi_text"},
+        "is_text_like": str(getattr(entry, "question_type", "") or "").strip()
+        in {"text", "multi_text"},
     }
     if info["question_type"] == "multi_text":
         info["text_inputs"] = max(
@@ -216,7 +229,9 @@ def build_entry_info_list(
     unused_indices = set(range(len(selectable_info)))
     aligned_info: List[SurveyQuestionMeta] = []
 
-    def _take_first(indices: Optional[List[int]]) -> Optional[SurveyQuestionMeta]:
+    def _take_first(
+        indices: Optional[List[int]],
+    ) -> Optional[SurveyQuestionMeta]:
         if not indices:
             return None
         for candidate in indices:
@@ -252,5 +267,3 @@ def build_entry_info_list(
         aligned_info.append(matched_info or _build_entry_info_fallback(entry))
 
     return aligned_info
-
-

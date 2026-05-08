@@ -1,4 +1,5 @@
 """维度分组面板。"""
+
 from __future__ import annotations
 
 from typing import Any, Dict, List, Optional, Sequence, Tuple
@@ -43,7 +44,13 @@ from .utils import (
 class DimensionNameDialog(MessageBoxBase):
     """输入维度名称弹窗。"""
 
-    def __init__(self, title: str, confirm_text: str, initial_value: str = "", parent=None):
+    def __init__(
+        self,
+        title: str,
+        confirm_text: str,
+        initial_value: str = "",
+        parent=None,
+    ):
         self._fallback_parent: Optional[QWidget] = None
         if parent is None:
             self._fallback_parent = QWidget()
@@ -103,7 +110,10 @@ class DimensionGroupingPanel(QWidget):
         content_layout.setSpacing(10)
         content_layout.addWidget(SubtitleLabel("维度分组", self.content_card))
         content_layout.addWidget(
-            BodyLabel("把题目拖到目标维度下完成分组，点击维度右侧按钮可重命名或删除。", self.content_card)
+            BodyLabel(
+                "把题目拖到目标维度下完成分组，点击维度右侧按钮可重命名或删除。",
+                self.content_card,
+            )
         )
 
         add_row = QHBoxLayout()
@@ -130,7 +140,11 @@ class DimensionGroupingPanel(QWidget):
 
         self.add_btn.clicked.connect(self._on_add_dimension)
 
-    def set_entries(self, entries: Sequence[QuestionEntry], questions_info: Optional[Sequence[SurveyQuestionMeta]] = None) -> None:
+    def set_entries(
+        self,
+        entries: Sequence[QuestionEntry],
+        questions_info: Optional[Sequence[SurveyQuestionMeta]] = None,
+    ) -> None:
         self._entries = list(entries or [])
         if questions_info is not None:
             self._questions_info = ensure_survey_question_metas(questions_info or [])
@@ -152,11 +166,23 @@ class DimensionGroupingPanel(QWidget):
     def _toast(self, message: str, level: str = "warning") -> None:
         parent = self.window() or self
         if level == "error":
-            InfoBar.error("", message, parent=parent, position=InfoBarPosition.TOP, duration=2600)
+            InfoBar.error(
+                "",
+                message,
+                parent=parent,
+                position=InfoBarPosition.TOP,
+                duration=2600,
+            )
             return
         if level == "success":
             return
-        InfoBar.warning("", message, parent=parent, position=InfoBarPosition.TOP, duration=2200)
+        InfoBar.warning(
+            "",
+            message,
+            parent=parent,
+            position=InfoBarPosition.TOP,
+            duration=2200,
+        )
 
     def _refresh_sections(self) -> None:
         self._clear_section_widgets()
@@ -171,7 +197,9 @@ class DimensionGroupingPanel(QWidget):
             section.entriesDropped.connect(self._on_entries_dropped)
             section.renameRequested.connect(self._on_rename_dimension)
             section.deleteRequested.connect(self._on_delete_dimension)
-            section.addQuestionsRequested.connect(self._on_add_questions_to_dimension)  # 新增：连接添加题目信号
+            section.addQuestionsRequested.connect(
+                self._on_add_questions_to_dimension
+            )  # 新增：连接添加题目信号
 
             self.sections_layout.addWidget(section)
             self._section_widgets[group_name] = section
@@ -215,17 +243,24 @@ class DimensionGroupingPanel(QWidget):
             rows_by_group.setdefault(group_name, []).append(row)
         return rows_by_group
 
-    def _supported_entry_rows(self) -> List[Tuple[int, QuestionEntry, SurveyQuestionMeta]]:
+    def _supported_entry_rows(
+        self,
+    ) -> List[Tuple[int, QuestionEntry, SurveyQuestionMeta]]:
         rows: List[Tuple[int, QuestionEntry, SurveyQuestionMeta]] = []
         for idx, entry in enumerate(self._entries):
             if not question_supports_dimension_grouping(entry):
                 continue
             question_num = to_int(getattr(entry, "question_num", idx + 1), idx + 1)
-            info = self._question_info_map.get(question_num, ensure_survey_question_meta({}, index=question_num))
+            info = self._question_info_map.get(
+                question_num,
+                ensure_survey_question_meta({}, index=question_num),
+            )
             rows.append((idx, entry, info))
         return rows
 
-    def _resolve_entry_title(self, entry: QuestionEntry, info: SurveyQuestionMeta, index: int) -> str:
+    def _resolve_entry_title(
+        self, entry: QuestionEntry, info: SurveyQuestionMeta, index: int
+    ) -> str:
         title = str(getattr(entry, "question_title", "") or "").strip()
         if title:
             return title
@@ -242,9 +277,14 @@ class DimensionGroupingPanel(QWidget):
             "scale": "量表题",
             "score": "评价题",
             "matrix": "矩阵题",
-        }.get(str(getattr(entry, "question_type", "") or "").strip().lower(), "量表题")
+        }.get(
+            str(getattr(entry, "question_type", "") or "").strip().lower(),
+            "量表题",
+        )
 
-    def _validate_new_dimension_name(self, raw_value: Any, *, old_name: Optional[str] = None) -> Optional[str]:
+    def _validate_new_dimension_name(
+        self, raw_value: Any, *, old_name: Optional[str] = None
+    ) -> Optional[str]:
         normalized = normalize_dimension_name(raw_value)
         if not normalized:
             self._toast("维度名称不能为空，也不能叫'未分组'", "warning")
@@ -288,7 +328,9 @@ class DimensionGroupingPanel(QWidget):
         if not new_name or new_name == current_name:
             return
 
-        self._dimension_groups = [new_name if name == current_name else name for name in self._dimension_groups]
+        self._dimension_groups = [
+            new_name if name == current_name else name for name in self._dimension_groups
+        ]
         for entry in self._entries:
             if normalize_dimension_name(getattr(entry, "dimension", None)) == current_name:
                 entry.dimension = new_name
@@ -330,7 +372,9 @@ class DimensionGroupingPanel(QWidget):
         self.changed.emit()
         self._toast(f"已删除维度「{current_name}」", "success")
 
-    def _apply_entries_to_dimension(self, entry_indices: Sequence[int], dimension_name: Optional[str]) -> bool:
+    def _apply_entries_to_dimension(
+        self, entry_indices: Sequence[int], dimension_name: Optional[str]
+    ) -> bool:
         normalized = normalize_dimension_name(dimension_name)
         changed = False
         for idx in sorted(set(entry_indices)):
@@ -364,10 +408,11 @@ class DimensionGroupingPanel(QWidget):
             return
 
         # 获取未分组的题目列表
-        ungrouped_questions = []
-        for row in self._build_question_rows():
-            if str(row.get("group_name") or DIMENSION_UNGROUPED) == DIMENSION_UNGROUPED:
-                ungrouped_questions.append(row)
+        ungrouped_questions = [
+            row
+            for row in self._build_question_rows()
+            if str(row.get("group_name") or DIMENSION_UNGROUPED) == DIMENSION_UNGROUPED
+        ]
 
         if not ungrouped_questions:
             self._toast("没有可添加的题目，所有题目都已分配到维度", "warning")
@@ -391,5 +436,7 @@ class DimensionGroupingPanel(QWidget):
         # 应用到目标维度
         target_dimension = None if target_group == DIMENSION_UNGROUPED else target_group
         if self._apply_entries_to_dimension(selected_indices, target_dimension):
-            self._toast(f"已添加 {len(selected_indices)} 道题目到「{target_group}」", "success")
-
+            self._toast(
+                f"已添加 {len(selected_indices)} 道题目到「{target_group}」",
+                "success",
+            )

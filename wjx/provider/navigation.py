@@ -1,6 +1,5 @@
 """页面导航 - 翻页、跳转与滚动控制"""
 import math
-import random
 import threading
 import time
 from typing import Optional
@@ -385,21 +384,6 @@ def dismiss_resume_dialog_if_present(
             else:
                 time.sleep(poll_interval)
     return False
-
-
-def _human_scroll_after_question(driver: BrowserDriver) -> None:
-    distance = random.uniform(120, 260)
-    page = getattr(driver, "page", None)
-    if page:
-        try:
-            page.mouse.wheel(0, distance)
-            return
-        except Exception as exc:
-            log_suppressed_exception("navigation._human_scroll_after_question mouse wheel", exc)
-    try:
-        driver.execute_script("window.scrollBy(0, arguments[0]);", distance)
-    except Exception as exc:
-        log_suppressed_exception("navigation._human_scroll_after_question script", exc)
 
 
 def _click_next_page_button(driver: BrowserDriver) -> bool:

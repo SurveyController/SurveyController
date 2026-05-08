@@ -1,11 +1,18 @@
 """Shared survey URL and QR-code entry card."""
+
 from __future__ import annotations
 
 from typing import Iterable
 
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import QHBoxLayout, QToolButton, QVBoxLayout, QWidget
-from qfluentwidgets import CardWidget, FluentIcon, LineEdit, PrimaryPushButton, ToolButton
+from qfluentwidgets import (
+    CardWidget,
+    FluentIcon,
+    LineEdit,
+    PrimaryPushButton,
+    ToolButton,
+)
 
 from software.ui.helpers.fluent_tooltip import install_tooltip_filter
 from software.ui.widgets.paste_only_menu import PasteOnlyMenu

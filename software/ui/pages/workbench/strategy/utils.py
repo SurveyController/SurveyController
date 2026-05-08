@@ -1,4 +1,5 @@
 """题目策略页通用辅助函数。"""
+
 from __future__ import annotations
 
 from typing import Any, Iterable, List, Optional
@@ -30,7 +31,9 @@ def entry_dimension_label(entry: QuestionEntry) -> str:
 
 
 def question_supports_dimension_grouping(entry: QuestionEntry) -> bool:
-    return str(getattr(entry, "question_type", "") or "").strip().lower() in DIMENSION_SUPPORTED_TYPES
+    return (
+        str(getattr(entry, "question_type", "") or "").strip().lower() in DIMENSION_SUPPORTED_TYPES
+    )
 
 
 def sanitize_dimension_groups(
@@ -57,7 +60,9 @@ def sanitize_dimension_groups(
 def summarize_bias(entry: QuestionEntry) -> str:
     raw_bias = getattr(entry, "psycho_bias", "custom")
     if isinstance(raw_bias, list):
-        normalized = [str(item or "custom").strip().lower() for item in raw_bias if str(item or "").strip()]
+        normalized = [
+            str(item or "custom").strip().lower() for item in raw_bias if str(item or "").strip()
+        ]
         if not normalized:
             return _BIAS_TEXT_MAP["custom"]
         unique = []

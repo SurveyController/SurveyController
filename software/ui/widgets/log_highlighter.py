@@ -1,4 +1,5 @@
 """日志语法高亮器 - 按日志级别着色"""
+
 from __future__ import annotations
 
 from typing import Dict, Optional
@@ -14,9 +15,7 @@ class LogHighlighter(QSyntaxHighlighter):
         super().__init__(document)
         self._colors = colors or {}
         self._formats: Dict[str, QTextCharFormat] = {}
-        self._log_prefix = QRegularExpression(
-            r"^\d{4}-\d{2}-\d{2}\s+\d{2}:\d{2}:\d{2}\s+\["
-        )
+        self._log_prefix = QRegularExpression(r"^\d{4}-\d{2}-\d{2}\s+\d{2}:\d{2}:\d{2}\s+\[")
         self._update_formats()
 
     def set_colors(self, colors: Dict[str, str]) -> None:
@@ -76,7 +75,9 @@ class LogHighlighter(QSyntaxHighlighter):
                 )
             return
 
-        if self.previousBlockState() == self.TRACEBACK_STATE and not self._looks_like_log_line(text):
+        if self.previousBlockState() == self.TRACEBACK_STATE and not self._looks_like_log_line(
+            text
+        ):
             self._apply_format("ERROR", text)
             self.setCurrentBlockState(self.TRACEBACK_STATE)
             return

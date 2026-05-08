@@ -13,6 +13,7 @@ from software.core.engine.dom_helpers import (
     _driver_question_looks_like_description,
     _driver_question_looks_like_slider_matrix,
 )
+from software.core.engine.navigation import _human_scroll_after_question
 from software.core.engine.runtime_control import _is_headless_mode
 from software.core.modes.duration_control import has_configured_answer_duration, simulate_answer_duration_delay
 from software.core.questions.utils import _should_treat_question_as_text_like
@@ -24,7 +25,6 @@ from software.providers.registry import parse_survey_sync
 from wjx.provider.detection import detect as _wjx_detect
 from wjx.provider.navigation import (
     _click_next_page_button,
-    _human_scroll_after_question,
     dismiss_resume_dialog_if_present,
     try_click_start_answer_button,
 )

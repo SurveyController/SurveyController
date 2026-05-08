@@ -1,4 +1,5 @@
 """RunController 启动提示与运行前状态辅助逻辑。"""
+
 from __future__ import annotations
 
 import copy
@@ -23,7 +24,9 @@ from .runtime_constants import (
 )
 
 
-def _parse_status_page_monitor_names(payload: Dict[str, Any]) -> Dict[int, str]:
+def _parse_status_page_monitor_names(
+    payload: Dict[str, Any],
+) -> Dict[int, str]:
     names: Dict[int, str] = {}
     for group in list(payload.get("publicGroupList") or []):
         monitor_list = group.get("monitorList") or []
@@ -59,7 +62,9 @@ def _extract_startup_service_warnings(
             status = 0
         if status == 1:
             continue
-        service_name = str(names.get(int(monitor_id)) or fallback_name or f"服务 {monitor_id}").strip()
+        service_name = str(
+            names.get(int(monitor_id)) or fallback_name or f"服务 {monitor_id}"
+        ).strip()
         detail = str(latest.get("msg") or "").strip()
         time_text = str(latest.get("time") or "").strip()
         suffix_parts: List[str] = []
@@ -101,9 +106,13 @@ class RunControllerInitializationMixin:
         def _initializing(self, value: bool) -> None: ...
 
         @property
-        def _prepared_execution_artifacts(self) -> Optional[PreparedExecutionArtifacts]: ...
+        def _prepared_execution_artifacts(
+            self,
+        ) -> Optional[PreparedExecutionArtifacts]: ...
         @_prepared_execution_artifacts.setter
-        def _prepared_execution_artifacts(self, value: Optional[PreparedExecutionArtifacts]) -> None: ...
+        def _prepared_execution_artifacts(
+            self, value: Optional[PreparedExecutionArtifacts]
+        ) -> None: ...
 
         @property
         def _init_stage_text(self) -> str: ...
@@ -144,13 +153,17 @@ class RunControllerInitializationMixin:
         ) -> None: ...
         def _emit_status(self) -> None: ...
 
-    def _prepare_engine_state(self, proxy_pool: List[ProxyLease]) -> tuple[ExecutionConfig, ExecutionState]:
-        """从已准备好的模板构建本次任务的 ExecutionConfig 与 ExecutionState。"""
+    def _prepare_engine_state(
+        self, proxy_pool: List[ProxyLease]
+    ) -> tuple[ExecutionConfig, ExecutionState]:
+        """从已准备好的模板构建本次任务状态。"""
         prepared = getattr(self, "_prepared_execution_artifacts", None)
         if prepared is None:
             raise RuntimeError("运行准备产物缺失，无法启动任务")
         execution_config = copy.deepcopy(prepared.execution_config_template)
-        execution_config.proxy_ip_pool = list(proxy_pool) if execution_config.random_proxy_ip_enabled else []
+        execution_config.proxy_ip_pool = (
+            list(proxy_pool) if execution_config.random_proxy_ip_enabled else []
+        )
         execution_state = ExecutionState(config=execution_config, stop_event=self.stop_event)
         return execution_config, execution_state
 
@@ -240,7 +253,9 @@ class RunControllerInitializationMixin:
                 headers=DEFAULT_HTTP_HEADERS,
                 proxies={},
             )
-            return _extract_startup_service_warnings(response.json(), monitor_targets, monitor_names)
+            return _extract_startup_service_warnings(
+                response.json(), monitor_targets, monitor_names
+            )
         except Exception:
             logging.info("读取状态页心跳失败，启动时忽略服务提示", exc_info=True)
             return []
@@ -249,7 +264,9 @@ class RunControllerInitializationMixin:
         with self._startup_status_check_lock:
             return list(self._startup_service_warnings or [])
 
-    def _start_with_initialization_gate(self, config: RuntimeConfig, proxy_pool: List[ProxyLease]) -> None:
+    def _start_with_initialization_gate(
+        self, config: RuntimeConfig, proxy_pool: List[ProxyLease]
+    ) -> None:
         if self.stop_event.is_set():
             self._starting = False
             return

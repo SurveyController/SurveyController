@@ -3,6 +3,7 @@ import pytest
 import threading
 from software.providers.contracts import SurveyQuestionMeta
 from tencent.provider import runtime
+from tencent.provider import runtime_answerers
 
 def _meta(num: int, *, page: int=1, provider_question_id: str | None=None, provider_type: str='', unsupported: bool=False) -> SurveyQuestionMeta:
     return SurveyQuestionMeta(num=num, title=f'Q{num}', page=page, provider='tencent', type_code='single', provider_question_id=provider_question_id or f'q{num}', provider_page_id=f'p{page}', provider_type=provider_type, unsupported=unsupported)
@@ -34,6 +35,38 @@ class TencentRuntimeTests:
         result = runtime.brush_qq(object(), object(), ctx, stop_signal=threading.Event(), thread_name='Worker-1', psycho_plan=None)
         assert result
         assert calls == ['star', 'submit']
+
+    def test_matrix_star_falls_back_to_plain_matrix_cell(self, make_runtime_state, patch_attrs) -> None:
+        question = _meta(1, provider_type='matrix_star', provider_question_id='matrix-star-q1')
+        ctx = make_runtime_state(
+            {1: question},
+            {1: ('matrix', 0)},
+            config_defaults={
+                'matrix_prob': [-1],
+                'question_dimension_map': {},
+            },
+        )
+        calls: list[object] = []
+        patch_attrs(
+            (runtime, '_wait_for_question_visible', lambda *_args, **_kwargs: True),
+            (runtime, '_is_question_visible', lambda *_args, **_kwargs: True),
+            (runtime, '_human_scroll_after_question', lambda *_args, **_kwargs: None),
+            (runtime, 'dismiss_resume_dialog_if_present', lambda *_args, **_kwargs: None),
+            (runtime, '_is_headless_mode', lambda _ctx: True),
+            (runtime, 'HEADLESS_PAGE_BUFFER_DELAY', 0.0),
+            (runtime, 'has_configured_answer_duration', lambda _value: False),
+            (runtime, 'simulate_answer_duration_delay', lambda *_args, **_kwargs: False),
+            (runtime_answerers, '_click_star_cell', lambda *_args, **_kwargs: calls.append('star') and False),
+            (runtime_answerers, '_click_matrix_cell', lambda *_args, **_kwargs: calls.append(('plain', _args[2], _args[3])) or True),
+            (runtime, 'submit', lambda *_args, **_kwargs: calls.append('submit')),
+        )
+
+        result = runtime.brush_qq(object(), object(), ctx, stop_signal=threading.Event(), thread_name='Worker-1', psycho_plan=None)
+
+        assert result
+        assert 'star' in calls
+        assert any(call[0] == 'plain' for call in calls if isinstance(call, tuple))
+        assert calls[-1] == 'submit'
 
     def test_brush_qq_walks_pages_then_submits(self, make_runtime_state, patch_attrs) -> None:
         ctx = make_runtime_state({1: _meta(1, page=1, provider_question_id='page1-q1'), 2: _meta(2, page=2, provider_question_id='page2-q1')}, {1: ('single', 0), 2: ('text', 0)})

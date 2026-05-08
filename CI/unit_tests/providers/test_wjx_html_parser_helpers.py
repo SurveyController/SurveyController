@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from bs4 import BeautifulSoup
 
+from software.core.engine import dom_helpers
 from wjx.provider import html_parser_choice
 from wjx.provider import html_parser_common
 from wjx.provider import html_parser_matrix
@@ -10,6 +11,23 @@ from wjx.provider import html_parser_rules
 
 def _soup(html: str) -> BeautifulSoup:
     return BeautifulSoup(html, "html.parser")
+
+
+class _FakeDriverAnchor:
+    def __init__(self, attrs: dict[str, str]) -> None:
+        self.text = ""
+        self._attrs = dict(attrs)
+
+    def get_attribute(self, name: str) -> str:
+        return self._attrs.get(name, "")
+
+
+class _FakeDriverQuestionDiv:
+    def __init__(self, selector_map: dict[str, list[object]]) -> None:
+        self._selector_map = dict(selector_map)
+
+    def find_elements(self, _by, selector: str) -> list[object]:
+        return list(self._selector_map.get(selector, []))
 
 
 class WjxHtmlParserHelperTests:
@@ -84,6 +102,39 @@ class WjxHtmlParserHelperTests:
         assert not html_parser_common._soup_question_looks_like_rating(scale_div)
         assert html_parser_common._soup_question_looks_like_rating(rating_div)
         assert html_parser_common._extract_rating_option_count(rating_count_div) == 5
+
+    def test_dval_scale_with_blank_rate_icons_is_not_rating(self) -> None:
+        scale_div = _soup(
+            """
+            <div>
+              <div class="scaleTitle_frist">很不同意</div>
+              <div class="scaleTitle_last">很同意</div>
+              <ul tp="d">
+                <li><a class="rate-off" dval="1"></a></li>
+                <li><a class="rate-off" dval="2"></a></li>
+                <li><a class="rate-off" dval="3"></a></li>
+                <li><a class="rate-off" dval="4"></a></li>
+                <li><a class="rate-off" dval="5"></a></li>
+              </ul>
+            </div>
+            """
+        ).div
+
+        assert html_parser_common._soup_question_looks_like_numeric_scale(scale_div)
+        assert not html_parser_common._soup_question_looks_like_rating(scale_div)
+
+    def test_driver_dval_scale_with_blank_rate_icons_is_not_rating(self) -> None:
+        anchors = [_FakeDriverAnchor({"dval": str(index)}) for index in range(1, 6)]
+        question_div = _FakeDriverQuestionDiv(
+            {
+                "ul[tp='d'] li a, .scale-rating ul li a, .scale-rating a[val]": anchors,
+                ".scaleTitle, .scaleTitle_frist, .scaleTitle_last, .scaleTitleFirst, .scaleTitleLast": [object()],
+                "a.rate-off, a.rate-on, .rate-off, .rate-on": anchors,
+            }
+        )
+
+        assert dom_helpers._driver_question_looks_like_numeric_scale(question_div)
+        assert not dom_helpers._driver_question_looks_like_rating(question_div)
 
     def test_should_mark_as_multi_text_respects_type_and_flags(self) -> None:
         assert html_parser_common._should_mark_as_multi_text("1", 0, 2, False)

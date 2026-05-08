@@ -1,11 +1,12 @@
 """联系开发者对话框"""
+
 from typing import cast
 
 from PySide6.QtCore import Qt, QTimer
 from PySide6.QtCore import QObject
 from PySide6.QtWidgets import QDialog, QVBoxLayout
 
-from software.ui.widgets.contact_form import ContactForm
+from software.ui.widgets.contact_form.widget import ContactForm
 
 
 class ContactDialog(QDialog):
@@ -90,4 +91,3 @@ class ContactDialog(QDialog):
             return
         self._stop_status_polling()
         super().accept()
-

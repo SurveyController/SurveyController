@@ -1,19 +1,35 @@
 """题目配置向导卡片与校验。"""
+
 import copy
 from collections.abc import Sequence
 from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple, cast
 
 from PySide6.QtCore import QTimer, Qt
 from PySide6.QtWidgets import QFrame, QHBoxLayout, QVBoxLayout, QWidget
-from qfluentwidgets import BodyLabel, CardWidget, LineEdit, MessageBox, SubtitleLabel
+from qfluentwidgets import (
+    BodyLabel,
+    CardWidget,
+    LineEdit,
+    MessageBox,
+    SubtitleLabel,
+)
 
 from software.core.questions.config import QuestionEntry
 from software.core.questions.utils import try_parse_random_int_range
-from software.providers.contracts import SurveyQuestionMeta, ensure_survey_question_meta
+from software.providers.contracts import (
+    SurveyQuestionMeta,
+    ensure_survey_question_meta,
+)
 from software.ui.widgets.no_wheel import NoWheelSlider
 
 from .constants import _get_entry_type_label
-from .utils import _apply_label_color, _bind_slider_input, _configure_wrapped_text_label, _shorten_text, resolve_display_question_num
+from .utils import (
+    _apply_label_color,
+    _bind_slider_input,
+    _configure_wrapped_text_label,
+    _shorten_text,
+    resolve_display_question_num,
+)
 
 
 class WizardCardsMixin:
@@ -40,7 +56,13 @@ class WizardCardsMixin:
             option_names: List[str],
             prefix: str,
         ) -> None: ...
-        def _build_text_section(self, idx: int, entry: QuestionEntry, card: CardWidget, card_layout: QVBoxLayout) -> None: ...
+        def _build_text_section(
+            self,
+            idx: int,
+            entry: QuestionEntry,
+            card: CardWidget,
+            card_layout: QVBoxLayout,
+        ) -> None: ...
         def _build_matrix_section(
             self,
             idx: int,
@@ -50,7 +72,12 @@ class WizardCardsMixin:
             option_texts: List[str],
             row_texts: List[str],
         ) -> None: ...
-        def _build_order_section(self, card: CardWidget, card_layout: QVBoxLayout, option_texts: List[str]) -> None: ...
+        def _build_order_section(
+            self,
+            card: CardWidget,
+            card_layout: QVBoxLayout,
+            option_texts: List[str],
+        ) -> None: ...
         def _build_slider_section(
             self,
             idx: int,
@@ -59,10 +86,15 @@ class WizardCardsMixin:
             card_layout: QVBoxLayout,
             option_texts: List[str],
         ) -> None: ...
-        def _register_question_card_interaction_targets(self, card: CardWidget, idx: int) -> None: ...
+        def _register_question_card_interaction_targets(
+            self, card: CardWidget, idx: int
+        ) -> None: ...
 
-    def _resolve_matrix_weights(self, entry: QuestionEntry, rows: int, columns: int) -> List[List[float]]:
+    def _resolve_matrix_weights(
+        self, entry: QuestionEntry, rows: int, columns: int
+    ) -> List[List[float]]:
         """解析矩阵题的配比配置，返回按行的默认权重。"""
+
         def _clean_row(raw_row: Any) -> Optional[List[float]]:
             if not isinstance(raw_row, (list, tuple)):
                 return None
@@ -101,22 +133,26 @@ class WizardCardsMixin:
                 uniform = [1.0] * columns
             return [list(uniform) for _ in range(rows)]
         return [[1.0] * columns for _ in range(rows)]
+
     @staticmethod
     def _to_float(value: Any, default: float) -> float:
         try:
             return float(value)
         except Exception:
             return float(default)
+
     def _get_entry_info(self, idx: int) -> SurveyQuestionMeta:
         if 0 <= idx < len(self.info):
             info = self.info[idx]
             if isinstance(info, SurveyQuestionMeta):
                 return info
         return ensure_survey_question_meta({}, index=idx + 1)
+
     def _format_question_label(self, idx: int) -> str:
         info = self._get_entry_info(idx)
         qnum = resolve_display_question_num(info, idx + 1)
         return f"第{qnum or idx + 1}题"
+
     def _find_info_by_question_num(self, question_num: int) -> SurveyQuestionMeta:
         for info in self.info:
             if not isinstance(info, SurveyQuestionMeta):
@@ -128,6 +164,7 @@ class WizardCardsMixin:
             if current_num == question_num:
                 return info
         return ensure_survey_question_meta({}, index=question_num)
+
     @staticmethod
     def _format_question_num_list(question_nums: List[int]) -> str:
         normalized: List[int] = []
@@ -148,7 +185,10 @@ class WizardCardsMixin:
         if len(labels) <= 4:
             return "、".join(labels)
         return f"{'、'.join(labels[:4])} 等{len(labels)}题"
-    def _format_condition_option_text(self, source_info: SurveyQuestionMeta, option_indices: Sequence[Any]) -> str:
+
+    def _format_condition_option_text(
+        self, source_info: SurveyQuestionMeta, option_indices: Sequence[Any]
+    ) -> str:
         option_texts = list(source_info.get("option_texts") or [])
         normalized_labels: List[str] = []
         seen = set()
@@ -173,6 +213,7 @@ class WizardCardsMixin:
         if len(normalized_labels) <= 3:
             return "、".join(normalized_labels)
         return f"以下任一项：{'、'.join(normalized_labels[:4])}"
+
     def _build_display_condition_summary(self, info_entry: SurveyQuestionMeta) -> str:
         conditions = info_entry.get("display_conditions") or []
         if not isinstance(conditions, list) or not conditions:
@@ -196,6 +237,7 @@ class WizardCardsMixin:
         if not segments:
             return "⚠️ 这题不是每份问卷都会出现，只有满足前面题目的条件时才会显示。"
         return f"⚠️ 这题不是每份问卷都会出现。仅在满足以下条件时显示：{'；'.join(segments)}。"
+
     def _build_dependent_display_summary(self, info_entry: SurveyQuestionMeta) -> str:
         targets = info_entry.get("controls_display_targets") or []
         if not isinstance(targets, list) or not targets:
@@ -232,7 +274,10 @@ class WizardCardsMixin:
             target_text = self._format_question_num_list(target_nums)
             segments.append(f"选中{option_text}时显示{target_text}")
         return f"⚠️ 这题会控制后续题是否出现：{'；'.join(segments)}。"
-    def _show_validation_error(self, message: str, idx: int, focus_widget: Optional[QWidget] = None) -> None:
+
+    def _show_validation_error(
+        self, message: str, idx: int, focus_widget: Optional[QWidget] = None
+    ) -> None:
         self._navigate_to_question(idx, animate=True)
         box = MessageBox("保存失败", message, self)
         box.yesButton.setText("知道了")
@@ -255,6 +300,7 @@ class WizardCardsMixin:
         widget = dialog.property("_focus_widget_after_validation_error")
         if isinstance(widget, QWidget):
             QTimer.singleShot(0, widget.setFocus)
+
     def _validate_random_integer_inputs(self) -> bool:
         for idx, mode in self.text_random_mode_map.items():
             if str(mode or "").strip().lower() != "integer":
@@ -266,8 +312,9 @@ class WizardCardsMixin:
                 max_edit.text().strip() if max_edit is not None else "",
             ]
             if try_parse_random_int_range(raw_range) is None:
+                question_label = self._format_question_label(idx)
                 self._show_validation_error(
-                    f"{self._format_question_label(idx)}的随机整数范围未填写完整，请输入最小值和最大值。",
+                    f"{question_label}的随机整数范围未填写完整，请输入最小值和最大值。",
                     idx,
                     min_edit or max_edit,
                 )
@@ -285,8 +332,10 @@ class WizardCardsMixin:
                     max_edit.text().strip() if max_edit is not None else "",
                 ]
                 if try_parse_random_int_range(raw_range) is None:
+                    question_label = self._format_question_label(idx)
                     self._show_validation_error(
-                        f"{self._format_question_label(idx)}的填空{blank_idx + 1}随机整数范围未填写完整，请输入最小值和最大值。",
+                        f"{question_label}的填空{blank_idx + 1}"
+                        "随机整数范围未填写完整，请输入最小值和最大值。",
                         idx,
                         min_edit or max_edit,
                     )
@@ -307,13 +356,16 @@ class WizardCardsMixin:
                     max_edit.text().strip() if max_edit is not None else "",
                 ]
                 if try_parse_random_int_range(raw_range) is None:
+                    question_label = self._format_question_label(idx)
                     self._show_validation_error(
-                        f"{self._format_question_label(idx)}的第{option_idx + 1}个附加填空随机整数范围未填写完整，请输入最小值和最大值。",
+                        f"{question_label}的第{option_idx + 1}个附加填空"
+                        "随机整数范围未填写完整，请输入最小值和最大值。",
                         idx,
                         min_edit or max_edit,
                     )
                     return False
         return True
+
     def _validate_non_zero_weights(self) -> bool:
         for idx, sliders in self.slider_map.items():
             weights = [max(0, slider.value()) for slider in sliders]
@@ -355,20 +407,25 @@ class WizardCardsMixin:
                 option_text = str(item.get("option_text") or "").strip()
                 if not option_text:
                     option_text = f"第{int(item.get('option_index', 0)) + 1}项"
+                question_label = self._format_question_label(idx)
+                option_label = _shorten_text(option_text, 28)
                 self._show_validation_error(
-                    f"{self._format_question_label(idx)}里“{_shorten_text(option_text, 28)}”对应的嵌入式下拉配比不能全为0，请至少保留一个大于0的值。",
+                    f"{question_label}里“{option_label}”对应的嵌入式"
+                    "下拉配比不能全为0，请至少保留一个大于0的值。",
                     idx,
                     sliders[0],
                 )
                 return False
 
         return True
+
     def accept(self) -> None:
         if not self._validate_random_integer_inputs():
             return
         if not self._validate_non_zero_weights():
             return
         cast(Any, super()).accept()
+
     def _resolve_slider_bounds(self, idx: int, entry: QuestionEntry) -> tuple[int, int]:
         min_val = 0.0
         max_val = 10.0
@@ -390,7 +447,14 @@ class WizardCardsMixin:
         if max_int <= min_int:
             max_int = min_int + 1
         return (min_int, max_int)
-    def _build_entry_card(self, idx: int, entry: QuestionEntry, container: QWidget, inner: QVBoxLayout) -> CardWidget:
+
+    def _build_entry_card(
+        self,
+        idx: int,
+        entry: QuestionEntry,
+        container: QWidget,
+        inner: QVBoxLayout,
+    ) -> CardWidget:
         """构建单个题目的配置卡片。"""
         # 获取题目信息
         info_entry = self._get_entry_info(idx)
@@ -491,7 +555,9 @@ class WizardCardsMixin:
                 # 将题目文本按空格分隔，为每个部分添加编号
                 parts = title_text.split()
                 if len(parts) >= text_inputs:
-                    display_text = " ".join([f"{parts[i]}____(填空{i+1})" for i in range(text_inputs)])
+                    display_text = " ".join(
+                        [f"{parts[i]}____(填空{i + 1})" for i in range(text_inputs)]
+                    )
             desc = BodyLabel(_shorten_text(display_text, 120), card)
             desc.setWordWrap(True)
             desc.setStyleSheet("font-size: 12px; margin-bottom: 4px;")
@@ -511,14 +577,18 @@ class WizardCardsMixin:
             card_layout.addWidget(jump_warn)
 
         if has_dependent_display_logic:
-            display_control_warn = BodyLabel(self._build_dependent_display_summary(info_entry), card)
+            display_control_warn = BodyLabel(
+                self._build_dependent_display_summary(info_entry), card
+            )
             display_control_warn.setWordWrap(True)
             display_control_warn.setStyleSheet("font-size: 12px; padding: 4px 0;")
             _apply_label_color(display_control_warn, "#0f766e", "#86efac")
             card_layout.addWidget(display_control_warn)
 
         if has_display_condition:
-            display_condition_warn = BodyLabel(self._build_display_condition_summary(info_entry), card)
+            display_condition_warn = BodyLabel(
+                self._build_display_condition_summary(info_entry), card
+            )
             display_condition_warn.setWordWrap(True)
             display_condition_warn.setStyleSheet("font-size: 12px; padding: 4px 0;")
             _apply_label_color(display_condition_warn, "#166534", "#86efac")
@@ -538,7 +608,14 @@ class WizardCardsMixin:
 
         inner.addWidget(card)
         return card
-    def _build_attached_select_section(self, idx: int, entry: QuestionEntry, card: CardWidget, card_layout: QVBoxLayout) -> None:
+
+    def _build_attached_select_section(
+        self,
+        idx: int,
+        entry: QuestionEntry,
+        card: CardWidget,
+        card_layout: QVBoxLayout,
+    ) -> None:
         raw_configs = getattr(entry, "attached_option_selects", None) or []
         if not isinstance(raw_configs, list) or not raw_configs:
             return
@@ -547,7 +624,9 @@ class WizardCardsMixin:
         separator = QFrame(card)
         separator.setFrameShape(QFrame.Shape.HLine)
         separator.setFrameShadow(QFrame.Shadow.Plain)
-        separator.setStyleSheet("color: rgba(255, 255, 255, 0.16); margin-top: 6px; margin-bottom: 6px;")
+        separator.setStyleSheet(
+            "color: rgba(255, 255, 255, 0.16); margin-top: 6px; margin-bottom: 6px;"
+        )
         card_layout.addWidget(separator)
 
         section_title = BodyLabel("嵌入式下拉配比：", card)
@@ -555,7 +634,10 @@ class WizardCardsMixin:
         _apply_label_color(section_title, "#444444", "#e0e0e0")
         card_layout.addWidget(section_title)
 
-        section_hint = BodyLabel("只有命中对应单选项时，下面这些嵌入式下拉权重才会生效；底部会自动换算成目标占比。", card)
+        section_hint = BodyLabel(
+            "只有命中对应单选项时，下面这些嵌入式下拉权重才会生效；底部会自动换算成目标占比。",
+            card,
+        )
         section_hint.setWordWrap(True)
         section_hint.setStyleSheet("font-size: 12px;")
         _apply_label_color(section_hint, "#666666", "#bfbfbf")
@@ -567,7 +649,9 @@ class WizardCardsMixin:
             select_options_raw = item.get("select_options")
             if not isinstance(select_options_raw, list):
                 continue
-            select_options = [str(opt or "").strip() for opt in select_options_raw if str(opt or "").strip()]
+            select_options = [
+                str(opt or "").strip() for opt in select_options_raw if str(opt or "").strip()
+            ]
             if not select_options:
                 continue
             try:
@@ -639,7 +723,12 @@ class WizardCardsMixin:
             _apply_label_color(ratio_preview_label, "#666666", "#bfbfbf")
             card_layout.addWidget(ratio_preview_label)
 
-            def _update_option_preview(_value: int = 0, _label=ratio_preview_label, _sliders=sliders, _options=select_options):
+            def _update_option_preview(
+                _value: int = 0,
+                _label=ratio_preview_label,
+                _sliders=sliders,
+                _options=select_options,
+            ):
                 self._refresh_ratio_preview_label(
                     _label,
                     _sliders,
@@ -651,15 +740,18 @@ class WizardCardsMixin:
                 slider.valueChanged.connect(_update_option_preview)
             _update_option_preview()
 
-            stored_configs.append({
-                "option_index": option_index,
-                "option_text": option_text,
-                "select_options": select_options,
-                "sliders": sliders,
-            })
+            stored_configs.append(
+                {
+                    "option_index": option_index,
+                    "option_text": option_text,
+                    "select_options": select_options,
+                    "sliders": sliders,
+                }
+            )
 
         if stored_configs:
             self.attached_select_slider_map[idx] = stored_configs
+
     def _restore_entries(self) -> None:
         limit = min(len(self.entries), len(self._entry_snapshots))
         for idx in range(limit):

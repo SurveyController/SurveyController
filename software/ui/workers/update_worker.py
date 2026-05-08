@@ -1,4 +1,5 @@
 """后台更新检查 Worker 对象。"""
+
 from __future__ import annotations
 
 import logging
@@ -17,7 +18,10 @@ class UpdateCheckWorker(QObject):
             from software.update.updater import UpdateManager
 
             logging.info("后台检查更新开始...")
-            update_info = UpdateManager.check_updates() or {"has_update": False, "status": "unknown"}
+            update_info = UpdateManager.check_updates() or {
+                "has_update": False,
+                "status": "unknown",
+            }
             has_update = bool(update_info.get("has_update", False))
             status = str(update_info.get("status", "unknown"))
 
@@ -30,4 +34,3 @@ class UpdateCheckWorker(QObject):
         except Exception as exc:
             logging.warning("检查更新失败: %s", exc)
             self.finished.emit(False, {"has_update": False, "status": "unknown"})
-

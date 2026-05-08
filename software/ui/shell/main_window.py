@@ -1,4 +1,5 @@
 """主窗口模块 - 精简版，使用拆分后的组件"""
+
 from __future__ import annotations
 
 import copy
@@ -23,18 +24,25 @@ from qfluentwidgets import (
 )
 from shiboken6 import isValid
 
-from software.ui.pages.workbench.dashboard import DashboardPage
-from software.ui.pages.workbench.reverse_fill import ReverseFillPage
-from software.ui.pages.workbench.runtime_panel import RuntimePage
-from software.ui.pages.workbench.question_editor.page import QuestionPage
-from software.ui.pages.workbench.strategy import QuestionStrategyPage
+from software.ui.pages.workbench.dashboard.page import DashboardPage
+from software.ui.pages.workbench.reverse_fill.page import ReverseFillPage
+from software.ui.pages.workbench.runtime_panel.main import RuntimePage
+from software.ui.pages.workbench.strategy.page import QuestionStrategyPage
+from software.ui.pages.workbench.session import (
+    WorkbenchRunCoordinator,
+    WorkbenchState,
+)
 
 from software.ui.dialogs.contact import ContactDialog
 
-from software.ui.controller import RunController
+from software.ui.controller.run_controller import RunController
 from software.ui.shell.main_window_parts.dialogs import MainWindowDialogsMixin
-from software.ui.shell.main_window_parts.lifecycle import MainWindowLifecycleMixin
-from software.ui.shell.main_window_parts.lazy_pages import MainWindowLazyPagesMixin
+from software.ui.shell.main_window_parts.lifecycle import (
+    MainWindowLifecycleMixin,
+)
+from software.ui.shell.main_window_parts.lazy_pages import (
+    MainWindowLazyPagesMixin,
+)
 from software.ui.shell.main_window_parts.update import MainWindowUpdateMixin
 from software.app.config import (
     APP_ICON_RELATIVE_PATH,
@@ -64,6 +72,8 @@ class MainWindow(
 ):
     """主窗口，采用微软商店风格导航，支持主题动态切换。"""
 
+    _IMPORT_CHECK_ENV = "WJX_IMPORT_CHECK"
+
     # 下载开始信号（显示转圈动画）
     downloadStarted = Signal()
     # 下载进度信号
@@ -75,6 +85,9 @@ class MainWindow(
 
     def __init__(self, parent=None):
         self._boot_splash = None
+        self._import_check_mode = (
+            str(os.environ.get(self._IMPORT_CHECK_ENV, "") or "").strip() == "1"
+        )
         super().__init__(parent)
         theme_path = get_resource_path(os.path.join("software", "ui", "theme.json"))
         if os.path.exists(theme_path):
@@ -97,9 +110,11 @@ class MainWindow(
         self._startup_update_pending_info = None
         self._random_ip_quota_auto_sync_interval_ms = 90000
         self._random_ip_quota_auto_sync_timer = QTimer(self)
-        self._random_ip_quota_auto_sync_timer.setInterval(self._random_ip_quota_auto_sync_interval_ms)
+        self._random_ip_quota_auto_sync_timer.setInterval(
+            self._random_ip_quota_auto_sync_interval_ms
+        )
         self._random_ip_quota_auto_sync_timer.timeout.connect(self._sync_random_ip_quota_silently)
-        
+
         self._base_window_title = f"SurveyController v{__VERSION__}"
         self.setWindowTitle(self._base_window_title)
         icon_path = get_resource_path(os.path.join("assets", "icon.png"))
@@ -117,24 +132,30 @@ class MainWindow(
             self.apply_topmost_state(True, show=False)
 
         # 创建启动页面
-        self._boot_splash = create_boot_splash(self)
+        if not self._import_check_mode:
+            self._boot_splash = create_boot_splash(self)
 
         self.controller = RunController(self)
+        self.workbench_state = WorkbenchState(self)
         # 立即初始化关键页面
         self.runtime_page = RuntimePage(self.controller, self)
-        self.question_page = QuestionPage(self)
         self.strategy_page = QuestionStrategyPage(self)
-        self.reverse_fill_page = ReverseFillPage(self.controller, self)
-        # QuestionPage 仅用作题目配置的数据载体，不作为主界面子页面展示；
-        # 若不隐藏会以默认几何 (0,0,100,30) 叠在窗口左上角，造成标题栏错乱。
-        self.question_page.hide()
         self.dashboard = DashboardPage(
             self.controller,
-            self.question_page,
+            self.workbench_state,
             self.runtime_page,
             self.strategy_page,
             self,
         )
+        self.run_coordinator = WorkbenchRunCoordinator(
+            controller=self.controller,
+            state=self.workbench_state,
+            dashboard=self.dashboard,
+        )
+        self.dashboard.set_run_coordinator(self.run_coordinator)
+        self.reverse_fill_page = ReverseFillPage(self.controller, self)
+        self.run_coordinator.bind_reverse_fill_page(self.reverse_fill_page)
+        self.reverse_fill_page.set_run_coordinator(self.run_coordinator)
 
         # 延迟初始化非关键页面（懒加载）
         self._log_page = None
@@ -148,17 +169,19 @@ class MainWindow(
 
         # 设置对象名称
         self.dashboard.setObjectName("dashboard")
-        self.question_page.setObjectName("question")
         self.runtime_page.setObjectName("runtime")
         self.strategy_page.setObjectName("strategy")
         self.reverse_fill_page.setObjectName("reverse_fill")
         self.reverse_fill_page.set_open_wizard_handler(self._open_reverse_fill_wizard)
         self.reverse_fill_page.surveyUrlChanged.connect(self._sync_dashboard_url_from_reverse_fill)
         self.dashboard.url_edit.textChanged.connect(self._sync_reverse_fill_url_from_dashboard)
-        self.question_page.entriesChanged.connect(lambda _count: self._sync_reverse_fill_context())
+        self.workbench_state.entriesChanged.connect(
+            lambda _count: self._sync_reverse_fill_context()
+        )
 
         self._init_navigation()
-        self._init_community_hint_badge_state()
+        if not self._import_check_mode:
+            self._init_community_hint_badge_state()
         self.stackedWidget.currentChanged.connect(self._on_stack_widget_changed)
         # 微软商店风格导航栏需要在事件循环后应用显示偏好，避免初始化时序抖动
         QTimer.singleShot(0, self._configure_navigation_interface)
@@ -173,11 +196,13 @@ class MainWindow(
         self._refresh_title_random_ip_user_id()
         self._sync_reverse_fill_context()
         self._register_popups()
-        self._load_saved_config()
-        self._start_random_ip_quota_auto_sync()
+        if not self._import_check_mode:
+            self._load_saved_config()
+            self._start_random_ip_quota_auto_sync()
         self._center_on_screen()
 
-        finish_boot_splash(1500)
+        if not self._import_check_mode:
+            finish_boot_splash(1500)
 
         # 连接下载开始信号（显示转圈动画）
         self.downloadStarted.connect(self._on_download_started)
@@ -199,7 +224,8 @@ class MainWindow(
         self._check_preview_version()
 
         # 根据设置检查更新
-        self._check_update_on_startup()
+        if not self._import_check_mode:
+            self._check_update_on_startup()
 
     def _apply_theme_mode(self, theme_mode: Theme):
         """按指定主题模式应用样式（不覆盖用户配置文件）。"""
@@ -299,8 +325,9 @@ class MainWindow(
         # setTheme(AUTO) 在 themeMode 已经是 AUTO 时会被 qconfig.set 短路，
         # 导致内部 theme 属性不会被重新检测。这里手动强制刷新。
         from qfluentwidgets.common.style_sheet import updateStyleSheet
+
         old_theme = qconfig.theme
-        qconfig.theme = Theme.AUTO          # 触发 darkdetect 重新检测
+        qconfig.theme = Theme.AUTO  # 触发 darkdetect 重新检测
         if qconfig.theme != old_theme:
             updateStyleSheet()
             qconfig.themeChangedFinished.emit()
@@ -377,7 +404,9 @@ class MainWindow(
 
     def _sync_random_ip_quota_silently(self) -> None:
         try:
-            if self.controller.is_initializing() or bool(getattr(self.controller, "running", False)):
+            if self.controller.is_initializing() or bool(
+                getattr(self.controller, "running", False)
+            ):
                 return
             self.controller.sync_random_ip_counter_from_server(
                 silent=True,
@@ -390,7 +419,13 @@ class MainWindow(
         current_widget = self.stackedWidget.currentWidget()
         current_name = current_widget.objectName() if current_widget else ""
         if current_name and current_name != self._last_logged_page:
-            log_action("NAV", "switch_page", current_name, "main_window", result="opened")
+            log_action(
+                "NAV",
+                "switch_page",
+                current_name,
+                "main_window",
+                result="opened",
+            )
             self._last_logged_page = current_name
         if current_widget and current_widget.objectName() == "community":
             self._set_community_hint_pending(False)
@@ -438,7 +473,9 @@ class MainWindow(
             return False
         return dlg.exec() == QDialog.DialogCode.Accepted
 
-    def _on_contact_dialog_finished(self, dialog: QDialog, result: int, lock_message_type: bool) -> None:
+    def _on_contact_dialog_finished(
+        self, dialog: QDialog, result: int, lock_message_type: bool
+    ) -> None:
         accepted = int(result) == int(QDialog.DialogCode.Accepted)
         log_action(
             "UI",
@@ -551,12 +588,30 @@ class MainWindow(
                 if kind == "confirm":
                     return self.show_confirm_dialog(title, message)
                 if kind == "error":
-                    InfoBar.error(title, message, parent=self, position=InfoBarPosition.TOP, duration=3000)
+                    InfoBar.error(
+                        title,
+                        message,
+                        parent=self,
+                        position=InfoBarPosition.TOP,
+                        duration=3000,
+                    )
                     return False
                 if kind == "warning":
-                    InfoBar.warning(title, message, parent=self, position=InfoBarPosition.TOP, duration=3000)
+                    InfoBar.warning(
+                        title,
+                        message,
+                        parent=self,
+                        position=InfoBarPosition.TOP,
+                        duration=3000,
+                    )
                     return True
-                InfoBar.info(title, message, parent=self, position=InfoBarPosition.TOP, duration=2500)
+                InfoBar.info(
+                    title,
+                    message,
+                    parent=self,
+                    position=InfoBarPosition.TOP,
+                    duration=2500,
+                )
                 return True
 
             return self._dispatch_to_ui(_show)
@@ -574,17 +629,18 @@ class MainWindow(
         if getattr(self.dashboard, "_open_wizard_after_parse", False):
             self.dashboard._open_wizard_after_parse = False
             info_snapshot = copy.deepcopy(info or [])
+            open_wizard = self._open_parse_wizard_after_parse
             QTimer.singleShot(
                 0,
-                lambda info_snapshot=info_snapshot, parsed_title=parsed_title: self._open_parse_wizard_after_parse(
-                    info_snapshot,
-                    parsed_title,
-                ),
+                lambda: open_wizard(info_snapshot, parsed_title),
             )
             return
-        self.question_page.set_questions(info, self.controller.question_entries)
+        self.workbench_state.set_questions(info, self.controller.question_entries)
         self.strategy_page.set_dimension_groups([])
-        self.strategy_page.set_entries(self.question_page.entries, self.question_page.entry_questions_info)
+        self.strategy_page.set_entries(
+            self.workbench_state.entries,
+            self.workbench_state.entry_questions_info,
+        )
         self.dashboard.update_question_meta(parsed_title, len(self.controller.question_entries))
         self._sync_reverse_fill_context()
 
@@ -612,13 +668,17 @@ class MainWindow(
             url_text = url_edit.text() if url_edit is not None and hasattr(url_edit, "text") else ""
             survey_provider = str(
                 getattr(self.controller, "survey_provider", "")
-                or getattr(getattr(self.controller, "config", None), "survey_provider", "")
+                or getattr(
+                    getattr(self.controller, "config", None),
+                    "survey_provider",
+                    "",
+                )
                 or detect_survey_provider(url_text, default="")
                 or ""
             )
             self.reverse_fill_page.set_question_context(
-                self.question_page.questions_info,
-                self.question_page.get_entries(),
+                self.workbench_state.questions_info,
+                self.workbench_state.get_entries(),
                 survey_title=getattr(self.dashboard, "_survey_title", "") or "",
                 survey_provider=survey_provider,
             )
@@ -648,7 +708,7 @@ class MainWindow(
         url_edit.blockSignals(False)
 
     def _open_reverse_fill_wizard(self, issue_question_nums: List[int]) -> None:
-        info = list(self.question_page.questions_info or [])
+        info = list(self.workbench_state.questions_info or [])
         if not info:
             self._toast("当前还没有解析出题目，无法打开配置向导。", "warning")
             return
@@ -673,7 +733,9 @@ class MainWindow(
             pending_entries = copy.deepcopy(self.controller.question_entries)
             selected_info = list(copy.deepcopy(info or []))
             selected_entries = pending_entries
-            selected_issue_nums = {int(num) for num in list(issue_question_nums or []) if int(num) > 0}
+            selected_issue_nums = {
+                int(num) for num in list(issue_question_nums or []) if int(num) > 0
+            }
             if selected_issue_nums:
                 info_by_num = {int(getattr(item, "num", 0) or 0): item for item in selected_info}
                 entry_by_num = {
@@ -681,12 +743,25 @@ class MainWindow(
                     for entry in selected_entries
                     if int(getattr(entry, "question_num", 0) or 0) > 0
                 }
-                selected_info = [copy.deepcopy(info_by_num[num]) for num in selected_issue_nums if num in info_by_num]
-                selected_entries = [copy.deepcopy(entry_by_num[num]) for num in selected_issue_nums if num in entry_by_num]
+                selected_info = [
+                    copy.deepcopy(info_by_num[num])
+                    for num in selected_issue_nums
+                    if num in info_by_num
+                ]
+                selected_entries = [
+                    copy.deepcopy(entry_by_num[num])
+                    for num in selected_issue_nums
+                    if num in entry_by_num
+                ]
                 if not selected_info or not selected_entries:
-                    self._toast("异常题目配置数据不完整，暂时无法打开配置向导。", "warning")
+                    self._toast(
+                        "异常题目配置数据不完整，暂时无法打开配置向导。",
+                        "warning",
+                    )
                     return
-            accepted = self.dashboard._run_question_wizard(selected_entries, selected_info, parsed_title)
+            accepted = self.dashboard.run_question_wizard(
+                selected_entries, selected_info, parsed_title
+            )
         except Exception as exc:
             logging.exception("自动配置向导打开失败")
             log_action(
@@ -699,7 +774,7 @@ class MainWindow(
                 detail=exc,
                 payload={"question_count": len(info or [])},
             )
-            current_entries = self.question_page.get_entries()
+            current_entries = self.workbench_state.get_entries()
             self.dashboard.update_question_meta(parsed_title, len(current_entries))
             self.dashboard._toast(
                 "自动配置向导打开失败，已保留原有题目设置；详细原因已写入日志",
@@ -718,13 +793,18 @@ class MainWindow(
                 merged_entries = []
                 for entry in pending_entries:
                     question_num = int(getattr(entry, "question_num", 0) or 0)
-                    merged_entries.append(copy.deepcopy(updated_entries_by_num.get(question_num, entry)))
+                    merged_entries.append(
+                        copy.deepcopy(updated_entries_by_num.get(question_num, entry))
+                    )
                 pending_entries = merged_entries
-            self.question_page.set_questions(info, pending_entries)
+            self.workbench_state.set_questions(info, pending_entries)
             self.controller.question_entries = pending_entries
             if not selected_issue_nums:
                 self.strategy_page.set_dimension_groups([])
-            self.strategy_page.set_entries(self.question_page.entries, self.question_page.entry_questions_info)
+            self.strategy_page.set_entries(
+                self.workbench_state.entries,
+                self.workbench_state.entry_questions_info,
+            )
             self._sync_reverse_fill_context()
             self.dashboard.update_question_meta(parsed_title, len(pending_entries))
             log_action(
@@ -737,7 +817,7 @@ class MainWindow(
             )
             return
 
-        current_entries = self.question_page.get_entries()
+        current_entries = self.workbench_state.get_entries()
         self.dashboard.update_question_meta(parsed_title, len(current_entries))
         log_action(
             "UI",
@@ -753,7 +833,3 @@ class MainWindow(
 def create_window() -> MainWindow:
     """供入口调用的工厂函数。"""
     return MainWindow()
-
-
-
-

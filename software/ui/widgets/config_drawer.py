@@ -1,4 +1,5 @@
 """右侧配置抽屉，用于展示 configs 目录下的配置文件列表。"""
+
 from __future__ import annotations
 import logging
 from software.logging.log_utils import log_suppressed_exception
@@ -8,8 +9,19 @@ import os
 from datetime import datetime
 from typing import Callable, List, Optional
 
-from PySide6.QtCore import QByteArray, QPoint, QEasingCurve, QPropertyAnimation, Qt
-from PySide6.QtWidgets import QHBoxLayout, QListWidgetItem, QVBoxLayout, QWidget
+from PySide6.QtCore import (
+    QByteArray,
+    QPoint,
+    QEasingCurve,
+    QPropertyAnimation,
+    Qt,
+)
+from PySide6.QtWidgets import (
+    QHBoxLayout,
+    QListWidgetItem,
+    QVBoxLayout,
+    QWidget,
+)
 from qfluentwidgets import (
     BodyLabel,
     CardWidget,
@@ -28,8 +40,6 @@ from software.ui.helpers.fluent_tooltip import install_tooltip_filter
 
 class _OverlayWidget(QWidget):
     """遮罩层组件，点击时关闭抽屉"""
-
-
 
     def __init__(self, parent=None, on_click: Optional[Callable[[], None]] = None):
         super().__init__(parent)
@@ -201,7 +211,11 @@ class ConfigDrawer(QWidget):
             try:
                 self._slide_anim.finished.disconnect(self._on_close_finished)
             except Exception as exc:
-                log_suppressed_exception("open_drawer: self._slide_anim.finished.disconnect(self._on_close_finished)", exc, level=logging.WARNING)
+                log_suppressed_exception(
+                    "open_drawer: disconnect close callback",
+                    exc,
+                    level=logging.WARNING,
+                )
             self._close_connected = False
 
         target_x = host.width() - self.width()
@@ -238,7 +252,11 @@ class ConfigDrawer(QWidget):
                 try:
                     self._slide_anim.finished.disconnect(self._on_close_finished)
                 except Exception as exc:
-                    log_suppressed_exception("close_drawer: self._slide_anim.finished.disconnect(self._on_close_finished)", exc, level=logging.WARNING)
+                    log_suppressed_exception(
+                        "close_drawer: disconnect close callback",
+                        exc,
+                        level=logging.WARNING,
+                    )
                 self._close_connected = False
             start_pos = self.pos()
             end_pos = QPoint(host.width(), start_pos.y())
@@ -274,7 +292,11 @@ class ConfigDrawer(QWidget):
             try:
                 self._slide_anim.finished.disconnect(self._on_close_finished)
             except Exception as exc:
-                log_suppressed_exception("_on_close_finished: self._slide_anim.finished.disconnect(self._on_close_finished)", exc, level=logging.WARNING)
+                log_suppressed_exception(
+                    "_on_close_finished: disconnect close callback",
+                    exc,
+                    level=logging.WARNING,
+                )
             self._close_connected = False
         self._is_closing = False
         self._overlay.hide()
@@ -290,4 +312,3 @@ class ConfigDrawer(QWidget):
         if self._on_select:
             self._on_select(path)
         self.close_drawer()
-

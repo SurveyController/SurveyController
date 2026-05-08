@@ -1,7 +1,9 @@
 """运行控制器 - 连接 UI 与引擎的业务逻辑桥接层。"""
+
 from __future__ import annotations
 
 import threading
+from dataclasses import dataclass, field
 from typing import Any, Callable, Dict, List, Optional
 
 from PySide6.QtCore import QObject, QTimer, Signal, Slot
@@ -10,26 +12,100 @@ from software.core.engine.cleanup import CleanupRunner
 from software.core.engine.async_engine import AsyncEngineClient
 from software.core.questions.config import QuestionEntry
 from software.core.task import ExecutionState
-from software.io.config import RuntimeConfig
+from software.io.config import RuntimeConfig, load_config, save_config
 from software.providers.contracts import SurveyQuestionMeta
-from software.system import SystemSleepBlocker
-from software.ui.controller.engine_adapter import BoolVar as _BoolVar, EngineGuiAdapter
-from software.ui.controller.run_controller_parts import (
+from software.system.power_management import SystemSleepBlocker
+from software.ui.controller.engine_adapter import (
+    BoolVar as _BoolVar,
+    EngineGuiAdapter,
+)
+from software.ui.controller.run_controller_parts.parsing import (
     RunControllerParsingMixin,
-    RunControllerPersistenceMixin,
+)
+from software.ui.controller.run_controller_parts.runtime import (
     RunControllerRuntimeMixin,
 )
-from software.ui.controller.run_controller_parts.runtime_preparation import PreparedExecutionArtifacts
-from software.ui.controller.runtime_state import RunControllerRuntimeState, RuntimeUiStateStore
+from software.ui.controller.run_controller_parts.runtime_preparation import (
+    PreparedExecutionArtifacts,
+)
 from software.ui.controller.ui_dispatcher import UiCallbackDispatcher
 
 BoolVar = _BoolVar
 
 
+@dataclass
+class RunControllerRuntimeState:
+    """收口运行控制器里零散的生命周期状态。"""
+
+    paused: bool = False
+    stopping: bool = False
+    completion_cleanup_done: bool = False
+    cleanup_scheduled: bool = False
+    stopped_by_stop_run: bool = False
+    quick_feedback_prompt_emitted: bool = False
+    starting: bool = False
+    initializing: bool = False
+    init_stage_text: str = ""
+    init_steps: List[Dict[str, str]] = field(default_factory=list)
+    init_completed_steps: set[str] = field(default_factory=set)
+    init_current_step_key: str = ""
+    init_gate_stop_event: Optional[Any] = None
+    prepared_execution_artifacts: Optional[Any] = None
+    startup_service_warnings: List[str] = field(default_factory=list)
+
+
+class RuntimeUiStateStore:
+    """集中管理运行参数页同步到控制器的 UI 状态。"""
+
+    def __init__(self) -> None:
+        self._state: Dict[str, Any] = {}
+
+    @staticmethod
+    def normalize_value(key: str, value: Any) -> Any:
+        if key in {"target", "threads"}:
+            return max(1, int(value or 1))
+        if key in {"random_ip_enabled", "headless_mode", "timed_mode_enabled"}:
+            return bool(value)
+        if key == "proxy_source":
+            normalized = str(value or "default").strip().lower()
+            return normalized if normalized in {"default", "benefit", "custom"} else "default"
+        if key == "answer_duration":
+            raw = value if isinstance(value, (list, tuple)) else (0, 0)
+            low = max(0, int(raw[0] if len(raw) >= 1 else 0))
+            high = max(low, int(raw[1] if len(raw) >= 2 else low))
+            return (low, high)
+        return value
+
+    def get(self) -> Dict[str, Any]:
+        return dict(self._state)
+
+    def update(self, **updates: Any) -> tuple[Dict[str, Any], bool]:
+        normalized: Dict[str, Any] = {}
+        changed = False
+        for key, value in updates.items():
+            normalized_value = self.normalize_value(key, value)
+            normalized[key] = normalized_value
+            if self._state.get(key) != normalized_value:
+                changed = True
+        if normalized:
+            self._state.update(normalized)
+        return dict(self._state), changed
+
+    def sync_from_config(self, config: RuntimeConfig) -> tuple[Dict[str, Any], bool]:
+        return self.update(
+            target=getattr(config, "target", 1),
+            threads=getattr(config, "threads", 1),
+            random_ip_enabled=getattr(config, "random_ip_enabled", False),
+            headless_mode=getattr(config, "headless_mode", True),
+            timed_mode_enabled=getattr(config, "timed_mode_enabled", False),
+            proxy_source=getattr(config, "proxy_source", "default"),
+            answer_duration=getattr(config, "answer_duration", (0, 0)),
+        )
+
+
 class RunController(
     RunControllerParsingMixin,
     RunControllerRuntimeMixin,
-    RunControllerPersistenceMixin,
     QObject,
 ):
     surveyParsed = Signal(list, str)
@@ -193,7 +269,9 @@ class RunController(
         self._runtime_state.init_gate_stop_event = value
 
     @property
-    def _prepared_execution_artifacts(self) -> Optional[PreparedExecutionArtifacts]:
+    def _prepared_execution_artifacts(
+        self,
+    ) -> Optional[PreparedExecutionArtifacts]:
         return self._runtime_state.prepared_execution_artifacts
 
     @_prepared_execution_artifacts.setter
@@ -248,7 +326,9 @@ class RunController(
             self.runtimeUiStateChanged.emit(dict(state))
         return dict(state)
 
-    def sync_runtime_ui_state_from_config(self, config: RuntimeConfig, *, emit: bool = True) -> Dict[str, Any]:
+    def sync_runtime_ui_state_from_config(
+        self, config: RuntimeConfig, *, emit: bool = True
+    ) -> Dict[str, Any]:
         state, changed = self._runtime_ui_store.sync_from_config(config)
         if emit and changed:
             self.runtimeUiStateChanged.emit(dict(state))
@@ -324,3 +404,22 @@ class RunController(
             message_handler=self.message_dialog_handler,
             confirm_handler=self.confirm_dialog_handler,
         )
+
+    def load_saved_config(
+        self, path: Optional[str] = None, *, strict: bool = False
+    ) -> RuntimeConfig:
+        cfg = load_config(path, strict=strict)
+        self.config = cfg
+        self.question_entries = cfg.question_entries
+        self.questions_info = list(getattr(cfg, "questions_info", None) or [])
+        self.survey_title = str(getattr(cfg, "survey_title", "") or "")
+        self.survey_provider = str(getattr(cfg, "survey_provider", "wjx") or "wjx")
+        return cfg
+
+    def save_current_config(self, path: Optional[str] = None) -> str:
+        entries = getattr(self.config, "question_entries", None)
+        if entries is None:
+            entries = self.question_entries
+        self.question_entries = list(entries or [])
+        self.config.question_entries = self.question_entries
+        return save_config(self.config, path)

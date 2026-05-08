@@ -1,8 +1,17 @@
 """向导文本题配置区。"""
+
 from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple
 
 from PySide6.QtWidgets import QButtonGroup, QHBoxLayout, QVBoxLayout, QWidget
-from qfluentwidgets import BodyLabel, CardWidget, IndicatorPosition, LineEdit, PushButton, RadioButton, SwitchButton
+from qfluentwidgets import (
+    BodyLabel,
+    CardWidget,
+    IndicatorPosition,
+    LineEdit,
+    PushButton,
+    RadioButton,
+    SwitchButton,
+)
 
 from software.app.config import DEFAULT_FILL_TEXT
 from software.core.questions.config import QuestionEntry
@@ -44,18 +53,30 @@ class WizardSectionsTextMixin:
 
         def _get_entry_info(self, idx: int) -> SurveyQuestionMeta: ...
         @staticmethod
-        def _resolve_text_random_int_range(entry: QuestionEntry) -> Tuple[Optional[int], Optional[int]]: ...
+        def _resolve_text_random_int_range(
+            entry: QuestionEntry,
+        ) -> Tuple[Optional[int], Optional[int]]: ...
         @staticmethod
-        def _create_integer_range_edit(parent: QWidget, initial_value: Optional[int], placeholder: str) -> LineEdit: ...
+        def _create_integer_range_edit(
+            parent: QWidget, initial_value: Optional[int], placeholder: str
+        ) -> LineEdit: ...
         def _on_text_random_mode_toggled(self, idx: int, mode: str, checked: bool) -> None: ...
         def _on_entry_ai_toggled(self, idx: int, checked: bool) -> None: ...
         @staticmethod
         def _resolve_text_random_mode(entry: QuestionEntry) -> str: ...
         def _sync_text_section_state(self, idx: int) -> None: ...
         def _set_text_answer_enabled(self, idx: int, enabled: bool) -> None: ...
-        def _on_multi_text_blank_ai_toggled(self, checkbox: Any, checked: bool, sync_func: Any) -> None: ...
+        def _on_multi_text_blank_ai_toggled(
+            self, checkbox: Any, checked: bool, sync_func: Any
+        ) -> None: ...
 
-    def _build_text_section(self, idx: int, entry: QuestionEntry, card: CardWidget, card_layout: QVBoxLayout) -> None:
+    def _build_text_section(
+        self,
+        idx: int,
+        entry: QuestionEntry,
+        card: CardWidget,
+        card_layout: QVBoxLayout,
+    ) -> None:
         self._has_content = True
 
         # 检测是否为多项填空题
@@ -112,7 +133,9 @@ class WizardSectionsTextMixin:
                     if len(edit_list) > 1:
                         edit_list.remove(edit)
                         row_widget.deleteLater()
+
                 del_btn.clicked.connect(remove_row)
+
             return add_row
 
         add_row_func = make_add_row_func(text_rows_layout, edits, card)
@@ -175,19 +198,29 @@ class WizardSectionsTextMixin:
             self.text_random_int_max_edit_map[idx] = random_max_edit
 
             random_list_radio.toggled.connect(
-                lambda checked, i=idx: self._on_text_random_mode_toggled(i, _TEXT_RANDOM_NONE, checked)
+                lambda checked, i=idx: self._on_text_random_mode_toggled(
+                    i, _TEXT_RANDOM_NONE, checked
+                )
             )
             random_name_cb.toggled.connect(
-                lambda checked, i=idx: self._on_text_random_mode_toggled(i, _TEXT_RANDOM_NAME, checked)
+                lambda checked, i=idx: self._on_text_random_mode_toggled(
+                    i, _TEXT_RANDOM_NAME, checked
+                )
             )
             random_mobile_cb.toggled.connect(
-                lambda checked, i=idx: self._on_text_random_mode_toggled(i, _TEXT_RANDOM_MOBILE, checked)
+                lambda checked, i=idx: self._on_text_random_mode_toggled(
+                    i, _TEXT_RANDOM_MOBILE, checked
+                )
             )
             random_id_card_cb.toggled.connect(
-                lambda checked, i=idx: self._on_text_random_mode_toggled(i, _TEXT_RANDOM_ID_CARD, checked)
+                lambda checked, i=idx: self._on_text_random_mode_toggled(
+                    i, _TEXT_RANDOM_ID_CARD, checked
+                )
             )
             random_integer_cb.toggled.connect(
-                lambda checked, i=idx: self._on_text_random_mode_toggled(i, _TEXT_RANDOM_INTEGER, checked)
+                lambda checked, i=idx: self._on_text_random_mode_toggled(
+                    i, _TEXT_RANDOM_INTEGER, checked
+                )
             )
 
             ai_cb = SwitchButton(card, IndicatorPosition.RIGHT)
@@ -209,7 +242,9 @@ class WizardSectionsTextMixin:
                 )
             )
             ai_cb.setChecked(bool(getattr(entry, "ai_enabled", False)))
-            ai_cb.checkedChanged.connect(lambda checked, i=idx: self._on_entry_ai_toggled(i, checked))
+            ai_cb.checkedChanged.connect(
+                lambda checked, i=idx: self._on_entry_ai_toggled(i, checked)
+            )
             btn_row.addWidget(ai_cb)
             btn_row.addWidget(ai_label)
             self.ai_check_map[idx] = ai_cb
@@ -234,9 +269,14 @@ class WizardSectionsTextMixin:
         btn_row.addStretch(1)
         card_layout.addLayout(btn_row)
         self.text_edit_map[idx] = edits
+
     def _build_multi_text_matrix_input(
-        self, idx: int, entry: QuestionEntry, card: CardWidget,
-        card_layout: QVBoxLayout, blank_count: int
+        self,
+        idx: int,
+        entry: QuestionEntry,
+        card: CardWidget,
+        card_layout: QVBoxLayout,
+        blank_count: int,
     ) -> None:
         """为多项填空题构建矩阵式输入界面"""
         from software.core.questions.text_shared import MULTI_TEXT_DELIMITER
@@ -258,7 +298,7 @@ class WizardSectionsTextMixin:
         header_layout.addWidget(num_spacer)
 
         for i in range(blank_count):
-            col_label = BodyLabel(f"填空{i+1}", card)
+            col_label = BodyLabel(f"填空{i + 1}", card)
             col_label.setStyleSheet("font-size: 11px; font-weight: bold;")
             _apply_label_color(col_label, "#888888", "#a6a6a6")
             header_layout.addWidget(col_label, 1)
@@ -282,7 +322,9 @@ class WizardSectionsTextMixin:
 
         def make_add_row_func(container_layout, row_edit_list, parent_card, num_blanks):
             def add_row(initial_values: Optional[List[str]] = None):
-                values: List[str] = initial_values if initial_values is not None else [""] * num_blanks
+                values: List[str] = (
+                    initial_values if initial_values is not None else [""] * num_blanks
+                )
 
                 row_widget = QWidget(parent_card)
                 row_layout = QHBoxLayout(row_widget)
@@ -299,7 +341,7 @@ class WizardSectionsTextMixin:
                 for i in range(num_blanks):
                     edit = LineEdit(parent_card)
                     edit.setText(values[i] if i < len(values) else "")
-                    edit.setPlaceholderText(f"填空{i+1}")
+                    edit.setPlaceholderText(f"填空{i + 1}")
                     row_layout.addWidget(edit, 1)
                     edits_in_row.append(edit)
 
@@ -343,6 +385,7 @@ class WizardSectionsTextMixin:
 
         # 填空项配置区域
         from PySide6.QtWidgets import QRadioButton
+
         config_hint = BodyLabel("填空项配置：", card)
         config_hint.setStyleSheet("font-size: 12px; margin-top: 8px;")
         _apply_label_color(config_hint, "#666666", "#bfbfbf")
@@ -404,7 +447,9 @@ class WizardSectionsTextMixin:
             radio_group.addButton(radio_id_card, 3)
             radio_group.addButton(radio_integer, 4)
 
-            current_mode = saved_modes[blank_idx] if blank_idx < len(saved_modes) else _TEXT_RANDOM_NONE
+            current_mode = (
+                saved_modes[blank_idx] if blank_idx < len(saved_modes) else _TEXT_RANDOM_NONE
+            )
             if current_mode == _TEXT_RANDOM_NAME:
                 radio_name.setChecked(True)
             elif current_mode == _TEXT_RANDOM_MOBILE:
@@ -434,7 +479,9 @@ class WizardSectionsTextMixin:
             ai_cb.setToolTip("运行时每次填空都会调用 AI")
             ai_label.setToolTip("运行时每次填空都会调用 AI")
             install_tooltip_filters((ai_cb, ai_label))
-            ai_cb.setChecked(saved_ai_flags[blank_idx] if blank_idx < len(saved_ai_flags) else False)
+            ai_cb.setChecked(
+                saved_ai_flags[blank_idx] if blank_idx < len(saved_ai_flags) else False
+            )
             blank_row.addWidget(ai_cb)
             blank_row.addWidget(ai_label)
             blank_ai_checkboxes.append(ai_cb)
@@ -443,13 +490,15 @@ class WizardSectionsTextMixin:
             card_layout.addLayout(blank_row)
 
             blank_radio_groups.append(radio_group)
-            blank_mode_radios.append({
-                "list": radio_list,
-                "name": radio_name,
-                "mobile": radio_mobile,
-                "id_card": radio_id_card,
-                "integer": radio_integer,
-            })
+            blank_mode_radios.append(
+                {
+                    "list": radio_list,
+                    "name": radio_name,
+                    "mobile": radio_mobile,
+                    "id_card": radio_id_card,
+                    "integer": radio_integer,
+                }
+            )
             blank_integer_range_edits.append((range_min_edit, range_max_edit))
 
             # 互斥逻辑：控制该列输入框的启用/禁用
@@ -457,8 +506,8 @@ class WizardSectionsTextMixin:
                 def sync_column_state():
                     mode_id = radios["list"].group().checkedId()
                     ai_enabled = ai_checkbox.isChecked()
-                    use_list = (mode_id == 0 and not ai_enabled)
-                    use_integer_range = (mode_id == 4 and not ai_enabled)
+                    use_list = mode_id == 0 and not ai_enabled
+                    use_integer_range = mode_id == 4 and not ai_enabled
 
                     # 禁用/启用该列的所有输入框
                     for row in edits_list:
@@ -493,7 +542,9 @@ class WizardSectionsTextMixin:
             )
             radio_group.buttonClicked.connect(lambda checked=False, f=sync_func: f())
             ai_cb.checkedChanged.connect(
-                lambda checked, cb=ai_cb, f=sync_func: self._on_multi_text_blank_ai_toggled(cb, checked, f)
+                lambda checked, cb=ai_cb, f=sync_func: self._on_multi_text_blank_ai_toggled(
+                    cb, checked, f
+                )
             )
             # 初始化状态
             sync_func()

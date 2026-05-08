@@ -1,11 +1,15 @@
 """RunController 解析与题目默认配置相关逻辑。"""
+
 from __future__ import annotations
 
 import logging
 import threading
 from typing import TYPE_CHECKING, Any, List
 
-from software.core.questions.config import QuestionEntry, build_default_question_entries
+from software.core.questions.config import (
+    QuestionEntry,
+    build_default_question_entries,
+)
 from software.providers.common import is_supported_survey_url
 from software.providers.contracts import SurveyDefinition, SurveyQuestionMeta
 
@@ -74,5 +78,5 @@ class RunControllerParsingMixin:
 
     def _parse_questions(self, url: str) -> SurveyDefinition:
         from software.providers.registry import parse_survey_sync
-        return parse_survey_sync(url)
 
+        return parse_survey_sync(url)

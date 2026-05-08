@@ -1,4 +1,5 @@
 """RunController 随机 IP 与额度相关逻辑。"""
+
 from __future__ import annotations
 
 import logging
@@ -20,8 +21,13 @@ from software.network.proxy.session import (
     sync_quota_snapshot_from_server,
 )
 from software.network.proxy import is_custom_proxy_api_active
-from software.network.proxy.policy import get_random_ip_counter_snapshot_local
-from software.logging.log_utils import log_deduped_message, reset_deduped_log_message
+from software.network.proxy.policy.source import (
+    get_random_ip_counter_snapshot_local,
+)
+from software.logging.log_utils import (
+    log_deduped_message,
+    reset_deduped_log_message,
+)
 
 _RANDOM_IP_SYNC_FAILURE_LOG_KEY = "random_ip_quota_sync_failure"
 
@@ -37,20 +43,37 @@ class RunControllerRandomIPMixin:
             max(0.0, float(snapshot.get("used_quota") or 0.0)),
             max(0.0, float(snapshot.get("total_quota") or 0.0)),
         )
-    def _show_random_ip_message(self, adapter: Optional[Any], title: str, message: str, *, level: str = "info") -> None:
+
+    def _show_random_ip_message(
+        self,
+        adapter: Optional[Any],
+        title: str,
+        message: str,
+        *,
+        level: str = "info",
+    ) -> None:
         if not adapter:
             return
         try:
             adapter.show_message_dialog(str(title or ""), str(message or ""), level=level)
         except Exception:
             logging.info("显示随机IP提示失败", exc_info=True)
-    def _apply_random_ip_counter(self, adapter: Optional[Any], *, used: float, total: float, custom_api: bool) -> None:
+
+    def _apply_random_ip_counter(
+        self,
+        adapter: Optional[Any],
+        *,
+        used: float,
+        total: float,
+        custom_api: bool,
+    ) -> None:
         if not adapter:
             return
         try:
             adapter.update_random_ip_counter(float(used), float(total), bool(custom_api))
         except Exception:
             logging.info("更新随机IP额度显示失败", exc_info=True)
+
     def _set_random_ip_enabled(self, adapter: Optional[Any], enabled: bool) -> None:
         if not adapter:
             return
@@ -58,7 +81,10 @@ class RunControllerRandomIPMixin:
             adapter.set_random_ip_enabled(bool(enabled))
         except Exception:
             logging.info("更新随机IP开关失败", exc_info=True)
-    def _set_random_ip_loading(self, adapter: Optional[Any], loading: bool, message: str = "") -> None:
+
+    def _set_random_ip_loading(
+        self, adapter: Optional[Any], loading: bool, message: str = ""
+    ) -> None:
         try:
             self.notify_random_ip_loading(bool(loading), str(message or ""))
         except Exception:
@@ -69,21 +95,36 @@ class RunControllerRandomIPMixin:
             adapter.set_random_ip_loading(bool(loading), str(message or ""))
         except Exception:
             logging.info("更新随机IP加载状态失败", exc_info=True)
+
     def _get_counter_snapshot(self) -> tuple[float, float, bool]:
         custom_api = bool(is_custom_proxy_api_active())
         if not custom_api and has_authenticated_session():
             try:
-                return (*self._resolve_counter_snapshot_values(get_fresh_quota_snapshot()), False)
+                return (
+                    *self._resolve_counter_snapshot_values(get_fresh_quota_snapshot()),
+                    False,
+                )
             except RandomIPAuthError as exc:
                 if exc.detail.startswith("session_persist_failed"):
                     raise
                 logging.warning("随机IP额度校验失败，回退本地快照：%s", exc.detail)
-                return (*self._resolve_counter_snapshot_values(get_quota_snapshot()), False)
+                return (
+                    *self._resolve_counter_snapshot_values(get_quota_snapshot()),
+                    False,
+                )
             except Exception as exc:
                 logging.warning("读取随机IP额度失败，回退本地快照：%s", exc)
-                return (*self._resolve_counter_snapshot_values(get_quota_snapshot()), False)
+                return (
+                    *self._resolve_counter_snapshot_values(get_quota_snapshot()),
+                    False,
+                )
         count, limit, local_custom_api = get_random_ip_counter_snapshot_local()
-        return max(0.0, float(count or 0.0)), max(0.0, float(limit or 0.0)), bool(custom_api or local_custom_api)
+        return (
+            max(0.0, float(count or 0.0)),
+            max(0.0, float(limit or 0.0)),
+            bool(custom_api or local_custom_api),
+        )
+
     def _refresh_random_ip_counter_now(self, adapter: Optional[Any]) -> None:
         if not adapter:
             return
@@ -101,7 +142,10 @@ class RunControllerRandomIPMixin:
             logging.warning("刷新随机IP计数失败：%s", message)
             used, total, custom_api = self._get_counter_snapshot()
         self._apply_random_ip_counter(adapter, used=used, total=total, custom_api=custom_api)
-    def refresh_random_ip_counter(self, *, adapter: Optional[Any] = None, async_mode: bool = True) -> None:
+
+    def refresh_random_ip_counter(
+        self, *, adapter: Optional[Any] = None, async_mode: bool = True
+    ) -> None:
         adapter = adapter or getattr(self, "adapter", None)
         if not adapter:
             return
@@ -113,6 +157,7 @@ class RunControllerRandomIPMixin:
             ).start()
             return
         self._refresh_random_ip_counter_now(adapter)
+
     def _begin_random_ip_server_sync(self, *, min_interval_seconds: float = 0.0) -> bool:
         if is_custom_proxy_api_active() or not has_authenticated_session():
             return False
@@ -128,6 +173,7 @@ class RunControllerRandomIPMixin:
                 return False
             self._random_ip_server_sync_active = True
         return True
+
     def _finish_random_ip_server_sync(self, *, succeeded: bool) -> None:
         lock = getattr(self, "_random_ip_server_sync_lock", None)
         if lock is None:
@@ -136,6 +182,7 @@ class RunControllerRandomIPMixin:
             if succeeded:
                 self._random_ip_last_server_sync_at = time.monotonic()
             self._random_ip_server_sync_active = False
+
     def sync_random_ip_counter_from_server(
         self,
         *,
@@ -167,7 +214,9 @@ class RunControllerRandomIPMixin:
                     level=log_level,
                 )
                 if not silent:
-                    self._show_random_ip_message(adapter, "随机IP同步失败", message, level="warning")
+                    self._show_random_ip_message(
+                        adapter, "随机IP同步失败", message, level="warning"
+                    )
                 try:
                     self._refresh_random_ip_counter_now(adapter)
                 except Exception:
@@ -183,19 +232,26 @@ class RunControllerRandomIPMixin:
             ).start()
             return
         _worker()
+
     def _try_activate_random_ip_trial(self, adapter: Optional[Any]) -> tuple[bool, bool]:
         try:
             self._set_random_ip_loading(adapter, True, "正在领取试用...")
             session = activate_trial()
         except RandomIPAuthError as exc:
             message = format_random_ip_error(exc)
-            if exc.detail in {"trial_already_claimed", "trial_already_used", "device_trial_already_claimed"}:
+            if exc.detail in {
+                "trial_already_claimed",
+                "trial_already_used",
+                "device_trial_already_claimed",
+            }:
                 self._show_random_ip_message(adapter, "试用已领取", message, level="warning")
                 return False, True
             self._show_random_ip_message(adapter, "领取试用失败", message, level="error")
             return False, False
         except Exception as exc:
-            self._show_random_ip_message(adapter, "领取试用失败", f"领取试用失败：{exc}", level="error")
+            self._show_random_ip_message(
+                adapter, "领取试用失败", f"领取试用失败：{exc}", level="error"
+            )
             return False, False
         finally:
             self._set_random_ip_loading(adapter, False, "")
@@ -211,8 +267,14 @@ class RunControllerRandomIPMixin:
                 level="info",
             )
         else:
-            self._show_random_ip_message(adapter, "试用已领取", "已领取免费试用，随机IP账号已绑定到当前设备。", level="info")
+            self._show_random_ip_message(
+                adapter,
+                "试用已领取",
+                "已领取免费试用，随机IP账号已绑定到当前设备。",
+                level="info",
+            )
         return True, False
+
     def _ensure_random_ip_ready(self, adapter: Optional[Any]) -> bool:
         if has_authenticated_session():
             return True
@@ -227,8 +289,14 @@ class RunControllerRandomIPMixin:
             return bool(adapter.open_quota_request_form())
         except Exception:
             logging.info("打开随机IP额度申请入口失败", exc_info=True)
-            self._show_random_ip_message(adapter, "需要申请额度", "请在“联系开发者”中提交随机IP额度申请。", level="warning")
+            self._show_random_ip_message(
+                adapter,
+                "需要申请额度",
+                "请在“联系开发者”中提交随机IP额度申请。",
+                level="warning",
+            )
             return False
+
     def toggle_random_ip(self, enabled: bool, *, adapter: Optional[Any] = None) -> bool:
         adapter = adapter or getattr(self, "adapter", None)
         enabled = bool(enabled)
@@ -266,12 +334,23 @@ class RunControllerRandomIPMixin:
         used_quota, total_quota = self._resolve_counter_snapshot_values(snapshot)
         self._apply_random_ip_counter(adapter, used=used_quota, total=total_quota, custom_api=False)
         if is_quota_exhausted({"authenticated": True, **snapshot}):
-            self._show_random_ip_message(adapter, "提示", "随机IP已用额度已达到上限，请先补充额度后再启用。", level="warning")
+            self._show_random_ip_message(
+                adapter,
+                "提示",
+                "随机IP已用额度已达到上限，请先补充额度后再启用。",
+                level="warning",
+            )
             self._set_random_ip_enabled(adapter, False)
             return False
         self._set_random_ip_enabled(adapter, True)
         return True
-    def handle_random_ip_submission(self, *, stop_signal: Optional[threading.Event], adapter: Optional[Any] = None) -> None:
+
+    def handle_random_ip_submission(
+        self,
+        *,
+        stop_signal: Optional[threading.Event],
+        adapter: Optional[Any] = None,
+    ) -> None:
         adapter = adapter or getattr(self, "adapter", None)
         if not adapter or is_custom_proxy_api_active():
             return

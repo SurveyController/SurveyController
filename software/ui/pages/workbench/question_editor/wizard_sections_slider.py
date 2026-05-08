@@ -1,17 +1,40 @@
 """向导滑块题配置区。"""
+
 from typing import TYPE_CHECKING, Any, Dict, List
 
-from PySide6.QtCore import QByteArray, QEasingCurve, QPropertyAnimation, QTimer, Qt
+from PySide6.QtCore import (
+    QByteArray,
+    QEasingCurve,
+    QPropertyAnimation,
+    QTimer,
+    Qt,
+)
 from PySide6.QtWidgets import QButtonGroup, QHBoxLayout, QVBoxLayout, QWidget
-from qfluentwidgets import BodyLabel, CardWidget, IndicatorPosition, LineEdit, RadioButton, SegmentedWidget, SwitchButton
+from qfluentwidgets import (
+    BodyLabel,
+    CardWidget,
+    IndicatorPosition,
+    LineEdit,
+    RadioButton,
+    SegmentedWidget,
+    SwitchButton,
+)
 
 from software.core.questions.config import QuestionEntry
 from software.providers.contracts import SurveyQuestionMeta
 from software.ui.helpers.fluent_tooltip import install_tooltip_filters
 from software.ui.widgets.no_wheel import NoWheelSlider
 
-from .psycho_config import BIAS_PRESET_CHOICES, PSYCHO_SUPPORTED_TYPES, build_bias_weights
-from .utils import _apply_label_color, _bind_slider_input, _configure_wrapped_text_label
+from .psycho_config import (
+    BIAS_PRESET_CHOICES,
+    PSYCHO_SUPPORTED_TYPES,
+    build_bias_weights,
+)
+from .utils import (
+    _apply_label_color,
+    _bind_slider_input,
+    _configure_wrapped_text_label,
+)
 from .wizard_sections_common import (
     _TEXT_RANDOM_ID_CARD,
     _TEXT_RANDOM_INTEGER,
@@ -34,13 +57,19 @@ class WizardSectionsSliderMixin:
         def _resolve_slider_bounds(self, idx: int, entry: QuestionEntry) -> tuple[int, int]: ...
         def _get_entry_info(self, idx: int) -> SurveyQuestionMeta: ...
         @staticmethod
-        def _normalize_fillable_option_indices(raw_indices: Any, option_count: int) -> List[int]: ...
+        def _normalize_fillable_option_indices(
+            raw_indices: Any, option_count: int
+        ) -> List[int]: ...
         @staticmethod
         def _resolve_option_fill_mode(raw_value: Any) -> tuple[str, bool]: ...
         @staticmethod
-        def _resolve_option_fill_int_range(raw_value: Any) -> tuple[int | None, int | None]: ...
+        def _resolve_option_fill_int_range(
+            raw_value: Any,
+        ) -> tuple[int | None, int | None]: ...
         @staticmethod
-        def _create_integer_range_edit(parent: QWidget, initial_value: int | None, placeholder: str) -> LineEdit: ...
+        def _create_integer_range_edit(
+            parent: QWidget, initial_value: int | None, placeholder: str
+        ) -> LineEdit: ...
         def _on_option_fill_mode_toggled(self, state: Dict[str, Any], checked: bool) -> None: ...
         def _on_option_fill_ai_toggled(self, state: Dict[str, Any], checked: bool) -> None: ...
         def _sync_option_fill_state(self, state: Dict[str, Any]) -> None: ...
@@ -52,8 +81,14 @@ class WizardSectionsSliderMixin:
             prefix: str,
         ) -> None: ...
 
-    def _build_slider_section(self, idx: int, entry: QuestionEntry, card: CardWidget,
-                              card_layout: QVBoxLayout, option_texts: List[str]) -> None:
+    def _build_slider_section(
+        self,
+        idx: int,
+        entry: QuestionEntry,
+        card: CardWidget,
+        card_layout: QVBoxLayout,
+        option_texts: List[str],
+    ) -> None:
         self._has_content = True
         slider_min, slider_max = (0, 100)
         if entry.question_type == "slider":
@@ -108,7 +143,9 @@ class WizardSectionsSliderMixin:
 
         jump_map: Dict[int, int] = {}
         info_entry = self._get_entry_info(idx)
-        fillable_option_indices = self._normalize_fillable_option_indices(info_entry.get("fillable_options"), options)
+        fillable_option_indices = self._normalize_fillable_option_indices(
+            info_entry.get("fillable_options"), options
+        )
         if not fillable_option_indices:
             fillable_option_indices = self._normalize_fillable_option_indices(
                 getattr(entry, "fillable_option_indices", None),
@@ -118,7 +155,7 @@ class WizardSectionsSliderMixin:
         saved_option_fill_texts = list(getattr(entry, "option_fill_texts", []) or [])
         option_fill_edits: Dict[int, LineEdit] = {}
         option_fill_states: Dict[int, Dict[str, Any]] = {}
-        for rule in (info_entry.get("jump_rules") or []):
+        for rule in info_entry.get("jump_rules") or []:
             oi = rule.get("option_index")
             jt = rule.get("jumpto")
             if oi is not None and jt is not None:
@@ -167,7 +204,14 @@ class WizardSectionsSliderMixin:
                 slider.setRange(slider_min, slider_max)
             else:
                 slider.setRange(0, 100)
-            slider.setValue(int(min(slider.maximum(), max(slider.minimum(), weights[opt_idx]))))
+            slider.setValue(
+                int(
+                    min(
+                        slider.maximum(),
+                        max(slider.minimum(), weights[opt_idx]),
+                    )
+                )
+            )
             slider.setMinimumWidth(200)
             opt_layout.addWidget(slider, 1)
 
@@ -180,7 +224,9 @@ class WizardSectionsSliderMixin:
             if is_multiple:
                 percent_label = BodyLabel("%", card)
                 percent_label.setFixedWidth(12)
-                percent_label.setAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
+                percent_label.setAlignment(
+                    Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter
+                )
                 _apply_label_color(percent_label, "#666666", "#bfbfbf")
                 opt_layout.addWidget(percent_label)
 
@@ -188,7 +234,11 @@ class WizardSectionsSliderMixin:
             sliders.append(slider)
 
             if opt_idx in fillable_option_set:
-                raw_fill_value = saved_option_fill_texts[opt_idx] if opt_idx < len(saved_option_fill_texts) else None
+                raw_fill_value = (
+                    saved_option_fill_texts[opt_idx]
+                    if opt_idx < len(saved_option_fill_texts)
+                    else None
+                )
                 fill_mode, fill_ai_enabled = self._resolve_option_fill_mode(raw_fill_value)
                 range_min, range_max = self._resolve_option_fill_int_range(raw_fill_value)
 
@@ -205,7 +255,11 @@ class WizardSectionsSliderMixin:
 
                 fill_edit = LineEdit(card)
                 existing_fill = ""
-                if fill_mode == _TEXT_RANDOM_NONE and not fill_ai_enabled and opt_idx < len(saved_option_fill_texts):
+                if (
+                    fill_mode == _TEXT_RANDOM_NONE
+                    and not fill_ai_enabled
+                    and opt_idx < len(saved_option_fill_texts)
+                ):
                     existing_fill = str(saved_option_fill_texts[opt_idx] or "").strip()
                 if existing_fill:
                     fill_edit.setText(existing_fill)
@@ -322,10 +376,14 @@ class WizardSectionsSliderMixin:
                 )
                 for radio in fill_state["radios"].values():
                     radio.toggled.connect(
-                        lambda checked, state=fill_state: self._on_option_fill_mode_toggled(state, checked)
+                        lambda checked, state=fill_state: self._on_option_fill_mode_toggled(
+                            state, checked
+                        )
                     )
                 ai_cb.checkedChanged.connect(
-                    lambda checked, state=fill_state: self._on_option_fill_ai_toggled(state, checked)
+                    lambda checked, state=fill_state: self._on_option_fill_ai_toggled(
+                        state, checked
+                    )
                 )
                 self._sync_option_fill_state(fill_state)
 
@@ -354,13 +412,18 @@ class WizardSectionsSliderMixin:
                 slider.valueChanged.connect(_update_option_preview)
             _update_option_preview()
 
-        # 预设 ↔ 滑块联动（用标志位避免循环触发，不用 blockSignals 以保证输入框同步）
+        # 预设与滑块联动，用标志位避免循环触发。
         if _preset_seg is not None:
             _applying_preset = [False]
 
             _slider_anims: Dict[object, QPropertyAnimation] = {}
 
-            def _on_preset_changed(route_key: str, _sliders=sliders, _flag=_applying_preset, _sa=_slider_anims):
+            def _on_preset_changed(
+                route_key: str,
+                _sliders=sliders,
+                _flag=_applying_preset,
+                _sa=_slider_anims,
+            ):
                 if route_key == "custom":
                     return
                 _flag[0] = True
@@ -378,6 +441,7 @@ class WizardSectionsSliderMixin:
                     anim.start()
                     _sa[sl] = anim
                 QTimer.singleShot(320, lambda: _flag.__setitem__(0, False))
+
             _preset_seg.currentItemChanged.connect(_on_preset_changed)
 
             def _make_slider_cb(_seg=_preset_seg, _flag=_applying_preset):
@@ -387,7 +451,9 @@ class WizardSectionsSliderMixin:
                         return
                     if _seg.currentRouteKey() != "custom":
                         _seg.setCurrentItem("custom")
+
                 return _cb
+
             _slider_cb = _make_slider_cb()
             for sl in sliders:
                 sl.valueChanged.connect(_slider_cb)
