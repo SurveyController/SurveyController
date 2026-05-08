@@ -179,6 +179,21 @@ if (-not (Test-Path $mainExe)) {
 if (-not (Test-Path $iconPath)) {
     throw ("Icon file not found: {0}" -f $iconPath)
 }
+$blockedPlaywrightPaths = @(
+    "playwright\driver\package\lib\tools\backend",
+    "playwright\driver\package\lib\tools\cli-client",
+    "playwright\driver\package\lib\tools\cli-daemon",
+    "playwright\driver\package\lib\tools\dashboard",
+    "playwright\driver\package\lib\tools\mcp",
+    "playwright\driver\package\lib\tools\utils",
+    "playwright\driver\package\lib\tools\exports.js"
+)
+foreach ($relativePath in $blockedPlaywrightPaths) {
+    $candidate = Join-Path $packDir $relativePath
+    if (Test-Path $candidate) {
+        throw ("Blocked Playwright tool payload was packaged: {0}" -f $candidate)
+    }
+}
 
 Write-Step "Run vpk pack"
 New-Item -ItemType Directory -Path $releaseDir -Force | Out-Null

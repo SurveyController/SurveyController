@@ -107,6 +107,24 @@ jobs:
           Remove-Item -Recurse -Force build, dist -ErrorAction SilentlyContinue
           python -m PyInstaller SurveyController.spec --noconfirm --clean
 
+      - name: Verify Playwright package trim
+        shell: powershell
+        run: |
+          $blockedPaths = @(
+            "dist/lib/playwright/driver/package/lib/tools/backend",
+            "dist/lib/playwright/driver/package/lib/tools/cli-client",
+            "dist/lib/playwright/driver/package/lib/tools/cli-daemon",
+            "dist/lib/playwright/driver/package/lib/tools/dashboard",
+            "dist/lib/playwright/driver/package/lib/tools/mcp",
+            "dist/lib/playwright/driver/package/lib/tools/utils",
+            "dist/lib/playwright/driver/package/lib/tools/exports.js"
+          )
+          foreach ($path in $blockedPaths) {
+            if (Test-Path $path) {
+              throw "Blocked Playwright tool payload was packaged: $path"
+            }
+          }
+
       - name: Build Velopack release package
         shell: powershell
         run: |
