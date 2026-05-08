@@ -124,6 +124,17 @@ Git 提交分两步：
 1. 暂存：告诉 Git 这次准备提交哪些文件。
 2. 提交：把暂存内容保存成一次历史记录。
 
+在此之前，先看一眼实际会进提交的文件：
+
+```bash
+git status --short
+```
+
+> [!IMPORTANT]
+> **不要把 IDE 工作区垃圾、个人本地配置、临时文件一起提交进来！**
+
+比如 `.trae/`、`.idea/`、`.vscode/`、`AGENTS.md`、`.kiro/`、编辑器缓存、截图草稿、临时导出文件。这些东西和项目代码无关，塞进仓库只会污染 review。
+
 暂存所有改动：
 
 ```bash
@@ -213,13 +224,12 @@ git push
 提交前请确认：
 
 - 改动只包含本次 PR 需要的内容。
+- 没有提交 `.trae/`、`.idea/`、`.vscode/` 等 IDE 工作区目录。
 - 没有提交 `__pycache__`、`.pyc`、日志、缓存、构建产物。
 - 没有提交密钥、代理套餐等敏感信息。
 - 用户数据仍写入用户目录，不写回安装目录。
 
-## 该改哪里
-
-常见改动位置：
+## 常见改动位置
 
 | 目标 | 目录 |
 | --- | --- |
@@ -243,11 +253,11 @@ git push
 
 - Python 代码保持简单直白，优先复用现有模块。
 - GUI 一律使用 QFluentWidgets 原生组件。
+- 尽量**不要使用 emoji 表情符号**，而应该要使用 QFluentWidgets 提供的图标资源。
 - 浏览器自动化默认使用系统自带的 Microsoft Edge。
 - `software/app/runtime_paths.py` 只表示安装目录和只读资源目录，不要把它当可写目录。
 - 用户配置写入 `%AppData%\SurveyController\`。
 - 日志和缓存写入 `%LocalAppData%\SurveyController\`。
-- 代理池真实状态由 `software/proxy_service/` 维护；Python 侧只负责配置、UI 联动和本地 HTTP 调用。
 
 ## 本地检查
 
@@ -281,7 +291,7 @@ uv run pytest CI/unit_tests
 - 代理、网络策略：补对应已有测试文件。
 - UI 纯展示改动可不强制补单测，但要手动启动看一遍。
 
-不要在测试里访问真实问卷、真实账号、真实付费代理，除非它明确属于 live test。
+不要在测试里访问真实问卷、真实账号、真实付费代理。
 
 ## Pull Request 要求
 
@@ -296,13 +306,13 @@ PR 描述请写清楚：
 建议格式：
 
 ```markdown
-## 改动
+## 简述改动
 - ...
 
-## 验证
-- uv run python CI/python_ci.py
-
 ## 影响
+- ...
+
+## 解决的问题
 - ...
 ```
 
@@ -339,5 +349,3 @@ Fixes #123
 ├── SurveyController.py      # 桌面应用入口
 └── SurveyController.spec    # PyInstaller 配置
 ```
-
-运行时缓存如 `__pycache__/`、`*.pyc`、日志和覆盖率临时文件不纳入仓库。

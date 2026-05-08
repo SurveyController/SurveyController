@@ -6,6 +6,25 @@ from software.network.proxy.session import auth
 from software.network.proxy.session.models import RandomIPAuthError, RandomIPSession
 
 
+@pytest.fixture(autouse=True)
+def isolate_random_ip_auth_storage(monkeypatch: pytest.MonkeyPatch):
+    settings = _Settings()
+    secrets: dict[str, str] = {}
+
+    def read_secret(key: str) -> _Secret:
+        value = secrets.get(key, "")
+        return _Secret(value, "ok" if value else "not_found")
+
+    monkeypatch.setattr(auth, "_get_settings", lambda: settings)
+    monkeypatch.setattr(auth, "read_secret", read_secret)
+    monkeypatch.setattr(auth, "set_secret", lambda key, value: secrets.__setitem__(key, str(value or "")))
+    auth._session_loaded = False
+    auth._session = RandomIPSession()
+    yield settings, secrets
+    auth._session_loaded = False
+    auth._session = RandomIPSession()
+
+
 class _Settings:
     def __init__(self) -> None:
         self.values: dict[str, object] = {}
@@ -72,7 +91,7 @@ def test_format_random_ip_error_maps_backend_details(detail: str, expected: str)
 
 
 class RandomIPSessionAuthTests:
-    def test_ensure_loaded_generates_device_id_and_reads_quota_from_settings(self, patch_attrs) -> None:
+    def test_ensure_loaded_builds_stable_device_id_and_reads_quota_from_settings(self, patch_attrs) -> None:
         settings = _Settings()
         settings.values = {
             auth._settings_key("user_id"): "12",
@@ -87,17 +106,53 @@ class RandomIPSessionAuthTests:
             (auth, "_get_settings", lambda: settings),
             (auth, "read_secret", lambda _key: _Secret("", "not_found")),
             (auth, "set_secret", lambda key, value: secrets.setdefault(key, value)),
-            (auth.uuid, "uuid4", lambda: type("UUID", (), {"hex": "generated-device"})()),
+            (auth, "build_stable_device_id", lambda: "sc-v2-generated-device"),
         )
 
         auth._ensure_loaded()
 
-        assert auth._session.device_id == "generated-device"
+        assert auth._session.device_id == "sc-v2-generated-device"
         assert auth._session.user_id == 12
         assert auth._session.remaining_quota == 3.0
         assert auth._session.total_quota == 10.0
         assert auth._session.used_quota == 7.0
-        assert secrets[auth._DEVICE_SECRET_KEY] == "generated-device"
+        assert secrets[auth._DEVICE_SECRET_KEY] == "sc-v2-generated-device"
+
+    def test_ensure_loaded_keeps_existing_secret_device_id(self, patch_attrs) -> None:
+        settings = _Settings()
+        settings.values = {
+            auth._settings_key("device_id"): "settings-device",
+            auth._settings_key("user_id"): "38852",
+        }
+        auth._session_loaded = False
+        patch_attrs(
+            (auth, "_get_settings", lambda: settings),
+            (auth, "read_secret", lambda _key: _Secret("existing-secret-device", "ok")),
+            (auth, "build_stable_device_id", lambda: "sc-v2-should-not-be-used"),
+        )
+
+        auth._ensure_loaded()
+
+        assert auth._session.device_id == "existing-secret-device"
+        assert auth._session.user_id == 38852
+
+    def test_ensure_loaded_keeps_existing_settings_device_id(self, patch_attrs) -> None:
+        settings = _Settings()
+        settings.values = {
+            auth._settings_key("device_id"): "existing-settings-device",
+            auth._settings_key("user_id"): "38852",
+        }
+        auth._session_loaded = False
+        patch_attrs(
+            (auth, "_get_settings", lambda: settings),
+            (auth, "read_secret", lambda _key: _Secret("", "not_found")),
+            (auth, "build_stable_device_id", lambda: "sc-v2-should-not-be-used"),
+        )
+
+        auth._ensure_loaded()
+
+        assert auth._session.device_id == "existing-settings-device"
+        assert auth._session.user_id == 38852
 
     def test_set_session_persists_normalized_quota_and_snapshot(self, patch_attrs) -> None:
         settings = _Settings()
