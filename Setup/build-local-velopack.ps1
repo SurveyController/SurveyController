@@ -132,6 +132,7 @@ $iconPath = Join-Path $packDir "icon.ico"
 $generatedSetup = Join-Path $releaseDir ("SurveyController-{0}-Setup.exe" -f $Channel)
 $renamedSetup = Join-Path $releaseDir ("SurveyController_{0}_setup.exe" -f $tagName)
 $releaseFeed = Join-Path $releaseDir ("releases.{0}.json" -f $Channel)
+$keepFullVersions = 6
 
 Write-Step "Check environment"
 Assert-CommandAvailable -Name "python" -InstallHint "Install Python first and ensure python is available in PATH."
@@ -198,6 +199,19 @@ foreach ($relativePath in $blockedPlaywrightPaths) {
 Write-Step "Run vpk pack"
 New-Item -ItemType Directory -Path $releaseDir -Force | Out-Null
 Copy-PreviousReleasePackages -SourceDir $previousReleaseDir -TargetDir $releaseDir
+if (Test-Path $releaseFeed) {
+    Push-Location $repoRoot
+    try {
+        python CI/release_tools/trim_velopack_feed.py `
+            --release-dir $releaseDir `
+            --channel $Channel `
+            --keep-full $keepFullVersions `
+            --drop-version $packVersion
+    }
+    finally {
+        Pop-Location
+    }
+}
 Push-Location $repoRoot
 try {
     $vpkArgs = @(

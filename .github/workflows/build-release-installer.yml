@@ -125,6 +125,15 @@ jobs:
             }
           }
 
+      - name: Drop existing Velopack version
+        shell: powershell
+        run: |
+          python CI/release_tools/trim_velopack_feed.py `
+            --release-dir "${{ steps.release_meta.outputs.release_dir }}" `
+            --channel "${{ steps.release_meta.outputs.channel }}" `
+            --keep-full "${env:VELOPACK_KEEP_FULL_VERSIONS}" `
+            --drop-version "${{ steps.release_meta.outputs.pack_version }}"
+
       - name: Build Velopack release package
         shell: powershell
         run: |
