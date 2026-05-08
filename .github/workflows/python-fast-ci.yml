@@ -1,4 +1,4 @@
-name: Python Fast CI
+name: Python Fast Checks
 
 on:
   pull_request:
@@ -16,7 +16,7 @@ concurrency:
 
 jobs:
   static-checks:
-    name: Static Checks
+    name: Static Analysis
     runs-on: windows-latest
 
     steps:

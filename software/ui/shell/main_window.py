@@ -64,6 +64,8 @@ class MainWindow(
 ):
     """主窗口，采用微软商店风格导航，支持主题动态切换。"""
 
+    _IMPORT_CHECK_ENV = "WJX_IMPORT_CHECK"
+
     # 下载开始信号（显示转圈动画）
     downloadStarted = Signal()
     # 下载进度信号
@@ -75,6 +77,7 @@ class MainWindow(
 
     def __init__(self, parent=None):
         self._boot_splash = None
+        self._import_check_mode = str(os.environ.get(self._IMPORT_CHECK_ENV, "") or "").strip() == "1"
         super().__init__(parent)
         theme_path = get_resource_path(os.path.join("software", "ui", "theme.json"))
         if os.path.exists(theme_path):
@@ -117,7 +120,8 @@ class MainWindow(
             self.apply_topmost_state(True, show=False)
 
         # 创建启动页面
-        self._boot_splash = create_boot_splash(self)
+        if not self._import_check_mode:
+            self._boot_splash = create_boot_splash(self)
 
         self.controller = RunController(self)
         self.workbench_state = WorkbenchState(self)
@@ -162,7 +166,8 @@ class MainWindow(
         self.workbench_state.entriesChanged.connect(lambda _count: self._sync_reverse_fill_context())
 
         self._init_navigation()
-        self._init_community_hint_badge_state()
+        if not self._import_check_mode:
+            self._init_community_hint_badge_state()
         self.stackedWidget.currentChanged.connect(self._on_stack_widget_changed)
         # 微软商店风格导航栏需要在事件循环后应用显示偏好，避免初始化时序抖动
         QTimer.singleShot(0, self._configure_navigation_interface)
@@ -177,11 +182,13 @@ class MainWindow(
         self._refresh_title_random_ip_user_id()
         self._sync_reverse_fill_context()
         self._register_popups()
-        self._load_saved_config()
-        self._start_random_ip_quota_auto_sync()
+        if not self._import_check_mode:
+            self._load_saved_config()
+            self._start_random_ip_quota_auto_sync()
         self._center_on_screen()
 
-        finish_boot_splash(1500)
+        if not self._import_check_mode:
+            finish_boot_splash(1500)
 
         # 连接下载开始信号（显示转圈动画）
         self.downloadStarted.connect(self._on_download_started)
@@ -203,7 +210,8 @@ class MainWindow(
         self._check_preview_version()
 
         # 根据设置检查更新
-        self._check_update_on_startup()
+        if not self._import_check_mode:
+            self._check_update_on_startup()
 
     def _apply_theme_mode(self, theme_mode: Theme):
         """按指定主题模式应用样式（不覆盖用户配置文件）。"""

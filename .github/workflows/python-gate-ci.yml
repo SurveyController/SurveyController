@@ -1,4 +1,4 @@
-name: Python Gate CI
+name: Python Runtime Gates
 
 on:
   pull_request:
@@ -18,7 +18,7 @@ concurrency:
 
 jobs:
   import-check:
-    name: Import Check
+    name: Import Smoke Test
     runs-on: windows-latest
 
     steps:
@@ -41,7 +41,7 @@ jobs:
         run: uv run python -m CI.python_checks.import_check
 
   window-smoke:
-    name: Window Smoke
+    name: Window Smoke Test
     runs-on: windows-latest
 
     steps:
@@ -64,7 +64,7 @@ jobs:
         run: uv run python -m CI.python_checks.window_smoke_check
 
   live-runtime-regression-matrix:
-    name: Live Runtime Regression Matrix (${{ matrix.config_name }})
+    name: Live Runtime Checks
     needs:
       - import-check
       - window-smoke
@@ -96,15 +96,17 @@ jobs:
       - name: Install dependencies
         run: uv sync --locked
 
-      - name: Run live runtime regression
+      - name: Run live runtime regression for ${{ matrix.config_name }}
         env:
           SURVEY_CONTROLLER_LIVE_TEST_CONFIG: ${{ matrix.config_path }}
         run: uv run pytest CI/live_tests/test_live_runtime_regression.py -ra -vv --tb=short --durations=10 --color=yes
 
   live-runtime-regression:
-    name: Live Runtime Regression
-    if: ${{ always() }}
+    name: Live Runtime Gate
+    if: ${{ always() && needs.import-check.result == 'success' && needs.window-smoke.result == 'success' }}
     needs:
+      - import-check
+      - window-smoke
       - live-runtime-regression-matrix
     runs-on: windows-latest
 
