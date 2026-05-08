@@ -6,7 +6,7 @@
 """
 
 # 版本号
-__VERSION__ = "3.1.3-alpha.1"
+__VERSION__ = "3.1.3"
 
 # GitHub 仓库配置
 GITHUB_OWNER = "SurveyController"

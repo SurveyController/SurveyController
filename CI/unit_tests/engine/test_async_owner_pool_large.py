@@ -8,6 +8,7 @@ from types import ModuleType
 import pytest
 
 import software.network.browser.async_owner_pool as async_owner_pool
+from software.network.browser.startup import BrowserStartupRuntimeError
 from software.network.browser.async_owner_pool import (
     AsyncBrowserOwner,
     AsyncBrowserOwnerPool,
@@ -171,10 +172,24 @@ class AsyncBrowserOwnerLargeTests:
         monkeypatch.setattr(async_owner_pool, "classify_playwright_startup_error", lambda exc: SimpleNamespace(message=f"friendly:{exc}"))
         _install_fake_async_playwright(monkeypatch, failed_playwright)
 
-        with pytest.raises(RuntimeError, match="friendly:env broken"):
+        with pytest.raises(BrowserStartupRuntimeError, match="friendly:env broken"):
             await owner._launch_browser()
 
         assert failed_playwright.stop_calls == 1
+
+    @pytest.mark.asyncio
+    async def test_launch_browser_raises_startup_error_on_driver_disconnect(self, monkeypatch) -> None:
+        owner = AsyncBrowserOwner(owner_id=33, portal=SimpleNamespace(), prefer_browsers=["edge"])
+        monkeypatch.setattr(async_owner_pool, "_build_launch_args", lambda **_kwargs: {})
+        monkeypatch.setattr(
+            async_owner_pool,
+            "_start_playwright_async_runtime",
+            lambda: asyncio.sleep(0, result=(_ for _ in ()).throw(RuntimeError("Connection closed while reading from the driver"))),
+        )
+        monkeypatch.setattr(async_owner_pool, "classify_playwright_startup_error", lambda exc: SimpleNamespace(message=f"friendly:{exc}"))
+
+        with pytest.raises(BrowserStartupRuntimeError, match="Connection closed while reading from the driver"):
+            await owner._launch_browser()
 
     @pytest.mark.asyncio
     async def test_ensure_browser_reuses_existing_and_relaunches_when_broken(self, monkeypatch) -> None:
@@ -247,6 +262,17 @@ class AsyncBrowserOwnerLargeTests:
         assert context.close_calls == 1
         assert owner.active_contexts == 0
         assert owner._broken is True
+
+    @pytest.mark.asyncio
+    async def test_ensure_ready_starts_browser_without_context(self, monkeypatch) -> None:
+        owner = AsyncBrowserOwner(owner_id=77, portal=SimpleNamespace(), prefer_browsers=["edge"])
+        browser = _FakeBrowser()
+        monkeypatch.setattr(owner, "_ensure_browser", lambda: asyncio.sleep(0, result=(browser, "edge")))
+
+        browser_name = await owner.ensure_ready()
+
+        assert browser_name == "edge"
+        assert browser.new_context_calls == []
 
     @pytest.mark.asyncio
     async def test_release_slot_ignores_over_release(self) -> None:
@@ -341,3 +367,17 @@ class AsyncBrowserOwnerPoolLargeTests:
 
         assert pool._closed is True
         assert shutdown_calls == [1, 2]
+
+    @pytest.mark.asyncio
+    async def test_owner_pool_ensure_ready_retries_disconnected_owner(self, monkeypatch) -> None:
+        pool = AsyncBrowserOwnerPool(
+            config=BrowserPoolConfig(owner_count=2, contexts_per_owner=1, logical_concurrency=2),
+            portal=SimpleNamespace(),
+            headless=True,
+        )
+        first_owner, second_owner = pool.owners
+        monkeypatch.setattr(first_owner, "ensure_ready", lambda: asyncio.sleep(0, result=(_ for _ in ()).throw(RuntimeError("disconnect first"))))
+        monkeypatch.setattr(second_owner, "ensure_ready", lambda: asyncio.sleep(0, result="edge"))
+        monkeypatch.setattr(async_owner_pool, "_is_browser_disconnected_error", lambda exc: "disconnect" in str(exc))
+
+        assert await pool.ensure_ready() == "edge"

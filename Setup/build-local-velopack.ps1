@@ -126,7 +126,6 @@ $tagName = if ($appVersion.StartsWith("v", [System.StringComparison]::OrdinalIgn
 $releaseDir = Join-Path $repoRoot $OutputDir
 $previousReleaseDir = Get-PreviousReleaseDir -RepoRoot $repoRoot -Channel $Channel
 $distDir = Join-Path $repoRoot "dist"
-$buildDir = Join-Path $repoRoot "build"
 $packDir = Join-Path $distDir "lib"
 $mainExe = Join-Path $packDir "SurveyController.exe"
 $iconPath = Join-Path $packDir "icon.ico"

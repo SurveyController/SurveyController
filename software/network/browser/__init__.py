@@ -15,6 +15,7 @@ from software.network.browser.exceptions import (
 from software.network.browser.session import BrowserDriver
 from software.network.browser.startup import (
     BrowserStartupErrorInfo,
+    BrowserStartupRuntimeError,
     classify_playwright_startup_error,
     describe_playwright_startup_error,
     is_playwright_startup_environment_error,
@@ -25,6 +26,7 @@ __all__ = [
     "By",
     "BrowserDriver",
     "BrowserStartupErrorInfo",
+    "BrowserStartupRuntimeError",
     "NoSuchElementException",
     "ProxyConnectionError",
     "TimeoutException",
