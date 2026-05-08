@@ -137,12 +137,14 @@ class AsyncBrowserOwner:
                 if is_playwright_startup_environment_error(exc):
                     break
         info = classify_playwright_startup_error(last_exc) if last_exc is not None else None
-        friendly = info.message if info is not None else "未知错误"
+        if info is None:
+            info = classify_playwright_startup_error(RuntimeError("未知错误"))
+        friendly = info.message
         if last_exc is not None:
             raise BrowserStartupRuntimeError(f"AsyncBrowserOwner 无法启动任何浏览器: {friendly}", info=info) from last_exc
         raise BrowserStartupRuntimeError(
             f"AsyncBrowserOwner 无法启动任何浏览器: {friendly}",
-            info=classify_playwright_startup_error(RuntimeError(friendly)),
+            info=info,
         )
 
     @staticmethod
