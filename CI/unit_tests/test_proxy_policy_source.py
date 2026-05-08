@@ -24,6 +24,10 @@ class ProxyPolicySourceTests:
         assert not proxy_source.is_official_proxy_source(proxy_source.PROXY_SOURCE_CUSTOM)
         assert proxy_source.source_supports_quota_session(proxy_source.PROXY_SOURCE_DEFAULT)
         assert proxy_source.source_uses_custom_api_override(proxy_source.PROXY_SOURCE_CUSTOM)
+        assert proxy_source.source_uses_custom_api_override(proxy_source.PROXY_SOURCE_IPLIST)
+        assert proxy_source.is_iplist_proxy_source(proxy_source.PROXY_SOURCE_IPLIST)
+        assert proxy_source.is_local_free_proxy_source(proxy_source.PROXY_SOURCE_FREE_POOL)
+        assert proxy_source.is_local_free_proxy_source(proxy_source.PROXY_SOURCE_IPLIST)
 
     def test_get_proxy_upstream_uses_benefit_mapping(self) -> None:
         assert proxy_source.get_proxy_upstream(proxy_source.PROXY_SOURCE_BENEFIT) == proxy_source.PROXY_UPSTREAM_BENEFIT

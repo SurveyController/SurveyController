@@ -267,7 +267,7 @@ class RunControllerExecutionMixin:
         self._startup_service_warnings = []
         self._start_startup_status_check(config)
 
-        self._start_with_initialization_gate(config, [])
+        self._start_with_initialization_gate(config, prepared.execution_config_template.proxy_ip_pool)
     def _start_workers_with_proxy_pool(
         self,
         config: RuntimeConfig,

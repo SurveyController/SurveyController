@@ -42,7 +42,7 @@ def get_proxy_settings() -> ProxySettings:
 def apply_proxy_source_settings(source: str, *, custom_api_url: Optional[str] = None) -> ProxySettings:
     """统一更新代理源与自定义 API 地址。"""
     normalized = normalize_proxy_source(source)
-    if normalized == "custom":
+    if normalized in {"custom", "iplist"}:
         set_proxy_api_override(custom_api_url if custom_api_url else None)
     else:
         set_proxy_api_override(None)

@@ -17,8 +17,10 @@ from software.network.browser.transient import create_playwright_driver
 from software.core.task import ExecutionConfig, ExecutionState
 from software.logging.log_utils import log_suppressed_exception
 from software.network.browser.owner_pool import BrowserOwnerLease, BrowserOwnerPool
-from software.network.proxy.pool import is_proxy_responsive
+from software.network.proxy.pool import is_http_proxy_connect_responsive
 from software.network.session_policy import (
+    _lease_skips_generic_connect_check,
+    _lease_needs_preuse_recheck,
     _discard_unresponsive_proxy,
     _record_bad_proxy_and_maybe_pause,
     _select_proxy_for_session,
@@ -241,7 +243,22 @@ class BrowserSessionService:
                 if _record_bad_proxy_and_maybe_pause(self.state, self.gui_instance):
                     return None
 
-            if self.proxy_address and not is_proxy_responsive(self.proxy_address):
+            selected_lease = None
+            proxy_map = getattr(self.state, "proxy_in_use_by_thread", None)
+            if self.proxy_address and self.thread_name and isinstance(proxy_map, dict):
+                selected_lease = proxy_map.get(self.thread_name)
+            if (
+                self.proxy_address
+                and not _lease_skips_generic_connect_check(selected_lease)
+                and not _lease_needs_preuse_recheck(selected_lease)
+                and not is_http_proxy_connect_responsive(
+                    self.proxy_address,
+                    target_url=str(getattr(self.config, "url", "") or ""),
+                    timeout=1.0,
+                    log_failures=False,
+                    log_success=False,
+                )
+            ):
                 logging.warning("提取到的代理质量过低，自动弃用更换下一个")
                 _discard_unresponsive_proxy(self.state, self.proxy_address)
                 if self.thread_name:

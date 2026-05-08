@@ -32,6 +32,16 @@ AI_PROVIDERS = {
         "recommended_models": ["doubao-seed-1-8-251228", "glm-4-7-251222", "doubao-seed-1-6-251015", "doubao-seed-1-6-lite-251015", "doubao-seed-1-6-flash-250828", "doubao-seed-1-6-250615"],
         "default_model": "doubao-seed-1-8-251228",
     },
+    "mimo": {
+        "label": "小米 Mimo 套餐",
+        "base_url": "https://token-plan-cn.xiaomimimo.com/v1",
+        "recommended_models": ["mimo-v2.5-pro", "mimo-v2.5", "mimo-v2-pro", "mimo-v2-omni"],
+        "default_model": "mimo-v2.5-pro",
+        "include_sampling_params": False,
+        "timeout_seconds": 45,
+        "max_concurrent_requests": 2,
+        "max_request_attempts": 1,
+    },
     "custom": {
         "label": "自定义 (OpenAI 兼容)",
         "base_url": "",

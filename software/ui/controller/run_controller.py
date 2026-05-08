@@ -44,6 +44,8 @@ class RunController(
     freeAiUnstableSuggested = Signal()
     runtimeUiStateChanged = Signal(dict)
     randomIpLoadingChanged = Signal(bool, str)
+    freeProxyPoolProgressChanged = Signal(dict)
+    freeProxyPoolBuildFinished = Signal(bool, str, int)
     startupHintEmitted = Signal(str, str, int)
     _uiCallbackQueued = Signal()
 
@@ -207,6 +209,38 @@ class RunController(
     @_startup_service_warnings.setter
     def _startup_service_warnings(self, value: List[str]) -> None:
         self._runtime_state.startup_service_warnings = list(value or [])
+
+    @property
+    def _free_proxy_pool(self) -> List[Any]:
+        return self._runtime_state.free_proxy_pool
+
+    @_free_proxy_pool.setter
+    def _free_proxy_pool(self, value: List[Any]) -> None:
+        self._runtime_state.free_proxy_pool = list(value or [])
+
+    @property
+    def _free_proxy_pool_built_at(self) -> float:
+        return float(self._runtime_state.free_proxy_pool_built_at or 0.0)
+
+    @_free_proxy_pool_built_at.setter
+    def _free_proxy_pool_built_at(self, value: float) -> None:
+        self._runtime_state.free_proxy_pool_built_at = float(value or 0.0)
+
+    @property
+    def _free_proxy_pool_build_active(self) -> bool:
+        return bool(self._runtime_state.free_proxy_pool_build_active)
+
+    @_free_proxy_pool_build_active.setter
+    def _free_proxy_pool_build_active(self, value: bool) -> None:
+        self._runtime_state.free_proxy_pool_build_active = bool(value)
+
+    @property
+    def _free_proxy_pool_stop_event(self) -> Optional[threading.Event]:
+        return self._runtime_state.free_proxy_pool_stop_event
+
+    @_free_proxy_pool_stop_event.setter
+    def _free_proxy_pool_stop_event(self, value: Optional[threading.Event]) -> None:
+        self._runtime_state.free_proxy_pool_stop_event = value
 
     def is_initializing(self) -> bool:
         return bool(self._initializing)

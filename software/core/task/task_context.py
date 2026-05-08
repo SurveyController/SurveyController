@@ -66,7 +66,9 @@ class ExecutionConfig:
     timed_mode_refresh_interval: float = 0.5
 
     random_proxy_ip_enabled: bool = False
+    proxy_source: str = "default"
     proxy_ip_pool: List[ProxyLease] = field(default_factory=list)
+    free_proxy_pool_probe_timeout_ms: int = 5000
     random_user_agent_enabled: bool = False
     user_agent_ratios: Dict[str, int] = field(
         default_factory=lambda: {"wechat": 33, "mobile": 33, "pc": 34}
@@ -100,6 +102,7 @@ class ExecutionState(
 
     proxy_waiting_threads: int = 0
     proxy_in_use_by_thread: Dict[str, ProxyLease] = field(default_factory=dict)
+    free_proxy_pool_cursor: int = 0
     successful_proxy_addresses: set[str] = field(default_factory=set)
     proxy_cooldown_until_by_address: Dict[str, float] = field(default_factory=dict)
     reverse_fill_runtime: Optional[ReverseFillRuntimeState] = None

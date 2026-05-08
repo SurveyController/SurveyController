@@ -58,6 +58,7 @@ def handle_proxy_connection_error(
     update_thread_status: Callable[[str, str], None],
     handle_proxy_unavailable: Callable[..., bool],
     mark_proxy_temporarily_bad: Callable[[ExecutionState, str], None],
+    is_public_proxy_source: Callable[[ExecutionState, str], bool] | None = None,
 ) -> bool:
     if stop_signal.is_set():
         return True
@@ -66,6 +67,16 @@ def handle_proxy_connection_error(
         mark_proxy_temporarily_bad(state, session.proxy_address)
     if config.random_proxy_ip_enabled:
         update_thread_status(thread_name, "代理失效，切换中")
+        proxy_address = str(getattr(session, "proxy_address", "") or "") if session is not None else ""
+        if proxy_address and callable(is_public_proxy_source) and is_public_proxy_source(state, proxy_address):
+            with state.lock:
+                state.proxy_unavailable_fail_count = max(0, int(state.proxy_unavailable_fail_count or 0)) + 1
+                consecutive_failures = int(state.proxy_unavailable_fail_count or 0)
+            logging.warning(
+                "公共代理连接失败，已丢弃并继续切换（连续代理失败 %s 次，不计入填写失败阈值）",
+                consecutive_failures,
+            )
+            return False
         if handle_proxy_unavailable(
             stop_signal,
             thread_name=thread_name,

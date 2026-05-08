@@ -16,6 +16,7 @@ from software.app.config import (
     POST_SUBMIT_URL_POLL_INTERVAL,
 )
 from software.core.engine.failure_reason import FailureReason
+from software.core.engine.failure_snapshot import capture_submission_failure_snapshot
 from software.core.engine.run_stop_policy import RunStopPolicy
 from software.core.engine.stop_signal import StopSignalLike
 from software.core.task import ExecutionConfig, ExecutionState
@@ -287,13 +288,16 @@ class SubmissionService:
             except Exception:
                 completion_detected = False
 
-        if not completion_detected and not stop_signal.is_set():
+        while not completion_detected and not stop_signal.is_set():
             recovered = self._attempt_submission_recovery(
                 driver,
                 stop_signal,
                 gui_instance,
                 thread_name=thread_name,
             )
+            if not recovered or stop_signal.is_set():
+                break
+
             if recovered and not stop_signal.is_set():
                 recovery_wait_seconds = max(2.0, float(POST_SUBMIT_URL_MAX_WAIT or 0.0) * 4.0)
                 recovery_poll = max(0.05, float(POST_SUBMIT_URL_POLL_INTERVAL or 0.1))
@@ -319,6 +323,14 @@ class SubmissionService:
                         completion_detected = False
 
         if not completion_detected:
+            snapshot_dir = capture_submission_failure_snapshot(
+                driver,
+                thread_name=thread_name,
+                provider=self.config.survey_provider,
+                reason="post_submit_no_completion",
+            )
+            if snapshot_dir:
+                logging.warning("提交失败现场快照已保存：%s", snapshot_dir)
             stopped = self.stop_policy.record_failure(
                 stop_signal,
                 thread_name=thread_name,

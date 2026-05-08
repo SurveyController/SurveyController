@@ -1,9 +1,12 @@
 from __future__ import annotations
 
+import json
+import os
 from typing import Any
 from unittest.mock import patch
 
 from software.core.engine.failure_reason import FailureReason
+from software.core.engine.failure_snapshot import capture_submission_failure_snapshot
 from software.core.engine.submission_service import SubmissionOutcome, SubmissionService
 from software.core.task import ExecutionConfig, ExecutionState
 
@@ -49,7 +52,62 @@ class _FakeDriver:
         return None
 
 
+class _FakeSnapshotPage:
+    def __init__(self) -> None:
+        self.screenshot_kwargs: dict[str, Any] = {}
+
+    def screenshot(self, **kwargs: Any) -> None:
+        self.screenshot_kwargs = dict(kwargs)
+        path = str(kwargs["path"])
+        with open(path, "wb") as handle:
+            handle.write(b"fake-png")
+
+
 class SubmissionServiceTests:
+
+    def test_capture_submission_failure_snapshot_writes_debug_artifacts(self, tmp_path) -> None:
+        driver = _FakeDriver("https://example.com/form")
+        driver.title = "Example Survey"
+        driver.page_source = "<html><body><div class='errorMessage'>请选择选项</div></body></html>"
+        page = _FakeSnapshotPage()
+        driver.page = page
+
+        def execute_script(script: str, *_args: Any):
+            if "visibleErrors" in script:
+                return {
+                    "href": driver.current_url,
+                    "title": driver.title,
+                    "visibleErrors": [{"fieldTopic": "5", "text": "请选择选项"}],
+                    "markedFields": [{"topic": "5", "title": "多选题", "errors": ["请选择选项"]}],
+                }
+            return "请选择选项"
+
+        driver.execute_script = execute_script
+
+        with patch("software.core.engine.failure_snapshot.get_user_logs_directory", return_value=str(tmp_path)):
+            snapshot_dir = capture_submission_failure_snapshot(
+                driver,
+                thread_name="Worker-1",
+                provider="wjx",
+                reason="post_submit_no_completion",
+            )
+
+        assert snapshot_dir
+        assert os.path.exists(os.path.join(snapshot_dir, "full_page.png"))
+        assert os.path.exists(os.path.join(snapshot_dir, "page.html"))
+        assert os.path.exists(os.path.join(snapshot_dir, "visible_text.txt"))
+        assert os.path.exists(os.path.join(snapshot_dir, "errors.json"))
+        assert os.path.exists(os.path.join(snapshot_dir, "meta.json"))
+        assert page.screenshot_kwargs["full_page"] is True
+
+        with open(os.path.join(snapshot_dir, "errors.json"), encoding="utf-8") as handle:
+            errors = json.load(handle)
+        assert errors["visibleErrors"][0]["fieldTopic"] == "5"
+
+        with open(os.path.join(snapshot_dir, "meta.json"), encoding="utf-8") as handle:
+            meta = json.load(handle)
+        assert meta["current_url"] == "https://example.com/form"
+        assert meta["provider"] == "wjx"
 
     def test_wait_for_completion_page_stops_immediately_when_stop_requested(self, make_mock_event, make_stop_policy_mock) -> None:
         config = ExecutionConfig(headless_mode=False, survey_provider='wjx')
@@ -150,12 +208,18 @@ class SubmissionServiceTests:
         service = SubmissionService(config, state, stop_policy)
         stop_signal = make_mock_event()
         driver = _FakeDriver('https://example.com/form')
-        with patch('software.core.engine.submission_service._provider_submission_requires_verification', return_value=False), patch('software.core.engine.submission_service._provider_wait_for_submission_verification', return_value=False), patch.object(service, '_wait_for_completion_page', side_effect=[False, False]), patch('software.core.engine.submission_service.duration_control.is_survey_completion_page', return_value=False), patch('software.core.engine.submission_service.random.uniform', return_value=0.2):
+        with patch('software.core.engine.submission_service._provider_submission_requires_verification', return_value=False), patch('software.core.engine.submission_service._provider_wait_for_submission_verification', return_value=False), patch.object(service, '_wait_for_completion_page', side_effect=[False, False]), patch('software.core.engine.submission_service.duration_control.is_survey_completion_page', return_value=False), patch('software.core.engine.submission_service.capture_submission_failure_snapshot', return_value='C:\\snapshots\\case-1') as snapshot_mock, patch('software.core.engine.submission_service.random.uniform', return_value=0.2):
             outcome = service.finalize_after_submit(driver, stop_signal=stop_signal, gui_instance=None, thread_name='Worker-1')
         assert outcome.status == 'failure'
         assert outcome.failure_reason == FailureReason.FILL_FAILED
         assert not outcome.completion_detected
         assert outcome.should_stop
+        snapshot_mock.assert_called_once_with(
+            driver,
+            thread_name='Worker-1',
+            provider='wjx',
+            reason='post_submit_no_completion',
+        )
         stop_policy.record_failure.assert_called_once()
         assert not bool(stop_policy.record_failure.call_args.kwargs.get('consume_reverse_fill_attempt', True))
 
@@ -238,4 +302,18 @@ class SubmissionServiceTests:
         assert outcome.status == 'success'
         assert outcome.completion_detected
         recovery_mock.assert_called_once_with(driver, stop_signal, None, thread_name='Worker-1')
+        stop_policy.record_success.assert_called_once_with(stop_signal, thread_name='Worker-1')
+
+    def test_finalize_after_submit_allows_multiple_provider_recovery_rounds(self, make_mock_event, make_stop_policy_mock) -> None:
+        config = ExecutionConfig(headless_mode=False, survey_provider='wjx')
+        state = ExecutionState(config=config)
+        stop_policy = make_stop_policy_mock(record_success_return=False)
+        service = SubmissionService(config, state, stop_policy)
+        stop_signal = make_mock_event()
+        driver = _FakeDriver('https://example.com/form')
+        with patch('software.core.engine.submission_service._provider_submission_requires_verification', return_value=False), patch('software.core.engine.submission_service._provider_wait_for_submission_verification', return_value=False), patch.object(service, '_detect_completion_once', return_value=False), patch.object(service, '_check_submission_verification_after_submit', return_value=None), patch.object(service, '_wait_for_completion_page', side_effect=[False, False, False, True]), patch.object(service, '_attempt_submission_recovery', side_effect=[True, True]) as recovery_mock, patch('software.core.engine.submission_service.random.uniform', return_value=0.2), patch('software.core.engine.submission_service.time.sleep'):
+            outcome = service.finalize_after_submit(driver, stop_signal=stop_signal, gui_instance=None, thread_name='Worker-1')
+        assert outcome.status == 'success'
+        assert outcome.completion_detected
+        assert recovery_mock.call_count == 2
         stop_policy.record_success.assert_called_once_with(stop_signal, thread_name='Worker-1')

@@ -10,6 +10,7 @@ from typing import Any, Optional
 from software.core.engine.failure_reason import FailureReason
 from software.core.engine.stop_signal import StopSignalLike
 from software.core.task import ExecutionConfig, ExecutionState
+from software.network.proxy.policy.source import PROXY_SOURCE_FREE_POOL, PROXY_SOURCE_IPLIST, normalize_proxy_source
 
 
 class RunStopPolicy:
@@ -38,6 +39,11 @@ class RunStopPolicy:
         base_threshold = self.failure_threshold()
         if not bool(self.config.random_proxy_ip_enabled):
             return base_threshold
+        source = normalize_proxy_source(getattr(self.config, "proxy_source", "default"))
+        if source in {PROXY_SOURCE_FREE_POOL, PROXY_SOURCE_IPLIST}:
+            pool_size = len(list(getattr(self.config, "proxy_ip_pool", []) or []))
+            concurrency = max(1, int(self.config.num_threads or 1))
+            return max(base_threshold, concurrency * 4, min(max(pool_size, concurrency), 30))
         return max(base_threshold, int(self.config.num_threads or 1))
 
     def record_failure(

@@ -27,8 +27,20 @@ class _FakeDriver:
         self.js_error = js_error
         self.locator_results = dict(locator_results or {})
         self.find_calls: list[tuple[object, str]] = []
+        self.script_payload = None
 
-    def execute_script(self, _script: str):
+    def execute_script(self, script: str):
+        if "questionNumbers" in script:
+            if self.script_payload is not None:
+                return self.script_payload
+            return {
+                "questionNumbers": [4, 5, 6],
+                "messages": [
+                    "您的输入小于最小输入字数30,当前字数为2",
+                    "请选择选项",
+                    "请回答此题",
+                ],
+            }
         if self.js_error is not None:
             raise self.js_error
         return self.js_visible
@@ -145,3 +157,19 @@ class WjxSubmissionTests:
     def test_is_device_quota_limit_page_proxies_inner_helper(self, patch_attrs) -> None:
         patch_attrs((submission, "_is_device_quota_limit_page", lambda _driver: True))
         assert submission.is_device_quota_limit_page(object())
+
+    def test_extract_missing_answer_hint_reads_wjx_error_messages(self) -> None:
+        hint = submission._extract_missing_answer_hint(_FakeDriver())
+
+        assert hint is not None
+        assert hint.question_numbers == (4, 5, 6)
+        assert "最小输入字数" in hint.message
+
+    def test_extract_missing_answer_hint_ignores_plain_min_word_body_text(self) -> None:
+        driver = _FakeDriver()
+        driver.script_payload = {
+            "questionNumbers": [],
+            "messages": ["不少于", "最少"],
+        }
+
+        assert submission._extract_missing_answer_hint(driver) is None

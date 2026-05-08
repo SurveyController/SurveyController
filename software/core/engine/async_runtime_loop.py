@@ -25,10 +25,12 @@ from software.core.engine.submission_service import SubmissionService
 from software.core.task import ExecutionConfig, ExecutionState
 from software.network.browser import ProxyConnectionError
 from software.network.browser.async_owner_pool import AsyncBrowserOwnerPool, AsyncBrowserSession
-from software.network.proxy.pool import is_proxy_responsive
+from software.network.proxy.pool import is_http_proxy_connect_responsive
 from software.network.session_policy import (
     _discard_unresponsive_proxy,
+    _lease_needs_preuse_recheck,
     _mark_proxy_temporarily_bad,
+    _proxy_address_is_public_source,
     _record_bad_proxy_and_maybe_pause,
     _select_proxy_for_session,
     _select_user_agent_for_session,
@@ -208,7 +210,19 @@ class AsyncSlotRunner:
         if self.config.random_proxy_ip_enabled and not proxy_address:
             if _record_bad_proxy_and_maybe_pause(self.state, self.gui_instance):
                 return None, None
-        if proxy_address and not is_proxy_responsive(proxy_address):
+        proxy_map = getattr(self.state, "proxy_in_use_by_thread", None)
+        selected_lease = proxy_map.get(self.slot_label) if proxy_address and isinstance(proxy_map, dict) else None
+        if (
+            proxy_address
+            and not _lease_needs_preuse_recheck(selected_lease)
+            and not is_http_proxy_connect_responsive(
+                proxy_address,
+                target_url=str(getattr(self.config, "url", "") or ""),
+                timeout=1.0,
+                log_failures=False,
+                log_success=False,
+            )
+        ):
             logging.warning("提取到的代理质量过低，自动弃用更换下一个")
             _discard_unresponsive_proxy(self.state, proxy_address)
             self.state.release_proxy_in_use(self.slot_label)
@@ -371,6 +385,7 @@ class AsyncSlotRunner:
                 log_message=str(kwargs.get("log_message") or "代理连接失败"),
             ),
             mark_proxy_temporarily_bad=_mark_proxy_temporarily_bad,
+            is_public_proxy_source=_proxy_address_is_public_source,
         )
 
     async def _handle_ai_runtime_error(self, exc: AIRuntimeError) -> bool:

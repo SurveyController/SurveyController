@@ -46,8 +46,8 @@ class _AsyncHandle:
             return self.url
         return self.evaluate_value
 
-    async def click(self):
-        self.actions.append(("click", None))
+    async def click(self, **kwargs):
+        self.actions.append(("click", kwargs or None))
         if self.click_errors:
             raise self.click_errors.pop(0)
 
@@ -231,6 +231,22 @@ class AsyncCompatFacadeTests:
         element.send_keys("abc")
         assert isinstance(element.find_element("id", "demo"), async_compat.AsyncCompatElement)
         assert len(element.find_elements("css", ".x")) == 1
+        loop.close()
+
+    def test_async_compat_element_sets_hidden_inputs_with_js_without_fill_wait(self, monkeypatch) -> None:
+        loop = asyncio.new_event_loop()
+        portal = async_compat.AsyncLoopPortal(loop)
+        handle = _AsyncHandle()
+        handle.bounding_box_value = None
+        monkeypatch.setattr(portal, "run", lambda awaitable: asyncio.run(awaitable) if asyncio.iscoroutine(awaitable) else awaitable)
+        element = async_compat.AsyncCompatElement(portal, handle, page=object())
+
+        element.clear()
+        element.send_keys("隐藏值")
+
+        assert not any(action == ("fill", "") for action in handle.actions)
+        assert not any(action == ("fill", "隐藏值") for action in handle.actions)
+        assert [action[0] for action in handle.actions].count("evaluate") >= 2
         loop.close()
 
     def test_async_compat_element_raises_for_missing_selector(self, monkeypatch) -> None:

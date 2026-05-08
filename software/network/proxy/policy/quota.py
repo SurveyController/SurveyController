@@ -17,9 +17,9 @@ def get_random_ip_limit() -> float:
 
 
 def get_random_ip_counter_snapshot_local() -> tuple[float, float, bool]:
-    from software.network.proxy.policy.source import is_custom_proxy_source
+    from software.network.proxy.policy.source import is_custom_proxy_source, is_local_free_proxy_source
 
-    if is_custom_proxy_source():
+    if is_custom_proxy_source() or is_local_free_proxy_source():
         return 0, 0, True
 
     if has_authenticated_session():
@@ -32,9 +32,9 @@ def get_random_ip_counter_snapshot_local() -> tuple[float, float, bool]:
 def normalize_random_ip_enabled_value(desired_enabled: bool) -> bool:
     if not desired_enabled:
         return False
-    from software.network.proxy.policy.source import is_custom_proxy_source
+    from software.network.proxy.policy.source import is_custom_proxy_source, is_local_free_proxy_source
 
-    if is_custom_proxy_source():
+    if is_custom_proxy_source() or is_local_free_proxy_source():
         return True
     if not has_authenticated_session():
         return False

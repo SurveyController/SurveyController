@@ -566,6 +566,7 @@ def refill_required_questions_on_current_page(
     indices = dict(runtime_state.indices_snapshot or {})
     if not indices:
         indices = _build_initial_indices()
+    recovery_indices = dict(indices)
     filled_count = 0
     for question_num in target_numbers:
         question_meta = metadata.get(question_num)
@@ -593,13 +594,24 @@ def refill_required_questions_on_current_page(
         if _driver_question_looks_like_description(question_div, question_type):
             continue
 
+        dispatch_indices = dict(recovery_indices)
+        config_entry = ctx.config.question_config_index_map.get(question_num)
+        if config_entry:
+            index_key = str(config_entry[0] or "").strip()
+            try:
+                mapped_index = max(0, int(config_entry[1]))
+            except Exception:
+                mapped_index = 0
+            if index_key:
+                dispatch_indices[index_key] = mapped_index
+
         _run_question_dispatch(
             driver,
             ctx,
             question_num=question_num,
             question_type=question_type,
             question_div=question_div,
-            indices=indices,
+            indices=dispatch_indices,
             psycho_plan=psycho_plan,
         )
         filled_count += 1

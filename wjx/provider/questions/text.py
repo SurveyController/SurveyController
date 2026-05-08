@@ -1,6 +1,7 @@
 """填空题/多项填空题处理"""
 from typing import Any, List, Optional, Set, Tuple
 import logging
+import re
 from software.logging.log_utils import log_suppressed_exception
 
 
@@ -20,6 +21,17 @@ from software.core.persona.context import record_answer
 from software.core.questions.text_shared import MULTI_TEXT_DELIMITER
 from software.core.reverse_fill.runtime import resolve_current_reverse_fill_answer
 from software.core.reverse_fill.schema import REVERSE_FILL_KIND_MULTI_TEXT, REVERSE_FILL_KIND_TEXT
+
+
+_TEXT_MIN_WORD_PATTERNS = (
+    re.compile(r"(?:至少|最少|不少于|不低于)\s*(\d+)\s*(?:个)?(?:字|字符|汉字)"),
+    re.compile(r"(\d+)\s*(?:个)?(?:字|字符|汉字)\s*(?:以上|起)"),
+)
+_MIN_WORD_FILLER_SENTENCES = (
+    "我会结合自己的实际情况继续学习和积累经验。",
+    "同时多参加实践活动，逐步明确方向并提升综合能力。",
+    "后续也会根据反馈不断调整计划，保持比较稳定的执行节奏。",
+)
 
 
 def _preview_text_answer(value: Optional[Any], limit: int = 80) -> str:
@@ -77,6 +89,20 @@ def fill_text_question_input(driver: BrowserDriver, element, value: Optional[Any
         except Exception as exc:
             log_suppressed_exception("fill_text_question_input: element.clear()", exc, level=logging.ERROR)
         element.send_keys(raw_text)
+        try:
+            driver.execute_script(
+                """
+                const input = arguments[0];
+                if (!input) return;
+                const eventOptions = { bubbles: true };
+                ['input','change','blur','keyup','keydown'].forEach(name => {
+                    try { input.dispatchEvent(new Event(name, eventOptions)); } catch (err) {}
+                });
+                """,
+                element,
+            )
+        except Exception as exc:
+            log_suppressed_exception("fill_text_question_input: dispatch events", exc, level=logging.ERROR)
         return
 
     driver.execute_script(
@@ -100,6 +126,135 @@ def fill_text_question_input(driver: BrowserDriver, element, value: Optional[Any
         element,
         raw_text,
     )
+
+
+def _visible_text_length(value: Optional[Any]) -> int:
+    text = "" if value is None else str(value)
+    return len(re.sub(r"\s+", "", text.strip()))
+
+
+def _safe_positive_int(value: Any) -> Optional[int]:
+    try:
+        raw_text = str(value or "").strip()
+    except Exception:
+        return None
+    if not raw_text:
+        return None
+    match = re.search(r"\d+", raw_text)
+    if not match:
+        return None
+    try:
+        result = int(match.group(0))
+    except Exception:
+        return None
+    return result if result > 0 else None
+
+
+def _extract_min_word_from_text(*fragments: Any) -> Optional[int]:
+    limits: List[int] = []
+    for fragment in fragments:
+        text = str(fragment or "").strip()
+        if not text:
+            continue
+        for pattern in _TEXT_MIN_WORD_PATTERNS:
+            for match in pattern.finditer(text):
+                candidate = _safe_positive_int(match.group(1))
+                if candidate is not None:
+                    limits.append(candidate)
+    return max(limits) if limits else None
+
+
+def resolve_text_min_word_count(driver: BrowserDriver, current: int, element: Optional[Any] = None) -> Optional[int]:
+    """读取问卷星填空题的最少字数限制。"""
+    limits: List[int] = []
+    candidates: List[Any] = []
+    if element is not None:
+        candidates.append(element)
+
+    question_div = None
+    try:
+        question_div = driver.find_element(By.CSS_SELECTOR, f"#div{current}")
+    except Exception:
+        question_div = None
+
+    if question_div is not None:
+        try:
+            candidates.extend(question_div.find_elements(By.CSS_SELECTOR, "input, textarea"))
+        except Exception:
+            pass
+    elif not candidates:
+        try:
+            candidates.append(driver.find_element(By.CSS_SELECTOR, f"#q{current}"))
+        except Exception:
+            pass
+
+    for candidate in candidates:
+        for attr_name in ("minword", "data-minword", "minlength", "data-minlength"):
+            try:
+                value = candidate.get_attribute(attr_name)
+            except Exception:
+                value = None
+            parsed = _safe_positive_int(value)
+            if parsed is not None:
+                limits.append(parsed)
+
+    if question_div is not None:
+        fragments: List[str] = []
+        for selector in (".topichtml", ".field-label", ".qinsert", ".errorMessage"):
+            try:
+                elements = question_div.find_elements(By.CSS_SELECTOR, selector)
+            except Exception:
+                elements = []
+            for node in elements:
+                try:
+                    text = str(node.text or "").strip()
+                except Exception:
+                    text = ""
+                if text:
+                    fragments.append(text)
+        try:
+            full_text = str(question_div.text or "").strip()
+        except Exception:
+            full_text = ""
+        if full_text:
+            fragments.append(full_text)
+        text_limit = _extract_min_word_from_text(*fragments)
+        if text_limit is not None:
+            limits.append(text_limit)
+
+    return max(limits) if limits else None
+
+
+def ensure_min_word_answer(answer: Optional[Any], min_words: Optional[int], title: str = "") -> str:
+    """在提交前保证填空答案达到页面最少字数要求。"""
+    text = str(answer or "").strip() or DEFAULT_FILL_TEXT
+    if min_words is None or min_words <= 0:
+        return text
+    if _visible_text_length(text) >= min_words:
+        return text
+
+    title_hint = str(title or "").strip()
+    if "目标" in title_hint or "计划" in title_hint or "发展" in title_hint:
+        filler_pool = (
+            "我会先把专业基础学扎实，再通过实习和项目积累经验。",
+            "同时结合兴趣和就业方向做阶段性规划，遇到问题及时调整。",
+            "希望在持续学习中提升沟通、实践和解决问题的能力。",
+        )
+    elif "看法" in title_hint or "建议" in title_hint or "意见" in title_hint:
+        filler_pool = (
+            "我的看法是需要结合实际情况推进，不能只停留在口号上。",
+            "后续可以多听取反馈，逐步完善安排，让执行过程更清晰。",
+            "这样更容易形成长期稳定的改进效果。",
+        )
+    else:
+        filler_pool = _MIN_WORD_FILLER_SENTENCES
+
+    parts = [text]
+    filler_index = 0
+    while _visible_text_length("".join(parts)) < min_words:
+        parts.append(filler_pool[filler_index % len(filler_pool)])
+        filler_index += 1
+    return "".join(parts)
 
 
 def fill_contenteditable_element(driver: BrowserDriver, element, value: str) -> None:
@@ -352,6 +507,10 @@ def text(
     if reverse_fill_answer is not None:
         if reverse_fill_answer.kind == REVERSE_FILL_KIND_TEXT:
             selected_answer = str(reverse_fill_answer.text_value or "").strip() or DEFAULT_FILL_TEXT
+            selected_answer = ensure_min_word_answer(
+                selected_answer,
+                resolve_text_min_word_count(driver, current),
+            )
             _handle_single_text(driver, current, selected_answer)
             _log_text_answer(current, "", "反填", selected_answer)
             record_answer(current, "text", text_answer=selected_answer)
@@ -417,17 +576,25 @@ def text(
     selected_answer = resolved_candidates[selected_index] if resolved_candidates else DEFAULT_FILL_TEXT
 
     if entry_kind == "text" and ai_enabled:
+        title = fallback_title
+        min_words = resolve_text_min_word_count(driver, current)
         try:
             title = resolve_question_title_for_ai(driver, current, fallback_title)
             selected_answer = generate_ai_answer(
                 title,
                 question_type="fill_blank",
                 blank_count=1,
+                min_words=min_words,
             )
         except AIRuntimeError as exc:
             raise AIRuntimeError(f"第{current}题 AI 生成失败：{exc}") from exc
         if isinstance(selected_answer, list):
             selected_answer = str(selected_answer[0]).strip() if selected_answer else DEFAULT_FILL_TEXT
+        selected_answer = ensure_min_word_answer(
+            selected_answer,
+            min_words,
+            title or fallback_title,
+        )
         _handle_single_text(driver, current, selected_answer)
         _log_text_answer(current, title or fallback_title, "AI", selected_answer)
         record_answer(current, "text", text_answer=selected_answer)
@@ -484,6 +651,11 @@ def text(
         record_answer(current, "text", text_answer=" | ".join(applied_values))
         return
 
+    selected_answer = ensure_min_word_answer(
+        selected_answer,
+        resolve_text_min_word_count(driver, current),
+        fallback_title,
+    )
     _handle_single_text(driver, current, selected_answer)
     _log_text_answer(current, fallback_title, "配置", selected_answer)
     # 记录统计数据
@@ -532,15 +704,18 @@ def _handle_multi_text(
             # AI优先
             if blank_ai_flags and idx < len(blank_ai_flags) and blank_ai_flags[idx]:
                 try:
+                    min_words = resolve_text_min_word_count(driver, current)
                     ai_text = generate_ai_answer(
                         title,
                         question_type="fill_blank",
                         blank_count=1,
+                        min_words=min_words,
                     )
                     if isinstance(ai_text, list):
                         values[idx] = str(ai_text[0]).strip() if ai_text else DEFAULT_FILL_TEXT
                     else:
                         values[idx] = str(ai_text or "").strip() or DEFAULT_FILL_TEXT
+                    values[idx] = ensure_min_word_answer(values[idx], min_words, title)
                     value_sources[idx] = "AI"
                 except AIRuntimeError:
                     values[idx] = DEFAULT_FILL_TEXT

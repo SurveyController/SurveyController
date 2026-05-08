@@ -1,5 +1,14 @@
 from __future__ import annotations
-from software.integrations.ai.client import AI_MODE_PROVIDER, FREE_QUESTION_TYPE_FILL, generate_answer, save_ai_settings
+from software.integrations.ai.client import (
+    AI_MODE_FREE,
+    AI_MODE_PROVIDER,
+    AI_PROVIDERS,
+    FREE_QUESTION_TYPE_FILL,
+    generate_answer,
+    get_ai_settings,
+    save_ai_settings,
+)
+from software.integrations.ai.settings import reset_ai_settings
 from software.integrations.ai.protocols import _extract_chat_completion_text, _extract_responses_text, _resolve_custom_endpoint
 
 class AIProtocolTests:
@@ -44,3 +53,55 @@ class AIProtocolTests:
             client_module.call_responses_api = original_responses
         assert answer == '回退成功'
         assert calls == ['chat', 'responses']
+
+    def test_generate_answer_uses_mimo_token_plan_openai_endpoint(self) -> None:
+        import software.integrations.ai.client as client_module
+        original_chat = client_module.call_chat_completions
+        save_ai_settings(
+            ai_mode=AI_MODE_PROVIDER,
+            provider='mimo',
+            api_key='test-key',
+            model='',
+            system_prompt='测试提示词',
+        )
+        captured: dict[str, str] = {}
+
+        def _fake_chat(url, api_key, model, question, system_prompt, **kwargs):
+            captured.update(
+                url=url,
+                api_key=api_key,
+                model=model,
+                question=question,
+                system_prompt=system_prompt,
+                include_sampling_params=kwargs.get('include_sampling_params'),
+                provider_key=kwargs.get('provider_key'),
+                timeout=kwargs.get('timeout'),
+                max_concurrent_requests=kwargs.get('max_concurrent_requests'),
+                max_request_attempts=kwargs.get('max_request_attempts'),
+            )
+            return '连接成功'
+
+        client_module.call_chat_completions = _fake_chat
+        try:
+            answer = generate_answer('测试问题', question_type=FREE_QUESTION_TYPE_FILL, blank_count=1)
+        finally:
+            client_module.call_chat_completions = original_chat
+
+        assert answer == '连接成功'
+        assert captured['url'] == 'https://token-plan-cn.xiaomimimo.com/v1/chat/completions'
+        assert captured['api_key'] == 'test-key'
+        assert captured['model'] == AI_PROVIDERS['mimo']['default_model']
+        assert captured['question'] == '测试问题'
+        assert captured['include_sampling_params'] is False
+        assert captured['provider_key'] == 'mimo'
+        assert captured['timeout'] == 45
+        assert captured['max_concurrent_requests'] == 2
+        assert captured['max_request_attempts'] == 1
+
+    def test_reset_ai_settings_keeps_free_ai_as_default(self) -> None:
+        save_ai_settings(ai_mode=AI_MODE_PROVIDER, provider='mimo', api_key='test-key')
+        reset_ai_settings()
+
+        settings = get_ai_settings()
+        assert settings['ai_mode'] == AI_MODE_FREE
+        assert settings['provider'] == 'deepseek'

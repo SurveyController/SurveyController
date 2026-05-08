@@ -30,14 +30,14 @@ class _FakeHandle:
     def bounding_box(self):
         return self.bounding_box_value
 
-    def evaluate(self, script: str):
-        self.actions.append(("evaluate", script))
+    def evaluate(self, script: str, *args):
+        self.actions.append(("evaluate", script if not args else (script, args)))
         if self.evaluate_error is not None:
             raise self.evaluate_error
         return self.evaluate_value
 
-    def click(self) -> None:
-        self.actions.append(("click", None))
+    def click(self, **kwargs) -> None:
+        self.actions.append(("click", kwargs or None))
         if self.click_error_sequence:
             raise self.click_error_sequence.pop(0)
 
@@ -88,17 +88,41 @@ class PlaywrightElementTests:
         assert element.size == {"width": 0, "height": 0}
         assert element.tag_name == ""
 
-    def test_click_uses_scroll_fallback_before_js_click(self) -> None:
+    def test_click_timeout_uses_fast_js_fallback(self) -> None:
         handle = _FakeHandle()
-        handle.click_error_sequence = [RuntimeError("first"), RuntimeError("second")]
+        handle.click_error_sequence = [RuntimeError("divS intercepts pointer events")]
+        element = PlaywrightElement(handle, page=object())
+
+        element.click()
+
+        assert handle.actions[:2] == [
+            ("click", {"timeout": 1200}),
+            ("evaluate", "el => { el.click(); return true; }"),
+        ]
+
+    def test_hidden_clear_and_send_keys_use_js_without_fill_wait(self) -> None:
+        handle = _FakeHandle()
+        handle.bounding_box_value = None
+        element = PlaywrightElement(handle, page=object())
+
+        element.clear()
+        element.send_keys("隐藏值")
+
+        assert not any(action == ("fill", "") for action in handle.actions)
+        assert not any(action == ("fill", "隐藏值") for action in handle.actions)
+        assert [action[0] for action in handle.actions].count("evaluate") >= 2
+
+    def test_click_uses_scroll_fallback_before_js_click_for_non_timeout_errors(self) -> None:
+        handle = _FakeHandle()
+        handle.click_error_sequence = [ValueError("first"), RuntimeError("second")]
         element = PlaywrightElement(handle, page=object())
 
         element.click()
 
         assert handle.actions[:4] == [
-            ("click", None),
+            ("click", {"timeout": 1200}),
             ("scroll", None),
-            ("click", None),
+            ("click", {"timeout": 1200}),
             ("evaluate", "el => { el.click(); return true; }"),
         ]
 

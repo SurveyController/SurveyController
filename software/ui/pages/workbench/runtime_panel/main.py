@@ -27,6 +27,13 @@ from software.ui.pages.workbench.runtime_panel.cards import (
     TimeRangeSettingCard,
     TimedModeSettingCard,
 )
+from software.network.proxy.pool.free_pool import (
+    FREE_POOL_DEFAULT_CANDIDATE_COUNT,
+    FREE_POOL_DEFAULT_FETCH_WORKERS,
+    FREE_POOL_DEFAULT_PROBE_TIMEOUT_MS,
+    FREE_POOL_DEFAULT_TARGET_COUNT,
+    FREE_POOL_DEFAULT_VALIDATE_WORKERS,
+)
 from software.ui.widgets.setting_cards import SpinBoxSettingCard, SwitchSettingCard
 from software.io.config import RuntimeConfig
 from software.ui.helpers.proxy_access import apply_proxy_source_settings, get_proxy_minute_by_answer_seconds
@@ -34,6 +41,8 @@ from software.ui.helpers.proxy_access import apply_proxy_source_settings, get_pr
 _PROXY_SOURCE_DEFAULT = "default"
 _PROXY_SOURCE_BENEFIT = "benefit"
 _PROXY_SOURCE_CUSTOM = "custom"
+_PROXY_SOURCE_FREE_POOL = "free_pool"
+_PROXY_SOURCE_IPLIST = "iplist"
 
 
 class RuntimePage(ScrollArea):
@@ -60,6 +69,9 @@ class RuntimePage(ScrollArea):
         self._bind_events()
         self.controller.runtimeUiStateChanged.connect(self._apply_runtime_ui_state)
         self.controller.randomIpLoadingChanged.connect(self._apply_random_ip_loading)
+        self.controller.freeProxyPoolProgressChanged.connect(self._apply_free_proxy_pool_progress)
+        self.controller.freeProxyPoolBuildFinished.connect(self._on_free_proxy_pool_build_finished)
+        self.random_ip_card.set_free_pool_build_handler(self._start_free_proxy_pool_build)
         self._sync_random_ua(self.random_ua_card.isChecked())
         self._apply_thread_limit_by_headless(self.headless_card.isChecked())
         self.controller.set_runtime_ui_state(
@@ -70,6 +82,7 @@ class RuntimePage(ScrollArea):
             headless_mode=self.headless_card.switchButton.isChecked(),
             timed_mode_enabled=self.timed_card.switchButton.isChecked(),
             proxy_source=self._get_selected_proxy_source(),
+            free_proxy_pool_probe_timeout_ms=self.random_ip_card.freePoolProbeTimeoutSpin.value(),
             answer_duration=self._card_value_as_range(self.answer_card),
         )
 
@@ -228,6 +241,9 @@ class RuntimePage(ScrollArea):
             forward_signal_args=False,
         )
         self.answer_card.valueChanged.connect(self._on_answer_duration_changed)
+        self.random_ip_card.freePoolProbeTimeoutSpin.valueChanged.connect(
+            lambda value: self.controller.set_runtime_ui_state(free_proxy_pool_probe_timeout_ms=int(value))
+        )
         bind_logged_action(
             self.reliability_card.switchButton.checkedChanged,
             self._on_reliability_mode_toggled,
@@ -241,7 +257,13 @@ class RuntimePage(ScrollArea):
     @staticmethod
     def _normalize_proxy_source(source: str) -> str:
         normalized = str(source or _PROXY_SOURCE_DEFAULT).strip().lower()
-        return normalized if normalized in {_PROXY_SOURCE_DEFAULT, _PROXY_SOURCE_BENEFIT, _PROXY_SOURCE_CUSTOM} else _PROXY_SOURCE_DEFAULT
+        return normalized if normalized in {
+            _PROXY_SOURCE_DEFAULT,
+            _PROXY_SOURCE_BENEFIT,
+            _PROXY_SOURCE_CUSTOM,
+            _PROXY_SOURCE_FREE_POOL,
+            _PROXY_SOURCE_IPLIST,
+        } else _PROXY_SOURCE_DEFAULT
 
     def _get_selected_proxy_source(self) -> str:
         idx = self.random_ip_card.proxyCombo.currentIndex()
@@ -427,7 +449,7 @@ class RuntimePage(ScrollArea):
         """代理源选择变化时更新设置"""
         source = self._get_selected_proxy_source()
         try:
-            if source == _PROXY_SOURCE_CUSTOM:
+            if source in {_PROXY_SOURCE_CUSTOM, _PROXY_SOURCE_IPLIST}:
                 api_url = self.random_ip_card.customApiEdit.text().strip()
                 apply_proxy_source_settings(source, custom_api_url=api_url if api_url else None)
             else:
@@ -510,12 +532,17 @@ class RuntimePage(ScrollArea):
         try:
             source = self._get_selected_proxy_source()
             cfg.proxy_source = source
-            cfg.custom_proxy_api = self.random_ip_card.customApiEdit.text().strip() if source == _PROXY_SOURCE_CUSTOM else ""
+            cfg.custom_proxy_api = self.random_ip_card.customApiEdit.text().strip() if source in {_PROXY_SOURCE_CUSTOM, _PROXY_SOURCE_IPLIST} else ""
             cfg.proxy_area_code = self.random_ip_card.get_area_code()
+            cfg.free_proxy_pool_probe_timeout_ms = max(
+                1,
+                int(self.random_ip_card.freePoolProbeTimeoutSpin.value() or FREE_POOL_DEFAULT_PROBE_TIMEOUT_MS),
+            )
         except Exception:
             cfg.proxy_source = _PROXY_SOURCE_DEFAULT
             cfg.custom_proxy_api = ""
             cfg.proxy_area_code = None
+            cfg.free_proxy_pool_probe_timeout_ms = FREE_POOL_DEFAULT_PROBE_TIMEOUT_MS
         self.ai_section.update_config(cfg)
 
     def apply_config(self, cfg: RuntimeConfig):
@@ -576,10 +603,13 @@ class RuntimePage(ScrollArea):
             self.random_ip_card._on_source_changed()
             apply_proxy_source_settings(
                 proxy_source,
-                custom_api_url=custom_api if (proxy_source == _PROXY_SOURCE_CUSTOM and custom_api) else None,
+                custom_api_url=custom_api if (proxy_source in {_PROXY_SOURCE_CUSTOM, _PROXY_SOURCE_IPLIST} and custom_api) else None,
             )
             area_code = getattr(cfg, "proxy_area_code", None)
             self.random_ip_card.set_area_code(area_code)
+            self.random_ip_card.freePoolProbeTimeoutSpin.setValue(
+                max(1, int(getattr(cfg, "free_proxy_pool_probe_timeout_ms", FREE_POOL_DEFAULT_PROBE_TIMEOUT_MS) or FREE_POOL_DEFAULT_PROBE_TIMEOUT_MS))
+            )
             self._evaluate_benefit_proxy_compatibility(show_tip=False)
         except Exception as exc:
             log_suppressed_exception("apply_config: proxy_source = getattr(cfg, \"proxy_source\", \"default\")", exc, level=logging.WARNING)
@@ -642,11 +672,59 @@ class RuntimePage(ScrollArea):
                 self.random_ip_card.proxyCombo.blockSignals(False)
                 self.random_ip_card._on_source_changed()
 
+        probe_timeout_ms = state.get("free_proxy_pool_probe_timeout_ms")
+        if probe_timeout_ms is not None and int(self.random_ip_card.freePoolProbeTimeoutSpin.value()) != int(probe_timeout_ms):
+            self.random_ip_card.freePoolProbeTimeoutSpin.blockSignals(True)
+            self.random_ip_card.freePoolProbeTimeoutSpin.setValue(max(1, int(probe_timeout_ms)))
+            self.random_ip_card.freePoolProbeTimeoutSpin.blockSignals(False)
+
     def _apply_random_ip_loading(self, loading: bool, message: str) -> None:
         try:
             self.random_ip_card.setLoading(bool(loading), str(message or ""))
         except Exception as exc:
             log_suppressed_exception("_apply_random_ip_loading", exc, level=logging.WARNING)
+
+    def _start_free_proxy_pool_build(
+        self,
+        *,
+        expected_count: int,
+        validate_workers: int,
+        candidate_count: int,
+        fetch_workers: int,
+        probe_timeout_ms: int,
+    ) -> bool:
+        try:
+            return bool(
+                self.controller.build_free_proxy_pool_async(
+                    expected_count=max(1, int(expected_count or FREE_POOL_DEFAULT_TARGET_COUNT)),
+                    max_workers=max(1, int(validate_workers or FREE_POOL_DEFAULT_VALIDATE_WORKERS)),
+                    candidate_count=max(1, int(candidate_count or FREE_POOL_DEFAULT_CANDIDATE_COUNT)),
+                    fetch_workers=max(1, int(fetch_workers or FREE_POOL_DEFAULT_FETCH_WORKERS)),
+                    probe_timeout_ms=max(1, int(probe_timeout_ms or FREE_POOL_DEFAULT_PROBE_TIMEOUT_MS)),
+                    force_refresh=True,
+                    target_url=str(getattr(self.controller.config, "url", "") or ""),
+                )
+            )
+        except Exception as exc:
+            log_suppressed_exception("_start_free_proxy_pool_build", exc, level=logging.WARNING)
+            return False
+
+    def _apply_free_proxy_pool_progress(self, payload: dict) -> None:
+        try:
+            self.random_ip_card.update_free_pool_progress(dict(payload or {}))
+        except Exception as exc:
+            log_suppressed_exception("_apply_free_proxy_pool_progress", exc, level=logging.WARNING)
+
+    def _on_free_proxy_pool_build_finished(self, success: bool, message: str, count: int) -> None:
+        try:
+            self.random_ip_card.finish_free_pool_build(bool(success), str(message or ""), int(count or 0))
+        except Exception as exc:
+            log_suppressed_exception("_on_free_proxy_pool_build_finished", exc, level=logging.WARNING)
+        parent = self.window() or self.view
+        if success:
+            InfoBar.success("", str(message or f"免费代理池已构建：{count} 个可用代理"), parent=parent, position=InfoBarPosition.TOP, duration=3000)
+        else:
+            InfoBar.warning("", str(message or "免费代理池构建失败"), parent=parent, position=InfoBarPosition.TOP, duration=4500)
 
     @staticmethod
     def _card_value_as_range(card: TimeRangeSettingCard) -> tuple[int, int]:

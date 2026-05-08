@@ -1,10 +1,11 @@
 """运行参数页 - 专属设置卡片组件（随机IP、随机UA、定时模式等）"""
 import logging
+import time
 from typing import Optional
 
-from PySide6.QtCore import QObject, QThread, Qt, QStringListModel, Signal
+from PySide6.QtCore import QObject, QThread, Qt, QStringListModel, Signal, QTimer
 from PySide6.QtGui import QDoubleValidator, QIntValidator
-from PySide6.QtWidgets import QCompleter, QHBoxLayout, QVBoxLayout, QWidget
+from PySide6.QtWidgets import QCompleter, QGridLayout, QHBoxLayout, QVBoxLayout, QWidget
 from qfluentwidgets import (
     BodyLabel,
     ComboBox,
@@ -17,6 +18,7 @@ from qfluentwidgets import (
     InfoBar,
     InfoBarPosition,
     LineEdit,
+    ProgressBar,
     PushButton,
     SettingCard,
     SwitchButton,
@@ -28,6 +30,17 @@ from software.core.psychometrics.psychometric import (
     MIN_TARGET_ALPHA,
     normalize_target_alpha,
 )
+from software.network.proxy.pool.free_pool import (
+    FREE_POOL_DEFAULT_CANDIDATE_COUNT,
+    FREE_POOL_DEFAULT_FETCH_WORKERS,
+    FREE_POOL_DEFAULT_PROBE_TIMEOUT_MS,
+    FREE_POOL_DEFAULT_TARGET_COUNT,
+    FREE_POOL_DEFAULT_VALIDATE_WORKERS,
+    FREE_POOL_MAX_CANDIDATE_COUNT,
+    FREE_POOL_MAX_FETCH_WORKERS,
+    FREE_POOL_MAX_TARGET_COUNT,
+    FREE_POOL_MAX_VALIDATE_WORKERS,
+)
 from software.ui.helpers.fluent_tooltip import install_tooltip_filter
 from software.ui.helpers.proxy_access import (
     apply_custom_proxy_api,
@@ -38,6 +51,7 @@ from software.ui.helpers.proxy_access import (
     load_supported_area_codes,
     test_custom_proxy_api,
 )
+from software.ui.widgets.no_wheel import NoWheelSpinBox
 
 
 class SearchableComboBox(EditableComboBox):
@@ -74,6 +88,8 @@ _MUNICIPALITY_PROVINCE_CODES = {"110000", "120000", "310000", "500000"}
 _PROXY_SOURCE_DEFAULT = "default"
 _PROXY_SOURCE_BENEFIT = "benefit"
 _PROXY_SOURCE_CUSTOM = "custom"
+_PROXY_SOURCE_FREE_POOL = "free_pool"
+_PROXY_SOURCE_IPLIST = "iplist"
 
 
 class _BenefitAreaPrefetchWorker(QObject):
@@ -128,6 +144,8 @@ class RandomIPSettingCard(ExpandGroupSettingCard):
         self.proxyCombo = ComboBox(self._groupContainer)
         self.proxyCombo.addItem("默认", userData=_PROXY_SOURCE_DEFAULT)
         self.proxyCombo.addItem("限时福利", userData=_PROXY_SOURCE_BENEFIT)
+        self.proxyCombo.addItem("公共免费池", userData=_PROXY_SOURCE_FREE_POOL)
+        self.proxyCombo.addItem("自建 IPList", userData=_PROXY_SOURCE_IPLIST)
         self.proxyCombo.addItem("自定义", userData=_PROXY_SOURCE_CUSTOM)
         self.proxyCombo.setMinimumWidth(200)
         source_row.addWidget(source_label)
@@ -164,12 +182,145 @@ class RandomIPSettingCard(ExpandGroupSettingCard):
         self.benefitHintLabel.hide()
         layout.addWidget(self.benefitHintLabel)
 
+        self.freePoolHintLabel = BodyLabel(
+            "自由IP种子池由 CIAN 提供：构建时三轮快检全部种子，运行时按池内 IP 轮循使用并在用前快检。",
+            self._groupContainer,
+        )
+        self.freePoolHintLabel.setWordWrap(True)
+        self.freePoolHintLabel.setStyleSheet("color: #606060; font-size: 12px;")
+        self.freePoolHintLabel.hide()
+        layout.addWidget(self.freePoolHintLabel)
+
+        self.freePoolBuildRow = QWidget(self._groupContainer)
+        free_pool_layout = QVBoxLayout(self.freePoolBuildRow)
+        free_pool_layout.setContentsMargins(0, 0, 0, 0)
+        free_pool_layout.setSpacing(10)
+
+        free_pool_controls_grid = QGridLayout()
+        free_pool_controls_grid.setContentsMargins(0, 0, 0, 0)
+        free_pool_controls_grid.setHorizontalSpacing(12)
+        free_pool_controls_grid.setVerticalSpacing(8)
+        free_pool_controls_grid.setColumnStretch(1, 1)
+        free_pool_controls_grid.setColumnStretch(3, 1)
+
+        target_label = BodyLabel("目标可用", self.freePoolBuildRow)
+        target_label.setMinimumWidth(70)
+        target_label.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+        free_pool_controls_grid.addWidget(target_label, 0, 0)
+        self.freePoolTargetSpin = NoWheelSpinBox(self.freePoolBuildRow)
+        self.freePoolTargetSpin.setRange(1, FREE_POOL_MAX_TARGET_COUNT)
+        self.freePoolTargetSpin.setSingleStep(20)
+        self.freePoolTargetSpin.setValue(FREE_POOL_DEFAULT_TARGET_COUNT)
+        self.freePoolTargetSpin.setMinimumWidth(120)
+        self.freePoolTargetSpin.setMaximumWidth(170)
+        self.freePoolTargetSpin.setFixedHeight(36)
+        self.freePoolTargetSpin.setKeyboardTracking(False)
+        free_pool_controls_grid.addWidget(self.freePoolTargetSpin, 0, 1)
+
+        candidate_label = BodyLabel("候选数量", self.freePoolBuildRow)
+        candidate_label.setMinimumWidth(70)
+        candidate_label.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+        free_pool_controls_grid.addWidget(candidate_label, 0, 2)
+        self.freePoolCandidateSpin = NoWheelSpinBox(self.freePoolBuildRow)
+        self.freePoolCandidateSpin.setRange(100, FREE_POOL_MAX_CANDIDATE_COUNT)
+        self.freePoolCandidateSpin.setSingleStep(5000)
+        self.freePoolCandidateSpin.setValue(FREE_POOL_DEFAULT_CANDIDATE_COUNT)
+        self.freePoolCandidateSpin.setMinimumWidth(140)
+        self.freePoolCandidateSpin.setMaximumWidth(190)
+        self.freePoolCandidateSpin.setFixedHeight(36)
+        self.freePoolCandidateSpin.setKeyboardTracking(False)
+        free_pool_controls_grid.addWidget(self.freePoolCandidateSpin, 0, 3)
+
+        fetch_label = BodyLabel("拉取并发", self.freePoolBuildRow)
+        fetch_label.setMinimumWidth(70)
+        fetch_label.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+        free_pool_controls_grid.addWidget(fetch_label, 1, 0)
+        self.freePoolFetchConcurrencySpin = NoWheelSpinBox(self.freePoolBuildRow)
+        self.freePoolFetchConcurrencySpin.setRange(1, FREE_POOL_MAX_FETCH_WORKERS)
+        self.freePoolFetchConcurrencySpin.setValue(FREE_POOL_DEFAULT_FETCH_WORKERS)
+        self.freePoolFetchConcurrencySpin.setMinimumWidth(120)
+        self.freePoolFetchConcurrencySpin.setMaximumWidth(170)
+        self.freePoolFetchConcurrencySpin.setFixedHeight(36)
+        free_pool_controls_grid.addWidget(self.freePoolFetchConcurrencySpin, 1, 1)
+
+        validate_label = BodyLabel("检测并发", self.freePoolBuildRow)
+        validate_label.setMinimumWidth(70)
+        validate_label.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+        free_pool_controls_grid.addWidget(validate_label, 1, 2)
+        self.freePoolConcurrencySpin = NoWheelSpinBox(self.freePoolBuildRow)
+        self.freePoolConcurrencySpin.setRange(1, FREE_POOL_MAX_VALIDATE_WORKERS)
+        self.freePoolConcurrencySpin.setValue(FREE_POOL_DEFAULT_VALIDATE_WORKERS)
+        self.freePoolConcurrencySpin.setMinimumWidth(120)
+        self.freePoolConcurrencySpin.setMaximumWidth(170)
+        self.freePoolConcurrencySpin.setFixedHeight(36)
+        free_pool_controls_grid.addWidget(self.freePoolConcurrencySpin, 1, 3)
+
+        probe_timeout_label = BodyLabel("快检延迟", self.freePoolBuildRow)
+        probe_timeout_label.setMinimumWidth(70)
+        probe_timeout_label.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+        free_pool_controls_grid.addWidget(probe_timeout_label, 2, 0)
+        self.freePoolProbeTimeoutSpin = NoWheelSpinBox(self.freePoolBuildRow)
+        self.freePoolProbeTimeoutSpin.setRange(1, 60000)
+        self.freePoolProbeTimeoutSpin.setSingleStep(500)
+        self.freePoolProbeTimeoutSpin.setSuffix(" ms")
+        self.freePoolProbeTimeoutSpin.setValue(FREE_POOL_DEFAULT_PROBE_TIMEOUT_MS)
+        self.freePoolProbeTimeoutSpin.setMinimumWidth(120)
+        self.freePoolProbeTimeoutSpin.setMaximumWidth(170)
+        self.freePoolProbeTimeoutSpin.setFixedHeight(36)
+        free_pool_controls_grid.addWidget(self.freePoolProbeTimeoutSpin, 2, 1)
+
+        self.testFreePoolBtn = PushButton("测试免费 IP", self.freePoolBuildRow)
+        self.testFreePoolBtn.setFixedWidth(128)
+        self.testFreePoolBtn.setFixedHeight(36)
+        self.testFreePoolBtn.clicked.connect(self._on_test_free_pool_clicked)
+        free_pool_controls_grid.addWidget(self.testFreePoolBtn, 2, 3, Qt.AlignmentFlag.AlignLeft)
+        free_pool_layout.addLayout(free_pool_controls_grid)
+
+        self.freePoolStatusLabel = BodyLabel("", self.freePoolBuildRow)
+        self.freePoolStatusLabel.setWordWrap(True)
+        self.freePoolStatusLabel.setStyleSheet("color: #606060; font-size: 12px;")
+        self.freePoolStatusLabel.hide()
+        free_pool_layout.addWidget(self.freePoolStatusLabel)
+
+        free_pool_action_row = QHBoxLayout()
+        free_pool_action_row.setContentsMargins(0, 0, 0, 0)
+        free_pool_action_row.setSpacing(12)
+
+        self.freePoolProgressContainer = QWidget(self.freePoolBuildRow)
+        free_pool_progress_row = QHBoxLayout(self.freePoolProgressContainer)
+        free_pool_progress_row.setContentsMargins(0, 0, 0, 0)
+        free_pool_progress_row.setSpacing(8)
+        self.freePoolProgressBar = ProgressBar(self.freePoolProgressContainer)
+        self.freePoolProgressBar.setRange(0, 100)
+        self.freePoolProgressBar.setValue(0)
+        self.freePoolProgressBar.setFixedHeight(6)
+        self.freePoolProgressBar.hide()
+        self.freePoolProgressLabel = BodyLabel("", self.freePoolProgressContainer)
+        self.freePoolProgressLabel.setFixedWidth(48)
+        self.freePoolProgressLabel.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+        self.freePoolProgressLabel.setStyleSheet("color: #606060; font-size: 12px;")
+        self.freePoolProgressLabel.hide()
+        free_pool_progress_row.addWidget(self.freePoolProgressBar, 1)
+        free_pool_progress_row.addWidget(self.freePoolProgressLabel)
+        free_pool_action_row.addWidget(self.freePoolProgressContainer, 1)
+        free_pool_layout.addLayout(free_pool_action_row)
+        self.freePoolBuildRow.hide()
+        layout.addWidget(self.freePoolBuildRow)
+
+        self.ipListHintLabel = BodyLabel(
+            "连接自建代理池接口（如 proxy_pool/ProxyPool 的 get/get_all），启动前会并发筛选可用代理。",
+            self._groupContainer,
+        )
+        self.ipListHintLabel.setStyleSheet("color: #606060; font-size: 12px;")
+        self.ipListHintLabel.hide()
+        layout.addWidget(self.ipListHintLabel)
+
         # 自定义API输入
         self.customApiRow = QWidget(self._groupContainer)
         api_layout = QHBoxLayout(self.customApiRow)
         api_layout.setContentsMargins(0, 0, 0, 0)
         api_label = BodyLabel("API 地址", self.customApiRow)
-        api_hint = BodyLabel("*不计费。仅支持json返回格式", self.customApiRow)
+        api_hint = BodyLabel("*不计费。支持 JSON/纯文本代理列表", self.customApiRow)
         api_hint.setStyleSheet("color: red; font-size: 11px;")
         self.customApiEdit = LineEdit(self.customApiRow)
         self.customApiEdit.setPlaceholderText("请输入代理api地址")
@@ -217,6 +368,10 @@ class RandomIPSettingCard(ExpandGroupSettingCard):
         self._benefit_prefetch_thread: Optional[QThread] = None
         self._benefit_prefetch_worker: Optional[_BenefitAreaPrefetchWorker] = None
         self._pending_benefit_area_code: Optional[str] = None
+        self._free_pool_build_handler = None
+        self._free_pool_last_progress_ui_at = 0.0
+        self._free_pool_last_progress_percent = -1
+        self._free_pool_layout_refresh_pending = False
         self._load_area_options(_PROXY_SOURCE_DEFAULT)
         self.areaRow.setVisible(True)
         self.provinceCombo.currentIndexChanged.connect(self._on_province_changed)
@@ -236,7 +391,145 @@ class RandomIPSettingCard(ExpandGroupSettingCard):
     def _get_selected_source(self) -> str:
         idx = self.proxyCombo.currentIndex()
         source = str(self.proxyCombo.itemData(idx)) if idx >= 0 else _PROXY_SOURCE_DEFAULT
-        return source if source in {_PROXY_SOURCE_DEFAULT, _PROXY_SOURCE_BENEFIT, _PROXY_SOURCE_CUSTOM} else _PROXY_SOURCE_DEFAULT
+        return source if source in {
+            _PROXY_SOURCE_DEFAULT,
+            _PROXY_SOURCE_BENEFIT,
+            _PROXY_SOURCE_CUSTOM,
+            _PROXY_SOURCE_FREE_POOL,
+            _PROXY_SOURCE_IPLIST,
+        } else _PROXY_SOURCE_DEFAULT
+
+    def set_free_pool_build_handler(self, handler) -> None:
+        self._free_pool_build_handler = handler
+
+    def _on_test_free_pool_clicked(self) -> None:
+        handler = self._free_pool_build_handler
+        if not callable(handler):
+            return
+        started = bool(
+            handler(
+                expected_count=max(1, int(self.freePoolTargetSpin.value())),
+                validate_workers=max(1, int(self.freePoolConcurrencySpin.value())),
+                candidate_count=max(1, int(self.freePoolCandidateSpin.value())),
+                fetch_workers=max(1, int(self.freePoolFetchConcurrencySpin.value())),
+                probe_timeout_ms=max(1, int(self.freePoolProbeTimeoutSpin.value())),
+            )
+        )
+        if started:
+            self.set_free_pool_building(True, "正在构建免费代理池")
+
+    def _schedule_free_pool_layout_refresh(self) -> None:
+        if self._free_pool_layout_refresh_pending:
+            return
+        self._free_pool_layout_refresh_pending = True
+
+        def _refresh() -> None:
+            self._free_pool_layout_refresh_pending = False
+            self._refreshLayout()
+
+        QTimer.singleShot(0, _refresh)
+
+    def set_free_pool_building(self, active: bool, message: str = "") -> None:
+        self.testFreePoolBtn.setEnabled(not bool(active))
+        self.freePoolTargetSpin.setEnabled(not bool(active))
+        self.freePoolCandidateSpin.setEnabled(not bool(active))
+        self.freePoolFetchConcurrencySpin.setEnabled(not bool(active))
+        self.freePoolConcurrencySpin.setEnabled(not bool(active))
+        self.freePoolProbeTimeoutSpin.setEnabled(not bool(active))
+        progress_visible = bool(active) or bool(message)
+        layout_changed = (
+            self.freePoolProgressBar.isVisible() != progress_visible
+            or self.freePoolProgressLabel.isVisible() != progress_visible
+            or self.freePoolStatusLabel.isVisible() != bool(message)
+        )
+        self.freePoolProgressBar.setVisible(progress_visible)
+        self.freePoolProgressLabel.setVisible(progress_visible)
+        self.freePoolStatusLabel.setVisible(bool(message))
+        if message:
+            self.freePoolStatusLabel.setText(str(message))
+        if active and self.freePoolProgressBar.value() <= 0:
+            self.freePoolProgressBar.setValue(0)
+        self._free_pool_last_progress_ui_at = 0.0
+        self._free_pool_last_progress_percent = -1
+        if layout_changed:
+            self._schedule_free_pool_layout_refresh()
+
+    def update_free_pool_progress(self, payload: dict) -> None:
+        data = dict(payload or {})
+        stage = str(data.get("stage") or "")
+        message = str(data.get("message") or "")
+        percent = 0
+        if stage == "fetch":
+            total = max(1, int(data.get("total") or 1))
+            completed = max(0, int(data.get("completed") or 0))
+            candidates = int(data.get("candidates") or 0)
+            target_candidates = max(1, int(data.get("target_candidates") or self.freePoolCandidateSpin.value() or 1))
+            local_seed_count = max(0, int(data.get("local_seed_count") or 0))
+            percent = min(35, int(completed * 35 / total))
+            if not message:
+                seed_text = f"，本地种子 {local_seed_count}" if local_seed_count else ""
+                message = f"拉取候选 {candidates}/{target_candidates}，请求 {completed}/{total}{seed_text}"
+        elif stage in {"validate", "done"}:
+            total = max(1, int(data.get("total") or 1))
+            checked = max(0, int(data.get("checked") or 0))
+            passed = max(0, int(data.get("passed") or 0))
+            percent = 36 if stage == "validate" and checked <= 0 else 35 + min(65, int(checked * 65 / total))
+            message = message or f"检测 {checked}/{total}，可用 {passed}"
+        elif stage == "start":
+            message = message or "正在构建免费代理池"
+            percent = 0
+        percent = max(0, min(100, percent))
+        now = time.monotonic()
+        should_flush = (
+            stage in {"start", "done"}
+            or percent == 100
+            or percent != self._free_pool_last_progress_percent
+            or (now - self._free_pool_last_progress_ui_at) >= 0.2
+        )
+        if not should_flush:
+            return
+        self._free_pool_last_progress_ui_at = now
+        self._free_pool_last_progress_percent = percent
+        layout_changed = (
+            not self.freePoolProgressBar.isVisible()
+            or not self.freePoolProgressLabel.isVisible()
+            or self.freePoolStatusLabel.isVisible() != bool(message)
+        )
+        self.freePoolProgressBar.setVisible(True)
+        self.freePoolProgressLabel.setVisible(True)
+        self.freePoolStatusLabel.setVisible(bool(message))
+        self.freePoolProgressBar.setValue(percent)
+        if message:
+            self.freePoolStatusLabel.setText(message)
+        self.freePoolProgressLabel.setText(f"{percent}%")
+        if layout_changed:
+            self._schedule_free_pool_layout_refresh()
+
+    def finish_free_pool_build(self, success: bool, message: str, count: int) -> None:
+        layout_changed = (
+            not self.freePoolProgressBar.isVisible()
+            or not self.freePoolProgressLabel.isVisible()
+            or not self.freePoolStatusLabel.isVisible()
+        )
+        self.testFreePoolBtn.setEnabled(True)
+        self.freePoolTargetSpin.setEnabled(True)
+        self.freePoolCandidateSpin.setEnabled(True)
+        self.freePoolFetchConcurrencySpin.setEnabled(True)
+        self.freePoolConcurrencySpin.setEnabled(True)
+        self.freePoolProbeTimeoutSpin.setEnabled(True)
+        self.freePoolProgressBar.setVisible(True)
+        self.freePoolProgressLabel.setVisible(True)
+        self.freePoolStatusLabel.setVisible(True)
+        self.freePoolProgressBar.setValue(100 if success else 0)
+        text = str(message or ("免费代理池构建完成" if success else "免费代理池构建失败"))
+        if success:
+            text = f"{text}，启动时将优先使用"
+        self.freePoolProgressLabel.setText("100%" if success else "失败")
+        self.freePoolStatusLabel.setText(text)
+        self._free_pool_last_progress_ui_at = 0.0
+        self._free_pool_last_progress_percent = 100 if success else -1
+        if layout_changed:
+            self._schedule_free_pool_layout_refresh()
 
     @staticmethod
     def _collect_area_codes(area_data: list) -> set[str]:
@@ -258,11 +551,14 @@ class RandomIPSettingCard(ExpandGroupSettingCard):
     def _on_source_changed(self):
         source = self._get_selected_source()
         current_area = self.get_area_code()
-        self.customApiRow.setVisible(source == _PROXY_SOURCE_CUSTOM)
+        self.customApiRow.setVisible(source in {_PROXY_SOURCE_CUSTOM, _PROXY_SOURCE_IPLIST})
         self.proxyTrialLink.setVisible(source == _PROXY_SOURCE_CUSTOM)
         self.benefitHintLabel.setVisible(source == _PROXY_SOURCE_BENEFIT)
+        self.freePoolHintLabel.setVisible(source == _PROXY_SOURCE_FREE_POOL)
+        self.freePoolBuildRow.setVisible(source == _PROXY_SOURCE_FREE_POOL)
+        self.ipListHintLabel.setVisible(source == _PROXY_SOURCE_IPLIST)
         self.areaRow.setVisible(source in {_PROXY_SOURCE_DEFAULT, _PROXY_SOURCE_BENEFIT})
-        if source == _PROXY_SOURCE_CUSTOM:
+        if source in {_PROXY_SOURCE_CUSTOM, _PROXY_SOURCE_FREE_POOL, _PROXY_SOURCE_IPLIST}:
             self._apply_area_override(None)
         else:
             if source == _PROXY_SOURCE_BENEFIT and not self._benefit_prefetch_done:
@@ -320,7 +616,13 @@ class RandomIPSettingCard(ExpandGroupSettingCard):
 
     def _load_area_options(self, source: Optional[str] = None):
         source = str(source or self._get_selected_source() or _PROXY_SOURCE_DEFAULT).strip().lower()
-        if source not in {_PROXY_SOURCE_DEFAULT, _PROXY_SOURCE_BENEFIT, _PROXY_SOURCE_CUSTOM}:
+        if source not in {
+            _PROXY_SOURCE_DEFAULT,
+            _PROXY_SOURCE_BENEFIT,
+            _PROXY_SOURCE_CUSTOM,
+            _PROXY_SOURCE_FREE_POOL,
+            _PROXY_SOURCE_IPLIST,
+        }:
             source = _PROXY_SOURCE_DEFAULT
         self._area_source = source
         try:
@@ -537,7 +839,7 @@ class RandomIPSettingCard(ExpandGroupSettingCard):
     def _on_api_edit_finished(self):
         """API地址输入完成时同步到全局变量"""
         api_url = self.customApiEdit.text().strip()
-        if self._get_selected_source() == _PROXY_SOURCE_CUSTOM:
+        if self._get_selected_source() in {_PROXY_SOURCE_CUSTOM, _PROXY_SOURCE_IPLIST}:
             apply_custom_proxy_api(api_url if api_url else None)
         else:
             apply_custom_proxy_api(None)

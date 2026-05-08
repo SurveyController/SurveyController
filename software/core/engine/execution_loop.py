@@ -34,6 +34,7 @@ from software.network.browser import (
 )
 from software.network.session_policy import (
     _mark_proxy_temporarily_bad,
+    _proxy_address_is_public_source,
     _record_bad_proxy_and_maybe_pause,
 )
 from software.providers.registry import fill_survey_sync as _provider_fill_survey
@@ -462,6 +463,7 @@ class ExecutionLoop:
             update_thread_status=lambda name, status_text: self._update_thread_status(name, status_text, running=True),
             handle_proxy_unavailable=self._handle_proxy_unavailable,
             mark_proxy_temporarily_bad=_mark_proxy_temporarily_bad,
+            is_public_proxy_source=_proxy_address_is_public_source,
         )
 
     def _should_use_preloaded_session_pool(self) -> bool:

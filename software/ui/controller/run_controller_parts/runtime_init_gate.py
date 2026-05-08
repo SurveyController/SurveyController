@@ -11,6 +11,13 @@ from software.core.task import ExecutionConfig, ExecutionState, ProxyLease
 from software.integrations.ai.client import AI_MODE_FREE, get_ai_settings
 from software.io.config import RuntimeConfig
 import software.network.http as http_client
+from software.network.proxy.pool import prefetch_proxy_pool
+from software.network.proxy.pool.free_pool import FREE_POOL_DEFAULT_PROBE_TIMEOUT_MS, FREE_POOL_DEFAULT_TARGET_COUNT
+from software.network.proxy.policy.source import (
+    PROXY_SOURCE_FREE_POOL,
+    PROXY_SOURCE_IPLIST,
+    normalize_proxy_source,
+)
 from .runtime_preparation import PreparedExecutionArtifacts
 
 from .runtime_constants import (
@@ -134,6 +141,10 @@ class RunControllerInitializationMixin:
         def _startup_service_warnings(self) -> List[str]: ...
         @_startup_service_warnings.setter
         def _startup_service_warnings(self, value: List[str]) -> None: ...
+        @property
+        def _free_proxy_pool(self) -> List[ProxyLease]: ...
+        @_free_proxy_pool.setter
+        def _free_proxy_pool(self, value: List[ProxyLease]) -> None: ...
 
         def _start_workers_with_proxy_pool(
             self,
@@ -249,9 +260,107 @@ class RunControllerInitializationMixin:
         with self._startup_status_check_lock:
             return list(self._startup_service_warnings or [])
 
+    def _initial_proxy_pool_target_count(self, config: RuntimeConfig) -> int:
+        target = max(1, int(getattr(config, "target", 1) or 1))
+        threads = max(1, int(getattr(config, "threads", 1) or 1))
+        source = normalize_proxy_source(getattr(config, "proxy_source", "default"))
+        if source in {PROXY_SOURCE_FREE_POOL, PROXY_SOURCE_IPLIST}:
+            return max(1, min(target, max(threads * 4, threads + 12), FREE_POOL_DEFAULT_TARGET_COUNT))
+        return max(1, min(threads, target, 16))
+
+    def _prefetch_initial_proxy_pool(
+        self,
+        config: RuntimeConfig,
+        stop_signal: threading.Event,
+    ) -> List[ProxyLease]:
+        if not bool(getattr(config, "random_ip_enabled", False)):
+            return []
+        source = normalize_proxy_source(getattr(config, "proxy_source", "default"))
+        if source == PROXY_SOURCE_FREE_POOL:
+            warmed = list(getattr(self, "_free_proxy_pool", []) or [])
+            if warmed:
+                logging.info("复用已构建公共免费代理池: count=%s", len(warmed))
+                self._free_proxy_pool = []
+                return warmed
+        expected_count = self._initial_proxy_pool_target_count(config)
+        kwargs = dict(
+            expected_count=expected_count,
+            proxy_api_url=str(getattr(config, "custom_proxy_api", "") or "").strip() or None,
+            stop_signal=stop_signal,
+            max_workers=200 if source == PROXY_SOURCE_FREE_POOL else None,
+            force_refresh=False,
+            target_url=str(getattr(config, "url", "") or ""),
+        )
+        if source == PROXY_SOURCE_FREE_POOL:
+            kwargs["probe_timeout_ms"] = max(
+                1,
+                int(
+                    getattr(
+                        config,
+                        "free_proxy_pool_probe_timeout_ms",
+                        FREE_POOL_DEFAULT_PROBE_TIMEOUT_MS,
+                    )
+                    or FREE_POOL_DEFAULT_PROBE_TIMEOUT_MS
+                ),
+            )
+        return prefetch_proxy_pool(**kwargs)
+
+    def _run_initialization_gate(self, config: RuntimeConfig, proxy_pool: List[ProxyLease]) -> None:
+        stop_signal = self._init_gate_stop_event or threading.Event()
+        warmed_pool = list(proxy_pool or [])
+        try:
+            if bool(getattr(config, "random_ip_enabled", False)) and not warmed_pool:
+                self._initializing = True
+                self._init_current_step_key = "proxy_pool"
+                self._init_stage_text = "正在构建代理池"
+                self._dispatch_to_ui_async(self._emit_status)
+                warmed_pool = self._prefetch_initial_proxy_pool(config, stop_signal)
+                if stop_signal.is_set() or self.stop_event.is_set():
+                    self._dispatch_to_ui_async(self._cancel_initialization_startup)
+                    return
+                self._init_completed_steps = set(self._init_completed_steps) | {"proxy_pool"}
+                self._init_stage_text = "代理池已就绪"
+                self._dispatch_to_ui_async(self._emit_status)
+            self._reset_initialization_state()
+            if stop_signal.is_set() or self.stop_event.is_set():
+                self._dispatch_to_ui_async(self._cancel_initialization_startup)
+                return
+            self._dispatch_to_ui_async(lambda: self._start_workers_with_proxy_pool(config, warmed_pool))
+        except Exception as exc:
+            logging.warning("启动前代理池构建失败: %s", exc)
+            message = f"代理池构建失败：{exc}"
+            self._dispatch_to_ui_async(lambda _message=message: self._finish_initialization_idle_state(_message))
+        finally:
+            self._init_gate_thread = None
+
     def _start_with_initialization_gate(self, config: RuntimeConfig, proxy_pool: List[ProxyLease]) -> None:
         if self.stop_event.is_set():
             self._starting = False
+            return
+        if bool(getattr(config, "random_ip_enabled", False)) and not list(proxy_pool or []):
+            if not hasattr(self, "_dispatch_to_ui_async"):
+                warmed_pool = self._prefetch_initial_proxy_pool(config, self.stop_event)
+                if self.stop_event.is_set():
+                    self._starting = False
+                    return
+                self._start_workers_with_proxy_pool(config, warmed_pool)
+                return
+            stop_signal = threading.Event()
+            self._init_gate_stop_event = stop_signal
+            self._initializing = True
+            self._init_stage_text = "正在构建代理池"
+            self._init_steps = [{"key": "proxy_pool", "label": "并发筛选可用代理"}]
+            self._init_completed_steps = set()
+            self._init_current_step_key = "proxy_pool"
+            self._emit_status()
+            thread = threading.Thread(
+                target=self._run_initialization_gate,
+                args=(config, list(proxy_pool)),
+                daemon=True,
+                name="ProxyPoolInitGate",
+            )
+            self._init_gate_thread = thread
+            thread.start()
             return
         self._start_workers_with_proxy_pool(config, list(proxy_pool))
 

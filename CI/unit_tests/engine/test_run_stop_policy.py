@@ -66,6 +66,19 @@ class RunStopPolicyTests:
         assert state.proxy_unavailable_fail_count == 1
         assert state.get_terminal_stop_snapshot()[0] == ''
 
+    def test_local_free_proxy_unavailable_threshold_allows_rotation(self) -> None:
+        config = ExecutionConfig(
+            fail_threshold=5,
+            num_threads=5,
+            random_proxy_ip_enabled=True,
+            proxy_source='free_pool',
+            proxy_ip_pool=[f'http://10.0.0.{idx}:80' for idx in range(40)],
+        )
+        state = ExecutionState(config=config)
+        policy = RunStopPolicy(config, state)
+
+        assert policy.proxy_unavailable_threshold() >= 30
+
     def test_failure_threshold_uses_half_concurrency_when_threads_above_ten(self) -> None:
         config = ExecutionConfig(fail_threshold=5, num_threads=32, stop_on_fail_enabled=True)
         state = ExecutionState(config=config, cur_fail=15)
