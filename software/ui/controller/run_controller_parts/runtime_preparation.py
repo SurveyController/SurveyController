@@ -14,6 +14,7 @@ from software.core.reverse_fill.validation import build_enabled_reverse_fill_spe
 from software.core.task import ExecutionConfig
 from software.io.config import RuntimeConfig, clone_questions_info
 from software.network.proxy import set_proxy_occupy_minute_by_answer_duration
+from software.network.proxy.pool.free_pool import FREE_POOL_DEFAULT_PROBE_TIMEOUT_MS
 from software.providers.common import SURVEY_PROVIDER_WJX, detect_survey_provider, normalize_survey_provider
 from software.providers.contracts import SurveyQuestionMeta
 
@@ -118,7 +119,19 @@ def _build_execution_config_template(
         timed_mode_enabled=bool(getattr(config, "timed_mode_enabled", False)),
         timed_mode_refresh_interval=float(getattr(config, "timed_mode_interval", 3.0) or 3.0),
         random_proxy_ip_enabled=bool(getattr(config, "random_ip_enabled", False)),
+        proxy_source=str(getattr(config, "proxy_source", "default") or "default"),
         proxy_ip_pool=[],
+        free_proxy_pool_probe_timeout_ms=max(
+            1,
+            int(
+                getattr(
+                    config,
+                    "free_proxy_pool_probe_timeout_ms",
+                    FREE_POOL_DEFAULT_PROBE_TIMEOUT_MS,
+                )
+                or FREE_POOL_DEFAULT_PROBE_TIMEOUT_MS
+            ),
+        ),
         random_user_agent_enabled=bool(getattr(config, "random_ua_enabled", False)),
         user_agent_ratios=copy.deepcopy(
             dict(getattr(config, "random_ua_ratios", {"wechat": 33, "mobile": 33, "pc": 34}) or {})

@@ -4,6 +4,7 @@ import threading
 from types import SimpleNamespace
 from unittest.mock import patch
 from software.core.engine.browser_session_service import BrowserSessionService
+from software.core.task import ProxyLease
 
 class _FakeSemaphore:
 
@@ -132,7 +133,7 @@ class BrowserSessionServiceTests:
         config = SimpleNamespace(headless_mode=True, random_proxy_ip_enabled=True, num_threads=1)
         fake_driver = make_managed_driver()
         service = BrowserSessionService(config, state, gui_instance=None, thread_name='Worker-1')
-        with patch('software.core.engine.browser_session_service._select_proxy_for_session', return_value='http://1.1.1.1:8000'), patch('software.core.engine.browser_session_service.is_proxy_responsive', return_value=True), patch('software.core.engine.browser_session_service._select_user_agent_for_session', return_value=('', '')), patch('software.core.engine.browser_session_service.create_browser_manager', return_value=object()), patch('software.core.engine.browser_session_service.create_playwright_driver', return_value=(fake_driver, 'edge')) as create_driver_mock:
+        with patch('software.core.engine.browser_session_service._select_proxy_for_session', return_value='http://1.1.1.1:8000'), patch('software.core.engine.browser_session_service.is_http_proxy_connect_responsive', return_value=True), patch('software.core.engine.browser_session_service._select_user_agent_for_session', return_value=('', '')), patch('software.core.engine.browser_session_service.create_browser_manager', return_value=object()), patch('software.core.engine.browser_session_service.create_playwright_driver', return_value=(fake_driver, 'edge')) as create_driver_mock:
             browser_name = service.create_browser(['edge'], 0, 0)
         assert browser_name == 'edge'
         assert create_driver_mock.call_args.kwargs['proxy_address'] == 'http://1.1.1.1:8000'
@@ -210,19 +211,31 @@ class BrowserSessionServiceTests:
         state = _FakeState()
         config = SimpleNamespace(headless_mode=True, random_proxy_ip_enabled=True, num_threads=1)
         service = BrowserSessionService(config, state, gui_instance=None, thread_name='Worker-1')
-        with patch('software.core.engine.browser_session_service._select_proxy_for_session', return_value='127.0.0.1:8888'), patch('software.core.engine.browser_session_service.is_proxy_responsive', return_value=False), patch('software.core.engine.browser_session_service._discard_unresponsive_proxy') as discard_mock, patch('software.core.engine.browser_session_service._record_bad_proxy_and_maybe_pause') as record_bad_mock:
+        with patch('software.core.engine.browser_session_service._select_proxy_for_session', return_value='127.0.0.1:8888'), patch('software.core.engine.browser_session_service.is_http_proxy_connect_responsive', return_value=False), patch('software.core.engine.browser_session_service._discard_unresponsive_proxy') as discard_mock, patch('software.core.engine.browser_session_service._record_bad_proxy_and_maybe_pause') as record_bad_mock:
             browser_name = service.create_browser(['edge'], 0, 0)
         assert browser_name is None
         discard_mock.assert_called_once_with(state, '127.0.0.1:8888')
         record_bad_mock.assert_called_once()
         assert state.released_threads == ['Worker-1']
 
+    def test_create_browser_skips_generic_connect_check_for_free_pool_proxy(self, make_managed_driver) -> None:
+        state = _FakeState()
+        state.proxy_in_use_by_thread = {'Worker-1': ProxyLease(address='http://1.1.1.1:8000', source='free_pool')}
+        config = SimpleNamespace(headless_mode=True, random_proxy_ip_enabled=True, num_threads=1)
+        fake_driver = make_managed_driver()
+        service = BrowserSessionService(config, state, gui_instance=None, thread_name='Worker-1')
+        with patch('software.core.engine.browser_session_service._select_proxy_for_session', return_value='http://1.1.1.1:8000'), patch('software.core.engine.browser_session_service.is_http_proxy_connect_responsive', return_value=False) as responsive_mock, patch('software.core.engine.browser_session_service._select_user_agent_for_session', return_value=('', '')), patch('software.core.engine.browser_session_service.create_browser_manager', return_value=object()), patch('software.core.engine.browser_session_service.create_playwright_driver', return_value=(fake_driver, 'edge')):
+            browser_name = service.create_browser(['edge'], 0, 0, stop_signal=threading.Event())
+        assert browser_name == 'edge'
+        responsive_mock.assert_not_called()
+        assert getattr(fake_driver, '_session_proxy_address', None) == 'http://1.1.1.1:8000'
+
     def test_create_browser_retries_next_proxy_when_runtime_wait_mode_hits_bad_proxy(self, make_managed_driver) -> None:
         state = _FakeState()
         config = SimpleNamespace(headless_mode=True, random_proxy_ip_enabled=True, num_threads=1)
         fake_driver = make_managed_driver()
         service = BrowserSessionService(config, state, gui_instance=None, thread_name='Worker-1')
-        with patch('software.core.engine.browser_session_service._select_proxy_for_session', side_effect=['http://1.1.1.1:8000', 'http://2.2.2.2:8000']), patch('software.core.engine.browser_session_service.is_proxy_responsive', side_effect=[False, True]), patch('software.core.engine.browser_session_service._discard_unresponsive_proxy') as discard_mock, patch('software.core.engine.browser_session_service._select_user_agent_for_session', return_value=('', '')), patch('software.core.engine.browser_session_service.create_browser_manager', return_value=object()), patch('software.core.engine.browser_session_service.create_playwright_driver', return_value=(fake_driver, 'edge')):
+        with patch('software.core.engine.browser_session_service._select_proxy_for_session', side_effect=['http://1.1.1.1:8000', 'http://2.2.2.2:8000']), patch('software.core.engine.browser_session_service.is_http_proxy_connect_responsive', side_effect=[False, True]), patch('software.core.engine.browser_session_service._discard_unresponsive_proxy') as discard_mock, patch('software.core.engine.browser_session_service._select_user_agent_for_session', return_value=('', '')), patch('software.core.engine.browser_session_service.create_browser_manager', return_value=object()), patch('software.core.engine.browser_session_service.create_playwright_driver', return_value=(fake_driver, 'edge')):
             browser_name = service.create_browser(['edge'], 0, 0, stop_signal=SimpleNamespace(is_set=lambda: False))
         assert browser_name == 'edge'
         assert discard_mock.call_count == 1
@@ -260,7 +273,7 @@ class BrowserSessionServiceTests:
         fake_driver = make_managed_driver()
         service = BrowserSessionService(config, state, gui_instance=None, thread_name='Worker-1')
         stop_signal = threading.Event()
-        with patch('software.core.engine.browser_session_service._select_proxy_for_session', side_effect=['http://1.1.1.1:8000', 'http://2.2.2.2:8000']), patch('software.core.engine.browser_session_service.is_proxy_responsive', return_value=True), patch('software.core.engine.browser_session_service._select_user_agent_for_session', return_value=('', '')), patch('software.core.engine.browser_session_service.create_browser_manager', return_value=object()), patch('software.core.engine.browser_session_service.create_playwright_driver', side_effect=[RuntimeError('Target page, context or browser has been closed'), (fake_driver, 'edge')]) as create_driver_mock, patch('software.core.engine.browser_session_service._discard_unresponsive_proxy') as discard_mock:
+        with patch('software.core.engine.browser_session_service._select_proxy_for_session', side_effect=['http://1.1.1.1:8000', 'http://2.2.2.2:8000']), patch('software.core.engine.browser_session_service.is_http_proxy_connect_responsive', return_value=True), patch('software.core.engine.browser_session_service._select_user_agent_for_session', return_value=('', '')), patch('software.core.engine.browser_session_service.create_browser_manager', return_value=object()), patch('software.core.engine.browser_session_service.create_playwright_driver', side_effect=[RuntimeError('Target page, context or browser has been closed'), (fake_driver, 'edge')]) as create_driver_mock, patch('software.core.engine.browser_session_service._discard_unresponsive_proxy') as discard_mock:
             browser_name = service.create_browser(['edge'], 0, 0, stop_signal=stop_signal)
         assert browser_name == 'edge'
         assert create_driver_mock.call_count == 2
@@ -289,7 +302,7 @@ class BrowserSessionServiceTests:
         config = SimpleNamespace(headless_mode=True, random_proxy_ip_enabled=True, num_threads=1)
         fake_driver = make_managed_driver()
         service = BrowserSessionService(config, state, gui_instance=None, thread_name='Worker-1')
-        with patch('software.core.engine.browser_session_service._select_proxy_for_session', return_value='http://1.1.1.1:8000'), patch('software.core.engine.browser_session_service.is_proxy_responsive', return_value=True), patch('software.core.engine.browser_session_service._select_user_agent_for_session', return_value=('', '')), patch('software.core.engine.browser_session_service.create_browser_manager', return_value=object()), patch('software.core.engine.browser_session_service.create_playwright_driver', return_value=(fake_driver, 'edge')):
+        with patch('software.core.engine.browser_session_service._select_proxy_for_session', return_value='http://1.1.1.1:8000'), patch('software.core.engine.browser_session_service.is_http_proxy_connect_responsive', return_value=True), patch('software.core.engine.browser_session_service._select_user_agent_for_session', return_value=('', '')), patch('software.core.engine.browser_session_service.create_browser_manager', return_value=object()), patch('software.core.engine.browser_session_service.create_playwright_driver', return_value=(fake_driver, 'edge')):
             browser_name = service.create_browser(['edge'], 0, 0)
         assert browser_name == 'edge'
         assert [status for _thread, status, _running in state.phase_updates] == ['获取代理', '创建浏览器会话']

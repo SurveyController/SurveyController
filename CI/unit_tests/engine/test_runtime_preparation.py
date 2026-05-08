@@ -4,6 +4,7 @@ from unittest.mock import patch
 from software.core.questions.config import QuestionEntry
 from software.io.config import RuntimeConfig
 from software.core.reverse_fill.schema import ReverseFillSpec
+from software.network.proxy.pool.free_pool import FREE_POOL_DEFAULT_PROBE_TIMEOUT_MS
 from software.ui.controller.run_controller_parts.runtime_preparation import PreparedExecutionArtifacts, RuntimePreparationError, prepare_execution_artifacts
 
 class RuntimePreparationTests:
@@ -67,6 +68,7 @@ class RuntimePreparationTests:
         assert artifacts.execution_config_template.questions_metadata[1].title == 'Q1'
         assert artifacts.execution_config_template.answer_rules == [{'num': 1, 'equals': [1]}]
         assert artifacts.execution_config_template.proxy_ip_pool == []
+        assert artifacts.execution_config_template.free_proxy_pool_probe_timeout_ms == FREE_POOL_DEFAULT_PROBE_TIMEOUT_MS
         sync_proxy_duration.assert_called_once_with((12, 20))
 
     def test_prepare_execution_artifacts_uses_fallback_title_when_config_title_blank(self) -> None:

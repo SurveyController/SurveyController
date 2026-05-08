@@ -27,6 +27,7 @@ from software.providers.contracts import (
 )
 from software.logging.log_utils import log_suppressed_exception
 from software.app.config import BROWSER_PREFERENCE, USER_AGENT_PRESETS
+from software.network.proxy.pool.free_pool import FREE_POOL_DEFAULT_PROBE_TIMEOUT_MS
 
 CURRENT_CONFIG_SCHEMA_VERSION = 5
 _SUPPORTED_LEGACY_CONFIG_SCHEMA_VERSIONS = {3, 4}
@@ -394,12 +395,16 @@ def normalize_runtime_config_payload(raw: Dict[str, Any]) -> RuntimeConfig:
     config.random_ip_enabled = normalize_random_ip_enabled_value(_as_bool(raw.get("random_ip_enabled"), False))
     custom_proxy_api = str(raw.get("custom_proxy_api") or "").strip()
     proxy_source = str(raw.get("proxy_source") or "default").strip().lower()
-    if proxy_source not in ("default", "benefit", "custom"):
+    if proxy_source not in ("default", "benefit", "custom", "free_pool", "iplist"):
         proxy_source = "custom" if custom_proxy_api else "default"
     config.proxy_source = proxy_source
     config.custom_proxy_api = custom_proxy_api
     raw_area_code = raw.get("proxy_area_code")
     config.proxy_area_code = None if raw_area_code is None else str(raw_area_code)
+    config.free_proxy_pool_probe_timeout_ms = max(
+        1,
+        _as_int(raw.get("free_proxy_pool_probe_timeout_ms"), FREE_POOL_DEFAULT_PROBE_TIMEOUT_MS),
+    )
     config.random_ua_enabled = bool(raw.get("random_ua_enabled", False))
     config.random_ua_keys = _filter_valid_user_agent_keys(raw.get("random_ua_keys") or [])
 

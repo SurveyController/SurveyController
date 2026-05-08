@@ -9,6 +9,8 @@ from software.app.config import (
     PROXY_POOL_ORDINARY,
     PROXY_POOL_QUALITY,
     PROXY_SOURCE_CUSTOM,
+    PROXY_SOURCE_FREE_POOL,
+    PROXY_SOURCE_IPLIST,
     PROXY_QUOTA_COST_MAP,
     PROXY_SOURCE_DEFAULT,
     PROXY_TTL_GRACE_SECONDS,
@@ -17,8 +19,16 @@ from software.app.config import (
 PROXY_SOURCE_BENEFIT = "benefit"
 PROXY_UPSTREAM_DEFAULT = "default"
 PROXY_UPSTREAM_BENEFIT = "idiot"
-_SUPPORTED_PROXY_SOURCES = frozenset({PROXY_SOURCE_DEFAULT, PROXY_SOURCE_BENEFIT, PROXY_SOURCE_CUSTOM})
+_SUPPORTED_PROXY_SOURCES = frozenset({
+    PROXY_SOURCE_DEFAULT,
+    PROXY_SOURCE_BENEFIT,
+    PROXY_SOURCE_CUSTOM,
+    PROXY_SOURCE_FREE_POOL,
+    PROXY_SOURCE_IPLIST,
+})
 _OFFICIAL_PROXY_SOURCES = frozenset({PROXY_SOURCE_DEFAULT, PROXY_SOURCE_BENEFIT})
+_CUSTOM_API_PROXY_SOURCES = frozenset({PROXY_SOURCE_CUSTOM, PROXY_SOURCE_IPLIST})
+_LOCAL_FREE_PROXY_SOURCES = frozenset({PROXY_SOURCE_FREE_POOL, PROXY_SOURCE_IPLIST})
 
 _config_lock = threading.Lock()
 _proxy_api_url_override: Optional[str] = None
@@ -61,7 +71,7 @@ def get_proxy_source() -> str:
 
 def is_custom_proxy_source(source: Optional[str] = None) -> bool:
     current = get_proxy_source() if source is None else normalize_proxy_source(source)
-    return current == PROXY_SOURCE_CUSTOM
+    return current in _CUSTOM_API_PROXY_SOURCES
 
 
 def is_official_proxy_source(source: Optional[str] = None) -> bool:
@@ -75,6 +85,21 @@ def source_supports_quota_session(source: Optional[str] = None) -> bool:
 
 def source_uses_custom_api_override(source: Optional[str] = None) -> bool:
     return is_custom_proxy_source(source)
+
+
+def is_free_proxy_pool_source(source: Optional[str] = None) -> bool:
+    current = get_proxy_source() if source is None else normalize_proxy_source(source)
+    return current == PROXY_SOURCE_FREE_POOL
+
+
+def is_iplist_proxy_source(source: Optional[str] = None) -> bool:
+    current = get_proxy_source() if source is None else normalize_proxy_source(source)
+    return current == PROXY_SOURCE_IPLIST
+
+
+def is_local_free_proxy_source(source: Optional[str] = None) -> bool:
+    current = get_proxy_source() if source is None else normalize_proxy_source(source)
+    return current in _LOCAL_FREE_PROXY_SOURCES
 
 
 def get_proxy_upstream(source: Optional[str] = None) -> str:

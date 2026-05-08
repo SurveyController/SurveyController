@@ -30,6 +30,7 @@ class RuntimeConfig:
     proxy_source: str = "default"
     custom_proxy_api: str = ""
     proxy_area_code: Optional[str] = None
+    free_proxy_pool_probe_timeout_ms: int = 5000
     random_ua_enabled: bool = False
     random_ua_keys: List[str] = field(default_factory=lambda: list(DEFAULT_RANDOM_UA_KEYS))
     random_ua_ratios: Dict[str, int] = field(default_factory=lambda: {"wechat": 33, "mobile": 33, "pc": 34})

@@ -19,7 +19,14 @@ from software.network.proxy.session import (
     load_session_for_startup,
     sync_quota_snapshot_from_server,
 )
-from software.network.proxy import is_custom_proxy_api_active
+from software.network.proxy import is_custom_proxy_api_active, is_local_free_proxy_source
+from software.network.proxy.pool.free_pool import (
+    FREE_POOL_DEFAULT_CANDIDATE_COUNT,
+    FREE_POOL_DEFAULT_FETCH_WORKERS,
+    FREE_POOL_DEFAULT_PROBE_TIMEOUT_MS,
+    FREE_POOL_DEFAULT_TARGET_COUNT,
+    fetch_free_proxy_batch,
+)
 from software.network.proxy.policy import get_random_ip_counter_snapshot_local
 from software.logging.log_utils import log_deduped_message, reset_deduped_log_message
 
@@ -29,8 +36,28 @@ _RANDOM_IP_SYNC_FAILURE_LOG_KEY = "random_ip_quota_sync_failure"
 class RunControllerRandomIPMixin:
     if TYPE_CHECKING:
         adapter: Any
+        freeProxyPoolProgressChanged: Any
+        freeProxyPoolBuildFinished: Any
+
+        @property
+        def _free_proxy_pool(self) -> list: ...
+        @_free_proxy_pool.setter
+        def _free_proxy_pool(self, value: list) -> None: ...
+        @property
+        def _free_proxy_pool_built_at(self) -> float: ...
+        @_free_proxy_pool_built_at.setter
+        def _free_proxy_pool_built_at(self, value: float) -> None: ...
+        @property
+        def _free_proxy_pool_build_active(self) -> bool: ...
+        @_free_proxy_pool_build_active.setter
+        def _free_proxy_pool_build_active(self, value: bool) -> None: ...
+        @property
+        def _free_proxy_pool_stop_event(self) -> Optional[threading.Event]: ...
+        @_free_proxy_pool_stop_event.setter
+        def _free_proxy_pool_stop_event(self, value: Optional[threading.Event]) -> None: ...
 
         def notify_random_ip_loading(self, loading: bool, message: str = "") -> None: ...
+        def _dispatch_to_ui_async(self, callback) -> None: ...
 
     def _resolve_counter_snapshot_values(self, snapshot: Dict[str, Any]) -> tuple[float, float]:
         return (
@@ -69,8 +96,93 @@ class RunControllerRandomIPMixin:
             adapter.set_random_ip_loading(bool(loading), str(message or ""))
         except Exception:
             logging.info("更新随机IP加载状态失败", exc_info=True)
+
+    def build_free_proxy_pool_async(
+        self,
+        *,
+        expected_count: int = FREE_POOL_DEFAULT_TARGET_COUNT,
+        max_workers: int = 200,
+        candidate_count: int = FREE_POOL_DEFAULT_CANDIDATE_COUNT,
+        fetch_workers: int = FREE_POOL_DEFAULT_FETCH_WORKERS,
+        probe_timeout_ms: int = FREE_POOL_DEFAULT_PROBE_TIMEOUT_MS,
+        force_refresh: bool = True,
+        target_url: str = "",
+    ) -> bool:
+        if self._free_proxy_pool_build_active:
+            return False
+        stop_event = threading.Event()
+        self._free_proxy_pool_stop_event = stop_event
+        self._free_proxy_pool_build_active = True
+        self._free_proxy_pool = []
+
+        def emit_progress(payload: Dict[str, Any]) -> None:
+            self._dispatch_to_ui_async(lambda _payload=dict(payload): self.freeProxyPoolProgressChanged.emit(_payload))
+
+        def finish(success: bool, message: str, count: int) -> None:
+            self._free_proxy_pool_build_active = False
+            self._free_proxy_pool_stop_event = None
+            self.freeProxyPoolBuildFinished.emit(bool(success), str(message or ""), int(count or 0))
+
+        def worker() -> None:
+            success = False
+            message = ""
+            count = 0
+            try:
+                emit_progress(
+                    {
+                        "stage": "start",
+                        "total": 100,
+                        "completed": 0,
+                        "checked": 0,
+                        "passed": 0,
+                        "target_candidates": max(1, int(candidate_count or FREE_POOL_DEFAULT_CANDIDATE_COUNT)),
+                        "message": "正在构建免费代理池",
+                    }
+                )
+                leases = fetch_free_proxy_batch(
+                    expected_count=max(1, int(expected_count or 1)),
+                    force_refresh=bool(force_refresh),
+                    stop_signal=stop_event,
+                    max_workers=max(1, int(max_workers or 1)),
+                    candidate_count=max(1, int(candidate_count or FREE_POOL_DEFAULT_CANDIDATE_COUNT)),
+                    fetch_workers=max(1, int(fetch_workers or FREE_POOL_DEFAULT_FETCH_WORKERS)),
+                    probe_timeout_ms=max(1, int(probe_timeout_ms or FREE_POOL_DEFAULT_PROBE_TIMEOUT_MS)),
+                    progress_callback=emit_progress,
+                    target_url=str(target_url or ""),
+                )
+                if stop_event.is_set():
+                    message = "已取消免费代理池构建"
+                    leases = []
+                elif leases:
+                    self._free_proxy_pool = list(leases)
+                    self._free_proxy_pool_built_at = time.time()
+                    count = len(leases)
+                    success = True
+                    message = f"免费代理池已构建：{count} 个可用代理"
+                else:
+                    message = "没有检测到可用免费代理"
+            except Exception as exc:
+                message = str(exc)
+                logging.warning("公共免费代理池构建失败: %s", exc)
+            finally:
+                self._dispatch_to_ui_async(
+                    lambda _success=success, _message=message, _count=count: finish(
+                        _success,
+                        _message,
+                        _count,
+                    )
+                )
+
+        threading.Thread(target=worker, daemon=True, name="FreeProxyPoolBuild").start()
+        return True
+
+    def cancel_free_proxy_pool_build(self) -> None:
+        stop_event = self._free_proxy_pool_stop_event
+        if stop_event is not None:
+            stop_event.set()
+
     def _get_counter_snapshot(self) -> tuple[float, float, bool]:
-        custom_api = bool(is_custom_proxy_api_active())
+        custom_api = bool(is_custom_proxy_api_active() or is_local_free_proxy_source())
         if not custom_api and has_authenticated_session():
             try:
                 return (*self._resolve_counter_snapshot_values(get_fresh_quota_snapshot()), False)
@@ -114,7 +226,7 @@ class RunControllerRandomIPMixin:
             return
         self._refresh_random_ip_counter_now(adapter)
     def _begin_random_ip_server_sync(self, *, min_interval_seconds: float = 0.0) -> bool:
-        if is_custom_proxy_api_active() or not has_authenticated_session():
+        if is_custom_proxy_api_active() or is_local_free_proxy_source() or not has_authenticated_session():
             return False
         lock = getattr(self, "_random_ip_server_sync_lock", None)
         if lock is None:
@@ -237,7 +349,7 @@ class RunControllerRandomIPMixin:
         if not enabled:
             self._set_random_ip_enabled(adapter, False)
             return False
-        if is_custom_proxy_api_active():
+        if is_custom_proxy_api_active() or is_local_free_proxy_source():
             self._set_random_ip_enabled(adapter, True)
             self.refresh_random_ip_counter(adapter=adapter)
             return True
@@ -273,7 +385,7 @@ class RunControllerRandomIPMixin:
         return True
     def handle_random_ip_submission(self, *, stop_signal: Optional[threading.Event], adapter: Optional[Any] = None) -> None:
         adapter = adapter or getattr(self, "adapter", None)
-        if not adapter or is_custom_proxy_api_active():
+        if not adapter or is_custom_proxy_api_active() or is_local_free_proxy_source():
             return
         try:
             snapshot = get_session_snapshot()

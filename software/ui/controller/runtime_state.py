@@ -5,6 +5,7 @@ from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional, Set
 
 from software.io.config import RuntimeConfig
+from software.network.proxy.pool.free_pool import FREE_POOL_DEFAULT_PROBE_TIMEOUT_MS
 
 
 @dataclass
@@ -26,6 +27,10 @@ class RunControllerRuntimeState:
     init_gate_stop_event: Optional[Any] = None
     prepared_execution_artifacts: Optional[Any] = None
     startup_service_warnings: List[str] = field(default_factory=list)
+    free_proxy_pool: List[Any] = field(default_factory=list)
+    free_proxy_pool_built_at: float = 0.0
+    free_proxy_pool_build_active: bool = False
+    free_proxy_pool_stop_event: Optional[Any] = None
 
 
 class RuntimeUiStateStore:
@@ -42,7 +47,12 @@ class RuntimeUiStateStore:
             return bool(value)
         if key == "proxy_source":
             normalized = str(value or "default").strip().lower()
-            return normalized if normalized in {"default", "benefit", "custom"} else "default"
+            return normalized if normalized in {"default", "benefit", "custom", "free_pool", "iplist"} else "default"
+        if key == "free_proxy_pool_probe_timeout_ms":
+            try:
+                return max(1, int(value or FREE_POOL_DEFAULT_PROBE_TIMEOUT_MS))
+            except Exception:
+                return FREE_POOL_DEFAULT_PROBE_TIMEOUT_MS
         if key == "answer_duration":
             raw = value if isinstance(value, (list, tuple)) else (0, 0)
             low = max(0, int(raw[0] if len(raw) >= 1 else 0))
@@ -73,5 +83,6 @@ class RuntimeUiStateStore:
             headless_mode=getattr(config, "headless_mode", True),
             timed_mode_enabled=getattr(config, "timed_mode_enabled", False),
             proxy_source=getattr(config, "proxy_source", "default"),
+            free_proxy_pool_probe_timeout_ms=getattr(config, "free_proxy_pool_probe_timeout_ms", FREE_POOL_DEFAULT_PROBE_TIMEOUT_MS),
             answer_duration=getattr(config, "answer_duration", (0, 0)),
         )

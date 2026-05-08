@@ -67,6 +67,14 @@ class _FakeStopPolicy:
         return self.proxy_threshold
 
 
+class _DummyLock:
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *_args):
+        return False
+
+
 def _build_runner(*, config: ExecutionConfig | None = None, state: ExecutionState | None = None, stop_set: bool = False):
     loop = asyncio.get_running_loop()
     config = config or ExecutionConfig(target_num=3, submit_interval_range_seconds=[1, 3], survey_provider="wjx")
@@ -185,7 +193,7 @@ class AsyncRuntimeLoopLargeTests:
         state.release_proxy_in_use = lambda thread_name: released.append(thread_name)
         monkeypatch.setattr(runtime_loop, "_select_proxy_for_session", lambda *_args, **_kwargs: "http://1.1.1.1:80")
         monkeypatch.setattr(runtime_loop, "_record_bad_proxy_and_maybe_pause", lambda *_args, **_kwargs: False)
-        monkeypatch.setattr(runtime_loop, "is_proxy_responsive", lambda proxy: False)
+        monkeypatch.setattr(runtime_loop, "is_http_proxy_connect_responsive", lambda proxy, **_kwargs: False)
         monkeypatch.setattr(runtime_loop, "_discard_unresponsive_proxy", lambda *_args, **_kwargs: None)
         monkeypatch.setattr(runtime_loop, "_select_user_agent_for_session", lambda *_args, **_kwargs: ("UA", None))
         runner, _state, _ctx, _loop, _scheduler = _build_runner(config=config, state=state)
@@ -290,6 +298,21 @@ class AsyncRuntimeLoopLargeTests:
         monkeypatch.setattr(asyncio, "to_thread", lambda func, *args, **kwargs: asyncio.sleep(0, result=func(*args, **kwargs)))
         monkeypatch.setattr(runtime_loop, "_handle_ai_runtime_error_impl", lambda exc, *_args, **_kwargs: str(exc) == "ai boom")
         assert await runner._handle_ai_runtime_error(AIRuntimeError("ai boom")) is True
+
+    @pytest.mark.asyncio
+    async def test_public_proxy_connection_error_rotates_without_stop_policy(self, monkeypatch) -> None:
+        config = ExecutionConfig(random_proxy_ip_enabled=True, proxy_source="free_pool")
+        state = ExecutionState(config=config)
+        runner, state, _ctx, _loop, _scheduler = _build_runner(config=config, state=state)
+        runner.proxy_address = "http://1.1.1.1:8000"
+        runner.stop_policy = _FakeStopPolicy()
+        monkeypatch.setattr(runtime_loop, "_proxy_address_is_public_source", lambda *_args, **_kwargs: True)
+        monkeypatch.setattr(runtime_loop, "_mark_proxy_temporarily_bad", lambda *_args, **_kwargs: None)
+        state.lock = _DummyLock()
+
+        assert runner._handle_proxy_connection_error(None) is False
+        assert runner.stop_policy.failure_calls == []
+        assert state.proxy_unavailable_fail_count == 1
 
     @pytest.mark.asyncio
     async def test_run_finishes_cleanly_when_scheduler_returns_none(self) -> None:

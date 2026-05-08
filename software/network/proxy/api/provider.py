@@ -15,6 +15,8 @@ from software.app.config import (
     PROXY_POOL_ORDINARY,
     PROXY_SOURCE_CUSTOM,
     PROXY_SOURCE_DEFAULT,
+    PROXY_SOURCE_FREE_POOL,
+    PROXY_SOURCE_IPLIST,
     PROXY_STATUS_TIMEOUT_SECONDS,
     STATUS_ENDPOINT,
 )
@@ -47,13 +49,9 @@ from software.network.proxy.pool.pool import (
     _build_proxy_lease,
     _mask_proxy_for_log,
 )
-
-_IP_PORT_RE = re.compile(
-    r'(?:https?://)?'
-    r'(?:([^\s:@/,]+):([^\s:@/,]+)@)?'
-    r'((?:\d{1,3}\.){3}\d{1,3})'
-    r':(\d{2,5})'
-)
+from software.network.proxy.pool.free_pool import fetch_free_proxy_batch
+from software.network.proxy.pool.iplist_pool import fetch_iplist_proxy_batch
+from software.network.proxy.pool.parsing import parse_proxy_payload
 
 _FATAL_PATTERNS = [
     (r"白名单", "请先添加当前IP到代理商白名单"),
@@ -64,6 +62,8 @@ _FATAL_PATTERNS = [
     (r"身份未认证", "请先完成实名认证"),
     (r"用户被禁用", "账号已被禁用，请联系代理商"),
 ]
+
+_FREE_POOL_PROVIDER_PROBE_TIMEOUT_MS = 5000
 
 
 class AreaProxyQualityError(RuntimeError):
@@ -124,73 +124,17 @@ def _resolve_final_source(final_upstream: str, fallback_source: str) -> str:
     return fallback_source
 
 
-def _extract_proxy_from_string(s: str) -> Optional[str]:
-    if not isinstance(s, str):
-        return None
-    m = _IP_PORT_RE.search(s.strip())
-    if not m:
-        return None
-    user, pwd, ip, port = m.group(1), m.group(2), m.group(3), m.group(4)
-    return f"{user}:{pwd}@{ip}:{port}" if user and pwd else f"{ip}:{port}"
-
-
-def _extract_proxy_from_dict(obj: dict) -> Optional[str]:
-    if not isinstance(obj, dict):
-        return None
-    ip = str(obj.get("ip") or obj.get("IP") or obj.get("host") or "").strip()
-    port = str(obj.get("port") or obj.get("Port") or obj.get("PORT") or "").strip()
-    if ip and port:
-        username = str(obj.get("account") or obj.get("username") or obj.get("user") or "").strip()
-        password = str(obj.get("password") or obj.get("pwd") or obj.get("pass") or "").strip()
-        return f"{username}:{password}@{ip}:{port}" if username and password else f"{ip}:{port}"
-    for v in obj.values():
-        if isinstance(v, str):
-            proxy = _extract_proxy_from_string(v)
-            if proxy:
-                return proxy
-    return None
-
-
-def _recursive_find_proxies(data: Any, results: List[str], depth: int = 0) -> None:
-    if depth > 10:
-        return
-    if isinstance(data, dict):
-        proxy = _extract_proxy_from_dict(data)
-        if proxy:
-            results.append(proxy)
-            return
-        for value in data.values():
-            _recursive_find_proxies(value, results, depth + 1)
-    elif isinstance(data, list):
-        for item in data:
-            if isinstance(item, str):
-                proxy = _extract_proxy_from_string(item)
-                if proxy:
-                    results.append(proxy)
-            else:
-                _recursive_find_proxies(item, results, depth + 1)
-    elif isinstance(data, str):
-        proxy = _extract_proxy_from_string(data)
-        if proxy:
-            results.append(proxy)
-
-
 def _parse_proxy_payload(text: str) -> List[str]:
-    try:
-        data = json.loads(text)
-    except json.JSONDecodeError as e:
-        raise ValueError(f"JSON解析失败: {e}")
-    candidates: List[str] = []
-    _recursive_find_proxies(data, candidates)
+    candidates = parse_proxy_payload(text)
     if not candidates:
-        raise ValueError("返回数据中无有效代理地址")
+        raise ValueError("No valid proxy address found in response")
     seen: Set[str] = set()
     unique: List[str] = []
     for addr in candidates:
         if addr not in seen:
             seen.add(addr)
             unique.append(addr)
-            logging.info(f"获取到代理: {_mask_proxy_for_log(addr)}")
+            logging.info("Proxy fetched: %s", _mask_proxy_for_log(addr))
     return unique
 
 
@@ -340,6 +284,22 @@ def _fetch_new_proxy_batch(
     current_source = get_proxy_source()
     is_custom = is_custom_proxy_source(current_source)
     is_official = is_official_proxy_source(current_source)
+
+    if current_source == PROXY_SOURCE_FREE_POOL:
+        return fetch_free_proxy_batch(
+            expected_count=expected_count,
+            stop_signal=stop_signal,
+            probe_timeout_ms=_FREE_POOL_PROVIDER_PROBE_TIMEOUT_MS,
+        )
+
+    if current_source == PROXY_SOURCE_IPLIST:
+        if not has_custom_proxy_api_override():
+            raise RuntimeError("IPList proxy endpoint is not configured")
+        return fetch_iplist_proxy_batch(
+            expected_count=expected_count,
+            proxy_url=get_effective_proxy_api_url(),
+            stop_signal=stop_signal,
+        )
 
     if is_custom:
         if not has_custom_proxy_api_override():

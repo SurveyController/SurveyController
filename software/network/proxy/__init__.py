@@ -30,6 +30,9 @@ from software.network.proxy.policy import (
     has_custom_proxy_api_override,
     is_custom_proxy_api_active,
     is_custom_proxy_source,
+    is_free_proxy_pool_source,
+    is_iplist_proxy_source,
+    is_local_free_proxy_source,
     is_official_proxy_source,
     normalize_proxy_source,
     normalize_random_ip_enabled_value,
@@ -45,7 +48,7 @@ from software.network.proxy.pool import (
     prefetch_proxy_pool,
     proxy_lease_has_sufficient_ttl,
 )
-from software.app.config import PROXY_SOURCE_CUSTOM, PROXY_SOURCE_DEFAULT
+from software.app.config import PROXY_SOURCE_CUSTOM, PROXY_SOURCE_DEFAULT, PROXY_SOURCE_FREE_POOL, PROXY_SOURCE_IPLIST
 from software.network.proxy.session import format_quota_value
 
 __all__ = [
@@ -54,6 +57,8 @@ __all__ = [
     "PROXY_SOURCE_BENEFIT",
     "PROXY_SOURCE_CUSTOM",
     "PROXY_SOURCE_DEFAULT",
+    "PROXY_SOURCE_FREE_POOL",
+    "PROXY_SOURCE_IPLIST",
     "ProxySettings",
     "apply_custom_proxy_api",
     "apply_proxy_area_code",
@@ -78,6 +83,9 @@ __all__ = [
     "has_custom_proxy_api_override",
     "is_custom_proxy_source",
     "is_custom_proxy_api_active",
+    "is_free_proxy_pool_source",
+    "is_iplist_proxy_source",
+    "is_local_free_proxy_source",
     "is_official_proxy_source",
     "normalize_proxy_source",
     "normalize_random_ip_enabled_value",

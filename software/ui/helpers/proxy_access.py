@@ -15,6 +15,7 @@ from software.network.proxy.policy import (
     get_proxy_settings,
     get_quota_cost_by_minute,
     get_random_ip_counter_snapshot_local,
+    is_local_free_proxy_source,
 )
 from software.network.proxy.session import (
     RandomIPAuthError,
@@ -41,6 +42,7 @@ __all__ = [
     "get_proxy_settings",
     "get_quota_cost_by_minute",
     "get_random_ip_counter_snapshot_local",
+    "is_local_free_proxy_source",
     "get_session_snapshot",
     "has_authenticated_session",
     "has_unknown_local_quota",
