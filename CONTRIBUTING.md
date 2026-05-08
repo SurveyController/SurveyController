@@ -14,6 +14,10 @@
 ├── .github/
 │   ├── ISSUE_TEMPLATE/
 │   └── workflows/
+│       ├── build-release-installer.yml
+│       ├── deploy-worker.yml
+│       ├── python-fast-ci.yml
+│       └── python-gate-ci.yml
 ├── .gitignore
 ├── AGENTS.md
 ├── assets/
@@ -21,7 +25,8 @@
 │   └── SurveyController/
 ├── CI/
 │   ├── live_tests/
-│   │   └── test_survey_parsers.py
+│   │   ├── run_async_engine_once.py
+│   │   └── test_live_runtime_regression.py
 │   ├── python_checks/
 │   │   ├── common.py
 │   │   ├── compile_check.py

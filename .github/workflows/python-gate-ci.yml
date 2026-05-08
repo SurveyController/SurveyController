@@ -1,0 +1,119 @@
+name: Python Gate CI
+
+on:
+  pull_request:
+  workflow_dispatch:
+  schedule:
+    - cron: "0 1 * * *"
+
+permissions:
+  contents: read
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
+
+concurrency:
+  group: python-gate-ci-${{ github.ref || github.run_id }}
+  cancel-in-progress: true
+
+jobs:
+  import-check:
+    name: Import Check
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v5
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@08807647e7069bb48b6ef5acd8ec9567f424441b # v8.1.0
+        with:
+          python-version: "3.11"
+          enable-cache: true
+          cache-dependency-glob: |
+            pyproject.toml
+            uv.lock
+
+      - name: Install dependencies
+        run: uv sync --locked
+
+      - name: Run module import check
+        run: uv run python -m CI.python_checks.import_check
+
+  window-smoke:
+    name: Window Smoke
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v5
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@08807647e7069bb48b6ef5acd8ec9567f424441b # v8.1.0
+        with:
+          python-version: "3.11"
+          enable-cache: true
+          cache-dependency-glob: |
+            pyproject.toml
+            uv.lock
+
+      - name: Install dependencies
+        run: uv sync --locked
+
+      - name: Run main window smoke check
+        run: uv run python -m CI.python_checks.window_smoke_check
+
+  live-runtime-regression-matrix:
+    name: Live Runtime Regression Matrix (${{ matrix.config_name }})
+    needs:
+      - import-check
+      - window-smoke
+    runs-on: windows-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - config_name: debug
+            config_path: configs/debug.json
+          - config_name: credamo
+            config_path: configs/credamo.json
+          - config_name: tencent
+            config_path: configs/腾讯问卷.json
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v5
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@08807647e7069bb48b6ef5acd8ec9567f424441b # v8.1.0
+        with:
+          python-version: "3.11"
+          enable-cache: true
+          cache-dependency-glob: |
+            pyproject.toml
+            uv.lock
+
+      - name: Install dependencies
+        run: uv sync --locked
+
+      - name: Run live runtime regression
+        env:
+          SURVEY_CONTROLLER_LIVE_TEST_CONFIG: ${{ matrix.config_path }}
+        run: uv run pytest CI/live_tests/test_live_runtime_regression.py -ra -vv --tb=short --durations=10 --color=yes
+
+  live-runtime-regression:
+    name: Live Runtime Regression
+    if: ${{ always() }}
+    needs:
+      - live-runtime-regression-matrix
+    runs-on: windows-latest
+
+    steps:
+      - name: Verify matrix result
+        shell: powershell
+        run: |
+          $result = "${{ needs.live-runtime-regression-matrix.result }}"
+          Write-Host "Live runtime regression matrix result: $result"
+          if ($result -ne "success") {
+            throw "Live runtime regression did not pass."
+          }
