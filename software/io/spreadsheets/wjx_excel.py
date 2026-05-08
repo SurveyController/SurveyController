@@ -80,9 +80,10 @@ def _detect_wjx_export_format(question_columns: Dict[int, List[ReverseFillColumn
 def load_wjx_excel_export(source_path: str, *, preferred_format: str = REVERSE_FILL_FORMAT_AUTO) -> WjxExcelExport:
     from openpyxl import load_workbook
 
-    path = os.path.abspath(str(source_path or "").strip())
-    if not path:
+    raw_path = str(source_path or "").strip()
+    if not raw_path:
         raise ValueError("未提供 Excel 文件路径")
+    path = os.path.abspath(raw_path)
     if not os.path.exists(path):
         raise ValueError(f"Excel 文件不存在：{path}")
 

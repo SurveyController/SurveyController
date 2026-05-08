@@ -1,6 +1,6 @@
 [project]
 name = "surveycontroller"
-version = "3.1.3a1"
+version = "3.1.4"
 description = "SurveyController desktop application"
 readme = "README.md"
 requires-python = ">=3.11"
