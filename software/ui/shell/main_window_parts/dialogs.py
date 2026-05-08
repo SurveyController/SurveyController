@@ -1,4 +1,5 @@
 """MainWindow 对话框与线程安全弹窗方法。"""
+
 from __future__ import annotations
 
 import logging
@@ -11,7 +12,11 @@ from PySide6.QtWidgets import QApplication
 from PySide6.QtWidgets import QDialog
 from qfluentwidgets import InfoBar, InfoBarPosition, MessageBox
 
-from software.app.config import TASK_RESULT_WINDOWS_NOTIFICATION_SETTING_KEY, app_settings, get_bool_from_qsettings
+from software.app.config import (
+    TASK_RESULT_WINDOWS_NOTIFICATION_SETTING_KEY,
+    app_settings,
+    get_bool_from_qsettings,
+)
 from software.logging.action_logger import log_action
 
 
@@ -64,13 +69,37 @@ class MainWindowDialogsMixin:
     def _toast(self, text: str, level: str = "info", duration: int = 2000):
         kind = level.lower()
         if kind == "success":
-            InfoBar.success("", text, parent=self, position=InfoBarPosition.TOP, duration=duration)
+            InfoBar.success(
+                "",
+                text,
+                parent=self,
+                position=InfoBarPosition.TOP,
+                duration=duration,
+            )
         elif kind == "warning":
-            InfoBar.warning("", text, parent=self, position=InfoBarPosition.TOP, duration=duration)
+            InfoBar.warning(
+                "",
+                text,
+                parent=self,
+                position=InfoBarPosition.TOP,
+                duration=duration,
+            )
         elif kind == "error":
-            InfoBar.error("", text, parent=self, position=InfoBarPosition.TOP, duration=duration)
+            InfoBar.error(
+                "",
+                text,
+                parent=self,
+                position=InfoBarPosition.TOP,
+                duration=duration,
+            )
         else:
-            InfoBar.info("", text, parent=self, position=InfoBarPosition.TOP, duration=duration)
+            InfoBar.info(
+                "",
+                text,
+                parent=self,
+                position=InfoBarPosition.TOP,
+                duration=duration,
+            )
 
     def _dispatch_to_ui_async(self, func: Callable[[], Any]) -> None:
         if self.thread() == QThread.currentThread():  # type: ignore[attr-defined]
@@ -101,10 +130,13 @@ class MainWindowDialogsMixin:
 
     def _should_show_task_result_windows_notification(self) -> bool:
         settings = app_settings()
-        return get_bool_from_qsettings(
-            settings.value(TASK_RESULT_WINDOWS_NOTIFICATION_SETTING_KEY),
-            True,
-        ) and not self._is_window_activated()
+        return (
+            get_bool_from_qsettings(
+                settings.value(TASK_RESULT_WINDOWS_NOTIFICATION_SETTING_KEY),
+                True,
+            )
+            and not self._is_window_activated()
+        )
 
     def show_task_result_windows_notification(self, title: str, message: str) -> None:
         if not self._should_show_task_result_windows_notification():
@@ -120,7 +152,12 @@ class MainWindowDialogsMixin:
             tray.setIcon(self.windowIcon())
             tray.setVisible(True)
             self._task_result_tray_icon = tray
-        tray.showMessage(str(title or ""), str(message or ""), QSystemTrayIcon.MessageIcon.Information, 5000)
+        tray.showMessage(
+            str(title or ""),
+            str(message or ""),
+            QSystemTrayIcon.MessageIcon.Information,
+            5000,
+        )
 
     def _track_async_dialog(self, dialog: QDialog) -> None:
         dialogs = getattr(self, "_async_dialog_refs", None)
@@ -142,7 +179,14 @@ class MainWindowDialogsMixin:
         """显示确认对话框，返回用户是否确认。"""
 
         def _show():
-            log_action("DIALOG", "confirm", "message_box", "main_window", result="shown", detail=title)
+            log_action(
+                "DIALOG",
+                "confirm",
+                "message_box",
+                "main_window",
+                result="shown",
+                detail=title,
+            )
             box = MessageBox(title, message, self)
             box.yesButton.setText("确定")
             box.cancelButton.setText("取消")
@@ -167,7 +211,14 @@ class MainWindowDialogsMixin:
         cancel_text: str,
     ) -> bool:
         """在 UI 线程显示自定义按钮确认框。"""
-        log_action("DIALOG", "confirm", "message_box", "main_window", result="shown", detail=title)
+        log_action(
+            "DIALOG",
+            "confirm",
+            "message_box",
+            "main_window",
+            result="shown",
+            detail=title,
+        )
         box = MessageBox(title, message, self)
         box.yesButton.setText(str(yes_text or "确定"))
         box.cancelButton.setText(str(cancel_text or "取消"))

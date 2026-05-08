@@ -1,4 +1,5 @@
 """条件规则弹窗。"""
+
 from __future__ import annotations
 
 import copy
@@ -27,10 +28,18 @@ from qfluentwidgets import (
 )
 
 from software.core.questions.consistency import normalize_rule_dict
-from software.providers.contracts import SurveyQuestionMeta, ensure_survey_question_metas
+from software.providers.contracts import (
+    SurveyQuestionMeta,
+    ensure_survey_question_metas,
+)
 
 ALLOWED_RULE_TYPE_CODES = {"3", "4", "5", "6"}
-RULE_TYPE_CODE_LABELS = {"3": "单选题", "4": "多选题", "5": "量表题", "6": "矩阵题"}
+RULE_TYPE_CODE_LABELS = {
+    "3": "单选题",
+    "4": "多选题",
+    "5": "量表题",
+    "6": "矩阵题",
+}
 CONDITION_MODE_LABELS = {
     "selected": "选择了以下选项",
     "not_selected": "未选择以下选项",
@@ -268,14 +277,21 @@ class ConditionRuleDialog(QDialog):
     def _fill_question_combo(self, combo: ComboBox) -> None:
         combo.clear()
         combo.addItem("请选择题目", userData=None)
-        sorted_questions = sorted(self._question_map.values(), key=lambda x: to_int(x.get("num"), 0))
+        sorted_questions = sorted(
+            self._question_map.values(), key=lambda x: to_int(x.get("num"), 0)
+        )
         for question in sorted_questions:
-            combo.addItem(build_question_label(question), userData=to_int(question.get("num"), 0))
+            combo.addItem(
+                build_question_label(question),
+                userData=to_int(question.get("num"), 0),
+            )
 
     def _bind_events(self) -> None:
         self.cancel_btn.clicked.connect(self.reject)
         self.ok_btn.clicked.connect(self._on_confirm_clicked)
-        self.condition_question_combo.currentIndexChanged.connect(self._on_condition_question_changed)
+        self.condition_question_combo.currentIndexChanged.connect(
+            self._on_condition_question_changed
+        )
         self.target_question_combo.currentIndexChanged.connect(self._on_target_question_changed)
         self.condition_row_combo.currentIndexChanged.connect(self._on_condition_row_changed)
         self.target_row_combo.currentIndexChanged.connect(self._on_target_row_changed)
@@ -311,8 +327,16 @@ class ConditionRuleDialog(QDialog):
             self.target_question_combo.setCurrentIndex(target_idx)
             self.target_question_combo.blockSignals(False)
 
-        self._update_row_selector(self.condition_question_combo, self._condition_row_widget, self.condition_row_combo)
-        self._update_row_selector(self.target_question_combo, self._target_row_widget, self.target_row_combo)
+        self._update_row_selector(
+            self.condition_question_combo,
+            self._condition_row_widget,
+            self.condition_row_combo,
+        )
+        self._update_row_selector(
+            self.target_question_combo,
+            self._target_row_widget,
+            self.target_row_combo,
+        )
         if condition_row_index is not None:
             row_idx = self.condition_row_combo.findData(condition_row_index)
             if row_idx >= 0:
@@ -341,13 +365,21 @@ class ConditionRuleDialog(QDialog):
 
     def _on_condition_question_changed(self) -> None:
         q_num = self._get_combo_question_num(self.condition_question_combo)
-        self._update_row_selector(self.condition_question_combo, self._condition_row_widget, self.condition_row_combo)
+        self._update_row_selector(
+            self.condition_question_combo,
+            self._condition_row_widget,
+            self.condition_row_combo,
+        )
         row_index = self._get_combo_row_index(self.condition_row_combo)
         self._render_condition_options([], q_num, row_index)
 
     def _on_target_question_changed(self) -> None:
         q_num = self._get_combo_question_num(self.target_question_combo)
-        self._update_row_selector(self.target_question_combo, self._target_row_widget, self.target_row_combo)
+        self._update_row_selector(
+            self.target_question_combo,
+            self._target_row_widget,
+            self.target_row_combo,
+        )
         row_index = self._get_combo_row_index(self.target_row_combo)
         self._render_target_options([], q_num, row_index)
 
@@ -391,7 +423,12 @@ class ConditionRuleDialog(QDialog):
         info = self._question_map.get(question_num) or {}
         return normalize_question_type_code(info.get("type_code")) == "6"
 
-    def _update_row_selector(self, question_combo: ComboBox, row_widget: QWidget, row_combo: ComboBox) -> None:
+    def _update_row_selector(
+        self,
+        question_combo: ComboBox,
+        row_widget: QWidget,
+        row_combo: ComboBox,
+    ) -> None:
         q_num = self._get_combo_question_num(question_combo)
         if q_num is not None and self._is_matrix_question(q_num):
             info = self._question_map.get(q_num) or {}
@@ -407,7 +444,12 @@ class ConditionRuleDialog(QDialog):
             row_combo.clear()
             row_widget.hide()
 
-    def _render_condition_options(self, selected_indices: List[int], question_num: Optional[int], row_index: Optional[int]) -> None:
+    def _render_condition_options(
+        self,
+        selected_indices: List[int],
+        question_num: Optional[int],
+        row_index: Optional[int],
+    ) -> None:
         self._condition_checks = self._render_option_checks(
             self.condition_options_layout,
             selected_indices,
@@ -416,7 +458,12 @@ class ConditionRuleDialog(QDialog):
             "请先选择条件题目",
         )
 
-    def _render_target_options(self, selected_indices: List[int], question_num: Optional[int], row_index: Optional[int]) -> None:
+    def _render_target_options(
+        self,
+        selected_indices: List[int],
+        question_num: Optional[int],
+        row_index: Optional[int],
+    ) -> None:
         self._target_checks = self._render_option_checks(
             self.target_options_layout,
             selected_indices,
@@ -446,7 +493,9 @@ class ConditionRuleDialog(QDialog):
             label.setStyleSheet("color: #888888;")
             layout.addWidget(label)
             return []
-        option_texts = info.get("option_texts") if isinstance(info.get("option_texts"), list) else []
+        option_texts = (
+            info.get("option_texts") if isinstance(info.get("option_texts"), list) else []
+        )
         checks: List[CheckBox] = []
         if not option_texts:
             label = BodyLabel("该题未解析到选项，无法配置条件规则", self)
@@ -470,7 +519,13 @@ class ConditionRuleDialog(QDialog):
         return result
 
     def _warn(self, message: str) -> None:
-        InfoBar.warning("", message, parent=self, position=InfoBarPosition.TOP, duration=2200)
+        InfoBar.warning(
+            "",
+            message,
+            parent=self,
+            position=InfoBarPosition.TOP,
+            duration=2200,
+        )
 
     def _on_confirm_clicked(self) -> None:
         rule = self._build_rule()
@@ -497,10 +552,18 @@ class ConditionRuleDialog(QDialog):
 
         condition_info = self._question_map.get(condition_num)
         target_info = self._question_map.get(target_num)
-        if not condition_info or normalize_question_type_code(condition_info.get("type_code")) not in ALLOWED_RULE_TYPE_CODES:
+        if (
+            not condition_info
+            or normalize_question_type_code(condition_info.get("type_code"))
+            not in ALLOWED_RULE_TYPE_CODES
+        ):
             self._warn("条件题目类型不支持")
             return None
-        if not target_info or normalize_question_type_code(target_info.get("type_code")) not in ALLOWED_RULE_TYPE_CODES:
+        if (
+            not target_info
+            or normalize_question_type_code(target_info.get("type_code"))
+            not in ALLOWED_RULE_TYPE_CODES
+        ):
             self._warn("目标题目类型不支持")
             return None
 
@@ -527,7 +590,9 @@ class ConditionRuleDialog(QDialog):
             self._warn("请至少勾选一个目标选项")
             return None
 
-        condition_mode = "not_selected" if self.condition_not_selected_radio.isChecked() else "selected"
+        condition_mode = (
+            "not_selected" if self.condition_not_selected_radio.isChecked() else "selected"
+        )
         action_mode = "must_not_select" if self.must_not_select_radio.isChecked() else "must_select"
         rule_id = ""
         if isinstance(self._rule_data, dict):

@@ -1,4 +1,5 @@
 """IP 使用记录页面"""
+
 from __future__ import annotations
 
 import math
@@ -16,9 +17,30 @@ from software.ui.helpers.proxy_access import (
     has_authenticated_session,
 )
 
-from PySide6.QtCore import Qt, QPoint, QPointF, QDate, QDateTime, QTime, Signal, QRectF, QPropertyAnimation, QEasingCurve, Property, QTimer, QByteArray, Slot
+from PySide6.QtCore import (
+    Qt,
+    QPoint,
+    QPointF,
+    QDate,
+    QDateTime,
+    QTime,
+    Signal,
+    QRectF,
+    QPropertyAnimation,
+    QEasingCurve,
+    Property,
+    QTimer,
+    QByteArray,
+    Slot,
+)
 from typing import Any
-from PySide6.QtCharts import QChart, QLineSeries, QChartView, QValueAxis, QDateTimeAxis
+from PySide6.QtCharts import (
+    QChart,
+    QLineSeries,
+    QChartView,
+    QValueAxis,
+    QDateTimeAxis,
+)
 from PySide6.QtGui import QPainter, QPen, QColor, QBrush
 from PySide6.QtWidgets import (
     QWidget,
@@ -41,6 +63,7 @@ from qfluentwidgets import (
     qconfig,
 )
 
+
 class ConfettiOverlay(QWidget):
     """礼炮彩带动画覆盖层，透明背景、鼠标穿透，只播放一次。"""
 
@@ -59,9 +82,9 @@ class ConfettiOverlay(QWidget):
         _ = parent
         super().__init__(None)  # 顶层窗口，不挂父控件，避免子控件透明属性崩溃
         self.setWindowFlags(
-            Qt.WindowType.FramelessWindowHint |
-            Qt.WindowType.WindowStaysOnTopHint |
-            Qt.WindowType.Tool
+            Qt.WindowType.FramelessWindowHint
+            | Qt.WindowType.WindowStaysOnTopHint
+            | Qt.WindowType.Tool
         )
         self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground, True)  # 顶层窗口才能安全使用
         self.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents, True)
@@ -78,18 +101,21 @@ class ConfettiOverlay(QWidget):
             for _ in range(90):
                 angle_rad = math.radians(base_angle + random.uniform(-28, 28))
                 speed = random.uniform(10, 22)
-                self._particles.append({
-                    'x': float(cannon_x), 'y': float(h),
-                    'vx': math.cos(angle_rad) * speed,
-                    'vy': -math.sin(angle_rad) * speed,
-                    'angle': random.uniform(0, 360),
-                    'av': random.uniform(-9, 9),
-                    'color': random.choice(self._COLORS),
-                    'w': random.uniform(7, 13),
-                    'h': random.uniform(3, 7),
-                    'life': 1.0,
-                    'decay': random.uniform(0.005, 0.010),
-                })
+                self._particles.append(
+                    {
+                        "x": float(cannon_x),
+                        "y": float(h),
+                        "vx": math.cos(angle_rad) * speed,
+                        "vy": -math.sin(angle_rad) * speed,
+                        "angle": random.uniform(0, 360),
+                        "av": random.uniform(-9, 9),
+                        "color": random.choice(self._COLORS),
+                        "w": random.uniform(7, 13),
+                        "h": random.uniform(3, 7),
+                        "life": 1.0,
+                        "decay": random.uniform(0.005, 0.010),
+                    }
+                )
         self.show()
         self.raise_()
         self._timer.start()
@@ -97,13 +123,13 @@ class ConfettiOverlay(QWidget):
     def _tick(self):
         alive = []
         for p in self._particles:
-            p['vy'] += 0.32
-            p['vx'] *= 0.992
-            p['x'] += p['vx']
-            p['y'] += p['vy']
-            p['angle'] += p['av']
-            p['life'] -= p['decay']
-            if p['life'] > 0:
+            p["vy"] += 0.32
+            p["vx"] *= 0.992
+            p["x"] += p["vx"]
+            p["y"] += p["vy"]
+            p["angle"] += p["av"]
+            p["life"] -= p["decay"]
+            if p["life"] > 0:
                 alive.append(p)
         self._particles = alive
         if not self._particles:
@@ -120,46 +146,61 @@ class ConfettiOverlay(QWidget):
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
         for p in self._particles:
             painter.save()
-            painter.translate(p['x'], p['y'])
-            painter.rotate(p['angle'])
-            c = QColor(p['color'])
-            c.setAlphaF(min(1.0, p['life'] * 1.8))
+            painter.translate(p["x"], p["y"])
+            painter.rotate(p["angle"])
+            c = QColor(p["color"])
+            c.setAlphaF(min(1.0, p["life"] * 1.8))
             painter.setPen(Qt.PenStyle.NoPen)
             painter.setBrush(c)
-            hw, hh = p['w'] / 2, p['h'] / 2
-            painter.drawRect(int(-hw), int(-hh), int(p['w']), int(p['h']))
+            hw, hh = p["w"] / 2, p["h"] / 2
+            painter.drawRect(int(-hw), int(-hh), int(p["w"]), int(p["h"]))
             painter.restore()
         painter.end()
 
 
 def _compute_monotone_slopes(xs, ys):
     n = len(xs)
-    d = [(ys[i+1]-ys[i])/(xs[i+1]-xs[i]) for i in range(n-1)]
-    m = [0.0]*n
+    d = [(ys[i + 1] - ys[i]) / (xs[i + 1] - xs[i]) for i in range(n - 1)]
+    m = [0.0] * n
     m[0], m[-1] = d[0], d[-1]
-    for i in range(1, n-1):
-        m[i] = (d[i-1]+d[i])/2
-    for i in range(n-1):
+    for i in range(1, n - 1):
+        m[i] = (d[i - 1] + d[i]) / 2
+    for i in range(n - 1):
         if abs(d[i]) < 1e-10:
-            m[i] = m[i+1] = 0.0
+            m[i] = m[i + 1] = 0.0
         else:
-            a, b = m[i]/d[i], m[i+1]/d[i]
-            s = a*a+b*b
+            a, b = m[i] / d[i], m[i + 1] / d[i]
+            s = a * a + b * b
             if s > 9:
-                t = 3/math.sqrt(s)
-                m[i] = t*a*d[i]; m[i+1] = t*b*d[i]
+                t = 3 / math.sqrt(s)
+                m[i] = t * a * d[i]
+                m[i + 1] = t * b * d[i]
     return m
 
+
 def _eval_monotone_cubic(xs, ys, ms, x):
-    if x <= xs[0]: return ys[0]
-    if x >= xs[-1]: return ys[-1]
-    lo, hi = 0, len(xs)-2
+    if x <= xs[0]:
+        return ys[0]
+    if x >= xs[-1]:
+        return ys[-1]
+    lo, hi = 0, len(xs) - 2
     while lo < hi:
-        mid = (lo+hi)//2
-        if xs[mid+1] < x: lo = mid+1
-        else: hi = mid
-    i = lo; h = xs[i+1]-xs[i]; t = (x-xs[i])/h; t2, t3 = t*t, t*t*t
-    return (2*t3-3*t2+1)*ys[i]+(t3-2*t2+t)*h*ms[i]+(-2*t3+3*t2)*ys[i+1]+(t3-t2)*h*ms[i+1]
+        mid = (lo + hi) // 2
+        if xs[mid + 1] < x:
+            lo = mid + 1
+        else:
+            hi = mid
+    i = lo
+    h = xs[i + 1] - xs[i]
+    t = (x - xs[i]) / h
+    t2, t3 = t * t, t * t * t
+    return (
+        (2 * t3 - 3 * t2 + 1) * ys[i]
+        + (t3 - 2 * t2 + t) * h * ms[i]
+        + (-2 * t3 + 3 * t2) * ys[i + 1]
+        + (t3 - t2) * h * ms[i + 1]
+    )
+
 
 class ChartOverlay(QWidget):
     def __init__(self, parent=None, curve_y_fn=None):
@@ -182,8 +223,13 @@ class ChartOverlay(QWidget):
         self._smooth_timer.setInterval(16)
         self._smooth_timer.timeout.connect(self._smooth_step)
 
-    def _get_opacity(self): return self._opacity
-    def _set_opacity(self, v): self._opacity = v; self.update()
+    def _get_opacity(self):
+        return self._opacity
+
+    def _set_opacity(self, v):
+        self._opacity = v
+        self.update()
+
     opacity = Property(float, _get_opacity, _set_opacity)  # type: ignore[call-arg]
 
     def _smooth_step(self):
@@ -233,26 +279,26 @@ class ChartOverlay(QWidget):
         painter = QPainter(self)
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
         painter.setOpacity(self._opacity)
-        
+
         top_y = self.plot_area.top()
         bottom_y = self.plot_area.bottom()
-        
+
         c = themeColor()
-        
+
         # 竖线
         pen = QPen(c, 1.5, Qt.PenStyle.DashLine)
         painter.setPen(pen)
         painter.drawLine(QPointF(self._current_x, top_y), QPointF(self._current_x, bottom_y))
-        
+
         # 关键点小圆圈
         painter.setPen(QPen(c, 2.5))
         painter.setBrush(QColor(255, 255, 255) if not isDarkTheme() else QColor(30, 30, 30))
         painter.drawEllipse(QPointF(self._current_x, self._current_y), 5, 5)
-        
+
         # 提示内容
         text1 = f"{self.date_str}"
         text2 = f"提取数量: {self.ip_count}"
-        
+
         font = self.font()
         font.setPointSize(10)
         painter.setFont(font)
@@ -261,42 +307,47 @@ class ChartOverlay(QWidget):
         w2 = fm.horizontalAdvance(text2)
         box_w = max(w1, w2) + 32
         box_h = fm.height() * 2 + 20
-        
+
         # 计算 tooltip 位置，防越界
         box_x = self._current_x + 12
         if box_x + box_w > self.width() - 10:
             box_x = self._current_x - box_w - 12
-            
+
         box_y = self._current_y - box_h / 2
         if box_y < top_y:
             box_y = top_y
         if box_y + box_h > bottom_y:
             box_y = bottom_y - box_h
-            
+
         dark = isDarkTheme()
         bg_col = QColor(43, 43, 43, 245) if dark else QColor(255, 255, 255, 245)
         border_col = QColor(255, 255, 255, 20) if dark else QColor(0, 0, 0, 20)
         text_col1 = QColor(200, 200, 200) if dark else QColor(100, 100, 100)
         text_col2 = QColor(255, 255, 255) if dark else QColor(30, 30, 30)
-        
+
         # 阴影
         painter.setPen(Qt.PenStyle.NoPen)
         painter.setBrush(QColor(0, 0, 0, 40 if not dark else 80))
-        painter.drawRoundedRect(QRectF(box_x+2, box_y+3, box_w, box_h), 8, 8)
-        
+        painter.drawRoundedRect(QRectF(box_x + 2, box_y + 3, box_w, box_h), 8, 8)
+
         # 背景卡片
         painter.setPen(QPen(border_col, 1))
         painter.setBrush(bg_col)
         painter.drawRoundedRect(QRectF(box_x, box_y, box_w, box_h), 8, 8)
-        
+
         # 文本
         painter.setPen(text_col1)
         painter.drawText(int(box_x + 16), int(box_y + 10 + fm.ascent()), text1)
-        
+
         painter.setPen(text_col2)
         font.setBold(True)
         painter.setFont(font)
-        painter.drawText(int(box_x + 16), int(box_y + 10 + fm.height() + 6 + fm.ascent()), text2)
+        painter.drawText(
+            int(box_x + 16),
+            int(box_y + 10 + fm.height() + 6 + fm.ascent()),
+            text2,
+        )
+
 
 class InteractiveChartView(QChartView):
     def __init__(self, chart, series, point_meta_ref, data_points_ref, parent=None):
@@ -323,7 +374,7 @@ class InteractiveChartView(QChartView):
         data_y = _eval_monotone_cubic(self._interp_xs, self._interp_ys, self._interp_ms, data_x)
         item_pos = self.chart().mapToPosition(QPointF(data_x, data_y), self._series)
         return self.mapFromScene(self.chart().mapToScene(item_pos)).y()
-    
+
     def resizeEvent(self, event):
         super().resizeEvent(event)
         self.overlay.resize(self.size())
@@ -338,47 +389,59 @@ class InteractiveChartView(QChartView):
         pos = event.position()
         scene_pos = self.mapToScene(pos.toPoint())
         chart_item_pos = self.chart().mapFromScene(scene_pos)
-        
+
         plot_area = self.chart().plotArea()
         # 扩大一点包围盒区域，增加图表边缘处的鼠标捕捉容错范围
         extended_area = plot_area.adjusted(-30, -30, 30, 30)
-        
+
         if not extended_area.contains(chart_item_pos):
             self.overlay.hide_line()
             return
-        
-        # 抛弃逻辑坐标系计算，直接通过转化到真实屏幕试图 (View) 中的物理像素坐标来计算横向距离
+
+        # 转成视图坐标后计算横向距离，避免逻辑坐标偏差。
         closest_p = None
         closest_view_pos = None
-        min_dist = float('inf')
-        
+        min_dist = float("inf")
+
         for p in points:
-            # 完整坐标系映射: 逻辑数据 -> QChart 元素 -> QGraphicsScene 场景 -> QChartView 视图组件物理像素
+            # 逻辑数据 -> QChart -> QGraphicsScene -> QChartView。
             item_pos = self.chart().mapToPosition(p, self._series)
             scene_pos_point = self.chart().mapToScene(item_pos)
             view_pos = self.mapFromScene(scene_pos_point)
-            
+
             # 使用视口中的纯物理 X 像素坐标做差，获得最直观的跟随
             dist = abs(view_pos.x() - pos.x())
             if dist < min_dist:
                 min_dist = dist
                 closest_p = p
                 closest_view_pos = view_pos
-                
+
         if closest_p is not None:
             assert closest_view_pos is not None
             # 用于约束实线垂直上下高度的边界矩形，同样映射到当前物理视图
             top_left = self.mapFromScene(self.chart().mapToScene(plot_area.topLeft()))
             bottom_right = self.mapFromScene(self.chart().mapToScene(plot_area.bottomRight()))
             view_plot_area = QRectF(top_left, bottom_right)
-            
+
             ts = int(round(closest_p.x()))
-            label, total = self._point_meta.get(ts, (QDateTime.fromMSecsSinceEpoch(ts).toString("yyyy-MM-dd"), int(round(closest_p.y()))))
-            
-            self.overlay.update_point(closest_view_pos.x(), closest_view_pos.y(), label, total, view_plot_area)
+            label, total = self._point_meta.get(
+                ts,
+                (
+                    QDateTime.fromMSecsSinceEpoch(ts).toString("yyyy-MM-dd"),
+                    int(round(closest_p.y())),
+                ),
+            )
+
+            self.overlay.update_point(
+                closest_view_pos.x(),
+                closest_view_pos.y(),
+                label,
+                total,
+                view_plot_area,
+            )
         else:
             self.overlay.hide_line()
-            
+
     def leaveEvent(self, event):
         super().leaveEvent(event)
         self.overlay.hide_line()
@@ -392,7 +455,9 @@ class IpUsagePage(ScrollArea):
     def __init__(self, parent=None):
         super().__init__(parent)
         self._dataLoaded.connect(self._on_data_loaded, Qt.ConnectionType.QueuedConnection)
-        self._bonusClaimFinished.connect(self._on_bonus_claim_finished, Qt.ConnectionType.QueuedConnection)
+        self._bonusClaimFinished.connect(
+            self._on_bonus_claim_finished, Qt.ConnectionType.QueuedConnection
+        )
         self._load_requested_once = False
         self._last_load_failed = False
         self._load_scheduled = False
@@ -473,7 +538,9 @@ class IpUsagePage(ScrollArea):
         self._chart.addAxis(self._axis_y, Qt.AlignmentFlag.AlignLeft)
         self._series.attachAxis(self._axis_y)
 
-        self._chart_view = InteractiveChartView(self._chart, self._series, self._point_meta, self._data_points)
+        self._chart_view = InteractiveChartView(
+            self._chart, self._series, self._point_meta, self._data_points
+        )
         self._chart_view.setRenderHint(QPainter.RenderHint.Antialiasing)
         self._chart_view.setStyleSheet("background: transparent; border: none;")
         self._chart_view.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
@@ -541,7 +608,9 @@ class IpUsagePage(ScrollArea):
             "color: rgba(198, 205, 218, 0.78);" if dark else "color: rgba(95, 102, 114, 0.9);"
         )
         self._loading_overlay.setStyleSheet(
-            "background-color: rgba(16, 19, 27, 155);" if dark else "background-color: rgba(255, 255, 255, 175);"
+            "background-color: rgba(16, 19, 27, 155);"
+            if dark
+            else "background-color: rgba(255, 255, 255, 175);"
         )
 
     def _load_data(self):
@@ -566,7 +635,13 @@ class IpUsagePage(ScrollArea):
         self._last_load_failed = bool(error)
 
         if error:
-            InfoBar.error("", f"获取失败：{error}", parent=self.window(), position=InfoBarPosition.TOP, duration=4000)
+            InfoBar.error(
+                "",
+                f"获取失败：{error}",
+                parent=self.window(),
+                position=InfoBarPosition.TOP,
+                duration=4000,
+            )
             self._date_label.setText("加载失败，请切换页面后重试")
             self._ip_balance_label.setText("IP池剩余数量：同步失败")
             return
@@ -618,15 +693,21 @@ class IpUsagePage(ScrollArea):
         if len(xs) >= 2:
             ms = _compute_monotone_slopes(xs, ys)
             self._chart_view.set_interp_data(xs, ys, ms)
-            for i in range(len(xs)-1):
-                h = xs[i+1]-xs[i]
+            for i in range(len(xs) - 1):
+                h = xs[i + 1] - xs[i]
                 for j in range(12):
-                    t = j/12; t2, t3 = t*t, t*t*t
-                    yi = (2*t3-3*t2+1)*ys[i]+(t3-2*t2+t)*h*ms[i]+(-2*t3+3*t2)*ys[i+1]+(t3-t2)*h*ms[i+1]
-                    self._series.append(QPointF(xs[i]+t*h, yi))
+                    t = j / 12
+                    t2, t3 = t * t, t * t * t
+                    yi = (
+                        (2 * t3 - 3 * t2 + 1) * ys[i]
+                        + (t3 - 2 * t2 + t) * h * ms[i]
+                        + (-2 * t3 + 3 * t2) * ys[i + 1]
+                        + (t3 - t2) * h * ms[i + 1]
+                    )
+                    self._series.append(QPointF(xs[i] + t * h, yi))
             self._series.append(QPointF(xs[-1], ys[-1]))
         else:
-            self._chart_view.set_interp_data(xs, ys, [0.0]*len(xs))
+            self._chart_view.set_interp_data(xs, ys, [0.0] * len(xs))
             for p in self._data_points:
                 self._series.append(p)
 
@@ -750,6 +831,7 @@ class IpUsagePage(ScrollArea):
             self._confetti_overlay = ConfettiOverlay()
         # 用全局坐标覆盖主窗口区域
         from PySide6.QtCore import QRect
+
         global_rect = QRect(top.mapToGlobal(QPoint(0, 0)), size)
         try:
             self._confetti_overlay.setGeometry(global_rect)
@@ -766,13 +848,25 @@ class IpUsagePage(ScrollArea):
         if self._bonus_claim_in_progress:
             return
         self._bonus_claim_in_progress = True
-        threading.Thread(target=self._claim_bonus_worker, daemon=True, name="EasterEggBonusClaim").start()
+        threading.Thread(
+            target=self._claim_bonus_worker,
+            daemon=True,
+            name="EasterEggBonusClaim",
+        ).start()
 
     def _claim_bonus_worker(self) -> None:
-        payload: dict[str, Any] = {"level": "success", "message": "🎉恭喜发现彩蛋", "play_confetti": True}
+        payload: dict[str, Any] = {
+            "level": "success",
+            "message": "🎉恭喜发现彩蛋",
+            "play_confetti": True,
+        }
         try:
             if not has_authenticated_session():
-                payload = {"level": "info", "message": "🎉恭喜发现彩蛋，激活随机IP后可领取隐藏福利", "play_confetti": True}
+                payload = {
+                    "level": "info",
+                    "message": "🎉恭喜发现彩蛋，激活随机IP后可领取隐藏福利",
+                    "play_confetti": True,
+                }
             else:
                 result = claim_easter_egg_bonus()
                 claimed = bool(result.get("claimed"))
@@ -781,23 +875,49 @@ class IpUsagePage(ScrollArea):
                 if claimed and bonus_quota > 0:
                     payload = {
                         "level": "success",
-                        "message": f"🎉恭喜发现彩蛋，额度+{format_quota_value(bonus_quota)}",
+                        "message": (f"🎉恭喜发现彩蛋，额度+{format_quota_value(bonus_quota)}"),
                         "play_confetti": True,
                     }
                 elif claimed:
-                    payload = {"level": "success", "message": "🎉恭喜发现彩蛋，隐藏福利已到账", "play_confetti": True}
-                elif detail in {"bonus_already_claimed", "easter_egg_already_claimed"}:
-                    payload = {"skip_infobar": True, "play_confetti": False, "mark_confetti_played": True}
+                    payload = {
+                        "level": "success",
+                        "message": "🎉恭喜发现彩蛋，隐藏福利已到账",
+                        "play_confetti": True,
+                    }
+                elif detail in {
+                    "bonus_already_claimed",
+                    "easter_egg_already_claimed",
+                }:
+                    payload = {
+                        "skip_infobar": True,
+                        "play_confetti": False,
+                        "mark_confetti_played": True,
+                    }
                 else:
                     payload = {"skip_infobar": True, "play_confetti": False}
         except RandomIPAuthError as exc:
             detail = str(exc.detail or "").strip()
-            if detail in {"bonus_already_claimed", "easter_egg_already_claimed"}:
-                payload = {"skip_infobar": True, "play_confetti": False, "mark_confetti_played": True}
+            if detail in {
+                "bonus_already_claimed",
+                "easter_egg_already_claimed",
+            }:
+                payload = {
+                    "skip_infobar": True,
+                    "play_confetti": False,
+                    "mark_confetti_played": True,
+                }
             else:
-                payload = {"level": "warning", "message": format_random_ip_error(exc), "play_confetti": False}
+                payload = {
+                    "level": "warning",
+                    "message": format_random_ip_error(exc),
+                    "play_confetti": False,
+                }
         except Exception as exc:
-            payload = {"level": "warning", "message": f"领取彩蛋奖励失败：{exc}", "play_confetti": False}
+            payload = {
+                "level": "warning",
+                "message": f"领取彩蛋奖励失败：{exc}",
+                "play_confetti": False,
+            }
         finally:
             self._bonusClaimFinished.emit(payload)
 
@@ -821,7 +941,11 @@ class IpUsagePage(ScrollArea):
             if controller is not None:
                 controller.refresh_random_ip_counter()
         except Exception as exc:
-            log_suppressed_exception("_on_bonus_claim_finished refresh counter", exc, level=logging.WARNING)
+            log_suppressed_exception(
+                "_on_bonus_claim_finished refresh counter",
+                exc,
+                level=logging.WARNING,
+            )
         if isinstance(payload, dict) and bool(payload.get("skip_infobar")):
             return
         QTimer.singleShot(400, lambda p=payload: self._show_easter_egg_infobar(p))
@@ -837,7 +961,13 @@ class IpUsagePage(ScrollArea):
                 "info": InfoBar.info,
                 "success": InfoBar.success,
             }.get(level, InfoBar.success)
-            factory(title="", content=message, parent=self.window(), position=InfoBarPosition.TOP, duration=5000)
+            factory(
+                title="",
+                content=message,
+                parent=self.window(),
+                position=InfoBarPosition.TOP,
+                duration=5000,
+            )
         except Exception as exc:
             log_suppressed_exception("_show_easter_egg_infobar", exc, level=logging.WARNING)
 
@@ -851,5 +981,3 @@ class IpUsagePage(ScrollArea):
         self._confetti_retry_timer.stop()
         self._dispose_confetti_overlay()
         super().closeEvent(event)
-
-

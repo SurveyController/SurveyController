@@ -9,9 +9,16 @@ from PySide6.QtWidgets import QDialog, QWidget
 from software.core.questions.config import QuestionEntry
 from software.io.config import RuntimeConfig, build_runtime_config_snapshot
 from software.logging.action_logger import log_action
-from software.providers.contracts import SurveyQuestionMeta, ensure_survey_question_metas
-from software.ui.pages.workbench.question_editor.add_dialog import QuestionAddDialog
-from software.ui.pages.workbench.question_editor.utils import build_entry_info_list
+from software.providers.contracts import (
+    SurveyQuestionMeta,
+    ensure_survey_question_metas,
+)
+from software.ui.pages.workbench.question_editor.add_dialog import (
+    QuestionAddDialog,
+)
+from software.ui.pages.workbench.question_editor.utils import (
+    build_entry_info_list,
+)
 
 
 class WorkbenchState(QObject):
@@ -40,7 +47,11 @@ class WorkbenchState(QObject):
         self._questions_info = normalized_info
         self.set_entries(entries, normalized_info)
 
-    def set_entries(self, entries: List[QuestionEntry], info: Optional[List[SurveyQuestionMeta]] = None) -> None:
+    def set_entries(
+        self,
+        entries: List[QuestionEntry],
+        info: Optional[List[SurveyQuestionMeta]] = None,
+    ) -> None:
         if info is not None:
             self._questions_info = ensure_survey_question_metas(info or [])
         self._entries = list(entries or [])
@@ -118,7 +129,13 @@ class WorkbenchRunCoordinator:
             if getattr(dashboard, "_completion_notified", False):
                 dashboard._pending_restart = True
                 self.controller.stop_run()
-                log_action("RUN", "restart_run", "start_btn", "dashboard", result="queued")
+                log_action(
+                    "RUN",
+                    "restart_run",
+                    "start_btn",
+                    "dashboard",
+                    result="queued",
+                )
                 dashboard._toast("正在重新开始，请稍候...", "info", 1200)
             return False
 
@@ -127,7 +144,9 @@ class WorkbenchRunCoordinator:
             question_entries=self.state.get_entries(),
             questions_info=self.state.questions_info,
         )
-        cfg.reverse_fill_enabled = bool(enable_reverse_fill and str(getattr(cfg, "reverse_fill_source_path", "") or "").strip())
+        cfg.reverse_fill_enabled = bool(
+            enable_reverse_fill and str(getattr(cfg, "reverse_fill_source_path", "") or "").strip()
+        )
         if not cfg.question_entries:
             log_action(
                 "RUN",
@@ -138,7 +157,10 @@ class WorkbenchRunCoordinator:
                 level=logging.WARNING,
                 payload={"reason": "no_question_entries"},
             )
-            dashboard._toast("未配置任何题目，无法开始执行（请先在'题目配置'页添加/配置题目）", "warning")
+            dashboard._toast(
+                "未配置任何题目，无法开始执行（请先在'题目配置'页添加/配置题目）",
+                "warning",
+            )
             dashboard._sync_start_button_state(running=False)
             return False
 
@@ -156,7 +178,11 @@ class WorkbenchRunCoordinator:
             "start_btn",
             "dashboard",
             result="started",
-            payload={"target": cfg.target, "threads": cfg.threads, "reverse_fill_enabled": cfg.reverse_fill_enabled},
+            payload={
+                "target": cfg.target,
+                "threads": cfg.threads,
+                "reverse_fill_enabled": cfg.reverse_fill_enabled,
+            },
         )
         return True
 

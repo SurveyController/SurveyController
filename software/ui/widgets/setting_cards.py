@@ -17,7 +17,16 @@ from software.ui.widgets.no_wheel import NoWheelSpinBox
 class SpinBoxSettingCard(SettingCard):
     """带 SpinBox 的设置卡"""
 
-    def __init__(self, icon, title, content, min_val=1, max_val=99999, default=10, parent=None):
+    def __init__(
+        self,
+        icon,
+        title,
+        content,
+        min_val=1,
+        max_val=99999,
+        default=10,
+        parent=None,
+    ):
         super().__init__(icon, title, content, parent)
         self.spinBox = NoWheelSpinBox(self)
         self.spinBox.setRange(min_val, max_val)
@@ -147,4 +156,3 @@ class ExpandComboSwitchSettingCard(ExpandGroupSettingCard):
             effect = QGraphicsOpacityEffect(self._groupContainer)
             self._groupContainer.setGraphicsEffect(effect)
         effect.setOpacity(1.0 if enabled else 0.4)  # type: ignore[union-attr]
-

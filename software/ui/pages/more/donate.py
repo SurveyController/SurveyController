@@ -1,10 +1,17 @@
 """捐助页面"""
+
 import os
 from typing import Optional
 
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QPixmap
-from PySide6.QtWidgets import QWidget, QVBoxLayout, QHBoxLayout, QLabel, QBoxLayout
+from PySide6.QtWidgets import (
+    QWidget,
+    QVBoxLayout,
+    QHBoxLayout,
+    QLabel,
+    QBoxLayout,
+)
 from qfluentwidgets import (
     ScrollArea,
     TitleLabel,
@@ -22,7 +29,7 @@ class DonatePage(ScrollArea):
     def __init__(self, parent=None):
         super().__init__(parent)
         self.view = QWidget(self)
-        self.view.setObjectName('view')
+        self.view.setObjectName("view")
         self.setWidget(self.view)
         self.setWidgetResizable(True)
         self.enableTransparentBackground()
@@ -155,4 +162,3 @@ class DonatePage(ScrollArea):
                     Qt.TransformationMode.SmoothTransformation,
                 )
             )
-

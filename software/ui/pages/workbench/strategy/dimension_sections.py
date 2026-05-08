@@ -1,4 +1,5 @@
 """维度分组区块组件。"""
+
 from __future__ import annotations
 
 import json
@@ -6,7 +7,12 @@ from typing import Dict, List, Sequence, cast
 
 from PySide6.QtCore import QEvent, QMimeData, QSize, Qt, Signal
 from PySide6.QtGui import QDrag, QDragEnterEvent, QDragMoveEvent, QDropEvent
-from PySide6.QtWidgets import QAbstractItemView, QHBoxLayout, QVBoxLayout, QWidget
+from PySide6.QtWidgets import (
+    QAbstractItemView,
+    QHBoxLayout,
+    QVBoxLayout,
+    QWidget,
+)
 from qfluentwidgets import (
     BodyLabel,
     CaptionLabel,
@@ -119,7 +125,11 @@ class DimensionEntryTable(TableWidget):
 
     def viewportEvent(self, event) -> bool:
         event_type = event.type()
-        if event_type in (QEvent.Type.DragEnter, QEvent.Type.DragMove, QEvent.Type.Drop):
+        if event_type in (
+            QEvent.Type.DragEnter,
+            QEvent.Type.DragMove,
+            QEvent.Type.Drop,
+        ):
             drag_event = cast(QDragEnterEvent | QDragMoveEvent | QDropEvent, event)
             mime_data = drag_event.mimeData()
             if mime_data is None or not mime_data.hasFormat(ENTRY_DRAG_MIME):
@@ -190,11 +200,8 @@ class DimensionEntryTable(TableWidget):
             data = json.loads(raw.decode("utf-8"))
         except Exception:
             return []
-        result: List[int] = []
-        for item in data if isinstance(data, list) else []:
-            if isinstance(item, int) and item >= 0:
-                result.append(item)
-        return sorted(set(result))
+        items = data if isinstance(data, list) else []
+        return sorted({item for item in items if isinstance(item, int) and item >= 0})
 
 
 class DimensionSectionWidget(QWidget):
@@ -274,7 +281,9 @@ class DimensionSectionWidget(QWidget):
         # 添加题目按钮（仅在非未分组区域显示）
         self.add_questions_btn = PushButton("添加题目", self)
         self.add_questions_btn.setIcon(FluentIcon.ADD)
-        self.add_questions_btn.clicked.connect(lambda: self.addQuestionsRequested.emit(self.group_name))
+        self.add_questions_btn.clicked.connect(
+            lambda: self.addQuestionsRequested.emit(self.group_name)
+        )
         self.add_questions_btn.setVisible(self.group_name != DIMENSION_UNGROUPED)
 
         layout.addWidget(self.header)

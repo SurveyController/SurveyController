@@ -1,9 +1,16 @@
 """日志页面"""
+
 import os
 import logging
 from datetime import datetime
 from PySide6.QtCore import Qt, QTimer
-from PySide6.QtWidgets import QWidget, QVBoxLayout, QHBoxLayout, QPlainTextEdit, QFileDialog
+from PySide6.QtWidgets import (
+    QWidget,
+    QVBoxLayout,
+    QHBoxLayout,
+    QPlainTextEdit,
+    QFileDialog,
+)
 from PySide6.QtGui import QFont, QTextCursor
 from qfluentwidgets import (
     SubtitleLabel,
@@ -31,27 +38,26 @@ from software.ui.widgets.log_highlighter import LogHighlighter
 
 # 日志级别颜色配置（深色/浅色主题）
 LOG_COLORS_DARK = {
-    "ERROR": "#ef4444",   # 红色
-    "WARN": "#eab308",    # 黄色
-    "WARNING": "#eab308", # 黄色
-    "INFO": "#d1d5db",    # 浅灰色
-    "OK": "#22c55e",      # 绿色
-    "DEFAULT": "#9ca3af", # 默认灰色
+    "ERROR": "#ef4444",  # 红色
+    "WARN": "#eab308",  # 黄色
+    "WARNING": "#eab308",  # 黄色
+    "INFO": "#d1d5db",  # 浅灰色
+    "OK": "#22c55e",  # 绿色
+    "DEFAULT": "#9ca3af",  # 默认灰色
 }
 
 LOG_COLORS_LIGHT = {
-    "ERROR": "#dc2626",   # 深红色
-    "WARN": "#ca8a04",    # 深黄色
-    "WARNING": "#ca8a04", # 深黄色
-    "INFO": "#374151",    # 深灰色
-    "OK": "#15803d",      # 深绿
-    "DEFAULT": "#4b5563", # 默认深灰
+    "ERROR": "#dc2626",  # 深红色
+    "WARN": "#ca8a04",  # 深黄色
+    "WARNING": "#ca8a04",  # 深黄色
+    "INFO": "#374151",  # 深灰色
+    "OK": "#15803d",  # 深绿
+    "DEFAULT": "#4b5563",  # 默认深灰
 }
+
 
 class LogPage(QWidget):
     """独立的日志页，放在侧边栏。"""
-
-
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -91,11 +97,11 @@ class LogPage(QWidget):
         self.log_view = QPlainTextEdit(self)
         self.log_view.setReadOnly(True)
         self.log_view.setTextInteractionFlags(
-            Qt.TextInteractionFlag.TextSelectableByMouse | 
-            Qt.TextInteractionFlag.TextSelectableByKeyboard
+            Qt.TextInteractionFlag.TextSelectableByMouse
+            | Qt.TextInteractionFlag.TextSelectableByKeyboard
         )
         self.log_view.setPlaceholderText("日志输出会显示在这里...")
-        
+
         # 设置等宽字体
         font = QFont("Consolas", 10)
         font.setStyleHint(QFont.StyleHint.Monospace)
@@ -105,16 +111,20 @@ class LogPage(QWidget):
             if LOG_BUFFER_CAPACITY and int(LOG_BUFFER_CAPACITY) > 0:
                 self.log_view.document().setMaximumBlockCount(int(LOG_BUFFER_CAPACITY))
         except Exception as exc:
-            log_suppressed_exception("_build_ui: if LOG_BUFFER_CAPACITY and int(LOG_BUFFER_CAPACITY) > 0: self.log_view.docume...", exc, level=logging.WARNING)
+            log_suppressed_exception(
+                "_build_ui: setMaximumBlockCount",
+                exc,
+                level=logging.WARNING,
+            )
         self._highlighter = LogHighlighter(
             self.log_view.document(),
             colors=self._resolve_log_colors(),
         )
-        
+
         # 应用主题样式
         self._apply_theme()
         qconfig.themeChanged.connect(self._apply_theme)
-        
+
         layout.addWidget(self.log_view, 1)
 
     def _bind_events(self):
@@ -255,17 +265,19 @@ class LogPage(QWidget):
                 fallback_records=LOG_BUFFER_HANDLER.get_records(),
             )
             InfoBar.success(
-                "", f"日志已保存：{file_path}",
+                "",
+                f"日志已保存：{file_path}",
                 parent=self.window(),
                 position=InfoBarPosition.TOP,
-                duration=3000
+                duration=3000,
             )
         except Exception as exc:
             InfoBar.error(
-                "", f"保存失败：{exc}",
+                "",
+                f"保存失败：{exc}",
                 parent=self.window(),
                 position=InfoBarPosition.TOP,
-                duration=3000
+                duration=3000,
             )
 
     def _apply_theme(self):
@@ -327,5 +339,3 @@ class LogPage(QWidget):
                     self.log_view.setPlainText(content)
         except Exception as exc:
             log_suppressed_exception("_load_last_session_logs", exc, level=logging.WARNING)
-
-

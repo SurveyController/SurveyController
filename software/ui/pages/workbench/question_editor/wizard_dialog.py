@@ -1,10 +1,18 @@
 """配置向导弹窗：用滑块快速设置权重/概率，编辑填空题答案。"""
+
 import copy
 from typing import Any, Dict, List, Optional, Tuple, cast
 
 from PySide6.QtCore import QPropertyAnimation, QTimer, Qt, QSize
 from PySide6.QtGui import QGuiApplication, QShowEvent
-from PySide6.QtWidgets import QButtonGroup, QDialog, QHBoxLayout, QListWidget, QVBoxLayout, QWidget
+from PySide6.QtWidgets import (
+    QButtonGroup,
+    QDialog,
+    QHBoxLayout,
+    QListWidget,
+    QVBoxLayout,
+    QWidget,
+)
 from qfluentwidgets import (
     BodyLabel,
     CardWidget,
@@ -20,14 +28,22 @@ from qfluentwidgets import (
 
 from software.app.config import DEFAULT_FILL_TEXT
 from software.core.questions.config import QuestionEntry
-from software.core.questions.utils import OPTION_FILL_AI_TOKEN, build_random_int_token, serialize_random_int_range
+from software.core.questions.utils import (
+    OPTION_FILL_AI_TOKEN,
+    build_random_int_token,
+    serialize_random_int_range,
+)
 from software.providers.contracts import SurveyQuestionMeta
 from software.ui.widgets.no_wheel import NoWheelSlider
 
 from .psycho_config import BIAS_PRESET_CHOICES
 from .utils import _apply_label_color, _shorten_text, build_entry_info_list
 from .wizard_cards import WizardCardsMixin
-from .wizard_navigation import FloatingPagerShell, StableVerticalPipsPager, WizardNavigationMixin
+from .wizard_navigation import (
+    FloatingPagerShell,
+    StableVerticalPipsPager,
+    WizardNavigationMixin,
+)
 from .wizard_search import WizardSearchMixin
 from .wizard_sections import (
     WizardSectionsMixin,
@@ -48,6 +64,7 @@ class QuestionWizardDialog(
     QDialog,
 ):
     """配置向导：用滑块快速设置权重/概率，编辑填空题答案。"""
+
     _PREFERRED_DIALOG_SIZE = QSize(1060, 820)
     _MIN_DIALOG_SIZE = QSize(760, 560)
 
@@ -67,7 +84,7 @@ class QuestionWizardDialog(
         self.resize(self._PREFERRED_DIALOG_SIZE)
         self.entries = entries
         raw_info = list(info or [])
-        # 右侧配置卡片必须和可配置题目一一对应，不能直接拿原始解析结果按下标硬对。
+        # 右侧配置卡片必须和可配置题目一一对应。
         self.info = build_entry_info_list(self.entries, raw_info)
         self.reliability_mode_enabled = reliability_mode_enabled
         self.slider_map: Dict[int, List[NoWheelSlider]] = {}
@@ -193,6 +210,7 @@ class QuestionWizardDialog(
                 else:
                     seg.setCurrentItem(route_key)
             self._master_applying = False
+
         _master_seg.currentItemChanged.connect(_on_master_preset)
 
         def _reset_master(_=None):
@@ -200,6 +218,7 @@ class QuestionWizardDialog(
                 return
             if _master_seg.currentRouteKey() != "custom":
                 _master_seg.setCurrentItem("custom")
+
         for seg in self.bias_preset_map.values():
             if isinstance(seg, list):
                 for s in seg:
@@ -281,8 +300,14 @@ class QuestionWizardDialog(
 
         frame_margin_width = 32
         frame_margin_height = 40
-        max_width = max(self._MIN_DIALOG_SIZE.width(), available.width() - frame_margin_width)
-        max_height = max(self._MIN_DIALOG_SIZE.height(), available.height() - frame_margin_height)
+        max_width = max(
+            self._MIN_DIALOG_SIZE.width(),
+            available.width() - frame_margin_width,
+        )
+        max_height = max(
+            self._MIN_DIALOG_SIZE.height(),
+            available.height() - frame_margin_height,
+        )
 
         target_width = min(self._PREFERRED_DIALOG_SIZE.width(), max_width)
         target_height = min(self._PREFERRED_DIALOG_SIZE.height(), max_height)
@@ -302,9 +327,20 @@ class QuestionWizardDialog(
         frame = self.frameGeometry()
         frame.moveCenter(available.center())
         top_left = frame.topLeft()
-        top_left.setX(max(available.left(), min(top_left.x(), available.right() - frame.width() + 1)))
-        top_left.setY(max(available.top(), min(top_left.y(), available.bottom() - frame.height() + 1)))
+        top_left.setX(
+            max(
+                available.left(),
+                min(top_left.x(), available.right() - frame.width() + 1),
+            )
+        )
+        top_left.setY(
+            max(
+                available.top(),
+                min(top_left.y(), available.bottom() - frame.height() + 1),
+            )
+        )
         self.move(top_left)
+
     def get_results(self) -> Dict[int, Any]:
         """获取滑块权重/概率结果"""
         result: Dict[int, Any] = {}
@@ -319,13 +355,16 @@ class QuestionWizardDialog(
             for row_idx, row in enumerate(row_sliders):
                 weights = [max(0, s.value()) for s in row]
                 if weights and not any(weight > 0 for weight in weights):
-                    raise ValueError(f"{self._format_question_label(idx)}的第{row_idx + 1}行配比不能全为0。")
+                    question_label = self._format_question_label(idx)
+                    raise ValueError(f"{question_label}的第{row_idx + 1}行配比不能全为0。")
                 row_weights.append(weights)
             result[idx] = row_weights
         return result
+
     def get_text_results(self) -> Dict[int, List[str]]:
         """获取填空题答案结果"""
         from software.core.questions.text_shared import MULTI_TEXT_DELIMITER
+
         result: Dict[int, List[str]] = {}
         for idx, edits in self.text_edit_map.items():
             if edits and isinstance(edits[0], list):
@@ -345,6 +384,7 @@ class QuestionWizardDialog(
                 texts = [DEFAULT_FILL_TEXT]
             result[idx] = texts
         return result
+
     def get_option_fill_results(self) -> Dict[int, List[Optional[str]]]:
         """获取选择题中“其他请填空”等附加输入框的配置结果。"""
         result: Dict[int, List[Optional[str]]] = {}
@@ -384,20 +424,33 @@ class QuestionWizardDialog(
                     values[option_index] = text
             result[idx] = values
         return result
+
     def get_text_random_modes(self) -> Dict[int, str]:
         """获取填空题随机值模式（none/name/mobile/integer）"""
-        return {idx: mode for idx, mode in self.text_random_mode_map.items()}
+        return dict(self.text_random_mode_map)
+
     def get_text_random_int_ranges(self) -> Dict[int, List[int]]:
         """获取填空题随机整数范围。"""
         result: Dict[int, List[int]] = {}
         for idx, min_edit in self.text_random_int_min_edit_map.items():
             max_edit = self.text_random_int_max_edit_map.get(idx)
-            raw_range = [min_edit.text().strip(), max_edit.text().strip() if max_edit else ""]
+            raw_range = [
+                min_edit.text().strip(),
+                max_edit.text().strip() if max_edit else "",
+            ]
             result[idx] = serialize_random_int_range(raw_range)
         return result
+
     def get_multi_text_blank_modes(self) -> Dict[int, List[str]]:
         """获取多项填空题每个填空项的随机模式"""
-        from .wizard_sections import _TEXT_RANDOM_NONE, _TEXT_RANDOM_NAME, _TEXT_RANDOM_MOBILE, _TEXT_RANDOM_ID_CARD, _TEXT_RANDOM_INTEGER
+        from .wizard_sections import (
+            _TEXT_RANDOM_ID_CARD,
+            _TEXT_RANDOM_INTEGER,
+            _TEXT_RANDOM_MOBILE,
+            _TEXT_RANDOM_NAME,
+            _TEXT_RANDOM_NONE,
+        )
+
         result: Dict[int, List[str]] = {}
         if not hasattr(self, "multi_text_blank_radio_groups"):
             return result
@@ -417,15 +470,22 @@ class QuestionWizardDialog(
                     modes.append(_TEXT_RANDOM_NONE)
             result[idx] = modes
         return result
+
     def get_multi_text_blank_int_ranges(self) -> Dict[int, List[List[int]]]:
         """获取多项填空题每个填空项的随机整数范围。"""
         result: Dict[int, List[List[int]]] = {}
-        for idx, edit_pairs in self.multi_text_blank_integer_range_edits.items():
+        for (
+            idx,
+            edit_pairs,
+        ) in self.multi_text_blank_integer_range_edits.items():
             ranges: List[List[int]] = []
             for min_edit, max_edit in edit_pairs:
-                ranges.append(serialize_random_int_range([min_edit.text().strip(), max_edit.text().strip()]))
+                ranges.append(
+                    serialize_random_int_range([min_edit.text().strip(), max_edit.text().strip()])
+                )
             result[idx] = ranges
         return result
+
     def get_multi_text_blank_ai_flags(self) -> Dict[int, List[bool]]:
         """获取多项填空题每个填空项的AI标志"""
         result: Dict[int, List[bool]] = {}
@@ -434,6 +494,7 @@ class QuestionWizardDialog(
         for idx, checkboxes in self.multi_text_blank_ai_checkboxes.items():
             result[idx] = [cb.isChecked() for cb in checkboxes]
         return result
+
     def get_ai_flags(self) -> Dict[int, bool]:
         """获取填空题是否启用 AI"""
         result: Dict[int, bool] = {}
@@ -441,6 +502,7 @@ class QuestionWizardDialog(
             random_mode = self.text_random_mode_map.get(idx, _TEXT_RANDOM_NONE)
             result[idx] = False if random_mode != _TEXT_RANDOM_NONE else cb.isChecked()
         return result
+
     def get_attached_select_results(self) -> Dict[int, List[Dict[str, Any]]]:
         result: Dict[int, List[Dict[str, Any]]] = {}
         for idx, config_items in self.attached_select_slider_map.items():
@@ -455,14 +517,17 @@ class QuestionWizardDialog(
                     raise ValueError(
                         f"{self._format_question_label(idx)}里“{option_text}”对应的嵌入式下拉配比不能全为0。"
                     )
-                serialized_items.append({
-                    "option_index": int(item.get("option_index", 0)),
-                    "option_text": str(item.get("option_text") or "").strip(),
-                    "select_options": list(item.get("select_options") or []),
-                    "weights": weights,
-                })
+                serialized_items.append(
+                    {
+                        "option_index": int(item.get("option_index", 0)),
+                        "option_text": str(item.get("option_text") or "").strip(),
+                        "select_options": list(item.get("select_options") or []),
+                        "weights": weights,
+                    }
+                )
             result[idx] = serialized_items
         return result
+
     def get_bias_presets(self) -> Dict[int, Any]:
         """获取每个题目的倾向预设值（矩阵题返回列表）"""
         result: Dict[int, Any] = {}
@@ -472,6 +537,7 @@ class QuestionWizardDialog(
             else:
                 result[idx] = str(seg.currentRouteKey() or "custom")
         return result
+
     def get_dimensions(self) -> Dict[int, Optional[str]]:
         """获取题目的当前维度配置。"""
         result: Dict[int, Optional[str]] = {}

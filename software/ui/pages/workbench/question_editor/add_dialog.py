@@ -1,4 +1,5 @@
 """新增题目弹窗：基础信息 + 题目配置预览。"""
+
 from typing import List, Optional
 
 from PySide6.QtWidgets import (
@@ -29,8 +30,6 @@ from .add_preview import AddPreviewMixin
 
 class QuestionAddDialog(AddPreviewMixin, QDialog):
     """新增题目弹窗：基础信息 + 题目配置预览。"""
-
-
 
     def __init__(self, entries: List[QuestionEntry], parent=None):
         super().__init__(parent)
@@ -310,6 +309,7 @@ class QuestionAddDialog(AddPreviewMixin, QDialog):
                 self._ensure_matrix_weights(rows, option_count)
                 weights = [[float(max(0, v)) for v in row] for row in self._matrix_weights]
                 from typing import Any, cast
+
                 return QuestionEntry(
                     question_type=q_type,
                     probabilities=cast(Any, weights),
@@ -360,4 +360,3 @@ class QuestionAddDialog(AddPreviewMixin, QDialog):
     def _on_accept(self) -> None:
         self._result_entry = self._build_entry()
         super().accept()
-

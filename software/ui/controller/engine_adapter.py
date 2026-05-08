@@ -1,4 +1,5 @@
 """运行控制器使用的引擎/UI 适配层。"""
+
 from __future__ import annotations
 
 import logging
@@ -160,6 +161,7 @@ class EngineGuiAdapter:
         if not callable(callback):
             return False
         try:
+
             def _apply() -> bool:
                 return bool(callback(str(title or ""), str(message or "")))
 
@@ -221,4 +223,8 @@ class EngineGuiAdapter:
                 except Exception:
                     logging.warning("[兜底清理] 强制关闭浏览器失败", exc_info=True)
         if seen:
-            logging.info("[兜底清理] 已强制关闭 %d/%d 个 driver 实例", cleaned, len(seen))
+            logging.info(
+                "[兜底清理] 已强制关闭 %d/%d 个 driver 实例",
+                cleaned,
+                len(seen),
+            )

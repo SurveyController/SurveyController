@@ -1,4 +1,5 @@
 """MainWindow 更新检查与下载提示相关方法。"""
+
 from __future__ import annotations
 
 import logging
@@ -22,7 +23,9 @@ from qfluentwidgets import (
 from software.app.config import app_settings, get_bool_from_qsettings
 from software.app.version import __VERSION__
 from software.logging.action_logger import log_action
-from software.ui.helpers.qfluent_compat import set_indeterminate_progress_ring_active
+from software.ui.helpers.qfluent_compat import (
+    set_indeterminate_progress_ring_active,
+)
 
 
 class MainWindowUpdateMixin:
@@ -30,6 +33,7 @@ class MainWindowUpdateMixin:
 
     if TYPE_CHECKING:
         from typing import Any
+
         titleBar: Any
         downloadProgress: Any
         _toast: Any
@@ -242,18 +246,26 @@ class MainWindowUpdateMixin:
         host_layout = QHBoxLayout(container)
         host_layout.setContentsMargins(0, 0, 0, 0)
         host_layout.setSpacing(0)
-        # InfoBadge 自带的文字基线比标题标签略高一点，底对齐后视觉上才在一条线上。
+        # InfoBadge 基线略高，底对齐后视觉上才在一条线上。
         host_layout.setAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignBottom)
 
         title_label = getattr(title_bar, "titleLabel", None)
         if title_label is not None:
-            title_height = max(int(title_label.height() or 0), int(title_label.sizeHint().height() or 0))
+            title_height = max(
+                int(title_label.height() or 0),
+                int(title_label.sizeHint().height() or 0),
+            )
             if title_height > 0:
                 container.setFixedHeight(title_height)
         insert_index = layout.indexOf(title_label) + 1 if title_label is not None else -1
         if insert_index <= 0:
             insert_index = max(layout.count() - 1, 0)
-        layout.insertWidget(insert_index, container, 0, Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
+        layout.insertWidget(
+            insert_index,
+            container,
+            0,
+            Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter,
+        )
 
         self._title_bar_status_container = container
         self._title_bar_status_layout = host_layout
@@ -269,7 +281,11 @@ class MainWindowUpdateMixin:
         if widget.parent() is not container:
             widget.setParent(container)
         if host_layout.indexOf(widget) < 0:
-            host_layout.addWidget(widget, 0, Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
+            host_layout.addWidget(
+                widget,
+                0,
+                Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter,
+            )
         container.show()
         return True
 
@@ -293,7 +309,12 @@ class MainWindowUpdateMixin:
         """更新检查期间在标题栏徽章位置显示转圈占位。"""
         if self._update_checking_spinner:
             return
-        for attr in ("_latest_badge", "_outdated_badge", "_preview_badge", "_unknown_badge"):
+        for attr in (
+            "_latest_badge",
+            "_outdated_badge",
+            "_preview_badge",
+            "_unknown_badge",
+        ):
             badge = getattr(self, attr, None)
             if badge is None:
                 continue
@@ -303,7 +324,10 @@ class MainWindowUpdateMixin:
                 logging.info("移除旧徽章失败", exc_info=True)
             setattr(self, attr, None)
         try:
-            spinner = IndeterminateProgressRing(parent=self._ensure_title_bar_status_container() or self.titleBar, start=False)
+            spinner = IndeterminateProgressRing(
+                parent=self._ensure_title_bar_status_container() or self.titleBar,
+                start=False,
+            )
             spinner.setFixedSize(16, 16)
             spinner.setStrokeWidth(2)
             if not self._mount_title_bar_status_widget(spinner):
@@ -516,7 +540,9 @@ class MainWindowUpdateMixin:
             if total == 100 and speed <= 0:
                 detail = f"{max(0, min(100, int(downloaded or 0)))}%"
             else:
-                detail = f"{self._format_size(downloaded)} / {self._format_size(total)}"
+                downloaded_text = self._format_size(downloaded)
+                total_text = self._format_size(total)
+                detail = f"{downloaded_text} / {total_text}"
             if speed > 0 and total != 100:
                 detail += f" | {self._format_speed(speed)}"
             self._download_detail_label.setText(detail)
@@ -555,7 +581,13 @@ class MainWindowUpdateMixin:
     def _cancel_download(self):
         """取消本次自动安装流程。"""
         self._download_cancelled = True
-        log_action("UPDATE", "download_update", "download_toast", "main_window", result="cancelled")
+        log_action(
+            "UPDATE",
+            "download_update",
+            "download_toast",
+            "main_window",
+            result="cancelled",
+        )
         self._close_download_toast()
         self._toast("已停止本次自动更新", "warning")
 
@@ -589,7 +621,7 @@ class MainWindowUpdateMixin:
 
         should_launch = self.show_confirm_dialog(
             "更新完成",
-            f"新版本 v{version or '未知'} 已下载完成。\n\n是否立即退出并安装更新？",
+            (f"新版本 v{version or '未知'} 已下载完成。\n\n是否立即退出并安装更新？"),
         )
         if should_launch:
             log_action(
@@ -639,5 +671,3 @@ class MainWindowUpdateMixin:
         """下载失败后在主线程显示弹窗"""
         if not getattr(self, "_download_cancelled", False):
             self.show_message_dialog("更新失败", error_msg, level="error")
-
-

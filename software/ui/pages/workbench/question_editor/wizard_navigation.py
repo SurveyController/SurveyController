@@ -1,21 +1,54 @@
 """题目配置向导导航与滚动同步。"""
+
 from typing import TYPE_CHECKING, Any, List, Optional, cast
 
-from PySide6.QtCore import QByteArray, QObject, QEasingCurve, QEvent, QPointF, QPropertyAnimation, QRectF, QSize, QTimer, Qt, QModelIndex, QPersistentModelIndex
+from PySide6.QtCore import (
+    QByteArray,
+    QObject,
+    QEasingCurve,
+    QEvent,
+    QPointF,
+    QPropertyAnimation,
+    QRectF,
+    QSize,
+    QTimer,
+    Qt,
+    QModelIndex,
+    QPersistentModelIndex,
+)
 from PySide6.QtGui import QColor, QFont, QPainter, QPen
-from PySide6.QtWidgets import QAbstractItemView, QListWidget, QStyle, QStyleOptionViewItem, QWidget, QStyledItemDelegate
-from qfluentwidgets import CardWidget, VerticalPipsPager, isDarkTheme, themeColor
-from qfluentwidgets.components.widgets.pips_pager import PipsScrollButtonDisplayMode
-from qfluentwidgets.components.widgets.tool_tip import ItemViewToolTipDelegate, ItemViewToolTipType
+from PySide6.QtWidgets import (
+    QAbstractItemView,
+    QListWidget,
+    QStyle,
+    QStyleOptionViewItem,
+    QWidget,
+    QStyledItemDelegate,
+)
+from qfluentwidgets import (
+    CardWidget,
+    VerticalPipsPager,
+    isDarkTheme,
+    themeColor,
+)
+from qfluentwidgets.components.widgets.pips_pager import (
+    PipsScrollButtonDisplayMode,
+)
+from qfluentwidgets.components.widgets.tool_tip import (
+    ItemViewToolTipDelegate,
+    ItemViewToolTipType,
+)
 
 from software.providers.contracts import SurveyQuestionMeta
 from software.ui.helpers.fluent_tooltip import install_tooltip_filters
 from .utils import resolve_display_question_num
 
+
 def _color_with_alpha(color: QColor, alpha: int) -> QColor:
     copied = QColor(color)
     copied.setAlpha(max(0, min(255, int(alpha))))
     return copied
+
 
 class WizardPipsDelegate(QStyledItemDelegate):
     """带 ItemViewToolTipDelegate 的分页点绘制。"""
@@ -70,7 +103,12 @@ class WizardPipsDelegate(QStyledItemDelegate):
             active_label_fill = _color_with_alpha(accent, 72)
 
         if question_number % 5 == 0:
-            badge_rect = QRectF(option_view.rect.x() + 1, option_view.rect.center().y() - 7, 14, 14)
+            badge_rect = QRectF(
+                option_view.rect.x() + 1,
+                option_view.rect.center().y() - 7,
+                14,
+                14,
+            )
             painter.setBrush(active_label_fill if is_selected else label_fill)
             painter.drawRoundedRect(badge_rect, 5, 5)
             painter.setPen(active_label_color if is_selected else label_color)
@@ -115,8 +153,9 @@ class WizardPipsDelegate(QStyledItemDelegate):
         model_index = cast(QModelIndex, index)
         return self.tooltipDelegate.helpEvent(event, view, option, model_index)
 
+
 class StableVerticalPipsPager(VerticalPipsPager):
-    """稳定版竖向分页器：保留 PipsPager 行为，放大命中范围并接 ToolTipFilter 链路。"""
+    """稳定版竖向分页器。"""
 
     _ARROW_STEP = 5
 
@@ -209,6 +248,7 @@ class StableVerticalPipsPager(VerticalPipsPager):
     def scrollPrevious(self) -> None:
         self.setCurrentIndex(max(0, self.currentIndex() - self._ARROW_STEP))
 
+
 class FloatingPagerShell(QWidget):
     """透明外壳：只负责把分页器摆在左侧空白带中间。"""
 
@@ -285,6 +325,7 @@ class FloatingPagerShell(QWidget):
                 nearest_index = idx
         return nearest_index
 
+
 class WizardNavigationMixin:
     _QUESTION_INDEX_PROPERTY = "_wizardQuestionIndex"
 
@@ -313,6 +354,7 @@ class WizardNavigationMixin:
         shell.pager.currentIndexChanged.connect(self._on_question_pager_changed)
         shell.raise_()
         return shell
+
     def _configure_navigation_pager(self, total: int) -> None:
         if self._question_pager is None:
             return
@@ -345,12 +387,14 @@ class WizardNavigationMixin:
         self._question_pager.preButton.setToolTip("上一题")
         self._question_pager.nextButton.setToolTip("下一题")
         install_tooltip_filters((self._question_pager.preButton, self._question_pager.nextButton))
+
     def _build_navigation_tooltips(self) -> List[str]:
         labels: List[str] = []
         for idx in range(len(self._question_cards)):
             qnum = resolve_display_question_num(self._get_entry_info(idx), idx + 1)
             labels.append(f"第{qnum or idx + 1}题")
         return labels
+
     def _update_navigation_pager_geometry(self) -> None:
         if self._question_shell is None or self._scroll_area is None:
             return
@@ -368,19 +412,27 @@ class WizardNavigationMixin:
             max_spacing = 0
             if total > 1:
                 visible_total = max(1, min(total, self._question_pager.getVisibleNumber()))
-                max_spacing = max(0, (available_height - 12 - visible_total * 18) // (visible_total - 1))
+                max_spacing = max(
+                    0,
+                    (available_height - 12 - visible_total * 18) // (visible_total - 1),
+                )
             spacing = min(preferred_spacing, max_spacing)
             self._question_pager.setSpacing(spacing)
             shell_height = min(available_height, max(92, self._question_pager.height() + 16))
         else:
             shell_height = max(92, min(scroll_geo.height() - 72, 144))
         shell_width = 30
-        x = max(0, scroll_geo.left() + max(0, (self._navigation_lane_width - shell_width) // 2))
+        x = max(
+            0,
+            scroll_geo.left() + max(0, (self._navigation_lane_width - shell_width) // 2),
+        )
         y = scroll_geo.top() + max(12, (scroll_geo.height() - shell_height) // 2)
         self._question_shell.setGeometry(x, y, shell_width, shell_height)
         self._question_shell.raise_()
+
     def _on_question_pager_changed(self, question_idx: int) -> None:
         self._navigate_to_question(question_idx, animate=True)
+
     def _navigate_to_question(self, question_idx: int, animate: bool) -> None:
         total = len(self._question_cards)
         if total <= 0:
@@ -393,6 +445,7 @@ class WizardNavigationMixin:
         self._current_question_idx = clamped
         self._refresh_navigation_state(total)
         self._scroll_to_question(clamped, animate=animate)
+
     def _refresh_navigation_state(self, total: int) -> None:
         if self._question_pager is not None:
             self._question_pager.blockSignals(True)
@@ -401,8 +454,13 @@ class WizardNavigationMixin:
                 self._question_pager.setCurrentIndex(current)
             self._question_pager.setEnabled(total > 1)
             self._question_pager.blockSignals(False)
+
     def _scroll_to_question(self, question_idx: Optional[int], animate: bool) -> None:
-        if self._scroll_area is None or self._content_layout is None or self._content_container is None:
+        if (
+            self._scroll_area is None
+            or self._content_layout is None
+            or self._content_container is None
+        ):
             return
         scroll_bar = self._scroll_area.verticalScrollBar()
         if question_idx is None or not (0 <= question_idx < len(self._question_cards)):
@@ -415,6 +473,7 @@ class WizardNavigationMixin:
             scroll_bar.setValue(target_value)
             return
         self._animate_scroll_to(target_value)
+
     def _animate_scroll_to(self, target_value: int) -> None:
         if self._scroll_area is None:
             return
@@ -428,7 +487,9 @@ class WizardNavigationMixin:
         curve = QEasingCurve(QEasingCurve.Type.BezierSpline)
         curve.addCubicBezierSegment(QPointF(0.215, 0.61), QPointF(0.355, 1.0), QPointF(1.0, 1.0))
 
-        self._scroll_animation = QPropertyAnimation(scroll_bar, QByteArray(b"value"), cast(QObject, self))
+        self._scroll_animation = QPropertyAnimation(
+            scroll_bar, QByteArray(b"value"), cast(QObject, self)
+        )
         self._scroll_animation.setStartValue(start_value)
         self._scroll_animation.setEndValue(target_value)
         self._scroll_animation.setDuration(self._resolve_scroll_duration(start_value, target_value))
@@ -436,10 +497,12 @@ class WizardNavigationMixin:
         self._is_animating_scroll = True
         self._scroll_animation.finished.connect(self._on_scroll_animation_finished)
         self._scroll_animation.start()
+
     @staticmethod
     def _resolve_scroll_duration(start_value: int, target_value: int) -> int:
         distance = abs(int(target_value) - int(start_value))
         return max(160, min(420, 160 + int(distance * 0.11)))
+
     def _stop_scroll_animation(self) -> None:
         if self._scroll_animation is None:
             return
@@ -450,17 +513,20 @@ class WizardNavigationMixin:
         self._scroll_animation.deleteLater()
         self._scroll_animation = None
         self._is_animating_scroll = False
+
     def _on_scroll_animation_finished(self) -> None:
         self._is_animating_scroll = False
         if self._scroll_animation is not None:
             self._scroll_animation.deleteLater()
             self._scroll_animation = None
         self._sync_current_question_from_scroll()
+
     def _on_scroll_value_changed(self, _value: int) -> None:
         self._hide_search_popup()
         if self._is_animating_scroll:
             return
         self._sync_current_question_from_scroll()
+
     def _set_current_question_idx(self, question_idx: int) -> None:
         if not self._question_cards:
             self._current_question_idx = 0
@@ -470,6 +536,7 @@ class WizardNavigationMixin:
             return
         self._current_question_idx = clamped
         self._refresh_navigation_state(len(self._question_cards))
+
     def _register_question_card_interaction_targets(self, card: CardWidget, idx: int) -> None:
         widgets = [card, *card.findChildren(QWidget)]
         for widget in widgets:
@@ -478,13 +545,21 @@ class WizardNavigationMixin:
                 widget.installEventFilter(self)
             except Exception:
                 continue
+
     def eventFilter(self, arg__1, arg__2):
         watched, event = arg__1, arg__2
-        if watched is self._search_edit and event is not None and event.type() == QEvent.Type.KeyPress:
+        if (
+            watched is self._search_edit
+            and event is not None
+            and event.type() == QEvent.Type.KeyPress
+        ):
             if self._search_popup is not None and self._search_popup.isVisible():
                 key = event.key()
                 if key == Qt.Key.Key_Down:
-                    next_row = min(self._search_popup.count() - 1, max(0, self._search_popup.currentRow() + 1))
+                    next_row = min(
+                        self._search_popup.count() - 1,
+                        max(0, self._search_popup.currentRow() + 1),
+                    )
                     self._search_popup.setCurrentRow(next_row)
                     return True
                 if key == Qt.Key.Key_Up:
@@ -494,12 +569,22 @@ class WizardNavigationMixin:
                 if key == Qt.Key.Key_Escape:
                     self._hide_search_popup()
                     return True
-        if watched is self._search_edit and event is not None and event.type() == QEvent.Type.FocusOut:
+        if (
+            watched is self._search_edit
+            and event is not None
+            and event.type() == QEvent.Type.FocusOut
+        ):
             QTimer.singleShot(0, self._hide_search_popup)
-        if watched is self._search_popup and event is not None and event.type() == QEvent.Type.KeyPress:
+        if (
+            watched is self._search_popup
+            and event is not None
+            and event.type() == QEvent.Type.KeyPress
+        ):
             key = event.key()
             if key in (Qt.Key.Key_Return, Qt.Key.Key_Enter):
-                current_item = self._search_popup.currentItem() if self._search_popup is not None else None
+                current_item = (
+                    self._search_popup.currentItem() if self._search_popup is not None else None
+                )
                 if current_item is not None:
                     self._activate_search_popup_item(current_item)
                     return True
@@ -523,6 +608,7 @@ class WizardNavigationMixin:
                 except Exception:
                     pass
         return cast(Any, super()).eventFilter(watched, event)
+
     def _resolve_current_question_idx_from_scroll(self) -> int:
         if self._scroll_area is None or not self._question_cards:
             return 0
@@ -535,8 +621,8 @@ class WizardNavigationMixin:
         best_idx = max(0, min(self._current_question_idx, len(self._question_cards) - 1))
         best_visible_height = -1
 
-        # 以“当前视口内哪张卡片占得最多”为准，而不是盯着某个固定锚点。
-        # 这样面对高矮差异很大的题目卡片时，不会因为第二张卡片刚冒头就过早切题。
+        # 以当前视口内哪张卡片占得最多为准。
+        # 避免高矮差异大时过早切题。
         for idx, card in enumerate(self._question_cards):
             card_top = int(card.y())
             card_bottom = card_top + int(card.height())
@@ -566,6 +652,7 @@ class WizardNavigationMixin:
                 best_idx = idx
 
         return best_idx
+
     def _sync_current_question_from_scroll(self) -> None:
         if self._is_animating_scroll or self._scroll_area is None or not self._question_cards:
             return
@@ -578,10 +665,12 @@ class WizardNavigationMixin:
             return
         current_idx = self._resolve_current_question_idx_from_scroll()
         self._set_current_question_idx(current_idx)
+
     def resizeEvent(self, arg__1) -> None:
         cast(Any, super()).resizeEvent(arg__1)
         self._hide_search_popup()
         self._update_navigation_pager_geometry()
+
     def reject(self) -> None:
         self._restore_entries()
         cast(Any, super()).reject()

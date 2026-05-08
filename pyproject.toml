@@ -33,3 +33,6 @@ build = [
 [tool.uv]
 package = false
 default-groups = ["dev"]
+
+[tool.ruff]
+line-length = 100

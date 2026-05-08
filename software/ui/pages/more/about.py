@@ -1,4 +1,5 @@
 """关于页面"""
+
 import threading
 import webbrowser
 from datetime import datetime
@@ -30,13 +31,15 @@ from qfluentwidgets import (
     ImageLabel,
     CardWidget,
     StrongBodyLabel,
-    FluentIcon
+    FluentIcon,
 )
 
 from software.app.version import __VERSION__, GITHUB_OWNER, GITHUB_REPO
 from software.ui.widgets.full_width_infobar import FullWidthInfoBar
 from software.app.runtime_paths import get_resource_path
-from software.ui.helpers.qfluent_compat import set_indeterminate_progress_ring_active
+from software.ui.helpers.qfluent_compat import (
+    set_indeterminate_progress_ring_active,
+)
 from shiboken6 import isValid
 
 
@@ -49,11 +52,13 @@ class AboutPage(ScrollArea):
 
     def __init__(self, parent=None):
         super().__init__(parent)
-        self._updateCheckFinished.connect(self._on_update_result, Qt.ConnectionType.QueuedConnection)
+        self._updateCheckFinished.connect(
+            self._on_update_result, Qt.ConnectionType.QueuedConnection
+        )
         self._updateCheckError.connect(self._on_update_error, Qt.ConnectionType.QueuedConnection)
 
         self.view = QWidget(self)
-        self.view.setObjectName('view')
+        self.view.setObjectName("view")
         self.setWidget(self.view)
         self.setWidgetResizable(True)
         self.enableTransparentBackground()
@@ -85,21 +90,21 @@ class AboutPage(ScrollArea):
         hero_layout = QVBoxLayout(hero_widget)
         hero_layout.setSpacing(10)
         hero_layout.setAlignment(Qt.AlignmentFlag.AlignHCenter)
-        
+
         logo_path = get_resource_path("assets/icon.png")
         self.logo = ImageLabel(logo_path, self)
         self.logo.setFixedSize(96, 96)
-        self.logo.scaledToHeight(96) 
-        
+        self.logo.scaledToHeight(96)
+
         title = TitleLabel("SurveyController", self)
-        
+
         desc = BodyLabel("SurveyController - 高效的自动化问卷填写工具", self)
         desc.setStyleSheet("color: #606060;")
-        
+
         hero_layout.addWidget(self.logo, 0, Qt.AlignmentFlag.AlignHCenter)
         hero_layout.addWidget(title, 0, Qt.AlignmentFlag.AlignHCenter)
         hero_layout.addWidget(desc, 0, Qt.AlignmentFlag.AlignHCenter)
-        
+
         content_layout.addWidget(hero_widget)
         content_layout.addSpacing(10)
 
@@ -112,7 +117,7 @@ class AboutPage(ScrollArea):
             isClosable=False,
             position=InfoBarPosition.NONE,
             duration=-1,
-            parent=content_widget
+            parent=content_widget,
         )
         disclaimer_bar.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
         disclaimer_bar.setMinimumWidth(0)
@@ -122,14 +127,14 @@ class AboutPage(ScrollArea):
         # 2. 版本信息 + 相关链接（两个卡片并排）
         cards_row = QHBoxLayout()
         cards_row.setSpacing(16)
-        
+
         # 左卡片：版本信息
         version_card = CardWidget(self)
         version_layout = QVBoxLayout(version_card)
         version_layout.setContentsMargins(20, 16, 20, 16)
         version_layout.setSpacing(8)
         version_layout.addWidget(StrongBodyLabel("当前版本", self))
-        
+
         version_row = QHBoxLayout()
         v_num = BodyLabel(f"v{__VERSION__}", self)
         self.publish_time_label = CaptionLabel("", self)
@@ -146,20 +151,20 @@ class AboutPage(ScrollArea):
         version_row.addWidget(self.update_spinner)
         version_row.addWidget(self.update_btn)
         version_layout.addLayout(version_row)
-        
+
         # 右卡片：相关链接
         links_card = CardWidget(self)
         links_layout = QVBoxLayout(links_card)
         links_layout.setContentsMargins(20, 16, 20, 16)
         links_layout.setSpacing(8)
         links_layout.addWidget(StrongBodyLabel("相关链接", self))
-        
+
         self.github_btn = PushButton("GitHub 仓库", self)
         self.github_btn.setIcon(FluentIcon.GITHUB)
         icon_path = get_resource_path("icon.ico")
         self.website_btn = PushButton("官方文档", self)
         self.website_btn.setIcon(QIcon(icon_path))
-        
+
         links_row = QHBoxLayout()
         links_row.setSpacing(12)
         links_row.addWidget(self.github_btn)
@@ -167,10 +172,10 @@ class AboutPage(ScrollArea):
         links_row.addStretch(1)
         links_layout.addLayout(links_row)
         links_layout.addStretch(1)
-        
+
         cards_row.addWidget(version_card, 1)
         cards_row.addWidget(links_card, 1)
-        
+
         content_layout.addLayout(cards_row)
 
         # 4. 致谢 & 许可
@@ -188,10 +193,14 @@ class AboutPage(ScrollArea):
         # 贡献者
         contributors_layout = QHBoxLayout()
         contributors_layout.addWidget(BodyLabel("贡献者：", self))
-        contributor1_link = HyperlinkButton("https://github.com/SurveyController", "@SurveyController", self)
+        contributor1_link = HyperlinkButton(
+            "https://github.com/SurveyController", "@SurveyController", self
+        )
         contributor2_link = HyperlinkButton("https://github.com/shiahonb777", "@shiahonb777", self)
         contributor3_link = HyperlinkButton("https://github.com/BingBuLiang", "@BingBuLiang", self)
-        contributor4_link = HyperlinkButton("https://github.com/dAwn-Rebirth", "@dAwn-Rebirth", self)
+        contributor4_link = HyperlinkButton(
+            "https://github.com/dAwn-Rebirth", "@dAwn-Rebirth", self
+        )
         contributor5_link = HyperlinkButton("https://github.com/Moyuin-aka", "@Moyuin-aka", self)
         contributors_layout.addWidget(contributor1_link)
         contributors_layout.addWidget(contributor2_link)
@@ -209,7 +218,7 @@ class AboutPage(ScrollArea):
         terms_layout.addWidget(self.terms_btn)
         terms_layout.addStretch(1)
         credit_layout.addLayout(terms_layout)
-        
+
         content_layout.addWidget(credit_card)
 
         # Footer
@@ -225,9 +234,11 @@ class AboutPage(ScrollArea):
         content_layout.addStretch(1)
 
         self.update_btn.clicked.connect(self._check_updates)
-        self.github_btn.clicked.connect(lambda: webbrowser.open(f"https://github.com/{GITHUB_OWNER}/{GITHUB_REPO}"))
+        self.github_btn.clicked.connect(
+            lambda: webbrowser.open(f"https://github.com/{GITHUB_OWNER}/{GITHUB_REPO}")
+        )
         self.website_btn.clicked.connect(lambda: webbrowser.open("https://surveydoc.hungrym0.top/"))
-        
+
         # 异步获取发布时间
         self._load_publish_time()
 
@@ -255,47 +266,76 @@ class AboutPage(ScrollArea):
             payload={"version": (update_info or {}).get("version", "unknown")},
         )
         if status == "outdated":
-            if hasattr(win, 'update_info'):
+            if hasattr(win, "update_info"):
                 win.update_info = update_info  # type: ignore[union-attr]
             from software.update.updater import show_update_notification
+
             show_update_notification(win)
         elif status == "latest":
-            InfoBar.success("", f"当前已是最新版本 v{__VERSION__}", parent=win, position=InfoBarPosition.TOP, duration=3000)
+            InfoBar.success(
+                "",
+                f"当前已是最新版本 v{__VERSION__}",
+                parent=win,
+                position=InfoBarPosition.TOP,
+                duration=3000,
+            )
         elif status == "preview":
             latest = update_info.get("latest_version", "?") if update_info else "?"
-            InfoBar.warning("", f"当前版本 v{__VERSION__} 高于远程最新版 v{latest}，属于预览版", parent=win, position=InfoBarPosition.TOP, duration=4000)
+            InfoBar.warning(
+                "",
+                f"当前版本 v{__VERSION__} 高于远程最新版 v{latest}，属于预览版",
+                parent=win,
+                position=InfoBarPosition.TOP,
+                duration=4000,
+            )
         else:
-            InfoBar.warning("", "检查更新失败，请检查网络连接后重试", parent=win, position=InfoBarPosition.TOP, duration=4000)
+            InfoBar.warning(
+                "",
+                "检查更新失败，请检查网络连接后重试",
+                parent=win,
+                position=InfoBarPosition.TOP,
+                duration=4000,
+            )
 
     @Slot(str)
     def _on_update_error(self, error_msg: str):
         """处理更新检查错误（在主线程中执行）"""
         self._set_update_loading(False)
-        InfoBar.error("", f"检查更新失败：{error_msg}", parent=self.window(), position=InfoBarPosition.TOP, duration=3000)
+        InfoBar.error(
+            "",
+            f"检查更新失败：{error_msg}",
+            parent=self.window(),
+            position=InfoBarPosition.TOP,
+            duration=3000,
+        )
 
     def _check_updates(self):
         if self._checking_update:
             return
         self._set_update_loading(True)
         log_action("UPDATE", "check_updates", "update_btn", "about", result="started")
-        
+
         def _do_check():
             try:
                 from software.update.updater import UpdateManager
+
                 update_info = UpdateManager.check_updates()
                 self._updateCheckFinished.emit(update_info)
             except Exception as exc:
                 self._updateCheckError.emit(str(exc))
-        
+
         threading.Thread(target=_do_check, daemon=True).start()
 
     def _load_publish_time(self):
         """异步加载当前版本的发布时间"""
-        self._publishTimeLoaded.connect(self._on_publish_time_loaded, Qt.ConnectionType.QueuedConnection)
-        
+        self._publishTimeLoaded.connect(
+            self._on_publish_time_loaded, Qt.ConnectionType.QueuedConnection
+        )
+
         def _do_load():
             try:
                 from software.update.updater import UpdateManager
+
                 releases = UpdateManager.get_all_releases()
                 for r in releases:
                     if r.get("version") == __VERSION__:
@@ -305,8 +345,13 @@ class AboutPage(ScrollArea):
                             self._publishTimeLoaded.emit(dt.strftime("%Y-%m-%d"))
                         return
             except Exception as exc:
-                log_suppressed_exception("_do_load: from software.update.updater import UpdateManager", exc, level=logging.WARNING)
-        
+                context = "_do_load: from software.update.updater import UpdateManager"
+                log_suppressed_exception(
+                    context,
+                    exc,
+                    level=logging.WARNING,
+                )
+
         threading.Thread(target=_do_load, daemon=True).start()
 
     @Slot(str)
@@ -322,6 +367,7 @@ class AboutPage(ScrollArea):
             dialog.activateWindow()
             return
         from software.ui.dialogs.terms_of_service import TermsOfServiceDialog
+
         dlg = TermsOfServiceDialog(self.window())
         self._terms_dialog = dlg
         dlg.finished.connect(self._clear_terms_dialog_ref)
@@ -330,6 +376,3 @@ class AboutPage(ScrollArea):
 
     def _clear_terms_dialog_ref(self, *_args) -> None:
         self._terms_dialog = None
-
-
-

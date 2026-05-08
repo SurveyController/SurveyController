@@ -1,6 +1,9 @@
 """UI 侧代理与额度访问门面。"""
 
-from software.network.proxy.api import format_status_payload, test_custom_proxy_api
+from software.network.proxy.api import (
+    format_status_payload,
+    test_custom_proxy_api,
+)
 from software.network.proxy.areas import (
     load_area_codes,
     load_benefit_supported_areas,

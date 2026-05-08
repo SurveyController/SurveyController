@@ -1,4 +1,5 @@
 """社区页面 - 网格卡片布局"""
+
 import os
 import webbrowser
 
@@ -122,12 +123,12 @@ class CommunityPage(ScrollArea):
         title_layout = QHBoxLayout()
         title_layout.setSpacing(8)
         title_layout.setContentsMargins(0, 0, 0, 0)
-        
+
         if icon:
             icon_label = QLabel(card)
             icon_label.setPixmap(icon.icon(QPixmap()).pixmap(24, 24))
             title_layout.addWidget(icon_label)
-        
+
         title_label = StrongBodyLabel(title, card)
         title_label.setStyleSheet("font-size: 16px; letter-spacing: 1px;")
         title_layout.addWidget(title_label)
@@ -227,7 +228,8 @@ class CommunityPage(ScrollArea):
                 if not pixmap.isNull():
                     self._qq_pixmap = pixmap
                     scaled = pixmap.scaled(
-                        144, 144,
+                        144,
+                        144,
                         Qt.AspectRatioMode.KeepAspectRatio,
                         Qt.TransformationMode.SmoothTransformation,
                     )
@@ -298,6 +300,7 @@ class CommunityPage(ScrollArea):
             return
 
         from software.ui.dialogs.contact import ContactDialog
+
         dialog = ContactDialog(
             self,
             status_endpoint=STATUS_ENDPOINT,
@@ -353,9 +356,7 @@ class CommunityPage(ScrollArea):
         license_btn = PushButton("查看协议", card)
         license_btn.setIcon(FluentIcon.INFO)
         self._setup_card_button(license_btn)
-        license_btn.clicked.connect(
-            lambda: webbrowser.open(f"{_GITHUB_URL}/blob/main/LICENSE")
-        )
+        license_btn.clicked.connect(lambda: webbrowser.open(f"{_GITHUB_URL}/blob/main/LICENSE"))
 
         action_bar = self._create_action_bar(
             card,
@@ -364,5 +365,3 @@ class CommunityPage(ScrollArea):
         layout.addWidget(action_bar)
 
         return card
-
-

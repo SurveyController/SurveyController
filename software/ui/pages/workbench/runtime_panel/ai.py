@@ -1,4 +1,5 @@
 """运行参数页 - AI 提供商和 API Key 配置组件"""
+
 from typing import Optional
 import logging
 from software.logging.log_utils import log_suppressed_exception
@@ -45,7 +46,9 @@ class AIPromptSettingCard(ExpandGroupSettingCard):
             "在此处编辑 AI 填空的系统提示词",
             parent,
         )
-        self._default_prompt = (default_prompt or "").strip() or get_default_system_prompt("provider")
+        self._default_prompt = (default_prompt or "").strip() or get_default_system_prompt(
+            "provider"
+        )
 
         self._group_container = QWidget(self)
         layout = QVBoxLayout(self._group_container)
@@ -76,7 +79,6 @@ class AIPromptSettingCard(ExpandGroupSettingCard):
 
 
 class RuntimeAISection(QObject):
-
     _AI_MODES = {
         "free": "限时免费",
         "provider": "自定义服务商",
@@ -103,7 +105,9 @@ class RuntimeAISection(QObject):
         if initial_mode not in self._AI_MODES:
             initial_mode = "free"
         self._last_ai_mode = initial_mode
-        self._ai_system_prompt = str(ai_config.get("system_prompt") or "").strip() or get_default_system_prompt(initial_mode)
+        self._ai_system_prompt = str(
+            ai_config.get("system_prompt") or ""
+        ).strip() or get_default_system_prompt(initial_mode)
         self._build_ui(ai_config)
         self._bind_events()
         self._update_ai_visibility()
@@ -176,11 +180,17 @@ class RuntimeAISection(QObject):
         idx = self.ai_provider_combo.findData(saved_provider)
         if idx >= 0:
             self.ai_provider_combo.setCurrentIndex(idx)
-        self.ai_provider_link = HyperlinkButton(FluentIcon.LINK, "", "API文档", self.ai_provider_card)
+        self.ai_provider_link = HyperlinkButton(
+            FluentIcon.LINK, "", "API文档", self.ai_provider_card
+        )
         self._update_ai_doc_link(saved_provider)
-        self.ai_provider_card.hBoxLayout.addWidget(self.ai_provider_link, 0, Qt.AlignmentFlag.AlignRight)
+        self.ai_provider_card.hBoxLayout.addWidget(
+            self.ai_provider_link, 0, Qt.AlignmentFlag.AlignRight
+        )
         self.ai_provider_card.hBoxLayout.addSpacing(8)
-        self.ai_provider_card.hBoxLayout.addWidget(self.ai_provider_combo, 0, Qt.AlignmentFlag.AlignRight)
+        self.ai_provider_card.hBoxLayout.addWidget(
+            self.ai_provider_combo, 0, Qt.AlignmentFlag.AlignRight
+        )
         self.ai_provider_card.hBoxLayout.addSpacing(16)
         self.group.addSettingCard(self.ai_provider_card)
 
@@ -194,7 +204,9 @@ class RuntimeAISection(QObject):
         self.ai_baseurl_edit.setMinimumWidth(280)
         self.ai_baseurl_edit.setPlaceholderText("https://api.example.com/v1 或完整端点")
         self.ai_baseurl_edit.setText(ai_config.get("base_url") or "")
-        self.ai_baseurl_card.hBoxLayout.addWidget(self.ai_baseurl_edit, 0, Qt.AlignmentFlag.AlignRight)
+        self.ai_baseurl_card.hBoxLayout.addWidget(
+            self.ai_baseurl_edit, 0, Qt.AlignmentFlag.AlignRight
+        )
         self.ai_baseurl_card.hBoxLayout.addSpacing(16)
         self.group.addSettingCard(self.ai_baseurl_card)
 
@@ -208,7 +220,9 @@ class RuntimeAISection(QObject):
         self.ai_apikey_edit.setMinimumWidth(280)
         self.ai_apikey_edit.setPlaceholderText("sk-...")
         self.ai_apikey_edit.setText(ai_config.get("api_key") or "")
-        self.ai_apikey_card.hBoxLayout.addWidget(self.ai_apikey_edit, 0, Qt.AlignmentFlag.AlignRight)
+        self.ai_apikey_card.hBoxLayout.addWidget(
+            self.ai_apikey_edit, 0, Qt.AlignmentFlag.AlignRight
+        )
         self.ai_apikey_card.hBoxLayout.addSpacing(16)
         self.group.addSettingCard(self.ai_apikey_card)
 
@@ -296,7 +310,11 @@ class RuntimeAISection(QObject):
             self.ai_mode_combo.blockSignals(blocked)
             self.ai_provider_combo.blockSignals(blocked)
         except Exception as exc:
-            log_suppressed_exception("_set_ai_controls_blocked: combo controls blockSignals(blocked)", exc, level=logging.WARNING)
+            log_suppressed_exception(
+                "_set_ai_controls_blocked: combo blockSignals",
+                exc,
+                level=logging.WARNING,
+            )
 
     def _get_current_ai_mode(self) -> str:
         idx = self.ai_mode_combo.currentIndex()
@@ -311,14 +329,13 @@ class RuntimeAISection(QObject):
         """安全地显示 InfoBar，关闭之前的避免动画冲突"""
         # 先关闭之前的 InfoBar
 
-
         if self._current_infobar is not None:
             try:
                 self._current_infobar.close()
             except (RuntimeError, AttributeError):
                 pass
             self._current_infobar = None
-        
+
         # 显示新的 InfoBar
         infobar_func = InfoBar.success if success else InfoBar.error
         self._current_infobar = infobar_func(
@@ -344,16 +361,16 @@ class RuntimeAISection(QObject):
         self.ai_baseurl_card.setVisible((not is_free_mode) and is_custom)
         if is_free_mode:
             return
-        
+
         # 更新推荐模型列表
         provider_config = AI_PROVIDERS.get(provider_key, {})
         recommended_models = provider_config.get("recommended_models", [])
         default_model = provider_config.get("default_model", "")
-        
+
         # 控制显示哪个输入控件
         self.ai_model_combo.setVisible(not is_custom)
         self.ai_model_edit.setVisible(is_custom)
-        
+
         if is_custom:
             # 自定义模式：切换时清空（除非是初始化加载）
             if not self._ai_loading:
@@ -364,15 +381,15 @@ class RuntimeAISection(QObject):
             self.ai_model_combo.clear()
             if recommended_models:
                 self.ai_model_combo.addItems(recommended_models)
-            
+
             # 更新占位符
             self.ai_model_combo.setPlaceholderText(default_model or "输入模型名称")
-            
+
             # 切换服务商时使用新的默认模型（除非是初始化加载）
             if not self._ai_loading:
                 self.ai_model_combo.setText(default_model)
                 save_ai_settings(model=default_model)
-        
+
         self._update_ai_doc_link(provider_key)
 
     def _apply_ai_config(self, cfg: RuntimeConfig):
@@ -385,7 +402,9 @@ class RuntimeAISection(QObject):
             cfg.ai_base_url = str(ai_config.get("base_url") or "")
             cfg.ai_api_protocol = str(ai_config.get("api_protocol") or "auto")
             cfg.ai_model = str(ai_config.get("model") or "")
-            cfg.ai_system_prompt = str(ai_config.get("system_prompt") or "").strip() or get_default_system_prompt(cfg.ai_mode)
+            cfg.ai_system_prompt = str(
+                ai_config.get("system_prompt") or ""
+            ).strip() or get_default_system_prompt(cfg.ai_mode)
         if not getattr(cfg, "ai_provider", ""):
             cfg.ai_provider = "deepseek"
         if not getattr(cfg, "ai_mode", ""):
@@ -534,5 +553,3 @@ class RuntimeAISection(QObject):
     def _on_ai_test_thread_finished(self):
         self._ai_test_thread = None
         self._ai_test_worker = None
-
-

@@ -1,4 +1,5 @@
 """Shared clipboard and drag/drop QR-code handling for survey entry areas."""
+
 from __future__ import annotations
 
 import io
@@ -48,7 +49,9 @@ class SurveyClipboardMixin:
                         if urls:
                             file_path = urls[0].toLocalFile()
                             if file_path and os.path.exists(file_path):
-                                if file_path.lower().endswith((".png", ".jpg", ".jpeg", ".bmp", ".gif")):
+                                if file_path.lower().endswith(
+                                    (".png", ".jpg", ".jpeg", ".bmp", ".gif")
+                                ):
                                     self._process_qrcode_image(file_path)
                                     event.acceptProposedAction()
                                     return True
@@ -66,7 +69,10 @@ class SurveyClipboardMixin:
                 from PySide6.QtWidgets import QApplication
 
                 if isinstance(event, QKeyEvent):
-                    if event.key() == Qt.Key.Key_V and event.modifiers() & Qt.KeyboardModifier.ControlModifier:
+                    if (
+                        event.key() == Qt.Key.Key_V
+                        and event.modifiers() & Qt.KeyboardModifier.ControlModifier
+                    ):
                         clipboard = QApplication.clipboard()
                         mime_data = clipboard.mimeData(QClipboard.Mode.Clipboard)
                         image_data = self._extract_image_from_clipboard(mime_data, clipboard)
@@ -82,7 +88,15 @@ class SurveyClipboardMixin:
                             if urls:
                                 file_path = urls[0].toLocalFile()
                                 if file_path and os.path.exists(file_path):
-                                    if file_path.lower().endswith((".png", ".jpg", ".jpeg", ".bmp", ".gif")):
+                                    if file_path.lower().endswith(
+                                        (
+                                            ".png",
+                                            ".jpg",
+                                            ".jpeg",
+                                            ".bmp",
+                                            ".gif",
+                                        )
+                                    ):
                                         self._process_qrcode_image(file_path)
                                         return True
 
@@ -142,7 +156,9 @@ class SurveyClipboardMixin:
             return None
         return image
 
-    def _extract_image_from_clipboard(self, mime_data: QMimeData, clipboard: Optional[QClipboard] = None):
+    def _extract_image_from_clipboard(
+        self, mime_data: QMimeData, clipboard: Optional[QClipboard] = None
+    ):
         if mime_data.hasImage():
             image = mime_data.imageData()
             qimage = self._extract_qimage(image)
@@ -173,7 +189,11 @@ class SurveyClipboardMixin:
                 dib_image.load()
                 return dib_image
         except Exception as exc:
-            log_suppressed_exception("_extract_image_from_clipboard: DeviceIndependentBitmap", exc, level=logging.INFO)
+            log_suppressed_exception(
+                "_extract_image_from_clipboard: DeviceIndependentBitmap",
+                exc,
+                level=logging.INFO,
+            )
 
         if clipboard is not None:
             try:
@@ -182,7 +202,11 @@ class SurveyClipboardMixin:
                 if qimage is not None:
                     return qimage
             except Exception as exc:
-                log_suppressed_exception("_extract_image_from_clipboard: clipboard.image()", exc, level=logging.INFO)
+                log_suppressed_exception(
+                    "_extract_image_from_clipboard: clipboard.image()",
+                    exc,
+                    level=logging.INFO,
+                )
 
         return None
 

@@ -1,15 +1,32 @@
-"""WizardSectionsMixin：各题型配置区 UI 构建方法，供 QuestionWizardDialog 通过多继承引入。"""
+"""WizardSectionsMixin：各题型配置区 UI 构建方法。"""
+
 from typing import Any, Dict, List, Tuple
 
-from PySide6.QtCore import QByteArray, QEasingCurve, QPropertyAnimation, QTimer, Qt
+from PySide6.QtCore import (
+    QByteArray,
+    QEasingCurve,
+    QPropertyAnimation,
+    QTimer,
+    Qt,
+)
 from PySide6.QtWidgets import QHBoxLayout, QVBoxLayout, QWidget
-from qfluentwidgets import BodyLabel, CardWidget, LineEdit, ScrollArea, SegmentedWidget
+from qfluentwidgets import (
+    BodyLabel,
+    CardWidget,
+    LineEdit,
+    ScrollArea,
+    SegmentedWidget,
+)
 
 from software.core.questions.config import QuestionEntry
 from software.providers.contracts import SurveyQuestionMeta
 from software.ui.widgets.no_wheel import NoWheelSlider
 
-from .psycho_config import BIAS_PRESET_CHOICES, PSYCHO_SUPPORTED_TYPES, build_bias_weights
+from .psycho_config import (
+    BIAS_PRESET_CHOICES,
+    PSYCHO_SUPPORTED_TYPES,
+    build_bias_weights,
+)
 from .wizard_sections_common import (
     WizardSectionsCommonMixin,
     _TEXT_RANDOM_ID_CARD,
@@ -24,7 +41,12 @@ from .wizard_sections_common import (
 )
 from .wizard_sections_slider import WizardSectionsSliderMixin
 from .wizard_sections_text import WizardSectionsTextMixin
-from .utils import _apply_label_color, _bind_slider_input, _configure_wrapped_text_label, _shorten_text
+from .utils import (
+    _apply_label_color,
+    _bind_slider_input,
+    _configure_wrapped_text_label,
+    _shorten_text,
+)
 
 
 class WizardSectionsMixin(
@@ -58,7 +80,9 @@ class WizardSectionsMixin(
     option_fill_state_map: Dict[int, Any]
 
     def _get_entry_info(self, idx: int) -> SurveyQuestionMeta: ...
-    def _resolve_matrix_weights(self, entry: QuestionEntry, rows: int, columns: int) -> List[List[float]]: ...
+    def _resolve_matrix_weights(
+        self, entry: QuestionEntry, rows: int, columns: int
+    ) -> List[List[float]]: ...
     def _resolve_slider_bounds(self, idx: int, entry: Any) -> Tuple[int, int]: ...
 
     def _build_matrix_section(
@@ -102,7 +126,11 @@ class WizardSectionsMixin(
         per_row_layout.setSpacing(10)
         card_layout.addWidget(per_row_scroll)
 
-        def build_slider_rows(parent_widget: QWidget, target_layout: QVBoxLayout, values: List[float]) -> List[NoWheelSlider]:
+        def build_slider_rows(
+            parent_widget: QWidget,
+            target_layout: QVBoxLayout,
+            values: List[float],
+        ) -> List[NoWheelSlider]:
             sliders: List[NoWheelSlider] = []
             for col_idx in range(columns):
                 opt_widget = QWidget(parent_widget)
@@ -110,7 +138,9 @@ class WizardSectionsMixin(
                 opt_layout.setContentsMargins(0, 2, 0, 2)
                 opt_layout.setSpacing(12)
 
-                opt_text = option_texts[col_idx] if col_idx < len(option_texts) else f"列 {col_idx + 1}"
+                opt_text = (
+                    option_texts[col_idx] if col_idx < len(option_texts) else f"列 {col_idx + 1}"
+                )
                 text_label = BodyLabel(opt_text, parent_widget)
                 _configure_wrapped_text_label(text_label, 160)
                 text_label.setStyleSheet("font-size: 13px;")
@@ -139,7 +169,9 @@ class WizardSectionsMixin(
         matrix_weights = self._resolve_matrix_weights(entry, rows, columns)
 
         per_row_sliders: List[List[NoWheelSlider]] = []
-        per_row_values = matrix_weights if matrix_weights else [[1.0] * columns for _ in range(rows)]
+        per_row_values = (
+            matrix_weights if matrix_weights else [[1.0] * columns for _ in range(rows)]
+        )
         for row_idx in range(rows):
             row_card = CardWidget(per_row_view)
             row_card_layout = QVBoxLayout(row_card)
@@ -147,7 +179,10 @@ class WizardSectionsMixin(
             row_card_layout.setSpacing(6)
             row_label_text = row_texts[row_idx] if row_idx < len(row_texts) else ""
             if row_label_text:
-                row_label = BodyLabel(_shorten_text(f"第{row_idx + 1}行：{row_label_text}", 60), row_card)
+                row_label = BodyLabel(
+                    _shorten_text(f"第{row_idx + 1}行：{row_label_text}", 60),
+                    row_card,
+                )
             else:
                 row_label = BodyLabel(f"第{row_idx + 1}行", row_card)
             row_label.setStyleSheet("font-weight: 500;")
@@ -167,7 +202,9 @@ class WizardSectionsMixin(
                 if isinstance(saved_bias, list) and row_idx < len(saved_bias):
                     seg.setCurrentItem(saved_bias[row_idx] or "custom")
                 else:
-                    seg.setCurrentItem((saved_bias if isinstance(saved_bias, str) else None) or "custom")
+                    seg.setCurrentItem(
+                        (saved_bias if isinstance(saved_bias, str) else None) or "custom"
+                    )
                 preset_row.addWidget(seg)
                 preset_row.addStretch(1)
                 row_card_layout.addLayout(preset_row)
@@ -193,6 +230,7 @@ class WizardSectionsMixin(
                         option_texts,
                         "本行目标占比（实际会小幅波动）：",
                     )
+
                 return update
 
             row_preview_update = make_row_preview_update()
@@ -243,9 +281,17 @@ class WizardSectionsMixin(
             for seg, row_sliders in zip(matrix_row_preset_segs, per_row_sliders):
                 wire_row(seg, row_sliders, columns)
 
-    def _build_order_section(self, card: CardWidget, card_layout: QVBoxLayout, option_texts: List[str]) -> None:
+    def _build_order_section(
+        self,
+        card: CardWidget,
+        card_layout: QVBoxLayout,
+        option_texts: List[str],
+    ) -> None:
         self._has_content = True
-        hint = BodyLabel("排序题无需设置配比，执行时会随机排序；如题干要求仅排序前 N 项，将自动识别。", card)
+        hint = BodyLabel(
+            "排序题无需设置配比，执行时会随机排序；如题干要求仅排序前 N 项，将自动识别。",
+            card,
+        )
         hint.setWordWrap(True)
         hint.setStyleSheet("font-size: 12px;")
         _apply_label_color(hint, "#666666", "#bfbfbf")

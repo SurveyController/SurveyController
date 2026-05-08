@@ -1,4 +1,5 @@
 """DashboardPage 问卷解析流程。"""
+
 from __future__ import annotations
 
 import logging
@@ -26,7 +27,13 @@ class DashboardSurveyParseMixin:
         _open_wizard_after_parse: bool
         _progress_infobar: Any
 
-        def _toast(self, text: str, level: str = "info", duration: int = 2000, show_progress: bool = False) -> Any: ...
+        def _toast(
+            self,
+            text: str,
+            level: str = "info",
+            duration: int = 2000,
+            show_progress: bool = False,
+        ) -> Any: ...
 
     def _on_parse_clicked(self):
         url = self.url_edit.text().strip()
@@ -57,7 +64,9 @@ class DashboardSurveyParseMixin:
             return
         # 第二层检测：是否为具体的问卷链接（排除问卷星投票/考试等）
         provider = detect_survey_provider(url)
-        if not (provider in {SURVEY_PROVIDER_QQ, SURVEY_PROVIDER_CREDAMO} or is_wjx_survey_url(url)):
+        if not (
+            provider in {SURVEY_PROVIDER_QQ, SURVEY_PROVIDER_CREDAMO} or is_wjx_survey_url(url)
+        ):
             log_action(
                 "UI",
                 "parse_survey",
@@ -81,19 +90,26 @@ class DashboardSurveyParseMixin:
             result="started",
             payload={"provider": detect_survey_provider(url)},
         )
+
     def _on_survey_parsed(self, info: list, title: str):
-        """问卷解析成功的处理（仅负责关闭进度条和记录结果，向导弹出由 MainWindow 处理）"""
+        """问卷解析成功后关闭进度条并记录结果。"""
         _ = title
         # 关闭进度消息条
         if self._progress_infobar:
             try:
                 self._progress_infobar.close()
             except Exception as exc:
-                log_suppressed_exception("_on_survey_parsed: self._progress_infobar.close()", exc, level=logging.WARNING)
+                log_suppressed_exception(
+                    "_on_survey_parsed: self._progress_infobar.close()",
+                    exc,
+                    level=logging.WARNING,
+                )
             self._progress_infobar = None
 
         count = len(info) if info else 0
-        unsupported_count = sum(1 for item in ensure_survey_question_metas(info or []) if bool(item.unsupported))
+        unsupported_count = sum(
+            1 for item in ensure_survey_question_metas(info or []) if bool(item.unsupported)
+        )
         if unsupported_count > 0:
             log_action(
                 "UI",
@@ -102,7 +118,10 @@ class DashboardSurveyParseMixin:
                 "dashboard",
                 result="unsupported",
                 level=logging.WARNING,
-                payload={"question_count": count, "unsupported_count": unsupported_count},
+                payload={
+                    "question_count": count,
+                    "unsupported_count": unsupported_count,
+                },
             )
             return
 
@@ -114,6 +133,7 @@ class DashboardSurveyParseMixin:
             result="success",
             payload={"question_count": count},
         )
+
     def _on_survey_parse_failed(self, error_msg: str):
         """问卷解析失败的处理"""
         # 关闭进度消息条
@@ -121,17 +141,29 @@ class DashboardSurveyParseMixin:
             try:
                 self._progress_infobar.close()
             except Exception as exc:
-                log_suppressed_exception("_on_survey_parse_failed: self._progress_infobar.close()", exc, level=logging.WARNING)
+                log_suppressed_exception(
+                    "_on_survey_parse_failed: self._progress_infobar.close()",
+                    exc,
+                    level=logging.WARNING,
+                )
             self._progress_infobar = None
 
         text = str(error_msg or "").strip()
         if text == _QQ_LOGIN_REQUIRED_MESSAGE:
             self._toast(text, "warning", duration=4500)
         elif "问卷已暂停" in text:
-            self._toast("问卷已暂停，需要前往问卷星后台重新发布", "warning", duration=4500)
+            self._toast(
+                "问卷已暂停，需要前往问卷星后台重新发布",
+                "warning",
+                duration=4500,
+            )
         elif "暂未开放" in text:
             self._toast(text, "warning", duration=5000)
         else:
             # 显示解析失败消息
-            self._toast(f"解析失败：{text or '请确认链接有效且网络正常'}", "error", duration=3000)
+            self._toast(
+                f"解析失败：{text or '请确认链接有效且网络正常'}",
+                "error",
+                duration=3000,
+            )
         self._open_wizard_after_parse = False

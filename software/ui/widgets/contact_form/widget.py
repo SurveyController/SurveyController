@@ -1,4 +1,5 @@
 """联系开发者表单组件，可嵌入页面或对话框。"""
+
 import json
 import logging
 import os
@@ -10,9 +11,27 @@ from decimal import Decimal, InvalidOperation
 from typing import Any, Callable, Optional, cast
 
 from PySide6.QtCore import QEvent, QObject, QTimer, Qt, QUrl, Signal, Slot
-from PySide6.QtGui import QDoubleValidator, QGuiApplication, QIntValidator, QKeyEvent, QKeySequence
-from PySide6.QtNetwork import QNetworkAccessManager, QNetworkReply, QNetworkRequest
-from PySide6.QtWidgets import QFileDialog, QButtonGroup, QHBoxLayout, QLabel, QSizePolicy, QVBoxLayout, QWidget
+from PySide6.QtGui import (
+    QDoubleValidator,
+    QGuiApplication,
+    QIntValidator,
+    QKeyEvent,
+    QKeySequence,
+)
+from PySide6.QtNetwork import (
+    QNetworkAccessManager,
+    QNetworkReply,
+    QNetworkRequest,
+)
+from PySide6.QtWidgets import (
+    QFileDialog,
+    QButtonGroup,
+    QHBoxLayout,
+    QLabel,
+    QSizePolicy,
+    QVBoxLayout,
+    QWidget,
+)
 from qfluentwidgets import (
     Action,
     BodyLabel,
@@ -39,7 +58,10 @@ from software.app.config import (
     EMAIL_VERIFY_ENDPOINT,
     PROXY_STATUS_TIMEOUT_SECONDS,
 )
-from software.app.user_paths import get_fatal_crash_log_path, get_user_local_data_root
+from software.app.user_paths import (
+    get_fatal_crash_log_path,
+    get_user_local_data_root,
+)
 from software.app.version import __VERSION__
 from software.io.config import RuntimeConfig, save_config
 from software.logging.log_utils import (
@@ -47,10 +69,16 @@ from software.logging.log_utils import (
     export_full_log_to_file,
     log_suppressed_exception,
 )
-from software.ui.helpers.contact_api import format_quota_value, get_session_snapshot, post as http_post
+from software.ui.helpers.contact_api import (
+    format_quota_value,
+    get_session_snapshot,
+    post as http_post,
+)
 from software.ui.helpers.fluent_tooltip import install_tooltip_filters
 from software.ui.helpers.image_attachments import ImageAttachmentManager
-from software.ui.helpers.qfluent_compat import set_indeterminate_progress_ring_active
+from software.ui.helpers.qfluent_compat import (
+    set_indeterminate_progress_ring_active,
+)
 
 from .constants import (
     DONATION_AMOUNT_BLOCK_MESSAGE,
@@ -399,7 +427,9 @@ class ContactForm(StatusPollingMixin, QWidget):
     ):
         super().__init__(parent)
         self._sendFinished.connect(self._on_send_finished, Qt.ConnectionType.QueuedConnection)
-        self._verifyCodeFinished.connect(self._on_verify_code_finished, Qt.ConnectionType.QueuedConnection)
+        self._verifyCodeFinished.connect(
+            self._on_verify_code_finished, Qt.ConnectionType.QueuedConnection
+        )
         self._init_status_polling(status_endpoint, status_formatter)
         self._attachments = ImageAttachmentManager(max_count=3, max_size_bytes=10 * 1024 * 1024)
         self._current_message_type: str = ""
@@ -440,7 +470,12 @@ class ContactForm(StatusPollingMixin, QWidget):
         self.type_combo = ComboBox(self)
         self.type_locked_label = BodyLabel("", self)
         self.type_locked_label.setFixedWidth(COMPACT_FIELD_WIDTH)
-        self.base_options = ["报错反馈", REQUEST_MESSAGE_TYPE, "新功能建议", "纯聊天"]
+        self.base_options = [
+            "报错反馈",
+            REQUEST_MESSAGE_TYPE,
+            "新功能建议",
+            "纯聊天",
+        ]
         for item in self.base_options:
             self.type_combo.addItem(item, item)
         self.type_combo.setFixedWidth(COMPACT_FIELD_WIDTH)
@@ -528,7 +563,12 @@ class ContactForm(StatusPollingMixin, QWidget):
         self.urgency_label = BodyLabel("问卷紧急程度：", self)
         self.urgency_combo = ComboBox(self)
         self.urgency_combo.setMaximumWidth(140)
-        for urgency in ["低", "中（本月内）", "高（本周内）", "紧急（两天内）"]:
+        for urgency in [
+            "低",
+            "中（本月内）",
+            "高（本周内）",
+            "紧急（两天内）",
+        ]:
             self.urgency_combo.addItem(urgency, urgency)
         urgency_default_index = self.urgency_combo.findText("中（本月内）")
         if urgency_default_index >= 0:
@@ -604,7 +644,10 @@ class ContactForm(StatusPollingMixin, QWidget):
         attachments_box.setSpacing(6)
 
         attach_toolbar = QHBoxLayout()
-        self.attach_title = BodyLabel("图片附件 (最多3张，支持Ctrl+V粘贴，单张≤10MB):", self.attachments_section)
+        self.attach_title = BodyLabel(
+            "图片附件 (最多3张，支持Ctrl+V粘贴，单张≤10MB):",
+            self.attachments_section,
+        )
 
         self.attach_add_btn = PushButton(FluentIcon.ADD, "添加图片", self.attachments_section)
         self.attach_clear_btn = PushButton(FluentIcon.DELETE, "清空附件", self.attachments_section)
@@ -654,8 +697,12 @@ class ContactForm(StatusPollingMixin, QWidget):
         self.payment_method_label = BodyLabel("选择的支付方式：", self.request_payment_section)
         self.payment_method_group = QButtonGroup(self.request_payment_section)
         self.payment_method_group.setExclusive(True)
-        self.payment_method_wechat_radio = RadioButton(PAYMENT_METHOD_OPTIONS[0], self.request_payment_section)
-        self.payment_method_alipay_radio = RadioButton(PAYMENT_METHOD_OPTIONS[1], self.request_payment_section)
+        self.payment_method_wechat_radio = RadioButton(
+            PAYMENT_METHOD_OPTIONS[0], self.request_payment_section
+        )
+        self.payment_method_alipay_radio = RadioButton(
+            PAYMENT_METHOD_OPTIONS[1], self.request_payment_section
+        )
         self.payment_method_group.addButton(self.payment_method_wechat_radio, 1)
         self.payment_method_group.addButton(self.payment_method_alipay_radio, 2)
         payment_row.addWidget(self.payment_method_label)
@@ -668,7 +715,7 @@ class ContactForm(StatusPollingMixin, QWidget):
 
         # 组装表单、消息、附件
         wrapper.addLayout(form_layout)
-        wrapper.addLayout(msg_layout, 1) # 给消息框最大的 stretch
+        wrapper.addLayout(msg_layout, 1)  # 给消息框最大的 stretch
         wrapper.addWidget(self.auto_attach_section)
         wrapper.addWidget(self.attachments_section)
         wrapper.addWidget(self.request_payment_section)
@@ -677,8 +724,13 @@ class ContactForm(StatusPollingMixin, QWidget):
         donated_row = QHBoxLayout(self.request_payment_confirm_section)
         donated_row.setContentsMargins(0, 0, 0, 0)
         donated_row.setSpacing(8)
-        self.donated_cb = CheckBox("我已完成支付，且确认随机ip可用", self.request_payment_confirm_section)
-        self.open_donate_btn = PushButton(FluentIcon.HEART, "去支付", self.request_payment_confirm_section)
+        self.donated_cb = CheckBox(
+            "我已完成支付，且确认随机ip可用",
+            self.request_payment_confirm_section,
+        )
+        self.open_donate_btn = PushButton(
+            FluentIcon.HEART, "去支付", self.request_payment_confirm_section
+        )
         self.open_donate_btn.setToolTip("打开支付页面")
         donated_row.addStretch(1)
         donated_row.addWidget(self.open_donate_btn)
@@ -747,7 +799,11 @@ class ContactForm(StatusPollingMixin, QWidget):
     def eventFilter(self, watched, event):
         message_edit = getattr(self, "message_edit", None)
         donated_cb = getattr(self, "donated_cb", None)
-        if message_edit is not None and watched is message_edit and event.type() == QEvent.Type.KeyPress:
+        if (
+            message_edit is not None
+            and watched is message_edit
+            and event.type() == QEvent.Type.KeyPress
+        ):
             key_event = cast(QKeyEvent, event)
             if key_event.matches(QKeySequence.StandardKey.Paste):
                 if self._handle_clipboard_image():
@@ -756,7 +812,13 @@ class ContactForm(StatusPollingMixin, QWidget):
             block_reason = self._get_donation_check_block_reason()
             if block_reason and not donated_cb.isChecked():
                 if event.type() == QEvent.Type.MouseButtonPress:
-                    InfoBar.warning("", block_reason, parent=self, position=InfoBarPosition.TOP, duration=2600)
+                    InfoBar.warning(
+                        "",
+                        block_reason,
+                        parent=self,
+                        position=InfoBarPosition.TOP,
+                        duration=2600,
+                    )
                     return True
                 if event.type() == QEvent.Type.KeyPress:
                     key_event = cast(QKeyEvent, event)
@@ -766,7 +828,13 @@ class ContactForm(StatusPollingMixin, QWidget):
                         Qt.Key.Key_Enter,
                         Qt.Key.Key_Select,
                     ):
-                        InfoBar.warning("", block_reason, parent=self, position=InfoBarPosition.TOP, duration=2600)
+                        InfoBar.warning(
+                            "",
+                            block_reason,
+                            parent=self,
+                            position=InfoBarPosition.TOP,
+                            duration=2600,
+                        )
                         return True
         if watched is self.amount_edit and event.type() == QEvent.Type.FocusOut:
             self._normalize_amount_if_needed()
@@ -822,6 +890,7 @@ class ContactForm(StatusPollingMixin, QWidget):
         """关闭所有子 InfoBar 组件，避免线程泄漏"""
         try:
             from qfluentwidgets import InfoBar
+
             # 遍历所有子组件，找到 InfoBar 并关闭
             for child in self.findChildren(InfoBar):
                 try:
@@ -844,7 +913,13 @@ class ContactForm(StatusPollingMixin, QWidget):
             message = "正在发送验证码，请等待完成后再关闭"
         else:
             return
-        InfoBar.warning("", message, parent=self, position=InfoBarPosition.TOP, duration=2500)
+        InfoBar.warning(
+            "",
+            message,
+            parent=self,
+            position=InfoBarPosition.TOP,
+            duration=2500,
+        )
 
     def _set_status_loading(self, loading: bool) -> None:
         set_indeterminate_progress_ring_active(self.status_spinner, loading)
@@ -918,7 +993,9 @@ class ContactForm(StatusPollingMixin, QWidget):
             self.send_verify_btn.show()
             self.email_edit.setPlaceholderText("name@example.com")
             self.message_label.setText("补充说明（选填）：")
-            self.message_edit.setPlaceholderText("请简单说明你的问卷紧急情况或使用场景...\n以及...是大学生吗（？")
+            self.message_edit.setPlaceholderText(
+                "请简单说明你的问卷紧急情况或使用场景...\n以及...是大学生吗（？"
+            )
         else:
             self.attachments_section.show()
             self.auto_attach_section.setVisible(is_bug_report)
@@ -976,7 +1053,9 @@ class ContactForm(StatusPollingMixin, QWidget):
         current_type = self.type_combo.currentText() or ""
         require_donation_check = current_type == REQUEST_MESSAGE_TYPE
         block_reason = self._get_donation_check_block_reason()
-        can_send = (not require_donation_check) or (self.donated_cb.isChecked() and not block_reason)
+        can_send = (not require_donation_check) or (
+            self.donated_cb.isChecked() and not block_reason
+        )
         self.send_btn.setEnabled(can_send)
         if require_donation_check and block_reason:
             self.donated_cb.setToolTip(block_reason)
@@ -1066,7 +1145,13 @@ class ContactForm(StatusPollingMixin, QWidget):
         if ok:
             self._render_attachments_ui()
         else:
-            InfoBar.error("", msg, parent=self, position=InfoBarPosition.TOP, duration=2500)
+            InfoBar.error(
+                "",
+                msg,
+                parent=self,
+                position=InfoBarPosition.TOP,
+                duration=2500,
+            )
         return True
 
     def _on_choose_files(self):
@@ -1084,7 +1169,13 @@ class ContactForm(StatusPollingMixin, QWidget):
         for path in paths:
             ok, msg = self._attachments.add_file_path(path)
             if not ok:
-                InfoBar.error("", msg, parent=self, position=InfoBarPosition.TOP, duration=2500)
+                InfoBar.error(
+                    "",
+                    msg,
+                    parent=self,
+                    position=InfoBarPosition.TOP,
+                    duration=2500,
+                )
                 break
         self._render_attachments_ui()
 
@@ -1152,7 +1243,10 @@ class ContactForm(StatusPollingMixin, QWidget):
             return "请先填写支付金额后，再勾选“我已完成支付，且确认随机ip可用”。"
         if self._random_ip_user_id > 0:
             return ""
-        return "你还没有成功使用过随机IP，暂时不能勾选。请先启用并实际跑通一次随机IP，确认能正常用，再来申请。"
+        return (
+            "你还没有成功使用过随机IP，暂时不能勾选。"
+            "请先启用并实际跑通一次随机IP，确认能正常用，再来申请。"
+        )
 
     def _sync_donation_check_state(self) -> None:
         if not hasattr(self, "donated_cb"):
@@ -1180,7 +1274,13 @@ class ContactForm(StatusPollingMixin, QWidget):
                     log_suppressed_exception("_open_donate_page", exc, level=logging.WARNING)
                     break
             widget = widget.parentWidget()
-        InfoBar.warning("", "暂时打不开支付页，请从“更多 -> 捐助”进入", parent=self, position=InfoBarPosition.TOP, duration=2500)
+        InfoBar.warning(
+            "",
+            "暂时打不开支付页，请从“更多 -> 捐助”进入",
+            parent=self,
+            position=InfoBarPosition.TOP,
+            duration=2500,
+        )
 
     def _on_amount_changed(self, text: str):
         _ = text
@@ -1242,7 +1342,11 @@ class ContactForm(StatusPollingMixin, QWidget):
             self.online_label.setText(text)
             self.online_label.setStyleSheet(f"color:{color};")
         except RuntimeError as exc:
-            log_suppressed_exception("_on_status_loaded: self.status_spinner.hide()", exc, level=logging.WARNING)
+            log_suppressed_exception(
+                "_on_status_loaded: self.status_spinner.hide()",
+                exc,
+                level=logging.WARNING,
+            )
 
     def _get_minimum_allowed_amount(self, quantity: Decimal) -> Optional[Decimal]:
         for min_quantity, min_amount in DONATION_AMOUNT_RULES:
@@ -1273,7 +1377,9 @@ class ContactForm(StatusPollingMixin, QWidget):
 
     def _refresh_amount_options(self) -> None:
         current_text = (self.amount_edit.currentText() or "").strip()
-        allowed_amounts = self._get_allowed_amount_options(self._parse_quantity_value() or Decimal("0"))
+        allowed_amounts = self._get_allowed_amount_options(
+            self._parse_quantity_value() or Decimal("0")
+        )
 
         previous_block_state = self.amount_edit.blockSignals(True)
         try:
@@ -1316,7 +1422,11 @@ class ContactForm(StatusPollingMixin, QWidget):
                 if path and os.path.exists(path):
                     os.remove(path)
             except Exception as exc:
-                log_suppressed_exception(f"_cleanup_pending_temp_files: {path}", exc, level=logging.WARNING)
+                log_suppressed_exception(
+                    f"_cleanup_pending_temp_files: {path}",
+                    exc,
+                    level=logging.WARNING,
+                )
         self._pending_temp_attachment_paths = []
 
     @staticmethod
@@ -1334,11 +1444,17 @@ class ContactForm(StatusPollingMixin, QWidget):
         except Exception as exc:
             log_suppressed_exception(f"_remove_temp_file: {path}", exc, level=logging.WARNING)
 
-    def _export_bug_report_config_snapshot(self) -> tuple[str, tuple[str, bytes, str]]:
+    def _export_bug_report_config_snapshot(
+        self,
+    ) -> tuple[str, tuple[str, bytes, str]]:
         provider = getattr(self, "_config_snapshot_provider", None)
         if not callable(provider):
             host = self._find_controller_host()
-            provider = getattr(host, "_collect_current_config_snapshot", None) if host is not None else None
+            provider = (
+                getattr(host, "_collect_current_config_snapshot", None)
+                if host is not None
+                else None
+            )
         if not callable(provider):
             raise ValueError("当前窗口没有可导出的运行时配置")
         config_snapshot = cast(RuntimeConfig, provider())
@@ -1355,7 +1471,9 @@ class ContactForm(StatusPollingMixin, QWidget):
             self._remove_temp_file(path)
         return "配置快照", (file_name, data, "application/json")
 
-    def _export_bug_report_log_snapshot(self) -> tuple[str, tuple[str, bytes, str]]:
+    def _export_bug_report_log_snapshot(
+        self,
+    ) -> tuple[str, tuple[str, bytes, str]]:
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         file_name = f"bug_report_log_{timestamp}.txt"
         path = os.path.join(tempfile.gettempdir(), file_name)
@@ -1392,9 +1510,11 @@ class ContactForm(StatusPollingMixin, QWidget):
         self,
     ) -> tuple[list[tuple[str, tuple[str, bytes, str]]], list[str]]:
         auto_files: list[tuple[str, tuple[str, bytes, str]]] = []
+        config_status = "已附带" if self.auto_attach_config_checkbox.isChecked() else "未附带"
+        log_status = "已附带" if self.auto_attach_log_checkbox.isChecked() else "未附带"
         summary_lines = [
-            f"当前运行配置快照：{'已附带' if self.auto_attach_config_checkbox.isChecked() else '未附带'}",
-            f"当前日志快照：{'已附带' if self.auto_attach_log_checkbox.isChecked() else '未附带'}",
+            f"当前运行配置快照：{config_status}",
+            f"当前日志快照：{log_status}",
         ]
 
         if self.auto_attach_config_checkbox.isChecked():
@@ -1445,56 +1565,141 @@ class ContactForm(StatusPollingMixin, QWidget):
             request_quota_text = self._normalize_quantity_text(quantity_text)
             request_urgency_text = (self.urgency_combo.currentText() or "").strip()
             if not request_payment_method:
-                InfoBar.warning("", "请选择你刚刚使用的支付方式", parent=self, position=InfoBarPosition.TOP, duration=2000)
+                InfoBar.warning(
+                    "",
+                    "请选择你刚刚使用的支付方式",
+                    parent=self,
+                    position=InfoBarPosition.TOP,
+                    duration=2000,
+                )
                 self._update_send_button_state()
                 return
             if not amount_text:
-                InfoBar.warning("", "请输入支付金额", parent=self, position=InfoBarPosition.TOP, duration=2000)
+                InfoBar.warning(
+                    "",
+                    "请输入支付金额",
+                    parent=self,
+                    position=InfoBarPosition.TOP,
+                    duration=2000,
+                )
                 return
             if not self.donated_cb.isChecked():
-                InfoBar.warning("", "请先勾选“我已完成支付”后再发送申请", parent=self, position=InfoBarPosition.TOP, duration=2000)
+                InfoBar.warning(
+                    "",
+                    "请先勾选“我已完成支付”后再发送申请",
+                    parent=self,
+                    position=InfoBarPosition.TOP,
+                    duration=2000,
+                )
                 self._update_send_button_state()
                 return
             if not quantity_text:
-                InfoBar.warning("", "请输入申请额度", parent=self, position=InfoBarPosition.TOP, duration=2000)
+                InfoBar.warning(
+                    "",
+                    "请输入申请额度",
+                    parent=self,
+                    position=InfoBarPosition.TOP,
+                    duration=2000,
+                )
                 return
             quantity_value = self._parse_quantity_value(quantity_text)
             if quantity_value is None:
-                InfoBar.warning("", "申请额度必须 >= 0，且只能填 0.5 的倍数", parent=self, position=InfoBarPosition.TOP, duration=2200)
+                InfoBar.warning(
+                    "",
+                    "申请额度必须 >= 0，且只能填 0.5 的倍数",
+                    parent=self,
+                    position=InfoBarPosition.TOP,
+                    duration=2200,
+                )
                 return
             if quantity_value > Decimal(str(MAX_REQUEST_QUOTA)):
-                InfoBar.warning("", f"申请额度不能超过 {format_quota_value(MAX_REQUEST_QUOTA)}", parent=self, position=InfoBarPosition.TOP, duration=2000)
+                quota_text = format_quota_value(MAX_REQUEST_QUOTA)
+                InfoBar.warning(
+                    "",
+                    f"申请额度不能超过 {quota_text}",
+                    parent=self,
+                    position=InfoBarPosition.TOP,
+                    duration=2000,
+                )
                 return
             if amount_text and not self._is_amount_allowed(amount_text, quantity_text):
                 self._show_amount_rule_infobar()
-                InfoBar.warning("", DONATION_AMOUNT_BLOCK_MESSAGE, parent=self, position=InfoBarPosition.TOP, duration=2200)
+                InfoBar.warning(
+                    "",
+                    DONATION_AMOUNT_BLOCK_MESSAGE,
+                    parent=self,
+                    position=InfoBarPosition.TOP,
+                    duration=2200,
+                )
                 return
             if not self._verify_code_requested:
-                InfoBar.warning("", "请先点击发送验证码", parent=self, position=InfoBarPosition.TOP, duration=2000)
+                InfoBar.warning(
+                    "",
+                    "请先点击发送验证码",
+                    parent=self,
+                    position=InfoBarPosition.TOP,
+                    duration=2000,
+                )
                 return
             if email != self._verify_code_requested_email:
-                InfoBar.warning("", "邮箱已变更，请重新发送验证码", parent=self, position=InfoBarPosition.TOP, duration=2200)
+                InfoBar.warning(
+                    "",
+                    "邮箱已变更，请重新发送验证码",
+                    parent=self,
+                    position=InfoBarPosition.TOP,
+                    duration=2200,
+                )
                 return
             if verify_code != "114514":
-                InfoBar.warning("", "验证码错误，请重试", parent=self, position=InfoBarPosition.TOP, duration=2200)
+                InfoBar.warning(
+                    "",
+                    "验证码错误，请重试",
+                    parent=self,
+                    position=InfoBarPosition.TOP,
+                    duration=2200,
+                )
                 return
 
         message = (self.message_edit.toPlainText() or "").strip()
         if not message and mtype != REQUEST_MESSAGE_TYPE:
-            InfoBar.warning("", "请输入消息内容", parent=self, position=InfoBarPosition.TOP, duration=2000)
+            InfoBar.warning(
+                "",
+                "请输入消息内容",
+                parent=self,
+                position=InfoBarPosition.TOP,
+                duration=2000,
+            )
             return
 
         if mtype == REQUEST_MESSAGE_TYPE and not email:
-            InfoBar.warning("", "额度申请必须填写邮箱地址", parent=self, position=InfoBarPosition.TOP, duration=2000)
+            InfoBar.warning(
+                "",
+                "额度申请必须填写邮箱地址",
+                parent=self,
+                position=InfoBarPosition.TOP,
+                duration=2000,
+            )
             return
 
         if email and not self._validate_email(email):
-            InfoBar.warning("", "邮箱格式不正确", parent=self, position=InfoBarPosition.TOP, duration=2000)
+            InfoBar.warning(
+                "",
+                "邮箱格式不正确",
+                parent=self,
+                position=InfoBarPosition.TOP,
+                duration=2000,
+            )
             return
 
         self.refresh_random_ip_user_id_hint()
         if mtype == REQUEST_MESSAGE_TYPE and self._random_ip_user_id <= 0:
-            InfoBar.warning("", "暂时还不能申请额度。请先小测试一两份，确认能正常提交成功后，再来申请额度。", parent=self, position=InfoBarPosition.TOP, duration=3500)
+            InfoBar.warning(
+                "",
+                "暂时还不能申请额度。请先小测试一两份，确认能正常提交成功后，再来申请额度。",
+                parent=self,
+                position=InfoBarPosition.TOP,
+                duration=3500,
+            )
             return
 
         if mtype == REQUEST_MESSAGE_TYPE:
@@ -1534,19 +1739,36 @@ class ContactForm(StatusPollingMixin, QWidget):
         )
 
         if not CONTACT_API_URL:
-            InfoBar.error("", "联系API未配置", parent=self, position=InfoBarPosition.TOP, duration=3000)
+            InfoBar.error(
+                "",
+                "联系API未配置",
+                parent=self,
+                position=InfoBarPosition.TOP,
+                duration=3000,
+            )
             return
 
-        manual_files_payload = [] if mtype == REQUEST_MESSAGE_TYPE else self._attachments.files_payload()
+        manual_files_payload = (
+            [] if mtype == REQUEST_MESSAGE_TYPE else self._attachments.files_payload()
+        )
         auto_files_payload: list[tuple[str, tuple[str, bytes, str]]] = []
         if self._is_bug_report_type(mtype):
             try:
                 auto_files_payload, _ = self._build_bug_report_auto_files_payload()
             except Exception as exc:
                 self._cleanup_pending_temp_files()
-                InfoBar.error("", f"自动导出附件失败：{exc}", parent=self, position=InfoBarPosition.TOP, duration=3500)
+                InfoBar.error(
+                    "",
+                    f"自动导出附件失败：{exc}",
+                    parent=self,
+                    position=InfoBarPosition.TOP,
+                    duration=3500,
+                )
                 return
-        payload = {"message": full_message, "timestamp": datetime.now().isoformat()}
+        payload = {
+            "message": full_message,
+            "timestamp": datetime.now().isoformat(),
+        }
         files_payload = self._renumber_files_payload(manual_files_payload + auto_files_payload)
 
         self.send_btn.setFocus()
@@ -1582,13 +1804,21 @@ class ContactForm(StatusPollingMixin, QWidget):
         try:
             self.email_edit.setSelection(0, 0)
         except (RuntimeError, AttributeError) as exc:
-            log_suppressed_exception("_clear_email_selection: self.email_edit.setSelection(0, 0)", exc, level=logging.WARNING)
+            log_suppressed_exception(
+                "_clear_email_selection: self.email_edit.setSelection(0, 0)",
+                exc,
+                level=logging.WARNING,
+            )
 
     def _focus_send_button(self):
         try:
             self.send_btn.setFocus()
         except (RuntimeError, AttributeError) as exc:
-            log_suppressed_exception("_focus_send_button: self.send_btn.setFocus()", exc, level=logging.WARNING)
+            log_suppressed_exception(
+                "_focus_send_button: self.send_btn.setFocus()",
+                exc,
+                level=logging.WARNING,
+            )
 
     @Slot(bool, str)
     def _on_send_finished(self, success: bool, error_msg: str):
@@ -1600,10 +1830,20 @@ class ContactForm(StatusPollingMixin, QWidget):
 
         if success:
             current_type = getattr(self, "_current_message_type", "")
-            msg = "申请已提交，请等待人工处理" if current_type == REQUEST_MESSAGE_TYPE else "消息已发送"
+            msg = (
+                "申请已提交，请等待人工处理"
+                if current_type == REQUEST_MESSAGE_TYPE
+                else "消息已发送"
+            )
             if getattr(self, "_current_has_email", False):
                 msg += "，开发者会优先通过邮箱联系你"
-            InfoBar.success("", msg, parent=self, position=InfoBarPosition.TOP, duration=2500)
+            InfoBar.success(
+                "",
+                msg,
+                parent=self,
+                position=InfoBarPosition.TOP,
+                duration=2500,
+            )
             if current_type == REQUEST_MESSAGE_TYPE:
                 self.quotaRequestSucceeded.emit()
             if self._auto_clear_on_success:
@@ -1624,7 +1864,13 @@ class ContactForm(StatusPollingMixin, QWidget):
                 self._reset_bug_report_auto_attach_defaults()
             self.sendSucceeded.emit()
         else:
-            InfoBar.error("", error_msg, parent=self, position=InfoBarPosition.TOP, duration=3000)
+            InfoBar.error(
+                "",
+                error_msg,
+                parent=self,
+                position=InfoBarPosition.TOP,
+                duration=3000,
+            )
 
     def _find_controller_host(self) -> Optional[QWidget]:
         widget: Optional[QWidget] = cast(QWidget, self)
@@ -1677,14 +1923,32 @@ class ContactForm(StatusPollingMixin, QWidget):
 
         email = (self.email_edit.text() or "").strip()
         if not email:
-            InfoBar.warning("", "请先填写邮箱地址", parent=self, position=InfoBarPosition.TOP, duration=2000)
+            InfoBar.warning(
+                "",
+                "请先填写邮箱地址",
+                parent=self,
+                position=InfoBarPosition.TOP,
+                duration=2000,
+            )
             return
         if not self._validate_email(email):
-            InfoBar.warning("", "邮箱格式不正确，请先检查", parent=self, position=InfoBarPosition.TOP, duration=2000)
+            InfoBar.warning(
+                "",
+                "邮箱格式不正确，请先检查",
+                parent=self,
+                position=InfoBarPosition.TOP,
+                duration=2000,
+            )
             return
 
         if not EMAIL_VERIFY_ENDPOINT:
-            InfoBar.error("", "验证码接口未配置", parent=self, position=InfoBarPosition.TOP, duration=2500)
+            InfoBar.error(
+                "",
+                "验证码接口未配置",
+                parent=self,
+                position=InfoBarPosition.TOP,
+                duration=2500,
+            )
             return
 
         self._verify_code_requested = False
@@ -1725,7 +1989,13 @@ class ContactForm(StatusPollingMixin, QWidget):
         if success:
             self._verify_code_requested = True
             self._verify_code_requested_email = email
-            InfoBar.success("", "验证码已发送，请查收并输入验证码", parent=self, position=InfoBarPosition.TOP, duration=2200)
+            InfoBar.success(
+                "",
+                "验证码已发送，请查收并输入验证码",
+                parent=self,
+                position=InfoBarPosition.TOP,
+                duration=2200,
+            )
             self._start_cooldown()
             return
 
@@ -1738,4 +2008,10 @@ class ContactForm(StatusPollingMixin, QWidget):
             ui_msg = "邮件发送失败，请稍后重试"
         else:
             ui_msg = error_msg or "验证码发送失败，请稍后重试"
-        InfoBar.error("", ui_msg, parent=self, position=InfoBarPosition.TOP, duration=2500)
+        InfoBar.error(
+            "",
+            ui_msg,
+            parent=self,
+            position=InfoBarPosition.TOP,
+            duration=2500,
+        )

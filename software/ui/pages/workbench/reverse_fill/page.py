@@ -1,4 +1,3 @@
-
 """问卷星 Excel 反填管理页。"""
 
 from __future__ import annotations
@@ -10,7 +9,14 @@ from typing import TYPE_CHECKING, Any, Callable, List, Optional, Sequence
 
 from PySide6.QtCore import QEvent, Qt, Signal
 from PySide6.QtGui import QColor, QDragEnterEvent, QDropEvent
-from PySide6.QtWidgets import QApplication, QFileDialog, QHBoxLayout, QTableWidgetItem, QVBoxLayout, QWidget
+from PySide6.QtWidgets import (
+    QApplication,
+    QFileDialog,
+    QHBoxLayout,
+    QTableWidgetItem,
+    QVBoxLayout,
+    QWidget,
+)
 from qfluentwidgets import (
     BodyLabel,
     CaptionLabel,
@@ -48,7 +54,10 @@ from software.core.reverse_fill.validation import build_reverse_fill_spec
 from software.io.config import RuntimeConfig
 from software.logging.action_logger import log_action
 from software.logging.log_utils import log_suppressed_exception
-from software.providers.common import SURVEY_PROVIDER_WJX, normalize_survey_provider
+from software.providers.common import (
+    SURVEY_PROVIDER_WJX,
+    normalize_survey_provider,
+)
 from software.providers.common import (
     SURVEY_PROVIDER_CREDAMO,
     SURVEY_PROVIDER_QQ,
@@ -56,11 +65,18 @@ from software.providers.common import (
     is_supported_survey_url,
     is_wjx_survey_url,
 )
-from software.providers.contracts import SurveyQuestionMeta, ensure_survey_question_metas
+from software.providers.contracts import (
+    SurveyQuestionMeta,
+    ensure_survey_question_metas,
+)
 from software.ui.helpers.fluent_tooltip import install_tooltip_filter
 from software.ui.pages.workbench.shared.clipboard import SurveyClipboardMixin
-from software.ui.pages.workbench.shared.random_ip_toggle_row import RandomIpToggleRow
-from software.ui.pages.workbench.shared.survey_entry_card import SurveyEntryCard
+from software.ui.pages.workbench.shared.random_ip_toggle_row import (
+    RandomIpToggleRow,
+)
+from software.ui.pages.workbench.shared.survey_entry_card import (
+    SurveyEntryCard,
+)
 from software.ui.widgets.no_wheel import NoWheelSpinBox
 
 if TYPE_CHECKING:
@@ -283,7 +299,9 @@ class ReverseFillPage(SurveyClipboardMixin, QWidget):
 
         self.mapping_table = TableWidget(table_wrapper)
         self.mapping_table.setColumnCount(6)
-        self.mapping_table.setHorizontalHeaderLabels(["题号", "题型", "状态", "关联列", "异常说明", "处理建议"])
+        self.mapping_table.setHorizontalHeaderLabels(
+            ["题号", "题型", "状态", "关联列", "异常说明", "处理建议"]
+        )
         self.mapping_table.verticalHeader().setVisible(False)
         self.mapping_table.setSelectionBehavior(TableWidget.SelectionBehavior.SelectRows)
         self.mapping_table.setEditTriggers(TableWidget.EditTrigger.NoEditTriggers)
@@ -433,9 +451,14 @@ class ReverseFillPage(SurveyClipboardMixin, QWidget):
         self.reverse_fill_threads_spin.setValue(self._reverse_fill_threads_value)
         self.reverse_fill_threads_spin.blockSignals(False)
 
-        selected_format = str(getattr(cfg, "reverse_fill_format", REVERSE_FILL_FORMAT_AUTO) or REVERSE_FILL_FORMAT_AUTO)
+        selected_format = str(
+            getattr(cfg, "reverse_fill_format", REVERSE_FILL_FORMAT_AUTO)
+            or REVERSE_FILL_FORMAT_AUTO
+        )
         valid_formats = {value for value, _label in _FORMAT_CHOICES}
-        self._selected_format_value = selected_format if selected_format in valid_formats else REVERSE_FILL_FORMAT_AUTO
+        self._selected_format_value = (
+            selected_format if selected_format in valid_formats else REVERSE_FILL_FORMAT_AUTO
+        )
         self._refresh_preview()
 
     def _selected_format(self) -> str:
@@ -458,25 +481,59 @@ class ReverseFillPage(SurveyClipboardMixin, QWidget):
                 return False
         return super().eventFilter(watched, event)
 
-    def _toast(self, message: str, level: str = "warning", duration: int = 2400, show_progress: bool = False) -> Optional[InfoBar]:
+    def _toast(
+        self,
+        message: str,
+        level: str = "warning",
+        duration: int = 2400,
+        show_progress: bool = False,
+    ) -> Optional[InfoBar]:
         if self._progress_infobar:
             try:
                 self._progress_infobar.close()
             except Exception as exc:
-                log_suppressed_exception("_toast: self._progress_infobar.close()", exc, level=logging.WARNING)
+                log_suppressed_exception(
+                    "_toast: self._progress_infobar.close()",
+                    exc,
+                    level=logging.WARNING,
+                )
             self._progress_infobar = None
 
         parent = self.window() or self
         kind = str(level or "warning").lower()
 
         if kind == "error":
-            infobar = InfoBar.error("反填页提示", message, parent=parent, position=InfoBarPosition.TOP, duration=duration)
+            infobar = InfoBar.error(
+                "反填页提示",
+                message,
+                parent=parent,
+                position=InfoBarPosition.TOP,
+                duration=duration,
+            )
         elif kind == "success":
-            infobar = InfoBar.success("反填页提示", message, parent=parent, position=InfoBarPosition.TOP, duration=duration)
+            infobar = InfoBar.success(
+                "反填页提示",
+                message,
+                parent=parent,
+                position=InfoBarPosition.TOP,
+                duration=duration,
+            )
         elif kind == "info":
-            infobar = InfoBar.info("反填页提示", message, parent=parent, position=InfoBarPosition.TOP, duration=duration)
+            infobar = InfoBar.info(
+                "反填页提示",
+                message,
+                parent=parent,
+                position=InfoBarPosition.TOP,
+                duration=duration,
+            )
         else:
-            infobar = InfoBar.warning("反填页提示", message, parent=parent, position=InfoBarPosition.TOP, duration=duration)
+            infobar = InfoBar.warning(
+                "反填页提示",
+                message,
+                parent=parent,
+                position=InfoBarPosition.TOP,
+                duration=duration,
+            )
 
         if show_progress:
             spinner = IndeterminateProgressRing()
@@ -516,7 +573,9 @@ class ReverseFillPage(SurveyClipboardMixin, QWidget):
         self._sync_random_ip_toggle_presentation(bool(enabled))
         if self.controller.toggle_random_ip_async(bool(enabled), adapter=self.controller.adapter):
             return
-        fallback_enabled = bool(self.controller.get_runtime_ui_state().get("random_ip_enabled", False))
+        fallback_enabled = bool(
+            self.controller.get_runtime_ui_state().get("random_ip_enabled", False)
+        )
         self.random_ip_cb.blockSignals(True)
         self.random_ip_cb.setChecked(fallback_enabled)
         self.random_ip_cb.blockSignals(False)
@@ -525,7 +584,9 @@ class ReverseFillPage(SurveyClipboardMixin, QWidget):
     def _sync_start_button_state(self, running: Optional[bool] = None) -> None:
         if running is None:
             running = bool(getattr(self.controller, "running", False))
-        enabled = (not bool(running)) and self._has_question_entries() and self._has_excel_source_path()
+        enabled = (
+            (not bool(running)) and self._has_question_entries() and self._has_excel_source_path()
+        )
         self.start_btn.setEnabled(enabled)
 
     def _set_main_progress_indeterminate(self, enabled: bool) -> None:
@@ -560,7 +621,11 @@ class ReverseFillPage(SurveyClipboardMixin, QWidget):
         self.progress_bar.setValue(progress)
         self.progress_pct.setText(f"{progress}%")
         self._last_progress = progress
-        if int(target or 0) > 0 and int(current or 0) >= int(target or 0) and not self._completion_notified:
+        if (
+            int(target or 0) > 0
+            and int(current or 0) >= int(target or 0)
+            and not self._completion_notified
+        ):
             self._completion_notified = True
             self.stop_btn.setEnabled(False)
 
@@ -632,7 +697,11 @@ class ReverseFillPage(SurveyClipboardMixin, QWidget):
             return False
         effective_target = max(0, int(getattr(spec, "target_num", 0) or 0))
         if effective_target <= 0:
-            self._toast("当前 Excel 没有可提交的有效行，先检查起始行和表格内容", "warning", duration=3200)
+            self._toast(
+                "当前 Excel 没有可提交的有效行，先检查起始行和表格内容",
+                "warning",
+                duration=3200,
+            )
             return False
         coordinator = getattr(self, "_run_coordinator", None)
         if coordinator is not None:
@@ -651,7 +720,9 @@ class ReverseFillPage(SurveyClipboardMixin, QWidget):
         return provider == SURVEY_PROVIDER_WJX and bool(self._questions_info)
 
     def _browse_excel_file(self) -> None:
-        start_dir = os.path.dirname(self.file_edit.text().strip()) if self.file_edit.text().strip() else ""
+        start_dir = (
+            os.path.dirname(self.file_edit.text().strip()) if self.file_edit.text().strip() else ""
+        )
         path, _ = QFileDialog.getOpenFileName(
             self,
             "选择源数据 Excel 文件",
@@ -690,7 +761,9 @@ class ReverseFillPage(SurveyClipboardMixin, QWidget):
     @staticmethod
     def _is_supported_excel_path(file_path: str) -> bool:
         normalized = str(file_path or "").strip()
-        return bool(normalized) and os.path.isfile(normalized) and normalized.lower().endswith(".xlsx")
+        return (
+            bool(normalized) and os.path.isfile(normalized) and normalized.lower().endswith(".xlsx")
+        )
 
     def _apply_excel_source_path(self, file_path: str) -> None:
         normalized = str(file_path or "").strip()
@@ -706,10 +779,16 @@ class ReverseFillPage(SurveyClipboardMixin, QWidget):
             self._toast("请先输入问卷链接或贴入二维码", "warning")
             return
         if not is_supported_survey_url(url):
-            self._toast("仅支持问卷星、腾讯问卷与 Credamo 见数链接", "error", duration=3000)
+            self._toast(
+                "仅支持问卷星、腾讯问卷与 Credamo 见数链接",
+                "error",
+                duration=3000,
+            )
             return
         provider = detect_survey_provider(url)
-        if not (provider in {SURVEY_PROVIDER_QQ, SURVEY_PROVIDER_CREDAMO} or is_wjx_survey_url(url)):
+        if not (
+            provider in {SURVEY_PROVIDER_QQ, SURVEY_PROVIDER_CREDAMO} or is_wjx_survey_url(url)
+        ):
             self._toast("链接不是可解析的公开问卷", "error", duration=3000)
             return
 
@@ -734,14 +813,24 @@ class ReverseFillPage(SurveyClipboardMixin, QWidget):
         unsupported_count = sum(1 for item in parsed_info if bool(item.unsupported))
         self._survey_title = str(title or "").strip()
         self._survey_provider = normalize_survey_provider(
-            getattr(self.controller, "survey_provider", "") or detect_survey_provider(self.url_edit.text().strip(), default=""),
+            getattr(self.controller, "survey_provider", "")
+            or detect_survey_provider(self.url_edit.text().strip(), default=""),
             default=self._survey_provider or "",
         )
         self._refresh_preview()
         if unsupported_count > 0:
-            self._toast(f"问卷已解析，发现 {unsupported_count} 道反填不能直接覆盖的题型", "warning", duration=3600)
+            message = f"问卷已解析，发现 {unsupported_count} 道反填不能直接覆盖的题型"
+            self._toast(
+                message,
+                "warning",
+                duration=3600,
+            )
             return
-        self._toast("问卷已解析，可以继续选择 Excel 做反填预检", "success", duration=2600)
+        self._toast(
+            "问卷已解析，可以继续选择 Excel 做反填预检",
+            "success",
+            duration=2600,
+        )
 
     def _on_survey_parse_failed(self, error_msg: str) -> None:
         if not self._parse_requested_from_reverse_fill:
@@ -752,7 +841,10 @@ class ReverseFillPage(SurveyClipboardMixin, QWidget):
 
     def _open_wizard(self) -> None:
         if not callable(self._open_wizard_handler):
-            self._toast("目前无法直接导航至系统向导。您需优先在仪表盘主页完成问卷解析方可继续。", "warning")
+            self._toast(
+                "目前无法直接导航至系统向导。您需优先在仪表盘主页完成问卷解析方可继续。",
+                "warning",
+            )
             return
         issue_question_nums = [int(num) for num in self._issue_question_nums if int(num) > 0]
         if not issue_question_nums:
@@ -788,7 +880,9 @@ class ReverseFillPage(SurveyClipboardMixin, QWidget):
         for row, plan in enumerate(plans):
             question_num = int(plan.question_num or 0)
             issues = issues_by_question.get(question_num, [])
-            detail_parts = [str(plan.detail or "").strip()] if str(plan.detail or "").strip() else []
+            detail_parts = (
+                [str(plan.detail or "").strip()] if str(plan.detail or "").strip() else []
+            )
             suggestion_parts: list[str] = []
             for issue in issues:
                 reason = str(issue.reason or "").strip()
@@ -801,9 +895,19 @@ class ReverseFillPage(SurveyClipboardMixin, QWidget):
                 suggestion_parts.append("无需处理")
 
             self._set_table_text(self.mapping_table, row, 0, str(int(plan.question_num or 0)))
-            self._set_table_text(self.mapping_table, row, 1, _question_type_label(plan.question_type))
+            self._set_table_text(
+                self.mapping_table,
+                row,
+                1,
+                _question_type_label(plan.question_type),
+            )
             self._set_table_text(self.mapping_table, row, 2, _status_label_for_plan(plan))
-            self._set_table_text(self.mapping_table, row, 3, " / ".join(list(plan.column_headers or [])))
+            self._set_table_text(
+                self.mapping_table,
+                row,
+                3,
+                " / ".join(list(plan.column_headers or [])),
+            )
             self._set_table_text(self.mapping_table, row, 4, "\n".join(detail_parts) or "无")
             self._set_table_text(self.mapping_table, row, 5, "\n".join(suggestion_parts) or "无")
 
@@ -835,7 +939,7 @@ class ReverseFillPage(SurveyClipboardMixin, QWidget):
                 hint = "该执行总线暂不能在当前平台环境接管反填覆盖支持，相关控制流已全托管休眠"
             else:
                 hint = ""
-                
+
             self.detected_format_label.setText("验证结果：未接通目标流")
             self.state_hint_label.setText(hint)
             self._clear_tables()
@@ -869,13 +973,20 @@ class ReverseFillPage(SurveyClipboardMixin, QWidget):
             f"识别格式：{reverse_fill_format_label(spec.detected_format)}"
         )
         self.state_hint_label.setText("")
-        
+
         actionable_issues = [
             item
             for item in list(spec.issues or [])
-            if str(getattr(item, "category", "") or "").strip() not in _NON_ACTIONABLE_ISSUE_CATEGORIES
+            if str(getattr(item, "category", "") or "").strip()
+            not in _NON_ACTIONABLE_ISSUE_CATEGORIES
         ]
-        issue_question_nums = sorted({int(item.question_num or 0) for item in actionable_issues if int(item.question_num or 0) > 0})
+        issue_question_nums = sorted(
+            {
+                int(item.question_num or 0)
+                for item in actionable_issues
+                if int(item.question_num or 0) > 0
+            }
+        )
         self._issue_question_nums = issue_question_nums
         issue_cnt = len(actionable_issues)
         self.open_wizard_btn.setVisible(issue_cnt > 0)

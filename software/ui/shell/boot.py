@@ -120,7 +120,7 @@ class BootSplash:
             (width - bar_width) // 2,
             height - int(82 * self._scale),
             bar_width,
-            bar_height
+            bar_height,
         )
 
     def finish(self):
@@ -180,4 +180,3 @@ def finish_boot_splash(delay_ms: int = 1500):
         _boot_splash._finish_timer.setSingleShot(True)
         _boot_splash._finish_timer.timeout.connect(_boot_splash.finish)
         _boot_splash._finish_timer.start(delay_ms)
-

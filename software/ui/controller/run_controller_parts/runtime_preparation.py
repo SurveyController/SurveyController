@@ -1,4 +1,5 @@
 """RunController 运行前准备逻辑。"""
+
 from __future__ import annotations
 
 import copy
@@ -8,13 +9,22 @@ from typing import Any, List, Optional, Tuple, cast
 
 from software.app.config import HEADLESS_MAX_THREADS, NON_HEADLESS_MAX_THREADS
 from software.core.psychometrics.psychometric import normalize_target_alpha
-from software.core.questions.config import configure_probabilities, validate_question_config
+from software.core.questions.config import (
+    configure_probabilities,
+    validate_question_config,
+)
 from software.core.reverse_fill import ReverseFillSpec
-from software.core.reverse_fill.validation import build_enabled_reverse_fill_spec
+from software.core.reverse_fill.validation import (
+    build_enabled_reverse_fill_spec,
+)
 from software.core.task import ExecutionConfig
 from software.io.config import RuntimeConfig, clone_questions_info
 from software.network.proxy import set_proxy_occupy_minute_by_answer_duration
-from software.providers.common import SURVEY_PROVIDER_WJX, detect_survey_provider, normalize_survey_provider
+from software.providers.common import (
+    SURVEY_PROVIDER_WJX,
+    detect_survey_provider,
+    normalize_survey_provider,
+)
 from software.providers.contracts import SurveyQuestionMeta
 
 
@@ -32,7 +42,13 @@ class PreparedExecutionArtifacts:
 class RuntimePreparationError(Exception):
     """启动前准备失败，携带给 UI 的提示文案。"""
 
-    def __init__(self, user_message: str, *, log_message: str = "", detailed: bool = False) -> None:
+    def __init__(
+        self,
+        user_message: str,
+        *,
+        log_message: str = "",
+        detailed: bool = False,
+    ) -> None:
         super().__init__(str(user_message or "运行准备失败"))
         self.user_message = str(user_message or "运行准备失败")
         self.log_message = str(log_message or self.user_message)
@@ -40,7 +56,11 @@ class RuntimePreparationError(Exception):
 
 
 def _resolve_thread_limit(config: RuntimeConfig) -> int:
-    return HEADLESS_MAX_THREADS if bool(getattr(config, "headless_mode", False)) else NON_HEADLESS_MAX_THREADS
+    return (
+        HEADLESS_MAX_THREADS
+        if bool(getattr(config, "headless_mode", False))
+        else NON_HEADLESS_MAX_THREADS
+    )
 
 
 def _resolve_survey_provider(config: RuntimeConfig) -> str:
@@ -62,7 +82,9 @@ def _resolve_proxy_answer_duration(config: RuntimeConfig) -> Tuple[int, int]:
     return (int(raw[0]), int(raw[1]))
 
 
-def _build_questions_metadata(questions_info: List[SurveyQuestionMeta]) -> dict[int, SurveyQuestionMeta]:
+def _build_questions_metadata(
+    questions_info: List[SurveyQuestionMeta],
+) -> dict[int, SurveyQuestionMeta]:
     metadata: dict[int, SurveyQuestionMeta] = {}
     for item in questions_info:
         try:
@@ -94,7 +116,14 @@ def _build_execution_config_template(
         requested_target_num = max(1, int(getattr(reverse_fill_spec, "target_num", 0) or 1))
         requested_num_threads = max(
             1,
-            int(getattr(config, "reverse_fill_threads", getattr(config, "threads", 1)) or 1),
+            int(
+                getattr(
+                    config,
+                    "reverse_fill_threads",
+                    getattr(config, "threads", 1),
+                )
+                or 1
+            ),
         )
         requested_num_threads = min(requested_num_threads, requested_target_num)
 
@@ -121,7 +150,14 @@ def _build_execution_config_template(
         proxy_ip_pool=[],
         random_user_agent_enabled=bool(getattr(config, "random_ua_enabled", False)),
         user_agent_ratios=copy.deepcopy(
-            dict(getattr(config, "random_ua_ratios", {"wechat": 33, "mobile": 33, "pc": 34}) or {})
+            dict(
+                getattr(
+                    config,
+                    "random_ua_ratios",
+                    {"wechat": 33, "mobile": 33, "pc": 34},
+                )
+                or {}
+            )
         ),
         pause_on_aliyun_captcha=bool(getattr(config, "pause_on_aliyun_captcha", True)),
         stop_on_fail_enabled=bool(getattr(config, "fail_stop_enabled", True)),
@@ -140,7 +176,10 @@ def prepare_execution_artifacts(
 ) -> PreparedExecutionArtifacts:
     question_entries = list(getattr(config, "question_entries", []) or [])
     if not question_entries:
-        raise RuntimePreparationError('未配置任何题目，无法开始执行（请先在"题目配置"页添加/配置题目）', log_message="未配置任何题目，无法启动")
+        raise RuntimePreparationError(
+            '未配置任何题目，无法开始执行（请先在"题目配置"页添加/配置题目）',
+            log_message="未配置任何题目，无法启动",
+        )
 
     survey_provider = _resolve_survey_provider(config)
     questions_info = clone_questions_info(
@@ -163,7 +202,9 @@ def prepare_execution_artifacts(
             question_entries,
         )
     except Exception as exc:
-        raise RuntimePreparationError(str(exc), log_message=f"反填配置验证失败：{exc}", detailed=True) from exc
+        raise RuntimePreparationError(
+            str(exc), log_message=f"反填配置验证失败：{exc}", detailed=True
+        ) from exc
 
     try:
         set_proxy_occupy_minute_by_answer_duration(_resolve_proxy_answer_duration(config))

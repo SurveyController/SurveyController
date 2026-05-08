@@ -1,4 +1,5 @@
 """RunController 启停、线程和收尾逻辑。"""
+
 from __future__ import annotations
 
 import logging
@@ -9,7 +10,11 @@ from typing import TYPE_CHECKING, Any, Callable, Dict, List, Optional
 
 from PySide6.QtCore import QCoreApplication
 
-from software.app.config import STOP_FORCE_WAIT_SECONDS, app_settings, get_bool_from_qsettings
+from software.app.config import (
+    STOP_FORCE_WAIT_SECONDS,
+    app_settings,
+    get_bool_from_qsettings,
+)
 from software.core.engine.async_engine import AsyncEngineClient
 from software.core.engine.failure_reason import FailureReason
 from software.core.task import ExecutionConfig, ExecutionState, ProxyLease
@@ -118,9 +123,13 @@ class RunControllerExecutionMixin:
         def _init_gate_stop_event(self, value: Optional[threading.Event]) -> None: ...
 
         @property
-        def _prepared_execution_artifacts(self) -> Optional[PreparedExecutionArtifacts]: ...
+        def _prepared_execution_artifacts(
+            self,
+        ) -> Optional[PreparedExecutionArtifacts]: ...
         @_prepared_execution_artifacts.setter
-        def _prepared_execution_artifacts(self, value: Optional[PreparedExecutionArtifacts]) -> None: ...
+        def _prepared_execution_artifacts(
+            self, value: Optional[PreparedExecutionArtifacts]
+        ) -> None: ...
 
         @property
         def _quick_feedback_prompt_emitted(self) -> bool: ...
@@ -135,13 +144,26 @@ class RunControllerExecutionMixin:
         def _dispatch_to_ui_async(self, callback: Callable[[], Any]) -> None: ...
         def _enqueue_ui_callback(self, callback: Callable[[], Any]) -> bool: ...
         def _sync_adapter_ui_bridge(self, adapter: Optional[Any] = None) -> None: ...
-        def sync_runtime_ui_state_from_config(self, config: RuntimeConfig, *, emit: bool = True) -> Dict[str, Any]: ...
-        def refresh_random_ip_counter(self, *, adapter: Optional[Any] = None, async_mode: bool = True) -> None: ...
+        def sync_runtime_ui_state_from_config(
+            self, config: RuntimeConfig, *, emit: bool = True
+        ) -> Dict[str, Any]: ...
+        def refresh_random_ip_counter(
+            self, *, adapter: Optional[Any] = None, async_mode: bool = True
+        ) -> None: ...
         def toggle_random_ip(self, enabled: bool, *, adapter: Optional[Any] = None) -> bool: ...
-        def handle_random_ip_submission(self, *, stop_signal: Optional[threading.Event], adapter: Optional[Any] = None) -> None: ...
-        def _start_with_initialization_gate(self, config: RuntimeConfig, proxy_pool: List[ProxyLease]) -> None: ...
+        def handle_random_ip_submission(
+            self,
+            *,
+            stop_signal: Optional[threading.Event],
+            adapter: Optional[Any] = None,
+        ) -> None: ...
+        def _start_with_initialization_gate(
+            self, config: RuntimeConfig, proxy_pool: List[ProxyLease]
+        ) -> None: ...
         def _start_startup_status_check(self, config: RuntimeConfig) -> None: ...
-        def _prepare_engine_state(self, proxy_pool: List[ProxyLease]) -> tuple[ExecutionConfig, ExecutionState]: ...
+        def _prepare_engine_state(
+            self, proxy_pool: List[ProxyLease]
+        ) -> tuple[ExecutionConfig, ExecutionState]: ...
         def _reset_initialization_state(self) -> None: ...
         def _finish_initialization_idle_state(self, status_text: str) -> None: ...
         def _build_initialization_logs(self) -> List[str]: ...
@@ -164,17 +186,21 @@ class RunControllerExecutionMixin:
         )
         adapter.random_ip_enabled_var.set(bool(random_ip_enabled))
         self._sync_adapter_ui_bridge(adapter)
-        adapter.refresh_random_ip_counter = lambda *, async_mode=True, _adapter=adapter: self.refresh_random_ip_counter(  # type: ignore[attr-defined]
-            adapter=_adapter,
-            async_mode=async_mode,
+        adapter.refresh_random_ip_counter = lambda *, async_mode=True, _adapter=adapter: (
+            self.refresh_random_ip_counter(  # type: ignore[attr-defined]
+                adapter=_adapter,
+                async_mode=async_mode,
+            )
         )
         adapter.toggle_random_ip = lambda enabled=None, _adapter=adapter: self.toggle_random_ip(  # type: ignore[attr-defined]
             _adapter.is_random_ip_enabled() if enabled is None else enabled,
             adapter=_adapter,
         )
-        adapter.handle_random_ip_submission = lambda stop_signal=None, _adapter=adapter: self.handle_random_ip_submission(  # type: ignore[attr-defined]
-            stop_signal=stop_signal,
-            adapter=_adapter,
+        adapter.handle_random_ip_submission = lambda stop_signal=None, _adapter=adapter: (
+            self.handle_random_ip_submission(  # type: ignore[attr-defined]
+                stop_signal=stop_signal,
+                adapter=_adapter,
+            )
         )
         return adapter
 
@@ -195,6 +221,7 @@ class RunControllerExecutionMixin:
             self._sleep_blocker.release()
         except Exception:
             logging.warning("恢复自动休眠状态失败", exc_info=True)
+
     def _dispatch_to_ui(self, callback: Callable[[], Any]):
         if QCoreApplication.instance() is None:
             try:
@@ -221,6 +248,7 @@ class RunControllerExecutionMixin:
             logging.warning("UI 调度超时，放弃等待以避免阻塞")
             return None
         return result_container.get("value")
+
     def start_run(self, config: RuntimeConfig):  # noqa: C901
         logging.debug("收到启动请求")
 
@@ -250,7 +278,9 @@ class RunControllerExecutionMixin:
         self.questions_info = list(prepared.questions_info)
         self._prepared_execution_artifacts = prepared
         self.stop_event = threading.Event()
-        self.adapter = self._create_adapter(self.stop_event, random_ip_enabled=config.random_ip_enabled)
+        self.adapter = self._create_adapter(
+            self.stop_event, random_ip_enabled=config.random_ip_enabled
+        )
         self._paused_state = False
         self._stopping = False
         self._completion_cleanup_done = False
@@ -268,6 +298,7 @@ class RunControllerExecutionMixin:
         self._start_startup_status_check(config)
 
         self._start_with_initialization_gate(config, [])
+
     def _start_workers_with_proxy_pool(
         self,
         config: RuntimeConfig,
@@ -303,7 +334,9 @@ class RunControllerExecutionMixin:
             gui_instance=self.adapter,
         )
         runtime_thread = engine_client.thread
-        self.worker_threads = [runtime_thread] if isinstance(runtime_thread, threading.Thread) else []
+        self.worker_threads = (
+            [runtime_thread] if isinstance(runtime_thread, threading.Thread) else []
+        )
 
         monitor = threading.Thread(
             target=self._wait_for_async_run,
@@ -314,6 +347,7 @@ class RunControllerExecutionMixin:
         self._monitor_thread = monitor
         monitor.start()
         logging.debug("任务启动完成，监控线程已启动")
+
     def _wait_for_threads(self, adapter_snapshot: Optional[Any] = None):
         try:
             for t in self.worker_threads:
@@ -321,16 +355,20 @@ class RunControllerExecutionMixin:
             self._on_run_finished(adapter_snapshot)
         finally:
             self._monitor_thread = None
+
     def _wait_for_async_run(self, run_future: Any, adapter_snapshot: Optional[Any] = None):
         try:
             try:
                 run_future.result()
             except Exception:
                 logging.warning("async-first 运行内核异常退出", exc_info=True)
-                self._dispatch_to_ui_async(lambda: self.runFailed.emit("后台运行内核异常退出，请查看日志"))
+                self._dispatch_to_ui_async(
+                    lambda: self.runFailed.emit("后台运行内核异常退出，请查看日志")
+                )
             self._on_run_finished(adapter_snapshot)
         finally:
             self._monitor_thread = None
+
     def _on_run_finished(self, adapter_snapshot: Optional[Any] = None):
         if threading.current_thread() is not threading.main_thread():
             self._dispatch_to_ui_async(lambda: self._on_run_finished(adapter_snapshot))
@@ -347,6 +385,7 @@ class RunControllerExecutionMixin:
             self.runStateChanged.emit(False)
         self._emit_status()
         self._emit_quick_bug_report_suggestion_if_needed()
+
     def _submit_cleanup_task(
         self,
         adapter_snapshot: Optional[Any] = None,
@@ -365,6 +404,7 @@ class RunControllerExecutionMixin:
                 self._dispatch_to_ui_async(self.cleanupFinished.emit)
 
         self._cleanup_runner.submit(_cleanup, delay_seconds=delay_seconds)
+
     def _schedule_cleanup(self, adapter_snapshot: Optional[Any] = None) -> None:
         if self._cleanup_scheduled:
             return
@@ -373,6 +413,7 @@ class RunControllerExecutionMixin:
             adapter_snapshot,
             delay_seconds=STOP_FORCE_WAIT_SECONDS,
         )
+
     def stop_run(self):
         ctx = getattr(self, "_execution_state", None)
         if ctx is not None:
@@ -427,10 +468,15 @@ class RunControllerExecutionMixin:
         self._stopping = True
         self._stopped_by_stop_run = True
         self._emit_status()
+
     def _collect_shutdown_threads(self) -> List[threading.Thread]:
         seen: set[int] = set()
         threads: List[threading.Thread] = []
-        for candidate in [getattr(self, "_init_gate_thread", None), *list(self.worker_threads or []), getattr(self, "_monitor_thread", None)]:
+        for candidate in [
+            getattr(self, "_init_gate_thread", None),
+            *list(self.worker_threads or []),
+            getattr(self, "_monitor_thread", None),
+        ]:
             if not isinstance(candidate, threading.Thread):
                 continue
             identifier = id(candidate)
@@ -439,6 +485,7 @@ class RunControllerExecutionMixin:
             seen.add(identifier)
             threads.append(candidate)
         return threads
+
     def shutdown_for_close(self, timeout_seconds: float = 5.0) -> bool:
         self._cleanup_scheduled = True
         self.stop_run()
@@ -534,7 +581,11 @@ class RunControllerExecutionMixin:
             self._quick_feedback_prompt_emitted = True
             self.freeAiUnstableSuggested.emit()
             return
-        if category in {"target_reached", "user_stopped", "submission_verification"}:
+        if category in {
+            "target_reached",
+            "user_stopped",
+            "submission_verification",
+        }:
             return
         if failure_reason in {
             FailureReason.DEVICE_QUOTA_LIMIT.value,
@@ -562,6 +613,7 @@ class RunControllerExecutionMixin:
         if self._paused_state:
             self._paused_state = False
             self.pauseStateChanged.emit(False, "")
+
     def _emit_status(self):
         if self._initializing:
             self.statusUpdated.emit("正在初始化", 0, 0)
@@ -611,7 +663,8 @@ class RunControllerExecutionMixin:
             status_prefix = "已提交"
         status = f"{status_prefix} {current}/{target} 份 | 提交连续失败 {fail} 次"
         if int(device_quota_fail_count or 0) > 0:
-            status = f"{status} | 设备限制拦截 {int(device_quota_fail_count or 0)} 次"
+            quota_fail_count = int(device_quota_fail_count or 0)
+            status = f"{status} | 设备限制拦截 {quota_fail_count} 次"
         if paused and reason:
             status = f"{status} | {reason}"
         self.statusUpdated.emit(status, int(current), int(target or 0))
@@ -625,7 +678,10 @@ class RunControllerExecutionMixin:
                 logging.debug("获取线程进度快照失败", exc_info=True)
                 thread_rows = []
             try:
-                num_threads = max(1, int(getattr(getattr(ctx, "config", None), "num_threads", 1) or 1))
+                num_threads = max(
+                    1,
+                    int(getattr(getattr(ctx, "config", None), "num_threads", 1) or 1),
+                )
             except Exception:
                 num_threads = 1
             if int(target or 0) > 0:
@@ -645,7 +701,9 @@ class RunControllerExecutionMixin:
             self._paused_state = paused
             self.pauseStateChanged.emit(bool(paused), str(reason or ""))
 
-        should_force_cleanup = target > 0 and current >= target and not self._completion_cleanup_done
+        should_force_cleanup = (
+            target > 0 and current >= target and not self._completion_cleanup_done
+        )
         if should_force_cleanup:
             self._completion_cleanup_done = True
             self._schedule_cleanup()

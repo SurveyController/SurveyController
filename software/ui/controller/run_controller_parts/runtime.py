@@ -1,4 +1,5 @@
 """RunController 运行控制与状态管理逻辑。"""
+
 from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any, Callable, Dict, Optional
@@ -13,6 +14,7 @@ if TYPE_CHECKING:
     from PySide6.QtCore import QObject, QTimer
 
     from software.core.engine.cleanup import CleanupRunner
+
 
 class RunControllerRuntimeMixin(
     RunControllerRandomIPMixin,
@@ -43,4 +45,6 @@ class RunControllerRuntimeMixin(
         def _sync_adapter_ui_bridge(self, adapter: Optional[Any] = None) -> None: ...
         def notify_random_ip_loading(self, loading: bool, message: str = "") -> None: ...
         def set_runtime_ui_state(self, emit: bool = True, **updates: Any) -> Dict[str, Any]: ...
-        def sync_runtime_ui_state_from_config(self, config: RuntimeConfig, *, emit: bool = True) -> Dict[str, Any]: ...
+        def sync_runtime_ui_state_from_config(
+            self, config: RuntimeConfig, *, emit: bool = True
+        ) -> Dict[str, Any]: ...

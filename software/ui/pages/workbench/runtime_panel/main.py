@@ -1,4 +1,5 @@
 """运行参数设置页面"""
+
 import logging
 from software.logging.action_logger import bind_logged_action, log_action
 from software.logging.log_utils import log_suppressed_exception
@@ -27,9 +28,15 @@ from software.ui.pages.workbench.runtime_panel.cards import (
     TimeRangeSettingCard,
     TimedModeSettingCard,
 )
-from software.ui.widgets.setting_cards import SpinBoxSettingCard, SwitchSettingCard
+from software.ui.widgets.setting_cards import (
+    SpinBoxSettingCard,
+    SwitchSettingCard,
+)
 from software.io.config import RuntimeConfig
-from software.ui.helpers.proxy_access import apply_proxy_source_settings, get_proxy_minute_by_answer_seconds
+from software.ui.helpers.proxy_access import (
+    apply_proxy_source_settings,
+    get_proxy_minute_by_answer_seconds,
+)
 
 _PROXY_SOURCE_DEFAULT = "default"
 _PROXY_SOURCE_BENEFIT = "benefit"
@@ -44,7 +51,6 @@ class RuntimePage(ScrollArea):
     HEADLESS_MAX_THREADS = HEADLESS_MAX_THREADS
     SUBMIT_INTERVAL_MAX_SECONDS = 300
     ANSWER_DURATION_MAX_SECONDS = 600
-
 
     def __init__(self, controller: RunController, parent=None):
         super().__init__(parent)
@@ -92,12 +98,22 @@ class RuntimePage(ScrollArea):
         run_group = SettingCardGroup("作答设置", self.view)
 
         self.target_card = SpinBoxSettingCard(
-            FluentIcon.DOCUMENT, "目标份数", "设置要提交的问卷数量",
-            min_val=1, max_val=9999, default=10, parent=run_group
+            FluentIcon.DOCUMENT,
+            "目标份数",
+            "设置要提交的问卷数量",
+            min_val=1,
+            max_val=9999,
+            default=10,
+            parent=run_group,
         )
         self.thread_card = SpinBoxSettingCard(
-            FluentIcon.APPLICATION, "并发会话", "控制同时运行的独立问卷会话数量，程序会自动复用更少的浏览器底座",
-            min_val=self.MIN_THREADS, max_val=self.NON_HEADLESS_MAX_THREADS, default=2, parent=run_group
+            FluentIcon.APPLICATION,
+            "并发会话",
+            "控制同时运行的独立问卷会话数量，程序会自动复用更少的浏览器底座",
+            min_val=self.MIN_THREADS,
+            max_val=self.NON_HEADLESS_MAX_THREADS,
+            default=2,
+            parent=run_group,
         )
         spin_width = self.target_card.suggestSpinBoxWidthForDigits(4)
         self.target_card.setSpinBoxWidth(spin_width)
@@ -142,20 +158,22 @@ class RuntimePage(ScrollArea):
         self.interval_card = TimeRangeSettingCard(
             FluentIcon.HISTORY,
             "提交间隔",
-            f"两次提交之间的等待时间（0-{self.SUBMIT_INTERVAL_MAX_SECONDS} 秒）",
+            (f"两次提交之间的等待时间（0-{self.SUBMIT_INTERVAL_MAX_SECONDS} 秒）"),
             max_seconds=self.SUBMIT_INTERVAL_MAX_SECONDS,
-            parent=time_group
+            parent=time_group,
         )
         self.answer_card = TimeRangeSettingCard(
             FluentIcon.STOP_WATCH,
             "作答时长",
-            f"设置单份作答耗时（0-{self.ANSWER_DURATION_MAX_SECONDS} 秒），按20%比例随机上下抖动",
+            (f"设置单份作答耗时（0-{self.ANSWER_DURATION_MAX_SECONDS} 秒），按20%比例随机上下抖动"),
             max_seconds=self.ANSWER_DURATION_MAX_SECONDS,
-            parent=time_group
+            parent=time_group,
         )
         self.timed_card = TimedModeSettingCard(
-            FluentIcon.RINGER, "定时模式", "启用后忽略时间设置，在开放后立即提交",
-            parent=time_group
+            FluentIcon.RINGER,
+            "定时模式",
+            "启用后忽略时间设置，在开放后立即提交",
+            parent=time_group,
         )
 
         time_group.addSettingCard(self.interval_card)
@@ -170,8 +188,12 @@ class RuntimePage(ScrollArea):
         layout.addStretch(1)
 
     def _bind_events(self):
-        self.target_card.spinBox.valueChanged.connect(lambda value: self.controller.set_runtime_ui_state(target=int(value)))
-        self.thread_card.spinBox.valueChanged.connect(lambda value: self.controller.set_runtime_ui_state(threads=int(value)))
+        self.target_card.spinBox.valueChanged.connect(
+            lambda value: self.controller.set_runtime_ui_state(target=int(value))
+        )
+        self.thread_card.spinBox.valueChanged.connect(
+            lambda value: self.controller.set_runtime_ui_state(threads=int(value))
+        )
         bind_logged_action(
             self.random_ip_card.switchButton.checkedChanged,
             self._on_random_ip_toggled,
@@ -241,11 +263,22 @@ class RuntimePage(ScrollArea):
     @staticmethod
     def _normalize_proxy_source(source: str) -> str:
         normalized = str(source or _PROXY_SOURCE_DEFAULT).strip().lower()
-        return normalized if normalized in {_PROXY_SOURCE_DEFAULT, _PROXY_SOURCE_BENEFIT, _PROXY_SOURCE_CUSTOM} else _PROXY_SOURCE_DEFAULT
+        return (
+            normalized
+            if normalized
+            in {
+                _PROXY_SOURCE_DEFAULT,
+                _PROXY_SOURCE_BENEFIT,
+                _PROXY_SOURCE_CUSTOM,
+            }
+            else _PROXY_SOURCE_DEFAULT
+        )
 
     def _get_selected_proxy_source(self) -> str:
         idx = self.random_ip_card.proxyCombo.currentIndex()
-        source = str(self.random_ip_card.proxyCombo.itemData(idx)) if idx >= 0 else _PROXY_SOURCE_DEFAULT
+        source = (
+            str(self.random_ip_card.proxyCombo.itemData(idx)) if idx >= 0 else _PROXY_SOURCE_DEFAULT
+        )
         return self._normalize_proxy_source(source)
 
     def _current_proxy_required_minute(self) -> int:
@@ -261,19 +294,27 @@ class RuntimePage(ScrollArea):
             from software.app.config import PROXY_TTL_GRACE_SECONDS
 
             raw_answer_seconds = max(0, int(self.answer_card.getValue()))
-            # get_proxy_minute_by_answer_seconds() 内部会自动加缓冲秒，这里先减掉，
+            # 该函数内部会自动加缓冲秒，这里先减掉。
             # 等价于“按用户输入时长本身判断”，避免 50 秒被提示为 3 分钟。
             normalized_seconds = max(0, raw_answer_seconds - int(PROXY_TTL_GRACE_SECONDS))
             return int(get_proxy_minute_by_answer_seconds(normalized_seconds))
         except Exception as exc:
-            log_suppressed_exception("_current_proxy_required_minute_for_benefit", exc, level=logging.WARNING)
+            log_suppressed_exception(
+                "_current_proxy_required_minute_for_benefit",
+                exc,
+                level=logging.WARNING,
+            )
             return 1
 
     def _show_benefit_proxy_limit_tip(self, minute: int) -> None:
         parent = self.window() or self.view
         InfoBar.warning(
             "",
-            f"当前作答时长会要求 {minute} 分钟代理，但“限时福利”只支持 1 分钟。请切回默认代理源，或缩短作答时长后再试。",
+            (
+                f"当前作答时长会要求 {minute} 分钟代理，"
+                "但“限时福利”只支持 1 分钟。请切回默认代理源，"
+                "或缩短作答时长后再试。"
+            ),
             parent=parent,
             position=InfoBarPosition.TOP,
             duration=4500,
@@ -297,23 +338,35 @@ class RuntimePage(ScrollArea):
         def _focus_target():
             target_edit = getattr(self.answer_card, "inputEdit", None)
             try:
-                # 把“作答时长”滚动到视口靠上位置，而不是仅仅可见
+                # 把“作答时长”滚动到视口靠上位置。
                 top_y = self.answer_card.mapTo(self.view, QPoint(0, 0)).y()
                 target_scroll = max(0, int(top_y - 16))
                 self.verticalScrollBar().setValue(target_scroll)
             except Exception as exc:
-                log_suppressed_exception("focus_answer_duration_setting: verticalScrollBar().setValue(...)", exc, level=logging.INFO)
+                log_suppressed_exception(
+                    "focus_answer_duration_setting: scroll",
+                    exc,
+                    level=logging.INFO,
+                )
             try:
                 if target_edit is not None:
                     target_edit.setFocus()
                     target_edit.selectAll()
             except Exception as exc:
-                log_suppressed_exception("focus_answer_duration_setting: self.answer_card.inputEdit.setFocus()", exc, level=logging.INFO)
+                log_suppressed_exception(
+                    "focus_answer_duration_setting: focus input",
+                    exc,
+                    level=logging.INFO,
+                )
             try:
                 # 兜底：极端布局场景下再做一次“至少可见”
                 self.ensureWidgetVisible(self.answer_card, 0, 24)
             except Exception as exc:
-                log_suppressed_exception("focus_answer_duration_setting: ensureWidgetVisible", exc, level=logging.INFO)
+                log_suppressed_exception(
+                    "focus_answer_duration_setting: ensureWidgetVisible",
+                    exc,
+                    level=logging.INFO,
+                )
 
         # 页面切换后做两次定位，避免首帧布局尚未稳定导致的偏移
         QTimer.singleShot(0, _focus_target)
@@ -337,7 +390,7 @@ class RuntimePage(ScrollArea):
         parent = self.window() or self.view
         InfoBar.info(
             "",
-            f"已关闭无头模式，并发上限为 {self.NON_HEADLESS_MAX_THREADS}，已自动调整",
+            (f"已关闭无头模式，并发上限为 {self.NON_HEADLESS_MAX_THREADS}，已自动调整"),
             parent=parent,
             position=InfoBarPosition.TOP,
             duration=2200,
@@ -355,14 +408,24 @@ class RuntimePage(ScrollArea):
             "headless_switch",
             "runtime",
             result="changed",
-            payload={"enabled": bool(enabled), "threads": int(self.thread_card.spinBox.value()), "clamped": clamped},
+            payload={
+                "enabled": bool(enabled),
+                "threads": int(self.thread_card.spinBox.value()),
+                "clamped": clamped,
+            },
         )
         if (not enabled) and clamped and not self._suppress_headless_tip:
             self._show_headless_limit_tip()
 
     def _show_timed_mode_help(self):
         """显示定时模式说明"""
-        log_action("UI", "open_timed_mode_help", "timed_mode_help", "runtime", result="opened")
+        log_action(
+            "UI",
+            "open_timed_mode_help",
+            "timed_mode_help",
+            "runtime",
+            result="opened",
+        )
         content = (
             "启用后，程序会忽略「提交间隔」和「作答时长」设置，改为高频刷新并在开放后立即提交。\n\n"
             "典型应用场景：\n"
@@ -374,12 +437,12 @@ class RuntimePage(ScrollArea):
         PopupTeachingTip.create(
             target=self.timed_card.helpButton,
             icon=FluentIcon.INFO,
-            title='定时模式说明',
+            title="定时模式说明",
             content=content,
             isClosable=True,
             tailPosition=TeachingTipTailPosition.BOTTOM,
             duration=-1,
-            parent=self.view
+            parent=self.view,
         )
 
     def _on_random_ip_toggled(self, enabled: bool):
@@ -433,7 +496,11 @@ class RuntimePage(ScrollArea):
             else:
                 apply_proxy_source_settings(source, custom_api_url=None)
         except Exception as exc:
-            log_suppressed_exception("_on_proxy_source_changed: apply_proxy_source_settings", exc, level=logging.WARNING)
+            log_suppressed_exception(
+                "_on_proxy_source_changed: apply_proxy_source_settings",
+                exc,
+                level=logging.WARNING,
+            )
         self._evaluate_benefit_proxy_compatibility(show_tip=(source == _PROXY_SOURCE_BENEFIT))
         self.controller.set_runtime_ui_state(proxy_source=source)
         log_action(
@@ -447,13 +514,20 @@ class RuntimePage(ScrollArea):
 
     def _on_answer_duration_changed(self, _value: int):
         self._evaluate_benefit_proxy_compatibility(show_tip=True)
-        self.controller.set_runtime_ui_state(answer_duration=self._card_value_as_range(self.answer_card))
+        self.controller.set_runtime_ui_state(
+            answer_duration=self._card_value_as_range(self.answer_card)
+        )
 
     def _sync_random_ua(self, enabled: bool):
         try:
             self.random_ua_card.setUAEnabled(bool(enabled))
         except Exception as exc:
-            log_suppressed_exception("_sync_random_ua: self.random_ua_card.setUAEnabled(bool(enabled))", exc, level=logging.WARNING)
+            context = "_sync_random_ua: self.random_ua_card.setUAEnabled(bool(enabled))"
+            log_suppressed_exception(
+                context,
+                exc,
+                level=logging.WARNING,
+            )
 
     def _sync_timed_mode(self, enabled: bool):
         """定时模式切换时禁用/启用时间控制按钮"""
@@ -461,7 +535,11 @@ class RuntimePage(ScrollArea):
             self.interval_card.setEnabled(not enabled)
             self.answer_card.setEnabled(not enabled)
         except Exception as exc:
-            log_suppressed_exception("_sync_timed_mode: self.interval_card.setEnabled(not enabled)", exc, level=logging.WARNING)
+            log_suppressed_exception(
+                "_sync_timed_mode: self.interval_card.setEnabled(not enabled)",
+                exc,
+                level=logging.WARNING,
+            )
 
     def _on_timed_mode_toggled(self, enabled: bool):
         self._sync_timed_mode(bool(enabled))
@@ -479,7 +557,11 @@ class RuntimePage(ScrollArea):
         try:
             self.reliability_card._sync_enabled(bool(enabled))
         except Exception as exc:
-            log_suppressed_exception("_on_reliability_mode_toggled: reliability_card._sync_enabled", exc, level=logging.INFO)
+            log_suppressed_exception(
+                "_on_reliability_mode_toggled: reliability_card._sync_enabled",
+                exc,
+                level=logging.INFO,
+            )
         log_action(
             "CONFIG",
             "toggle_reliability_mode",
@@ -491,26 +573,44 @@ class RuntimePage(ScrollArea):
 
     def update_config(self, cfg: RuntimeConfig):
         cfg.target = max(1, self.target_card.spinBox.value())
-        cfg.threads = max(self.MIN_THREADS, min(self._resolve_thread_max(self.headless_card.isChecked()), self.thread_card.spinBox.value()))
+        cfg.threads = max(
+            self.MIN_THREADS,
+            min(
+                self._resolve_thread_max(self.headless_card.isChecked()),
+                self.thread_card.spinBox.value(),
+            ),
+        )
         cfg.browser_preference = []  # 固定使用默认顺序：Edge → Chrome
         cfg.submit_interval = self._card_value_as_range(self.interval_card)
         cfg.answer_duration = self._card_value_as_range(self.answer_card)
         cfg.timed_mode_enabled = self.timed_card.switchButton.isChecked()
         cfg.random_ip_enabled = self.random_ip_card.switchButton.isChecked()
         cfg.random_ua_enabled = self.random_ua_card.switchButton.isChecked()
-        cfg.random_ua_ratios = self.random_ua_card.getRatios() if cfg.random_ua_enabled else {"wechat": 33, "mobile": 33, "pc": 34}
+        cfg.random_ua_ratios = (
+            self.random_ua_card.getRatios()
+            if cfg.random_ua_enabled
+            else {"wechat": 33, "mobile": 33, "pc": 34}
+        )
         cfg.fail_stop_enabled = True
         cfg.pause_on_aliyun_captcha = True
         cfg.reliability_mode_enabled = self.reliability_card.switchButton.isChecked()
         try:
             cfg.psycho_target_alpha = self.reliability_card.get_alpha()
         except Exception as exc:
-            log_suppressed_exception("update_config: reliability_card.get_alpha()", exc, level=logging.INFO)
+            log_suppressed_exception(
+                "update_config: reliability_card.get_alpha()",
+                exc,
+                level=logging.INFO,
+            )
         cfg.headless_mode = self.headless_card.switchButton.isChecked()
         try:
             source = self._get_selected_proxy_source()
             cfg.proxy_source = source
-            cfg.custom_proxy_api = self.random_ip_card.customApiEdit.text().strip() if source == _PROXY_SOURCE_CUSTOM else ""
+            cfg.custom_proxy_api = (
+                self.random_ip_card.customApiEdit.text().strip()
+                if source == _PROXY_SOURCE_CUSTOM
+                else ""
+            )
             cfg.proxy_area_code = self.random_ip_card.get_area_code()
         except Exception:
             cfg.proxy_source = _PROXY_SOURCE_DEFAULT
@@ -543,28 +643,45 @@ class RuntimePage(ScrollArea):
             else:
                 self.random_ua_card.setRatios({"wechat": 33, "mobile": 33, "pc": 34})
         except Exception as exc:
-            log_suppressed_exception("apply_config: self.random_ua_card.setRatios(ratios)", exc, level=logging.WARNING)
+            log_suppressed_exception(
+                "apply_config: self.random_ua_card.setRatios(ratios)",
+                exc,
+                level=logging.WARNING,
+            )
             self.random_ua_card.setRatios({"wechat": 33, "mobile": 33, "pc": 34})
 
         self._sync_random_ua(self.random_ua_card.switchButton.isChecked())
-        self.reliability_card.switchButton.setChecked(getattr(cfg, "reliability_mode_enabled", True))
+        self.reliability_card.switchButton.setChecked(
+            getattr(cfg, "reliability_mode_enabled", True)
+        )
         try:
             self.reliability_card.set_alpha(getattr(cfg, "psycho_target_alpha", 0.85))
             self.reliability_card._sync_enabled(self.reliability_card.switchButton.isChecked())
         except Exception as exc:
-            log_suppressed_exception("apply_config: reliability_card.set_alpha", exc, level=logging.INFO)
+            log_suppressed_exception(
+                "apply_config: reliability_card.set_alpha",
+                exc,
+                level=logging.INFO,
+            )
 
         self._suppress_headless_tip = True
         try:
             self.headless_card.setChecked(getattr(cfg, "headless_mode", True))
             self._apply_thread_limit_by_headless(self.headless_card.isChecked())
             max_threads = self._resolve_thread_max(self.headless_card.isChecked())
-            self.thread_card.spinBox.setValue(max(self.MIN_THREADS, min(max_threads, int(cfg.threads or self.MIN_THREADS))))
+            self.thread_card.spinBox.setValue(
+                max(
+                    self.MIN_THREADS,
+                    min(max_threads, int(cfg.threads or self.MIN_THREADS)),
+                )
+            )
         finally:
             self._suppress_headless_tip = False
 
         try:
-            proxy_source = self._normalize_proxy_source(getattr(cfg, "proxy_source", _PROXY_SOURCE_DEFAULT))
+            proxy_source = self._normalize_proxy_source(
+                getattr(cfg, "proxy_source", _PROXY_SOURCE_DEFAULT)
+            )
             custom_api = getattr(cfg, "custom_proxy_api", "")
             idx = self.random_ip_card.proxyCombo.findData(proxy_source)
             if idx < 0:
@@ -576,13 +693,19 @@ class RuntimePage(ScrollArea):
             self.random_ip_card._on_source_changed()
             apply_proxy_source_settings(
                 proxy_source,
-                custom_api_url=custom_api if (proxy_source == _PROXY_SOURCE_CUSTOM and custom_api) else None,
+                custom_api_url=custom_api
+                if (proxy_source == _PROXY_SOURCE_CUSTOM and custom_api)
+                else None,
             )
             area_code = getattr(cfg, "proxy_area_code", None)
             self.random_ip_card.set_area_code(area_code)
             self._evaluate_benefit_proxy_compatibility(show_tip=False)
         except Exception as exc:
-            log_suppressed_exception("apply_config: proxy_source = getattr(cfg, \"proxy_source\", \"default\")", exc, level=logging.WARNING)
+            log_suppressed_exception(
+                "apply_config: proxy source",
+                exc,
+                level=logging.WARNING,
+            )
         self.ai_section.apply_config(cfg)
         self.controller.sync_runtime_ui_state_from_config(cfg)
 
@@ -595,7 +718,9 @@ class RuntimePage(ScrollArea):
 
         threads = state.get("threads")
         headless = state.get("headless_mode")
-        if headless is not None and bool(self.headless_card.switchButton.isChecked()) != bool(headless):
+        if headless is not None and bool(self.headless_card.switchButton.isChecked()) != bool(
+            headless
+        ):
             self._suppress_headless_tip = True
             try:
                 self.headless_card.switchButton.blockSignals(True)
@@ -611,14 +736,18 @@ class RuntimePage(ScrollArea):
             self.thread_card.spinBox.blockSignals(False)
 
         random_ip_enabled = state.get("random_ip_enabled")
-        if random_ip_enabled is not None and bool(self.random_ip_card.switchButton.isChecked()) != bool(random_ip_enabled):
+        if random_ip_enabled is not None and bool(
+            self.random_ip_card.switchButton.isChecked()
+        ) != bool(random_ip_enabled):
             self.random_ip_card.switchButton.blockSignals(True)
             self.random_ip_card.switchButton.setChecked(bool(random_ip_enabled))
             self.random_ip_card.switchButton.blockSignals(False)
             self.random_ip_card._sync_ip_enabled(bool(random_ip_enabled))
 
         timed_mode_enabled = state.get("timed_mode_enabled")
-        if timed_mode_enabled is not None and bool(self.timed_card.switchButton.isChecked()) != bool(timed_mode_enabled):
+        if timed_mode_enabled is not None and bool(
+            self.timed_card.switchButton.isChecked()
+        ) != bool(timed_mode_enabled):
             self.timed_card.switchButton.blockSignals(True)
             self.timed_card.switchButton.setChecked(bool(timed_mode_enabled))
             self.timed_card.switchButton.blockSignals(False)
@@ -635,7 +764,9 @@ class RuntimePage(ScrollArea):
 
         proxy_source = state.get("proxy_source")
         if proxy_source is not None:
-            idx = self.random_ip_card.proxyCombo.findData(self._normalize_proxy_source(proxy_source))
+            idx = self.random_ip_card.proxyCombo.findData(
+                self._normalize_proxy_source(proxy_source)
+            )
             if idx >= 0 and self.random_ip_card.proxyCombo.currentIndex() != idx:
                 self.random_ip_card.proxyCombo.blockSignals(True)
                 self.random_ip_card.proxyCombo.setCurrentIndex(idx)
@@ -664,10 +795,7 @@ class RuntimePage(ScrollArea):
             return 0
         try:
             from typing import Any, cast
+
             return max(0, int(cast(Any, raw_range)))
         except Exception:
             return 0
-
-
-
-

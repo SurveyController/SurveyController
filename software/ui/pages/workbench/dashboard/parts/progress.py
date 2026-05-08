@@ -1,4 +1,5 @@
 """DashboardPage 运行状态与进度展示相关方法。"""
+
 from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any, Dict, Optional, cast
@@ -28,6 +29,7 @@ def _set_text_if_changed(widget: Any, text: str) -> None:
 def _set_value_if_changed(widget: Any, value: int) -> None:
     if widget is not None and widget.value() != value:
         widget.setValue(value)
+
 
 if TYPE_CHECKING:
     from software.ui.controller.run_controller import RunController
@@ -72,7 +74,13 @@ class DashboardProgressMixin:
 
         def _sync_start_button_state(self, running: Optional[bool] = None) -> None: ...
         def _has_question_entries(self) -> bool: ...
-        def _toast(self, text: str, level: str = "info", duration: int = 2000, show_progress: bool = False) -> Optional[Any]: ...
+        def _toast(
+            self,
+            text: str,
+            level: str = "info",
+            duration: int = 2000,
+            show_progress: bool = False,
+        ) -> Optional[Any]: ...
         def show_task_result_windows_notification(self, title: str, message: str) -> None: ...
         def _on_start_clicked(self) -> None: ...
         def resume_run_from_ui(self) -> None: ...
@@ -148,7 +156,12 @@ class DashboardProgressMixin:
             if bar is not None:
                 bar.show()
                 bar.setRange(0, 100)
-                bar.setValue(max(0, min(100, int(getattr(self, "_last_progress", 0) or 0))))
+                bar.setValue(
+                    max(
+                        0,
+                        min(100, int(getattr(self, "_last_progress", 0) or 0)),
+                    )
+                )
 
     def _build_thread_progress_panel(self, parent: QWidget) -> QWidget:
         self.thread_progress_panel = QWidget(parent)
@@ -156,7 +169,9 @@ class DashboardProgressMixin:
         thread_panel_layout.setContentsMargins(0, 4, 0, 0)
         thread_panel_layout.setSpacing(6)
         thread_panel_layout.setAlignment(Qt.AlignmentFlag.AlignTop)
-        self.thread_progress_hint = BodyLabel("会话进度会在任务开始后显示", self.thread_progress_panel)
+        self.thread_progress_hint = BodyLabel(
+            "会话进度会在任务开始后显示", self.thread_progress_panel
+        )
         self.thread_progress_hint.setWordWrap(True)
         self.thread_progress_hint.setStyleSheet("color: #6b6b6b;")
         thread_panel_layout.addWidget(self.thread_progress_hint)
@@ -176,8 +191,18 @@ class DashboardProgressMixin:
     def _on_thread_view_changed(self, route_key: str):
         self._set_thread_view(route_key, sync_segment=False, animate=True)
 
-    def _set_thread_view(self, route_key: str, *, sync_segment: bool = True, animate: bool = True):
-        key = route_key if route_key in (self.THREAD_VIEW_QUESTION_LIST, self.THREAD_VIEW_PROGRESS) else self.THREAD_VIEW_QUESTION_LIST
+    def _set_thread_view(
+        self,
+        route_key: str,
+        *,
+        sync_segment: bool = True,
+        animate: bool = True,
+    ):
+        key = (
+            route_key
+            if route_key in (self.THREAD_VIEW_QUESTION_LIST, self.THREAD_VIEW_PROGRESS)
+            else self.THREAD_VIEW_QUESTION_LIST
+        )
         prev = getattr(self, "_thread_view_current", self.THREAD_VIEW_QUESTION_LIST)
         self._thread_view_current = key
 
@@ -202,7 +227,11 @@ class DashboardProgressMixin:
         if stack is None:
             return
 
-        target = self.thread_view_progress_card if key == self.THREAD_VIEW_PROGRESS else self.thread_view_question_card
+        target = (
+            self.thread_view_progress_card
+            if key == self.THREAD_VIEW_PROGRESS
+            else self.thread_view_question_card
+        )
         is_back = key == self.THREAD_VIEW_QUESTION_LIST and prev != key
 
         if hasattr(stack, "setCurrentWidget"):
@@ -313,11 +342,7 @@ class DashboardProgressMixin:
         self.progress_bar.setValue(progress)
         self.progress_pct.setText(f"{progress}%")
         self._last_progress = progress
-        if (
-            target > 0
-            and current >= target
-            and not self._completion_notified
-        ):
+        if target > 0 and current >= target and not self._completion_notified:
             self._completion_notified = True
             self._toast("全部份数已完成", "success", duration=5000)
             try:
@@ -440,7 +465,9 @@ class DashboardProgressMixin:
             return
 
         self._set_main_progress_indeterminate(False)
-        self._last_device_quota_fail_count = max(0, int(payload.get("device_quota_fail_count") or 0))
+        self._last_device_quota_fail_count = max(
+            0, int(payload.get("device_quota_fail_count") or 0)
+        )
         thread_rows = payload.get("threads")
         if not isinstance(thread_rows, list):
             return
@@ -455,13 +482,19 @@ class DashboardProgressMixin:
             return
 
         self.thread_progress_hint.hide()
-        if running_now and getattr(self, "_thread_view_current", self.THREAD_VIEW_QUESTION_LIST) != self.THREAD_VIEW_PROGRESS:
+        if (
+            running_now
+            and getattr(self, "_thread_view_current", self.THREAD_VIEW_QUESTION_LIST)
+            != self.THREAD_VIEW_PROGRESS
+        ):
             self._set_thread_view(self.THREAD_VIEW_PROGRESS)
         target = max(0, int(payload.get("target") or 0))
         num_threads = max(1, int(payload.get("num_threads") or 1))
         per_thread_target = max(0, int(payload.get("per_thread_target") or 0))
         if per_thread_target <= 0:
-            per_thread_target = max(1, int((target + num_threads - 1) / num_threads)) if target > 0 else 1
+            per_thread_target = (
+                max(1, int((target + num_threads - 1) / num_threads)) if target > 0 else 1
+            )
 
         seen_names = set()
         for item in thread_rows:
@@ -470,7 +503,9 @@ class DashboardProgressMixin:
             thread_name = str(item.get("thread_name") or "").strip()
             if not thread_name:
                 continue
-            thread_display_name = str(item.get("thread_display_name") or thread_name).strip() or thread_name
+            thread_display_name = (
+                str(item.get("thread_display_name") or thread_name).strip() or thread_name
+            )
             seen_names.add(thread_name)
             row = self._thread_progress_rows.get(thread_name)
             if row is None:
@@ -492,18 +527,26 @@ class DashboardProgressMixin:
                 step_percent = int(min(100, (step_current / float(step_total)) * 100))
             else:
                 step_percent = 0
-            cumulative_percent = int(min(100, (success_count / float(max(1, per_thread_target))) * 100))
+            cumulative_percent = int(
+                min(
+                    100,
+                    (success_count / float(max(1, per_thread_target))) * 100,
+                )
+            )
             step_busy = status_text in self._THREAD_BUSY_STATUSES
 
             _set_text_if_changed(row["status"], status_text)
             _set_text_if_changed(row["counter"], f"成功 {success_count} | 提交失败 {fail_count}")
             self._set_thread_step_busy(row, step_busy)
             _set_value_if_changed(row["step_bar"], step_percent)
-            _set_text_if_changed(row["step_value"], f"{step_current}/{step_total}" if step_total > 0 else "0/0")
+            _set_text_if_changed(
+                row["step_value"],
+                f"{step_current}/{step_total}" if step_total > 0 else "0/0",
+            )
             _set_value_if_changed(row["cum_bar"], cumulative_percent)
             _set_text_if_changed(row["cum_value"], f"{cumulative_percent}%")
 
-        stale = [name for name in self._thread_progress_rows.keys() if name not in seen_names]
+        stale = [name for name in self._thread_progress_rows if name not in seen_names]
         for name in stale:
             row = self._thread_progress_rows.pop(name, None)
             if row and row.get("widget") is not None:
@@ -567,9 +610,10 @@ class DashboardProgressMixin:
                     2200,
                 )
                 try:
+                    message = f"任务结束，设备填写次数上限拦截 {quota_fail_count} 次"
                     self.window().show_task_result_windows_notification(
                         "任务失败",
-                        f"任务结束，设备填写次数上限拦截 {quota_fail_count} 次",
+                        message,
                     )
                 except Exception:
                     pass
@@ -595,7 +639,13 @@ class DashboardProgressMixin:
             msg = f"已暂停：{reason}" if reason else "已暂停"
             self._toast(msg, "warning", 2200)
         else:
-            log_action("RUN", "pause_state", "controller", "dashboard", result="resumed")
+            log_action(
+                "RUN",
+                "pause_state",
+                "controller",
+                "dashboard",
+                result="resumed",
+            )
             self._apply_progress_visual_state(
                 self._status_requires_attention_visual(self.status_label.text())
             )
@@ -607,7 +657,13 @@ class DashboardProgressMixin:
 
     def resume_run_from_ui(self):
         if not getattr(self.controller, "running", False):
-            log_action("RUN", "resume_run", "resume_btn", "dashboard", result="blocked")
+            log_action(
+                "RUN",
+                "resume_run",
+                "resume_btn",
+                "dashboard",
+                result="blocked",
+            )
             return
         reason = str(self._last_pause_reason or "")
         if "扣费" in reason or ("代理" in reason and "连续" in reason):
@@ -619,8 +675,13 @@ class DashboardProgressMixin:
             box.yesButton.setText("继续执行")
             box.cancelButton.setText("取消")
             if not box.exec():
-                log_action("RUN", "resume_run", "resume_btn", "dashboard", result="cancelled")
+                log_action(
+                    "RUN",
+                    "resume_run",
+                    "resume_btn",
+                    "dashboard",
+                    result="cancelled",
+                )
                 return
         self.controller.resume_run()
         log_action("RUN", "resume_run", "resume_btn", "dashboard", result="submitted")
-

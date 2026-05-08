@@ -1,4 +1,5 @@
 """联系开发者对话框"""
+
 from typing import cast
 
 from PySide6.QtCore import Qt, QTimer
@@ -90,4 +91,3 @@ class ContactDialog(QDialog):
             return
         self._stop_status_polling()
         super().accept()
-

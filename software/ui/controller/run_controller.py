@@ -1,4 +1,5 @@
 """运行控制器 - 连接 UI 与引擎的业务逻辑桥接层。"""
+
 from __future__ import annotations
 
 import threading
@@ -14,10 +15,19 @@ from software.core.task import ExecutionState
 from software.io.config import RuntimeConfig, load_config, save_config
 from software.providers.contracts import SurveyQuestionMeta
 from software.system.power_management import SystemSleepBlocker
-from software.ui.controller.engine_adapter import BoolVar as _BoolVar, EngineGuiAdapter
-from software.ui.controller.run_controller_parts.parsing import RunControllerParsingMixin
-from software.ui.controller.run_controller_parts.runtime import RunControllerRuntimeMixin
-from software.ui.controller.run_controller_parts.runtime_preparation import PreparedExecutionArtifacts
+from software.ui.controller.engine_adapter import (
+    BoolVar as _BoolVar,
+    EngineGuiAdapter,
+)
+from software.ui.controller.run_controller_parts.parsing import (
+    RunControllerParsingMixin,
+)
+from software.ui.controller.run_controller_parts.runtime import (
+    RunControllerRuntimeMixin,
+)
+from software.ui.controller.run_controller_parts.runtime_preparation import (
+    PreparedExecutionArtifacts,
+)
 from software.ui.controller.ui_dispatcher import UiCallbackDispatcher
 
 BoolVar = _BoolVar
@@ -259,7 +269,9 @@ class RunController(
         self._runtime_state.init_gate_stop_event = value
 
     @property
-    def _prepared_execution_artifacts(self) -> Optional[PreparedExecutionArtifacts]:
+    def _prepared_execution_artifacts(
+        self,
+    ) -> Optional[PreparedExecutionArtifacts]:
         return self._runtime_state.prepared_execution_artifacts
 
     @_prepared_execution_artifacts.setter
@@ -314,7 +326,9 @@ class RunController(
             self.runtimeUiStateChanged.emit(dict(state))
         return dict(state)
 
-    def sync_runtime_ui_state_from_config(self, config: RuntimeConfig, *, emit: bool = True) -> Dict[str, Any]:
+    def sync_runtime_ui_state_from_config(
+        self, config: RuntimeConfig, *, emit: bool = True
+    ) -> Dict[str, Any]:
         state, changed = self._runtime_ui_store.sync_from_config(config)
         if emit and changed:
             self.runtimeUiStateChanged.emit(dict(state))
@@ -391,7 +405,9 @@ class RunController(
             confirm_handler=self.confirm_dialog_handler,
         )
 
-    def load_saved_config(self, path: Optional[str] = None, *, strict: bool = False) -> RuntimeConfig:
+    def load_saved_config(
+        self, path: Optional[str] = None, *, strict: bool = False
+    ) -> RuntimeConfig:
         cfg = load_config(path, strict=strict)
         self.config = cfg
         self.question_entries = cfg.question_entries

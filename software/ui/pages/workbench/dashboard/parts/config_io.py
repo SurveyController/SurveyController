@@ -1,4 +1,5 @@
 """DashboardPage 配置导入导出。"""
+
 from __future__ import annotations
 
 import logging
@@ -8,7 +9,10 @@ from typing import TYPE_CHECKING, Any, cast
 from PySide6.QtWidgets import QFileDialog, QWidget
 
 from software.app.user_paths import get_user_config_directory
-from software.io.config import build_default_config_filename, build_runtime_config_snapshot
+from software.io.config import (
+    build_default_config_filename,
+    build_runtime_config_snapshot,
+)
 from software.logging.action_logger import log_action
 from software.logging.log_utils import log_suppressed_exception
 
@@ -22,7 +26,13 @@ class DashboardConfigIOMixin:
         strategy_page: Any
         _survey_title: str
 
-        def _toast(self, text: str, level: str = "info", duration: int = 2000, show_progress: bool = False) -> Any: ...
+        def _toast(
+            self,
+            text: str,
+            level: str = "info",
+            duration: int = 2000,
+            show_progress: bool = False,
+        ) -> Any: ...
         def apply_config(self, cfg: Any) -> None: ...
         def _build_config(self) -> Any: ...
         def _refresh_entry_table(self) -> None: ...
@@ -32,7 +42,13 @@ class DashboardConfigIOMixin:
     def _on_show_config_list(self):
         try:
             self.config_drawer.open_drawer()
-            log_action("UI", "open_config_list", "config_list_btn", "dashboard", result="opened")
+            log_action(
+                "UI",
+                "open_config_list",
+                "config_list_btn",
+                "dashboard",
+                result="opened",
+            )
         except Exception as exc:
             log_action(
                 "UI",
@@ -44,18 +60,37 @@ class DashboardConfigIOMixin:
                 detail=exc,
             )
             self._toast(f"无法打开配置列表：{exc}", "error")
+
     def _on_load_config(self):
         configs_dir = get_user_config_directory()
         if not os.path.exists(configs_dir):
             os.makedirs(configs_dir, exist_ok=True)
-        path, _ = QFileDialog.getOpenFileName(cast(QWidget, self), "载入配置", configs_dir, "JSON 文件 (*.json);;所有文件 (*.*)")
+        path, _ = QFileDialog.getOpenFileName(
+            cast(QWidget, self),
+            "载入配置",
+            configs_dir,
+            "JSON 文件 (*.json);;所有文件 (*.*)",
+        )
         if not path:
-            log_action("CONFIG", "load_config", "load_cfg_btn", "dashboard", result="cancelled")
+            log_action(
+                "CONFIG",
+                "load_config",
+                "load_cfg_btn",
+                "dashboard",
+                result="cancelled",
+            )
             return
         self._load_config_from_path(path)
+
     def _load_config_from_path(self, path: str):
         if not path:
-            log_action("CONFIG", "load_config", "load_cfg_btn", "dashboard", result="cancelled")
+            log_action(
+                "CONFIG",
+                "load_config",
+                "load_cfg_btn",
+                "dashboard",
+                result="cancelled",
+            )
             return
         if not os.path.exists(path):
             log_action(
@@ -65,7 +100,10 @@ class DashboardConfigIOMixin:
                 "dashboard",
                 result="failed",
                 level=logging.WARNING,
-                payload={"reason": "missing_file", "file": os.path.basename(path)},
+                payload={
+                    "reason": "missing_file",
+                    "file": os.path.basename(path),
+                },
             )
             self._toast("文件不存在，可能已被删除", "warning")
             return
@@ -91,12 +129,19 @@ class DashboardConfigIOMixin:
         self.apply_config(cfg)
         self.workbench_state.set_entries(cfg.question_entries or [], cfg.questions_info or [])
         self.strategy_page.set_questions_info(cfg.questions_info or [])
-        self.strategy_page.set_entries(self.workbench_state.entries, self.workbench_state.entry_questions_info)
+        self.strategy_page.set_entries(
+            self.workbench_state.entries,
+            self.workbench_state.entry_questions_info,
+        )
         self._refresh_entry_table()
         try:
             self.update_question_meta(cfg.survey_title or "", len(cfg.question_entries or []))
         except Exception as exc:
-            log_suppressed_exception("_load_config_from_path: self.update_question_meta(...)", exc, level=logging.WARNING)
+            log_suppressed_exception(
+                "_load_config_from_path: self.update_question_meta(...)",
+                exc,
+                level=logging.WARNING,
+            )
         self._sync_start_button_state()
         self.controller.refresh_random_ip_counter()
         log_action(
@@ -108,6 +153,7 @@ class DashboardConfigIOMixin:
             payload={"file": os.path.basename(path)},
         )
         self._toast("已载入配置", "success")
+
     def _on_save_config(self):
         cfg = build_runtime_config_snapshot(
             self._build_config(),
@@ -119,9 +165,20 @@ class DashboardConfigIOMixin:
         os.makedirs(configs_dir, exist_ok=True)
         default_name = build_default_config_filename(self._survey_title)
         default_path = os.path.join(configs_dir, default_name)
-        path, _ = QFileDialog.getSaveFileName(cast(QWidget, self), "保存配置", default_path, "JSON 文件 (*.json);;所有文件 (*.*)")
+        path, _ = QFileDialog.getSaveFileName(
+            cast(QWidget, self),
+            "保存配置",
+            default_path,
+            "JSON 文件 (*.json);;所有文件 (*.*)",
+        )
         if not path:
-            log_action("CONFIG", "save_config", "save_cfg_btn", "dashboard", result="cancelled")
+            log_action(
+                "CONFIG",
+                "save_config",
+                "save_cfg_btn",
+                "dashboard",
+                result="cancelled",
+            )
             return
         try:
             self.controller.save_current_config(path)
