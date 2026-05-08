@@ -42,6 +42,8 @@ def _build_child_env() -> dict[str, str]:
     current_python_path = env.get("PYTHONPATH", "")
     root_path = str(ROOT_DIR)
     env["PYTHONPATH"] = root_path if not current_python_path else os.pathsep.join([root_path, current_python_path])
+    env["PYTHONIOENCODING"] = "utf-8:replace"
+    env["PYTHONUTF8"] = "1"
     return env
 
 

@@ -603,9 +603,13 @@ def _answer_qq_matrix_star(
             question_index=current,
             row_index=row_index,
         )
-        if not _click_star_cell(driver, question_id, row_index, selected_index):
-            logging.warning("腾讯问卷第%d题（矩阵星级）第%d行点击失败。", current, row_index + 1)
-            continue
+        clicked = _click_star_cell(driver, question_id, row_index, selected_index)
+        if not clicked:
+            clicked = _click_matrix_cell(driver, question_id, row_index, selected_index)
+            if not clicked:
+                logging.warning("腾讯问卷第%d题（矩阵星级）第%d行点击失败。", current, row_index + 1)
+                continue
+            logging.info("腾讯问卷第%d题（矩阵星级）第%d行已用普通矩阵控件兜底。", current, row_index + 1)
         record_pending_distribution_choice(ctx, current, selected_index, option_count, row_index=row_index)
         _log_qq_matrix_row_choice(
             current,

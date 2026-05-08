@@ -95,6 +95,7 @@ class WorkbenchRunCoordinator:
         self.state = state
         self.dashboard = dashboard
         self.reverse_fill_page: Optional[Any] = None
+        self._reverse_fill_target_override: Optional[int] = None
 
     def bind_reverse_fill_page(self, page: Any) -> None:
         self.reverse_fill_page = page
@@ -108,11 +109,22 @@ class WorkbenchRunCoordinator:
             or getattr(self.dashboard, "_last_progress", 0) >= 100
         )
 
-    def sync_target(self, target: int) -> None:
+    def set_reverse_fill_target(self, target: int) -> None:
+        normalized_target = max(1, int(target or 1))
+        self._reverse_fill_target_override = normalized_target
         try:
-            self.controller.set_runtime_ui_state(target=max(1, int(target)))
+            self.controller.set_runtime_ui_state(target=normalized_target)
         except Exception:
             logging.debug("同步目标份数到运行态失败", exc_info=True)
+        target_spin = getattr(self.dashboard, "target_spin", None)
+        if target_spin is None:
+            return
+        try:
+            target_spin.blockSignals(True)
+            target_spin.setValue(normalized_target)
+            target_spin.blockSignals(False)
+        except Exception:
+            logging.debug("同步目标份数到主页输入框失败", exc_info=True)
 
     def build_config(self) -> RuntimeConfig:
         cfg = self.dashboard.build_base_config()
@@ -147,6 +159,8 @@ class WorkbenchRunCoordinator:
         cfg.reverse_fill_enabled = bool(
             enable_reverse_fill and str(getattr(cfg, "reverse_fill_source_path", "") or "").strip()
         )
+        if enable_reverse_fill and self._reverse_fill_target_override is not None:
+            cfg.target = self._reverse_fill_target_override
         if not cfg.question_entries:
             log_action(
                 "RUN",

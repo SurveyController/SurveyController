@@ -705,7 +705,7 @@ class ReverseFillPage(SurveyClipboardMixin, QWidget):
             return False
         coordinator = getattr(self, "_run_coordinator", None)
         if coordinator is not None:
-            coordinator.sync_target(effective_target)
+            coordinator.set_reverse_fill_target(effective_target)
         return True
 
     def _on_resume_clicked(self) -> None:
