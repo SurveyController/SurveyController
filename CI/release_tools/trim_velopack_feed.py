@@ -6,6 +6,7 @@ from __future__ import annotations
 import argparse
 import json
 import re
+import sys
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -30,6 +31,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--release-dir", required=True, help="Releases 目录")
     parser.add_argument("--channel", default="stable", help="更新通道")
     parser.add_argument("--keep-full", type=int, default=6, help="保留的 Full 版本数")
+    parser.add_argument("--drop-version", default="", help="先移除指定版本的旧资产，用于同版本重发")
     return parser.parse_args()
 
 
@@ -114,6 +116,10 @@ def _filter_records(records: list[AssetRecord], keep_versions: set[Version]) -> 
     return kept
 
 
+def _drop_version_records(records: list[AssetRecord], drop_version: Version) -> list[AssetRecord]:
+    return [record for record in records if record.parsed_version != drop_version]
+
+
 def _rewrite_manifest(path: Path, payload: dict[str, Any], kept_records: list[AssetRecord]) -> None:
     payload["Assets"] = [record.raw for record in kept_records]
     path.write_text(json.dumps(payload, ensure_ascii=False, separators=(",", ":")), encoding="utf-8")
@@ -122,6 +128,15 @@ def _rewrite_manifest(path: Path, payload: dict[str, Any], kept_records: list[As
 def _collect_manifest_files(channel: str, release_dir: Path) -> list[Path]:
     candidate = release_dir / f"releases.{channel}.json"
     return [candidate] if candidate.exists() else []
+
+
+def _safe_print(message: str) -> None:
+    stdout = sys.stdout
+    encoding = stdout.encoding or "utf-8"
+    try:
+        stdout.write(message + "\n")
+    except UnicodeEncodeError:
+        stdout.buffer.write((message + "\n").encode(encoding, errors="backslashreplace"))
 
 
 def main() -> int:
@@ -136,6 +151,10 @@ def main() -> int:
 
     payload = _load_manifest(manifest_path)
     records = _build_records(payload.get("Assets", []))
+    drop_version_text = _normalize_version(args.drop_version)
+    drop_version = _parse_version(drop_version_text) if drop_version_text else None
+    if drop_version is not None:
+        records = _drop_version_records(records, drop_version)
     keep_versions = set(_pick_kept_full_versions(records, args.keep_full))
     kept_records = _filter_records(records, keep_versions)
     kept_file_names = {record.file_name for record in kept_records}
@@ -152,8 +171,10 @@ def main() -> int:
             path.unlink()
 
     kept_versions_text = ", ".join(str(version) for version in sorted(keep_versions, reverse=True))
-    print(f"[INFO] 保留 Full 版本: {kept_versions_text}")
-    print(f"[INFO] 保留资产数: {len(kept_records)}")
+    if drop_version is not None:
+        _safe_print(f"[INFO] 移除旧版本资产: {drop_version}")
+    _safe_print(f"[INFO] 保留 Full 版本: {kept_versions_text}")
+    _safe_print(f"[INFO] 保留资产数: {len(kept_records)}")
     return 0
 
 
