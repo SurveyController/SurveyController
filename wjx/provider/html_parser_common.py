@@ -345,7 +345,16 @@ def _soup_question_looks_like_numeric_scale(question_div) -> bool:
         text = _normalize_html_text(anchor.get_text(" ", strip=True))
         if not text:
             try:
-                text = _normalize_html_text(anchor.get("title") or anchor.get("val") or anchor.get("value") or "")
+                text = _normalize_html_text(
+                    anchor.get("title")
+                    or anchor.get("aria-label")
+                    or anchor.get("val")
+                    or anchor.get("value")
+                    or anchor.get("dval")
+                    or anchor.get("data-value")
+                    or anchor.get("data-val")
+                    or ""
+                )
             except Exception:
                 text = ""
         if text:
