@@ -286,7 +286,23 @@ def _cleanup_binaries(b_name):
 
 def _cleanup_datas(d_name):
     norm = d_name.replace('\\', '/')
-    # 这里只裁纯展示资源。lib/tools 里有 traceCli 等启动期会 require 的脚本，不能再删。
+    # Playwright 运行问卷只需要核心 driver 和 trace 入口。
+    # 新版 lib/tools 下的 CLI/MCP 辅助工具会制造很深的 delta 新增路径，
+    # Velopack updater patch 会在这些路径上报 os error 3。
+    if norm.startswith('playwright/driver/package/lib/tools/backend/'):
+        return True
+    if norm.startswith('playwright/driver/package/lib/tools/cli-client/'):
+        return True
+    if norm.startswith('playwright/driver/package/lib/tools/cli-daemon/'):
+        return True
+    if norm.startswith('playwright/driver/package/lib/tools/dashboard/'):
+        return True
+    if norm.startswith('playwright/driver/package/lib/tools/mcp/'):
+        return True
+    if norm.startswith('playwright/driver/package/lib/tools/utils/'):
+        return True
+    if norm == 'playwright/driver/package/lib/tools/exports.js':
+        return True
     if norm.startswith('playwright/driver/package/lib/vite/'):
         return True
     if norm.startswith('playwright/driver/package/types/'):
