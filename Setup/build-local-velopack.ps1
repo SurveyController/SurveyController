@@ -136,6 +136,7 @@ $releaseFeed = Join-Path $releaseDir ("releases.{0}.json" -f $Channel)
 
 Write-Step "Check environment"
 Assert-CommandAvailable -Name "python" -InstallHint "Install Python first and ensure python is available in PATH."
+Assert-CommandAvailable -Name "uv" -InstallHint "Install uv first: powershell -ExecutionPolicy ByPass -c ""irm https://astral.sh/uv/install.ps1 | iex"""
 Assert-CommandAvailable -Name "dotnet" -InstallHint "Install .NET SDK 8 or newer first."
 
 $toolPath = Join-Path $env:USERPROFILE ".dotnet\tools"
@@ -160,10 +161,19 @@ if (-not $SkipClean) {
 }
 
 if (-not $SkipPyInstaller) {
+    Write-Step "Sync Python dependencies"
+    Push-Location $repoRoot
+    try {
+        uv sync --locked --no-dev --group build
+    }
+    finally {
+        Pop-Location
+    }
+
     Write-Step "Run PyInstaller"
     Push-Location $repoRoot
     try {
-        python -m PyInstaller SurveyController.spec --noconfirm --clean
+        uv run python -m PyInstaller SurveyController.spec --noconfirm --clean
     }
     finally {
         Pop-Location

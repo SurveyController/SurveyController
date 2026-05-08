@@ -3,7 +3,7 @@
 感谢愿意改进本项目！在开始之前，请先阅读 [行为准则](CODE_OF_CONDUCT.md)。
 
 ## 快速开始
-- **环境**：Python 3.11+，Windows 10/11。执行 `pip install -r requirements.txt` 安装依赖。
+- **环境**：Python 3.11+，Windows 10/11，uv。先执行 `uv sync` 安装依赖。
 
 <details>
 <summary><b>📂 点击查看项目目录结构</b></summary>
@@ -59,7 +59,8 @@
 ├── LICENSE
 ├── pytest.ini
 ├── README.md
-├── requirements.txt
+├── pyproject.toml
+├── uv.lock
 ├── rthook_pyside6.py
 ├── Setup/
 │   ├── LICENSE/
@@ -147,14 +148,17 @@
    ├── provider/
    │   ├── detection.py
    │   ├── html_parser.py
+   │   ├── html_parser_choice.py
+   │   ├── html_parser_common.py
+   │   ├── html_parser_matrix.py
+   │   ├── html_parser_rules.py
    │   ├── navigation.py
    │   ├── parser.py
    │   ├── runtime.py
    │   ├── runtime_dispatch.py
+   │   ├── runtime_state.py
    │   ├── submission.py
    │   ├── submission_pages.py
-   │   ├── submission_proxy.py
-   │   ├── _submission_core.py
    │   └── questions/
    │       ├── dropdown.py
    │       ├── matrix.py
