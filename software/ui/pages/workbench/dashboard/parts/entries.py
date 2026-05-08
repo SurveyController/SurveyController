@@ -141,7 +141,7 @@ class DashboardEntriesMixin:
     """题目配置表与编辑向导相关方法。"""
 
     if TYPE_CHECKING:
-        question_page: Any
+        workbench_state: Any
         _toast: Any
         entry_table: Any
         count_label: Any
@@ -152,24 +152,23 @@ class DashboardEntriesMixin:
         controller: Any
 
     def _show_add_question_dialog(self):
-        """新增题目 - 委托给 QuestionPage"""
-        self.question_page._add_entry()
-        self._refresh_entry_table()
+        if self.workbench_state.open_add_question_dialog(self.window() or self):
+            self._refresh_entry_table()
 
     def _edit_selected_entries(self):
         selected_rows = self._checked_rows()
         if not selected_rows:
             self._toast("请先勾选要编辑的题目", "warning")
             return
-        entries = self.question_page.get_entries()
-        info = self.question_page.entry_questions_info or []
+        entries = self.workbench_state.get_entries()
+        info = self.workbench_state.entry_questions_info or []
         selected_rows = [row for row in sorted(set(selected_rows)) if 0 <= row < len(entries)]
         if not selected_rows:
             self._toast("未找到可编辑的题目", "warning")
             return
         selected_entries = [entries[row] for row in selected_rows]
         selected_info = [info[row] if row < len(info) else {} for row in selected_rows]
-        if self._run_question_wizard(
+        if self.run_question_wizard(
             selected_entries,
             selected_info,
         ):
@@ -251,7 +250,7 @@ class DashboardEntriesMixin:
             if 0 <= idx < len(entries):
                 entries[idx].psycho_bias = bias
 
-    def _run_question_wizard(
+    def run_question_wizard(
         self,
         entries: List[QuestionEntry],
         info: List[SurveyQuestionMeta | Dict[str, Any]],
@@ -295,15 +294,15 @@ class DashboardEntriesMixin:
         if not box.exec():
             return
 
-        entries = self.question_page.get_entries()
+        entries = self.workbench_state.get_entries()
         for row in sorted(selected_rows, reverse=True):
             if 0 <= row < len(entries):
                 entries.pop(row)
-        self.question_page.set_entries(entries, self.question_page.questions_info)
+        self.workbench_state.set_entries(entries, self.workbench_state.questions_info)
         self._refresh_entry_table()
 
     def _clear_all_entries(self):
-        entries = self.question_page.get_entries()
+        entries = self.workbench_state.get_entries()
         count = len(entries)
         if count <= 0:
             self._toast("当前没有可清空的题目", "warning")
@@ -319,11 +318,11 @@ class DashboardEntriesMixin:
         if not box.exec():
             return
 
-        self.question_page.set_entries([], [])
+        self.workbench_state.set_entries([], [])
         self._refresh_entry_table()
 
     def _refresh_entry_table(self):
-        entries = self.question_page.get_entries()
+        entries = self.workbench_state.get_entries()
         table = self.entry_table
         previous_updates_enabled = table.updatesEnabled()
         previous_sorting_enabled = table.isSortingEnabled()

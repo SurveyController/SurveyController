@@ -26,8 +26,8 @@ from shiboken6 import isValid
 from software.ui.pages.workbench.dashboard.page import DashboardPage
 from software.ui.pages.workbench.reverse_fill.page import ReverseFillPage
 from software.ui.pages.workbench.runtime_panel.main import RuntimePage
-from software.ui.pages.workbench.question_editor.page import QuestionPage
 from software.ui.pages.workbench.strategy.page import QuestionStrategyPage
+from software.ui.pages.workbench.session import WorkbenchRunCoordinator, WorkbenchState
 
 from software.ui.dialogs.contact import ContactDialog
 
@@ -120,21 +120,26 @@ class MainWindow(
         self._boot_splash = create_boot_splash(self)
 
         self.controller = RunController(self)
+        self.workbench_state = WorkbenchState(self)
         # 立即初始化关键页面
         self.runtime_page = RuntimePage(self.controller, self)
-        self.question_page = QuestionPage(self)
         self.strategy_page = QuestionStrategyPage(self)
-        self.reverse_fill_page = ReverseFillPage(self.controller, self)
-        # QuestionPage 仅用作题目配置的数据载体，不作为主界面子页面展示；
-        # 若不隐藏会以默认几何 (0,0,100,30) 叠在窗口左上角，造成标题栏错乱。
-        self.question_page.hide()
         self.dashboard = DashboardPage(
             self.controller,
-            self.question_page,
+            self.workbench_state,
             self.runtime_page,
             self.strategy_page,
             self,
         )
+        self.run_coordinator = WorkbenchRunCoordinator(
+            controller=self.controller,
+            state=self.workbench_state,
+            dashboard=self.dashboard,
+        )
+        self.dashboard.set_run_coordinator(self.run_coordinator)
+        self.reverse_fill_page = ReverseFillPage(self.controller, self)
+        self.run_coordinator.bind_reverse_fill_page(self.reverse_fill_page)
+        self.reverse_fill_page.set_run_coordinator(self.run_coordinator)
 
         # 延迟初始化非关键页面（懒加载）
         self._log_page = None
@@ -148,14 +153,13 @@ class MainWindow(
 
         # 设置对象名称
         self.dashboard.setObjectName("dashboard")
-        self.question_page.setObjectName("question")
         self.runtime_page.setObjectName("runtime")
         self.strategy_page.setObjectName("strategy")
         self.reverse_fill_page.setObjectName("reverse_fill")
         self.reverse_fill_page.set_open_wizard_handler(self._open_reverse_fill_wizard)
         self.reverse_fill_page.surveyUrlChanged.connect(self._sync_dashboard_url_from_reverse_fill)
         self.dashboard.url_edit.textChanged.connect(self._sync_reverse_fill_url_from_dashboard)
-        self.question_page.entriesChanged.connect(lambda _count: self._sync_reverse_fill_context())
+        self.workbench_state.entriesChanged.connect(lambda _count: self._sync_reverse_fill_context())
 
         self._init_navigation()
         self._init_community_hint_badge_state()
@@ -582,9 +586,9 @@ class MainWindow(
                 ),
             )
             return
-        self.question_page.set_questions(info, self.controller.question_entries)
+        self.workbench_state.set_questions(info, self.controller.question_entries)
         self.strategy_page.set_dimension_groups([])
-        self.strategy_page.set_entries(self.question_page.entries, self.question_page.entry_questions_info)
+        self.strategy_page.set_entries(self.workbench_state.entries, self.workbench_state.entry_questions_info)
         self.dashboard.update_question_meta(parsed_title, len(self.controller.question_entries))
         self._sync_reverse_fill_context()
 
@@ -617,8 +621,8 @@ class MainWindow(
                 or ""
             )
             self.reverse_fill_page.set_question_context(
-                self.question_page.questions_info,
-                self.question_page.get_entries(),
+                self.workbench_state.questions_info,
+                self.workbench_state.get_entries(),
                 survey_title=getattr(self.dashboard, "_survey_title", "") or "",
                 survey_provider=survey_provider,
             )
@@ -648,7 +652,7 @@ class MainWindow(
         url_edit.blockSignals(False)
 
     def _open_reverse_fill_wizard(self, issue_question_nums: List[int]) -> None:
-        info = list(self.question_page.questions_info or [])
+        info = list(self.workbench_state.questions_info or [])
         if not info:
             self._toast("当前还没有解析出题目，无法打开配置向导。", "warning")
             return
@@ -686,7 +690,7 @@ class MainWindow(
                 if not selected_info or not selected_entries:
                     self._toast("异常题目配置数据不完整，暂时无法打开配置向导。", "warning")
                     return
-            accepted = self.dashboard._run_question_wizard(selected_entries, selected_info, parsed_title)
+            accepted = self.dashboard.run_question_wizard(selected_entries, selected_info, parsed_title)
         except Exception as exc:
             logging.exception("自动配置向导打开失败")
             log_action(
@@ -699,7 +703,7 @@ class MainWindow(
                 detail=exc,
                 payload={"question_count": len(info or [])},
             )
-            current_entries = self.question_page.get_entries()
+            current_entries = self.workbench_state.get_entries()
             self.dashboard.update_question_meta(parsed_title, len(current_entries))
             self.dashboard._toast(
                 "自动配置向导打开失败，已保留原有题目设置；详细原因已写入日志",
@@ -720,11 +724,11 @@ class MainWindow(
                     question_num = int(getattr(entry, "question_num", 0) or 0)
                     merged_entries.append(copy.deepcopy(updated_entries_by_num.get(question_num, entry)))
                 pending_entries = merged_entries
-            self.question_page.set_questions(info, pending_entries)
+            self.workbench_state.set_questions(info, pending_entries)
             self.controller.question_entries = pending_entries
             if not selected_issue_nums:
                 self.strategy_page.set_dimension_groups([])
-            self.strategy_page.set_entries(self.question_page.entries, self.question_page.entry_questions_info)
+            self.strategy_page.set_entries(self.workbench_state.entries, self.workbench_state.entry_questions_info)
             self._sync_reverse_fill_context()
             self.dashboard.update_question_meta(parsed_title, len(pending_entries))
             log_action(
@@ -737,7 +741,7 @@ class MainWindow(
             )
             return
 
-        current_entries = self.question_page.get_entries()
+        current_entries = self.workbench_state.get_entries()
         self.dashboard.update_question_meta(parsed_title, len(current_entries))
         log_action(
             "UI",

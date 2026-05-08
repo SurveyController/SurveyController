@@ -129,6 +129,7 @@ class ReverseFillPage(SurveyClipboardMixin, QWidget):
         self._last_spec: Optional[ReverseFillSpec] = None
         self._last_error: str = ""
         self._open_wizard_handler: Optional[Callable[[List[int]], None]] = None
+        self._run_coordinator: Optional[Any] = None
         self._issue_question_nums: List[int] = []
         self._clipboard_parse_ticket = 0
         self._parse_requested_from_reverse_fill = False
@@ -391,6 +392,9 @@ class ReverseFillPage(SurveyClipboardMixin, QWidget):
     def set_open_wizard_handler(self, handler: Optional[Callable[[List[int]], None]]) -> None:
         self._open_wizard_handler = handler
 
+    def set_run_coordinator(self, coordinator: Any) -> None:
+        self._run_coordinator = coordinator
+
     def set_question_context(
         self,
         questions_info: Sequence[SurveyQuestionMeta],
@@ -482,15 +486,14 @@ class ReverseFillPage(SurveyClipboardMixin, QWidget):
             self._progress_infobar = infobar
         return infobar
 
-    def _main_dashboard(self) -> Any:
-        return getattr(self.window(), "dashboard", None)
-
     def _has_question_entries(self) -> bool:
         try:
-            dashboard = self._main_dashboard()
-            return bool(dashboard and dashboard._has_question_entries())
+            coordinator = getattr(self, "_run_coordinator", None)
+            if coordinator is not None:
+                return bool(coordinator.has_question_entries())
         except Exception:
-            return False
+            pass
+        return False
 
     def _has_excel_source_path(self) -> bool:
         return bool(self.file_edit.text().strip())
@@ -605,21 +608,21 @@ class ReverseFillPage(SurveyClipboardMixin, QWidget):
         self._show_end_toast_after_cleanup = False
 
     def _on_start_clicked(self) -> None:
-        dashboard = self._main_dashboard()
-        if dashboard is None:
+        coordinator = getattr(self, "_run_coordinator", None)
+        if coordinator is None:
             self._toast("主页尚未完成初始化，暂时不能开始执行", "error", duration=3000)
             return
-        if not self._prepare_reverse_fill_start_target(dashboard):
+        if not self._prepare_reverse_fill_start_target():
             return
-        should_reset = bool(getattr(dashboard, "_completion_notified", False) or getattr(dashboard, "_last_progress", 0) >= 100)
-        dashboard._on_start_clicked(enable_reverse_fill=True)
-        if should_reset:
+        should_reset = bool(coordinator.is_completed_run())
+        started = bool(coordinator.start_reverse_fill())
+        if started and should_reset:
             self.progress_bar.setValue(0)
             self.progress_pct.setText("0%")
             self._last_progress = 0
             self._completion_notified = False
 
-    def _prepare_reverse_fill_start_target(self, dashboard: Any) -> bool:
+    def _prepare_reverse_fill_start_target(self) -> bool:
         if self._last_spec is None:
             self._refresh_preview()
         spec = self._last_spec
@@ -631,23 +634,17 @@ class ReverseFillPage(SurveyClipboardMixin, QWidget):
         if effective_target <= 0:
             self._toast("当前 Excel 没有可提交的有效行，先检查起始行和表格内容", "warning", duration=3200)
             return False
-        target_spin = getattr(dashboard, "target_spin", None)
-        if target_spin is not None and int(target_spin.value()) != effective_target:
-            target_spin.blockSignals(True)
-            target_spin.setValue(effective_target)
-            target_spin.blockSignals(False)
-        try:
-            self.controller.set_runtime_ui_state(target=effective_target)
-        except Exception:
-            logging.debug("同步反填目标份数到运行态失败", exc_info=True)
+        coordinator = getattr(self, "_run_coordinator", None)
+        if coordinator is not None:
+            coordinator.sync_target(effective_target)
         return True
 
     def _on_resume_clicked(self) -> None:
-        dashboard = self._main_dashboard()
-        if dashboard is None:
+        coordinator = getattr(self, "_run_coordinator", None)
+        if coordinator is None:
             self._toast("主页尚未完成初始化，暂时不能继续执行", "error", duration=3000)
             return
-        dashboard._on_resume_clicked()
+        coordinator.resume()
 
     def _context_ready(self) -> bool:
         provider = normalize_survey_provider(self._survey_provider, default="")

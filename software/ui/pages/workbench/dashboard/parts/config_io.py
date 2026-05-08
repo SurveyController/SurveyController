@@ -18,7 +18,7 @@ class DashboardConfigIOMixin:
         controller: Any
         config_drawer: Any
         runtime_page: Any
-        question_page: Any
+        workbench_state: Any
         strategy_page: Any
         _survey_title: str
 
@@ -89,9 +89,9 @@ class DashboardConfigIOMixin:
         # 应用到界面
         self.runtime_page.apply_config(cfg)
         self.apply_config(cfg)
-        self.question_page.set_entries(cfg.question_entries or [], cfg.questions_info or [])
+        self.workbench_state.set_entries(cfg.question_entries or [], cfg.questions_info or [])
         self.strategy_page.set_questions_info(cfg.questions_info or [])
-        self.strategy_page.set_entries(self.question_page.entries, self.question_page.entry_questions_info)
+        self.strategy_page.set_entries(self.workbench_state.entries, self.workbench_state.entry_questions_info)
         self._refresh_entry_table()
         try:
             self.update_question_meta(cfg.survey_title or "", len(cfg.question_entries or []))
@@ -111,8 +111,8 @@ class DashboardConfigIOMixin:
     def _on_save_config(self):
         cfg = build_runtime_config_snapshot(
             self._build_config(),
-            question_entries=self.question_page.get_entries(),
-            questions_info=self.question_page.questions_info,
+            question_entries=self.workbench_state.get_entries(),
+            questions_info=self.workbench_state.questions_info,
         )
         self.controller.config = cfg
         configs_dir = get_user_config_directory()

@@ -35,7 +35,7 @@ class MainWindowLifecycleMixin:
         _close_request_pending: bool
         _close_request_confirmed: bool
         dashboard: Any
-        question_page: Any
+        workbench_state: Any
         runtime_page: Any
         strategy_page: Any
         controller: Any
@@ -101,8 +101,8 @@ class MainWindowLifecycleMixin:
     def _collect_current_config_snapshot(self):
         cfg = build_runtime_config_snapshot(
             self.dashboard._build_config(),
-            question_entries=self.question_page.get_entries(),
-            questions_info=self.question_page.questions_info,
+            question_entries=self.workbench_state.get_entries(),
+            questions_info=self.workbench_state.questions_info,
         )
         self.controller.config = cfg
         return cfg
@@ -212,9 +212,9 @@ class MainWindowLifecycleMixin:
             cfg = RuntimeConfig()
         self.runtime_page.apply_config(cfg)
         self.dashboard.apply_config(cfg)
-        self.question_page.set_entries(cfg.question_entries or [], cfg.questions_info or [])
+        self.workbench_state.set_entries(cfg.question_entries or [], cfg.questions_info or [])
         self.strategy_page.set_questions_info(cfg.questions_info or [])
-        self.strategy_page.set_entries(self.question_page.entries, self.question_page.entry_questions_info)
+        self.strategy_page.set_entries(self.workbench_state.entries, self.workbench_state.entry_questions_info)
         self.strategy_page.set_rules(getattr(cfg, "answer_rules", []) or [])
         self.strategy_page.set_dimension_groups(getattr(cfg, "dimension_groups", []) or [])
         self.controller.refresh_random_ip_counter()

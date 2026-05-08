@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-from types import SimpleNamespace
-
 import software.core.modes.timed_mode as timed_mode
 
 

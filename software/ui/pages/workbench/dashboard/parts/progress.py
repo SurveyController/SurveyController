@@ -75,6 +75,7 @@ class DashboardProgressMixin:
         def _toast(self, text: str, level: str = "info", duration: int = 2000, show_progress: bool = False) -> Optional[Any]: ...
         def show_task_result_windows_notification(self, title: str, message: str) -> None: ...
         def _on_start_clicked(self) -> None: ...
+        def resume_run_from_ui(self) -> None: ...
         def window(self) -> Any: ...
 
     def _init_progress_state(self):
@@ -602,6 +603,9 @@ class DashboardProgressMixin:
             self.resume_btn.hide()
 
     def _on_resume_clicked(self):
+        self.resume_run_from_ui()
+
+    def resume_run_from_ui(self):
         if not getattr(self.controller, "running", False):
             log_action("RUN", "resume_run", "resume_btn", "dashboard", result="blocked")
             return

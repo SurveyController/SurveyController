@@ -51,9 +51,9 @@ from software.ui.widgets.config_drawer import ConfigDrawer
 from software.ui.widgets.full_width_infobar import FullWidthInfoBar
 from software.ui.widgets.no_wheel import NoWheelSpinBox
 from software.ui.controller.run_controller import RunController
-from software.ui.pages.workbench.question_editor.page import QuestionPage
 from software.ui.pages.workbench.runtime_panel.main import RuntimePage
 from software.ui.pages.workbench.strategy.page import QuestionStrategyPage
+from software.ui.pages.workbench.session import WorkbenchState
 
 class DashboardPage(
     SurveyClipboardMixin,
@@ -74,7 +74,7 @@ class DashboardPage(
     def __init__(
         self,
         controller: RunController,
-        question_page: QuestionPage,
+        workbench_state: WorkbenchState,
         runtime_page: RuntimePage,
         strategy_page: QuestionStrategyPage,
         parent=None,
@@ -82,9 +82,10 @@ class DashboardPage(
         super().__init__(parent)
         self.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, False)
         self.controller = controller
-        self.question_page = question_page
+        self.workbench_state = workbench_state
         self.runtime_page = runtime_page
         self.strategy_page = strategy_page
+        self.run_coordinator = None
         self._open_wizard_after_parse = False
         self._survey_title = ""
         self._last_pause_reason = ""
@@ -114,6 +115,9 @@ class DashboardPage(
         self._sync_start_button_state()
         self._refresh_ip_cost_infobar()
         self._init_random_ip_status_refresh()
+
+    def set_run_coordinator(self, coordinator) -> None:
+        self.run_coordinator = coordinator
 
     def _build_ui(self):
         outer = QVBoxLayout(self)
@@ -486,9 +490,9 @@ class DashboardPage(
         # 连接 IP 余额检查信号
         self._ipBalanceChecked.connect(self._on_ip_balance_checked)
         try:
-            self.question_page.entriesChanged.connect(self._on_question_entries_changed)
+            self.workbench_state.entriesChanged.connect(self._on_question_entries_changed)
         except Exception as exc:
-            log_suppressed_exception("_bind_events: self.question_page.entriesChanged.connect(self._on_question_entries_changed)", exc, level=logging.WARNING)
+            log_suppressed_exception("_bind_events: self.workbench_state.entriesChanged.connect(self._on_question_entries_changed)", exc, level=logging.WARNING)
         try:
             self.strategy_page.strategyChanged.connect(self._on_strategy_page_changed)
         except Exception as exc:
@@ -504,7 +508,7 @@ class DashboardPage(
 
     def _has_question_entries(self) -> bool:
         try:
-            return bool(self.question_page.get_entries())
+            return bool(self.workbench_state.has_question_entries())
         except Exception:
             return False
 
@@ -518,7 +522,7 @@ class DashboardPage(
         QDesktopServices.openUrl(QUrl(self.STATUS_PAGE_URL))
 
     def _on_question_entries_changed(self, _count: int):
-        self.strategy_page.set_entries(self.question_page.entries, self.question_page.entry_questions_info)
+        self.strategy_page.set_entries(self.workbench_state.entries, self.workbench_state.entry_questions_info)
         self._refresh_entry_table()
         self._sync_start_button_state()
 
