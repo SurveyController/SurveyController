@@ -13,6 +13,7 @@ from software.core.task import ExecutionConfig, ExecutionState
 import software.core.engine.async_runtime_loop as runtime_loop
 from software.network.browser import ProxyConnectionError
 from software.network.browser.async_owner_pool import _route_runtime_resource
+from software.network.browser.startup import BrowserStartupErrorInfo, BrowserStartupRuntimeError
 
 
 class _FakeScheduler:
@@ -43,10 +44,15 @@ class _FakeBrowserPool:
     def __init__(self, session=None) -> None:
         self.session = session or _FakeSession()
         self.open_calls: list[dict[str, object]] = []
+        self.ensure_ready_calls = 0
 
     async def open_session(self, **kwargs):
         self.open_calls.append(kwargs)
         return self.session
+
+    async def ensure_ready(self):
+        self.ensure_ready_calls += 1
+        return "edge"
 
 
 class _FakeStopPolicy:
@@ -205,6 +211,7 @@ class AsyncRuntimeLoopLargeTests:
 
         opened = await runner._open_session()
         assert opened is session
+        assert browser_pool.ensure_ready_calls == 1
         assert session.driver._thread_name == "Slot-1"
         assert session.driver._session_state is state
         assert session.driver._session_proxy_address == "http://1.1.1.1:80"
@@ -385,6 +392,29 @@ class AsyncRuntimeLoopLargeTests:
         await runner.run()
 
         assert scheduler.release_calls[0]["requeue"] is False
+
+    @pytest.mark.asyncio
+    async def test_run_browser_startup_error_stops_without_requeue(self, monkeypatch) -> None:
+        runner, state, ctx, _loop, scheduler = _build_runner()
+        scheduler.acquire_values = [12]
+        state.release_joint_sample = lambda *_args, **_kwargs: None
+        state.release_reverse_fill_sample = lambda *_args, **_kwargs: None
+        state.mark_thread_finished = lambda *_args, **_kwargs: None
+        monkeypatch.setattr(runner, "_prepare_round_context", lambda: asyncio.sleep(0, result=True))
+        exc = BrowserStartupRuntimeError(
+            "AsyncBrowserOwner 无法启动任何浏览器: driver closed",
+            info=BrowserStartupErrorInfo("launch_failed", "driver closed", False),
+        )
+        monkeypatch.setattr(runner, "_open_session", lambda: (_ for _ in ()).throw(exc))
+        release_flags: list[bool] = []
+        monkeypatch.setattr(runner, "_release_round_resources", lambda *, requeue_reverse_fill: release_flags.append(requeue_reverse_fill))
+
+        await runner.run()
+
+        assert ctx.stop_event.is_set()
+        assert scheduler.release_calls[0]["requeue"] is False
+        assert state.get_terminal_stop_snapshot()[0] == "browser_start_failed"
+        assert release_flags == []
 
     @pytest.mark.asyncio
     async def test_run_generic_exception_records_failure_and_requeues(self, monkeypatch) -> None:

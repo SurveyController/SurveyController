@@ -17,7 +17,9 @@ from software.network.browser.options import (
     _is_browser_disconnected_error,
 )
 from software.network.browser.startup import (
+    BrowserStartupRuntimeError,
     _format_exception_chain,
+    _start_playwright_async_runtime,
     classify_playwright_startup_error,
     is_playwright_startup_environment_error,
 )
@@ -96,8 +98,6 @@ class AsyncBrowserOwner:
                 log_suppressed_exception("AsyncBrowserOwner._shutdown_browser playwright.stop", exc, level=logging.WARNING)
 
     async def _launch_browser(self) -> tuple[Any, str]:
-        from playwright.async_api import async_playwright
-
         candidates = list(self._prefer_browsers or BROWSER_PREFERENCE)
         if not candidates:
             candidates = list(BROWSER_PREFERENCE)
@@ -111,7 +111,7 @@ class AsyncBrowserOwner:
                     window_position=self._window_position,
                     append_no_proxy=False,
                 )
-                pw = await async_playwright().start()
+                pw = await _start_playwright_async_runtime()
                 browser = await pw.chromium.launch(**launch_args)
                 self._playwright = pw
                 self._browser = browser
@@ -136,10 +136,16 @@ class AsyncBrowserOwner:
                         log_suppressed_exception("AsyncBrowserOwner._launch_browser pw.stop", stop_exc, level=logging.WARNING)
                 if is_playwright_startup_environment_error(exc):
                     break
-        friendly = classify_playwright_startup_error(last_exc).message if last_exc is not None else "未知错误"
+        info = classify_playwright_startup_error(last_exc) if last_exc is not None else None
+        if info is None:
+            info = classify_playwright_startup_error(RuntimeError("未知错误"))
+        friendly = info.message
         if last_exc is not None:
-            raise RuntimeError(f"AsyncBrowserOwner 无法启动任何浏览器: {friendly}") from last_exc
-        raise RuntimeError(f"AsyncBrowserOwner 无法启动任何浏览器: {friendly}")
+            raise BrowserStartupRuntimeError(f"AsyncBrowserOwner 无法启动任何浏览器: {friendly}", info=info) from last_exc
+        raise BrowserStartupRuntimeError(
+            f"AsyncBrowserOwner 无法启动任何浏览器: {friendly}",
+            info=info,
+        )
 
     @staticmethod
     def _extract_browser_pid(browser: Any) -> Optional[int]:
@@ -199,6 +205,11 @@ class AsyncBrowserOwner:
             if _is_browser_disconnected_error(exc):
                 self.mark_broken()
             raise
+
+    async def ensure_ready(self) -> str:
+        """确保浏览器底座已启动，但不创建页面上下文。"""
+        _browser, browser_name = await self._ensure_browser()
+        return browser_name
 
     def _release_slot(self) -> None:
         if self._active_contexts > 0:
@@ -289,6 +300,23 @@ class AsyncBrowserOwnerPool:
         for owner in owners:
             try:
                 return await owner.open_session(proxy_address=proxy_address, user_agent=user_agent)
+            except Exception as exc:
+                last_exc = exc
+                if _is_browser_disconnected_error(exc):
+                    continue
+                raise
+        if last_exc is not None:
+            raise last_exc
+        raise RuntimeError("AsyncBrowserOwnerPool 没有可用 owner")
+
+    async def ensure_ready(self) -> str:
+        if self._closed:
+            raise RuntimeError("AsyncBrowserOwnerPool 已关闭")
+        owners = sorted(self._owners, key=self._owner_sort_key)
+        last_exc: Optional[Exception] = None
+        for owner in owners:
+            try:
+                return await owner.ensure_ready()
             except Exception as exc:
                 last_exc = exc
                 if _is_browser_disconnected_error(exc):

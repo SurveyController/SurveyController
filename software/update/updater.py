@@ -8,7 +8,7 @@ from threading import Thread
 from typing import Any, Callable, Optional, cast
 
 import software.network.http as http_client
-from software.app.config import VELOPACK_FEED_URL
+from software.app.config import VELOPACK_CHANNEL, VELOPACK_FEED_URL
 from software.app.version import __VERSION__, GITHUB_API_URL, GITHUB_RELEASES_URL, GITHUB_RELEASE_TAG_URL
 from software.logging.action_logger import log_action
 
@@ -198,7 +198,8 @@ def _safe_create_update_manager():
     if velopack_module is None:
         return None
     try:
-        return velopack_module.UpdateManager(VELOPACK_FEED_URL)
+        options = velopack_module.UpdateOptions(False, 3, VELOPACK_CHANNEL)
+        return velopack_module.UpdateManager(VELOPACK_FEED_URL, options)
     except Exception as exc:
         logging.info("当前环境未安装到 Velopack，跳过更新管理器初始化: %s", exc)
         return None

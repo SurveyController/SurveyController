@@ -25,6 +25,7 @@ from software.core.engine.submission_service import SubmissionService
 from software.core.task import ExecutionConfig, ExecutionState
 from software.network.browser import ProxyConnectionError
 from software.network.browser.async_owner_pool import AsyncBrowserOwnerPool, AsyncBrowserSession
+from software.network.browser.startup import BrowserStartupRuntimeError
 from software.network.proxy.pool import is_proxy_responsive
 from software.network.session_policy import (
     _discard_unresponsive_proxy,
@@ -219,6 +220,8 @@ class AsyncSlotRunner:
     async def _open_session(self) -> Optional[AsyncBrowserSession]:
         if self.run_context.stop_requested():
             return None
+        self._update_step("准备浏览器底座")
+        await self.browser_pool.ensure_ready()
         proxy_address, ua_value = await asyncio.to_thread(self._select_session_proxy_and_ua)
         if self.run_context.stop_requested():
             return None
@@ -383,6 +386,27 @@ class AsyncSlotRunner:
             state=self.state,
         )
 
+    def _handle_browser_startup_error(self, exc: BrowserStartupRuntimeError) -> bool:
+        message = str(exc or "").strip() or "浏览器底座启动失败"
+        logging.error("异步浏览器底座启动失败，已停止本次运行，避免继续消耗随机IP：%s", message)
+        self.stop_policy.record_failure(
+            self.stop_proxy,
+            thread_name=self.slot_label,
+            failure_reason=FailureReason.BROWSER_START_FAILED,
+            status_text="浏览器启动失败",
+            log_message=message,
+            terminal_stop_category="browser_start_failed",
+            force_stop_when_threshold_reached=True,
+            consume_reverse_fill_attempt=False,
+        )
+        self.state.mark_terminal_stop(
+            "browser_start_failed",
+            failure_reason=FailureReason.BROWSER_START_FAILED.value,
+            message=message,
+        )
+        self.run_context.stop_event.set()
+        return True
+
     async def run(self) -> None:
         self._update_status("会话启动", running=True)
         base_browser_preference = list(self.config.browser_preference or BROWSER_PREFERENCE)
@@ -464,6 +488,11 @@ class AsyncSlotRunner:
                 self._release_round_resources(requeue_reverse_fill=True)
             except ProxyConnectionError:
                 if self._handle_proxy_connection_error(session):
+                    should_requeue_dispatch = False
+                    break
+                self._release_round_resources(requeue_reverse_fill=True)
+            except BrowserStartupRuntimeError as exc:
+                if self._handle_browser_startup_error(exc):
                     should_requeue_dispatch = False
                     break
                 self._release_round_resources(requeue_reverse_fill=True)

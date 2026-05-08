@@ -8,6 +8,7 @@ from software.core.questions.utils import (
     extract_text_from_element as _extract_text_from_element,
     smooth_scroll_to_element as _smooth_scroll_to_element,
 )
+from software.core.engine.navigation import _human_scroll_after_question
 from software.network.browser import By, BrowserDriver
 from software.logging.log_utils import log_suppressed_exception
 

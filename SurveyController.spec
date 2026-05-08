@@ -286,10 +286,8 @@ def _cleanup_binaries(b_name):
 
 def _cleanup_datas(d_name):
     norm = d_name.replace('\\', '/')
-    # 第一刀只裁 Playwright 的展示/工具资源，不碰 server/client/chromium 等核心运行链。
+    # 这里只裁纯展示资源。lib/tools 里有 traceCli 等启动期会 require 的脚本，不能再删。
     if norm.startswith('playwright/driver/package/lib/vite/'):
-        return True
-    if norm.startswith('playwright/driver/package/lib/tools/'):
         return True
     if norm.startswith('playwright/driver/package/types/'):
         return True
