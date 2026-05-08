@@ -6,6 +6,7 @@ from __future__ import annotations
 import argparse
 import json
 import re
+import sys
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -124,6 +125,15 @@ def _collect_manifest_files(channel: str, release_dir: Path) -> list[Path]:
     return [candidate] if candidate.exists() else []
 
 
+def _safe_print(message: str) -> None:
+    stdout = sys.stdout
+    encoding = stdout.encoding or "utf-8"
+    try:
+        stdout.write(message + "\n")
+    except UnicodeEncodeError:
+        stdout.buffer.write((message + "\n").encode(encoding, errors="backslashreplace"))
+
+
 def main() -> int:
     args = parse_args()
     release_dir = Path(args.release_dir).resolve()
@@ -152,8 +162,8 @@ def main() -> int:
             path.unlink()
 
     kept_versions_text = ", ".join(str(version) for version in sorted(keep_versions, reverse=True))
-    print(f"[INFO] 保留 Full 版本: {kept_versions_text}")
-    print(f"[INFO] 保留资产数: {len(kept_records)}")
+    _safe_print(f"[INFO] 保留 Full 版本: {kept_versions_text}")
+    _safe_print(f"[INFO] 保留资产数: {len(kept_records)}")
     return 0
 
 
