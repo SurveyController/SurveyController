@@ -57,8 +57,13 @@
 ```bash
 git clone https://github.com/SurveyController/SurveyController.git
 cd SurveyController
-pip install -r requirements.txt
-python SurveyController.py
+uv sync
+uv run python SurveyController.py
+```
+
+如果还没装 `uv`，先执行：
+```powershell
+powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 | iex"
 ```
 
 **环境要求：** Windows 10/11，Python 3.11+，Git，Microsoft Edge

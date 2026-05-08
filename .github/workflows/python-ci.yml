@@ -30,24 +30,26 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v5
 
-      - name: Set up Python
-        uses: actions/setup-python@v6
+      - name: Set up uv
+        uses: astral-sh/setup-uv@08807647e7069bb48b6ef5acd8ec9567f424441b # v8.1.0
         with:
           python-version: "3.11"
-          cache: "pip"
-          cache-dependency-path: requirements.txt
+          enable-cache: true
+          cache-dependency-glob: |
+            pyproject.toml
+            uv.lock
 
       - name: Install dependencies
-        run: python -m pip install -r requirements.txt
+        run: uv sync --locked
 
       - name: Run compile check
-        run: python -m CI.python_checks.compile_check
+        run: uv run python -m CI.python_checks.compile_check
 
       - name: Run Ruff check
-        run: python -m CI.python_checks.ruff_check
+        run: uv run python -m CI.python_checks.ruff_check
 
       - name: Run Pyright check
-        run: python -m CI.python_checks.pyright_check
+        run: uv run python -m CI.python_checks.pyright_check
 
   unit-tests:
     name: Unit Tests
@@ -57,18 +59,20 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v5
 
-      - name: Set up Python
-        uses: actions/setup-python@v6
+      - name: Set up uv
+        uses: astral-sh/setup-uv@08807647e7069bb48b6ef5acd8ec9567f424441b # v8.1.0
         with:
           python-version: "3.11"
-          cache: "pip"
-          cache-dependency-path: requirements.txt
+          enable-cache: true
+          cache-dependency-glob: |
+            pyproject.toml
+            uv.lock
 
       - name: Install dependencies
-        run: python -m pip install -r requirements.txt
+        run: uv sync --locked
 
       - name: Run unit tests
-        run: python -m CI.python_checks.unit_test_check
+        run: uv run python -m CI.python_checks.unit_test_check
 
   startup-smoke:
     name: Import And Window Smoke
@@ -82,21 +86,23 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v5
 
-      - name: Set up Python
-        uses: actions/setup-python@v6
+      - name: Set up uv
+        uses: astral-sh/setup-uv@08807647e7069bb48b6ef5acd8ec9567f424441b # v8.1.0
         with:
           python-version: "3.11"
-          cache: "pip"
-          cache-dependency-path: requirements.txt
+          enable-cache: true
+          cache-dependency-glob: |
+            pyproject.toml
+            uv.lock
 
       - name: Install dependencies
-        run: python -m pip install -r requirements.txt
+        run: uv sync --locked
 
       - name: Run module import check
-        run: python -m CI.python_checks.import_check
+        run: uv run python -m CI.python_checks.import_check
 
       - name: Run main window smoke check
-        run: python -m CI.python_checks.window_smoke_check
+        run: uv run python -m CI.python_checks.window_smoke_check
 
   live-parser-regression:
     name: Live Parser Regression
@@ -109,15 +115,17 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v5
 
-      - name: Set up Python
-        uses: actions/setup-python@v6
+      - name: Set up uv
+        uses: astral-sh/setup-uv@08807647e7069bb48b6ef5acd8ec9567f424441b # v8.1.0
         with:
           python-version: "3.11"
-          cache: "pip"
-          cache-dependency-path: requirements.txt
+          enable-cache: true
+          cache-dependency-glob: |
+            pyproject.toml
+            uv.lock
 
       - name: Install dependencies
-        run: python -m pip install -r requirements.txt
+        run: uv sync --locked
 
       - name: Run live survey parser regression tests
-        run: python -m pytest CI/live_tests/test_survey_parsers.py -ra -vv --tb=short --durations=10 --color=yes
+        run: uv run pytest CI/live_tests/test_survey_parsers.py -ra -vv --tb=short --durations=10 --color=yes

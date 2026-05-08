@@ -24,12 +24,12 @@ def _ensure_supported_httpx() -> None:
         current_version = Version(raw_version)
     except InvalidVersion as exc:
         raise RuntimeError(
-            f"检测到无法识别的 httpx 版本：{raw_version!r}。请安装兼容版本：pip install \"httpx>=0.27,<1\""
+            f"检测到无法识别的 httpx 版本：{raw_version!r}。请在项目根目录执行 uv sync，重新装回锁定依赖。"
         ) from exc
     if current_version < _MIN_HTTPX_VERSION:
         raise RuntimeError(
             f"当前 httpx 版本过旧：{current_version}。本项目需要 httpx>={_MIN_HTTPX_VERSION},<1。"
-            "请执行：pip install -U \"httpx>=0.27,<1\""
+            "请在项目根目录执行：uv sync"
         )
 
 
