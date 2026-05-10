@@ -12,9 +12,9 @@
 - Python 3.13.3
 - Git
 - Microsoft Edge 浏览器
-- `uv`
+- uv 包管理器
 
-安装 `uv`（如果没有的话）：
+安装 uv（如果没有的话）：
 
 ```powershell
 powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 | iex"
@@ -39,6 +39,7 @@ https://github.com/你的用户名/SurveyController
 ### 2. 克隆自己的 Fork
 
 不要直接克隆主仓库——如果你没有被赋予直接推送到主仓库的权限。
+
 假设你的 Fork 仓库名就是 SurveyController，先从你的 Fork 克隆到本地：
 
 ```bash
@@ -48,7 +49,7 @@ cd SurveyController
 
 ### 3. 安装依赖并启动项目
 
-进入项目目录后，用 `uv` 安装依赖：
+进入项目目录后，用 uv 安装依赖：
 
 ```bash
 uv sync
@@ -56,6 +57,7 @@ uv sync
 
 > [!NOTE]
 > 本项目默认使用 Windows 操作系统自带的 Microsoft Edge 浏览器
+>
 > **不需要另外执行** `playwright install chromium`。
 
 启动程序：
@@ -77,7 +79,7 @@ git remote -v
 
 ```text
 origin    你的 Fork 地址
-upstream  主仓库地址
+upstream  https://github.com/SurveyController/SurveyController.git
 ```
 
 **每次开始新功能前，先同步主仓库最新代码：**

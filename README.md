@@ -44,11 +44,6 @@
 > [!TIP]
 > **安装包：** 前往 [发行版](https://github.com/SurveyController/SurveyController/releases/latest) 下载 `SurveyController_<版本>_setup.exe`
 
-> [!NOTE]
-> Windows 安装版现已切到 Velopack 更新链路。
-> 第一次从旧版 Inno Setup 安装迁移过来时，需要手动安装一次新版安装包；
-> 之后应用内更新会走增量更新，不再每次重下完整安装器。
-
 ### 从源码运行
 
 如果你想参与测试最新功能或提交 Pull Request，可以参考以下步骤

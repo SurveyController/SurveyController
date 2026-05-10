@@ -186,21 +186,19 @@ class RunControllerExecutionMixin:
         )
         adapter.random_ip_enabled_var.set(bool(random_ip_enabled))
         self._sync_adapter_ui_bridge(adapter)
-        adapter.refresh_random_ip_counter = lambda *, async_mode=True, _adapter=adapter: (
-            self.refresh_random_ip_counter(  # type: ignore[attr-defined]
+        adapter.bind_runtime_actions(
+            refresh_random_ip_counter=lambda async_mode, _adapter=adapter: self.refresh_random_ip_counter(
                 adapter=_adapter,
                 async_mode=async_mode,
-            )
-        )
-        adapter.toggle_random_ip = lambda enabled=None, _adapter=adapter: self.toggle_random_ip(  # type: ignore[attr-defined]
-            _adapter.is_random_ip_enabled() if enabled is None else enabled,
-            adapter=_adapter,
-        )
-        adapter.handle_random_ip_submission = lambda stop_signal=None, _adapter=adapter: (
-            self.handle_random_ip_submission(  # type: ignore[attr-defined]
+            ),
+            toggle_random_ip=lambda enabled, _adapter=adapter: self.toggle_random_ip(
+                _adapter.is_random_ip_enabled() if enabled is None else bool(enabled),
+                adapter=_adapter,
+            ),
+            handle_random_ip_submission=lambda stop_signal=None, _adapter=adapter: self.handle_random_ip_submission(
                 stop_signal=stop_signal,
                 adapter=_adapter,
-            )
+            ),
         )
         return adapter
 

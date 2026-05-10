@@ -45,3 +45,18 @@ class EngineGuiAdapterCleanupTests:
         adapter.cleanup_browsers()
         assert events == ['first', 'late']
         assert adapter.active_drivers == []
+
+    def test_runtime_actions_use_bound_callbacks(self) -> None:
+        adapter = self._build_adapter()
+        events: list[object] = []
+        adapter.bind_runtime_actions(
+            refresh_random_ip_counter=lambda async_mode: events.append(("refresh", async_mode)),
+            toggle_random_ip=lambda enabled: events.append(("toggle", enabled)) or bool(enabled),
+            handle_random_ip_submission=lambda stop_signal: events.append(("submit", stop_signal)),
+        )
+
+        adapter.refresh_random_ip_counter(async_mode=False)
+        assert adapter.toggle_random_ip(True) is True
+        adapter.handle_random_ip_submission("stop")
+
+        assert events == [("refresh", False), ("toggle", True), ("submit", "stop")]

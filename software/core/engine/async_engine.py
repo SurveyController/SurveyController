@@ -10,10 +10,10 @@ from typing import Any, Callable, Optional
 
 from software.app.config import BROWSER_PREFERENCE
 from software.core.engine.async_events import AsyncRunContext
-from software.core.engine.async_runtime import _build_owner_window_positions
 from software.core.engine.async_runtime_loop import AsyncSlotRunner
 from software.core.engine.async_scheduler import AsyncScheduler
 from software.core.engine.async_status_bus import AsyncStatusBus
+from software.core.engine.runtime_layout import build_owner_window_positions
 from software.core.task import ExecutionConfig, ExecutionState
 from software.network.browser.async_compat import AsyncLoopPortal
 from software.network.browser.async_owner_pool import AsyncBrowserOwnerPool, BrowserPoolConfig
@@ -96,7 +96,7 @@ class AsyncRuntimeEngine:
             portal=portal,
             headless=bool(config.headless_mode),
             prefer_browsers=list(config.browser_preference or BROWSER_PREFERENCE),
-            window_positions=_build_owner_window_positions(pool_config.owner_count),
+            window_positions=build_owner_window_positions(pool_config.owner_count),
         )
         scheduler = AsyncScheduler(concurrency=worker_count)
         run_context = AsyncRunContext(

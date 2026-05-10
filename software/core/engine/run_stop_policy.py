@@ -8,6 +8,10 @@ import time
 from typing import Any, Optional
 
 from software.core.engine.failure_reason import FailureReason
+from software.core.engine.runtime_ui_bridge import (
+    handle_random_ip_submission as trigger_random_ip_submission,
+)
+from software.core.engine.runtime_ui_bridge import wait_if_paused as runtime_wait_if_paused
 from software.core.engine.stop_signal import StopSignalLike
 from software.core.task import ExecutionConfig, ExecutionState
 
@@ -22,8 +26,7 @@ class RunStopPolicy:
 
     def wait_if_paused(self, stop_signal: Optional[StopSignalLike]) -> None:
         try:
-            if self.gui_instance:
-                self.gui_instance.wait_if_paused(stop_signal)
+            runtime_wait_if_paused(self.gui_instance, stop_signal)
         except Exception:
             logging.info("暂停等待失败", exc_info=True)
 
@@ -177,9 +180,10 @@ class RunStopPolicy:
         if trigger_target_stop:
             self.trigger_target_reached_stop(stop_signal)
         if should_handle_random_ip:
-            handler = getattr(self.gui_instance, "handle_random_ip_submission", None)
-            if callable(handler):
-                handler(stop_signal)
+            try:
+                trigger_random_ip_submission(self.gui_instance, stop_signal)
+            except Exception:
+                logging.info("提交成功后刷新随机IP失败", exc_info=True)
         return should_break or trigger_target_stop
 
     def trigger_target_reached_stop(self, stop_signal: Optional[StopSignalLike]) -> None:

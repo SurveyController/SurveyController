@@ -19,6 +19,9 @@ from software.core.engine.page_loader import load_survey_page as _page_loader_lo
 from software.core.engine.page_load_probe import wait_for_page_probe
 from software.core.engine.provider_common import ensure_joint_psychometric_answer_plan
 from software.core.engine.run_stop_policy import RunStopPolicy
+from software.core.engine.runtime_ui_bridge import (
+    handle_random_ip_submission as trigger_random_ip_submission,
+)
 from software.core.engine.runtime_error_handlers import handle_ai_runtime_error as _handle_ai_runtime_error_impl
 from software.core.engine.runtime_error_handlers import handle_proxy_connection_error as _handle_proxy_connection_error_impl
 from software.core.engine.submission_service import SubmissionService
@@ -304,9 +307,7 @@ class AsyncSlotRunner:
             self.run_context.stop_event.set()
         self._update_status("设备达到填写次数上限")
         if not stopped and not self.run_context.stop_requested() and self.config.random_proxy_ip_enabled:
-            handler = getattr(self.gui_instance, "handle_random_ip_submission", None)
-            if callable(handler):
-                await asyncio.to_thread(handler, self.stop_proxy)
+            await asyncio.to_thread(trigger_random_ip_submission, self.gui_instance, self.stop_proxy)
         return True
 
     async def _finalize_after_submit(self, session: AsyncBrowserSession) -> Any:

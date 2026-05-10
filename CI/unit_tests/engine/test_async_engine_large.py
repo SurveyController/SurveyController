@@ -229,7 +229,7 @@ class AsyncRuntimeEngineLargeTests:
         monkeypatch.setattr(async_engine, "AsyncScheduler", _FakeScheduler)
         monkeypatch.setattr(async_engine, "AsyncRunContext", lambda **kwargs: SimpleNamespace(**kwargs))
         monkeypatch.setattr(async_engine, "AsyncSlotRunner", _FakeRunner)
-        monkeypatch.setattr(async_engine, "_build_owner_window_positions", lambda owner_count: [(50, 50)] * owner_count)
+        monkeypatch.setattr(async_engine, "build_owner_window_positions", lambda owner_count: [(50, 50)] * owner_count)
 
         with pytest.raises(RuntimeError, match="slot boom"):
             await engine._run(config=config, state=state, gui_instance="gui")
