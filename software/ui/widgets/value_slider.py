@@ -66,6 +66,4 @@ class ValueSlider(QWidget):
         return int(self.slider.value())
 
     def blockSignals(self, block: bool) -> bool:  # type: ignore[override]
-        previous = self.slider.blockSignals(block)
-        super().blockSignals(block)
-        return previous
+        return super().blockSignals(block)
