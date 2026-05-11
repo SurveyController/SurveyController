@@ -132,7 +132,10 @@ def _resolve_proxy_request_num_locked(ctx: ExecutionState) -> int:
     remaining_to_start = max(0, int(ctx.config.target_num or 0) - int(ctx.cur_num or 0) - active_count)
     if remaining_to_start <= 0:
         return 0
-    return max(1, min(waiting_count, remaining_to_start, 80))
+    parallel_capacity = max(1, int(getattr(ctx.config, "num_threads", 1) or 1))
+    idle_capacity = max(0, parallel_capacity - active_count)
+    request_count = max(waiting_count, idle_capacity)
+    return max(1, min(request_count, remaining_to_start, 80))
 
 
 def _should_stop_proxy_wait(
@@ -166,6 +169,21 @@ async def _wait_for_next_proxy_cycle_async(
     )
 
 
+async def _acquire_proxy_fetch_lock_async(
+    ctx: ExecutionState,
+    stop_signal: Optional[StopSignalLike],
+) -> bool:
+    while not _should_stop_proxy_wait(ctx, stop_signal):
+        acquired = await asyncio.to_thread(
+            ctx._proxy_fetch_lock.acquire,
+            True,
+            _PROXY_WAIT_POLL_SECONDS,
+        )
+        if acquired:
+            return True
+    return False
+
+
 async def _select_proxy_for_session_async(
     ctx: ExecutionState,
     thread_name: str = "",
@@ -192,7 +210,10 @@ async def _select_proxy_for_session_async(
                 return _mark_proxy_in_use(ctx, thread_name, selected)
 
             # 代理池为空时，使用全局 fetch 锁避免多线程并发重复请求代理 API（会快速耗尽额度）
-            with ctx._proxy_fetch_lock:
+            fetch_lock_acquired = await _acquire_proxy_fetch_lock_async(ctx, stop_signal)
+            if not fetch_lock_acquired:
+                return None
+            try:
                 with ctx.lock:
                     selected = _pop_available_proxy_lease_locked(ctx)
                     if selected is None:
@@ -243,6 +264,8 @@ async def _select_proxy_for_session_async(
                             ctx.notify_runtime_change()
                         if selected is not None:
                             return _mark_proxy_in_use(ctx, thread_name, selected)
+            finally:
+                ctx._proxy_fetch_lock.release()
 
             if not wait:
                 return None

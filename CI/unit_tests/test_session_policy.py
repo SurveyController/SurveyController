@@ -11,13 +11,28 @@ class SessionPolicyTests:
         assert not session_policy._record_bad_proxy_and_maybe_pause(ExecutionState(), object())
 
     def test_resolve_proxy_request_num_caps_by_waiters_remaining_and_global_limit(self) -> None:
-        ctx = ExecutionState(config=ExecutionConfig(target_num=200))
+        ctx = ExecutionState(config=ExecutionConfig(target_num=200, num_threads=32))
         ctx.cur_num = 10
         ctx.proxy_waiting_threads = 120
         ctx.proxy_in_use_by_thread = {'Worker-1': ProxyLease(address='http://1.1.1.1:8000'), 'Worker-2': ProxyLease(address='http://2.2.2.2:8000')}
         assert session_policy._resolve_proxy_request_num_locked(ctx) == 80
         ctx.config.target_num = 12
         assert session_policy._resolve_proxy_request_num_locked(ctx) == 0
+
+    def test_resolve_proxy_request_num_prefills_available_parallel_slots(self) -> None:
+        ctx = ExecutionState(config=ExecutionConfig(target_num=64, num_threads=32))
+        ctx.cur_num = 0
+        ctx.proxy_waiting_threads = 1
+        assert session_policy._resolve_proxy_request_num_locked(ctx) == 32
+
+        ctx.proxy_in_use_by_thread = {
+            f'Worker-{index}': ProxyLease(address=f'http://1.1.1.{index}:8000')
+            for index in range(1, 9)
+        }
+        assert session_policy._resolve_proxy_request_num_locked(ctx) == 24
+
+        ctx.config.target_num = 20
+        assert session_policy._resolve_proxy_request_num_locked(ctx) == 12
 
     def test_purge_unusable_proxy_pool_removes_invalid_duplicate_unpoolable_and_expiring_items(self) -> None:
         ctx = ExecutionState(config=ExecutionConfig())
@@ -149,6 +164,25 @@ class SessionPolicyTests:
             selected = asyncio.run(session_policy._select_proxy_for_session_async(ctx, 'Worker-1', stop_signal=ctx.stop_event, wait=True))
         assert selected == 'http://9.9.9.9:8000'
         assert ctx.proxy_in_use_by_thread['Worker-1'].address == 'http://9.9.9.9:8000'
+
+    def test_async_proxy_fetch_lock_wait_does_not_block_event_loop(self) -> None:
+        ctx = ExecutionState(config=ExecutionConfig(random_proxy_ip_enabled=True, target_num=1))
+        ctx._proxy_fetch_lock.acquire()
+
+        async def scenario() -> None:
+            async def release_later() -> None:
+                await asyncio.sleep(0.05)
+                ctx._proxy_fetch_lock.release()
+
+            waiter = asyncio.create_task(session_policy._acquire_proxy_fetch_lock_async(ctx, ctx.stop_event))
+            releaser = asyncio.create_task(release_later())
+            await asyncio.wait_for(asyncio.sleep(0.01), timeout=0.1)
+            assert not waiter.done()
+            assert await asyncio.wait_for(waiter, timeout=0.2)
+            ctx._proxy_fetch_lock.release()
+            await releaser
+
+        asyncio.run(scenario())
 
     def test_discard_unresponsive_proxy_removes_matching_proxy_from_pool(self) -> None:
         ctx = ExecutionState(config=ExecutionConfig())
