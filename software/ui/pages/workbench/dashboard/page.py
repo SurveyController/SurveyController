@@ -204,7 +204,7 @@ class DashboardPage(
         exec_card = CardWidget(self)
         exec_layout = QVBoxLayout(exec_card)
         exec_layout.setContentsMargins(12, 12, 12, 12)
-        exec_layout.setSpacing(10)
+        exec_layout.setSpacing(6)
 
         # 头部标题与跳转按钮
         title_row = QHBoxLayout()
@@ -217,7 +217,7 @@ class DashboardPage(
 
         left_column = QVBoxLayout()
         left_column.setContentsMargins(0, 0, 0, 0)
-        left_column.setSpacing(12)
+        left_column.setSpacing(8)
 
         spin_row = QHBoxLayout()
         spin_row.addWidget(BodyLabel("目标份数：", self))
@@ -234,6 +234,10 @@ class DashboardPage(
         spin_row.addWidget(self.thread_slider)
         spin_row.addStretch(1)
         left_column.addLayout(spin_row)
+
+        self.time_estimate_label = BodyLabel("预计所需 --", self)
+        self.time_estimate_label.setStyleSheet("color: #7a7a7a; font-size: 12px;")
+        left_column.addWidget(self.time_estimate_label)
 
         self.random_ip_row = RandomIpToggleRow(BodyLabel, self)
         self.random_ip_cb = self.random_ip_row.toggle_button
@@ -551,6 +555,54 @@ class DashboardPage(
             return bool(self.workbench_state.has_question_entries())
         except Exception:
             return False
+
+    @staticmethod
+    def _format_estimate_duration(seconds: int) -> str:
+        seconds = max(0, int(seconds or 0))
+        if seconds < 60:
+            return f"{seconds}秒"
+        minutes, sec = divmod(seconds, 60)
+        if minutes < 60:
+            return f"{minutes}分{sec}秒" if sec else f"{minutes}分"
+        hours, minute = divmod(minutes, 60)
+        return f"{hours}小时{minute}分" if minute else f"{hours}小时"
+
+    @staticmethod
+    def _range_max_seconds(value) -> int:
+        if isinstance(value, (list, tuple)) and value:
+            try:
+                return max(0, int(value[-1]))
+            except Exception:
+                return 0
+        if isinstance(value, (list, tuple)):
+            return 0
+        try:
+            return max(0, int(value or 0))
+        except Exception:
+            return 0
+
+    def _refresh_time_estimate(self, current: int | None = None, target: int | None = None) -> None:
+        label = getattr(self, "time_estimate_label", None)
+        if label is None:
+            return
+        try:
+            state = self.controller.get_runtime_ui_state()
+            effective_target = max(1, int(target if target is not None else self.target_spin.value()))
+            completed = max(0, int(current if current is not None else 0))
+            threads = max(1, int(self.thread_spin.value()))
+            answer_seconds = self._range_max_seconds(state.get("answer_duration", (0, 0)))
+            interval_seconds = self._range_max_seconds(state.get("submit_interval", (0, 0)))
+            per_item_seconds = max(1, answer_seconds + interval_seconds)
+            total_seconds = int((effective_target + threads - 1) // threads * per_item_seconds)
+            remaining_items = max(0, effective_target - completed)
+            remaining_seconds = int((remaining_items + threads - 1) // threads * per_item_seconds)
+            if bool(getattr(self.controller, "running", False)):
+                text = f"预计剩余 {self._format_estimate_duration(remaining_seconds)}"
+            else:
+                text = f"预计所需 {self._format_estimate_duration(total_seconds)}"
+        except Exception:
+            text = "预计所需 --"
+        label.setText(text)
 
     def _sync_start_button_state(self, running: Optional[bool] = None):
         if running is None:

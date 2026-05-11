@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import logging
 import threading
-from datetime import datetime
 from typing import TYPE_CHECKING, Any, Optional, cast
 from PySide6.QtGui import QColor
 from PySide6.QtWidgets import QDialog
@@ -13,13 +12,10 @@ from qfluentwidgets import FluentIcon, themeColor
 import software.network.http as http_client
 
 from software.ui.dialogs.contact import ContactDialog
-from software.app.config import DEFAULT_HTTP_HEADERS, STATUS_ENDPOINT
+from software.app.config import DEFAULT_HTTP_HEADERS, IP_EXTRACT_ENDPOINT, STATUS_ENDPOINT
 from software.logging.log_utils import log_suppressed_exception
 from software.ui.controller.run_controller_parts.runtime_constants import (
     STARTUP_STATUS_TIMEOUT_SECONDS,
-    STATUS_MONITOR_RANDOM_IP,
-    STATUS_PAGE_BASE_URL,
-    STATUS_PAGE_SLUG,
 )
 from software.ui.helpers.proxy_access import (
     PROXY_SOURCE_BENEFIT,
@@ -157,86 +153,30 @@ class DashboardRandomIPMixin:
             )
 
     def _fetch_random_ip_heartbeat_status(self) -> dict[str, str]:
-        heartbeat_url = f"{STATUS_PAGE_BASE_URL}/api/status-page/heartbeat/{STATUS_PAGE_SLUG}"
-        response = http_client.get(
-            heartbeat_url,
+        headers = {
+            **DEFAULT_HTTP_HEADERS,
+            "X-Health-Token": "status-rzib9lqpuk3httr4",
+            "Content-Type": "application/json",
+        }
+        response = http_client.post(
+            IP_EXTRACT_ENDPOINT,
+            json={},
             timeout=STARTUP_STATUS_TIMEOUT_SECONDS,
-            headers=DEFAULT_HTTP_HEADERS,
+            headers=headers,
             proxies={},
         )
-        heartbeat_map = response.json().get("heartbeatList") or {}
-        heartbeat_list = (
-            heartbeat_map.get(str(STATUS_MONITOR_RANDOM_IP))
-            or heartbeat_map.get(STATUS_MONITOR_RANDOM_IP)
-            or []
-        )
-        latest = heartbeat_list[-1] if isinstance(heartbeat_list, list) and heartbeat_list else {}
-        return self._build_random_ip_heartbeat_status(latest)
-
-    @staticmethod
-    def _build_random_ip_heartbeat_status(latest: Any) -> dict[str, str]:
-        if not isinstance(latest, dict) or not latest:
-            return {
-                "level": "warning",
-                "text": "服务状态未知",
-                "tooltip": "状态页没有返回随机IP提取服务的最新心跳。",
-            }
-
-        raw_status = latest.get("status")
-        try:
-            status = int(raw_status) if raw_status not in (None, "") else 0
-        except Exception:
-            status = 0
-
-        time_text = str(latest.get("time") or "").strip()
-        msg = str(latest.get("msg") or "").strip()
-        ping = latest.get("ping")
-        age_seconds = DashboardRandomIPMixin._parse_status_age_seconds(time_text)
-
-        detail_parts = []
-        if time_text:
-            detail_parts.append(f"最近心跳：{time_text}")
-        if ping not in (None, ""):
-            detail_parts.append(f"响应耗时：{ping} ms")
-        if msg:
-            detail_parts.append(f"返回信息：{msg}")
-
-        if status == 1 and age_seconds is not None and age_seconds > 120:
-            detail_parts.append(f"距离现在约 {age_seconds} 秒，已经偏久")
-            return {
-                "level": "warning",
-                "text": "服务状态延迟",
-                "tooltip": "；".join(detail_parts) or "随机IP提取最近心跳已经偏久，建议稍后再看。",
-            }
-        if status == 1:
+        status_code = int(getattr(response, "status_code", 0) or 0)
+        if 200 <= status_code < 300:
             return {
                 "level": "success",
                 "text": "服务可用",
-                "tooltip": "；".join(detail_parts) or "随机IP提取服务当前正常。",
+                "tooltip": f"随机IP提取接口返回 HTTP {status_code}。",
             }
         return {
             "level": "error",
             "text": "服务异常",
-            "tooltip": "；".join(detail_parts) or "随机IP提取服务当前状态异常。",
+            "tooltip": f"随机IP提取接口返回 HTTP {status_code}。",
         }
-
-    @staticmethod
-    def _parse_status_age_seconds(time_text: str) -> Optional[int]:
-        raw = str(time_text or "").strip()
-        if not raw:
-            return None
-        try:
-            heartbeat_time = datetime.strptime(raw, "%Y-%m-%d %H:%M:%S.%f")
-        except ValueError:
-            try:
-                heartbeat_time = datetime.strptime(raw, "%Y-%m-%d %H:%M:%S")
-            except ValueError:
-                return None
-        age_candidates = [
-            abs((datetime.now() - heartbeat_time).total_seconds()),
-            abs((datetime.utcnow() - heartbeat_time).total_seconds()),
-        ]
-        return max(0, int(min(age_candidates)))
 
     def _apply_random_ip_heartbeat_status(self, payload: Any) -> None:
         data = payload if isinstance(payload, dict) else {}

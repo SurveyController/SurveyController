@@ -69,7 +69,7 @@ class RuntimeUiStateStore:
         if key == "proxy_source":
             normalized = str(value or "default").strip().lower()
             return normalized if normalized in {"default", "benefit", "custom"} else "default"
-        if key == "answer_duration":
+        if key in {"answer_duration", "submit_interval"}:
             raw = value if isinstance(value, (list, tuple)) else (0, 0)
             low = max(0, int(raw[0] if len(raw) >= 1 else 0))
             high = max(low, int(raw[1] if len(raw) >= 2 else low))
@@ -99,6 +99,7 @@ class RuntimeUiStateStore:
             headless_mode=getattr(config, "headless_mode", True),
             timed_mode_enabled=getattr(config, "timed_mode_enabled", False),
             proxy_source=getattr(config, "proxy_source", "default"),
+            submit_interval=getattr(config, "submit_interval", (0, 0)),
             answer_duration=getattr(config, "answer_duration", (0, 0)),
         )
 

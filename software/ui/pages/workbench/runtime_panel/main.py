@@ -77,6 +77,7 @@ class RuntimePage(ScrollArea):
             headless_mode=self.headless_card.switchButton.isChecked(),
             timed_mode_enabled=self.timed_card.switchButton.isChecked(),
             proxy_source=self._get_selected_proxy_source(),
+            submit_interval=self._card_value_as_range(self.interval_card),
             answer_duration=self._card_value_as_range(self.answer_card),
         )
 
@@ -249,7 +250,8 @@ class RuntimePage(ScrollArea):
             payload_factory=lambda _index: {"source": self._get_selected_proxy_source()},
             forward_signal_args=False,
         )
-        self.answer_card.valueChanged.connect(self._on_answer_duration_changed)
+        self.interval_card.valueChanged.connect(self._on_time_settings_changed)
+        self.answer_card.valueChanged.connect(self._on_time_settings_changed)
         bind_logged_action(
             self.reliability_card.switchButton.checkedChanged,
             self._on_reliability_mode_toggled,
@@ -512,9 +514,10 @@ class RuntimePage(ScrollArea):
             payload={"source": source},
         )
 
-    def _on_answer_duration_changed(self, _value: int):
+    def _on_time_settings_changed(self, _value: int):
         self._evaluate_benefit_proxy_compatibility(show_tip=True)
         self.controller.set_runtime_ui_state(
+            submit_interval=self._card_value_as_range(self.interval_card),
             answer_duration=self._card_value_as_range(self.answer_card)
         )
 
