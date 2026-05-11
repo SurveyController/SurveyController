@@ -29,6 +29,7 @@ from software.ui.pages.workbench.runtime_panel.cards import (
     TimedModeSettingCard,
 )
 from software.ui.widgets.setting_cards import (
+    SliderSettingCard,
     SpinBoxSettingCard,
     SwitchSettingCard,
 )
@@ -71,7 +72,7 @@ class RuntimePage(ScrollArea):
         self.controller.set_runtime_ui_state(
             emit=False,
             target=self.target_card.spinBox.value(),
-            threads=self.thread_card.spinBox.value(),
+            threads=self.thread_card.slider.value(),
             random_ip_enabled=self.random_ip_card.switchButton.isChecked(),
             headless_mode=self.headless_card.switchButton.isChecked(),
             timed_mode_enabled=self.timed_card.switchButton.isChecked(),
@@ -106,7 +107,7 @@ class RuntimePage(ScrollArea):
             default=10,
             parent=run_group,
         )
-        self.thread_card = SpinBoxSettingCard(
+        self.thread_card = SliderSettingCard(
             FluentIcon.APPLICATION,
             "并发会话",
             "控制同时运行的独立问卷会话数量，程序会自动复用更少的浏览器底座",
@@ -117,7 +118,6 @@ class RuntimePage(ScrollArea):
         )
         spin_width = self.target_card.suggestSpinBoxWidthForDigits(4)
         self.target_card.setSpinBoxWidth(spin_width)
-        self.thread_card.setSpinBoxWidth(spin_width)
 
         self.reliability_card = ReliabilitySettingCard(parent=run_group)
         self.reliability_card.setChecked(True)
@@ -191,7 +191,7 @@ class RuntimePage(ScrollArea):
         self.target_card.spinBox.valueChanged.connect(
             lambda value: self.controller.set_runtime_ui_state(target=int(value))
         )
-        self.thread_card.spinBox.valueChanged.connect(
+        self.thread_card.slider.valueChanged.connect(
             lambda value: self.controller.set_runtime_ui_state(threads=int(value))
         )
         bind_logged_action(
@@ -377,12 +377,12 @@ class RuntimePage(ScrollArea):
 
     def _apply_thread_limit_by_headless(self, headless_enabled: bool) -> bool:
         max_threads = self._resolve_thread_max(bool(headless_enabled))
-        previous_value = int(self.thread_card.spinBox.value())
+        previous_value = int(self.thread_card.slider.value())
         clamped = previous_value > max_threads
 
-        self.thread_card.spinBox.setRange(self.MIN_THREADS, max_threads)
+        self.thread_card.slider.setRange(self.MIN_THREADS, max_threads)
         if clamped:
-            self.thread_card.spinBox.setValue(max_threads)
+            self.thread_card.slider.setValue(max_threads)
 
         return clamped
 
@@ -400,7 +400,7 @@ class RuntimePage(ScrollArea):
         clamped = self._apply_thread_limit_by_headless(bool(enabled))
         self.controller.set_runtime_ui_state(
             headless_mode=bool(enabled),
-            threads=int(self.thread_card.spinBox.value()),
+            threads=int(self.thread_card.slider.value()),
         )
         log_action(
             "CONFIG",
@@ -410,7 +410,7 @@ class RuntimePage(ScrollArea):
             result="changed",
             payload={
                 "enabled": bool(enabled),
-                "threads": int(self.thread_card.spinBox.value()),
+                "threads": int(self.thread_card.slider.value()),
                 "clamped": clamped,
             },
         )
@@ -577,7 +577,7 @@ class RuntimePage(ScrollArea):
             self.MIN_THREADS,
             min(
                 self._resolve_thread_max(self.headless_card.isChecked()),
-                self.thread_card.spinBox.value(),
+                self.thread_card.slider.value(),
             ),
         )
         cfg.browser_preference = []  # 固定使用默认顺序：Edge → Chrome
@@ -669,7 +669,7 @@ class RuntimePage(ScrollArea):
             self.headless_card.setChecked(getattr(cfg, "headless_mode", True))
             self._apply_thread_limit_by_headless(self.headless_card.isChecked())
             max_threads = self._resolve_thread_max(self.headless_card.isChecked())
-            self.thread_card.spinBox.setValue(
+            self.thread_card.slider.setValue(
                 max(
                     self.MIN_THREADS,
                     min(max_threads, int(cfg.threads or self.MIN_THREADS)),
@@ -730,10 +730,10 @@ class RuntimePage(ScrollArea):
                 self._suppress_headless_tip = False
         if headless is not None:
             self._apply_thread_limit_by_headless(bool(headless))
-        if threads is not None and int(self.thread_card.spinBox.value()) != int(threads):
-            self.thread_card.spinBox.blockSignals(True)
-            self.thread_card.spinBox.setValue(max(1, int(threads)))
-            self.thread_card.spinBox.blockSignals(False)
+        if threads is not None and int(self.thread_card.slider.value()) != int(threads):
+            self.thread_card.slider.blockSignals(True)
+            self.thread_card.slider.setValue(max(1, int(threads)))
+            self.thread_card.slider.blockSignals(False)
 
         random_ip_enabled = state.get("random_ip_enabled")
         if random_ip_enabled is not None and bool(

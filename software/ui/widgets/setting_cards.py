@@ -12,6 +12,7 @@ from qfluentwidgets import (
 )
 
 from software.ui.widgets.no_wheel import NoWheelSpinBox
+from software.ui.widgets.value_slider import ValueSlider
 
 
 class SpinBoxSettingCard(SettingCard):
@@ -59,6 +60,36 @@ class SpinBoxSettingCard(SettingCard):
         base_width = self.spinBox.sizeHint().width()
         extra = max(0, target_width - current_width)
         return int(base_width + extra + 8)
+
+
+class SliderSettingCard(SettingCard):
+    """带数值滑动条的设置卡。"""
+
+    def __init__(
+        self,
+        icon,
+        title,
+        content,
+        min_val=1,
+        max_val=99999,
+        default=10,
+        suffix="",
+        parent=None,
+    ):
+        super().__init__(icon, title, content, parent)
+        self.slider = ValueSlider(min_val, max_val, default, suffix=suffix, parent=self)
+        self.slider.setMinimumWidth(220)
+        self.hBoxLayout.addWidget(self.slider, 0, Qt.AlignmentFlag.AlignRight)
+        self.hBoxLayout.addSpacing(16)
+
+    def value(self):
+        return self.slider.value()
+
+    def setValue(self, value):
+        self.slider.setValue(value)
+
+    def setRange(self, min_val: int, max_val: int) -> None:
+        self.slider.setRange(min_val, max_val)
 
 
 class SwitchSettingCard(SettingCard):

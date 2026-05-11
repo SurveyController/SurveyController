@@ -8,8 +8,7 @@ from software.logging.action_logger import bind_logged_action
 from software.logging.log_utils import log_suppressed_exception
 
 
-from PySide6.QtCore import Qt, Signal, QUrl
-from PySide6.QtGui import QDesktopServices
+from PySide6.QtCore import Qt, Signal
 from PySide6.QtWidgets import (
     QWidget,
     QVBoxLayout,
@@ -38,7 +37,6 @@ from qfluentwidgets import (
 )
 
 from software.ui.pages.workbench.dashboard.cards import (
-    DashboardActionCard,
     RuntimeSettingsHintCard,
 )
 from software.ui.pages.workbench.dashboard.parts.config_io import (
@@ -70,6 +68,7 @@ from software.ui.helpers.fluent_tooltip import install_tooltip_filter
 from software.ui.widgets.config_drawer import ConfigDrawer
 from software.ui.widgets.full_width_infobar import FullWidthInfoBar
 from software.ui.widgets.no_wheel import NoWheelSpinBox
+from software.ui.widgets.value_slider import ValueSlider
 from software.ui.controller.run_controller import RunController
 from software.ui.pages.workbench.runtime_panel.main import RuntimePage
 from software.ui.pages.workbench.strategy.page import QuestionStrategyPage
@@ -90,8 +89,6 @@ class DashboardPage(
 
     _ipBalanceChecked = Signal(float)  # 发送剩余IP数信号
     _randomIpHeartbeatUpdated = Signal(object)  # 发送随机IP服务状态信号
-    STATUS_PAGE_URL = "https://status.hungrym0.top/status/surveycontroller"
-
     def __init__(
         self,
         controller: RunController,
@@ -231,11 +228,10 @@ class DashboardPage(
         spin_row.addWidget(self.target_spin)
         spin_row.addSpacing(12)
         spin_row.addWidget(BodyLabel("并发数：", self))
-        self.thread_spin = NoWheelSpinBox(self)
-        self.thread_spin.setRange(1, NON_HEADLESS_MAX_THREADS)
-        self.thread_spin.setMinimumWidth(140)
-        self.thread_spin.setMinimumHeight(36)
-        spin_row.addWidget(self.thread_spin)
+        self.thread_slider = ValueSlider(1, NON_HEADLESS_MAX_THREADS, 1, parent=self)
+        self.thread_slider.setMinimumWidth(220)
+        self.thread_spin = self.thread_slider
+        spin_row.addWidget(self.thread_slider)
         spin_row.addStretch(1)
         left_column.addLayout(spin_row)
 
@@ -250,14 +246,6 @@ class DashboardPage(
         quick_action_column.setSpacing(8)
         self.runtime_settings_hint_card = RuntimeSettingsHintCard(exec_card)
         quick_action_column.addWidget(self.runtime_settings_hint_card)
-        self.status_page_card = DashboardActionCard(
-            title="服务状态检查",
-            description="打开服务状态页，查看各服务可用性（仅供参考）",
-            button_text="前往",
-            icon=FluentIcon.GLOBE,
-            parent=exec_card,
-        )
-        quick_action_column.addWidget(self.status_page_card)
         left_column.addLayout(quick_action_column)
         content_row.addLayout(left_column, 1)
         content_row.setAlignment(Qt.AlignmentFlag.AlignTop)
@@ -504,15 +492,6 @@ class DashboardPage(
             page="dashboard",
             forward_signal_args=False,
         )
-        bind_logged_action(
-            self.status_page_card.openRequested,
-            self._open_status_page,
-            scope="NAV",
-            event="open_status_page",
-            target="status_page_card",
-            page="dashboard",
-            forward_signal_args=False,
-        )
         self.controller.runtimeUiStateChanged.connect(self._apply_runtime_ui_state)
         self.controller.randomIpLoadingChanged.connect(self.set_random_ip_loading)
         # 监听剪贴板变化，自动处理粘贴的图片
@@ -578,9 +557,6 @@ class DashboardPage(
             running = bool(getattr(self.controller, "running", False))
         can_start = (not running) and self._has_question_entries()
         self.start_btn.setEnabled(bool(can_start))
-
-    def _open_status_page(self):
-        QDesktopServices.openUrl(QUrl(self.STATUS_PAGE_URL))
 
     def _on_question_entries_changed(self, _count: int):
         self.strategy_page.set_entries(
