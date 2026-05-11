@@ -250,7 +250,6 @@ async def refill_required_questions_on_current_page(
     for question_num in normalized_numbers:
         root = root_by_number.get(question_num)
         if root is None:
-            logging.info("Credamo 第%s题当前页未识别到题目节点，跳过补答。", question_num)
             continue
         if state is not None:
             try:

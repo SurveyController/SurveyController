@@ -577,7 +577,6 @@ async def _answer_wjx_matrix(
     current = int(question.num or 0)
     row_count = max(1, int(question.rows or 1))
     option_count = max(2, len(question.option_texts or []) or int(question.options or 0))
-    option_texts = await _resolve_runtime_option_texts(driver, question)
     reverse_fill_answer = resolve_current_reverse_fill_answer(ctx, current)
     forced_indices: list[int] = []
     if reverse_fill_answer is not None and reverse_fill_answer.kind == REVERSE_FILL_KIND_MATRIX:
@@ -633,13 +632,6 @@ async def _answer_wjx_matrix(
         if await _click_matrix_cell(driver, current, row_index, selected_index):
             if row_index >= len(forced_indices):
                 record_pending_distribution_choice(ctx, current, selected_index, option_count, row_index=row_index)
-            logging.info(
-                "问卷星第%d题矩阵题作答：第%d行 -> 选项[%d] %s",
-                current,
-                row_index + 1,
-                selected_index,
-                option_texts[selected_index] if selected_index < len(option_texts) else _format_matrix_weight_value(selected_index),
-            )
             record_answer(current, "matrix", selected_indices=[selected_index], row_index=row_index)
         next_index += 1
     return next_index

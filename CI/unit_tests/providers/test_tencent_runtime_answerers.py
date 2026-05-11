@@ -54,7 +54,7 @@ class TencentRuntimeAnswerersTests:
 
         with caplog.at_level("INFO"):
             runtime_answerers._log_qq_matrix_row_choice(3, 2, 1, ["差", "好"], [0.2, 0.8], [20, 80])
-        assert "矩阵题作答" in caplog.text
+        assert "矩阵题作答" not in caplog.text
 
     @pytest.mark.asyncio
     async def test_answer_qq_single_handles_normal_and_strict_ratio_paths(self, monkeypatch) -> None:

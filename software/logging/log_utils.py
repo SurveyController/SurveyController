@@ -41,6 +41,7 @@ _SESSION_LOG_PATH = ""
 _SESSION_LOG_LOCK = threading.Lock()
 _SESSION_LOG_BACKFILLED = False
 _DELETE_SESSION_LOG_ON_SHUTDOWN = False
+_LOG_LISTENER_ID = 0
 
 
 def _should_filter_noise(message: str) -> bool:
@@ -186,15 +187,18 @@ class LogBufferHandler(logging.Handler):
         super().__init__()
         self.capacity = capacity
 
-        # 使用无锁队列接收日志
-        self._queue: queue.Queue = queue.Queue()
+        # 使用队列接收日志，避免业务线程做格式化和 UI 相关工作
+        self._queue: queue.Queue = queue.Queue(maxsize=max(1000, int(capacity or 0) * 4))
 
         # 处理后的日志记录（只在后台线程中修改）
         self._records: Deque[LogBufferEntry] = deque(maxlen=capacity if capacity else None)
+        self._records_lock = threading.RLock()
 
         # 版本号：每次 _records 变化时递增，用于检测变化
         self._version = 0
         self._version_lock = threading.Lock()
+        self._listeners: dict[int, Callable[[int], None]] = {}
+        self._listeners_lock = threading.Lock()
 
         # 后台处理线程
         self._worker_thread: Optional[threading.Thread] = None
@@ -246,6 +250,8 @@ class LogBufferHandler(logging.Handler):
                 # 更新版本号（表示有新日志）
                 with self._version_lock:
                     self._version += 1
+                    current_version = self._version
+                self._notify_listeners(current_version)
 
             except Exception as exc:
                 # 后台线程不应崩溃
@@ -275,7 +281,8 @@ class LogBufferHandler(logging.Handler):
 
             # 构造日志条目并添加到缓冲区
             entry = LogBufferEntry(text=display_text, category=category)
-            self._records.append(entry)
+            with self._records_lock:
+                self._records.append(entry)
 
         except Exception as exc:
             # 处理失败不应影响其他日志
@@ -294,13 +301,39 @@ class LogBufferHandler(logging.Handler):
 
     def get_records(self, _try_lock: bool = False) -> List[LogBufferEntry]:
         """获取日志记录"""
-        # 异步模式下直接返回副本，无需加锁
-        return list(self._records)
+        with self._records_lock:
+            return list(self._records)
 
     def get_version(self) -> int:
         """获取当前版本号（用于检测变化）"""
         with self._version_lock:
             return self._version
+
+    def add_listener(self, listener: Callable[[int], None]) -> int:
+        """注册日志变化监听。监听函数必须自己切回 UI 线程。"""
+        global _LOG_LISTENER_ID
+        if not callable(listener):
+            return 0
+        with self._listeners_lock:
+            _LOG_LISTENER_ID += 1
+            listener_id = _LOG_LISTENER_ID
+            self._listeners[listener_id] = listener
+            return listener_id
+
+    def remove_listener(self, listener_id: int) -> None:
+        if not listener_id:
+            return
+        with self._listeners_lock:
+            self._listeners.pop(int(listener_id), None)
+
+    def _notify_listeners(self, version: int) -> None:
+        with self._listeners_lock:
+            listeners = list(self._listeners.values())
+        for listener in listeners:
+            try:
+                listener(version)
+            except Exception as exc:
+                _safe_internal_log("LogBufferHandler listener failed", exc)
 
     def stop(self):
         """停止后台处理线程"""
@@ -311,13 +344,20 @@ class LogBufferHandler(logging.Handler):
     def flush_remaining(self):
         """刷新队列中剩余的日志（在关闭前调用）"""
         try:
+            processed = False
             # 处理队列中剩余的所有日志
             while not self._queue.empty():
                 try:
                     record = self._queue.get_nowait()
                     self._process_record(record)
+                    processed = True
                 except queue.Empty:
                     break
+            if processed:
+                with self._version_lock:
+                    self._version += 1
+                    current_version = self._version
+                self._notify_listeners(current_version)
         except Exception as exc:
             _safe_internal_log("LogBufferHandler flush_remaining failed", exc)
 
@@ -415,6 +455,84 @@ class LogBufferHandler(logging.Handler):
         return f"{message[:index]}{target_label}{whitespace}{suffix}"
 
 
+class AsyncFileHandler(logging.Handler):
+    """后台批量写文件，避免日志落盘拖慢业务线程。"""
+
+    _STOP = object()
+
+    def __init__(self, filename: str, *, encoding: str = "utf-8", batch_size: int = 200):
+        super().__init__()
+        self.baseFilename = os.path.abspath(filename)
+        self.encoding = encoding
+        self._batch_size = max(1, int(batch_size or 1))
+        self._queue: queue.Queue = queue.Queue(maxsize=10000)
+        self._closed = False
+        self._write_lock = threading.Lock()
+        self._worker_thread = threading.Thread(
+            target=self._worker_loop,
+            daemon=True,
+            name="SessionLogFileWriter",
+        )
+        self._worker_thread.start()
+
+    def emit(self, record: logging.LogRecord) -> None:
+        if self._closed:
+            return
+        try:
+            self._queue.put_nowait(record)
+        except queue.Full:
+            _safe_internal_log("AsyncFileHandler queue full, dropping log")
+        except Exception:
+            self.handleError(record)
+
+    def _worker_loop(self) -> None:
+        try:
+            with open(self.baseFilename, "a", encoding=self.encoding) as stream:
+                while True:
+                    item = self._queue.get()
+                    if item is self._STOP:
+                        break
+                    batch = [item]
+                    while len(batch) < self._batch_size:
+                        try:
+                            next_item = self._queue.get_nowait()
+                        except queue.Empty:
+                            break
+                        if next_item is self._STOP:
+                            self._queue.put_nowait(self._STOP)
+                            break
+                        batch.append(next_item)
+                    with self._write_lock:
+                        for record in batch:
+                            try:
+                                stream.write(self.format(record))
+                                stream.write("\n")
+                            except Exception as exc:
+                                _safe_internal_log("AsyncFileHandler write failed", exc)
+                        stream.flush()
+        except Exception as exc:
+            _safe_internal_log("AsyncFileHandler worker failed", exc)
+
+    def flush(self) -> None:
+        deadline = datetime.now().timestamp() + 2.0
+        while not self._queue.empty() and datetime.now().timestamp() < deadline:
+            threading.Event().wait(0.01)
+        with self._write_lock:
+            pass
+
+    def close(self) -> None:
+        if self._closed:
+            return
+        self._closed = True
+        try:
+            self._queue.put_nowait(self._STOP)
+        except Exception:
+            pass
+        if self._worker_thread.is_alive():
+            self._worker_thread.join(timeout=2.0)
+        super().close()
+
+
 LOG_BUFFER_HANDLER = LogBufferHandler()
 # 立即把缓冲处理器注册到根日志记录器，保证启动前的日志也能被收集
 _root_logger = logging.getLogger()
@@ -459,7 +577,7 @@ def _ensure_session_log_handler(root_logger: Optional[logging.Logger] = None) ->
             return _SESSION_LOG_PATH
 
         session_log_path = _create_session_log_file_path()
-        handler = logging.FileHandler(session_log_path, mode="a", encoding="utf-8", delay=False)
+        handler = AsyncFileHandler(session_log_path, encoding="utf-8")
         handler.setFormatter(logging.Formatter(LOG_FORMAT, datefmt="%Y-%m-%d %H:%M:%S"))
         logger.addHandler(handler)
         _SESSION_LOG_HANDLER = handler

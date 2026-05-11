@@ -234,15 +234,12 @@ async def refill_required_questions_on_current_page(
         if not visible:
             visible = await _is_question_visible(driver, question_num)
         if not visible:
-            logging.info("问卷星第%d题当前页不可见，跳过补答。", question_num)
             continue
         try:
             ctx.update_thread_status(thread_name or "Worker-?", f"补答第{question_num}题", running=True)
         except Exception:
             logging.info("更新线程状态失败：补答第%d题", question_num, exc_info=True)
-        result = await answer_question_by_meta(driver, question, ctx, psycho_plan=psycho_plan or runtime_state.psycho_plan)
-        if isinstance(result, int):
-            logging.info("问卷星第%d题补答返回矩阵索引推进=%s", question_num, result)
+        await answer_question_by_meta(driver, question, ctx, psycho_plan=psycho_plan or runtime_state.psycho_plan)
         filled_count += 1
     return filled_count
 
@@ -318,7 +315,6 @@ async def brush(
             if not visible:
                 visible = await _is_question_visible(driver, question_num)
             if not visible:
-                logging.info("问卷星第%d题当前页不可见，已跳过。", question_num)
                 continue
 
             progress_step += 1
@@ -334,9 +330,7 @@ async def brush(
                 except Exception:
                     logging.info("更新问卷星线程步骤失败", exc_info=True)
 
-            next_index = await answer_question_by_meta(driver, question, ctx, psycho_plan=psycho_plan)
-            if isinstance(next_index, int):
-                logging.info("问卷星第%d题矩阵作答推进索引到 %s", question_num, next_index)
+            await answer_question_by_meta(driver, question, ctx, psycho_plan=psycho_plan)
 
             if bool(getattr(question, "has_jump", False)) or bool(getattr(question, "has_dependent_display_logic", False)):
                 snapshot = await _collect_visible_question_snapshot(driver)

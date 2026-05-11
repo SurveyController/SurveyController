@@ -115,7 +115,6 @@ async def refill_required_questions_on_current_page(
             continue
         question_id = str(question.provider_question_id or "").strip()
         if page_question_ids and question_id and question_id not in page_question_ids:
-            logging.info("腾讯问卷第%d题不在当前页快照里，跳过补答。", question_num)
             continue
         if question_id:
             snapshot_item = visible_snapshot.get(question_id) if isinstance(visible_snapshot, dict) else None
@@ -123,7 +122,6 @@ async def refill_required_questions_on_current_page(
             if not visible:
                 visible = await _wait_for_question_visible(driver, question_id, timeout_ms=_QQ_SINGLE_QUESTION_FALLBACK_TIMEOUT_MS)
             if not visible:
-                logging.warning("腾讯问卷第%d题当前页不可见，无法补答。", question_num)
                 continue
         try:
             ctx.update_thread_status(thread_name or "Worker-?", f"补答第{question_num}题", running=True)
@@ -206,7 +204,6 @@ async def brush_qq(
                 else:
                     question_visible = False
             if not question_visible:
-                logging.warning("腾讯问卷第%d题未在当前页快照中可见，已跳过。", question_num)
                 continue
 
             step_index += 1

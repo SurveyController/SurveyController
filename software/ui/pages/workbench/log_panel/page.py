@@ -3,7 +3,7 @@
 import os
 import logging
 from datetime import datetime
-from PySide6.QtCore import Qt, QTimer
+from PySide6.QtCore import QObject, Qt, QTimer, Signal
 from PySide6.QtWidgets import (
     QWidget,
     QVBoxLayout,
@@ -56,6 +56,10 @@ LOG_COLORS_LIGHT = {
 }
 
 
+class _LogRefreshBridge(QObject):
+    changed = Signal(int)
+
+
 class LogPage(QWidget):
     """独立的日志页，放在侧边栏。"""
 
@@ -65,11 +69,15 @@ class LogPage(QWidget):
         self._last_seen_record = None
         self._stick_to_bottom = True  # 用户是否希望自动跟随最新日志
         self._last_version = -1  # 上次读取的日志版本号
+        self._refresh_pending = False
+        self._refresh_bridge = _LogRefreshBridge(self)
+        self._refresh_bridge.changed.connect(self._schedule_refresh)
+        self._listener_id = LOG_BUFFER_HANDLER.add_listener(self._on_log_buffer_changed)
         self._build_ui()
         self._bind_events()
         self._load_last_session_logs()
         self._refresh_timer = QTimer(self)
-        self._refresh_timer.setInterval(LOG_REFRESH_INTERVAL_MS)
+        self._refresh_timer.setInterval(max(1000, int(LOG_REFRESH_INTERVAL_MS or 0)))
         self._refresh_timer.timeout.connect(self.refresh_logs)
 
     def _build_ui(self):
@@ -141,6 +149,29 @@ class LogPage(QWidget):
         super().hideEvent(event)
         if self._refresh_timer.isActive():
             self._refresh_timer.stop()
+
+    def closeEvent(self, event):
+        try:
+            LOG_BUFFER_HANDLER.remove_listener(self._listener_id)
+            self._listener_id = 0
+        except Exception as exc:
+            log_suppressed_exception("LogPage.closeEvent remove_listener", exc, level=logging.WARNING)
+        super().closeEvent(event)
+
+    def _on_log_buffer_changed(self, _version: int) -> None:
+        self._refresh_bridge.changed.emit(int(_version or 0))
+
+    def _schedule_refresh(self, _version: int) -> None:
+        if not self.isVisible():
+            return
+        if self._refresh_pending:
+            return
+        self._refresh_pending = True
+        QTimer.singleShot(40, self._refresh_from_ui_thread)
+
+    def _refresh_from_ui_thread(self) -> None:
+        self._refresh_pending = False
+        self.refresh_logs()
 
     def _open_bug_report_dialog(self):
         """打开“报错反馈”联系开发者对话框。"""

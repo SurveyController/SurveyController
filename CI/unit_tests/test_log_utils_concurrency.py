@@ -1,9 +1,11 @@
 from __future__ import annotations
 import logging
+import os
 import threading
 import time
+import tempfile
 from unittest.mock import patch
-from software.logging.log_utils import LogBufferHandler
+from software.logging.log_utils import AsyncFileHandler, LogBufferHandler
 
 class LogBufferHandlerConcurrencyTests:
 
@@ -80,3 +82,27 @@ class LogBufferHandlerConcurrencyTests:
         texts = [entry.text for entry in handler.get_records()]
         for idx in range(5):
             assert any((f'日志-{idx}' in text for text in texts))
+
+    def test_log_buffer_notifies_listener_after_batch_processed(self) -> None:
+        handler = self._create_handler()
+        versions: list[int] = []
+        listener_id = handler.add_listener(lambda version: versions.append(version))
+        try:
+            handler.emit(logging.LogRecord('unit.logbuffer.listener', logging.INFO, __file__, 10, '监听日志', (), None))
+            assert self._wait_until(lambda: bool(versions))
+            assert versions[-1] == handler.get_version()
+        finally:
+            handler.remove_listener(listener_id)
+
+    def test_async_file_handler_writes_without_calling_file_handler_emit(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            path = os.path.join(temp_dir, 'session.log')
+            handler = AsyncFileHandler(path)
+            handler.setFormatter(logging.Formatter('%(message)s'))
+            try:
+                record = logging.LogRecord('unit.logfile.async', logging.INFO, __file__, 10, '异步落盘', (), None)
+                handler.emit(record)
+                handler.flush()
+                assert self._wait_until(lambda: os.path.exists(path) and '异步落盘' in open(path, 'r', encoding='utf-8').read())
+            finally:
+                handler.close()
