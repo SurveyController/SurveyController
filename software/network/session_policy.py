@@ -1,11 +1,12 @@
 """会话策略 - 代理切换与浏览器实例复用逻辑"""
+import asyncio
 from typing import Any, Optional, Tuple
 import logging
 
 from software.core.engine.stop_signal import StopSignalLike
 from software.core.task import ExecutionState, ProxyLease
 from software.network.proxy.pool import coerce_proxy_lease, mask_proxy_for_log
-from software.network.proxy.api import fetch_proxy_batch
+from software.network.proxy.api import fetch_proxy_batch_async
 from software.network.proxy import get_proxy_required_ttl_seconds, proxy_lease_has_sufficient_ttl
 from software.io.config import _select_user_agent_from_ratios
 
@@ -152,7 +153,20 @@ def _wait_for_next_proxy_cycle(
     return ctx.wait_for_runtime_change(stop_signal=stop_signal, timeout=timeout)
 
 
-def _select_proxy_for_session(
+async def _wait_for_next_proxy_cycle_async(
+    ctx: ExecutionState,
+    stop_signal: Optional[StopSignalLike],
+    *,
+    timeout: float = _PROXY_WAIT_POLL_SECONDS,
+) -> bool:
+    return await asyncio.to_thread(
+        ctx.wait_for_runtime_change,
+        stop_signal=stop_signal,
+        timeout=timeout,
+    )
+
+
+async def _select_proxy_for_session_async(
     ctx: ExecutionState,
     thread_name: str = "",
     *,
@@ -190,7 +204,10 @@ def _select_proxy_for_session(
 
                 if request_num > 0:
                     try:
-                        fetched = fetch_proxy_batch(expected_count=request_num, stop_signal=ctx.stop_event)
+                        fetched = await fetch_proxy_batch_async(
+                            expected_count=request_num,
+                            stop_signal=ctx.stop_event,
+                        )
                     except Exception as exc:
                         logging.warning(f"获取随机代理失败：{exc}")
                         fetched = None
@@ -229,7 +246,7 @@ def _select_proxy_for_session(
 
             if not wait:
                 return None
-            if _wait_for_next_proxy_cycle(ctx, stop_signal):
+            if await _wait_for_next_proxy_cycle_async(ctx, stop_signal):
                 return None
     finally:
         ctx.unregister_proxy_waiter()

@@ -1,12 +1,13 @@
 """定时提交模式 - 在指定时间范围内随机提交"""
 from __future__ import annotations
 
+import asyncio
 import logging
-import time
 import re
 from typing import Callable, Optional
 
-from software.network.browser import BrowserDriver
+from software.core.engine.async_wait import sleep_or_stop
+from software.network.browser.runtime_async import BrowserDriver
 
 DEFAULT_REFRESH_INTERVAL = 0.5
 _MIN_REFRESH_INTERVAL = 0.2
@@ -38,9 +39,9 @@ _ENDED_KEYWORDS = (
 )
 
 
-def _extract_body_text(driver: BrowserDriver) -> str:
+async def _extract_body_text(driver: BrowserDriver) -> str:
     try:
-        return driver.execute_script("return (document.body && document.body.innerText) || '';") or ""
+        return await driver.execute_script("return (document.body && document.body.innerText) || '';") or ""
     except Exception:
         return ""
 
@@ -73,7 +74,7 @@ def _parse_countdown_seconds(normalized_text: str) -> Optional[float]:
     return float(total)
 
 
-def _page_status(driver: BrowserDriver) -> tuple[bool, bool, bool, str]:
+async def _page_status(driver: BrowserDriver) -> tuple[bool, bool, bool, str]:
     """
     返回 (ready, not_started, ended, normalized_text)
     - ready: 页面已有题目/提交按钮可填写
@@ -83,7 +84,7 @@ def _page_status(driver: BrowserDriver) -> tuple[bool, bool, bool, str]:
     ready = False
     try:
         ready = bool(
-            driver.execute_script(
+            await driver.execute_script(
                 """
                 return (() => {
                     const hasQuestionBlock = !!document.querySelector('#divQuestion fieldset, #divQuestion [topic]');
@@ -100,7 +101,7 @@ def _page_status(driver: BrowserDriver) -> tuple[bool, bool, bool, str]:
     except Exception:
         ready = False
 
-    text = _extract_body_text(driver)
+    text = await _extract_body_text(driver)
     normalized = "".join(text.split())
     lowered = normalized.lower()
     not_started = any(keyword in normalized for keyword in _NOT_STARTED_KEYWORDS)
@@ -129,7 +130,7 @@ def _page_status(driver: BrowserDriver) -> tuple[bool, bool, bool, str]:
     return ready, not_started, ended, normalized
 
 
-def wait_until_open(
+async def wait_until_open(
     driver: BrowserDriver,
     url: str,
     stop_signal: Optional[object] = None,
@@ -160,14 +161,14 @@ def wait_until_open(
 
         try:
             if first_load:
-                driver.get(url)
+                await driver.get(url)
                 first_load = False
             else:
-                driver.refresh()
+                await driver.refresh()
         except Exception as exc:  # pragma: no cover - 容错
             _log(f"[Timed Mode] 刷新失败，将继续重试：{exc}")
 
-        ready, not_started, ended, normalized_text = _page_status(driver)
+        ready, not_started, ended, normalized_text = await _page_status(driver)
         countdown_seconds = _parse_countdown_seconds(normalized_text)
         if countdown_seconds is not None:
             # 倒计时阶段加速刷新，越接近开放刷新越快
@@ -189,7 +190,7 @@ def wait_until_open(
             reason = "检测到“未开始/未开放”提示，继续快速刷新等待..."
         elif normalized_text:
             reason = "尚未开放，继续刷新等待..."
-        now = time.time()
+        now = asyncio.get_running_loop().time()
         if countdown_seconds is not None and countdown_seconds <= 1.0:
             reason = f"检测到倒计时 <= {countdown_seconds:.1f}s，正快速刷新..."
 
@@ -202,7 +203,7 @@ def wait_until_open(
         if countdown_seconds is not None and countdown_seconds <= 0.0:
             continue
 
-        if stop_signal is not None and getattr(stop_signal, "wait", lambda *_: False)(interval):
+        if await sleep_or_stop(stop_signal, interval):
             return False
 
 

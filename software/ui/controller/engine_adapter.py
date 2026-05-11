@@ -49,7 +49,7 @@ class EngineGuiAdapter:
         self._on_random_ip_loading = on_random_ip_loading
         self._message_handler = message_handler
         self._confirm_handler = confirm_handler
-        self._refresh_random_ip_counter_handler: Optional[Callable[[bool], None]] = None
+        self._refresh_random_ip_counter_handler: Optional[Callable[[], None]] = None
         self._toggle_random_ip_handler: Optional[Callable[[Optional[bool]], bool]] = None
         self._handle_random_ip_submission_handler: Optional[Callable[[Any], None]] = None
         self.execution_state: Optional[ExecutionState] = None
@@ -117,7 +117,7 @@ class EngineGuiAdapter:
     def bind_runtime_actions(
         self,
         *,
-        refresh_random_ip_counter: Optional[Callable[[bool], None]] = None,
+        refresh_random_ip_counter: Optional[Callable[[], None]] = None,
         toggle_random_ip: Optional[Callable[[Optional[bool]], bool]] = None,
         handle_random_ip_submission: Optional[Callable[[Any], None]] = None,
     ) -> None:
@@ -190,12 +190,12 @@ class EngineGuiAdapter:
     def is_random_ip_enabled(self) -> bool:
         return bool(self.random_ip_enabled_var.get())
 
-    def refresh_random_ip_counter(self, *, async_mode: bool = True) -> None:
+    def refresh_random_ip_counter(self) -> None:
         callback = self._refresh_random_ip_counter_handler
         if not callable(callback):
             return
         try:
-            callback(bool(async_mode))
+            callback()
         except Exception:
             logging.info("刷新随机IP计数失败", exc_info=True)
 

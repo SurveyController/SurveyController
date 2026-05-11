@@ -3,14 +3,14 @@
 from __future__ import annotations
 
 import logging
-import threading
-import time
 from typing import Any, Optional
 
 from software.app.config import HEADLESS_PAGE_BUFFER_DELAY, HEADLESS_PAGE_CLICK_DELAY
+from software.core.engine.async_wait import sleep_or_stop
 from software.core.modes.duration_control import has_configured_answer_duration, simulate_answer_duration_delay
 from software.core.task import ExecutionConfig, ExecutionState
-from software.network.browser import BrowserDriver, NoSuchElementException
+from software.network.browser import NoSuchElementException
+from software.network.browser.runtime_async import BrowserDriver
 
 from software.core.engine.navigation import _human_scroll_after_question
 from software.core.engine.runtime_control import _is_headless_mode
@@ -44,7 +44,7 @@ _QQ_SINGLE_QUESTION_FALLBACK_TIMEOUT_MS = 1800
 _QQ_PAGE_TRANSITION_TIMEOUT_MS = 5000
 
 
-def _answer_question_by_meta(
+async def _answer_question_by_meta(
     driver: BrowserDriver,
     question: Any,
     ctx: ExecutionState,
@@ -57,31 +57,31 @@ def _answer_question_by_meta(
         return False
     entry_type, config_index = config_entry
     if entry_type == "single":
-        _answer_qq_single(driver, question, config_index, ctx)
+        await _answer_qq_single(driver, question, config_index, ctx)
         return True
     if entry_type == "multiple":
-        _answer_qq_multiple(driver, question, config_index, ctx)
+        await _answer_qq_multiple(driver, question, config_index, ctx)
         return True
     if entry_type == "dropdown":
-        _answer_qq_dropdown(driver, question, config_index, ctx, psycho_plan=psycho_plan)
+        await _answer_qq_dropdown(driver, question, config_index, ctx, psycho_plan=psycho_plan)
         return True
     if entry_type in {"text", "multi_text"}:
-        _answer_qq_text(driver, question, config_index, ctx)
+        await _answer_qq_text(driver, question, config_index, ctx)
         return True
     if entry_type in {"scale", "score"}:
-        _answer_qq_score_like(driver, question, config_index, ctx, psycho_plan=psycho_plan)
+        await _answer_qq_score_like(driver, question, config_index, ctx, psycho_plan=psycho_plan)
         return True
     if entry_type == "matrix":
         if question.provider_type == "matrix_star":
-            _answer_qq_matrix_star(driver, question, config_index, ctx, psycho_plan=psycho_plan)
+            await _answer_qq_matrix_star(driver, question, config_index, ctx, psycho_plan=psycho_plan)
         else:
-            _answer_qq_matrix(driver, question, config_index, ctx, psycho_plan=psycho_plan)
+            await _answer_qq_matrix(driver, question, config_index, ctx, psycho_plan=psycho_plan)
         return True
     logging.warning("腾讯问卷第%d题暂未接入补答题型：%s", int(question.num or 0), entry_type)
     return False
 
 
-def refill_required_questions_on_current_page(
+async def refill_required_questions_on_current_page(
     driver: BrowserDriver,
     ctx: ExecutionState,
     *,
@@ -121,7 +121,7 @@ def refill_required_questions_on_current_page(
             snapshot_item = visible_snapshot.get(question_id) if isinstance(visible_snapshot, dict) else None
             visible = bool((snapshot_item or {}).get("visible")) if isinstance(snapshot_item, dict) else False
             if not visible:
-                visible = _wait_for_question_visible(driver, question_id, timeout_ms=_QQ_SINGLE_QUESTION_FALLBACK_TIMEOUT_MS)
+                visible = await _wait_for_question_visible(driver, question_id, timeout_ms=_QQ_SINGLE_QUESTION_FALLBACK_TIMEOUT_MS)
             if not visible:
                 logging.warning("腾讯问卷第%d题当前页不可见，无法补答。", question_num)
                 continue
@@ -129,17 +129,17 @@ def refill_required_questions_on_current_page(
             ctx.update_thread_status(thread_name or "Worker-?", f"补答第{question_num}题", running=True)
         except Exception:
             logging.info("更新线程状态失败：补答第%d题", question_num, exc_info=True)
-        if _answer_question_by_meta(driver, question, ctx, psycho_plan=psycho_plan):
+        if await _answer_question_by_meta(driver, question, ctx, psycho_plan=psycho_plan):
             filled_count += 1
     return filled_count
 
 
-def brush_qq(
+async def brush_qq(
     driver: BrowserDriver,
     config: ExecutionConfig,
     ctx: ExecutionState,
     *,
-    stop_signal: Optional[threading.Event],
+    stop_signal: Optional[Any],
     thread_name: str,
     psycho_plan: Optional[Any],
 ) -> bool:
@@ -162,7 +162,7 @@ def brush_qq(
     runtime_state = get_qq_runtime_state(driver)
     runtime_state.psycho_plan = psycho_plan
 
-    dismiss_resume_dialog_if_present(driver, timeout=1.5, stop_signal=active_stop)
+    await dismiss_resume_dialog_if_present(driver, timeout=1.5, stop_signal=active_stop)
 
     def _abort_requested() -> bool:
         return bool(active_stop and active_stop.is_set())
@@ -170,8 +170,8 @@ def brush_qq(
     for page_index, questions in enumerate(page_groups):
         page_question_ids = [str(question.provider_question_id or "").strip() for question in questions if str(question.provider_question_id or "").strip()]
         page_snapshot = {}
-        if _supports_page_snapshot(driver):
-            page_snapshot = _wait_for_question_visibility_map(
+        if await _supports_page_snapshot(driver):
+            page_snapshot = await _wait_for_question_visibility_map(
                 driver,
                 page_question_ids,
                 timeout_ms=_QQ_PAGE_READY_TIMEOUT_MS,
@@ -196,13 +196,13 @@ def brush_qq(
             question_visible = bool((snapshot_item or {}).get("visible")) if isinstance(snapshot_item, dict) else False
             if not question_visible:
                 if snapshot_item is None:
-                    question_visible = _wait_for_question_visible(
+                    question_visible = await _wait_for_question_visible(
                         driver,
                         question_id,
                         timeout_ms=_QQ_SINGLE_QUESTION_FALLBACK_TIMEOUT_MS,
                     )
                 elif bool((snapshot_item or {}).get("attached")):
-                    question_visible = _is_question_visible(driver, question_id)
+                    question_visible = await _is_question_visible(driver, question_id)
                 else:
                     question_visible = False
             if not question_visible:
@@ -228,24 +228,24 @@ def brush_qq(
                 continue
             entry_type, config_index = config_entry
             if entry_type == "single":
-                _answer_qq_single(driver, question, config_index, ctx)
+                await _answer_qq_single(driver, question, config_index, ctx)
             elif entry_type == "multiple":
-                _answer_qq_multiple(driver, question, config_index, ctx)
+                await _answer_qq_multiple(driver, question, config_index, ctx)
             elif entry_type == "dropdown":
-                _answer_qq_dropdown(driver, question, config_index, ctx, psycho_plan=psycho_plan)
+                await _answer_qq_dropdown(driver, question, config_index, ctx, psycho_plan=psycho_plan)
             elif entry_type in {"text", "multi_text"}:
-                _answer_qq_text(driver, question, config_index, ctx)
+                await _answer_qq_text(driver, question, config_index, ctx)
             elif entry_type in {"scale", "score"}:
-                _answer_qq_score_like(driver, question, config_index, ctx, psycho_plan=psycho_plan)
+                await _answer_qq_score_like(driver, question, config_index, ctx, psycho_plan=psycho_plan)
             elif entry_type == "matrix":
                 if question.provider_type == "matrix_star":
-                    _answer_qq_matrix_star(driver, question, config_index, ctx, psycho_plan=psycho_plan)
+                    await _answer_qq_matrix_star(driver, question, config_index, ctx, psycho_plan=psycho_plan)
                 else:
-                    _answer_qq_matrix(driver, question, config_index, ctx, psycho_plan=psycho_plan)
+                    await _answer_qq_matrix(driver, question, config_index, ctx, psycho_plan=psycho_plan)
             else:
                 logging.warning("腾讯问卷第%d题暂未接入运行时类型：%s", question_num, entry_type)
 
-        _human_scroll_after_question(driver)
+        await _human_scroll_after_question(driver)
         if _abort_requested():
             try:
                 ctx.update_thread_status(thread_name, "已中断", running=False)
@@ -255,14 +255,12 @@ def brush_qq(
 
         buffer_delay = float(HEADLESS_PAGE_BUFFER_DELAY if headless_mode else 0.5)
         if buffer_delay > 0:
-            if active_stop and active_stop.wait(buffer_delay):
+            if await sleep_or_stop(active_stop, buffer_delay):
                 try:
                     ctx.update_thread_status(thread_name, "已中断", running=False)
                 except Exception:
                     logging.info("更新线程状态失败：已中断", exc_info=True)
                 return False
-            if not active_stop:
-                time.sleep(buffer_delay)
 
         is_last_page = page_index == len(page_groups) - 1
         if is_last_page:
@@ -271,7 +269,7 @@ def brush_qq(
                     ctx.update_thread_status(thread_name, "等待时长中", running=True)
                 except Exception:
                     logging.info("更新线程状态失败：等待时长中", exc_info=True)
-            if simulate_answer_duration_delay(active_stop, runtime_config.answer_duration_range_seconds):
+            if await simulate_answer_duration_delay(active_stop, runtime_config.answer_duration_range_seconds):
                 try:
                     ctx.update_thread_status(thread_name, "已中断", running=False)
                 except Exception:
@@ -281,10 +279,10 @@ def brush_qq(
 
         current_first = str(questions[0].provider_question_id or "")
         next_first = str(page_groups[page_index + 1][0].provider_question_id or "")
-        clicked = _click_next_page_button(driver)
+        clicked = await _click_next_page_button(driver)
         if not clicked:
             raise NoSuchElementException("腾讯问卷下一页按钮未找到")
-        _wait_for_page_transition(
+        await _wait_for_page_transition(
             driver,
             current_first,
             next_first,
@@ -292,14 +290,12 @@ def brush_qq(
         )
         click_delay = float(HEADLESS_PAGE_CLICK_DELAY if headless_mode else 0.5)
         if click_delay > 0:
-            if active_stop and active_stop.wait(click_delay):
+            if await sleep_or_stop(active_stop, click_delay):
                 try:
                     ctx.update_thread_status(thread_name, "已中断", running=False)
                 except Exception:
                     logging.info("更新线程状态失败：已中断", exc_info=True)
                 return False
-            if not active_stop:
-                time.sleep(click_delay)
 
     if _abort_requested():
         try:
@@ -312,7 +308,7 @@ def brush_qq(
         ctx.update_thread_status(thread_name, "提交中", running=True)
     except Exception:
         logging.info("更新线程状态失败：提交中", exc_info=True)
-    submit(driver, ctx=ctx, stop_signal=active_stop)
+    await submit(driver, ctx=ctx, stop_signal=active_stop)
     try:
         ctx.update_thread_status(thread_name, "等待结果确认", running=True)
     except Exception:

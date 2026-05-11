@@ -4,15 +4,14 @@ from __future__ import annotations
 
 import logging
 import random
-import threading
-import time
 from typing import Any, Optional
 
 from software.app.config import DEFAULT_FILL_TEXT
+from software.core.engine.async_wait import sleep_or_stop
 from software.core.modes.duration_control import has_configured_answer_duration, simulate_answer_duration_delay
 from software.core.questions.utils import normalize_droplist_probs, weighted_index
 from software.core.task import ExecutionConfig, ExecutionState
-from software.network.browser import BrowserDriver
+from software.network.browser.runtime_async import BrowserDriver
 from credamo.provider.runtime_state import get_credamo_runtime_state
 
 from . import runtime_answerers as _runtime_answerers
@@ -94,37 +93,37 @@ def _sync_runtime_answerer_patch_points() -> None:
     _runtime_answerers.weighted_index = weighted_index
 
 
-def _wait_for_question_roots(page: Any, stop_signal: Optional[threading.Event], **kwargs: Any):
+async def _wait_for_question_roots(page: Any, stop_signal: Any, **kwargs: Any):
     _sync_runtime_dom_patch_points()
-    return _DOM_WAIT_FOR_QUESTION_ROOTS(page, stop_signal, **kwargs)
+    return await _DOM_WAIT_FOR_QUESTION_ROOTS(page, stop_signal, **kwargs)
 
 
-def _unanswered_question_roots(page: Any, roots: list[Any], answered_keys: set[str], **kwargs: Any):
+async def _unanswered_question_roots(page: Any, roots: list[Any], answered_keys: set[str], **kwargs: Any):
     _sync_runtime_dom_patch_points()
-    return _DOM_UNANSWERED_QUESTION_ROOTS(page, roots, answered_keys, **kwargs)
+    return await _DOM_UNANSWERED_QUESTION_ROOTS(page, roots, answered_keys, **kwargs)
 
 
-def _wait_for_dynamic_question_roots(page: Any, answered_keys: set[str], stop_signal: Optional[threading.Event], **kwargs: Any):
+async def _wait_for_dynamic_question_roots(page: Any, answered_keys: set[str], stop_signal: Any, **kwargs: Any):
     _sync_runtime_dom_patch_points()
-    return _DOM_WAIT_FOR_DYNAMIC_QUESTION_ROOTS(page, answered_keys, stop_signal, **kwargs)
+    return await _DOM_WAIT_FOR_DYNAMIC_QUESTION_ROOTS(page, answered_keys, stop_signal, **kwargs)
 
 
-def _wait_for_page_change(page: Any, previous_signature: Any, stop_signal: Optional[threading.Event], **kwargs: Any) -> bool:
+async def _wait_for_page_change(page: Any, previous_signature: Any, stop_signal: Any, **kwargs: Any) -> bool:
     _sync_runtime_dom_patch_points()
-    return _DOM_WAIT_FOR_PAGE_CHANGE(page, previous_signature, stop_signal, **kwargs)
+    return await _DOM_WAIT_FOR_PAGE_CHANGE(page, previous_signature, stop_signal, **kwargs)
 
 
-def _click_submit(page: Any, stop_signal: Optional[threading.Event] = None, **kwargs: Any) -> bool:
+async def _click_submit(page: Any, stop_signal: Any = None, **kwargs: Any) -> bool:
     _sync_runtime_dom_patch_points()
-    return _DOM_CLICK_SUBMIT(page, stop_signal, **kwargs)
+    return await _DOM_CLICK_SUBMIT(page, stop_signal, **kwargs)
 
 
-def _answer_single_like(page: Any, root: Any, weights: Any, option_count: int) -> bool:
+async def _answer_single_like(page: Any, root: Any, weights: Any, option_count: int) -> bool:
     _sync_runtime_answerer_patch_points()
-    return _ANSWER_SINGLE_LIKE(page, root, weights, option_count)
+    return await _ANSWER_SINGLE_LIKE(page, root, weights, option_count)
 
 
-def _answer_multiple(
+async def _answer_multiple(
     page: Any,
     root: Any,
     weights: Any,
@@ -133,7 +132,7 @@ def _answer_multiple(
     max_limit: Optional[int] = None,
 ) -> bool:
     _sync_runtime_answerer_patch_points()
-    return _ANSWER_MULTIPLE(
+    return await _ANSWER_MULTIPLE(
         page,
         root,
         weights,
@@ -142,32 +141,32 @@ def _answer_multiple(
     )
 
 
-def _answer_text(root: Any, text_config: Any) -> bool:
+async def _answer_text(root: Any, text_config: Any) -> bool:
     _sync_runtime_answerer_patch_points()
-    return _ANSWER_TEXT(root, text_config)
+    return await _ANSWER_TEXT(root, text_config)
 
 
-def _answer_dropdown(page: Any, root: Any, weights: Any) -> bool:
+async def _answer_dropdown(page: Any, root: Any, weights: Any) -> bool:
     _sync_runtime_answerer_patch_points()
-    return _ANSWER_DROPDOWN(page, root, weights)
+    return await _ANSWER_DROPDOWN(page, root, weights)
 
 
-def _answer_scale(page: Any, root: Any, weights: Any) -> bool:
+async def _answer_scale(page: Any, root: Any, weights: Any) -> bool:
     _sync_runtime_answerer_patch_points()
-    return _ANSWER_SCALE(page, root, weights)
+    return await _ANSWER_SCALE(page, root, weights)
 
 
-def _answer_matrix(page: Any, root: Any, weights: Any, start_index: int = 0) -> bool:
+async def _answer_matrix(page: Any, root: Any, weights: Any, start_index: int = 0) -> bool:
     _sync_runtime_answerer_patch_points()
-    return _ANSWER_MATRIX(page, root, weights, start_index)
+    return await _ANSWER_MATRIX(page, root, weights, start_index)
 
 
-def _answer_order(page: Any, root: Any) -> bool:
+async def _answer_order(page: Any, root: Any) -> bool:
     _sync_runtime_answerer_patch_points()
-    return _ANSWER_ORDER(page, root)
+    return await _ANSWER_ORDER(page, root)
 
 
-def _answer_root_by_meta(
+async def _answer_root_by_meta(
     page: Any,
     root: Any,
     question_num: int,
@@ -180,10 +179,10 @@ def _answer_root_by_meta(
     entry_type, config_index = config_entry
     if entry_type == "single":
         weights = config.single_prob[config_index] if config_index < len(config.single_prob) else -1
-        return bool(_answer_single_like(page, root, weights, 0))
+        return bool(await _answer_single_like(page, root, weights, 0))
     if entry_type in {"scale", "score"}:
         weights = config.scale_prob[config_index] if config_index < len(config.scale_prob) else -1
-        return bool(_answer_scale(page, root, weights))
+        return bool(await _answer_scale(page, root, weights))
     if entry_type == "matrix":
         question_meta = config.questions_metadata.get(question_num) if hasattr(config, "questions_metadata") else None
         row_count = max(1, int(getattr(question_meta, "rows", 1) or 1))
@@ -191,17 +190,17 @@ def _answer_root_by_meta(
         for row_offset in range(row_count):
             matrix_index = config_index + row_offset
             row_weights.append(config.matrix_prob[matrix_index] if matrix_index < len(config.matrix_prob) else -1)
-        return bool(_answer_matrix(page, root, row_weights, config_index))
+        return bool(await _answer_matrix(page, root, row_weights, config_index))
     if entry_type == "dropdown":
         weights = config.droplist_prob[config_index] if config_index < len(config.droplist_prob) else -1
-        return bool(_answer_dropdown(page, root, weights))
+        return bool(await _answer_dropdown(page, root, weights))
     if entry_type == "multiple":
         weights = config.multiple_prob[config_index] if config_index < len(config.multiple_prob) else []
         question_meta = config.questions_metadata.get(question_num)
         min_limit = getattr(question_meta, "multi_min_limit", None) if question_meta is not None else None
         max_limit = getattr(question_meta, "multi_max_limit", None) if question_meta is not None else None
         return bool(
-            _answer_multiple(
+            await _answer_multiple(
                 page,
                 root,
                 weights,
@@ -210,15 +209,15 @@ def _answer_root_by_meta(
             )
         )
     if entry_type == "order":
-        return bool(_answer_order(page, root))
+        return bool(await _answer_order(page, root))
     if entry_type in {"text", "multi_text"}:
         text_config = config.texts[config_index] if config_index < len(config.texts) else [DEFAULT_FILL_TEXT]
-        return bool(_answer_text(root, text_config))
+        return bool(await _answer_text(root, text_config))
     logging.info("Credamo 第%s题暂未接入补答题型：%s", question_num, entry_type)
     return False
 
 
-def refill_required_questions_on_current_page(
+async def refill_required_questions_on_current_page(
     driver: BrowserDriver,
     config: ExecutionConfig,
     *,
@@ -237,13 +236,13 @@ def refill_required_questions_on_current_page(
     if not normalized_numbers:
         return 0
 
-    page = _page(driver)
-    roots = _question_roots(page)
+    page = await _page(driver)
+    roots = await _question_roots(page)
     if not roots:
         return 0
     root_by_number: dict[int, Any] = {}
     for local_index, root in enumerate(roots, start=1):
-        question_num = _question_number_from_root(page, root, local_index)
+        question_num = await _question_number_from_root(page, root, local_index)
         if question_num > 0 and question_num not in root_by_number:
             root_by_number[question_num] = root
 
@@ -258,22 +257,22 @@ def refill_required_questions_on_current_page(
                 state.update_thread_status(thread_name or "Worker-?", f"补答第{question_num}题", running=True)
             except Exception:
                 logging.info("更新 Credamo 线程状态失败：补答第%s题", question_num, exc_info=True)
-        if _answer_root_by_meta(page, root, question_num, config):
+        if await _answer_root_by_meta(page, root, question_num, config):
             filled_count += 1
     return filled_count
 
 
-def brush_credamo(
+async def brush_credamo(
     driver: BrowserDriver,
     config: ExecutionConfig,
     state: ExecutionState,
     *,
-    stop_signal: Optional[threading.Event],
+    stop_signal: Optional[Any],
     thread_name: str,
     psycho_plan: Optional[Any] = None,
 ) -> bool:
     active_stop = stop_signal or state.stop_event
-    page = _page(driver)
+    page = await _page(driver)
     total_steps = max(1, len(config.question_config_index_map))
     answered_steps = 0
     page_index = 0
@@ -287,7 +286,7 @@ def brush_credamo(
     while not _abort_requested(active_stop):
         page_index += 1
         runtime_state.page_index = page_index
-        roots = _wait_for_question_roots(page, active_stop)
+        roots = await _wait_for_question_roots(page, active_stop)
         if not roots:
             raise RuntimeError("Credamo 当前页未识别到题目")
 
@@ -295,7 +294,7 @@ def brush_credamo(
         runtime_state.answered_question_keys = []
         page_fallback_start = answered_steps
         while not _abort_requested(active_stop):
-            pending_roots = _unanswered_question_roots(page, roots, answered_keys, fallback_start=page_fallback_start)
+            pending_roots = await _unanswered_question_roots(page, roots, answered_keys, fallback_start=page_fallback_start)
             if not pending_roots:
                 break
 
@@ -311,8 +310,8 @@ def brush_credamo(
                 runtime_state.answered_question_keys = list(answered_keys)
                 config_entry = config.question_config_index_map.get(question_num)
                 if config_entry is None:
-                    fallback_kind = _question_kind_from_root(page, root)
-                    logging.info("Credamo 第%s题未匹配到配置，页面题型=%s，题面=%s", question_num, fallback_kind, _root_text(page, root))
+                    fallback_kind = await _question_kind_from_root(page, root)
+                    logging.info("Credamo 第%s题未匹配到配置，页面题型=%s，题面=%s", question_num, fallback_kind, await _root_text(page, root))
                     answered_steps = min(total_steps, answered_steps + 1)
                     continue
 
@@ -330,10 +329,10 @@ def brush_credamo(
 
                 if entry_type == "single":
                     weights = config.single_prob[config_index] if config_index < len(config.single_prob) else -1
-                    _answer_single_like(page, root, weights, 0)
+                    await _answer_single_like(page, root, weights, 0)
                 elif entry_type in {"scale", "score"}:
                     weights = config.scale_prob[config_index] if config_index < len(config.scale_prob) else -1
-                    _answer_scale(page, root, weights)
+                    await _answer_scale(page, root, weights)
                 elif entry_type == "matrix":
                     question_meta = config.questions_metadata.get(question_num) if hasattr(config, "questions_metadata") else None
                     row_count = max(1, int(getattr(question_meta, "rows", 1) or 1))
@@ -341,16 +340,16 @@ def brush_credamo(
                     for row_offset in range(row_count):
                         matrix_index = config_index + row_offset
                         row_weights.append(config.matrix_prob[matrix_index] if matrix_index < len(config.matrix_prob) else -1)
-                    _answer_matrix(page, root, row_weights, config_index)
+                    await _answer_matrix(page, root, row_weights, config_index)
                 elif entry_type == "dropdown":
                     weights = config.droplist_prob[config_index] if config_index < len(config.droplist_prob) else -1
-                    _answer_dropdown(page, root, weights)
+                    await _answer_dropdown(page, root, weights)
                 elif entry_type == "multiple":
                     weights = config.multiple_prob[config_index] if config_index < len(config.multiple_prob) else []
                     question_meta = config.questions_metadata.get(question_num)
                     min_limit = getattr(question_meta, "multi_min_limit", None) if question_meta is not None else None
                     max_limit = getattr(question_meta, "multi_max_limit", None) if question_meta is not None else None
-                    _answer_multiple(
+                    await _answer_multiple(
                         page,
                         root,
                         weights,
@@ -358,33 +357,33 @@ def brush_credamo(
                         max_limit=max_limit,
                     )
                 elif entry_type == "order":
-                    _answer_order(page, root)
+                    await _answer_order(page, root)
                 elif entry_type in {"text", "multi_text"}:
                     text_config = config.texts[config_index] if config_index < len(config.texts) else [DEFAULT_FILL_TEXT]
-                    _answer_text(root, text_config)
+                    await _answer_text(root, text_config)
                 else:
                     logging.info("Credamo 第%s题暂未接入题型：%s", question_num, entry_type)
                 answered_steps = min(total_steps, answered_steps + 1)
-                time.sleep(random.uniform(0.03, 0.08))
+                await sleep_or_stop(None, random.uniform(0.03, 0.08))
 
-            roots = _wait_for_dynamic_question_roots(
+            roots = await _wait_for_dynamic_question_roots(
                 page,
                 answered_keys,
                 active_stop,
                 fallback_start=page_fallback_start,
             )
-        navigation_action = _navigation_action(page)
+        navigation_action = await _navigation_action(page)
         if navigation_action != "next":
             break
-        previous_signature = _question_signature(page)
+        previous_signature = await _question_signature(page)
         runtime_state.last_page_signature = previous_signature
         try:
             state.update_thread_status(thread_name, "翻到下一页", running=True)
         except Exception:
             logging.info("更新 Credamo 线程状态失败：翻到下一页", exc_info=True)
-        if not _click_navigation(page, "next"):
+        if not await _click_navigation(page, "next"):
             raise RuntimeError("Credamo 下一页按钮未找到")
-        if not _wait_for_page_change(page, previous_signature, active_stop):
+        if not await _wait_for_page_change(page, previous_signature, active_stop):
             raise RuntimeError("Credamo 点击下一页后页面没有变化")
 
     if has_configured_answer_duration(config.answer_duration_range_seconds):
@@ -392,13 +391,13 @@ def brush_credamo(
             state.update_thread_status(thread_name, "等待时长中", running=True)
         except Exception:
             logging.info("更新 Credamo 线程状态失败：等待时长中", exc_info=True)
-    if simulate_answer_duration_delay(active_stop, config.answer_duration_range_seconds):
+    if await simulate_answer_duration_delay(active_stop, config.answer_duration_range_seconds):
         return False
     try:
         state.update_thread_status(thread_name, "提交中", running=True)
     except Exception:
         logging.info("更新 Credamo 线程状态失败：提交中", exc_info=True)
-    if not _click_submit(page, active_stop):
+    if not await _click_submit(page, active_stop):
         raise RuntimeError("Credamo 提交按钮未找到")
     try:
         state.update_thread_status(thread_name, "等待结果确认", running=True)

@@ -455,7 +455,7 @@ class MainWindow(
             status_endpoint=STATUS_ENDPOINT,
             status_formatter=format_status_payload,
         )
-        async_mode = str(default_type or "").strip() == "报错反馈"
+        open_non_blocking = str(default_type or "").strip() == "报错反馈"
         self._contact_dialog = dlg
         self._contact_dialog_active = True
         self._set_startup_update_check_suspended(True)
@@ -463,7 +463,7 @@ class MainWindow(
         dlg.form.quotaRequestSucceeded.connect(self._on_quota_request_sent)
         dlg.finished.connect(self._on_contact_dialog_finished_event)
         dlg.destroyed.connect(self._on_contact_dialog_destroyed_event)
-        if async_mode:
+        if open_non_blocking:
             dlg.open()
             try:
                 dlg.raise_()

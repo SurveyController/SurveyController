@@ -447,7 +447,7 @@ class RuntimePage(ScrollArea):
 
     def _on_random_ip_toggled(self, enabled: bool):
         """参数页随机IP开关切换时，异步执行网络校验，避免阻塞界面。"""
-        if self.controller.toggle_random_ip_async(bool(enabled)):
+        if self.controller.request_toggle_random_ip(bool(enabled)):
             log_action(
                 "CONFIG",
                 "toggle_random_ip",

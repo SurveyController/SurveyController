@@ -8,7 +8,7 @@ from typing import Any, List, Optional, Set
 
 import software.network.http as http_client
 from software.core.task import ProxyLease
-from software.network.proxy.session.auth import extract_proxy, format_random_ip_error
+from software.network.proxy.session.auth import extract_proxy_async, format_random_ip_error
 from software.app.config import (
     DEFAULT_HTTP_HEADERS,
     PROXY_MAX_PROXIES,
@@ -330,8 +330,9 @@ def _resolve_official_area_request_value(source: str, area_code: Optional[str]) 
     return str(resolved or "").strip()
 
 
-def _fetch_new_proxy_batch(
+async def fetch_proxy_batch_async(
     expected_count: int = 1,
+    *,
     proxy_url: Optional[str] = None,
     notify_on_area_error: bool = True,
     stop_signal: Optional[threading.Event] = None,
@@ -361,7 +362,7 @@ def _fetch_new_proxy_batch(
         remaining = expected_count
         while remaining > 0:
             try:
-                payload = extract_proxy(
+                payload = await extract_proxy_async(
                     minute=minute,
                     pool=pool,
                     area=area_value,
@@ -405,7 +406,12 @@ def _fetch_new_proxy_batch(
     errors: List[str] = []
     for url in _proxy_api_candidates(expected_count, proxy_url):
         try:
-            resp = http_client.get(url, timeout=10, headers=DEFAULT_HTTP_HEADERS, proxies={})
+            resp = await http_client.aget(
+                url,
+                timeout=10,
+                headers=DEFAULT_HTTP_HEADERS,
+                proxies={},
+            )
             resp.raise_for_status()
 
             if is_custom:
@@ -460,26 +466,10 @@ def _fetch_new_proxy_batch(
     return normalized[:expected_count]
 
 
-def fetch_proxy_batch(
-    expected_count: int = 1,
-    *,
-    proxy_url: Optional[str] = None,
-    notify_on_area_error: bool = True,
-    stop_signal: Optional[threading.Event] = None,
-) -> List[ProxyLease]:
-    """公开的代理批量获取接口。"""
-    return _fetch_new_proxy_batch(
-        expected_count=expected_count,
-        proxy_url=proxy_url,
-        notify_on_area_error=notify_on_area_error,
-        stop_signal=stop_signal,
-    )
-
-
 __all__ = [
     "AreaProxyQualityError",
     "ProxyApiFatalError",
-    "fetch_proxy_batch",
+    "fetch_proxy_batch_async",
     "format_status_payload",
     "get_status",
     "test_custom_proxy_api",

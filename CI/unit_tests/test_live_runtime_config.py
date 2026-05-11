@@ -1,3 +1,4 @@
+import asyncio
 from types import SimpleNamespace
 
 from CI.live_tests import run_async_engine_once
@@ -34,7 +35,18 @@ def test_build_live_test_config_uses_defaults_and_parsed_questions(monkeypatch):
             SurveyQuestionMeta(num=1, title="单选题", type_code="3", options=2),
         ],
     )
-    monkeypatch.setattr(run_async_engine_once, "parse_survey_sync", lambda _url: definition)
+    async def _fake_parse(_url):
+        return definition
+
+    monkeypatch.setattr(run_async_engine_once, "parse_survey", _fake_parse)
+    def _run(coro):
+        loop = asyncio.new_event_loop()
+        try:
+            return loop.run_until_complete(coro)
+        finally:
+            loop.close()
+
+    monkeypatch.setattr(run_async_engine_once.asyncio, "run", _run)
 
     config = run_async_engine_once._build_live_test_config(
         "https://www.wjx.cn/vm/demo.aspx",

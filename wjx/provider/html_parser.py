@@ -23,6 +23,7 @@ from .html_parser_common import (
     _extract_rating_option_count,
     _extract_text_input_labels,
     _normalize_html_text,
+    _soup_question_is_required,
     _should_mark_as_multi_text,
     _soup_question_looks_like_description,
     _soup_question_looks_like_rating,
@@ -87,6 +88,7 @@ def parse_survey_questions_from_html(html: str) -> List[Dict[str, Any]]:
             if type_code != "11" and _soup_question_looks_like_reorder(question_div):
                 type_code = "11"
             is_description = _soup_question_looks_like_description(question_div, type_code)
+            is_required = _soup_question_is_required(question_div)
             is_rating = False
             rating_max = 0
             if type_code == "5":
@@ -198,6 +200,7 @@ def parse_survey_questions_from_html(html: str) -> List[Dict[str, Any]]:
                 "slider_step": slider_step,
                 "multi_min_limit": multi_min_limit,
                 "multi_max_limit": multi_max_limit,
+                "required": is_required,
             })
     _attach_display_condition_metadata(questions_info)
     return questions_info

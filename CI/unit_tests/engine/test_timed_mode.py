@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import pytest
+
 import software.core.modes.timed_mode as timed_mode
 
 
@@ -11,17 +13,17 @@ class _TimedDriver:
         self.get_calls: list[str] = []
         self.refresh_calls = 0
 
-    def execute_script(self, script: str):
+    async def execute_script(self, script: str):
         if self.script_error is not None:
             raise self.script_error
         if "document.body && document.body.innerText" in script and "hasQuestionBlock" not in script:
             return self.body_text
         return self.ready_result
 
-    def get(self, url: str) -> None:
+    async def get(self, url: str) -> None:
         self.get_calls.append(url)
 
-    def refresh(self) -> None:
+    async def refresh(self) -> None:
         self.refresh_calls += 1
 
 
@@ -42,9 +44,10 @@ class _StopSignal:
 
 
 class TimedModeTests:
-    def test_extract_body_text_returns_empty_when_script_fails(self) -> None:
+    @pytest.mark.asyncio
+    async def test_extract_body_text_returns_empty_when_script_fails(self) -> None:
         driver = _TimedDriver(script_error=RuntimeError("boom"))
-        assert timed_mode._extract_body_text(driver) == ""
+        assert await timed_mode._extract_body_text(driver) == ""
 
     def test_normalize_interval_clamps_invalid_and_extreme_values(self) -> None:
         assert timed_mode._normalize_interval("abc") == timed_mode.DEFAULT_REFRESH_INTERVAL
@@ -58,34 +61,46 @@ class TimedModeTests:
         assert timed_mode._parse_countdown_seconds("距离开始还有1天2时3分4秒") == 93784.0
         assert timed_mode._parse_countdown_seconds("距离开始还有5分") == 300.0
 
-    def test_page_status_detects_ready_not_started_and_ended_states(self) -> None:
+    @pytest.mark.asyncio
+    async def test_page_status_detects_ready_not_started_and_ended_states(self) -> None:
         ready_driver = _TimedDriver(body_text="现在可以开始", ready_result=True)
-        assert timed_mode._page_status(ready_driver) == (True, False, False, "现在可以开始")
+        assert await timed_mode._page_status(ready_driver) == (True, False, False, "现在可以开始")
 
         not_started_driver = _TimedDriver(body_text="问卷将于2026年5月9日开放", ready_result=True)
-        assert timed_mode._page_status(not_started_driver) == (False, True, False, "问卷将于2026年5月9日开放")
+        assert await timed_mode._page_status(not_started_driver) == (False, True, False, "问卷将于2026年5月9日开放")
 
         ended_driver = _TimedDriver(body_text="This survey is closed", ready_result=True)
-        assert timed_mode._page_status(ended_driver) == (False, False, True, "Thissurveyisclosed")
+        assert await timed_mode._page_status(ended_driver) == (False, False, True, "Thissurveyisclosed")
 
-    def test_wait_until_open_returns_false_when_stop_signal_already_set(self) -> None:
+    @pytest.mark.asyncio
+    async def test_wait_until_open_returns_false_when_stop_signal_already_set(self) -> None:
         driver = _TimedDriver()
         stop_signal = _StopSignal(is_set=True)
-        assert timed_mode.wait_until_open(driver, "https://example.com", stop_signal) is False
+        assert await timed_mode.wait_until_open(driver, "https://example.com", stop_signal) is False
         assert driver.get_calls == []
 
-    def test_wait_until_open_returns_true_when_page_becomes_ready(self, monkeypatch) -> None:
+    @pytest.mark.asyncio
+    async def test_wait_until_open_returns_true_when_page_becomes_ready(self, monkeypatch) -> None:
         driver = _TimedDriver()
         stop_signal = _StopSignal()
         logs: list[str] = []
+        waited: list[float] = []
         statuses = iter([
             (False, True, False, "距离开始还有1秒"),
             (True, False, False, "已开放"),
         ])
-        monkeypatch.setattr(timed_mode, "_page_status", lambda *_args, **_kwargs: next(statuses))
-        monkeypatch.setattr(timed_mode.time, "time", lambda: 100.0)
 
-        result = timed_mode.wait_until_open(
+        async def _fake_page_status(*_args, **_kwargs):
+            return next(statuses)
+
+        async def _fake_sleep_or_stop(_stop_signal, seconds: float) -> bool:
+            waited.append(seconds)
+            return False
+
+        monkeypatch.setattr(timed_mode, "_page_status", _fake_page_status)
+        monkeypatch.setattr(timed_mode, "sleep_or_stop", _fake_sleep_or_stop)
+
+        result = await timed_mode.wait_until_open(
             driver,
             "https://example.com/survey",
             stop_signal,
@@ -95,36 +110,49 @@ class TimedModeTests:
 
         assert result is True
         assert driver.get_calls == ["https://example.com/survey"]
-        assert stop_signal.wait_calls == [0.2]
+        assert waited == [0.2]
         assert any("倒计时 <= 1.0s" in message for message in logs)
         assert any("问卷已开放" in message for message in logs)
 
-    def test_wait_until_open_returns_false_when_page_has_ended(self, monkeypatch) -> None:
+    @pytest.mark.asyncio
+    async def test_wait_until_open_returns_false_when_page_has_ended(self, monkeypatch) -> None:
         driver = _TimedDriver()
         logs: list[str] = []
-        monkeypatch.setattr(timed_mode, "_page_status", lambda *_args, **_kwargs: (False, False, True, "已结束"))
+        async def _fake_page_status(*_args, **_kwargs):
+            return False, False, True, "已结束"
 
-        assert timed_mode.wait_until_open(driver, "https://example.com", logger=logs.append) is False
+        monkeypatch.setattr(timed_mode, "_page_status", _fake_page_status)
+
+        assert await timed_mode.wait_until_open(driver, "https://example.com", logger=logs.append) is False
         assert any("已结束/关闭" in message for message in logs)
 
-    def test_wait_until_open_retries_after_refresh_error_and_stops_on_wait(self, monkeypatch) -> None:
+    @pytest.mark.asyncio
+    async def test_wait_until_open_retries_after_refresh_error_and_stops_on_wait(self, monkeypatch) -> None:
         driver = _TimedDriver()
         refresh_failures = {"count": 1}
         original_refresh = driver.refresh
 
-        def flaky_refresh() -> None:
+        async def flaky_refresh() -> None:
             if refresh_failures["count"] > 0:
                 refresh_failures["count"] -= 1
                 raise RuntimeError("refresh failed")
-            original_refresh()
+            await original_refresh()
 
         driver.refresh = flaky_refresh
         stop_signal = _StopSignal(wait_returns=[False, True])
         logs: list[str] = []
-        monkeypatch.setattr(timed_mode, "_page_status", lambda *_args, **_kwargs: (False, False, False, "页面还没开"))
-        monkeypatch.setattr(timed_mode.time, "time", lambda: 200.0)
+        wait_returns = iter([False, True])
 
-        assert timed_mode.wait_until_open(driver, "https://example.com", stop_signal, logger=logs.append) is False
+        async def _fake_page_status(*_args, **_kwargs):
+            return False, False, False, "页面还没开"
+
+        async def _fake_sleep_or_stop(_stop_signal, _seconds: float) -> bool:
+            return next(wait_returns)
+
+        monkeypatch.setattr(timed_mode, "_page_status", _fake_page_status)
+        monkeypatch.setattr(timed_mode, "sleep_or_stop", _fake_sleep_or_stop)
+
+        assert await timed_mode.wait_until_open(driver, "https://example.com", stop_signal, logger=logs.append) is False
         assert driver.get_calls == ["https://example.com"]
         assert any("刷新失败" in message for message in logs)
         assert any("尚未开放" in message for message in logs)

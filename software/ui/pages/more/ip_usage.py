@@ -11,7 +11,7 @@ from software.logging.log_utils import log_suppressed_exception
 from software.system.registry_manager import RegistryManager
 from software.ui.helpers.proxy_access import (
     RandomIPAuthError,
-    claim_easter_egg_bonus,
+    claim_easter_egg_bonus_async,
     format_quota_value,
     format_random_ip_error,
     has_authenticated_session,
@@ -848,13 +848,26 @@ class IpUsagePage(ScrollArea):
         if self._bonus_claim_in_progress:
             return
         self._bonus_claim_in_progress = True
-        threading.Thread(
-            target=self._claim_bonus_worker,
-            daemon=True,
-            name="EasterEggBonusClaim",
-        ).start()
+        win = self.window()
+        controller = getattr(win, "controller", None) if win is not None else None
+        if controller is not None and hasattr(controller, "_async_engine_client"):
+            try:
+                controller._async_engine_client.submit_ui_task(
+                    "claim_easter_egg_bonus",
+                    self._claim_bonus_task,
+                )
+                return
+            except Exception as exc:
+                log_suppressed_exception("_start_bonus_claim submit_ui_task", exc, level=logging.WARNING)
+        self._bonusClaimFinished.emit(
+            {
+                "level": "warning",
+                "message": "领取彩蛋奖励失败：异步引擎不可用",
+                "play_confetti": False,
+            }
+        )
 
-    def _claim_bonus_worker(self) -> None:
+    async def _claim_bonus_task(self) -> None:
         payload: dict[str, Any] = {
             "level": "success",
             "message": "🎉恭喜发现彩蛋",
@@ -868,7 +881,7 @@ class IpUsagePage(ScrollArea):
                     "play_confetti": True,
                 }
             else:
-                result = claim_easter_egg_bonus()
+                result = await claim_easter_egg_bonus_async()
                 claimed = bool(result.get("claimed"))
                 bonus_quota = float(result.get("bonus_quota") or 0.0)
                 detail = str(result.get("detail") or "").strip()

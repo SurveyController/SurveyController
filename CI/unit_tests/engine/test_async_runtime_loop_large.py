@@ -189,14 +189,16 @@ class AsyncRuntimeLoopLargeTests:
         state = ExecutionState(config=config)
         released: list[str] = []
         state.release_proxy_in_use = lambda thread_name: released.append(thread_name)
-        monkeypatch.setattr(runtime_loop, "_select_proxy_for_session", lambda *_args, **_kwargs: "http://1.1.1.1:80")
+        async def fake_select_proxy_for_session_async(*_args, **_kwargs):
+            return "http://1.1.1.1:80"
+        monkeypatch.setattr(runtime_loop, "_select_proxy_for_session_async", fake_select_proxy_for_session_async)
         monkeypatch.setattr(runtime_loop, "_record_bad_proxy_and_maybe_pause", lambda *_args, **_kwargs: False)
         monkeypatch.setattr(runtime_loop, "is_proxy_responsive", lambda proxy: False)
         monkeypatch.setattr(runtime_loop, "_discard_unresponsive_proxy", lambda *_args, **_kwargs: None)
         monkeypatch.setattr(runtime_loop, "_select_user_agent_for_session", lambda *_args, **_kwargs: ("UA", None))
         runner, _state, _ctx, _loop, _scheduler = _build_runner(config=config, state=state)
 
-        proxy, ua = runner._select_session_proxy_and_ua()
+        proxy, ua = await runner._select_session_proxy_and_ua()
         assert (proxy, ua) == (None, None)
         assert released == ["Slot-1"]
 
@@ -206,8 +208,9 @@ class AsyncRuntimeLoopLargeTests:
         browser_pool = _FakeBrowserPool(session=session)
         runner, state, _ctx, _loop, _scheduler = _build_runner()
         runner.browser_pool = browser_pool
-        monkeypatch.setattr(asyncio, "to_thread", lambda func, *args, **kwargs: asyncio.sleep(0, result=func(*args, **kwargs)))
-        monkeypatch.setattr(runner, "_select_session_proxy_and_ua", lambda: ("http://1.1.1.1:80", "UA"))
+        async def fake_select_session_proxy_and_ua():
+            return ("http://1.1.1.1:80", "UA")
+        monkeypatch.setattr(runner, "_select_session_proxy_and_ua", fake_select_session_proxy_and_ua)
 
         opened = await runner._open_session()
         assert opened is session
@@ -236,7 +239,7 @@ class AsyncRuntimeLoopLargeTests:
         session = _FakeSession(driver=SimpleNamespace())
 
         monkeypatch.setattr(asyncio, "to_thread", lambda func, *args, **kwargs: asyncio.sleep(0, result=func(*args, **kwargs)))
-        monkeypatch.setattr(runtime_loop.timed_mode, "wait_until_open", lambda *_args, **_kwargs: True)
+        monkeypatch.setattr(runtime_loop.timed_mode, "wait_until_open", lambda *_args, **_kwargs: asyncio.sleep(0, result=True))
         assert await runner._load_survey_or_record_failure(session) is True
 
         config.timed_mode_enabled = False
@@ -253,7 +256,6 @@ class AsyncRuntimeLoopLargeTests:
         runner, _state, ctx, _loop, _scheduler = _build_runner(config=config)
         runner.gui_instance = SimpleNamespace(handle_random_ip_submission=lambda stop_signal: gui_calls.append(stop_signal))
         monkeypatch.setattr(runtime_loop, "_provider_is_device_quota_limit_page", lambda *_args, **_kwargs: asyncio.sleep(0, result=True))
-        monkeypatch.setattr(asyncio, "to_thread", lambda func, *args, **kwargs: asyncio.sleep(0, result=func(*args, **kwargs)))
 
         assert await runner._handle_device_quota_limit(_FakeSession()) is True
         assert ctx.stop_event.is_set()
@@ -272,7 +274,6 @@ class AsyncRuntimeLoopLargeTests:
         config = ExecutionConfig(random_proxy_ip_enabled=True, fail_threshold=2, num_threads=4, survey_provider="wjx")
         state = ExecutionState(config=config)
         runner, _state, _ctx, _loop, _scheduler = _build_runner(config=config, state=state)
-        monkeypatch.setattr(asyncio, "to_thread", lambda func, *args, **kwargs: asyncio.sleep(0, result=func(*args, **kwargs)))
         state.wait_for_runtime_change = lambda **_kwargs: False
 
         assert await runner._wait_for_next_unique_proxy() is True
@@ -294,7 +295,6 @@ class AsyncRuntimeLoopLargeTests:
         runner.proxy_address = "http://1.1.1.1:80"
         assert runner._handle_proxy_connection_error(None) == "http://1.1.1.1:80"
 
-        monkeypatch.setattr(asyncio, "to_thread", lambda func, *args, **kwargs: asyncio.sleep(0, result=func(*args, **kwargs)))
         monkeypatch.setattr(runtime_loop, "_handle_ai_runtime_error_impl", lambda exc, *_args, **_kwargs: str(exc) == "ai boom")
         assert await runner._handle_ai_runtime_error(AIRuntimeError("ai boom")) is True
 
@@ -465,7 +465,6 @@ class AsyncOwnerPoolLargeTests:
         portal = SimpleNamespace()
         pool = AsyncBrowserOwnerPool(
             config=BrowserPoolConfig(owner_count=2, contexts_per_owner=1, logical_concurrency=2),
-            portal=portal,  # type: ignore[arg-type]
             headless=True,
         )
         disconnected = RuntimeError("Target page, context or browser has been closed")

@@ -1,7 +1,8 @@
 from __future__ import annotations
 
-from contextlib import contextmanager
+from contextlib import asynccontextmanager
 from types import SimpleNamespace
+from unittest.mock import AsyncMock
 
 import pytest
 
@@ -45,28 +46,43 @@ class _FakeQQPage:
         self.load_state_waits: list[tuple[str, int]] = []
         self.evaluations: list[tuple[str, object]] = []
 
-    def wait_for_selector(self, selector: str, *, state: str, timeout: int) -> None:
+    async def wait_for_selector(self, selector: str, *, state: str, timeout: int) -> None:
         self.selector_waits.append((selector, state, timeout))
         if self.wait_selector_error is not None:
             raise self.wait_selector_error
 
-    def wait_for_load_state(self, state: str, *, timeout: int) -> None:
+    async def wait_for_load_state(self, state: str, *, timeout: int) -> None:
         self.load_state_waits.append((state, timeout))
 
-    def evaluate(self, script: str, payload: object):
+    async def evaluate(self, script: str, payload: object):
         self.evaluations.append((script, payload))
         return self._payload
 
 
 class _FakeQQDriver:
     def __init__(self, page: _FakeQQPage | None, *, title: str = "") -> None:
-        self.page = page
-        self.title = title
-        self.current_url = getattr(page, "url", "")
+        self._page = page
+        self._title = title
+        self._current_url = getattr(page, "url", "")
         self.get_calls: list[str] = []
 
-    def get(self, url: str) -> None:
+    async def get(self, url: str) -> None:
         self.get_calls.append(url)
+
+    async def page(self):
+        return self._page
+
+    async def title(self) -> str:
+        return self._title
+
+    async def current_url(self) -> str:
+        return self._current_url
+
+    def mark_cleanup_done(self) -> bool:
+        return True
+
+    async def aclose(self) -> None:
+        return None
 
 
 class TencentParserTests:
@@ -83,23 +99,25 @@ class TencentParserTests:
         )
         assert qq_parser._is_qq_login_required_response(response)
 
-    def test_request_qq_api_raises_on_invalid_json_and_non_dict_payload(self, patch_attrs) -> None:
+    @pytest.mark.asyncio
+    async def test_request_qq_api_raises_on_invalid_json_and_non_dict_payload(self, patch_attrs) -> None:
         bad_json_response = _FakeHttpResponse(json_payload=ValueError("bad json"), text="not login")
-        patch_attrs((qq_parser.http_client, "get", lambda *_args, **_kwargs: bad_json_response))
+        patch_attrs((qq_parser.http_client, "aget", AsyncMock(return_value=bad_json_response)))
 
         with pytest.raises(RuntimeError, match="无法解析的响应：meta"):
-            qq_parser._request_qq_api("123", "meta", hash_value="hash", headers={})
+            await qq_parser._request_qq_api("123", "meta", hash_value="hash", headers={})
 
         non_dict_response = _FakeHttpResponse(json_payload=["bad"])
-        patch_attrs((qq_parser.http_client, "get", lambda *_args, **_kwargs: non_dict_response))
+        patch_attrs((qq_parser.http_client, "aget", AsyncMock(return_value=non_dict_response)))
 
         with pytest.raises(RuntimeError, match="非对象响应：questions"):
-            qq_parser._request_qq_api("123", "questions", hash_value="hash", headers={})
+            await qq_parser._request_qq_api("123", "questions", hash_value="hash", headers={})
 
-    def test_ensure_api_ok_and_http_fetch_locale_fallback(self, patch_attrs) -> None:
+    @pytest.mark.asyncio
+    async def test_ensure_api_ok_and_http_fetch_locale_fallback(self, patch_attrs) -> None:
         calls: list[str] = []
 
-        def fake_request(_survey_id, endpoint, *, hash_value, headers, extra_params=None):
+        async def fake_request(_survey_id, endpoint, *, hash_value, headers, extra_params=None):
             _ = hash_value, headers
             locale = (extra_params or {}).get("locale")
             calls.append(f"{endpoint}:{locale or ''}")
@@ -124,7 +142,7 @@ class TencentParserTests:
 
         patch_attrs((qq_parser, "_request_qq_api", fake_request))
 
-        info, title = qq_parser._fetch_qq_survey_via_http("123", "hash")
+        info, title = await qq_parser._fetch_qq_survey_via_http("123", "hash")
 
         assert title == "腾讯问卷标题 - 腾讯问卷"
         assert qq_parser._normalize_qq_title("标题 - 腾讯问卷") == "标题"
@@ -192,9 +210,10 @@ class TencentParserTests:
         assert third["unsupported"]
         assert "暂不支持腾讯题型" in third["unsupported_reason"]
 
-    def test_parse_qq_survey_rejects_login_url_and_supports_browser_fallback(self, patch_attrs) -> None:
+    @pytest.mark.asyncio
+    async def test_parse_qq_survey_rejects_login_url_and_supports_browser_fallback(self, patch_attrs) -> None:
         with pytest.raises(RuntimeError, match="需要登录"):
-            qq_parser.parse_qq_survey("https://wj.qq.com/r/login.html")
+            await qq_parser.parse_qq_survey("https://wj.qq.com/r/login.html")
 
         browser_payload = {
             "ok": True,
@@ -214,8 +233,8 @@ class TencentParserTests:
         page = _FakeQQPage(payload=browser_payload, wait_selector_error=RuntimeError("wait failed"))
         driver = _FakeQQDriver(page, title="备用浏览器标题")
 
-        @contextmanager
-        def fake_pool():
+        @asynccontextmanager
+        async def fake_pool():
             yield driver
 
         patch_attrs(
@@ -223,17 +242,18 @@ class TencentParserTests:
             (qq_parser, "acquire_parse_browser_session", fake_pool),
         )
 
-        info, title = qq_parser.parse_qq_survey("https://wj.qq.com/s2/123/hash/")
+        info, title = await qq_parser.parse_qq_survey("https://wj.qq.com/s2/123/hash/")
 
         assert driver.get_calls == ["https://wj.qq.com/s2/123/hash/"]
         assert info[0]["title"] == "题目1"
         assert title == "浏览器标题"
 
-    def test_parse_qq_survey_browser_fallback_rejects_missing_page_and_bad_status(self, patch_attrs) -> None:
+    @pytest.mark.asyncio
+    async def test_parse_qq_survey_browser_fallback_rejects_missing_page_and_bad_status(self, patch_attrs) -> None:
         missing_page_driver = _FakeQQDriver(None)
 
-        @contextmanager
-        def fake_pool_missing():
+        @asynccontextmanager
+        async def fake_pool_missing():
             yield missing_page_driver
 
         patch_attrs(
@@ -242,15 +262,15 @@ class TencentParserTests:
         )
 
         with pytest.raises(RuntimeError, match="不支持腾讯问卷解析"):
-            qq_parser.parse_qq_survey("https://wj.qq.com/s2/123/hash/")
+            await qq_parser.parse_qq_survey("https://wj.qq.com/s2/123/hash/")
 
         bad_payload_driver = _FakeQQDriver(_FakeQQPage(payload={"ok": False, "status": 403}))
 
-        @contextmanager
-        def fake_pool_bad():
+        @asynccontextmanager
+        async def fake_pool_bad():
             yield bad_payload_driver
 
         patch_attrs((qq_parser, "acquire_parse_browser_session", fake_pool_bad))
 
         with pytest.raises(RuntimeError, match="HTTP 403"):
-            qq_parser.parse_qq_survey("https://wj.qq.com/s2/123/hash/")
+            await qq_parser.parse_qq_survey("https://wj.qq.com/s2/123/hash/")

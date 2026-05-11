@@ -21,7 +21,7 @@ from software.network.proxy.policy.source import (
 )
 from software.network.proxy.session import (
     RandomIPAuthError,
-    claim_easter_egg_bonus,
+    claim_easter_egg_bonus_async,
     format_quota_value,
     format_random_ip_error,
     get_session_snapshot,
@@ -36,7 +36,7 @@ __all__ = [
     "apply_custom_proxy_api",
     "apply_proxy_area_code",
     "apply_proxy_source_settings",
-    "claim_easter_egg_bonus",
+    "claim_easter_egg_bonus_async",
     "format_quota_value",
     "format_random_ip_error",
     "format_status_payload",

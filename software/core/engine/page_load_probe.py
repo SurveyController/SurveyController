@@ -2,17 +2,18 @@
 
 from __future__ import annotations
 
-import time
+import asyncio
 from dataclasses import dataclass
 from typing import Any
 
 import software.core.modes.timed_mode as timed_mode
+from software.core.engine.async_wait import sleep_or_stop
 from software.providers.common import (
     SURVEY_PROVIDER_QQ,
     SURVEY_PROVIDER_WJX,
     normalize_survey_provider,
 )
-from software.providers.registry import is_device_quota_limit_page_sync as _provider_is_device_quota_limit_page
+from software.providers.registry import is_device_quota_limit_page as _provider_is_device_quota_limit_page
 from wjx.provider.submission_pages import _page_looks_like_wjx_questionnaire
 
 PAGE_LOAD_PROBE_ANSWERABLE = "answerable"
@@ -52,9 +53,9 @@ def _normalize_text(value: Any) -> str:
     return " ".join(str(value or "").split()).strip()
 
 
-def _extract_text_snapshot(driver: Any) -> tuple[str, str]:
+async def _extract_text_snapshot(driver: Any) -> tuple[str, str]:
     try:
-        snapshot = driver.execute_script(
+        snapshot = await driver.execute_script(
             """
             return (() => {
                 const title = document.title || '';
@@ -77,9 +78,9 @@ def _contains_proxy_error_text(*texts: str) -> bool:
     return any(marker in normalized for marker in _PROXY_ERROR_TEXT_MARKERS)
 
 
-def _generic_probe_snapshot(driver: Any) -> dict[str, Any]:
+async def _generic_probe_snapshot(driver: Any) -> dict[str, Any]:
     try:
-        result = driver.execute_script(
+        result = await driver.execute_script(
             """
             return (() => {
                 const visible = (el) => {
@@ -120,11 +121,11 @@ def _generic_probe_snapshot(driver: Any) -> dict[str, Any]:
     return result if isinstance(result, dict) else {}
 
 
-def _probe_wjx_page(driver: Any) -> PageLoadProbeResult:
-    if _page_looks_like_wjx_questionnaire(driver):
+async def _probe_wjx_page(driver: Any) -> PageLoadProbeResult:
+    if await _page_looks_like_wjx_questionnaire(driver):
         return PageLoadProbeResult(PAGE_LOAD_PROBE_ANSWERABLE, detail="wjx_questionnaire")
 
-    snapshot = _generic_probe_snapshot(driver)
+    snapshot = await _generic_probe_snapshot(driver)
     title = _normalize_text(snapshot.get("title"))
     body_text = _normalize_text(snapshot.get("bodyText"))
     if _contains_proxy_error_text(title, body_text):
@@ -133,12 +134,12 @@ def _probe_wjx_page(driver: Any) -> PageLoadProbeResult:
     if any(bool(snapshot.get(key)) for key in ("hasQuestionBlock", "hasInputs", "hasActions")):
         return PageLoadProbeResult(PAGE_LOAD_PROBE_ANSWERABLE, detail="wjx_dom_ready")
 
-    return _fallback_probe(driver, title=title, body_text=body_text, snapshot=snapshot)
+    return await _fallback_probe(driver, title=title, body_text=body_text, snapshot=snapshot)
 
 
-def _probe_qq_page(driver: Any) -> PageLoadProbeResult:
+async def _probe_qq_page(driver: Any) -> PageLoadProbeResult:
     try:
-        result = driver.execute_script(
+        result = await driver.execute_script(
             """
             return (() => {
                 const visible = (el) => {
@@ -180,17 +181,17 @@ def _probe_qq_page(driver: Any) -> PageLoadProbeResult:
     if any(bool(result.get(key)) for key in ("hasQuestions", "hasInputs", "hasActions")):
         return PageLoadProbeResult(PAGE_LOAD_PROBE_ANSWERABLE, detail="qq_dom_ready")
 
-    return _fallback_probe(driver, title=title, body_text=body_text, snapshot=result)
+    return await _fallback_probe(driver, title=title, body_text=body_text, snapshot=result)
 
 
-def _fallback_probe(
+async def _fallback_probe(
     driver: Any,
     *,
     title: str = "",
     body_text: str = "",
     snapshot: dict[str, Any] | None = None,
 ) -> PageLoadProbeResult:
-    ready, not_started, ended, normalized_text = timed_mode._page_status(driver)
+    ready, not_started, ended, normalized_text = await timed_mode._page_status(driver)
     if ready:
         return PageLoadProbeResult(PAGE_LOAD_PROBE_ANSWERABLE, detail="generic_ready")
     if not_started:
@@ -213,42 +214,43 @@ def _fallback_probe(
     return PageLoadProbeResult(PAGE_LOAD_PROBE_PROXY_UNUSABLE, detail="no_answerable_signal", retryable=True)
 
 
-def probe_loaded_page(driver: Any, *, provider: str) -> PageLoadProbeResult:
+async def probe_loaded_page(driver: Any, *, provider: str) -> PageLoadProbeResult:
     normalized_provider = normalize_survey_provider(provider)
-    if _provider_is_device_quota_limit_page(driver, provider=normalized_provider):
+    if await _provider_is_device_quota_limit_page(driver, provider=normalized_provider):
         return PageLoadProbeResult(PAGE_LOAD_PROBE_BUSINESS_PAGE, detail="device_quota_limit")
     if normalized_provider == SURVEY_PROVIDER_WJX:
-        return _probe_wjx_page(driver)
+        return await _probe_wjx_page(driver)
     if normalized_provider == SURVEY_PROVIDER_QQ:
-        return _probe_qq_page(driver)
-    title, body_text = _extract_text_snapshot(driver)
-    return _fallback_probe(driver, title=title, body_text=body_text)
+        return await _probe_qq_page(driver)
+    title, body_text = await _extract_text_snapshot(driver)
+    return await _fallback_probe(driver, title=title, body_text=body_text)
 
 
-def wait_for_page_probe(
+async def wait_for_page_probe(
     driver: Any,
     *,
     provider: str,
     timeout_ms: int,
     poll_interval_seconds: float,
 ) -> PageLoadProbeResult:
-    deadline = time.monotonic() + max(0.0, float(timeout_ms) / 1000.0)
+    loop = asyncio.get_running_loop()
+    deadline = loop.time() + max(0.0, float(timeout_ms) / 1000.0)
     interval = max(0.05, float(poll_interval_seconds or 0.25))
     last_result = PageLoadProbeResult(PAGE_LOAD_PROBE_PROXY_UNUSABLE, detail="probe_not_started", retryable=True)
 
     while True:
-        last_result = probe_loaded_page(driver, provider=provider)
+        last_result = await probe_loaded_page(driver, provider=provider)
         if last_result.status in {PAGE_LOAD_PROBE_ANSWERABLE, PAGE_LOAD_PROBE_BUSINESS_PAGE}:
             return last_result
         if not last_result.retryable:
             return last_result
-        if time.monotonic() >= deadline:
+        if loop.time() >= deadline:
             return PageLoadProbeResult(
                 PAGE_LOAD_PROBE_PROXY_UNUSABLE,
                 detail=last_result.detail or "probe_timeout",
                 retryable=False,
             )
-        time.sleep(interval)
+        await sleep_or_stop(None, interval)
 
 
 __all__ = [

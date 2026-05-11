@@ -2,31 +2,30 @@
 
 from __future__ import annotations
 
-import asyncio
 from dataclasses import dataclass
-from typing import Any, Callable
+from typing import Any, Awaitable, Callable
 
 from software.core.task import ExecutionConfig, ExecutionState
 from software.providers.contracts import SurveyDefinition
 
-ParseSurveyHook = Callable[[str], SurveyDefinition]
-FillSurveyHook = Callable[..., bool]
-PagePredicateHook = Callable[[Any], bool]
-ValidationMessageHook = Callable[[Any], str]
-WaitVerificationHook = Callable[..., bool]
-VerificationDetectedHook = Callable[[Any, Any, Any], None]
-SubmissionRecoveryHook = Callable[..., bool]
+ParseSurveyHook = Callable[[str], Awaitable[SurveyDefinition]]
+FillSurveyHook = Callable[..., Awaitable[bool]]
+PagePredicateHook = Callable[[Any], Awaitable[bool]]
+ValidationMessageHook = Callable[[Any], Awaitable[str]]
+WaitVerificationHook = Callable[..., Awaitable[bool]]
+VerificationDetectedHook = Callable[[Any, Any, Any], Awaitable[None]]
+SubmissionRecoveryHook = Callable[..., Awaitable[bool]]
 
 
-def _return_false(*_args: Any, **_kwargs: Any) -> bool:
+async def _return_false(*_args: Any, **_kwargs: Any) -> bool:
     return False
 
 
-def _return_empty_text(*_args: Any, **_kwargs: Any) -> str:
+async def _return_empty_text(*_args: Any, **_kwargs: Any) -> str:
     return ""
 
 
-def _noop(*_args: Any, **_kwargs: Any) -> None:
+async def _noop(*_args: Any, **_kwargs: Any) -> None:
     return None
 
 
@@ -49,32 +48,8 @@ class CallableProviderAdapter:
         self.provider = str(provider or "").strip()
         self._hooks = hooks
 
-    def parse_survey(self, url: str) -> SurveyDefinition:
-        return self._hooks.parse_survey(url)
-
     async def parse_survey_async(self, url: str) -> SurveyDefinition:
-        return await asyncio.to_thread(self.parse_survey, url)
-
-    def fill_survey(
-        self,
-        driver: Any,
-        config: ExecutionConfig,
-        state: ExecutionState,
-        *,
-        stop_signal: Any = None,
-        thread_name: str = "",
-        psycho_plan: Any = None,
-    ) -> bool:
-        return bool(
-            self._hooks.fill_survey(
-                driver,
-                config,
-                state,
-                stop_signal=stop_signal,
-                thread_name=thread_name,
-                psycho_plan=psycho_plan,
-            )
-        )
+        return await self._hooks.parse_survey(url)
 
     async def fill_survey_async(
         self,
@@ -87,8 +62,7 @@ class CallableProviderAdapter:
         psycho_plan: Any = None,
     ) -> bool:
         return bool(
-            await asyncio.to_thread(
-                self.fill_survey,
+            await self._hooks.fill_survey(
                 driver,
                 config,
                 state,
@@ -98,32 +72,14 @@ class CallableProviderAdapter:
             )
         )
 
-    def is_completion_page(self, driver: Any) -> bool:
-        return bool(self._hooks.is_completion_page(driver))
-
     async def is_completion_page_async(self, driver: Any) -> bool:
-        return bool(await asyncio.to_thread(self.is_completion_page, driver))
-
-    def submission_requires_verification(self, driver: Any) -> bool:
-        return bool(self._hooks.submission_requires_verification(driver))
+        return bool(await self._hooks.is_completion_page(driver))
 
     async def submission_requires_verification_async(self, driver: Any) -> bool:
-        return bool(await asyncio.to_thread(self.submission_requires_verification, driver))
-
-    def submission_validation_message(self, driver: Any) -> str:
-        return str(self._hooks.submission_validation_message(driver) or "").strip()
+        return bool(await self._hooks.submission_requires_verification(driver))
 
     async def submission_validation_message_async(self, driver: Any) -> str:
-        return str(await asyncio.to_thread(self.submission_validation_message, driver) or "").strip()
-
-    def wait_for_submission_verification(self, driver: Any, *, timeout: int = 3, stop_signal: Any = None) -> bool:
-        return bool(
-            self._hooks.wait_for_submission_verification(
-                driver,
-                timeout=timeout,
-                stop_signal=stop_signal,
-            )
-        )
+        return str(await self._hooks.submission_validation_message(driver) or "").strip()
 
     async def wait_for_submission_verification_async(
         self,
@@ -133,38 +89,15 @@ class CallableProviderAdapter:
         stop_signal: Any = None,
     ) -> bool:
         return bool(
-            await asyncio.to_thread(
-                self.wait_for_submission_verification,
+            await self._hooks.wait_for_submission_verification(
                 driver,
                 timeout=timeout,
                 stop_signal=stop_signal,
             )
         )
 
-    def handle_submission_verification_detected(self, ctx: Any, gui_instance: Any, stop_signal: Any) -> None:
-        self._hooks.handle_submission_verification_detected(ctx, gui_instance, stop_signal)
-
     async def handle_submission_verification_detected_async(self, ctx: Any, gui_instance: Any, stop_signal: Any) -> None:
-        await asyncio.to_thread(self.handle_submission_verification_detected, ctx, gui_instance, stop_signal)
-
-    def attempt_submission_recovery(
-        self,
-        driver: Any,
-        ctx: Any,
-        gui_instance: Any,
-        stop_signal: Any,
-        *,
-        thread_name: str = "",
-    ) -> bool:
-        return bool(
-            self._hooks.attempt_submission_recovery(
-                driver,
-                ctx,
-                gui_instance,
-                stop_signal,
-                thread_name=thread_name,
-            )
-        )
+        await self._hooks.handle_submission_verification_detected(ctx, gui_instance, stop_signal)
 
     async def attempt_submission_recovery_async(
         self,
@@ -176,8 +109,7 @@ class CallableProviderAdapter:
         thread_name: str = "",
     ) -> bool:
         return bool(
-            await asyncio.to_thread(
-                self.attempt_submission_recovery,
+            await self._hooks.attempt_submission_recovery(
                 driver,
                 ctx,
                 gui_instance,
@@ -186,17 +118,11 @@ class CallableProviderAdapter:
             )
         )
 
-    def consume_submission_success_signal(self, driver: Any) -> bool:
-        return bool(self._hooks.consume_submission_success_signal(driver))
-
     async def consume_submission_success_signal_async(self, driver: Any) -> bool:
-        return bool(await asyncio.to_thread(self.consume_submission_success_signal, driver))
-
-    def is_device_quota_limit_page(self, driver: Any) -> bool:
-        return bool(self._hooks.is_device_quota_limit_page(driver))
+        return bool(await self._hooks.consume_submission_success_signal(driver))
 
     async def is_device_quota_limit_page_async(self, driver: Any) -> bool:
-        return bool(await asyncio.to_thread(self.is_device_quota_limit_page, driver))
+        return bool(await self._hooks.is_device_quota_limit_page(driver))
 
 
 __all__ = [

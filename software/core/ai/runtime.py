@@ -1,13 +1,11 @@
 """AI 运行时辅助函数 - 调用 AI 模型生成答案"""
 import re
-import time
+import asyncio
 from typing import Optional, Union, List
 import logging
 from software.logging.log_utils import log_suppressed_exception
 
-
-from software.network.browser import By, BrowserDriver
-from software.integrations.ai import generate_answer
+from software.integrations.ai.client import agenerate_answer
 from software.integrations.ai.client import FreeAITimeoutError
 from software.app.config import _HTML_SPACE_RE
 
@@ -73,44 +71,7 @@ def _cleanup_question_title(raw_title: str) -> str:
     return title.strip()
 
 
-def extract_question_title_from_dom(driver: BrowserDriver, question_number: int) -> str:
-    selectors = [
-        f"#div{question_number} .topichtml",
-        f"#div{question_number} .field-label",
-        f"#div{question_number} .title",
-        f"#div{question_number} .topic",
-    ]
-    for selector in selectors:
-        try:
-            element = driver.find_element(By.CSS_SELECTOR, selector)
-        except Exception:
-            element = None
-        if not element:
-            continue
-        try:
-            text = element.text
-        except Exception:
-            text = ""
-        cleaned = _cleanup_question_title(text)
-        if cleaned:
-            return cleaned
-    return ""
-
-
-def resolve_question_title_for_ai(
-    driver: BrowserDriver,
-    question_number: int,
-    fallback_title: Optional[str] = None,
-) -> str:
-    title = _cleanup_question_title(fallback_title or "")
-    if not title:
-        title = extract_question_title_from_dom(driver, question_number)
-    if not title:
-        raise AIRuntimeError(f"无法获取第{question_number}题题干，无法调用 AI")
-    return title
-
-
-def generate_ai_answer(
+async def agenerate_ai_answer(
     question_title: str,
     *,
     question_type: str = "fill_blank",
@@ -120,19 +81,18 @@ def generate_ai_answer(
     if not cleaned:
         raise AIRuntimeError("题干为空，无法调用 AI")
 
-    # 注入画像和上下文信息，让 AI 答案与前面的作答保持一致
     try:
         from software.core.persona.context import build_ai_context_prompt
         context_prompt = build_ai_context_prompt()
         if context_prompt:
             cleaned = f"{context_prompt}\n\n请回答以下问卷问题：{cleaned}"
     except Exception as exc:
-        log_suppressed_exception("generate_ai_answer: from software.core.persona.context import build_ai_context_prompt", exc, level=logging.WARNING)
+        log_suppressed_exception("agenerate_ai_answer: from software.core.persona.context import build_ai_context_prompt", exc, level=logging.WARNING)
 
     last_error: Exception | None = None
     for attempt in range(1, _AI_FILL_MAX_ATTEMPTS + 1):
         try:
-            answer = generate_answer(
+            answer = await agenerate_answer(
                 cleaned,
                 question_type=question_type,
                 blank_count=blank_count,
@@ -165,7 +125,7 @@ def generate_ai_answer(
                 question_type,
                 exc,
             )
-            time.sleep(_AI_FILL_RETRY_BACKOFF_SECONDS)
+            await asyncio.sleep(_AI_FILL_RETRY_BACKOFF_SECONDS)
     if last_error is not None:
         raise AIRuntimeError(f"AI 调用失败：{last_error}") from last_error
     raise AIRuntimeError("AI 调用失败：未知错误")

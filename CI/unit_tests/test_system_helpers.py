@@ -76,10 +76,12 @@ class SystemHelpersTests:
             return ["lease"]
 
         import software.network.proxy.api as proxy_api
+        async def fake_fetch_async(**kwargs):
+            return fake_fetch(**kwargs)
 
         patch_attrs(
             (prefetch, "get_effective_proxy_api_url", lambda: "https://proxy.example/api"),
-            (proxy_api, "fetch_proxy_batch", fake_fetch),
+            (proxy_api, "fetch_proxy_batch_async", fake_fetch_async),
         )
 
         assert prefetch.prefetch_proxy_pool(0) == ["lease"]

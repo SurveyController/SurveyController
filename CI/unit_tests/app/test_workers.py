@@ -37,7 +37,7 @@ class WorkerTests:
         worker = AITestWorker()
         received: list[tuple[bool, str]] = []
         worker.finished.connect(lambda success, message: received.append((success, message)))
-        with patch('software.ui.workers.ai_test_worker.test_connection', return_value='连接成功：延迟 120ms'):
+        with patch('software.ui.workers.ai_test_worker.atest_connection', return_value='连接成功：延迟 120ms'):
             worker.run()
         assert received == [(True, '连接成功：延迟 120ms')]
 
@@ -45,7 +45,7 @@ class WorkerTests:
         worker = AITestWorker()
         received: list[tuple[bool, str]] = []
         worker.finished.connect(lambda success, message: received.append((success, message)))
-        with patch('software.ui.workers.ai_test_worker.test_connection', return_value='服务暂时不可用'):
+        with patch('software.ui.workers.ai_test_worker.atest_connection', return_value='服务暂时不可用'):
             worker.run()
         assert received == [(False, '服务暂时不可用')]
 
@@ -53,6 +53,6 @@ class WorkerTests:
         worker = AITestWorker()
         received: list[tuple[bool, str]] = []
         worker.finished.connect(lambda success, message: received.append((success, message)))
-        with patch('software.ui.workers.ai_test_worker.test_connection', side_effect=RuntimeError('timeout')):
+        with patch('software.ui.workers.ai_test_worker.atest_connection', side_effect=RuntimeError('timeout')):
             worker.run()
         assert received == [(False, '连接失败: timeout')]

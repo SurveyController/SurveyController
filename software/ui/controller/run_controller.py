@@ -135,7 +135,7 @@ class RunController(
         self._monitor_thread: Optional[threading.Thread] = None
         self._init_gate_thread: Optional[threading.Thread] = None
         self._execution_state: Optional[ExecutionState] = None
-        self._async_engine_client: Optional[AsyncEngineClient] = None
+        self._async_engine_client: AsyncEngineClient = AsyncEngineClient()
         self._cleanup_runner = CleanupRunner()
         self.on_ip_counter: Optional[Callable[[float, float, bool], None]] = None
         self.on_random_ip_loading: Optional[Callable[[bool, str], None]] = None
@@ -341,7 +341,7 @@ class RunController(
         with self._random_ip_toggle_lock:
             return bool(self._random_ip_toggle_active)
 
-    def toggle_random_ip_async(
+    def request_toggle_random_ip(
         self,
         enabled: bool,
         *,
@@ -370,10 +370,21 @@ class RunController(
                     logging.info("随机IP异步回调执行失败", exc_info=True)
             self.refresh_random_ip_counter(adapter=target_adapter)
 
-        def _worker() -> None:
+        try:
+            future = self.submit_toggle_random_ip(bool(enabled), adapter=target_adapter)
+        except Exception:
+            import logging
+
+            logging.warning("随机IP异步切换提交失败", exc_info=True)
+            with self._random_ip_toggle_lock:
+                self._random_ip_toggle_active = False
+            self.notify_random_ip_loading(False, "")
+            return False
+
+        def _on_done_callback(done_future) -> None:
             final_enabled = bool(enabled)
             try:
-                final_enabled = bool(self.toggle_random_ip(bool(enabled), adapter=target_adapter))
+                final_enabled = bool(done_future.result())
             except Exception:
                 import logging
 
@@ -383,14 +394,9 @@ class RunController(
                         final_enabled = bool(target_adapter.is_random_ip_enabled())
                     except Exception:
                         final_enabled = False
-            finally:
-                self._dispatch_to_ui_async(lambda value=bool(final_enabled): _finish(value))
+            self._dispatch_to_ui_async(lambda value=bool(final_enabled): _finish(value))
 
-        threading.Thread(
-            target=_worker,
-            daemon=True,
-            name="RandomIPToggle",
-        ).start()
+        future.add_done_callback(_on_done_callback)
         return True
 
     def _sync_adapter_ui_bridge(self, adapter: Optional[EngineGuiAdapter] = None) -> None:

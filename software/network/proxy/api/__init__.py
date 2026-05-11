@@ -3,7 +3,7 @@
 from software.network.proxy.api.provider import (
     AreaProxyQualityError,
     ProxyApiFatalError,
-    fetch_proxy_batch,
+    fetch_proxy_batch_async,
     format_status_payload,
     get_status,
     test_custom_proxy_api,
@@ -12,7 +12,7 @@ from software.network.proxy.api.provider import (
 __all__ = [
     "AreaProxyQualityError",
     "ProxyApiFatalError",
-    "fetch_proxy_batch",
+    "fetch_proxy_batch_async",
     "format_status_payload",
     "get_status",
     "test_custom_proxy_api",

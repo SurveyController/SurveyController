@@ -50,13 +50,13 @@ class EngineGuiAdapterCleanupTests:
         adapter = self._build_adapter()
         events: list[object] = []
         adapter.bind_runtime_actions(
-            refresh_random_ip_counter=lambda async_mode: events.append(("refresh", async_mode)),
+            refresh_random_ip_counter=lambda: events.append(("refresh",)),
             toggle_random_ip=lambda enabled: events.append(("toggle", enabled)) or bool(enabled),
             handle_random_ip_submission=lambda stop_signal: events.append(("submit", stop_signal)),
         )
 
-        adapter.refresh_random_ip_counter(async_mode=False)
+        adapter.refresh_random_ip_counter()
         assert adapter.toggle_random_ip(True) is True
         adapter.handle_random_ip_submission("stop")
 
-        assert events == [("refresh", False), ("toggle", True), ("submit", "stop")]
+        assert events == [("refresh",), ("toggle", True), ("submit", "stop")]

@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import asyncio
 from typing import Any, Optional
 
 from software.core.engine.provider_common import provider_run_context
@@ -48,6 +47,7 @@ _WJX_FILL: HookTarget = ("wjx.provider.runtime", "brush_wjx")
 _QQ_FILL: HookTarget = ("tencent.provider.runtime", "brush_qq")
 _CREDAMO_FILL: HookTarget = ("credamo.provider.runtime", "brush_credamo")
 
+_WJX_IS_COMPLETION_PAGE: HookTarget = ("wjx.provider.submission_pages", "is_completion_page")
 _WJX_SUBMISSION_REQUIRES_VERIFICATION: HookTarget = ("wjx.provider.submission", "submission_requires_verification")
 _WJX_SUBMISSION_VALIDATION_MESSAGE: HookTarget = ("wjx.provider.submission", "submission_validation_message")
 _WJX_WAIT_FOR_SUBMISSION_VERIFICATION: HookTarget = ("wjx.provider.submission", "wait_for_submission_verification")
@@ -78,6 +78,7 @@ _PROVIDER_REGISTRY = {
         ProviderAdapterHooks(
             parse_survey=build_parse_hook(SURVEY_PROVIDER_WJX, _WJX_PARSE),
             fill_survey=build_fill_hook(_WJX_FILL),
+            is_completion_page=build_predicate_hook(_WJX_IS_COMPLETION_PAGE),
             submission_requires_verification=build_predicate_hook(_WJX_SUBMISSION_REQUIRES_VERIFICATION),
             submission_validation_message=build_text_hook(_WJX_SUBMISSION_VALIDATION_MESSAGE),
             wait_for_submission_verification=build_wait_hook(_WJX_WAIT_FOR_SUBMISSION_VERIFICATION),
@@ -130,17 +131,9 @@ def _get_provider_adapter(*, provider: Optional[str] = None, ctx: Any = None, ur
 
 async def parse_survey(url: str) -> SurveyDefinition:
     """解析问卷结构，返回标准化后的 SurveyDefinition。"""
-    return await asyncio.to_thread(
-        parse_survey_sync,
+    return await parse_survey_with_cache(
         url,
-    )
-
-
-def parse_survey_sync(url: str) -> SurveyDefinition:
-    """同步解析问卷结构，供旧 UI/测试临时兼容。"""
-    return parse_survey_with_cache(
-        url,
-        lambda normalized_url: _get_provider_adapter(url=normalized_url).parse_survey(normalized_url),
+        lambda normalized_url: _get_provider_adapter(url=normalized_url).parse_survey_async(normalized_url),
     )
 
 
@@ -178,47 +171,9 @@ async def fill_survey(
         )
 
 
-def fill_survey_sync(
-    driver: Any,
-    config: ExecutionConfig,
-    state: ExecutionState,
-    *,
-    stop_signal: Any = None,
-    thread_name: str = "",
-    psycho_plan: Any = None,
-    provider: Optional[str] = None,
-) -> bool:
-    """同步 Provider 运行时答题分发，供旧引擎临时兼容。"""
-    adapter = _get_provider_adapter(provider=provider, ctx=state)
-    try:
-        state.update_thread_status(thread_name, "识别题目", running=True)
-    except Exception:
-        pass
-    with provider_run_context(
-        config,
-        state=state,
-        thread_name=thread_name,
-        psycho_plan=psycho_plan,
-    ) as resolved_plan:
-        return bool(
-            adapter.fill_survey(
-                driver,
-                config,
-                state,
-                stop_signal=stop_signal,
-                thread_name=thread_name,
-                psycho_plan=resolved_plan,
-            )
-        )
-
-
 async def is_completion_page(driver: Any, provider: Optional[str] = None) -> bool:
     """Provider 完成页识别分发。"""
     return bool(await _get_provider_adapter(provider=provider).is_completion_page_async(driver))
-
-
-def is_completion_page_sync(driver: Any, provider: Optional[str] = None) -> bool:
-    return bool(_get_provider_adapter(provider=provider).is_completion_page(driver))
 
 
 async def submission_requires_verification(driver: Any, provider: Optional[str] = None) -> bool:
@@ -226,17 +181,9 @@ async def submission_requires_verification(driver: Any, provider: Optional[str] 
     return bool(await _get_provider_adapter(provider=provider).submission_requires_verification_async(driver))
 
 
-def submission_requires_verification_sync(driver: Any, provider: Optional[str] = None) -> bool:
-    return bool(_get_provider_adapter(provider=provider).submission_requires_verification(driver))
-
-
 async def submission_validation_message(driver: Any, provider: Optional[str] = None) -> str:
     """Provider 提交后校验文案提取分发。"""
     return str(await _get_provider_adapter(provider=provider).submission_validation_message_async(driver) or "").strip()
-
-
-def submission_validation_message_sync(driver: Any, provider: Optional[str] = None) -> str:
-    return str(_get_provider_adapter(provider=provider).submission_validation_message(driver) or "").strip()
 
 
 async def wait_for_submission_verification(
@@ -249,22 +196,6 @@ async def wait_for_submission_verification(
     """Provider 提交后短时间轮询风控/验证命中。"""
     return bool(
         await _get_provider_adapter(provider=provider).wait_for_submission_verification_async(
-            driver,
-            timeout=timeout,
-            stop_signal=stop_signal,
-        )
-    )
-
-
-def wait_for_submission_verification_sync(
-    driver: Any,
-    *,
-    provider: Optional[str] = None,
-    timeout: int = 3,
-    stop_signal: Any = None,
-) -> bool:
-    return bool(
-        _get_provider_adapter(provider=provider).wait_for_submission_verification(
             driver,
             timeout=timeout,
             stop_signal=stop_signal,
@@ -292,26 +223,6 @@ async def attempt_submission_recovery(
     )
 
 
-def attempt_submission_recovery_sync(
-    driver: Any,
-    ctx: Any,
-    gui_instance: Any,
-    stop_signal: Any,
-    *,
-    provider: Optional[str] = None,
-    thread_name: str = "",
-) -> bool:
-    return bool(
-        _get_provider_adapter(provider=provider).attempt_submission_recovery(
-            driver,
-            ctx,
-            gui_instance,
-            stop_signal,
-            thread_name=thread_name,
-        )
-    )
-
-
 async def handle_submission_verification_detected(
     ctx: Any,
     gui_instance: Any,
@@ -327,36 +238,14 @@ async def handle_submission_verification_detected(
     )
 
 
-def handle_submission_verification_detected_sync(
-    ctx: Any,
-    gui_instance: Any,
-    stop_signal: Any,
-    *,
-    provider: Optional[str] = None,
-) -> None:
-    _get_provider_adapter(provider=provider, ctx=ctx).handle_submission_verification_detected(
-        ctx,
-        gui_instance,
-        stop_signal,
-    )
-
-
 async def consume_submission_success_signal(driver: Any, provider: Optional[str] = None) -> bool:
     """Provider 提交成功短路标记读取。"""
     return bool(await _get_provider_adapter(provider=provider).consume_submission_success_signal_async(driver))
 
 
-def consume_submission_success_signal_sync(driver: Any, provider: Optional[str] = None) -> bool:
-    return bool(_get_provider_adapter(provider=provider).consume_submission_success_signal(driver))
-
-
 async def is_device_quota_limit_page(driver: Any, provider: Optional[str] = None) -> bool:
     """Provider 设备次数上限页识别。"""
     return bool(await _get_provider_adapter(provider=provider).is_device_quota_limit_page_async(driver))
-
-
-def is_device_quota_limit_page_sync(driver: Any, provider: Optional[str] = None) -> bool:
-    return bool(_get_provider_adapter(provider=provider).is_device_quota_limit_page(driver))
 
 
 __all__ = [
@@ -365,26 +254,16 @@ __all__ = [
     "SURVEY_PROVIDER_CREDAMO",
     "SurveyDefinition",
     "consume_submission_success_signal",
-    "consume_submission_success_signal_sync",
     "detect_survey_provider",
     "parse_survey",
-    "parse_survey_sync",
     "attempt_submission_recovery",
-    "attempt_submission_recovery_sync",
     "fill_survey",
-    "fill_survey_sync",
     "is_completion_page",
-    "is_completion_page_sync",
     "is_device_quota_limit_page",
-    "is_device_quota_limit_page_sync",
     "handle_submission_verification_detected",
-    "handle_submission_verification_detected_sync",
     "submission_requires_verification",
-    "submission_requires_verification_sync",
     "submission_validation_message",
-    "submission_validation_message_sync",
     "wait_for_submission_verification",
-    "wait_for_submission_verification_sync",
 ]
 
 

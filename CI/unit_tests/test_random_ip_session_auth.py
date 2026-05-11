@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import asyncio
+
 import pytest
 
 from software.network.proxy.session import auth
@@ -216,7 +218,7 @@ class RandomIPSessionAuthTests:
         _reset_auth_state(RandomIPSession(device_id="device-5", user_id=33, total_quota=10, quota_known=True))
         posted: list[dict[str, object]] = []
 
-        def fake_post(_url: str, *, json_body: dict[str, object]):
+        async def fake_post(_url: str, *, json_body: dict[str, object]):
             posted.append(json_body)
             return _Response(
                 {
@@ -233,9 +235,11 @@ class RandomIPSessionAuthTests:
                 }
             )
 
-        patch_attrs((auth, "_post_json", fake_post))
+        patch_attrs((auth, "_apost_json", fake_post))
 
-        payload = auth.extract_proxy(minute=3, pool="quality", area="110100", num=2, upstream="benefit")
+        payload = asyncio.run(
+            auth.extract_proxy_async(minute=3, pool="quality", area="110100", num=2, upstream="benefit")
+        )
 
         assert posted == [
             {
@@ -252,26 +256,24 @@ class RandomIPSessionAuthTests:
     def test_claim_bonus_updates_quota_snapshot(self, patch_attrs) -> None:
         _reset_auth_state(RandomIPSession(device_id="device-6", user_id=44, remaining_quota=1, total_quota=2, used_quota=1, quota_known=True))
         settings = _Settings()
+        async def fake_bonus_post(*_args, **_kwargs):
+            return _Response(
+                {
+                    "claimed": True,
+                    "bonus_quota": 5,
+                    "remaining_quota": 6,
+                    "total_quota": 7,
+                    "used_quota": 1,
+                    "detail": "ok",
+                }
+            )
         patch_attrs(
             (auth, "_get_settings", lambda: settings),
             (auth, "set_secret", lambda *_args, **_kwargs: None),
-            (
-                auth,
-                "_post_json",
-                lambda *_args, **_kwargs: _Response(
-                    {
-                        "claimed": True,
-                        "bonus_quota": 5,
-                        "remaining_quota": 6,
-                        "total_quota": 7,
-                        "used_quota": 1,
-                        "detail": "ok",
-                    }
-                ),
-            ),
+            (auth, "_apost_json", fake_bonus_post),
         )
 
-        result = auth.claim_easter_egg_bonus()
+        result = asyncio.run(auth.claim_easter_egg_bonus_async())
 
         assert result["claimed"] is True
         assert result["bonus_quota"] == 5.0

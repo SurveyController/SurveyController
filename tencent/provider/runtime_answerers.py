@@ -7,21 +7,21 @@ import random
 from typing import Any, List, Optional, Sequence
 
 from software.app.config import DEFAULT_FILL_TEXT
-from software.core.ai.runtime import AIRuntimeError, generate_ai_answer
+from software.core.ai.runtime import AIRuntimeError, agenerate_ai_answer
 from software.core.persona.context import apply_persona_boost, record_answer
 from software.core.questions.consistency import apply_matrix_row_consistency, apply_single_like_consistency, get_multiple_rule_constraint
 from software.core.questions.distribution import record_pending_distribution_choice, resolve_distribution_probabilities
+from software.core.questions.runtime_async import resolve_runtime_option_fill_text_from_config
 from software.core.questions.strict_ratio import enforce_reference_rank_order, is_strict_ratio_question, stochastic_round, weighted_sample_without_replacement
 from software.core.questions.tendency import get_tendency_index
 from software.core.questions.utils import (
     normalize_droplist_probs,
     normalize_probabilities,
     resolve_dynamic_text_token,
-    resolve_option_fill_text_from_config,
     weighted_index,
 )
 from software.core.task import ExecutionState
-from software.network.browser import BrowserDriver
+from software.network.browser.runtime_async import BrowserDriver
 from software.providers.contracts import SurveyQuestionMeta
 
 from .runtime_interactions import (
@@ -82,7 +82,7 @@ def _log_qq_matrix_row_choice(
     )
 
 
-def _answer_qq_single(
+async def _answer_qq_single(
     driver: BrowserDriver,
     question: SurveyQuestionMeta,
     config_index: int,
@@ -103,7 +103,7 @@ def _answer_qq_single(
         probabilities = resolve_distribution_probabilities(probabilities, option_count, ctx, current)
         probabilities = enforce_reference_rank_order(probabilities, strict_reference)
     selected_index = weighted_index(probabilities)
-    if not _click_choice_input(driver, str(question.provider_question_id or ""), "radio", selected_index):
+    if not await _click_choice_input(driver, str(question.provider_question_id or ""), "radio", selected_index):
         logging.warning("腾讯问卷第%d题（单选）点击未生效，已跳过。", current)
         return
     if strict_ratio:
@@ -114,14 +114,14 @@ def _answer_qq_single(
         if config_index < len(config.single_option_fill_texts)
         else None
     )
-    fill_value = resolve_option_fill_text_from_config(
+    fill_value = await resolve_runtime_option_fill_text_from_config(
         fill_entries,
         selected_index,
         driver=driver,
         question_number=current,
         option_text=selected_text,
     )
-    if fill_value and _fill_choice_option_additional_text(
+    if fill_value and await _fill_choice_option_additional_text(
             driver,
             str(question.provider_question_id or ""),
             selected_index,
@@ -131,7 +131,7 @@ def _answer_qq_single(
         selected_text = f"{selected_text} / {fill_value}" if selected_text else fill_value
     record_answer(current, "single", selected_indices=[selected_index], selected_texts=[selected_text])
 
-def _answer_qq_dropdown(
+async def _answer_qq_dropdown(
     driver: BrowserDriver,
     question: SurveyQuestionMeta,
     config_index: int,
@@ -175,22 +175,22 @@ def _answer_qq_dropdown(
     question_id = str(question.provider_question_id or "")
     selected_ok = False
     for attempt in range(2):
-        _prepare_question_interaction(
+        await _prepare_question_interaction(
             driver,
             question_id,
             control_selectors=("input.t-input__inner", ".t-input", ".t-select__wrap"),
             settle_ms=220,
         )
-        if not _open_dropdown(driver, question_id):
+        if not await _open_dropdown(driver, question_id):
             if attempt == 0:
                 continue
             logging.warning(
                 "腾讯问卷第%d题（下拉）无法打开选项面板。state=%s",
                 current,
-                _describe_dropdown_state(driver, question_id),
+                await _describe_dropdown_state(driver, question_id),
             )
             return
-        if _select_dropdown_option(driver, question_id, selected_text):
+        if await _select_dropdown_option(driver, question_id, selected_text):
             selected_ok = True
             break
     if not selected_ok:
@@ -198,7 +198,7 @@ def _answer_qq_dropdown(
             "腾讯问卷第%d题（下拉）无法选中选项：%s | state=%s",
             current,
             selected_text,
-            _describe_dropdown_state(driver, question_id),
+            await _describe_dropdown_state(driver, question_id),
         )
         return
     fill_entries = (
@@ -206,14 +206,14 @@ def _answer_qq_dropdown(
         if config_index < len(config.droplist_option_fill_texts)
         else None
     )
-    fill_value = resolve_option_fill_text_from_config(
+    fill_value = await resolve_runtime_option_fill_text_from_config(
         fill_entries,
         selected_index,
         driver=driver,
         question_number=current,
         option_text=selected_text,
     )
-    if fill_value and _fill_choice_option_additional_text(
+    if fill_value and await _fill_choice_option_additional_text(
             driver,
             question_id,
             selected_index,
@@ -225,7 +225,7 @@ def _answer_qq_dropdown(
         record_pending_distribution_choice(ctx, current, selected_index, option_count)
     record_answer(current, "dropdown", selected_indices=[selected_index], selected_texts=[selected_text])
 
-def _answer_qq_text(
+async def _answer_qq_text(
     driver: BrowserDriver,
     question: SurveyQuestionMeta,
     config_index: int,
@@ -250,19 +250,19 @@ def _answer_qq_text(
         ai_prompt = f"{ai_prompt}\n补充说明：{description}"
     if ai_enabled:
         try:
-            generated = generate_ai_answer(ai_prompt, question_type="fill_blank", blank_count=1)
+            generated = await agenerate_ai_answer(ai_prompt, question_type="fill_blank", blank_count=1)
         except AIRuntimeError as exc:
             raise AIRuntimeError(f"腾讯问卷第{current}题 AI 生成失败：{exc}") from exc
         if isinstance(generated, list):
             selected_answer = str(generated[0]).strip() if generated else DEFAULT_FILL_TEXT
         else:
             selected_answer = str(generated or "").strip() or DEFAULT_FILL_TEXT
-    if not _fill_text_question(driver, str(question.provider_question_id or ""), selected_answer):
+    if not await _fill_text_question(driver, str(question.provider_question_id or ""), selected_answer):
         logging.warning("腾讯问卷第%d题（文本）填写失败。", current)
         return
     record_answer(current, "text", text_answer=selected_answer)
 
-def _answer_qq_score_like(
+async def _answer_qq_score_like(
     driver: BrowserDriver,
     question: SurveyQuestionMeta,
     config_index: int,
@@ -290,13 +290,13 @@ def _answer_qq_score_like(
         psycho_plan=psycho_plan,
         question_index=current,
     )
-    if not _click_choice_input(driver, str(question.provider_question_id or ""), "radio", selected_index):
+    if not await _click_choice_input(driver, str(question.provider_question_id or ""), "radio", selected_index):
         logging.warning("腾讯问卷第%d题（评分）点击未生效。", current)
         return
     record_pending_distribution_choice(ctx, current, selected_index, option_count)
     record_answer(current, "score", selected_indices=[selected_index])
 
-def _answer_qq_matrix(
+async def _answer_qq_matrix(
     driver: BrowserDriver,
     question: SurveyQuestionMeta,
     config_index: int,
@@ -356,7 +356,7 @@ def _answer_qq_matrix(
             question_index=current,
             row_index=row_index,
         )
-        if not _click_matrix_cell(driver, question_id, row_index, selected_index):
+        if not await _click_matrix_cell(driver, question_id, row_index, selected_index):
             logging.warning("腾讯问卷第%d题（矩阵）第%d行点击失败。", current, row_index + 1)
             continue
         record_pending_distribution_choice(ctx, current, selected_index, option_count, row_index=row_index)
@@ -371,7 +371,7 @@ def _answer_qq_matrix(
         record_answer(current, "matrix", selected_indices=[selected_index], row_index=row_index)
     return next_index
 
-def _answer_qq_multiple(
+async def _answer_qq_multiple(
     driver: BrowserDriver,
     question: SurveyQuestionMeta,
     config_index: int,
@@ -392,7 +392,7 @@ def _answer_qq_multiple(
     required_indices = _normalize_selected_indices(sorted(must_select_indices or []), option_count)
     blocked_indices = _normalize_selected_indices(sorted(must_not_select_indices or []), option_count)
 
-    def _apply(selected_indices: Sequence[int]) -> List[int]:
+    async def _apply(selected_indices: Sequence[int]) -> List[int]:
         applied = []
         question_id = str(question.provider_question_id or "")
         fill_entries = (
@@ -401,8 +401,8 @@ def _answer_qq_multiple(
             else None
         )
         for option_idx in selected_indices:
-            if _click_choice_input(driver, question_id, "checkbox", option_idx):
-                fill_value = resolve_option_fill_text_from_config(
+            if await _click_choice_input(driver, question_id, "checkbox", option_idx):
+                fill_value = await resolve_runtime_option_fill_text_from_config(
                     fill_entries,
                     option_idx,
                     driver=driver,
@@ -410,7 +410,7 @@ def _answer_qq_multiple(
                     option_text=option_texts[option_idx] if option_idx < len(option_texts) else "",
                 )
                 if fill_value:
-                    _fill_choice_option_additional_text(
+                    await _fill_choice_option_additional_text(
                         driver,
                         question_id,
                         option_idx,
@@ -448,7 +448,7 @@ def _answer_qq_multiple(
             blocked_indices,
             available_pool,
         )
-        confirmed = _apply(selected)
+        confirmed = await _apply(selected)
         if confirmed:
             selected_texts = [option_texts[i] for i in confirmed if i < len(option_texts)]
             record_answer(current, "multiple", selected_indices=confirmed, selected_texts=selected_texts)
@@ -498,7 +498,7 @@ def _answer_qq_multiple(
             optional_target,
         )
         selected = _normalize_selected_indices(required_selected + sampled_optional, option_count)
-        confirmed = _apply(selected)
+        confirmed = await _apply(selected)
         if confirmed:
             selected_texts = [option_texts[i] for i in confirmed if i < len(option_texts)]
             record_answer(current, "multiple", selected_indices=confirmed, selected_texts=selected_texts)
@@ -532,13 +532,13 @@ def _answer_qq_multiple(
     )
     if not selected and positive_indices:
         selected = [random.choice(positive_indices)]
-    confirmed = _apply(selected)
+    confirmed = await _apply(selected)
     if confirmed:
         selected_texts = [option_texts[i] for i in confirmed if i < len(option_texts)]
         record_answer(current, "multiple", selected_indices=confirmed, selected_texts=selected_texts)
 
 
-def _answer_qq_matrix_star(
+async def _answer_qq_matrix_star(
     driver: BrowserDriver,
     question: SurveyQuestionMeta,
     config_index: int,
@@ -603,9 +603,9 @@ def _answer_qq_matrix_star(
             question_index=current,
             row_index=row_index,
         )
-        clicked = _click_star_cell(driver, question_id, row_index, selected_index)
+        clicked = await _click_star_cell(driver, question_id, row_index, selected_index)
         if not clicked:
-            clicked = _click_matrix_cell(driver, question_id, row_index, selected_index)
+            clicked = await _click_matrix_cell(driver, question_id, row_index, selected_index)
             if not clicked:
                 logging.warning("腾讯问卷第%d题（矩阵星级）第%d行点击失败。", current, row_index + 1)
                 continue

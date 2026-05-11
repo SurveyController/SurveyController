@@ -1,7 +1,8 @@
-"""问卷星提交流程能力（provider 入口）。"""
+"""问卷星提交流程能力。"""
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import threading
 import time
@@ -16,10 +17,13 @@ from software.app.config import (
 )
 from software.core.engine.runtime_control import _is_headless_mode, _sleep_with_stop
 from software.core.task import ExecutionState
-from software.logging.log_utils import log_popup_confirm, log_popup_warning, log_suppressed_exception
-from software.network.browser import By, BrowserDriver, NoSuchElementException
-from wjx.provider.runtime_state import get_wjx_runtime_state
-from wjx.provider.submission_pages import (
+from software.logging.log_utils import log_popup_confirm, log_popup_warning
+from software.network.browser import By, NoSuchElementException
+from software.network.browser.runtime_async import BrowserDriver
+
+from .runtime_interactions import _click_submit_button
+from .runtime_state import get_wjx_runtime_state, peek_wjx_runtime_state
+from .submission_pages import (
     _is_device_quota_limit_page,
     _is_wjx_domain,
     _looks_like_wjx_survey_url,
@@ -53,176 +57,6 @@ _WJX_MISSING_ANSWER_MARKERS = (
     "请填写",
     "必答题",
 )
-_WJX_MISSING_ANSWER_SELECTORS = (
-    ".error",
-    ".field-error",
-    ".data__error",
-    ".ui-input-error",
-    ".wjx-error",
-    ".req-tip",
-    ".validate-error",
-    ".layui-layer-content",
-)
-
-
-def _click_submit_button(driver: BrowserDriver, max_wait: float = 10.0) -> bool:
-    """点击“提交”按钮（简单版）。"""
-    submit_keywords = ("提交", "完成", "交卷", "确认提交", "确认")
-    locator_candidates = [
-        (By.CSS_SELECTOR, "#ctlNext"),
-        (By.CSS_SELECTOR, "#submit_button"),
-        (By.CSS_SELECTOR, "#SubmitBtnGroup .submitbtn"),
-        (By.CSS_SELECTOR, ".submitbtn.mainBgColor"),
-        (By.CSS_SELECTOR, "#SM_BTN_1"),
-        (By.CSS_SELECTOR, "#divSubmit"),
-        (By.CSS_SELECTOR, ".btn-submit"),
-        (By.CSS_SELECTOR, "button[type='submit']"),
-        (By.XPATH, "//a[normalize-space(.)='提交' or normalize-space(.)='完成' or normalize-space(.)='交卷' or normalize-space(.)='确认提交' or normalize-space(.)='确认']"),
-        (By.XPATH, "//button[normalize-space(.)='提交' or normalize-space(.)='完成' or normalize-space(.)='交卷' or normalize-space(.)='确认提交' or normalize-space(.)='确认']"),
-    ]
-
-    def _text_looks_like_submit(element) -> bool:
-        text = (element.text or "").strip()
-        if not text:
-            text = (element.get_attribute("value") or "").strip()
-        if not text:
-            return False
-        return any(k in text for k in submit_keywords)
-
-    deadline = time.time() + max(0.0, float(max_wait or 0.0))
-    while True:
-        for by, value in locator_candidates:
-            try:
-                elements = driver.find_elements(by, value)
-            except Exception:
-                continue
-            for element in elements:
-                try:
-                    if not element.is_displayed():
-                        continue
-                except Exception:
-                    continue
-
-                if by == By.CSS_SELECTOR and value == "button[type='submit']":
-                    if not _text_looks_like_submit(element):
-                        continue
-
-                try:
-                    element.click()
-                    logging.info("成功点击提交按钮：%s=%s", by, value)
-                    return True
-                except Exception:
-                    pass
-                try:
-                    driver.execute_script("arguments[0].click();", element)
-                    logging.info("成功通过JS点击提交按钮：%s=%s", by, value)
-                    return True
-                except Exception:
-                    continue
-
-        if time.time() >= deadline:
-            break
-        time.sleep(0.2)
-
-    try:
-        force_triggered = bool(
-            driver.execute_script(
-                r"""
-                return (() => {
-                    const clickVisible = (el) => {
-                        if (!el) return false;
-                        const style = window.getComputedStyle(el);
-                        if (!style) return false;
-                        if (style.display === 'none' || style.visibility === 'hidden' || style.opacity === '0') return false;
-                        const rect = el.getBoundingClientRect();
-                        if (rect.width <= 0 || rect.height <= 0) return false;
-                        el.click();
-                        return true;
-                    };
-
-                    const ctlNext = document.querySelector('#ctlNext');
-                    if (clickVisible(ctlNext)) return true;
-
-                    const submitBtn = document.querySelector('#submit_button');
-                    if (clickVisible(submitBtn)) return true;
-
-                    const submitLike = Array.from(document.querySelectorAll('div,a,button,input,span')).find((el) => {
-                        const text = (el.innerText || el.textContent || el.value || '').replace(/\s+/g, '');
-                        return text === '提交' || text === '完成' || text === '交卷' || text === '确认提交';
-                    });
-                    if (clickVisible(submitLike)) return true;
-
-                    if (typeof submit_button_click === 'function') {
-                        submit_button_click();
-                        return true;
-                    }
-                    return false;
-                })();
-                """
-            )
-        )
-        if force_triggered:
-            logging.info("提交按钮常规选择器未命中，已触发问卷星提交兜底入口")
-            return True
-    except Exception as exc:
-        log_suppressed_exception("submission._click_submit_button force trigger", exc, level=logging.WARNING)
-
-    return False
-
-
-def _click_submit_confirm_button(driver: BrowserDriver, settle_delay: float = 0.0) -> None:
-    """点击可能出现的提交确认按钮（有则点，无则忽略）。"""
-    try:
-        confirm_candidates = [
-            (By.XPATH, '//*[@id="layui-layer1"]/div[3]/a'),
-            (By.CSS_SELECTOR, "#layui-layer1 .layui-layer-btn a"),
-            (By.CSS_SELECTOR, ".layui-layer .layui-layer-btn a.layui-layer-btn0"),
-        ]
-        for by, value in confirm_candidates:
-            try:
-                el = driver.find_element(by, value)
-            except Exception:
-                el = None
-            if not el:
-                continue
-            try:
-                if not el.is_displayed():
-                    continue
-            except Exception:
-                continue
-            try:
-                el.click()
-                if settle_delay > 0:
-                    time.sleep(settle_delay)
-                break
-            except Exception:
-                continue
-    except Exception as exc:
-        log_suppressed_exception("submission._click_submit_confirm_button", exc)
-
-
-def submit(
-    driver: BrowserDriver,
-    ctx: Optional[ExecutionState] = None,
-    stop_signal: Optional[threading.Event] = None,
-):
-    """点击提交按钮并结束。"""
-    headless_mode = _is_headless_mode(ctx)
-    settle_delay = float(HEADLESS_SUBMIT_CLICK_SETTLE_DELAY if headless_mode else SUBMIT_CLICK_SETTLE_DELAY)
-    pre_submit_delay = float(HEADLESS_SUBMIT_INITIAL_DELAY if headless_mode else SUBMIT_INITIAL_DELAY)
-
-    if pre_submit_delay > 0 and _sleep_with_stop(stop_signal, pre_submit_delay):
-        return
-    if stop_signal and stop_signal.is_set():
-        return
-
-    clicked = _click_submit_button(driver, max_wait=10.0)
-    if not clicked:
-        raise NoSuchElementException("Submit button not found")
-
-    if settle_delay > 0:
-        time.sleep(settle_delay)
-    _click_submit_confirm_button(driver, settle_delay=settle_delay)
 
 
 class AliyunCaptchaBypassError(RuntimeError):
@@ -235,13 +69,88 @@ class SubmissionRecoveryHint:
     message: str
 
 
-def submission_validation_message(driver: Optional[BrowserDriver] = None) -> str:
-    """返回问卷星提交流程的风控提示文案。"""
-    _ = driver
+def _runtime_context_summary(driver: BrowserDriver) -> str:
+    state = peek_wjx_runtime_state(driver)
+    if state is None:
+        return ""
+    page_number = max(0, int(getattr(state, "page_number", 0) or 0))
+    question_numbers: list[int] = []
+    for item in list(getattr(state, "page_questions", []) or []):
+        if not isinstance(item, dict):
+            continue
+        try:
+            question_num = int(item.get("question_num") or 0)
+        except Exception:
+            question_num = 0
+        if question_num > 0:
+            question_numbers.append(question_num)
+    parts: list[str] = []
+    if page_number > 0:
+        parts.append(f"page={page_number}")
+    if question_numbers:
+        parts.append(f"questions={question_numbers}")
+    return " ".join(parts)
+
+
+async def _click_submit_confirm_button(driver: BrowserDriver, settle_delay: float = 0.0) -> None:
+    confirm_candidates = [
+        (By.XPATH, '//*[@id="layui-layer1"]/div[3]/a'),
+        (By.CSS_SELECTOR, "#layui-layer1 .layui-layer-btn a"),
+        (By.CSS_SELECTOR, ".layui-layer .layui-layer-btn a.layui-layer-btn0"),
+    ]
+    for by, value in confirm_candidates:
+        try:
+            element = await driver.find_element(by, value)
+        except Exception:
+            element = None
+        if not element:
+            continue
+        try:
+            if not await element.is_displayed():
+                continue
+        except Exception:
+            continue
+        try:
+            await element.click()
+            if settle_delay > 0:
+                await asyncio.sleep(settle_delay)
+            return
+        except Exception:
+            continue
+
+
+async def submit(
+    driver: BrowserDriver,
+    ctx: Optional[ExecutionState] = None,
+    stop_signal: Optional[Any] = None,
+) -> None:
+    headless_mode = _is_headless_mode(ctx)
+    settle_delay = float(HEADLESS_SUBMIT_CLICK_SETTLE_DELAY if headless_mode else SUBMIT_CLICK_SETTLE_DELAY)
+    pre_submit_delay = float(HEADLESS_SUBMIT_INITIAL_DELAY if headless_mode else SUBMIT_INITIAL_DELAY)
+
+    if pre_submit_delay > 0 and await _sleep_with_stop(stop_signal, pre_submit_delay):
+        return
+    if stop_signal is not None and getattr(stop_signal, "is_set", lambda: False)():
+        return
+
+    clicked = await _click_submit_button(driver, timeout_ms=10000)
+    if not clicked:
+        runtime_context = _runtime_context_summary(driver)
+        if runtime_context:
+            logging.warning("问卷星提交按钮未找到：%s", runtime_context)
+        raise NoSuchElementException("Submit button not found")
+    if settle_delay > 0:
+        await asyncio.sleep(settle_delay)
+    await _click_submit_confirm_button(driver, settle_delay=settle_delay)
+
+
+async def submission_validation_message(driver: Optional[BrowserDriver] = None) -> str:
+    if driver is not None:
+        _runtime_context_summary(driver)
     return _ALIYUN_CAPTCHA_MESSAGE
 
 
-def _aliyun_captcha_visible_with_js(driver: BrowserDriver) -> bool:
+async def _aliyun_captcha_visible_with_js(driver: BrowserDriver) -> bool:
     script = r"""
         return (() => {
             const ids = [
@@ -289,55 +198,48 @@ def _aliyun_captcha_visible_with_js(driver: BrowserDriver) -> bool:
         })();
     """
     try:
-        return bool(driver.execute_script(script))
+        return bool(await driver.execute_script(script))
     except Exception:
         return False
 
 
-def _aliyun_captcha_element_exists(driver: BrowserDriver) -> bool:
+async def _aliyun_captcha_element_exists(driver: BrowserDriver) -> bool:
     for locator in _ALIYUN_CAPTCHA_LOCATORS:
         try:
-            element = driver.find_element(*locator)
-            if element and element.is_displayed():
+            element = await driver.find_element(*locator)
+        except Exception:
+            element = None
+        if not element:
+            continue
+        try:
+            if await element.is_displayed():
                 return True
         except Exception:
             continue
     return False
 
 
-def submission_requires_verification(driver: BrowserDriver) -> bool:
-    """检测提交后是否出现问卷星阿里云智能验证 DOM。"""
-    return _aliyun_captcha_visible_with_js(driver) or _aliyun_captcha_element_exists(driver)
+async def submission_requires_verification(driver: BrowserDriver) -> bool:
+    return bool(await _aliyun_captcha_visible_with_js(driver) or await _aliyun_captcha_element_exists(driver))
 
 
-def wait_for_submission_verification(
+async def wait_for_submission_verification(
     driver: BrowserDriver,
+    *,
     timeout: int = 3,
-    stop_signal: Optional[threading.Event] = None,
-    raise_on_detect: bool = False,
-    notify_on_detect: bool = False,
+    stop_signal: Any = None,
 ) -> bool:
-    """在短时间内轮询问卷星提交流程是否触发阿里云智能验证。"""
-    del notify_on_detect  # 统一由命中后的 provider 处理流程负责提示，避免线程弹窗和主线程弹窗重复轰炸。
-
-    end_time = time.time() + max(timeout, 3)
-    while time.time() < end_time:
-        if stop_signal and stop_signal.is_set():
+    deadline = time.time() + max(1, int(timeout or 1))
+    while time.time() < deadline:
+        if stop_signal is not None and getattr(stop_signal, "is_set", lambda: False)():
             return False
-        if submission_requires_verification(driver):
-            if raise_on_detect:
-                raise AliyunCaptchaBypassError(_ALIYUN_CAPTCHA_MESSAGE)
+        if await submission_requires_verification(driver):
             return True
-        time.sleep(0.15)
-
-    if submission_requires_verification(driver):
-        if raise_on_detect:
-                raise AliyunCaptchaBypassError(_ALIYUN_CAPTCHA_MESSAGE)
-        return True
-    return False
+        await asyncio.sleep(0.15)
+    return bool(await submission_requires_verification(driver))
 
 
-def _extract_missing_answer_hint(driver: BrowserDriver) -> Optional[SubmissionRecoveryHint]:
+async def _extract_missing_answer_hint(driver: BrowserDriver) -> Optional[SubmissionRecoveryHint]:
     script = r"""
         return (() => {
             const visible = (el) => {
@@ -402,7 +304,7 @@ def _extract_missing_answer_hint(driver: BrowserDriver) -> Optional[SubmissionRe
         })();
     """
     try:
-        payload = driver.execute_script(script) or {}
+        payload = await driver.execute_script(script) or {}
     except Exception:
         payload = {}
     if not isinstance(payload, dict):
@@ -438,7 +340,6 @@ def _trigger_aliyun_captcha_stop(
     gui_instance: Optional[Any],
     stop_signal: Optional[threading.Event],
 ) -> None:
-    """命中问卷星阿里云智能验证后触发全局暂停，并提示用户启用随机 IP。"""
     with ctx._aliyun_captcha_stop_lock:
         if ctx._aliyun_captcha_stop_triggered:
             return
@@ -523,7 +424,7 @@ def _trigger_aliyun_captcha_stop(
 
             message = (
                 "检测到问卷星阿里云智能验证，为避免继续失败提交已停止所有任务。\n\n"
-                "启用随机 IP 能够解决这个问题。\n"
+                "启用随机 IP 能解决这个问题。\n"
                 "是否立即启用随机 IP 功能？"
             )
             if gui_instance:
@@ -552,12 +453,11 @@ def _trigger_aliyun_captcha_stop(
     _notify()
 
 
-def handle_submission_verification_detected(
+async def handle_submission_verification_detected(
     ctx: ExecutionState,
     gui_instance: Optional[Any],
-    stop_signal: Optional[threading.Event],
+    stop_signal: Optional[Any],
 ) -> None:
-    """统一处理问卷星提交后命中阿里云智能验证后的策略。"""
     config = getattr(ctx, "config", None)
     random_proxy_ip_enabled = bool(
         getattr(ctx, "random_proxy_ip_enabled", getattr(config, "random_proxy_ip_enabled", False))
@@ -567,34 +467,32 @@ def handle_submission_verification_detected(
     )
 
     if random_proxy_ip_enabled:
-        logging.warning("随机IP模式命中问卷星阿里云智能验证：按配置仅记录日志，不暂停、不弹窗。")
+        logging.warning("随机IP模式命中问卷星阿里云智能验证：仅记录日志，不暂停。")
         return
-
     if not pause_on_aliyun_captcha:
         logging.warning("检测到问卷星阿里云智能验证：pause_on_aliyun_captcha=False，仅记录告警。")
         return
-
     _trigger_aliyun_captcha_stop(ctx, gui_instance, stop_signal)
 
 
-def is_device_quota_limit_page(driver: BrowserDriver) -> bool:
-    return _is_device_quota_limit_page(driver)
+async def is_device_quota_limit_page(driver: BrowserDriver) -> bool:
+    return bool(await _is_device_quota_limit_page(driver))
 
 
-def attempt_submission_recovery(
+async def attempt_submission_recovery(
     driver: BrowserDriver,
     ctx: ExecutionState,
     gui_instance: Optional[Any],
-    stop_signal: Optional[threading.Event],
+    stop_signal: Optional[Any],
     *,
     thread_name: str = "",
 ) -> bool:
     del gui_instance
-    if stop_signal and stop_signal.is_set():
+    if stop_signal is not None and getattr(stop_signal, "is_set", lambda: False)():
         return False
-    if submission_requires_verification(driver):
+    if await submission_requires_verification(driver):
         return False
-    if not _page_looks_like_wjx_questionnaire(driver):
+    if not await _page_looks_like_wjx_questionnaire(driver):
         return False
 
     runtime_state = get_wjx_runtime_state(driver)
@@ -602,7 +500,7 @@ def attempt_submission_recovery(
     if recovery_attempts >= 1:
         return False
 
-    hint = _extract_missing_answer_hint(driver)
+    hint = await _extract_missing_answer_hint(driver)
     if hint is None:
         return False
 
@@ -615,9 +513,8 @@ def attempt_submission_recovery(
             question_num = int(item.get("question_num") or 0)
         except Exception:
             question_num = 0
-        if question_num <= 0 or not bool(item.get("required")):
-            continue
-        current_page_required.append(question_num)
+        if question_num > 0 and bool(item.get("required")) and question_num not in current_page_required:
+            current_page_required.append(question_num)
 
     target_questions: list[int] = []
     for question_num in hint.question_numbers:
@@ -626,7 +523,7 @@ def attempt_submission_recovery(
     if not target_questions:
         target_questions = list(current_page_required)
     if not target_questions:
-        logging.warning("WJX 提交补救放弃：已识别未作答提示，但当前页没有可补的必答题。message=%s", hint.message)
+        logging.warning("WJX 提交补救放弃：识别到未作答提示，但当前页没有可补题目。message=%s", hint.message)
         return False
 
     logging.warning("WJX 提交命中未作答提示，准备补答并重提：questions=%s message=%s", target_questions, hint.message)
@@ -637,7 +534,7 @@ def attempt_submission_recovery(
 
     from wjx.provider.runtime import refill_required_questions_on_current_page
 
-    filled_count = refill_required_questions_on_current_page(
+    filled_count = await refill_required_questions_on_current_page(
         driver,
         ctx,
         question_numbers=target_questions,
@@ -649,14 +546,13 @@ def attempt_submission_recovery(
         return False
 
     runtime_state.submission_recovery_attempts = recovery_attempts + 1
-    submit(driver, ctx=ctx, stop_signal=stop_signal)
+    await submit(driver, ctx=ctx, stop_signal=stop_signal)
     return True
 
 
 __all__ = [
     "AliyunCaptchaBypassError",
     "_ALIYUN_CAPTCHA_DOM_IDS",
-    "_click_submit_button",
     "_is_wjx_domain",
     "_looks_like_wjx_survey_url",
     "_normalize_url_for_compare",
@@ -669,5 +565,3 @@ __all__ = [
     "submit",
     "wait_for_submission_verification",
 ]
-
-

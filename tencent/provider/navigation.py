@@ -2,21 +2,22 @@
 
 from __future__ import annotations
 
+import asyncio
 import math
-import threading
-import time
-from typing import Optional
 
-from software.core.questions.utils import (
-    extract_text_from_element as _extract_text_from_element,
-    smooth_scroll_to_element as _smooth_scroll_to_element,
+from software.core.engine.async_wait import sleep_or_stop
+from software.core.engine.stop_signal import StopSignalLike
+from software.core.questions.runtime_async import (
+    extract_text_from_runtime_element,
+    smooth_scroll_to_runtime_element,
 )
 from software.logging.log_utils import log_suppressed_exception
-from software.network.browser import By, BrowserDriver
+from software.network.browser import By
+from software.network.browser.runtime_async import BrowserDriver
 
 
-def dismiss_resume_dialog_if_present(
-    driver: BrowserDriver, timeout: float = 1.0, stop_signal: Optional[threading.Event] = None
+async def dismiss_resume_dialog_if_present(
+    driver: BrowserDriver, timeout: float = 1.0, stop_signal: StopSignalLike | None = None
 ) -> bool:
     """兼容处理可能出现的续答弹窗；未命中时直接继续。"""
     poll_interval = 0.2
@@ -55,24 +56,24 @@ def dismiss_resume_dialog_if_present(
         if stop_signal and stop_signal.is_set():
             return False
         try:
-            dialog_visible = bool(driver.execute_script(dialog_hint_script))
+            dialog_visible = bool(await driver.execute_script(dialog_hint_script))
         except Exception:
             dialog_visible = False
         for by, value in locator_candidates:
             try:
-                buttons = driver.find_elements(by, value)
+                buttons = await driver.find_elements(by, value)
             except Exception:
                 continue
             for button in buttons:
                 try:
-                    displayed = button.is_displayed()
+                    displayed = await button.is_displayed()
                 except Exception:
                     continue
                 if stop_signal and stop_signal.is_set():
                     return False
                 if not displayed:
                     continue
-                text = _extract_text_from_element(button)
+                text = await extract_text_from_runtime_element(button)
                 normalized_text = text.replace(" ", "") if text else ""
                 if normalized_text:
                     labels = ("取消", "重新填写", "重新作答", "重新开始")
@@ -81,7 +82,7 @@ def dismiss_resume_dialog_if_present(
                 if not normalized_text and not dialog_visible:
                     continue
                 try:
-                    _smooth_scroll_to_element(driver, button, "center")
+                    await smooth_scroll_to_runtime_element(driver, button, "center")
                 except Exception as exc:
                     log_suppressed_exception("tencent.navigation.dismiss_resume_dialog_if_present scroll", exc)
                 for click_method in (
@@ -89,23 +90,22 @@ def dismiss_resume_dialog_if_present(
                     lambda: driver.execute_script("arguments[0].click();", button),
                 ):
                     try:
-                        click_method()
+                        result = click_method()
+                        if asyncio.iscoroutine(result):
+                            await result
                         return True
                     except Exception:
                         continue
         if attempt < max_checks - 1:
-            if stop_signal:
-                if stop_signal.wait(poll_interval):
-                    return False
-            else:
-                time.sleep(poll_interval)
+            if await sleep_or_stop(stop_signal, poll_interval):
+                return False
     return False
 
 
-def _click_next_page_button(driver: BrowserDriver) -> bool:
+async def _click_next_page_button(driver: BrowserDriver) -> bool:
     """尝试点击“下一页”按钮。"""
     try:
-        driver.execute_script(
+        await driver.execute_script(
             """
             const candidates = [
                 '#divNext', '#ctlNext', '#btnNext', '#next',
@@ -140,34 +140,34 @@ def _click_next_page_button(driver: BrowserDriver) -> bool:
     ]
     for by, value in locator_candidates:
         try:
-            elements = driver.find_elements(by, value)
+            elements = await driver.find_elements(by, value)
         except Exception:
             continue
         for element in elements:
             try:
-                if not element.is_displayed():
+                if not await element.is_displayed():
                     continue
             except Exception:
                 continue
-            text = _extract_text_from_element(element)
+            text = await extract_text_from_runtime_element(element)
             if text and all(keyword not in text for keyword in ("下一页", "下一步", "下一题", "下一")):
                 continue
             try:
-                _smooth_scroll_to_element(driver, element, "center")
+                await smooth_scroll_to_runtime_element(driver, element, "center")
             except Exception as exc:
                 log_suppressed_exception("tencent.navigation._click_next_page_button scroll", exc)
             try:
-                element.click()
+                await element.click()
                 return True
             except Exception as exc:
                 log_suppressed_exception("tencent.navigation._click_next_page_button click", exc)
             try:
-                driver.execute_script("arguments[0].click();", element)
+                await driver.execute_script("arguments[0].click();", element)
                 return True
             except Exception as exc:
                 log_suppressed_exception("tencent.navigation._click_next_page_button js click", exc)
     try:
-        executed = driver.execute_script(
+        executed = await driver.execute_script(
             """
             if (typeof show_next_page === 'function') { show_next_page(); return true; }
             if (typeof next_page === 'function') { next_page(); return true; }

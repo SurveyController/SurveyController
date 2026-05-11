@@ -11,7 +11,6 @@ from typing import Any, Dict, List, Optional, Tuple
 from software.app.config import DEFAULT_FILL_TEXT
 from software.network.browser.parse_pool import acquire_parse_browser_session
 from software.providers.common import SURVEY_PROVIDER_CREDAMO
-from credamo.provider.runtime_dom import _looks_like_loading_shell, _page_loading_snapshot, _wait_for_question_roots
 
 _QUESTION_NUMBER_RE = re.compile(r"^\s*(?:Q|题目?)\s*(\d+)\b", re.IGNORECASE)
 _TYPE_ONLY_TITLE_RE = re.compile(r"^\s*\[[^\]]+\]\s*$")
@@ -78,12 +77,75 @@ class CredamoParseError(RuntimeError):
     """Credamo 页面结构无法解析时抛出的业务异常。"""
 
 
-def _retry_initial_question_load_if_needed(page: Any) -> List[Any]:
-    roots = _wait_for_question_roots(page, None)
+def _looks_like_loading_shell(title: str, body_text: str) -> bool:
+    normalized_title = str(title or "").strip()
+    normalized_body = str(body_text or "").strip()
+    if not normalized_body:
+        return normalized_title in {"", "答卷"}
+    compact_body = normalized_body.replace(" ", "")
+    if compact_body in {"载入中", "载入中...", "载入中..", "loading", "loading..."}:
+        return True
+    if normalized_title == "答卷" and len(compact_body) <= 16:
+        return True
+    return False
+
+
+async def _page_loading_snapshot(page: Any) -> tuple[str, str]:
+    try:
+        title = str(await page.title() or "").strip()
+    except Exception:
+        title = ""
+    try:
+        body_text = str(await page.locator("body").text_content(timeout=1000) or "").strip()
+    except Exception:
+        try:
+            body_text = str(await page.locator("body").inner_text(timeout=1000) or "").strip()
+        except Exception:
+            body_text = ""
+    return title, re.sub(r"\s+", " ", body_text).strip()
+
+
+async def _question_roots(page: Any) -> List[Any]:
+    script = r"""
+() => {
+  const visible = (el, minWidth = 8, minHeight = 8) => {
+    if (!el) return false;
+    const style = window.getComputedStyle(el);
+    if (!style || style.display === 'none' || style.visibility === 'hidden') return false;
+    const rect = el.getBoundingClientRect();
+    return rect.width >= minWidth && rect.height >= minHeight;
+  };
+  return Array.from(document.querySelectorAll('.answer-page .question'))
+    .map((root, index) => ({ index, visible: visible(root) }))
+    .filter((item) => item.visible)
+    .map((item) => item.index);
+}
+"""
+    try:
+        visible_indexes = await page.evaluate(script) or []
+    except Exception:
+        visible_indexes = []
+    try:
+        roots = list(await page.query_selector_all(".answer-page .question") or [])
+    except Exception:
+        roots = []
+    resolved: List[Any] = []
+    for raw_index in list(visible_indexes or []):
+        try:
+            index = int(raw_index)
+        except Exception:
+            continue
+        if 0 <= index < len(roots):
+            resolved.append(roots[index])
+    return resolved
+
+
+async def _retry_initial_question_load_if_needed(page: Any) -> List[Any]:
+    roots = await _question_roots(page)
     if roots:
         return roots
 
-    title, body_text = _page_loading_snapshot(page)
+    title, body_text = await _page_loading_snapshot(page)
     if not _looks_like_loading_shell(title, body_text):
         logging.info("Credamo 解析入口等待题目后仍未发现可见题目节点")
         return roots
@@ -101,17 +163,17 @@ def _retry_initial_question_load_if_needed(page: Any) -> List[Any]:
     )
     try:
         if reload_target:
-            page.goto(reload_target, wait_until="domcontentloaded", timeout=45000)
+            await page.goto(reload_target, wait_until="domcontentloaded", timeout=45000)
         else:
-            page.reload(wait_until="domcontentloaded", timeout=45000)
+            await page.reload(wait_until="domcontentloaded", timeout=45000)
         try:
-            page.wait_for_load_state("networkidle", timeout=8000)
+            await page.wait_for_load_state("networkidle", timeout=8000)
         except Exception:
             pass
     except Exception:
         logging.info("Credamo 解析入口刷新重试失败", exc_info=True)
 
-    roots = _wait_for_question_roots(page, None)
+    roots = await _question_roots(page)
     if not roots:
         logging.info("Credamo 解析入口刷新重试后仍未发现可见题目节点")
     return roots
@@ -560,7 +622,7 @@ def _normalize_question(raw: Dict[str, Any], fallback_num: int) -> Dict[str, Any
     return normalized
 
 
-def _extract_questions_from_current_page(page: Any, *, page_number: int) -> List[Dict[str, Any]]:
+async def _extract_questions_from_current_page(page: Any, *, page_number: int) -> List[Dict[str, Any]]:
     script = r"""
 () => {
   const visible = (el, minWidth = 8, minHeight = 8) => {
@@ -758,7 +820,7 @@ def _extract_questions_from_current_page(page: Any, *, page_number: int) -> List
         repr(list(_MATRIX_HEADER_CONTAINER_SELECTORS)),
     )
     try:
-        data = page.evaluate(script)
+        data = await page.evaluate(script)
     except Exception as exc:
         raise CredamoParseError(f"无法读取 Credamo 页面题目结构：{exc}") from exc
     if not isinstance(data, list):
@@ -773,36 +835,36 @@ def _extract_questions_from_current_page(page: Any, *, page_number: int) -> List
     return questions
 
 
-def _locator_count(locator: Any) -> int:
+async def _locator_count(locator: Any) -> int:
     try:
-        return int(locator.count())
+        return int(await locator.count())
     except Exception:
         return 0
 
 
-def _text_content(locator: Any) -> str:
+async def _text_content(locator: Any) -> str:
     try:
-        return _normalize_text(locator.text_content(timeout=500))
+        return _normalize_text(await locator.text_content(timeout=500))
     except Exception:
         return ""
 
 
-def _locator_is_visible(locator: Any) -> bool:
+async def _locator_is_visible(locator: Any) -> bool:
     try:
-        return bool(locator.is_visible(timeout=300))
+        return bool(await locator.is_visible(timeout=300))
     except Exception:
         return False
 
 
-def _detect_navigation_action(page: Any) -> Optional[str]:
+async def _detect_navigation_action(page: Any) -> Optional[str]:
     locator = page.locator("button, a, [role='button'], input[type='button'], input[type='submit']")
-    count = _locator_count(locator)
+    count = await _locator_count(locator)
     found_next = False
     for index in range(count):
         item = locator.nth(index)
-        if not _locator_is_visible(item):
+        if not await _locator_is_visible(item):
             continue
-        text = _text_content(item) or _normalize_text(item.get_attribute("value"))
+        text = await _text_content(item) or _normalize_text(await item.get_attribute("value"))
         lowered = text.casefold()
         if any(marker in lowered for marker in _SUBMIT_BUTTON_MARKERS):
             return "submit"
@@ -811,57 +873,57 @@ def _detect_navigation_action(page: Any) -> Optional[str]:
     return "next" if found_next else None
 
 
-def _click_navigation(page: Any, action: str) -> bool:
+async def _click_navigation(page: Any, action: str) -> bool:
     primary_button = page.locator("#credamo-submit-btn").first
-    if _locator_count(primary_button) > 0 and _locator_is_visible(primary_button):
+    if await _locator_count(primary_button) > 0 and await _locator_is_visible(primary_button):
         try:
-            primary_text = (_text_content(primary_button) or _normalize_text(primary_button.get_attribute("value"))).casefold()
+            primary_text = (await _text_content(primary_button) or _normalize_text(await primary_button.get_attribute("value"))).casefold()
         except Exception:
             primary_text = ""
         if action == "next" and any(marker in primary_text for marker in _NEXT_BUTTON_MARKERS):
             try:
-                primary_button.click(timeout=3000)
+                await primary_button.click(timeout=3000)
                 return True
             except Exception:
                 try:
-                    handle = primary_button.element_handle(timeout=1000)
-                    if handle is not None and bool(page.evaluate("el => { el.click(); return true; }", handle)):
+                    handle = await primary_button.element_handle(timeout=1000)
+                    if handle is not None and bool(await page.evaluate("el => { el.click(); return true; }", handle)):
                         return True
                 except Exception:
                     pass
         if action == "submit" and any(marker in primary_text for marker in _SUBMIT_BUTTON_MARKERS):
             try:
-                primary_button.click(timeout=3000)
+                await primary_button.click(timeout=3000)
                 return True
             except Exception:
                 try:
-                    handle = primary_button.element_handle(timeout=1000)
-                    if handle is not None and bool(page.evaluate("el => { el.click(); return true; }", handle)):
+                    handle = await primary_button.element_handle(timeout=1000)
+                    if handle is not None and bool(await page.evaluate("el => { el.click(); return true; }", handle)):
                         return True
                 except Exception:
                     pass
 
     targets = _NEXT_BUTTON_MARKERS if action == "next" else _SUBMIT_BUTTON_MARKERS
     locator = page.locator("button, a, [role='button'], input[type='button'], input[type='submit']")
-    count = _locator_count(locator)
+    count = await _locator_count(locator)
     for index in range(count):
         item = locator.nth(index)
-        if not _locator_is_visible(item):
+        if not await _locator_is_visible(item):
             continue
-        text = (_text_content(item) or _normalize_text(item.get_attribute("value"))).casefold()
+        text = (await _text_content(item) or _normalize_text(await item.get_attribute("value"))).casefold()
         if not any(marker in text for marker in targets):
             continue
         try:
-            item.scroll_into_view_if_needed(timeout=1000)
+            await item.scroll_into_view_if_needed(timeout=1000)
         except Exception:
             pass
         try:
-            item.click(timeout=3000)
+            await item.click(timeout=3000)
             return True
         except Exception:
             try:
-                handle = item.element_handle(timeout=1000)
-                if handle is not None and bool(page.evaluate("el => { el.click(); return true; }", handle)):
+                handle = await item.element_handle(timeout=1000)
+                if handle is not None and bool(await page.evaluate("el => { el.click(); return true; }", handle)):
                     return True
             except Exception:
                 continue
@@ -897,69 +959,32 @@ def _append_unseen_questions(
     return added
 
 
-def _wait_for_page_change(page: Any, previous_signature: Tuple[Tuple[str, str], ...], *, page_number: int) -> bool:
-    deadline = time.monotonic() + _PARSE_PAGE_WAIT_SECONDS
-    while time.monotonic() < deadline:
-        time.sleep(_PARSE_POLL_SECONDS)
-        current_questions = _extract_questions_from_current_page(page, page_number=page_number)
+async def _wait_for_page_change(page: Any, previous_signature: Tuple[Tuple[str, str], ...], *, page_number: int) -> bool:
+    deadline = time.time() + _PARSE_PAGE_WAIT_SECONDS
+    while time.time() < deadline:
+        await page.wait_for_timeout(int(_PARSE_POLL_SECONDS * 1000))
+        current_questions = await _extract_questions_from_current_page(page, page_number=page_number)
         current_signature = _extract_page_signature(current_questions)
         if current_signature and current_signature != previous_signature:
             return True
     return False
 
 
-def _prime_question_for_next(page: Any, root: Any, question: Dict[str, Any]) -> None:
-    from credamo.provider.runtime import (
-        _answer_dropdown,
-        _answer_matrix,
-        _answer_multiple,
-        _answer_order,
-        _answer_scale,
-        _answer_single_like,
-        _answer_text,
-    )
-
-    kind = str(question.get("provider_type") or question.get("type_code") or "").strip().lower()
-    option_count = max(1, int(question.get("options") or 0))
-    forced_option_index = question.get("forced_option_index")
+async def _run_parse_runtime_coroutine(coro: Any) -> None:
     try:
-        forced_index = int(forced_option_index) if forced_option_index is not None else None
+        await coro
     except Exception:
-        forced_index = None
-    if forced_index is not None and 0 <= forced_index < option_count:
-        first_option_weights = [100.0 if idx == forced_index else 0.0 for idx in range(option_count)]
-    else:
-        first_option_weights = [100.0] + [0.0] * max(0, option_count - 1)
-    middle_index = min(max(option_count // 2, 0), max(option_count - 1, 0))
-    middle_weights = [0.0] * option_count
-    if middle_weights:
-        middle_weights[middle_index] = 100.0
-    scale_weights = first_option_weights if forced_index is not None and 0 <= forced_index < option_count else middle_weights
-    if kind in {"single", "3"}:
-        _answer_single_like(page, root, first_option_weights, option_count)
-    elif kind in {"multiple", "4"}:
-        _answer_multiple(page, root, first_option_weights)
-    elif kind in {"dropdown", "7"}:
-        _answer_dropdown(page, root, first_option_weights)
-    elif kind in {"matrix", "6", "9"}:
-        _answer_matrix(page, root, first_option_weights)
-    elif kind in {"scale", "5", "score"}:
-        _answer_scale(page, root, scale_weights)
-    elif kind in {"order", "11"}:
-        _answer_order(page, root)
-    else:
-        forced_texts = question.get("forced_texts") if isinstance(question.get("forced_texts"), list) else []
-        _answer_text(root, forced_texts or [DEFAULT_FILL_TEXT])
+        logging.info("Credamo 解析翻页预填题目失败", exc_info=True)
 
 
-def _prime_page_for_next(
+async def _prime_page_for_next(
     page: Any,
     questions: List[Dict[str, Any]],
     primed_keys: Optional[set[str]] = None,
 ) -> int:
     from credamo.provider.runtime import _question_roots
 
-    roots = _question_roots(page)
+    roots = await _question_roots(page)
     primed = primed_keys if primed_keys is not None else set()
     primed_count = 0
     for question, root in zip(questions, roots):
@@ -967,7 +992,48 @@ def _prime_page_for_next(
         if key in primed:
             continue
         try:
-            _prime_question_for_next(page, root, question)
+            kind = str(question.get("provider_type") or question.get("type_code") or "").strip().lower()
+            option_count = max(1, int(question.get("options") or 0))
+            forced_option_index = question.get("forced_option_index")
+            try:
+                forced_index = int(forced_option_index) if forced_option_index is not None else None
+            except Exception:
+                forced_index = None
+            if forced_index is not None and 0 <= forced_index < option_count:
+                first_option_weights = [100.0 if idx == forced_index else 0.0 for idx in range(option_count)]
+            else:
+                first_option_weights = [100.0] + [0.0] * max(0, option_count - 1)
+            middle_index = min(max(option_count // 2, 0), max(option_count - 1, 0))
+            middle_weights = [0.0] * option_count
+            if middle_weights:
+                middle_weights[middle_index] = 100.0
+            scale_weights = first_option_weights if forced_index is not None and 0 <= forced_index < option_count else middle_weights
+
+            from credamo.provider.runtime import (
+                _answer_dropdown,
+                _answer_matrix,
+                _answer_multiple,
+                _answer_order,
+                _answer_scale,
+                _answer_single_like,
+                _answer_text,
+            )
+
+            if kind in {"single", "3"}:
+                await _run_parse_runtime_coroutine(_answer_single_like(page, root, first_option_weights, option_count))
+            elif kind in {"multiple", "4"}:
+                await _run_parse_runtime_coroutine(_answer_multiple(page, root, first_option_weights))
+            elif kind in {"dropdown", "7"}:
+                await _run_parse_runtime_coroutine(_answer_dropdown(page, root, first_option_weights))
+            elif kind in {"matrix", "6", "9"}:
+                await _run_parse_runtime_coroutine(_answer_matrix(page, root, first_option_weights))
+            elif kind in {"scale", "5", "score"}:
+                await _run_parse_runtime_coroutine(_answer_scale(page, root, scale_weights))
+            elif kind in {"order", "11"}:
+                await _run_parse_runtime_coroutine(_answer_order(page, root))
+            else:
+                forced_texts = question.get("forced_texts") if isinstance(question.get("forced_texts"), list) else []
+                await _run_parse_runtime_coroutine(_answer_text(root, forced_texts or [DEFAULT_FILL_TEXT]))
             primed.add(key)
             primed_count += 1
         except Exception:
@@ -975,41 +1041,41 @@ def _prime_page_for_next(
     return primed_count
 
 
-def _wait_for_dynamic_questions(
+async def _wait_for_dynamic_questions(
     page: Any,
     *,
     page_number: int,
     previous_visible_keys: set[str],
 ) -> List[Dict[str, Any]]:
-    deadline = time.monotonic() + _DYNAMIC_REVEAL_WAIT_SECONDS
-    latest_questions = _extract_questions_from_current_page(page, page_number=page_number)
-    while time.monotonic() < deadline:
-        current_questions = _extract_questions_from_current_page(page, page_number=page_number)
+    deadline = time.time() + _DYNAMIC_REVEAL_WAIT_SECONDS
+    latest_questions = await _extract_questions_from_current_page(page, page_number=page_number)
+    while time.time() < deadline:
+        current_questions = await _extract_questions_from_current_page(page, page_number=page_number)
         latest_questions = current_questions
         current_keys = {_question_dedupe_key(question) for question in current_questions}
         if current_keys - previous_visible_keys:
             return current_questions
-        time.sleep(_PARSE_POLL_SECONDS)
+        await page.wait_for_timeout(int(_PARSE_POLL_SECONDS * 1000))
     return latest_questions
 
 
-def _collect_current_page_until_stable(page: Any, *, page_number: int) -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]]]:
+async def _collect_current_page_until_stable(page: Any, *, page_number: int) -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]]]:
     discovered_questions: List[Dict[str, Any]] = []
     discovered_keys: set[str] = set()
     primed_keys: set[str] = set()
     current_questions: List[Dict[str, Any]] = []
 
     for _ in range(_MAX_DYNAMIC_REVEAL_ROUNDS):
-        current_questions = _extract_questions_from_current_page(page, page_number=page_number)
+        current_questions = await _extract_questions_from_current_page(page, page_number=page_number)
         if not current_questions:
             break
         _append_unseen_questions(discovered_questions, discovered_keys, current_questions)
         visible_keys = {_question_dedupe_key(question) for question in current_questions}
-        primed_count = _prime_page_for_next(page, current_questions, primed_keys)
+        primed_count = await _prime_page_for_next(page, current_questions, primed_keys)
         if primed_count <= 0:
             break
 
-        next_questions = _wait_for_dynamic_questions(
+        next_questions = await _wait_for_dynamic_questions(
             page,
             page_number=page_number,
             previous_visible_keys=visible_keys,
@@ -1022,21 +1088,21 @@ def _collect_current_page_until_stable(page: Any, *, page_number: int) -> Tuple[
     return current_questions, discovered_questions
 
 
-def parse_credamo_survey(url: str) -> Tuple[List[Dict[str, Any]], str]:
-    with acquire_parse_browser_session() as driver:
-        driver.get(url, timeout=45000, wait_until="domcontentloaded")
-        page = driver.page
+async def parse_credamo_survey(url: str) -> Tuple[List[Dict[str, Any]], str]:
+    async with acquire_parse_browser_session() as driver:
+        await driver.get(url, timeout=45000, wait_until="domcontentloaded")
+        page = await driver.page()
         try:
-            page.wait_for_load_state("networkidle", timeout=8000)
+            await page.wait_for_load_state("networkidle", timeout=8000)
         except Exception:
             pass
-        _retry_initial_question_load_if_needed(page)
+        await _retry_initial_question_load_if_needed(page)
         questions: List[Dict[str, Any]] = []
         seen_question_keys: set[str] = set()
-        title = _normalize_text(page.title())
+        title = _normalize_text(await page.title())
 
         for page_number in range(1, _MAX_PARSE_PAGES + 1):
-            current_questions, discovered_questions = _collect_current_page_until_stable(page, page_number=page_number)
+            current_questions, discovered_questions = await _collect_current_page_until_stable(page, page_number=page_number)
             if not current_questions:
                 if not questions:
                     raise CredamoParseError("没有识别到 Credamo 题目，请确认链接已开放且无需登录")
@@ -1049,21 +1115,21 @@ def parse_credamo_survey(url: str) -> Tuple[List[Dict[str, Any]], str]:
                 seen_question_keys.add(question_key)
                 questions.append(question)
 
-            navigation_action = _detect_navigation_action(page)
+            navigation_action = await _detect_navigation_action(page)
             if navigation_action != "next":
                 break
 
             previous_signature = _extract_page_signature(current_questions)
-            if not _click_navigation(page, "next"):
+            if not await _click_navigation(page, "next"):
                 break
-            _wait_for_page_change(page, previous_signature, page_number=page_number + 1)
+            await _wait_for_page_change(page, previous_signature, page_number=page_number + 1)
 
         if not questions:
             raise CredamoParseError("没有识别到 Credamo 题目，请确认链接已开放且无需登录")
         if not title:
             try:
                 title = _normalize_text(
-                    page.locator("h1, .title, [class*='title'], [class*='Title']").first.text_content(timeout=1000)
+                    await page.locator("h1, .title, [class*='title'], [class*='Title']").first.text_content(timeout=1000)
                 )
             except Exception:
                 title = ""

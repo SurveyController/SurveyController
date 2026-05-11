@@ -10,12 +10,17 @@ from typing import Any, List, Optional, Tuple
 
 from software.app.config import BROWSER_PREFERENCE
 from software.logging.log_utils import log_suppressed_exception
-from software.network.browser.async_compat import AsyncBrowserDriver, AsyncLoopPortal
 from software.network.browser.options import (
     _build_context_args,
     _build_launch_args,
     _is_browser_disconnected_error,
 )
+from software.network.browser.pool_config import (
+    BrowserPoolConfig,
+    DEFAULT_HEADED_CONTEXTS_PER_BROWSER,
+    DEFAULT_HEADLESS_CONTEXTS_PER_BROWSER,
+)
+from software.network.browser.runtime_async import PlaywrightAsyncDriver
 from software.network.browser.startup import (
     BrowserStartupRuntimeError,
     _format_exception_chain,
@@ -23,16 +28,11 @@ from software.network.browser.startup import (
     classify_playwright_startup_error,
     is_playwright_startup_environment_error,
 )
-from software.network.browser.owner_pool import (
-    BrowserPoolConfig,
-    DEFAULT_HEADED_CONTEXTS_PER_BROWSER,
-    DEFAULT_HEADLESS_CONTEXTS_PER_BROWSER,
-)
 
 
 @dataclass
 class AsyncBrowserSession:
-    driver: AsyncBrowserDriver
+    driver: PlaywrightAsyncDriver
     owner_id: int
     browser_name: str
 
@@ -47,14 +47,12 @@ class AsyncBrowserOwner:
         self,
         *,
         owner_id: int,
-        portal: AsyncLoopPortal,
         prefer_browsers: Optional[List[str]] = None,
         headless: bool = False,
         window_position: Optional[Tuple[int, int]] = None,
         max_contexts: int = DEFAULT_HEADED_CONTEXTS_PER_BROWSER,
     ) -> None:
         self.owner_id = max(1, int(owner_id or 1))
-        self._portal = portal
         self._prefer_browsers = list(prefer_browsers or BROWSER_PREFERENCE)
         self._headless = bool(headless)
         self._window_position = window_position
@@ -185,9 +183,7 @@ class AsyncBrowserOwner:
                 _route_runtime_resource,
             )
             page = await context.new_page()
-            driver = AsyncBrowserDriver(
-                portal=self._portal,
-                owner=self,
+            driver = PlaywrightAsyncDriver(
                 context=context,
                 page=page,
                 browser_name=browser_name,
@@ -263,7 +259,6 @@ class AsyncBrowserOwnerPool:
         self,
         *,
         config: BrowserPoolConfig,
-        portal: AsyncLoopPortal,
         headless: bool,
         prefer_browsers: Optional[List[str]] = None,
         window_positions: Optional[List[Tuple[int, int]]] = None,
@@ -276,7 +271,6 @@ class AsyncBrowserOwnerPool:
             self._owners.append(
                 AsyncBrowserOwner(
                     owner_id=owner_index + 1,
-                    portal=portal,
                     prefer_browsers=prefer_browsers,
                     headless=headless,
                     window_position=positions[owner_index] if owner_index < len(positions) else None,

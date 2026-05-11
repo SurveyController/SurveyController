@@ -1,33 +1,40 @@
+from __future__ import annotations
+
 import random
+
+import pytest
+
 from credamo.provider import runtime_answerers, runtime_dom
 
-class _FakePage:
 
-    def evaluate(self, _script, _root):
-        return '  第 1 题   测试题面  '
+class _FakePage:
+    async def evaluate(self, _script, _root):
+        return "  第 1 题   测试题面  "
+
 
 class _FakeRoot:
-
     def __init__(self, attrs):
         self._attrs = dict(attrs)
 
-    def get_attribute(self, name):
+    async def get_attribute(self, name):
         return self._attrs.get(name)
 
+
 class CredamoRuntimeHelperTests:
-
     def test_loading_shell_detection_covers_empty_answer_page(self):
-        assert runtime_dom._looks_like_loading_shell('答卷', '')
-        assert runtime_dom._looks_like_loading_shell('答卷', '载入中...')
-        assert not runtime_dom._looks_like_loading_shell('答卷', '第 1 题 请选择一个最符合你的选项并继续作答')
+        assert runtime_dom._looks_like_loading_shell("答卷", "")
+        assert runtime_dom._looks_like_loading_shell("答卷", "载入中...")
+        assert not runtime_dom._looks_like_loading_shell("答卷", "第 1 题 请选择一个最符合你的选项并继续作答")
 
-    def test_runtime_question_key_prefers_stable_dom_id(self):
-        root = _FakeRoot({'id': 'q-123'})
-        assert runtime_dom._runtime_question_key(_FakePage(), root, 1) == 'id:q-123'
+    @pytest.mark.asyncio
+    async def test_runtime_question_key_prefers_stable_dom_id(self):
+        root = _FakeRoot({"id": "q-123"})
+        assert await runtime_dom._runtime_question_key(_FakePage(), root, 1) == "id:q-123"
 
-    def test_runtime_question_key_falls_back_to_number_and_text(self):
+    @pytest.mark.asyncio
+    async def test_runtime_question_key_falls_back_to_number_and_text(self):
         root = _FakeRoot({})
-        assert runtime_dom._runtime_question_key(_FakePage(), root, 3) == 'num:3|text:  第 1 题   测试题面  '
+        assert await runtime_dom._runtime_question_key(_FakePage(), root, 3) == "num:3|text:  第 1 题   测试题面  "
 
     def test_positive_multiple_indexes_never_returns_empty_selection(self):
         random.seed(1)

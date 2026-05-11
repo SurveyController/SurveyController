@@ -1,10 +1,11 @@
 """答题时长控制 - 模拟真实答题时间分布"""
+from __future__ import annotations
+
 import logging
 import random
-import threading
-import time
 from typing import Any, Optional, Tuple
 
+from software.core.engine.async_wait import sleep_or_stop
 from software.network.proxy.policy.source import _map_answer_seconds_to_proxy_minute
 from software.logging.log_utils import log_suppressed_exception
 
@@ -33,8 +34,8 @@ def has_configured_answer_duration(answer_duration_range_seconds: Tuple[int, int
 
 
 
-def simulate_answer_duration_delay(
-    stop_signal: Optional[threading.Event] = None,
+async def simulate_answer_duration_delay(
+    stop_signal: Optional[Any] = None,
     answer_duration_range_seconds: Tuple[int, int] = (0, 0),
 ) -> bool:
     """在提交前模拟答题时长等待；返回 True 表示等待中被中断。"""
@@ -89,26 +90,22 @@ def simulate_answer_duration_delay(
         "[Action Log] Simulating answer duration: waiting %.1f seconds before submit",
         wait_seconds,
     )
-    if stop_signal:
-        interrupted = stop_signal.wait(wait_seconds)
-        return bool(interrupted and stop_signal.is_set())
-    time.sleep(wait_seconds)
-    return False
+    return bool(await sleep_or_stop(stop_signal, wait_seconds))
 
 
-def is_survey_completion_page(driver: Any, provider: Optional[str] = None) -> bool:
+async def is_survey_completion_page(driver: Any, provider: Optional[str] = None) -> bool:
     """尝试检测当前页面是否为问卷提交完成页。"""
     try:
-        current_url = str(getattr(driver, "current_url", "") or "")
+        current_url = str(await driver.current_url() or "")
         if "complete" in current_url.lower():
             return True
     except Exception as exc:
         log_suppressed_exception("is_survey_completion_page: current_url", exc, level=logging.WARNING)
 
     try:
-        from software.providers.registry import is_completion_page_sync as _provider_is_completion_page
+        from software.providers.registry import is_completion_page as _provider_is_completion_page
 
-        if _provider_is_completion_page(driver, provider=provider):
+        if await _provider_is_completion_page(driver, provider=provider):
             return True
     except Exception as exc:
         log_suppressed_exception("is_survey_completion_page: provider_is_completion_page", exc, level=logging.WARNING)
@@ -117,22 +114,22 @@ def is_survey_completion_page(driver: Any, provider: Optional[str] = None) -> bo
     try:
         divdsc = None
         try:
-            divdsc = driver.find_element("id", "divdsc")
+            divdsc = await driver.find_element("id", "divdsc")
         except Exception:
             divdsc = None
-        if divdsc and getattr(divdsc, "is_displayed", lambda: True)():
-            text = getattr(divdsc, "text", "") or ""
+        if divdsc and await divdsc.is_displayed():
+            text = await divdsc.text() or ""
             if any(marker in text for marker in _COMPLETION_MARKERS):
                 detected = True
     except Exception as exc:
         log_suppressed_exception("is_survey_completion_page: divdsc = None", exc, level=logging.WARNING)
     if not detected:
         try:
-            page_text = driver.execute_script("return document.body.innerText || '';") or ""
+            page_text = await driver.execute_script("return document.body.innerText || '';") or ""
             has_marker = any(marker in page_text for marker in _COMPLETION_MARKERS)
             if has_marker:
                 action_visible = bool(
-                    driver.execute_script(
+                    await driver.execute_script(
                         r"""
                         return (() => {
                             const selectors = [

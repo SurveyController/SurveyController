@@ -223,7 +223,6 @@ class AsyncRuntimeEngineLargeTests:
             async def shutdown(self) -> None:
                 self.shutdown_calls += 1
 
-        monkeypatch.setattr(async_engine, "AsyncLoopPortal", lambda loop: SimpleNamespace(loop=loop))
         monkeypatch.setattr(async_engine, "BrowserPoolConfig", SimpleNamespace(from_concurrency=lambda concurrency, headless: SimpleNamespace(owner_count=1, contexts_per_owner=8, logical_concurrency=concurrency, headless=headless)))
         monkeypatch.setattr(async_engine, "AsyncBrowserOwnerPool", _FakePool)
         monkeypatch.setattr(async_engine, "AsyncScheduler", _FakeScheduler)

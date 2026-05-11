@@ -4,11 +4,11 @@ from __future__ import annotations
 
 import logging
 import re
-import threading
 import time
-from typing import Any, List, Optional, Tuple
+from typing import Any, Optional
 
-from software.network.browser import BrowserDriver
+from software.core.engine.async_wait import sleep_or_stop
+from software.network.browser.runtime_async import BrowserDriver, BrowserElement
 
 
 _CREDAMO_DYNAMIC_WAIT_TIMEOUT_MS = 6000
@@ -21,44 +21,65 @@ _NEXT_BUTTON_MARKERS = ("下一页", "next", "继续")
 _SUBMIT_BUTTON_MARKERS = ("提交", "完成", "交卷", "submit", "finish", "done")
 
 
-def _page(driver: BrowserDriver) -> Any:
-    return getattr(driver, "page")
+async def _page(driver: BrowserDriver) -> Any:
+    return await driver.page()
 
 
-def _abort_requested(stop_signal: Optional[threading.Event]) -> bool:
-    return bool(stop_signal and stop_signal.is_set())
-
-
-def _question_roots(page: Any) -> List[Any]:
-    script = r"""
-() => {
-  const visible = (el, minWidth = 8, minHeight = 8) => {
-    if (!el) return false;
-    const style = window.getComputedStyle(el);
-    if (!style || style.display === 'none' || style.visibility === 'hidden') return false;
-    const rect = el.getBoundingClientRect();
-    return rect.width >= minWidth && rect.height >= minHeight;
-  };
-  const roots = [];
-  Array.from(document.querySelectorAll('.answer-page .question')).forEach((root) => {
-    if (!visible(root)) return;
-    roots.push(root);
-  });
-  return roots;
-}
-"""
-    roots = page.evaluate_handle(script)
-    try:
-        properties = roots.get_properties()
-        return [prop.as_element() for prop in properties.values() if prop.as_element() is not None]
-    finally:
+def _abort_requested(stop_signal: Any) -> bool:
+    if stop_signal is None:
+        return False
+    checker = getattr(stop_signal, "is_set", None)
+    if callable(checker):
         try:
-            roots.dispose()
+            return bool(checker())
         except Exception:
-            pass
+            return False
+    return False
 
 
-def _collect_question_root_snapshot(page: Any) -> List[dict[str, Any]]:
+async def _question_roots(page: Any) -> list[BrowserElement]:
+    try:
+        handles = await page.eval_on_selector_all(
+            ".answer-page .question",
+            r"""
+            (roots) => {
+              const visible = (el, minWidth = 8, minHeight = 8) => {
+                if (!el) return false;
+                const style = window.getComputedStyle(el);
+                if (!style || style.display === 'none' || style.visibility === 'hidden') return false;
+                const rect = el.getBoundingClientRect();
+                return rect.width >= minWidth && rect.height >= minHeight;
+              };
+              return roots
+                .filter((root) => visible(root))
+                .map((_root, index) => index);
+            }
+            """,
+        )
+    except Exception:
+        handles = None
+    if isinstance(handles, list):
+        try:
+            visible_roots = await page.query_selector_all(".answer-page .question")
+        except Exception:
+            return []
+        resolved: list[BrowserElement] = []
+        for index in handles:
+            try:
+                numeric_index = int(index)
+            except Exception:
+                continue
+            if 0 <= numeric_index < len(visible_roots):
+                resolved.append(visible_roots[numeric_index])
+        if resolved:
+            return resolved
+    try:
+        return await page.query_selector_all(".answer-page .question")
+    except Exception:
+        return []
+
+
+async def _collect_question_root_snapshot(page: Any) -> list[dict[str, Any]]:
     script = r"""
 () => {
   const visible = (el, minWidth = 8, minHeight = 8) => {
@@ -84,10 +105,10 @@ def _collect_question_root_snapshot(page: Any) -> List[dict[str, Any]]:
 }
 """
     try:
-        payload = page.evaluate(script) or []
+        payload = await page.evaluate(script) or []
     except Exception:
         return []
-    snapshot: List[dict[str, Any]] = []
+    snapshot: list[dict[str, Any]] = []
     if not isinstance(payload, list):
         return snapshot
     for item in payload:
@@ -106,13 +127,13 @@ def _collect_question_root_snapshot(page: Any) -> List[dict[str, Any]]:
     return snapshot
 
 
-def _page_loading_snapshot(page: Any) -> Tuple[str, str]:
+async def _page_loading_snapshot(page: Any) -> tuple[str, str]:
     try:
-        title = str(page.title() or "").strip()
+        title = str(await page.title() or "").strip()
     except Exception:
         title = ""
     try:
-        body_text = str(page.locator("body").inner_text(timeout=1000) or "").strip()
+        body_text = str(await page.locator("body").inner_text(timeout=1000) or "").strip()
     except Exception:
         body_text = ""
     return title, re.sub(r"\s+", " ", body_text).strip()
@@ -131,26 +152,26 @@ def _looks_like_loading_shell(title: str, body_text: str) -> bool:
     return False
 
 
-def _wait_for_question_roots(
+async def _wait_for_question_roots(
     page: Any,
-    stop_signal: Optional[threading.Event],
+    stop_signal: Any,
     *,
     timeout_ms: int = _CREDAMO_DYNAMIC_WAIT_TIMEOUT_MS,
     loading_shell_extra_timeout_ms: int = _CREDAMO_LOADING_SHELL_EXTRA_WAIT_TIMEOUT_MS,
-) -> List[Any]:
+) -> list[BrowserElement]:
     deadline = time.monotonic() + max(0.0, timeout_ms / 1000)
-    last_roots: List[Any] = []
+    last_roots: list[BrowserElement] = []
     loading_shell_retry_used = False
     while not _abort_requested(stop_signal):
         try:
-            last_roots = _question_roots(page)
+            last_roots = await _question_roots(page)
         except Exception:
             logging.info("Credamo 等待题目加载时读取页面失败", exc_info=True)
             last_roots = []
         if last_roots:
             return last_roots
         if time.monotonic() >= deadline:
-            title, body_text = _page_loading_snapshot(page)
+            title, body_text = await _page_loading_snapshot(page)
             if (
                 not loading_shell_retry_used
                 and loading_shell_extra_timeout_ms > 0
@@ -170,23 +191,20 @@ def _wait_for_question_roots(
                 (body_text[:120] or "<empty>"),
             )
             return last_roots
-        if stop_signal is not None:
-            stop_signal.wait(_CREDAMO_DYNAMIC_WAIT_POLL_SECONDS)
-        else:
-            time.sleep(_CREDAMO_DYNAMIC_WAIT_POLL_SECONDS)
+        await sleep_or_stop(stop_signal, _CREDAMO_DYNAMIC_WAIT_POLL_SECONDS)
     return last_roots
 
 
-def _root_text(page: Any, root: Any) -> str:
+async def _root_text(page: Any, root: BrowserElement) -> str:
     try:
-        return str(page.evaluate("el => (el.innerText || '').replace(/\\s+/g, ' ').trim()", root) or "")
+        return str(await page.evaluate("el => (el.innerText || '').replace(/\\s+/g, ' ').trim()", root) or "")
     except Exception:
         return ""
 
 
-def _question_number_from_root(page: Any, root: Any, fallback_num: int) -> int:
+async def _question_number_from_root(page: Any, root: BrowserElement, fallback_num: int) -> int:
     try:
-        raw = str(page.evaluate("el => (el.querySelector('.question-title .qstNo')?.textContent || '')", root) or "")
+        raw = str(await page.evaluate("el => (el.querySelector('.question-title .qstNo')?.textContent || '')", root) or "")
     except Exception:
         raw = ""
     match = _QUESTION_NUMBER_RE.search(raw)
@@ -198,7 +216,7 @@ def _question_number_from_root(page: Any, root: Any, fallback_num: int) -> int:
     return max(1, int(fallback_num or 1))
 
 
-def _question_kind_from_root(page: Any, root: Any) -> str:
+async def _question_kind_from_root(page: Any, root: BrowserElement) -> str:
     script = r"""
 (el) => {
   const visible = (node, minWidth = 4, minHeight = 4) => {
@@ -224,115 +242,112 @@ def _question_kind_from_root(page: Any, root: Any) -> str:
 }
 """
     try:
-        return str(page.evaluate(script, root) or "").strip().lower()
+        return str(await page.evaluate(script, root) or "").strip().lower()
     except Exception:
         return ""
 
 
-def _question_signature(page: Any) -> Tuple[Tuple[str, str], ...]:
-    signature: List[Tuple[str, str]] = []
-    for root in _question_roots(page):
+async def _question_signature(page: Any) -> tuple[tuple[str, str], ...]:
+    signature: list[tuple[str, str]] = []
+    for root in await _question_roots(page):
         try:
-            question_id = str(root.get_attribute("id") or root.get_attribute("data-id") or "")
+            question_id = str(await root.get_attribute("id") or await root.get_attribute("data-id") or "")
         except Exception:
             question_id = ""
-        signature.append((question_id, _root_text(page, root)))
+        signature.append((question_id, await _root_text(page, root)))
     return tuple(signature)
 
 
-def _runtime_question_key(page: Any, root: Any, question_num: int) -> str:
+async def _runtime_question_key(page: Any, root: BrowserElement, question_num: int) -> str:
     try:
-        question_id = str(root.get_attribute("id") or root.get_attribute("data-id") or "").strip()
+        question_id = str(await root.get_attribute("id") or await root.get_attribute("data-id") or "").strip()
     except Exception:
         question_id = ""
     if question_id:
         return f"id:{question_id}"
-    return f"num:{question_num}|text:{_root_text(page, root)[:120]}"
+    return f"num:{question_num}|text:{(await _root_text(page, root))[:120]}"
 
 
-def _unanswered_question_roots(
+async def _unanswered_question_roots(
     page: Any,
-    roots: List[Any],
+    roots: list[BrowserElement],
     answered_keys: set[str],
     *,
     fallback_start: int = 0,
-) -> List[Tuple[Any, int, str]]:
-    pending: List[Tuple[Any, int, str]] = []
+) -> list[tuple[BrowserElement, int, str]]:
+    pending: list[tuple[BrowserElement, int, str]] = []
     for local_index, root in enumerate(roots, start=1):
-        question_num = _question_number_from_root(page, root, fallback_start + local_index)
-        key = _runtime_question_key(page, root, question_num)
+        question_num = await _question_number_from_root(page, root, fallback_start + local_index)
+        key = await _runtime_question_key(page, root, question_num)
         if key in answered_keys:
             continue
         pending.append((root, question_num, key))
     return pending
 
 
-def _wait_for_dynamic_question_roots(
+async def _wait_for_dynamic_question_roots(
     page: Any,
     answered_keys: set[str],
-    stop_signal: Optional[threading.Event],
+    stop_signal: Any,
     *,
     timeout_ms: int = _CREDAMO_DYNAMIC_REVEAL_TIMEOUT_MS,
     fallback_start: int = 0,
-) -> List[Any]:
+) -> list[BrowserElement]:
     deadline = time.monotonic() + max(0.0, timeout_ms / 1000)
-    latest_roots: List[Any] = []
+    latest_roots: list[BrowserElement] = []
     while not _abort_requested(stop_signal):
         try:
-            latest_roots = _question_roots(page)
+            latest_roots = await _question_roots(page)
         except Exception:
             logging.info("Credamo 等待动态题目显示时读取页面失败", exc_info=True)
             latest_roots = []
-        if _unanswered_question_roots(page, latest_roots, answered_keys, fallback_start=fallback_start):
+        if await _unanswered_question_roots(page, latest_roots, answered_keys, fallback_start=fallback_start):
             return latest_roots
         if time.monotonic() >= deadline:
             return latest_roots
-        if stop_signal is not None:
-            stop_signal.wait(_CREDAMO_DYNAMIC_WAIT_POLL_SECONDS)
-        else:
-            time.sleep(_CREDAMO_DYNAMIC_WAIT_POLL_SECONDS)
+        await sleep_or_stop(stop_signal, _CREDAMO_DYNAMIC_WAIT_POLL_SECONDS)
     return latest_roots
 
 
-def _click_element(page: Any, element: Any) -> bool:
+async def _click_element(page: Any, element: Any) -> bool:
     try:
-        element.scroll_into_view_if_needed(timeout=2000)
+        await element.scroll_into_view_if_needed(timeout=2000)
     except Exception:
         pass
     try:
-        element.click(timeout=3000)
+        await element.click(timeout=3000)
         return True
     except Exception:
         pass
     try:
-        return bool(page.evaluate("el => { el.click(); return true; }", element))
+        return bool(await page.evaluate("el => { el.click(); return true; }", element))
     except Exception:
         return False
 
 
-def _is_checked(page: Any, element: Any) -> bool:
+async def _is_checked(page: Any, element: Any) -> bool:
     try:
-        return bool(page.evaluate("el => !!el.checked", element))
+        return bool(await page.evaluate("el => !!el.checked", element))
     except Exception:
         return False
 
 
-def _input_value(page: Any, element: Any) -> str:
+async def _input_value(page: Any, element: Any) -> str:
     try:
-        return str(page.evaluate("el => String(el.value || '')", element) or "")
+        return str(await page.evaluate("el => String(el.value || '')", element) or "")
     except Exception:
         return ""
 
 
-def _option_inputs(root: Any, kind: str) -> List[Any]:
+async def _option_inputs(root: Any, kind: str) -> list[Any]:
     selector = f"input[type='{kind}'], [role='{kind}']"
     try:
-        return root.query_selector_all(selector)
+        return await root.query_selector_all(selector)
     except Exception:
         return []
 
 
-def _option_click_targets(root: Any, kind: str) -> List[Any]:
+async def _option_click_targets(root: Any, kind: str) -> list[Any]:
     selectors = {
         "radio": ".single-choice .choice-row, .single-choice .choice, .choice-row, .choice",
         "checkbox": ".multi-choice .choice-row, .multi-choice .choice, .choice-row, .choice",
@@ -341,14 +356,14 @@ def _option_click_targets(root: Any, kind: str) -> List[Any]:
     if not selector:
         return []
     try:
-        return root.query_selector_all(selector)
+        return await root.query_selector_all(selector)
     except Exception:
         return []
 
 
-def _text_inputs(root: Any) -> List[Any]:
+async def _text_inputs(root: Any) -> list[Any]:
     try:
-        return root.query_selector_all(
+        return await root.query_selector_all(
             "textarea, input:not([readonly])[type='text'], input:not([readonly])[type='search'], "
             "input:not([readonly])[type='number'], input:not([readonly])[type='tel'], "
             "input:not([readonly])[type='email'], input:not([readonly]):not([type])"
@@ -365,15 +380,19 @@ def _normalize_runtime_text(value: Any) -> str:
     return re.sub(r"\s+", " ", text)
 
 
-def _element_text(page: Any, element: Any) -> str:
-    for reader in (
+async def _element_text(page: Any, element: Any) -> str:
+    readers = (
         lambda: element.inner_text(timeout=500),
         lambda: element.text_content(timeout=500),
         lambda: element.get_attribute("value"),
         lambda: page.evaluate("el => (el.innerText || el.textContent || el.value || '').trim()", element),
-    ):
+    )
+    for reader in readers:
         try:
-            text = _normalize_runtime_text(reader())
+            value = reader()
+            if hasattr(value, "__await__"):
+                value = await value
+            text = _normalize_runtime_text(value)
         except Exception:
             text = ""
         if text:
@@ -381,45 +400,45 @@ def _element_text(page: Any, element: Any) -> str:
     return ""
 
 
-def _question_title_text(page: Any, root: Any) -> str:
+async def _question_title_text(page: Any, root: Any) -> str:
     for selector in (".question-title", ".qstTitle", ".title", "[class*='title']"):
         try:
-            title_node = root.query_selector(selector)
+            title_node = await root.query_selector(selector)
         except Exception:
             title_node = None
         if title_node is None:
             continue
-        text = _element_text(page, title_node)
+        text = await _element_text(page, title_node)
         if text:
             return text
-    return _root_text(page, root)
+    return await _root_text(page, root)
 
 
-def _locator_is_visible(locator: Any) -> bool:
+async def _locator_is_visible(locator: Any) -> bool:
     try:
-        return bool(locator.is_visible(timeout=300))
+        return bool(await locator.is_visible(timeout=300))
     except Exception:
         return False
 
 
-def _navigation_action(page: Any) -> Optional[str]:
+async def _navigation_action(page: Any) -> Optional[str]:
     locator = page.locator("button, a, [role='button'], input[type='button'], input[type='submit']")
     try:
-        count = int(locator.count())
+        count = int(await locator.count())
     except Exception:
         count = 0
     found_next = False
     for index in range(count):
         item = locator.nth(index)
-        if not _locator_is_visible(item):
+        if not await _locator_is_visible(item):
             continue
         try:
-            text = str(item.text_content(timeout=500) or "").strip()
+            text = str(await item.text_content(timeout=500) or "").strip()
         except Exception:
             text = ""
         if not text:
             try:
-                text = str(item.get_attribute("value") or "").strip()
+                text = str(await item.get_attribute("value") or "").strip()
             except Exception:
                 text = ""
         lowered = text.casefold()
@@ -430,32 +449,32 @@ def _navigation_action(page: Any) -> Optional[str]:
     return "next" if found_next else None
 
 
-def _click_navigation(page: Any, action: str) -> bool:
+async def _click_navigation(page: Any, action: str) -> bool:
     primary_button = page.locator("#credamo-submit-btn").first
     try:
-        primary_count = int(primary_button.count())
+        primary_count = int(await primary_button.count())
     except Exception:
         primary_count = 0
-    if primary_count > 0 and _locator_is_visible(primary_button):
+    if primary_count > 0 and await _locator_is_visible(primary_button):
         try:
-            primary_text = str(primary_button.text_content(timeout=500) or "").strip()
+            primary_text = str(await primary_button.text_content(timeout=500) or "").strip()
         except Exception:
             primary_text = ""
         if not primary_text:
             try:
-                primary_text = str(primary_button.get_attribute("value") or "").strip()
+                primary_text = str(await primary_button.get_attribute("value") or "").strip()
             except Exception:
                 primary_text = ""
         lowered_primary = primary_text.casefold()
         targets = _NEXT_BUTTON_MARKERS if action == "next" else _SUBMIT_BUTTON_MARKERS
         if any(marker in lowered_primary for marker in targets):
             try:
-                primary_button.click(timeout=3000)
+                await primary_button.click(timeout=3000)
                 return True
             except Exception:
                 try:
-                    handle = primary_button.element_handle(timeout=1000)
-                    if handle is not None and bool(page.evaluate("el => { el.click(); return true; }", handle)):
+                    handle = await primary_button.element_handle(timeout=1000)
+                    if handle is not None and bool(await page.evaluate("el => { el.click(); return true; }", handle)):
                         return True
                 except Exception:
                     pass
@@ -463,81 +482,75 @@ def _click_navigation(page: Any, action: str) -> bool:
     targets = _NEXT_BUTTON_MARKERS if action == "next" else _SUBMIT_BUTTON_MARKERS
     locator = page.locator("button, a, [role='button'], input[type='button'], input[type='submit']")
     try:
-        count = int(locator.count())
+        count = int(await locator.count())
     except Exception:
         count = 0
     for index in range(count):
         item = locator.nth(index)
-        if not _locator_is_visible(item):
+        if not await _locator_is_visible(item):
             continue
         try:
-            text = str(item.text_content(timeout=500) or "").strip()
+            text = str(await item.text_content(timeout=500) or "").strip()
         except Exception:
             text = ""
         if not text:
             try:
-                text = str(item.get_attribute("value") or "").strip()
+                text = str(await item.get_attribute("value") or "").strip()
             except Exception:
                 text = ""
         lowered = text.casefold()
         if not any(marker in lowered for marker in targets):
             continue
         try:
-            item.scroll_into_view_if_needed(timeout=1500)
+            await item.scroll_into_view_if_needed(timeout=1500)
         except Exception:
             pass
         try:
-            item.click(timeout=3000)
+            await item.click(timeout=3000)
             return True
         except Exception:
             try:
-                handle = item.element_handle(timeout=1000)
-                if handle is not None and bool(page.evaluate("el => { el.click(); return true; }", handle)):
+                handle = await item.element_handle(timeout=1000)
+                if handle is not None and bool(await page.evaluate("el => { el.click(); return true; }", handle)):
                     return True
             except Exception:
                 continue
     return False
 
 
-def _wait_for_page_change(
+async def _wait_for_page_change(
     page: Any,
-    previous_signature: Tuple[Tuple[str, str], ...],
-    stop_signal: Optional[threading.Event],
+    previous_signature: tuple[tuple[str, str], ...],
+    stop_signal: Any,
     *,
     timeout_ms: int = _CREDAMO_PAGE_TRANSITION_TIMEOUT_MS,
 ) -> bool:
     deadline = time.monotonic() + max(0.0, timeout_ms / 1000)
     while not _abort_requested(stop_signal):
-        current_signature = _question_signature(page)
+        current_signature = await _question_signature(page)
         if current_signature and current_signature != previous_signature:
             return True
         if time.monotonic() >= deadline:
             return False
-        if stop_signal is not None:
-            stop_signal.wait(_CREDAMO_DYNAMIC_WAIT_POLL_SECONDS)
-        else:
-            time.sleep(_CREDAMO_DYNAMIC_WAIT_POLL_SECONDS)
+        await sleep_or_stop(stop_signal, _CREDAMO_DYNAMIC_WAIT_POLL_SECONDS)
     return False
 
 
-def _click_submit_once(page: Any) -> bool:
-    return _click_navigation(page, "submit")
+async def _click_submit_once(page: Any) -> bool:
+    return await _click_navigation(page, "submit")
 
 
-def _click_submit(
+async def _click_submit(
     page: Any,
-    stop_signal: Optional[threading.Event] = None,
+    stop_signal: Any = None,
     *,
     timeout_ms: int = _CREDAMO_DYNAMIC_WAIT_TIMEOUT_MS,
 ) -> bool:
     deadline = time.monotonic() + max(0.0, timeout_ms / 1000)
     while not _abort_requested(stop_signal):
-        if _click_submit_once(page):
+        if await _click_submit_once(page):
             return True
         if time.monotonic() >= deadline:
             return False
-        if stop_signal is not None:
-            stop_signal.wait(_CREDAMO_DYNAMIC_WAIT_POLL_SECONDS)
-        else:
-            time.sleep(_CREDAMO_DYNAMIC_WAIT_POLL_SECONDS)
+        await sleep_or_stop(stop_signal, _CREDAMO_DYNAMIC_WAIT_POLL_SECONDS)
     return False

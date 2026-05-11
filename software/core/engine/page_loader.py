@@ -3,9 +3,9 @@
 from __future__ import annotations
 
 import logging
-import time
 from typing import Any, Callable
 
+from software.core.engine.async_wait import sleep_or_stop
 from software.core.engine.page_load_probe import (
     PAGE_LOAD_PROBE_ANSWERABLE,
     PAGE_LOAD_PROBE_BUSINESS_PAGE,
@@ -100,7 +100,7 @@ def should_delay_random_proxy_reload(probe_result: Any) -> bool:
     return detail in {"page_still_loading", "no_answerable_signal", "blank_page"}
 
 
-def load_survey_page_with_random_proxy(
+async def load_survey_page_with_random_proxy(
     driver: Any,
     config: ExecutionConfig,
     *,
@@ -117,7 +117,7 @@ def load_survey_page_with_random_proxy(
         RANDOM_PROXY_FAST_COMMIT_TIMEOUT_MS,
     )
     try:
-        driver.get(
+        await driver.get(
             config.url,
             timeout=RANDOM_PROXY_FAST_COMMIT_TIMEOUT_MS,
             wait_until="commit",
@@ -128,7 +128,7 @@ def load_survey_page_with_random_proxy(
             RANDOM_PROXY_FAST_PROBE_TIMEOUT_MS,
             RANDOM_PROXY_FAST_PROBE_INTERVAL_SECONDS,
         )
-        first_probe = probe_waiter(
+        first_probe = await probe_waiter(
             driver,
             provider=provider,
             timeout_ms=RANDOM_PROXY_FAST_PROBE_TIMEOUT_MS,
@@ -145,7 +145,7 @@ def load_survey_page_with_random_proxy(
                 RANDOM_PROXY_FAST_PROBE_INTERVAL_SECONDS,
                 first_probe.detail or "-",
             )
-            grace_probe = probe_waiter(
+            grace_probe = await probe_waiter(
                 driver,
                 provider=provider,
                 timeout_ms=RANDOM_PROXY_FAST_LOADING_GRACE_PROBE_TIMEOUT_MS,
@@ -175,7 +175,7 @@ def load_survey_page_with_random_proxy(
         RANDOM_PROXY_FALLBACK_DOM_TIMEOUT_MS,
     )
     try:
-        driver.get(
+        await driver.get(
             config.url,
             timeout=RANDOM_PROXY_FALLBACK_DOM_TIMEOUT_MS,
             wait_until="domcontentloaded",
@@ -194,7 +194,7 @@ def load_survey_page_with_random_proxy(
         RANDOM_PROXY_FALLBACK_PROBE_TIMEOUT_MS,
         RANDOM_PROXY_FAST_PROBE_INTERVAL_SECONDS,
     )
-    second_probe = probe_waiter(
+    second_probe = await probe_waiter(
         driver,
         provider=provider,
         timeout_ms=RANDOM_PROXY_FALLBACK_PROBE_TIMEOUT_MS,
@@ -210,7 +210,7 @@ def load_survey_page_with_random_proxy(
             RANDOM_PROXY_FAST_PROBE_INTERVAL_SECONDS,
             getattr(second_probe, "detail", "") or "-",
         )
-        third_probe = probe_waiter(
+        third_probe = await probe_waiter(
             driver,
             provider=provider,
             timeout_ms=RANDOM_PROXY_LOADING_GRACE_PROBE_TIMEOUT_MS,
@@ -233,7 +233,7 @@ def load_survey_page_with_random_proxy(
     raise ProxyConnectionError(failure_detail)
 
 
-def load_survey_page(
+async def load_survey_page(
     driver: Any,
     config: ExecutionConfig,
     *,
@@ -242,7 +242,7 @@ def load_survey_page(
 ) -> None:
     provider = normalize_survey_provider(getattr(config, "survey_provider", None))
     if bool(getattr(config, "random_proxy_ip_enabled", False)) and provider != SURVEY_PROVIDER_CREDAMO:
-        load_survey_page_with_random_proxy(
+        await load_survey_page_with_random_proxy(
             driver,
             config,
             phase_updater=phase_updater,
@@ -254,7 +254,7 @@ def load_survey_page(
     attempts = build_page_load_attempts(config)
     for attempt_index, (timeout_ms, wait_until) in enumerate(attempts, start=1):
         try:
-            driver.get(config.url, timeout=timeout_ms, wait_until=wait_until)
+            await driver.get(config.url, timeout=timeout_ms, wait_until=wait_until)
             if attempt_index > 1:
                 logging.info("问卷加载重试成功：wait_until=%s timeout=%sms", wait_until, timeout_ms)
             return
@@ -270,7 +270,7 @@ def load_survey_page(
             )
             if attempt_index < len(attempts):
                 delay_index = min(attempt_index - 1, len(PAGE_LOAD_RETRY_DELAYS_SECONDS) - 1)
-                time.sleep(PAGE_LOAD_RETRY_DELAYS_SECONDS[delay_index])
+                await sleep_or_stop(None, PAGE_LOAD_RETRY_DELAYS_SECONDS[delay_index])
     if last_exc is not None:
         if bool(getattr(config, "random_proxy_ip_enabled", False)) and looks_like_proxy_page_load_failure(last_exc):
             raise ProxyConnectionError(exception_summary(last_exc)) from last_exc

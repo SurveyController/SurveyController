@@ -9,8 +9,10 @@ import os
 import shutil
 import threading
 import time
+import asyncio
+import inspect
 from dataclasses import asdict
-from typing import Any, Callable, Optional
+from typing import Any, Awaitable, Callable, Optional
 from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
 from software.app.config import DEFAULT_HTTP_HEADERS
@@ -134,13 +136,13 @@ def _hash_json(value: Any) -> str:
     return _hash_text(_stable_json(value))
 
 
-def _fetch_json_fingerprint(url: str, *, params: dict[str, Any], headers: dict[str, str]) -> Optional[str]:
-    response = http_client.get(url, params=params, timeout=8, headers=headers, proxies={})
+async def _fetch_json_fingerprint(url: str, *, params: dict[str, Any], headers: dict[str, str]) -> Optional[str]:
+    response = await http_client.aget(url, params=params, timeout=8, headers=headers, proxies={})
     response.raise_for_status()
     return _hash_json(response.json())
 
 
-def _qq_fingerprint(url: str) -> Optional[str]:
+async def _qq_fingerprint(url: str) -> Optional[str]:
     parsed = urlsplit(str(url or "").strip())
     segments = [segment for segment in parsed.path.split("/") if segment]
     if len(segments) < 3:
@@ -161,24 +163,24 @@ def _qq_fingerprint(url: str) -> Optional[str]:
     fingerprints: list[str] = []
     for endpoint in ("meta", "questions"):
         api_url = f"https://wj.qq.com/api/v2/respondent/surveys/{survey_id}/{endpoint}"
-        fingerprint = _fetch_json_fingerprint(api_url, params=params, headers=headers)
+        fingerprint = await _fetch_json_fingerprint(api_url, params=params, headers=headers)
         if fingerprint:
             fingerprints.append(f"{endpoint}:{fingerprint}")
     return _hash_text("|".join(fingerprints)) if fingerprints else None
 
 
-def _html_fingerprint(url: str) -> Optional[str]:
-    response = http_client.get(url, timeout=10, headers=DEFAULT_HTTP_HEADERS, proxies={})
+async def _html_fingerprint(url: str) -> Optional[str]:
+    response = await http_client.aget(url, timeout=10, headers=DEFAULT_HTTP_HEADERS, proxies={})
     response.raise_for_status()
     return _hash_text(response.text)
 
 
-def _fetch_remote_fingerprint(url: str, provider: str) -> Optional[str]:
+async def _fetch_remote_fingerprint(url: str, provider: str) -> Optional[str]:
     try:
         if provider == SURVEY_PROVIDER_QQ:
-            return _qq_fingerprint(url)
+            return await _qq_fingerprint(url)
         if provider == SURVEY_PROVIDER_WJX:
-            return _html_fingerprint(url)
+            return await _html_fingerprint(url)
     except Exception as exc:
         logging.info("获取问卷缓存指纹失败，url=%r provider=%s：%s", url, provider, exc)
     return None
@@ -256,6 +258,12 @@ def _cache_age_seconds(cached_at: float) -> float:
     return max(0.0, _now() - float(cached_at or 0.0))
 
 
+async def _resolve_maybe_awaitable(value: Any) -> Any:
+    if inspect.isawaitable(value):
+        return await value
+    return value
+
+
 def _begin_inflight(normalized_url: str) -> tuple[_InflightEntry, bool]:
     with _REGISTRY_LOCK:
         entry = _INFLIGHT_BY_URL.get(normalized_url)
@@ -285,19 +293,21 @@ def _wait_inflight(entry: _InflightEntry) -> SurveyDefinition:
     return entry.result
 
 
-def _run_singleflight_parse(
+async def _run_singleflight_parse(
     normalized_url: str,
-    parser: Callable[[str], SurveyDefinition],
+    parser: Callable[[str], Awaitable[SurveyDefinition]],
     *,
-    on_success: Optional[Callable[[SurveyDefinition], None]] = None,
+    on_success: Optional[Callable[[SurveyDefinition], Awaitable[None] | None]] = None,
 ) -> SurveyDefinition:
     entry, is_leader = _begin_inflight(normalized_url)
     if not is_leader:
-        return _wait_inflight(entry)
+        return await asyncio.to_thread(_wait_inflight, entry)
     try:
-        definition = parser(normalized_url)
+        definition = await parser(normalized_url)
         if on_success is not None:
-            on_success(definition)
+            persist_result = on_success(definition)
+            if asyncio.iscoroutine(persist_result):
+                await persist_result
         _finish_inflight(normalized_url, entry, result=definition)
         return definition
     except BaseException as exc:
@@ -309,7 +319,7 @@ def _start_background_refresh(
     normalized_url: str,
     provider: str,
     path: str,
-    parser: Callable[[str], SurveyDefinition],
+    parser: Callable[[str], Awaitable[SurveyDefinition]],
 ) -> None:
     refresh_epoch = _cache_clear_epoch_snapshot()
     with _REGISTRY_LOCK:
@@ -319,8 +329,8 @@ def _start_background_refresh(
 
     def _refresh_worker() -> None:
         try:
-            def _persist(definition: SurveyDefinition) -> None:
-                fingerprint = _fetch_remote_fingerprint(normalized_url, provider)
+            async def _persist(definition: SurveyDefinition) -> None:
+                fingerprint = await _resolve_maybe_awaitable(_fetch_remote_fingerprint(normalized_url, provider))
                 _write_cached_definition(
                     path,
                     definition,
@@ -328,7 +338,7 @@ def _start_background_refresh(
                     expected_epoch=refresh_epoch,
                 )
 
-            refreshed = _run_singleflight_parse(normalized_url, parser, on_success=_persist)
+            refreshed = asyncio.run(_run_singleflight_parse(normalized_url, parser, on_success=_persist))
             logging.info(
                 "后台刷新问卷解析缓存成功，url=%r provider=%s questions=%s",
                 normalized_url,
@@ -369,7 +379,7 @@ def _wait_refresh_threads(timeout: float = 5.0) -> None:
             thread.join(timeout=min(remaining, 0.1))
 
 
-def parse_survey_with_cache(url: str, parser: Callable[[str], SurveyDefinition]) -> SurveyDefinition:
+async def parse_survey_with_cache(url: str, parser: Callable[[str], Awaitable[SurveyDefinition]]) -> SurveyDefinition:
     """解析问卷；远端指纹未变时复用本地缓存。"""
     normalized_url = _normalize_cache_url(url)
     cache_epoch = _cache_clear_epoch_snapshot()
@@ -388,30 +398,20 @@ def parse_survey_with_cache(url: str, parser: Callable[[str], SurveyDefinition])
             return definition
 
         logging.info("问卷短时缓存已过期，重新解析，url=%r provider=%s", normalized_url, provider)
-        return _run_singleflight_parse(
+        return await _run_singleflight_parse(
             normalized_url,
             parser,
-            on_success=lambda refreshed: _write_cached_definition(
-                path,
-                refreshed,
-                f"ttl-only:{provider}",
-                expected_epoch=cache_epoch,
-            ),
+            on_success=lambda refreshed: _write_cached_definition(path, refreshed, f"ttl-only:{provider}", expected_epoch=cache_epoch),
         )
 
     if ttl_only_seconds is not None:
-        return _run_singleflight_parse(
+        return await _run_singleflight_parse(
             normalized_url,
             parser,
-            on_success=lambda refreshed: _write_cached_definition(
-                path,
-                refreshed,
-                f"ttl-only:{provider}",
-                expected_epoch=cache_epoch,
-            ),
+            on_success=lambda refreshed: _write_cached_definition(path, refreshed, f"ttl-only:{provider}", expected_epoch=cache_epoch),
         )
 
-    remote_fingerprint = _fetch_remote_fingerprint(normalized_url, provider)
+    remote_fingerprint = await _resolve_maybe_awaitable(_fetch_remote_fingerprint(normalized_url, provider))
     if cached is not None:
         definition, cached_fingerprint, cached_at = cached
         cache_age = _cache_age_seconds(cached_at)
@@ -430,8 +430,8 @@ def parse_survey_with_cache(url: str, parser: Callable[[str], SurveyDefinition])
             _start_background_refresh(normalized_url, provider, path, parser)
             return definition
 
-    def _persist(definition: SurveyDefinition) -> None:
-        fingerprint = remote_fingerprint or _fetch_remote_fingerprint(normalized_url, provider)
+    async def _persist(definition: SurveyDefinition) -> None:
+        fingerprint = remote_fingerprint or await _resolve_maybe_awaitable(_fetch_remote_fingerprint(normalized_url, provider))
         _write_cached_definition(
             path,
             definition,
@@ -439,7 +439,7 @@ def parse_survey_with_cache(url: str, parser: Callable[[str], SurveyDefinition])
             expected_epoch=cache_epoch,
         )
 
-    return _run_singleflight_parse(normalized_url, parser, on_success=_persist)
+    return await _run_singleflight_parse(normalized_url, parser, on_success=_persist)
 
 
 def clear_survey_parse_cache() -> int:

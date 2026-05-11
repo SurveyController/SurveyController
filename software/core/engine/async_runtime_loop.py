@@ -28,21 +28,22 @@ from software.core.engine.submission_service import SubmissionService
 from software.core.task import ExecutionConfig, ExecutionState
 from software.network.browser import ProxyConnectionError
 from software.network.browser.async_owner_pool import AsyncBrowserOwnerPool, AsyncBrowserSession
+from software.network.browser.runtime_async import BrowserDriver as AsyncBrowserDriver
 from software.network.browser.startup import BrowserStartupRuntimeError
 from software.network.proxy.pool import is_proxy_responsive
 from software.network.session_policy import (
     _discard_unresponsive_proxy,
     _mark_proxy_temporarily_bad,
     _record_bad_proxy_and_maybe_pause,
-    _select_proxy_for_session,
+    _select_proxy_for_session_async,
     _select_user_agent_for_session,
 )
 from software.providers.registry import fill_survey
 from software.providers.registry import is_device_quota_limit_page as _provider_is_device_quota_limit_page
 
 
-def _load_survey_page(driver: Any, config: ExecutionConfig, *, phase_updater: Any = None) -> None:
-    return _page_loader_load_survey_page(
+async def _load_survey_page(driver: Any, config: ExecutionConfig, *, phase_updater: Any = None) -> None:
+    return await _page_loader_load_survey_page(
         driver,
         config,
         phase_updater=phase_updater,
@@ -199,11 +200,11 @@ class AsyncSlotRunner:
         except Exception:
             logging.info("释放反填样本失败", exc_info=True)
 
-    def _select_session_proxy_and_ua(self) -> tuple[Optional[str], Optional[str]]:
+    async def _select_session_proxy_and_ua(self) -> tuple[Optional[str], Optional[str]]:
         should_wait_for_proxy = bool(self.config.random_proxy_ip_enabled)
         if self.config.random_proxy_ip_enabled:
             self._update_step("获取代理")
-        proxy_address = _select_proxy_for_session(
+        proxy_address = await _select_proxy_for_session_async(
             self.state,
             self.slot_label,
             stop_signal=self.stop_proxy,
@@ -225,7 +226,7 @@ class AsyncSlotRunner:
             return None
         self._update_step("准备浏览器底座")
         await self.browser_pool.ensure_ready()
-        proxy_address, ua_value = await asyncio.to_thread(self._select_session_proxy_and_ua)
+        proxy_address, ua_value = await self._select_session_proxy_and_ua()
         if self.run_context.stop_requested():
             return None
         if self.config.random_proxy_ip_enabled and not proxy_address:
@@ -256,9 +257,8 @@ class AsyncSlotRunner:
         self._update_step("加载问卷")
         try:
             if self.config.timed_mode_enabled:
-                ready = await asyncio.to_thread(
-                    timed_mode.wait_until_open,
-                    session.driver,
+                ready = await timed_mode.wait_until_open(
+                    cast(AsyncBrowserDriver, session.driver),
                     self.config.url,
                     self.stop_proxy,
                     refresh_interval=self._resolve_timed_refresh_interval(),
@@ -268,8 +268,7 @@ class AsyncSlotRunner:
                     self.run_context.stop_event.set()
                     return False
             else:
-                await asyncio.to_thread(
-                    _load_survey_page,
+                await _load_survey_page(
                     session.driver,
                     self.config,
                     phase_updater=lambda status_text: self._update_step(status_text),
@@ -307,13 +306,12 @@ class AsyncSlotRunner:
             self.run_context.stop_event.set()
         self._update_status("设备达到填写次数上限")
         if not stopped and not self.run_context.stop_requested() and self.config.random_proxy_ip_enabled:
-            await asyncio.to_thread(trigger_random_ip_submission, self.gui_instance, self.stop_proxy)
+            trigger_random_ip_submission(self.gui_instance, self.stop_proxy)
         return True
 
     async def _finalize_after_submit(self, session: AsyncBrowserSession) -> Any:
-        return await asyncio.to_thread(
-            self.submission_service.finalize_after_submit,
-            session.driver,
+        return await self.submission_service.finalize_after_submit(
+            cast(AsyncBrowserDriver, session.driver),
             stop_signal=self.stop_proxy,
             gui_instance=self.gui_instance,
             thread_name=self.slot_label,
@@ -378,8 +376,7 @@ class AsyncSlotRunner:
         )
 
     async def _handle_ai_runtime_error(self, exc: AIRuntimeError) -> bool:
-        return await asyncio.to_thread(
-            _handle_ai_runtime_error_impl,
+        return _handle_ai_runtime_error_impl(
             exc,
             self.stop_proxy,
             thread_name=self.slot_label,

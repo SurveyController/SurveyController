@@ -1,4 +1,5 @@
 from __future__ import annotations
+import asyncio
 import time
 from unittest.mock import patch
 from software.core.task import ExecutionConfig, ExecutionState, ProxyLease
@@ -78,14 +79,14 @@ class SessionPolicyTests:
 
     def test_select_proxy_for_session_returns_none_when_random_proxy_disabled(self) -> None:
         ctx = ExecutionState(config=ExecutionConfig(random_proxy_ip_enabled=False))
-        with patch.object(session_policy, 'fetch_proxy_batch') as fetch_proxy_batch:
-            assert session_policy._select_proxy_for_session(ctx, 'Worker-1') is None
+        with patch.object(session_policy, 'fetch_proxy_batch_async') as fetch_proxy_batch:
+            assert asyncio.run(session_policy._select_proxy_for_session_async(ctx, 'Worker-1')) is None
         fetch_proxy_batch.assert_not_called()
 
     def test_select_proxy_for_session_marks_existing_pool_proxy_in_use(self) -> None:
         ctx = ExecutionState(config=ExecutionConfig(random_proxy_ip_enabled=True))
         ctx.config.proxy_ip_pool = [ProxyLease(address='http://1.1.1.1:8000', source='unit')]
-        selected = session_policy._select_proxy_for_session(ctx, 'Worker-1')
+        selected = asyncio.run(session_policy._select_proxy_for_session_async(ctx, 'Worker-1'))
         assert selected == 'http://1.1.1.1:8000'
         assert 'Worker-1' in ctx.proxy_in_use_by_thread
         assert ctx.proxy_in_use_by_thread['Worker-1'].address == selected
@@ -95,8 +96,10 @@ class SessionPolicyTests:
         ctx.cur_num = 0
         ctx.proxy_waiting_threads = 2
         fetched = [ProxyLease(address='http://1.1.1.1:8000', source='api'), ProxyLease(address='http://2.2.2.2:8000', source='api')]
-        with patch.object(session_policy, 'fetch_proxy_batch', return_value=fetched) as fetch_proxy_batch:
-            selected = session_policy._select_proxy_for_session(ctx, 'Worker-1')
+        async def fake_fetch_proxy_batch_async(**_kwargs):
+            return fetched
+        with patch.object(session_policy, 'fetch_proxy_batch_async', side_effect=fake_fetch_proxy_batch_async) as fetch_proxy_batch:
+            selected = asyncio.run(session_policy._select_proxy_for_session_async(ctx, 'Worker-1'))
         assert selected == 'http://1.1.1.1:8000'
         assert [lease.address for lease in ctx.config.proxy_ip_pool] == ['http://2.2.2.2:8000']
         assert ctx.proxy_waiting_threads == 2
@@ -106,8 +109,10 @@ class SessionPolicyTests:
         ctx = ExecutionState(config=ExecutionConfig(random_proxy_ip_enabled=True, target_num=2))
         ctx.proxy_in_use_by_thread = {'Worker-2': ProxyLease(address='http://1.1.1.1:8000', source='api')}
         fetched = [ProxyLease(address='http://1.1.1.1:8000', source='api'), ProxyLease(address='http://2.2.2.2:8000', source='api')]
-        with patch.object(session_policy, 'fetch_proxy_batch', return_value=fetched), patch.object(session_policy, 'get_proxy_required_ttl_seconds', return_value=0), patch.object(session_policy, 'proxy_lease_has_sufficient_ttl', return_value=True):
-            selected = session_policy._select_proxy_for_session(ctx, 'Worker-1')
+        async def fake_fetch_proxy_batch_async(**_kwargs):
+            return fetched
+        with patch.object(session_policy, 'fetch_proxy_batch_async', side_effect=fake_fetch_proxy_batch_async), patch.object(session_policy, 'get_proxy_required_ttl_seconds', return_value=0), patch.object(session_policy, 'proxy_lease_has_sufficient_ttl', return_value=True):
+            selected = asyncio.run(session_policy._select_proxy_for_session_async(ctx, 'Worker-1'))
         assert selected == 'http://2.2.2.2:8000'
         assert ctx.proxy_in_use_by_thread['Worker-1'].address == 'http://2.2.2.2:8000'
 
@@ -115,8 +120,10 @@ class SessionPolicyTests:
         ctx = ExecutionState(config=ExecutionConfig(random_proxy_ip_enabled=True, target_num=2))
         ctx.mark_proxy_in_cooldown('http://1.1.1.1:8000', 180.0)
         fetched = [ProxyLease(address='http://1.1.1.1:8000', source='api'), ProxyLease(address='http://2.2.2.2:8000', source='api')]
-        with patch.object(session_policy, 'fetch_proxy_batch', return_value=fetched), patch.object(session_policy, 'get_proxy_required_ttl_seconds', return_value=0), patch.object(session_policy, 'proxy_lease_has_sufficient_ttl', return_value=True):
-            selected = session_policy._select_proxy_for_session(ctx, 'Worker-1')
+        async def fake_fetch_proxy_batch_async(**_kwargs):
+            return fetched
+        with patch.object(session_policy, 'fetch_proxy_batch_async', side_effect=fake_fetch_proxy_batch_async), patch.object(session_policy, 'get_proxy_required_ttl_seconds', return_value=0), patch.object(session_policy, 'proxy_lease_has_sufficient_ttl', return_value=True):
+            selected = asyncio.run(session_policy._select_proxy_for_session_async(ctx, 'Worker-1'))
         assert selected == 'http://2.2.2.2:8000'
         assert ctx.proxy_in_use_by_thread['Worker-1'].address == 'http://2.2.2.2:8000'
 
@@ -124,15 +131,22 @@ class SessionPolicyTests:
         ctx = ExecutionState(config=ExecutionConfig(random_proxy_ip_enabled=True, target_num=2))
         ctx.mark_successful_proxy_address('http://1.1.1.1:8000')
         fetched = [ProxyLease(address='http://1.1.1.1:8000', source='api'), ProxyLease(address='http://2.2.2.2:8000', source='api')]
-        with patch.object(session_policy, 'fetch_proxy_batch', return_value=fetched), patch.object(session_policy, 'get_proxy_required_ttl_seconds', return_value=0), patch.object(session_policy, 'proxy_lease_has_sufficient_ttl', return_value=True):
-            selected = session_policy._select_proxy_for_session(ctx, 'Worker-1')
+        async def fake_fetch_proxy_batch_async(**_kwargs):
+            return fetched
+        with patch.object(session_policy, 'fetch_proxy_batch_async', side_effect=fake_fetch_proxy_batch_async), patch.object(session_policy, 'get_proxy_required_ttl_seconds', return_value=0), patch.object(session_policy, 'proxy_lease_has_sufficient_ttl', return_value=True):
+            selected = asyncio.run(session_policy._select_proxy_for_session_async(ctx, 'Worker-1'))
         assert selected == 'http://2.2.2.2:8000'
         assert ctx.proxy_in_use_by_thread['Worker-1'].address == 'http://2.2.2.2:8000'
 
     def test_select_proxy_for_session_waits_for_new_proxy_when_runtime_requests_blocking_mode(self) -> None:
         ctx = ExecutionState(config=ExecutionConfig(random_proxy_ip_enabled=True, target_num=1))
-        with patch.object(session_policy, 'fetch_proxy_batch', side_effect=[[], [ProxyLease(address='http://9.9.9.9:8000', source='api')]]), patch.object(session_policy, '_wait_for_next_proxy_cycle', return_value=False):
-            selected = session_policy._select_proxy_for_session(ctx, 'Worker-1', stop_signal=ctx.stop_event, wait=True)
+        results = iter([[], [ProxyLease(address='http://9.9.9.9:8000', source='api')]])
+        async def fake_fetch_proxy_batch_async(**_kwargs):
+            return next(results)
+        async def fake_wait_for_next_proxy_cycle_async(*_args, **_kwargs):
+            return False
+        with patch.object(session_policy, 'fetch_proxy_batch_async', side_effect=fake_fetch_proxy_batch_async), patch.object(session_policy, '_wait_for_next_proxy_cycle_async', side_effect=fake_wait_for_next_proxy_cycle_async):
+            selected = asyncio.run(session_policy._select_proxy_for_session_async(ctx, 'Worker-1', stop_signal=ctx.stop_event, wait=True))
         assert selected == 'http://9.9.9.9:8000'
         assert ctx.proxy_in_use_by_thread['Worker-1'].address == 'http://9.9.9.9:8000'
 

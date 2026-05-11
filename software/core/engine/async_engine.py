@@ -15,8 +15,8 @@ from software.core.engine.async_scheduler import AsyncScheduler
 from software.core.engine.async_status_bus import AsyncStatusBus
 from software.core.engine.runtime_layout import build_owner_window_positions
 from software.core.task import ExecutionConfig, ExecutionState
-from software.network.browser.async_compat import AsyncLoopPortal
-from software.network.browser.async_owner_pool import AsyncBrowserOwnerPool, BrowserPoolConfig
+from software.network.browser.async_owner_pool import AsyncBrowserOwnerPool
+from software.network.browser.pool_config import BrowserPoolConfig
 from software.providers.registry import parse_survey
 
 
@@ -86,14 +86,12 @@ class AsyncRuntimeEngine:
         state.stop_event.clear()
         worker_count = max(1, int(config.num_threads or 1))
         state.ensure_worker_threads(worker_count, prefix="Slot")
-        portal = AsyncLoopPortal(asyncio.get_running_loop())
         pool_config = BrowserPoolConfig.from_concurrency(
             worker_count,
             headless=bool(config.headless_mode),
         )
         self._browser_pool = AsyncBrowserOwnerPool(
             config=pool_config,
-            portal=portal,
             headless=bool(config.headless_mode),
             prefer_browsers=list(config.browser_preference or BROWSER_PREFERENCE),
             window_positions=build_owner_window_positions(pool_config.owner_count),

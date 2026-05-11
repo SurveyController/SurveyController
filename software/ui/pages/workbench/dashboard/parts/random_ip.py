@@ -473,7 +473,7 @@ class DashboardRandomIPMixin:
 
     def _on_random_ip_toggled(self, enabled: bool):
         self._sync_random_ip_toggle_presentation(bool(enabled))
-        if self.controller.toggle_random_ip_async(bool(enabled), adapter=self.controller.adapter):
+        if self.controller.request_toggle_random_ip(bool(enabled), adapter=self.controller.adapter):
             return
 
         fallback_enabled = bool(

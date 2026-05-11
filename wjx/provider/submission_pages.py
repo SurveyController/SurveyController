@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from urllib.parse import urljoin, urlparse
 
-from software.network.browser import BrowserDriver
+from software.network.browser.runtime_async import BrowserDriver
 
 
 def _resolve_completion_url(submit_url: str, payload: str) -> str:
@@ -48,7 +48,7 @@ def _is_wjx_domain(url_value: str) -> bool:
 
 
 def _looks_like_wjx_survey_url(url_value: str) -> bool:
-    """粗略判断是否像问卷星问卷链接（用于“提交后分流到下一问卷”的识别）。"""
+    """粗略判断是否像问卷星问卷链接。"""
     if not url_value:
         return False
     text = str(url_value).strip()
@@ -70,7 +70,7 @@ def _looks_like_wjx_survey_url(url_value: str) -> bool:
     return True
 
 
-def _page_looks_like_wjx_questionnaire(driver: BrowserDriver) -> bool:
+async def _page_looks_like_wjx_questionnaire(driver: BrowserDriver) -> bool:
     """用 DOM 特征判断当前页是否为可作答的问卷页。"""
     script = r"""
         return (() => {
@@ -105,13 +105,13 @@ def _page_looks_like_wjx_questionnaire(driver: BrowserDriver) -> bool:
         })();
     """
     try:
-        return bool(driver.execute_script(script))
+        return bool(await driver.execute_script(script))
     except Exception:
         return False
 
 
-def _is_device_quota_limit_page(driver: BrowserDriver) -> bool:
-    """检测"设备已达到最大填写次数"提示页。"""
+async def _is_device_quota_limit_page(driver: BrowserDriver) -> bool:
+    """检测“设备已达到最大填写次数”提示页。"""
     script = r"""
         return (() => {
             const text = (document.body?.innerText || '').replace(/\s+/g, '').toLowerCase();
@@ -160,7 +160,62 @@ def _is_device_quota_limit_page(driver: BrowserDriver) -> bool:
         })();
     """
     try:
-        return bool(driver.execute_script(script))
+        return bool(await driver.execute_script(script))
+    except Exception:
+        return False
+
+
+async def is_completion_page(driver: BrowserDriver) -> bool:
+    try:
+        current_url = str(await driver.current_url() or "")
+    except Exception:
+        current_url = ""
+    if "complete" in current_url.lower():
+        return True
+    if await _page_looks_like_wjx_questionnaire(driver):
+        return False
+    script = r"""
+        return (() => {
+            const normalize = (text) => (text || '').replace(/\s+/g, '').toLowerCase();
+            const text = normalize(document.body?.innerText || '');
+            if (!text) return false;
+            const markers = [
+                '答卷已经提交',
+                '感谢您的参与',
+                '问卷提交成功',
+                '提交成功',
+                '已完成本次问卷',
+                '已完成本次答卷',
+                '感谢您的宝贵时间',
+            ];
+            if (!markers.some(marker => text.includes(marker))) return false;
+            const actionSelectors = [
+                '#submit_button',
+                '#divSubmit',
+                '#ctlNext',
+                '#divNext',
+                '#btnNext',
+                '#next',
+                '#SM_BTN_1',
+                '.submitDiv a',
+                '.btn-next',
+                '.btn-submit',
+                'button[type="submit"]',
+                'a.button.mainBgColor'
+            ];
+            const visible = (el) => {
+                if (!el) return false;
+                const style = window.getComputedStyle(el);
+                if (!style) return false;
+                if (style.display === 'none' || style.visibility === 'hidden' || style.opacity === '0') return false;
+                const rect = el.getBoundingClientRect();
+                return rect.width > 0 && rect.height > 0;
+            };
+            return !actionSelectors.some((selector) => Array.from(document.querySelectorAll(selector)).some(visible));
+        })();
+    """
+    try:
+        return bool(await driver.execute_script(script))
     except Exception:
         return False
 
@@ -172,4 +227,5 @@ __all__ = [
     "_normalize_url_for_compare",
     "_page_looks_like_wjx_questionnaire",
     "_resolve_completion_url",
+    "is_completion_page",
 ]

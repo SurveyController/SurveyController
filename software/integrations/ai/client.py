@@ -6,15 +6,15 @@ from __future__ import annotations
 import logging
 from typing import List, Optional, Union
 
-from software.integrations.ai.free_api import FreeAITimeoutError, call_free_ai_api
+from software.integrations.ai.free_api import FreeAITimeoutError, call_free_ai_api_async
 from software.integrations.ai.protocols import (
     _CHAT_COMPLETIONS_SUFFIX,
     _RESPONSES_SUFFIX,
+    acall_chat_completions,
+    acall_responses_api,
     _is_endpoint_mismatch_error,
     _normalize_endpoint_url,
     _resolve_custom_endpoint,
-    call_chat_completions,
-    call_responses_api,
 )
 from software.integrations.ai.settings import (
     AI_MODE_FREE,
@@ -46,22 +46,22 @@ __all__ = [
     "FREE_QUESTION_TYPE_FILL",
     "FREE_QUESTION_TYPE_MULTI",
     "FreeAITimeoutError",
-    "generate_answer",
+    "agenerate_answer",
     "get_ai_readiness_error",
     "get_ai_settings",
     "get_default_system_prompt",
     "save_ai_settings",
-    "test_connection",
+    "atest_connection",
 ]
 
 
-def generate_answer(
+async def agenerate_answer(
     question_title: str,
     *,
     question_type: str = FREE_QUESTION_TYPE_FILL,
     blank_count: Optional[int] = None,
 ) -> Union[str, List[str]]:
-    """根据问题标题生成答案。"""
+    """根据问题标题异步生成答案。"""
     config = get_ai_settings()
     readiness_error = get_ai_readiness_error(config)
     if readiness_error:
@@ -73,7 +73,7 @@ def generate_answer(
     system_prompt = str(config.get("system_prompt") or "").strip() or get_default_system_prompt(ai_mode)
 
     if ai_mode == AI_MODE_FREE:
-        answers = call_free_ai_api(
+        answers = await call_free_ai_api_async(
             question=question_title,
             question_type=resolved_question_type,
             blank_count=resolved_blank_count,
@@ -98,14 +98,14 @@ def generate_answer(
             raise RuntimeError("自定义模式需要配置模型名称")
         resolved_protocol, request_url, has_explicit_endpoint = _resolve_custom_endpoint(base_url, api_protocol)
         if resolved_protocol == "responses":
-            return call_responses_api(request_url, api_key, model, question_title, system_prompt)
+            return await acall_responses_api(request_url, api_key, model, question_title, system_prompt)
         try:
-            return call_chat_completions(request_url, api_key, model, question_title, system_prompt)
+            return await acall_chat_completions(request_url, api_key, model, question_title, system_prompt)
         except Exception as exc:
             if has_explicit_endpoint or api_protocol != "auto" or not _is_endpoint_mismatch_error(exc):
                 raise
             fallback_url = f"{_normalize_endpoint_url(base_url)}{_RESPONSES_SUFFIX}"
-            return call_responses_api(fallback_url, api_key, model, question_title, system_prompt)
+            return await acall_responses_api(fallback_url, api_key, model, question_title, system_prompt)
 
     provider_config = AI_PROVIDERS.get(provider)
     if not provider_config:
@@ -116,15 +116,15 @@ def generate_answer(
         raise RuntimeError("硅基流动需要先配置模型名称")
 
     request_url = f"{_normalize_endpoint_url(base_url)}{_CHAT_COMPLETIONS_SUFFIX}"
-    return call_chat_completions(request_url, api_key, model, question_title, system_prompt)
+    return await acall_chat_completions(request_url, api_key, model, question_title, system_prompt)
 
 
-def test_connection() -> str:
-    """测试 AI 连接。"""
+async def atest_connection() -> str:
+    """异步测试 AI 连接。"""
     try:
         ai_mode = _normalize_ai_mode(get_ai_settings().get("ai_mode"))
         logger.info("AI 连接测试开始 | mode=%s", ai_mode)
-        result = generate_answer(
+        result = await agenerate_answer(
             "这是一个测试问题，请回复'连接成功'",
             question_type=FREE_QUESTION_TYPE_FILL,
             blank_count=1,

@@ -14,11 +14,11 @@ from software.system.device_fingerprint import build_stable_device_id
 from software.system.secure_store import read_secret, set_secret
 
 from .client import (
+    _apost_json,
     _extract_error_payload,
     _log_extract_proxy_issue,
     _parse_batch_extract_payload,
     _parse_single_extract_payload,
-    _post_json,
 )
 from .models import RandomIPAuthError, RandomIPSession
 from .normalize import (
@@ -403,9 +403,9 @@ def _parse_session_response(response: Any, *, fallback_session: Optional[RandomI
     device_id = fallback_session.device_id if fallback_session is not None else get_device_id()
     return _parse_session_payload(data, device_id=device_id, fallback_session=fallback_session)
 
-def activate_trial() -> RandomIPSession:
+async def activate_trial_async() -> RandomIPSession:
     logging.info("随机IP试用领取开始：endpoint=%s", _endpoint_name(AUTH_TRIAL_ENDPOINT))
-    response = _post_json(AUTH_TRIAL_ENDPOINT, json_body={})
+    response = await _apost_json(AUTH_TRIAL_ENDPOINT, json_body={})
     if int(getattr(response, "status_code", 0) or 0) != 200:
         error = _extract_error_payload(response)
         logging.warning(
@@ -432,7 +432,14 @@ def _require_authenticated_session() -> RandomIPSession:
         return session
     raise RandomIPAuthError("not_authenticated")
 
-def extract_proxy(*, minute: int, pool: str, area: Optional[str], num: int = 1, upstream: str = "default") -> Dict[str, Any]:
+async def extract_proxy_async(
+    *,
+    minute: int,
+    pool: str,
+    area: Optional[str],
+    num: int = 1,
+    upstream: str = "default",
+) -> Dict[str, Any]:
     session = _require_authenticated_session()
     body: Dict[str, Any] = {
         "user_id": int(session.user_id),
@@ -450,7 +457,7 @@ def extract_proxy(*, minute: int, pool: str, area: Optional[str], num: int = 1, 
         body["area"] = area_code
 
     try:
-        response = _post_json(IP_EXTRACT_ENDPOINT, json_body=body)
+        response = await _apost_json(IP_EXTRACT_ENDPOINT, json_body=body)
     except RandomIPAuthError as exc:
         _log_extract_proxy_issue("随机IP提取请求异常", request_body=body, attempt=1, error=exc)
         raise
@@ -487,7 +494,7 @@ def get_quota_snapshot() -> Dict[str, Any]:
 def get_fresh_quota_snapshot() -> Dict[str, Any]:
     return _build_quota_snapshot(_require_authenticated_session())
 
-def sync_quota_snapshot_from_server(*, emit_logs: bool = True) -> Dict[str, Any]:
+async def sync_quota_snapshot_from_server_async(*, emit_logs: bool = True) -> Dict[str, Any]:
     session = _require_authenticated_session()
     if emit_logs:
         logging.info(
@@ -495,7 +502,7 @@ def sync_quota_snapshot_from_server(*, emit_logs: bool = True) -> Dict[str, Any]
             _endpoint_name(AUTH_TRIAL_ENDPOINT),
             int(session.user_id or 0),
         )
-    response = _post_json(AUTH_TRIAL_ENDPOINT, json_body={})
+    response = await _apost_json(AUTH_TRIAL_ENDPOINT, json_body={})
     if int(getattr(response, "status_code", 0) or 0) != 200:
         error = _extract_error_payload(response)
         if emit_logs:
@@ -528,9 +535,9 @@ def _apply_quota_payload(data: Dict[str, Any], *, log_context: str = "随机IP�
     )
     return _set_session(updated)
 
-def claim_easter_egg_bonus() -> Dict[str, Any]:
+async def claim_easter_egg_bonus_async() -> Dict[str, Any]:
     session = _require_authenticated_session()
-    response = _post_json(
+    response = await _apost_json(
         AUTH_BONUS_CLAIM_ENDPOINT,
         json_body={
             "user_id": int(session.user_id),

@@ -1,33 +1,40 @@
 from __future__ import annotations
+
 from contextlib import contextmanager
 from types import SimpleNamespace
-from unittest.mock import patch
+from unittest.mock import AsyncMock, patch
 
 from software.core.task import ExecutionConfig, ExecutionState
-from software.providers.common import SURVEY_PROVIDER_CREDAMO, SURVEY_PROVIDER_QQ, SURVEY_PROVIDER_WJX
 from software.providers import registry
+from software.providers.common import SURVEY_PROVIDER_CREDAMO, SURVEY_PROVIDER_QQ, SURVEY_PROVIDER_WJX
+from software.providers.hooks import build_predicate_hook
+
 
 async def test_parse_survey_routes_detected_provider_through_cache_loader() -> None:
     qq_url = "https://wj.qq.com/s2/123/demo"
-    adapter = registry._PROVIDER_REGISTRY[SURVEY_PROVIDER_QQ]
+    adapter = SimpleNamespace(parse_survey_async=AsyncMock(return_value="qq-definition"))
+    async def _cache_loader(_url, loader):
+        return await loader(qq_url)
 
     with (
-        patch.object(adapter, "parse_survey", return_value="qq-definition") as parse_mock,
+        patch.object(registry, "_get_provider_adapter", return_value=adapter),
         patch.object(
             registry,
             "parse_survey_with_cache",
-            side_effect=lambda _url, loader: loader(qq_url),
+            side_effect=_cache_loader,
         ) as cache_mock,
     ):
         result = await registry.parse_survey(qq_url)
 
     assert result == "qq-definition"
     cache_mock.assert_called_once()
-    parse_mock.assert_called_once_with(qq_url)
+    adapter.parse_survey_async.assert_awaited_once_with(qq_url)
+
 
 async def test_fill_survey_uses_provider_run_context_and_selected_adapter() -> None:
     state = ExecutionState(config=ExecutionConfig(survey_provider=SURVEY_PROVIDER_WJX))
     status_updates: list[tuple[str, bool]] = []
+
     def _capture_update_thread_status(thread_name: str, status_text: str, *, running: bool | None = None) -> None:
         del thread_name
         status_updates.append((status_text, bool(running)))
@@ -40,7 +47,7 @@ async def test_fill_survey_uses_provider_run_context_and_selected_adapter() -> N
         yield "resolved-plan"
 
     with (
-        patch.object(adapter, "fill_survey", return_value=True) as fill_mock,
+        patch.object(adapter, "fill_survey_async", new=AsyncMock(return_value=True)) as fill_mock,
         patch.object(registry, "provider_run_context", fake_provider_run_context),
     ):
         result = await registry.fill_survey(
@@ -55,22 +62,24 @@ async def test_fill_survey_uses_provider_run_context_and_selected_adapter() -> N
 
     assert result is True
     assert status_updates == [("识别题目", True)]
-    assert fill_mock.call_args.kwargs["psycho_plan"] == "resolved-plan"
+    assert fill_mock.await_args.kwargs["psycho_plan"] == "resolved-plan"
+
 
 async def test_handle_submission_verification_detected_uses_ctx_config_provider() -> None:
     ctx = SimpleNamespace(config=SimpleNamespace(survey_provider=SURVEY_PROVIDER_CREDAMO))
     adapter = registry._PROVIDER_REGISTRY[SURVEY_PROVIDER_CREDAMO]
 
-    with patch.object(adapter, "handle_submission_verification_detected") as handler_mock:
+    with patch.object(adapter, "handle_submission_verification_detected_async", new=AsyncMock()) as handler_mock:
         await registry.handle_submission_verification_detected(ctx, "gui", "stop")
 
-    handler_mock.assert_called_once_with(ctx, "gui", "stop")
+    handler_mock.assert_awaited_once_with(ctx, "gui", "stop")
+
 
 async def test_wait_for_submission_verification_routes_timeout_and_stop_signal() -> None:
     adapter = registry._PROVIDER_REGISTRY[SURVEY_PROVIDER_QQ]
     driver = object()
 
-    with patch.object(adapter, "wait_for_submission_verification", return_value=True) as wait_mock:
+    with patch.object(adapter, "wait_for_submission_verification_async", new=AsyncMock(return_value=True)) as wait_mock:
         result = await registry.wait_for_submission_verification(
             driver,
             provider=SURVEY_PROVIDER_QQ,
@@ -79,14 +88,15 @@ async def test_wait_for_submission_verification_routes_timeout_and_stop_signal()
         )
 
     assert result is True
-    wait_mock.assert_called_once_with(driver, timeout=9, stop_signal='stop')
+    wait_mock.assert_awaited_once_with(driver, timeout=9, stop_signal="stop")
+
 
 async def test_attempt_submission_recovery_routes_to_selected_provider() -> None:
     adapter = registry._PROVIDER_REGISTRY[SURVEY_PROVIDER_CREDAMO]
     driver = object()
     ctx = object()
 
-    with patch.object(adapter, "attempt_submission_recovery", return_value=True) as recovery_mock:
+    with patch.object(adapter, "attempt_submission_recovery_async", new=AsyncMock(return_value=True)) as recovery_mock:
         result = await registry.attempt_submission_recovery(
             driver,
             ctx,
@@ -97,4 +107,15 @@ async def test_attempt_submission_recovery_routes_to_selected_provider() -> None
         )
 
     assert result is True
-    recovery_mock.assert_called_once_with(driver, ctx, "gui", "stop", thread_name="Worker-7")
+    recovery_mock.assert_awaited_once_with(driver, ctx, "gui", "stop", thread_name="Worker-7")
+
+
+async def test_provider_hook_rejects_non_async_return_value() -> None:
+    with patch("software.providers.hooks._load_hook", return_value=lambda *_args, **_kwargs: True):
+        hook = build_predicate_hook(("fake.module", "sync_predicate"))
+        try:
+            await hook(object())
+        except TypeError as exc:
+            assert "provider hook 必须返回 awaitable" in str(exc)
+        else:
+            raise AssertionError("同步 provider hook 不应再被接受")

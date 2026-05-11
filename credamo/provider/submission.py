@@ -8,8 +8,9 @@ import time
 from dataclasses import dataclass
 from typing import Any, Optional
 
-from software.network.browser import BrowserDriver
+from software.core.engine.async_wait import sleep_or_stop
 from software.core.task import ExecutionState
+from software.network.browser.runtime_async import BrowserDriver
 from credamo.provider.runtime_dom import _page, _question_number_from_root, _question_roots, _unanswered_question_roots
 from credamo.provider.runtime_state import get_credamo_runtime_state, peek_credamo_runtime_state
 
@@ -93,14 +94,14 @@ def _runtime_context_summary(driver: BrowserDriver) -> str:
     return " ".join(parts)
 
 
-def _body_text(driver: BrowserDriver) -> str:
+async def _body_text(driver: BrowserDriver) -> str:
     try:
-        return str(driver.execute_script("return document.body ? document.body.innerText || '' : ''; ") or "")
+        return str(await driver.execute_script("return document.body ? document.body.innerText || '' : ''; ") or "")
     except Exception:
         return ""
 
 
-def _visible_feedback_text(driver: BrowserDriver) -> str:
+async def _visible_feedback_text(driver: BrowserDriver) -> str:
     selector = ",".join(_VISIBLE_FEEDBACK_SELECTORS)
     script = f"""
 return (() => {{
@@ -122,12 +123,12 @@ return (() => {{
 }})();
 """
     try:
-        return str(driver.execute_script(script) or "")
+        return str(await driver.execute_script(script) or "")
     except Exception:
         return ""
 
 
-def _extract_submission_recovery_hint(driver: BrowserDriver) -> Optional[SubmissionRecoveryHint]:
+async def _extract_submission_recovery_hint(driver: BrowserDriver) -> Optional[SubmissionRecoveryHint]:
     script = f"""
 return (() => {{
     const visible = (el) => {{
@@ -173,7 +174,7 @@ return (() => {{
 }})();
 """
     try:
-        payload = driver.execute_script(script) or {}
+        payload = await driver.execute_script(script) or {}
     except Exception:
         payload = {}
     if not isinstance(payload, dict):
@@ -197,17 +198,17 @@ return (() => {{
             if text not in messages:
                 messages.append(text)
 
-    page = getattr(driver, "page", None)
+    page = await _page(driver)
     runtime_state = peek_credamo_runtime_state(driver)
     if page is not None:
         answered_keys = set(getattr(runtime_state, "answered_question_keys", []) or [])
         try:
-            roots = _question_roots(page)
+            roots = await _question_roots(page)
         except Exception:
             roots = []
-        pending = _unanswered_question_roots(page, roots, answered_keys) if roots else []
+        pending = await _unanswered_question_roots(page, roots, answered_keys) if roots else []
         for root, fallback_num, _question_key in pending:
-            question_num = _question_number_from_root(page, root, fallback_num)
+            question_num = await _question_number_from_root(page, root, fallback_num)
             if question_num > 0 and question_num not in question_numbers:
                 question_numbers.append(question_num)
         if pending and not messages:
@@ -236,7 +237,7 @@ def _contains_verification_marker(text: str) -> bool:
     return any(marker.lower() in normalized for marker in _VERIFICATION_MARKERS)
 
 
-def _has_visible_action_controls(driver: BrowserDriver) -> bool:
+async def _has_visible_action_controls(driver: BrowserDriver) -> bool:
     selector = ",".join(_ACTION_SELECTORS)
     script = f"""
 return (() => {{
@@ -252,29 +253,29 @@ return (() => {{
 }})();
 """
     try:
-        return bool(driver.execute_script(script))
+        return bool(await driver.execute_script(script))
     except Exception:
         return False
 
 
-def is_completion_page(driver: BrowserDriver) -> bool:
+async def is_completion_page(driver: BrowserDriver) -> bool:
     try:
-        url = str(driver.current_url or "").lower()
+        url = str(await driver.current_url() or "").lower()
     except Exception:
         url = ""
     if any(marker in url for marker in _COMPLETION_URL_MARKERS):
         return True
-    feedback_text = _visible_feedback_text(driver)
+    feedback_text = await _visible_feedback_text(driver)
     if _contains_completion_marker(feedback_text):
         return True
-    text = _body_text(driver)
+    text = await _body_text(driver)
     if not _contains_completion_marker(text):
         return False
-    return not _has_visible_action_controls(driver)
+    return not await _has_visible_action_controls(driver)
 
 
-def submission_requires_verification(driver: BrowserDriver) -> bool:
-    feedback_text = _visible_feedback_text(driver)
+async def submission_requires_verification(driver: BrowserDriver) -> bool:
+    feedback_text = await _visible_feedback_text(driver)
     if _contains_completion_marker(feedback_text):
         return False
     if _looks_like_selection_validation(feedback_text):
@@ -284,7 +285,7 @@ def submission_requires_verification(driver: BrowserDriver) -> bool:
         if runtime_context:
             logging.info("Credamo 提交命中验证提示：%s", runtime_context)
         return True
-    text = _body_text(driver)
+    text = await _body_text(driver)
     if _contains_completion_marker(text):
         return False
     matched = _contains_verification_marker(text)
@@ -295,13 +296,13 @@ def submission_requires_verification(driver: BrowserDriver) -> bool:
     return matched
 
 
-def submission_validation_message(driver: Optional[BrowserDriver] = None) -> str:
+async def submission_validation_message(driver: Optional[BrowserDriver] = None) -> str:
     if driver is not None:
         _runtime_context_summary(driver)
     return "Credamo 见数提交命中验证码/安全验证，当前版本暂不支持自动处理"
 
 
-def wait_for_submission_verification(
+async def wait_for_submission_verification(
     driver: BrowserDriver,
     *,
     timeout: int = 3,
@@ -309,29 +310,29 @@ def wait_for_submission_verification(
 ) -> bool:
     deadline = time.time() + max(1, int(timeout or 1))
     while time.time() < deadline:
-        if stop_signal is not None and stop_signal.is_set():
+        if stop_signal is not None and getattr(stop_signal, "is_set", lambda: False)():
             return False
-        if submission_requires_verification(driver):
+        if await submission_requires_verification(driver):
             return True
-        time.sleep(0.15)
-    return submission_requires_verification(driver)
+        await sleep_or_stop(stop_signal, 0.15)
+    return await submission_requires_verification(driver)
 
 
-def handle_submission_verification_detected(ctx: Any, gui_instance: Any, stop_signal: Any) -> None:
+async def handle_submission_verification_detected(ctx: Any, gui_instance: Any, stop_signal: Any) -> None:
     del ctx, gui_instance, stop_signal
 
 
-def consume_submission_success_signal(driver: BrowserDriver) -> bool:
+async def consume_submission_success_signal(driver: BrowserDriver) -> bool:
     _runtime_context_summary(driver)
-    return is_completion_page(driver)
+    return await is_completion_page(driver)
 
 
-def is_device_quota_limit_page(driver: BrowserDriver) -> bool:
-    text = _body_text(driver)
+async def is_device_quota_limit_page(driver: BrowserDriver) -> bool:
+    text = await _body_text(driver)
     return "已达上限" in text or "次数已满" in text or "名额已满" in text
 
 
-def attempt_submission_recovery(
+async def attempt_submission_recovery(
     driver: BrowserDriver,
     ctx: ExecutionState,
     gui_instance: Any,
@@ -340,9 +341,9 @@ def attempt_submission_recovery(
     thread_name: str = "",
 ) -> bool:
     del gui_instance
-    if stop_signal is not None and stop_signal.is_set():
+    if stop_signal is not None and getattr(stop_signal, "is_set", lambda: False)():
         return False
-    if submission_requires_verification(driver):
+    if await submission_requires_verification(driver):
         return False
 
     runtime_state = get_credamo_runtime_state(driver)
@@ -350,7 +351,7 @@ def attempt_submission_recovery(
     if recovery_attempts >= 1:
         return False
 
-    hint = _extract_submission_recovery_hint(driver)
+    hint = await _extract_submission_recovery_hint(driver)
     if hint is None:
         return False
 
@@ -369,7 +370,7 @@ def attempt_submission_recovery(
 
     from credamo.provider.runtime import _click_submit, refill_required_questions_on_current_page
 
-    filled_count = refill_required_questions_on_current_page(
+    filled_count = await refill_required_questions_on_current_page(
         driver,
         ctx.config,
         question_numbers=target_questions,
@@ -381,6 +382,5 @@ def attempt_submission_recovery(
         return False
 
     runtime_state.submission_recovery_attempts = recovery_attempts + 1
-    page = _page(driver)
-    return bool(page is not None and _click_submit(page, stop_signal))
-
+    page = await _page(driver)
+    return bool(page is not None and await _click_submit(page, stop_signal))

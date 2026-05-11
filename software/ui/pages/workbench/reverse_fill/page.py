@@ -571,7 +571,7 @@ class ReverseFillPage(SurveyClipboardMixin, QWidget):
 
     def _on_random_ip_toggled(self, enabled: bool) -> None:
         self._sync_random_ip_toggle_presentation(bool(enabled))
-        if self.controller.toggle_random_ip_async(bool(enabled), adapter=self.controller.adapter):
+        if self.controller.request_toggle_random_ip(bool(enabled), adapter=self.controller.adapter):
             return
         fallback_enabled = bool(
             self.controller.get_runtime_ui_state().get("random_ip_enabled", False)

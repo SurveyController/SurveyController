@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import threading
 from types import SimpleNamespace
 
@@ -88,15 +89,15 @@ class ProxyApiProviderTests:
             proxy_source.set_proxy_api_override("https://proxy.example/api")
             calls: list[str] = []
 
-            def fake_get(url: str, **_kwargs):
+            async def fake_get(url: str, **_kwargs):
                 calls.append(url)
                 if url.endswith("num=2"):
                     raise RuntimeError("first candidate failed")
                 return _Response('{"items": ["4.4.4.4:8000", "5.5.5.5:8000", "4.4.4.4:8000"]}')
 
-            patch_attrs((provider.http_client, "get", fake_get))
+            patch_attrs((provider.http_client, "aget", fake_get))
 
-            leases = provider.fetch_proxy_batch(expected_count=2)
+            leases = asyncio.run(provider.fetch_proxy_batch_async(expected_count=2))
 
             assert calls == ["https://proxy.example/api?num=2", "https://proxy.example/api"]
             assert [lease.address for lease in leases] == ["http://4.4.4.4:8000", "http://5.5.5.5:8000"]
@@ -113,17 +114,15 @@ class ProxyApiProviderTests:
             proxy_source.set_proxy_api_override("https://proxy.example/api")
             stop_signal = threading.Event()
             popups: list[tuple[str, str]] = []
+            async def fake_get(*_args, **_kwargs):
+                return _Response('{"code": 2, "message": "白名单错误"}')
             patch_attrs(
-                (
-                    provider.http_client,
-                    "get",
-                    lambda *_args, **_kwargs: _Response('{"code": 2, "message": "白名单错误"}'),
-                ),
+                (provider.http_client, "aget", fake_get),
                 (provider, "log_popup_error", lambda title, message: popups.append((title, message))),
             )
 
             with pytest.raises(provider.ProxyApiFatalError, match="白名单"):
-                provider.fetch_proxy_batch(expected_count=1, stop_signal=stop_signal)
+                asyncio.run(provider.fetch_proxy_batch_async(expected_count=1, stop_signal=stop_signal))
 
             assert stop_signal.is_set()
             assert popups == [("代理API错误", "请先添加当前IP到代理商白名单")]
@@ -132,6 +131,24 @@ class ProxyApiProviderTests:
             proxy_source.set_proxy_api_override(original_override)
 
     def test_official_batch_fetch_builds_leases_from_backend_payload(self, patch_attrs) -> None:
+        async def fake_extract_proxy(**_kwargs):
+            return {
+                "provider": "default",
+                "items": [
+                    {
+                        "host": "6.6.6.6",
+                        "port": 9000,
+                        "account": "u",
+                        "password": "p",
+                        "expire_at": "2099-01-01T00:00:00+00:00",
+                    },
+                    {
+                        "host": "7.7.7.7",
+                        "port": 9001,
+                        "expire_at": "2099-01-01T00:00:00+00:00",
+                    },
+                ],
+            }
         patch_attrs(
             (provider, "get_proxy_source", lambda: provider.PROXY_SOURCE_DEFAULT),
             (provider, "is_custom_proxy_source", lambda _source: False),
@@ -141,30 +158,10 @@ class ProxyApiProviderTests:
             (provider, "get_proxy_upstream", lambda _source: provider.PROXY_UPSTREAM_DEFAULT),
             (provider, "_resolve_default_pool_by_area", lambda _area: "quality"),
             (provider, "_resolve_official_area_request_value", lambda _source, _area: "110100"),
-            (
-                provider,
-                "extract_proxy",
-                lambda **_kwargs: {
-                    "provider": "default",
-                    "items": [
-                        {
-                            "host": "6.6.6.6",
-                            "port": 9000,
-                            "account": "u",
-                            "password": "p",
-                            "expire_at": "2099-01-01T00:00:00+00:00",
-                        },
-                        {
-                            "host": "7.7.7.7",
-                            "port": 9001,
-                            "expire_at": "2099-01-01T00:00:00+00:00",
-                        },
-                    ],
-                },
-            ),
+            (provider, "extract_proxy_async", fake_extract_proxy),
         )
 
-        leases = provider.fetch_proxy_batch(expected_count=2)
+        leases = asyncio.run(provider.fetch_proxy_batch_async(expected_count=2))
 
         assert [lease.address for lease in leases] == [
             "http://u:p@6.6.6.6:9000",

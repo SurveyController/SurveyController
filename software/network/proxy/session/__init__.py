@@ -2,8 +2,9 @@
 
 from software.network.proxy.session.auth import (
     RandomIPAuthError,
-    activate_trial,
-    claim_easter_egg_bonus,
+    activate_trial_async,
+    claim_easter_egg_bonus_async,
+    extract_proxy_async,
     format_quota_value,
     format_random_ip_error,
     get_device_id,
@@ -14,13 +15,14 @@ from software.network.proxy.session.auth import (
     has_unknown_local_quota,
     is_quota_exhausted,
     load_session_for_startup,
-    sync_quota_snapshot_from_server,
+    sync_quota_snapshot_from_server_async,
 )
 
 __all__ = [
     "RandomIPAuthError",
-    "activate_trial",
-    "claim_easter_egg_bonus",
+    "activate_trial_async",
+    "claim_easter_egg_bonus_async",
+    "extract_proxy_async",
     "format_quota_value",
     "format_random_ip_error",
     "get_device_id",
@@ -31,5 +33,5 @@ __all__ = [
     "has_unknown_local_quota",
     "is_quota_exhausted",
     "load_session_for_startup",
-    "sync_quota_snapshot_from_server",
+    "sync_quota_snapshot_from_server_async",
 ]

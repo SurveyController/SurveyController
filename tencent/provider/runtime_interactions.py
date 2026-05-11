@@ -1,28 +1,33 @@
 """腾讯问卷运行时底层页面交互。"""
 from __future__ import annotations
 
-import time
+import asyncio
 from typing import Dict, List, Optional, Sequence
 
-from software.network.browser import BrowserDriver
+from software.core.engine.async_wait import sleep_or_stop
+from software.network.browser.runtime_async import BrowserDriver
 
 
-def _page(driver: BrowserDriver):
-    page = getattr(driver, "page", None)
+async def _page(driver: BrowserDriver):
+    page = await driver.page()
     if page is None:
         raise RuntimeError("当前浏览器驱动不支持腾讯问卷自动填写")
     return page
 
 
-def _supports_page_snapshot(driver: BrowserDriver) -> bool:
-    return getattr(driver, "page", None) is not None
+async def _supports_page_snapshot(driver: BrowserDriver) -> bool:
+    try:
+        return await driver.page() is not None
+    except Exception:
+        return False
 
 
-def _collect_question_visibility_map(driver: BrowserDriver, question_ids: Sequence[str]) -> Dict[str, Dict[str, bool]]:
+async def _collect_question_visibility_map(driver: BrowserDriver, question_ids: Sequence[str]) -> Dict[str, Dict[str, bool]]:
     normalized_ids = [str(question_id or "").strip() for question_id in question_ids if str(question_id or "").strip()]
     if not normalized_ids:
         return {}
-    payload = _page(driver).evaluate(
+    page = await _page(driver)
+    payload = await page.evaluate(
         """(questionIds) => {
             const visible = (el) => {
                 if (!el) return false;
@@ -54,7 +59,7 @@ def _collect_question_visibility_map(driver: BrowserDriver, question_ids: Sequen
     return result
 
 
-def _wait_for_question_visibility_map(
+async def _wait_for_question_visibility_map(
     driver: BrowserDriver,
     question_ids: Sequence[str],
     *,
@@ -63,46 +68,50 @@ def _wait_for_question_visibility_map(
     poll_ms: int = 80,
 ) -> Dict[str, Dict[str, bool]]:
     normalized_timeout = max(0, int(timeout_ms or 0))
-    snapshot = _collect_question_visibility_map(driver, question_ids)
+    snapshot = await _collect_question_visibility_map(driver, question_ids)
     if not require_any_visible:
         return snapshot
     if any(bool(item.get("visible")) for item in snapshot.values()):
         return snapshot
     if normalized_timeout <= 0:
         return snapshot
-    page = _page(driver)
-    deadline = time.time() + max(0.05, normalized_timeout / 1000.0)
-    while time.time() < deadline:
+    page = await _page(driver)
+    loop = asyncio.get_running_loop()
+    deadline = loop.time() + max(0.05, normalized_timeout / 1000.0)
+    while loop.time() < deadline:
         try:
-            page.wait_for_timeout(max(20, int(poll_ms or 0)))
+            await page.wait_for_timeout(max(20, int(poll_ms or 0)))
         except Exception:
-            time.sleep(max(0.02, float(poll_ms or 0) / 1000.0))
-        snapshot = _collect_question_visibility_map(driver, question_ids)
+            await sleep_or_stop(None, max(0.02, float(poll_ms or 0) / 1000.0))
+        snapshot = await _collect_question_visibility_map(driver, question_ids)
         if any(bool(item.get("visible")) for item in snapshot.values()):
             return snapshot
     return snapshot
 
-def _wait_for_question_visible(driver: BrowserDriver, provider_question_id: str, timeout_ms: int = 8000) -> bool:
+async def _wait_for_question_visible(driver: BrowserDriver, provider_question_id: str, timeout_ms: int = 8000) -> bool:
     if not provider_question_id:
         return False
     selector = f'section.question[data-question-id="{provider_question_id}"]'
     try:
-        _page(driver).wait_for_selector(selector, state="visible", timeout=timeout_ms)
+        page = await _page(driver)
+        await page.wait_for_selector(selector, state="visible", timeout=timeout_ms)
         return True
     except Exception:
         return False
 
-def _is_question_visible(driver: BrowserDriver, provider_question_id: str) -> bool:
+async def _is_question_visible(driver: BrowserDriver, provider_question_id: str) -> bool:
     if not provider_question_id:
         return False
     try:
-        return bool((_collect_question_visibility_map(driver, [provider_question_id]).get(provider_question_id) or {}).get("visible"))
+        snapshot = await _collect_question_visibility_map(driver, [provider_question_id])
+        return bool((snapshot.get(provider_question_id) or {}).get("visible"))
     except Exception:
         return False
 
-def _click_choice_input(driver: BrowserDriver, provider_question_id: str, input_type: str, option_index: int) -> bool:
+async def _click_choice_input(driver: BrowserDriver, provider_question_id: str, input_type: str, option_index: int) -> bool:
+    page = await _page(driver)
     return bool(
-        _page(driver).evaluate(
+        await page.evaluate(
             """({ questionId, inputType, optionIndex }) => {
                 const section = document.querySelector(`section.question[data-question-id="${questionId}"]`);
                 if (!section || optionIndex < 0) return false;
@@ -144,10 +153,10 @@ def _click_choice_input(driver: BrowserDriver, provider_question_id: str, input_
         )
     )
 
-def _fill_text_question(driver: BrowserDriver, provider_question_id: str, value: str) -> bool:
+async def _fill_text_question(driver: BrowserDriver, provider_question_id: str, value: str) -> bool:
     if not provider_question_id:
         return False
-    page = _page(driver)
+    page = await _page(driver)
     next_value = str(value or "")
     base_selector = f'section.question[data-question-id="{provider_question_id}"]'
     candidate_selectors = (
@@ -159,7 +168,7 @@ def _fill_text_question(driver: BrowserDriver, provider_question_id: str, value:
         f"{base_selector} input[type=\"number\"]",
         f"{base_selector} input",
     )
-    _prepare_question_interaction(
+    await _prepare_question_interaction(
         driver,
         provider_question_id,
         control_selectors=(
@@ -173,27 +182,27 @@ def _fill_text_question(driver: BrowserDriver, provider_question_id: str, value:
     for selector in candidate_selectors:
         try:
             locator = page.locator(selector).first
-            if locator.count() <= 0:
+            if await locator.count() <= 0:
                 continue
-            locator.scroll_into_view_if_needed(timeout=1500)
-            locator.fill(next_value, timeout=2500)
-            if str(locator.input_value() or "") == next_value:
+            await locator.scroll_into_view_if_needed(timeout=1500)
+            await locator.fill(next_value, timeout=2500)
+            if str(await locator.input_value() or "") == next_value:
                 return True
         except Exception:
             try:
                 locator = page.locator(selector).first
-                if locator.count() <= 0:
+                if await locator.count() <= 0:
                     continue
-                locator.scroll_into_view_if_needed(timeout=1500)
-                locator.click(timeout=1500)
-                locator.fill("")
-                locator.type(next_value, delay=20, timeout=2500)
-                if str(locator.input_value() or "") == next_value:
+                await locator.scroll_into_view_if_needed(timeout=1500)
+                await locator.click(timeout=1500)
+                await locator.fill("")
+                await locator.type(next_value, delay=20, timeout=2500)
+                if str(await locator.input_value() or "") == next_value:
                     return True
             except Exception:
                 continue
     return bool(
-        page.evaluate(
+        await page.evaluate(
             """({ questionId, rawValue }) => {
                 const section = document.querySelector(`section.question[data-question-id="${questionId}"]`);
                 if (!section) return false;
@@ -239,7 +248,7 @@ def _fill_text_question(driver: BrowserDriver, provider_question_id: str, value:
         )
     )
 
-def _fill_choice_option_additional_text(
+async def _fill_choice_option_additional_text(
     driver: BrowserDriver,
     provider_question_id: str,
     option_index: int,
@@ -252,9 +261,9 @@ def _fill_choice_option_additional_text(
     text = str(value or "").strip()
     if not text:
         return False
-    page = _page(driver)
+    page = await _page(driver)
     return bool(
-        page.evaluate(
+        await page.evaluate(
             """({ questionId, optionIndex, rawValue, inputType }) => {
                 const section = document.querySelector(`section.question[data-question-id="${questionId}"]`);
                 if (!section || optionIndex < 0) return false;
@@ -347,7 +356,7 @@ def _fill_choice_option_additional_text(
         )
     )
 
-def _prepare_question_interaction(
+async def _prepare_question_interaction(
     driver: BrowserDriver,
     provider_question_id: str,
     *,
@@ -356,33 +365,33 @@ def _prepare_question_interaction(
 ) -> bool:
     if not provider_question_id:
         return False
-    page = _page(driver)
+    page = await _page(driver)
     base_selector = f'section.question[data-question-id="{provider_question_id}"]'
     selectors = [f"{base_selector} {selector}" for selector in control_selectors] + [base_selector]
     for selector in selectors:
         try:
-            page.wait_for_selector(selector, state="attached", timeout=2500)
+            await page.wait_for_selector(selector, state="attached", timeout=2500)
         except Exception:
             continue
         try:
             locator = page.locator(selector).first
-            if locator.count() <= 0:
+            if await locator.count() <= 0:
                 continue
-            locator.scroll_into_view_if_needed(timeout=1800)
-            page.wait_for_timeout(max(0, int(settle_ms or 0)))
+            await locator.scroll_into_view_if_needed(timeout=1800)
+            await page.wait_for_timeout(max(0, int(settle_ms or 0)))
             return True
         except Exception:
             continue
     return False
 
-def _is_dropdown_open(driver: BrowserDriver, provider_question_id: str) -> bool:
+async def _is_dropdown_open(driver: BrowserDriver, provider_question_id: str) -> bool:
     if not provider_question_id:
         return False
-    page = _page(driver)
+    page = await _page(driver)
     selector = f'section.question[data-question-id="{provider_question_id}"]'
     try:
         return bool(
-            page.evaluate(
+            await page.evaluate(
                 """(questionSelector) => {
                     const section = document.querySelector(questionSelector);
                     if (!section) return false;
@@ -403,10 +412,10 @@ def _is_dropdown_open(driver: BrowserDriver, provider_question_id: str) -> bool:
     except Exception:
         return False
 
-def _open_dropdown(driver: BrowserDriver, provider_question_id: str) -> bool:
+async def _open_dropdown(driver: BrowserDriver, provider_question_id: str) -> bool:
     if not provider_question_id:
         return False
-    page = _page(driver)
+    page = await _page(driver)
     base_selector = f'section.question[data-question-id="{provider_question_id}"]'
     candidate_selectors = (
         f"{base_selector} input.t-input__inner",
@@ -418,55 +427,56 @@ def _open_dropdown(driver: BrowserDriver, provider_question_id: str) -> bool:
     for selector in candidate_selectors:
         try:
             locator = page.locator(selector).first
-            if locator.count() <= 0:
+            if await locator.count() <= 0:
                 continue
-            locator.scroll_into_view_if_needed(timeout=1500)
-            locator.click(timeout=1500)
+            await locator.scroll_into_view_if_needed(timeout=1500)
+            await locator.click(timeout=1500)
         except Exception:
             continue
         try:
-            page.wait_for_timeout(150)
+            await page.wait_for_timeout(150)
         except Exception:
-            time.sleep(0.15)
-        if _is_dropdown_open(driver, provider_question_id):
+            await sleep_or_stop(None, 0.15)
+        if await _is_dropdown_open(driver, provider_question_id):
             return True
     return False
 
-def _read_dropdown_value(driver: BrowserDriver, provider_question_id: str) -> str:
+async def _read_dropdown_value(driver: BrowserDriver, provider_question_id: str) -> str:
     if not provider_question_id:
         return ""
-    page = _page(driver)
+    page = await _page(driver)
     selector = f'section.question[data-question-id="{provider_question_id}"] input.t-input__inner'
     try:
         locator = page.locator(selector).first
-        if locator.count() <= 0:
+        if await locator.count() <= 0:
             return ""
-        return str(locator.input_value() or "").strip()
+        return str(await locator.input_value() or "").strip()
     except Exception:
         return ""
 
-def _wait_dropdown_value(driver: BrowserDriver, provider_question_id: str, expected_text: str, timeout_ms: int = 1200) -> bool:
+async def _wait_dropdown_value(driver: BrowserDriver, provider_question_id: str, expected_text: str, timeout_ms: int = 1200) -> bool:
     normalized_expected = str(expected_text or "").strip()
     if not provider_question_id or not normalized_expected:
         return False
-    page = _page(driver)
-    deadline = time.time() + max(0.1, timeout_ms / 1000.0)
-    while time.time() < deadline:
-        current_value = _read_dropdown_value(driver, provider_question_id)
+    page = await _page(driver)
+    loop = asyncio.get_running_loop()
+    deadline = loop.time() + max(0.1, timeout_ms / 1000.0)
+    while loop.time() < deadline:
+        current_value = await _read_dropdown_value(driver, provider_question_id)
         if current_value == normalized_expected:
             return True
         try:
-            page.wait_for_timeout(80)
+            await page.wait_for_timeout(80)
         except Exception:
-            time.sleep(0.08)
-    return _read_dropdown_value(driver, provider_question_id) == normalized_expected
+            await sleep_or_stop(None, 0.08)
+    return await _read_dropdown_value(driver, provider_question_id) == normalized_expected
 
-def _describe_dropdown_state(driver: BrowserDriver, provider_question_id: str) -> str:
+async def _describe_dropdown_state(driver: BrowserDriver, provider_question_id: str) -> str:
     if not provider_question_id:
         return "question_id=empty"
-    page = _page(driver)
+    page = await _page(driver)
     try:
-        payload = page.evaluate(
+        payload = await page.evaluate(
             """(questionId) => {
                 const visible = (el) => {
                     if (!el) return false;
@@ -520,12 +530,12 @@ def _describe_dropdown_state(driver: BrowserDriver, provider_question_id: str) -
     options = list(payload.get("options") or [])
     return f"value={current_value or '-'} popup_count={popup_count} options={options}"
 
-def _resolve_dropdown_popup_index(driver: BrowserDriver, provider_question_id: str) -> int:
+async def _resolve_dropdown_popup_index(driver: BrowserDriver, provider_question_id: str) -> int:
     if not provider_question_id:
         return -1
-    page = _page(driver)
+    page = await _page(driver)
     try:
-        popup_index = page.evaluate(
+        popup_index = await page.evaluate(
             """(questionId) => {
                 const visible = (el) => {
                     if (!el) return false;
@@ -570,72 +580,73 @@ def _resolve_dropdown_popup_index(driver: BrowserDriver, provider_question_id: s
     except Exception:
         return -1
 
-def _wait_dropdown_popup_index(driver: BrowserDriver, provider_question_id: str, timeout_ms: int = 2000) -> int:
+async def _wait_dropdown_popup_index(driver: BrowserDriver, provider_question_id: str, timeout_ms: int = 2000) -> int:
     if not provider_question_id:
         return -1
-    page = _page(driver)
-    deadline = time.time() + max(0.1, timeout_ms / 1000.0)
-    while time.time() < deadline:
-        popup_index = _resolve_dropdown_popup_index(driver, provider_question_id)
+    page = await _page(driver)
+    loop = asyncio.get_running_loop()
+    deadline = loop.time() + max(0.1, timeout_ms / 1000.0)
+    while loop.time() < deadline:
+        popup_index = await _resolve_dropdown_popup_index(driver, provider_question_id)
         if popup_index >= 0:
             return popup_index
         try:
-            page.wait_for_timeout(80)
+            await page.wait_for_timeout(80)
         except Exception:
-            time.sleep(0.08)
-    return _resolve_dropdown_popup_index(driver, provider_question_id)
+            await sleep_or_stop(None, 0.08)
+    return await _resolve_dropdown_popup_index(driver, provider_question_id)
 
-def _select_dropdown_option(driver: BrowserDriver, provider_question_id: str, option_text: str) -> bool:
+async def _select_dropdown_option(driver: BrowserDriver, provider_question_id: str, option_text: str) -> bool:
     if not provider_question_id or not str(option_text or "").strip():
         return False
-    page = _page(driver)
+    page = await _page(driver)
     normalized_target = str(option_text or "").strip()
-    popup_index = _wait_dropdown_popup_index(driver, provider_question_id, timeout_ms=2500)
+    popup_index = await _wait_dropdown_popup_index(driver, provider_question_id, timeout_ms=2500)
     if popup_index < 0:
         return False
     try:
         popup_locator = page.locator('.t-popup.t-select__dropdown').nth(popup_index)
-        popup_locator.wait_for(state="visible", timeout=1800)
+        await popup_locator.wait_for(state="visible", timeout=1800)
         candidates = popup_locator.locator('.t-select-option, [role="listitem"]')
-        count = candidates.count()
+        count = await candidates.count()
     except Exception:
         return False
     for index in range(count):
         try:
             candidate = candidates.nth(index)
-            if not candidate.is_visible():
+            if not await candidate.is_visible():
                 continue
-            text = str(candidate.inner_text() or "").strip().replace("\n", " ")
+            text = str(await candidate.inner_text() or "").strip().replace("\n", " ")
         except Exception:
             continue
         if text != normalized_target and normalized_target not in text:
             continue
         try:
-            candidate.scroll_into_view_if_needed(timeout=1500)
-            candidate.click(timeout=1500)
+            await candidate.scroll_into_view_if_needed(timeout=1500)
+            await candidate.click(timeout=1500)
         except Exception:
             try:
-                candidate.click(timeout=1500, force=True)
+                await candidate.click(timeout=1500, force=True)
             except Exception:
                 continue
         try:
-            page.wait_for_timeout(150)
+            await page.wait_for_timeout(150)
         except Exception:
-            time.sleep(0.15)
-        if _wait_dropdown_value(driver, provider_question_id, normalized_target, timeout_ms=1200):
+            await sleep_or_stop(None, 0.15)
+        if await _wait_dropdown_value(driver, provider_question_id, normalized_target, timeout_ms=1200):
             return True
     return False
 
-def _click_matrix_cell(driver: BrowserDriver, provider_question_id: str, row_index: int, column_index: int) -> bool:
+async def _click_matrix_cell(driver: BrowserDriver, provider_question_id: str, row_index: int, column_index: int) -> bool:
     if not provider_question_id or row_index < 0 or column_index < 0:
         return False
-    page = _page(driver)
+    page = await _page(driver)
     base_selector = f'section.question[data-question-id="{provider_question_id}"]'
 
-    def _checked_index() -> int:
+    async def _checked_index() -> int:
         try:
             return int(
-                page.evaluate(
+                await page.evaluate(
                     """({ questionId, rowIndex }) => {
                         const section = document.querySelector(`section.question[data-question-id="${questionId}"]`);
                         if (!section || rowIndex < 0) return -1;
@@ -660,29 +671,29 @@ def _click_matrix_cell(driver: BrowserDriver, provider_question_id: str, row_ind
         except Exception:
             return -1
 
-    def _click_locator(locator) -> bool:
+    async def _click_locator(locator) -> bool:
         try:
-            if locator.count() <= 0:
+            if await locator.count() <= 0:
                 return False
-            locator.scroll_into_view_if_needed(timeout=1800)
+            await locator.scroll_into_view_if_needed(timeout=1800)
         except Exception:
             return False
         for force in (False, True):
             try:
-                locator.click(timeout=1800, force=force)
+                await locator.click(timeout=1800, force=force)
             except Exception:
                 continue
             try:
-                page.wait_for_timeout(180)
+                await page.wait_for_timeout(180)
             except Exception:
-                time.sleep(0.18)
-            if _checked_index() == column_index:
+                await sleep_or_stop(None, 0.18)
+            if await _checked_index() == column_index:
                 return True
         return False
 
     try:
         table_rows = page.locator(f"{base_selector} tbody tr")
-        if table_rows.count() > row_index:
+        if await table_rows.count() > row_index:
             row_locator = table_rows.nth(row_index)
             table_candidates = (
                 row_locator.locator("td").nth(column_index + 1).locator("label.clickBlock").first,
@@ -691,14 +702,14 @@ def _click_matrix_cell(driver: BrowserDriver, provider_question_id: str, row_ind
                 row_locator.locator("td").nth(column_index + 1),
             )
             for locator in table_candidates:
-                if _click_locator(locator):
+                if await _click_locator(locator):
                     return True
     except Exception:
         pass
 
     try:
         question_rows = page.locator(f"{base_selector} .question-item")
-        if question_rows.count() > row_index:
+        if await question_rows.count() > row_index:
             row_locator = question_rows.nth(row_index)
             group_locator = row_locator.locator(".checkbtn").nth(column_index)
             block_candidates = (
@@ -708,13 +719,13 @@ def _click_matrix_cell(driver: BrowserDriver, provider_question_id: str, row_ind
                 row_locator.locator('input[type="radio"]').nth(column_index),
             )
             for locator in block_candidates:
-                if _click_locator(locator):
+                if await _click_locator(locator):
                     return True
     except Exception:
         pass
 
     return bool(
-        page.evaluate(
+        await page.evaluate(
             """async ({ questionId, rowIndex, columnIndex }) => {
                 const section = document.querySelector(`section.question[data-question-id="${questionId}"]`);
                 if (!section || rowIndex < 0 || columnIndex < 0) return false;
@@ -778,7 +789,7 @@ def _click_matrix_cell(driver: BrowserDriver, provider_question_id: str, row_ind
         )
     )
 
-def _click_star_cell(driver: BrowserDriver, provider_question_id: str, row_index: int, star_index: int) -> bool:
+async def _click_star_cell(driver: BrowserDriver, provider_question_id: str, row_index: int, star_index: int) -> bool:
     """点击矩阵星级题中指定行、指定位置的星星（star_index 为 0 起始）。
 
     腾讯问卷的星级组件基于 TDesign，使用 ``ul.t-rate`` + ``li.t-rate__star`` 结构，
@@ -786,9 +797,9 @@ def _click_star_cell(driver: BrowserDriver, provider_question_id: str, row_index
     """
     if not provider_question_id or row_index < 0 or star_index < 0:
         return False
-    page = _page(driver)
+    page = await _page(driver)
     return bool(
-        page.evaluate(
+        await page.evaluate(
             """async ({ questionId, rowIndex, starIndex }) => {
                 const section = document.querySelector(`section.question[data-question-id="${questionId}"]`);
                 if (!section || rowIndex < 0 || starIndex < 0) return false;

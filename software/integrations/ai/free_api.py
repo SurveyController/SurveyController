@@ -11,13 +11,13 @@ import software.network.http as http_client
 from software.app.config import AI_FREE_ENDPOINT, DEFAULT_HTTP_HEADERS
 from software.integrations.ai.protocols import (
     _AI_REQUEST_TIMEOUT_SECONDS,
+    _aexecute_ai_request_with_retry,
     _extract_json_dict,
-    _execute_ai_request_with_retry,
     _is_ai_timeout_exception,
 )
 from software.network.proxy.session import (
     RandomIPAuthError,
-    activate_trial,
+    activate_trial_async,
     format_random_ip_error,
     get_device_id,
     get_session_snapshot,
@@ -57,7 +57,7 @@ _AI_RETRYABLE_STATUS_CODES = frozenset({429, 502, 503, 504})
 
 __all__ = [
     "FreeAITimeoutError",
-    "call_free_ai_api",
+    "call_free_ai_api_async",
 ]
 
 
@@ -199,48 +199,6 @@ def _extract_free_error_detail(response: Any) -> str:
     return ""
 
 
-def _ensure_free_ai_identity() -> tuple[int, str]:
-    snapshot = get_session_snapshot()
-    user_id = int(snapshot.get("user_id") or 0)
-    device_id = str(snapshot.get("device_id") or "").strip()
-    if not device_id:
-        device_id = str(get_device_id() or "").strip()
-
-    if user_id > 0 and device_id:
-        logger.info(
-            "免费 AI 身份就绪 | user_id=%s | device=%s | source=session",
-            _mask_user_id(user_id),
-            _mask_device_id(device_id),
-        )
-        return user_id, device_id
-
-    logger.info(
-        "免费 AI 身份缺失，尝试自动领取试用 | user_id=%s | device=%s",
-        _mask_user_id(user_id),
-        _mask_device_id(device_id),
-    )
-    try:
-        activate_trial()
-    except RandomIPAuthError as exc:
-        raise RuntimeError(f"免费 AI 身份初始化失败：{format_random_ip_error(exc)}") from exc
-    except Exception as exc:
-        raise RuntimeError(f"免费 AI 身份初始化失败：{exc}") from exc
-
-    snapshot = get_session_snapshot()
-    user_id = int(snapshot.get("user_id") or 0)
-    device_id = str(snapshot.get("device_id") or "").strip()
-    if not device_id:
-        device_id = str(get_device_id() or "").strip()
-    if user_id <= 0 or not device_id:
-        raise RuntimeError("免费 AI 身份初始化失败：未获取到有效 user_id/device_id")
-    logger.info(
-        "免费 AI 身份领取成功 | user_id=%s | device=%s",
-        _mask_user_id(user_id),
-        _mask_device_id(device_id),
-    )
-    return user_id, device_id
-
-
 def _extract_free_answers(data: Dict[str, Any], question_type: str, blank_count: Optional[int]) -> List[str]:
     raw_answers = data.get("answers")
     if not isinstance(raw_answers, list) or not raw_answers:
@@ -268,14 +226,56 @@ def _extract_free_answers(data: Dict[str, Any], question_type: str, blank_count:
     return answers
 
 
-def call_free_ai_api(
+async def _ensure_free_ai_identity_async() -> tuple[int, str]:
+    snapshot = get_session_snapshot()
+    user_id = int(snapshot.get("user_id") or 0)
+    device_id = str(snapshot.get("device_id") or "").strip()
+    if not device_id:
+        device_id = str(get_device_id() or "").strip()
+
+    if user_id > 0 and device_id:
+        logger.info(
+            "免费 AI 身份就绪 | user_id=%s | device=%s | source=session",
+            _mask_user_id(user_id),
+            _mask_device_id(device_id),
+        )
+        return user_id, device_id
+
+    logger.info(
+        "免费 AI 身份缺失，尝试自动领取试用 | user_id=%s | device=%s",
+        _mask_user_id(user_id),
+        _mask_device_id(device_id),
+    )
+    try:
+        await activate_trial_async()
+    except RandomIPAuthError as exc:
+        raise RuntimeError(f"免费 AI 身份初始化失败：{format_random_ip_error(exc)}") from exc
+    except Exception as exc:
+        raise RuntimeError(f"免费 AI 身份初始化失败：{exc}") from exc
+
+    snapshot = get_session_snapshot()
+    user_id = int(snapshot.get("user_id") or 0)
+    device_id = str(snapshot.get("device_id") or "").strip()
+    if not device_id:
+        device_id = str(get_device_id() or "").strip()
+    if user_id <= 0 or not device_id:
+        raise RuntimeError("免费 AI 身份初始化失败：未获取到有效 user_id/device_id")
+    logger.info(
+        "免费 AI 身份领取成功 | user_id=%s | device=%s",
+        _mask_user_id(user_id),
+        _mask_device_id(device_id),
+    )
+    return user_id, device_id
+
+
+async def call_free_ai_api_async(
     question: str,
     question_type: str,
     blank_count: Optional[int],
     system_prompt: str = "",
     timeout: int = _AI_REQUEST_TIMEOUT_SECONDS,
 ) -> List[str]:
-    user_id, device_id = _ensure_free_ai_identity()
+    user_id, device_id = await _ensure_free_ai_identity_async()
     _log_free_ai_request_start(
         user_id=user_id,
         device_id=device_id,
@@ -300,15 +300,15 @@ def call_free_ai_api(
     if question_type == "multi_fill_blank":
         payload["blank_count"] = int(blank_count or 0)
 
-    def _send_request():
-        response = http_client.post(AI_FREE_ENDPOINT, headers=headers, json=payload, timeout=timeout, proxies={})
+    async def _send_request():
+        response = await http_client.apost(AI_FREE_ENDPOINT, headers=headers, json=payload, timeout=timeout, proxies={})
         status_code = int(getattr(response, "status_code", 0) or 0)
         if status_code in _AI_RETRYABLE_STATUS_CODES:
             response.raise_for_status()
         return response
 
     try:
-        response = _execute_ai_request_with_retry("free_ai", _send_request)
+        response = await _aexecute_ai_request_with_retry("free_ai", _send_request)
     except Exception as exc:
         if _is_ai_timeout_exception(exc):
             raise FreeAITimeoutError("免费 AI 调用超时") from exc

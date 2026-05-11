@@ -1,31 +1,25 @@
 from __future__ import annotations
 
-from types import SimpleNamespace
-
 import pytest
 
 import software.network.browser.parse_pool as parse_pool
 
 
-class _FakeLease:
-    def __init__(self, owner) -> None:
-        self.owner = owner
-        self.release_calls = 0
-
-    def release(self) -> None:
-        self.release_calls += 1
-
-
 class _FakeDriver:
     def __init__(self, *, mark_cleanup_done_result: bool = True) -> None:
         self.mark_cleanup_done_result = mark_cleanup_done_result
-        self.quit_calls = 0
+        self.aclose_calls = 0
 
     def mark_cleanup_done(self) -> bool:
         return self.mark_cleanup_done_result
 
-    def quit(self) -> None:
-        self.quit_calls += 1
+    async def aclose(self) -> None:
+        self.aclose_calls += 1
+
+
+class _FakeSession:
+    def __init__(self, driver: _FakeDriver | None) -> None:
+        self.driver = driver
 
 
 class ParsePoolTests:
@@ -48,36 +42,41 @@ class ParsePoolTests:
         assert first is second
         assert built_pools == [first]
 
-    def test_acquire_parse_browser_session_quits_driver_after_use(self, patch_attrs) -> None:
+    @pytest.mark.asyncio
+    async def test_acquire_parse_browser_session_closes_driver_after_use(self, patch_attrs) -> None:
         driver = _FakeDriver()
-        owner = SimpleNamespace(open_session=lambda **_kwargs: driver)
-        lease = _FakeLease(owner)
-        pool = SimpleNamespace(acquire_owner_lease=lambda **_kwargs: lease)
-        patch_attrs((parse_pool, "_get_parse_pool", lambda: pool))
 
-        with parse_pool.acquire_parse_browser_session(proxy_address="http://1.1.1.1:80") as resolved_driver:
+        class _FakePool:
+            async def open_session(self, **_kwargs):
+                return _FakeSession(driver)
+
+        patch_attrs((parse_pool, "_get_parse_pool", lambda: _FakePool()))
+
+        async with parse_pool.acquire_parse_browser_session(proxy_address="http://1.1.1.1:80") as resolved_driver:
             assert resolved_driver is driver
 
-        assert driver.quit_calls == 1
-        assert lease.release_calls == 0
+        assert driver.aclose_calls == 1
 
-    def test_acquire_parse_browser_session_releases_lease_when_open_session_fails(self, patch_attrs) -> None:
-        owner = SimpleNamespace(open_session=lambda **_kwargs: (_ for _ in ()).throw(RuntimeError("boom")))
-        lease = _FakeLease(owner)
-        pool = SimpleNamespace(acquire_owner_lease=lambda **_kwargs: lease)
-        patch_attrs((parse_pool, "_get_parse_pool", lambda: pool))
+    @pytest.mark.asyncio
+    async def test_acquire_parse_browser_session_raises_when_open_session_fails(self, patch_attrs) -> None:
+        class _FakePool:
+            async def open_session(self, **_kwargs):
+                raise RuntimeError("boom")
+
+        patch_attrs((parse_pool, "_get_parse_pool", lambda: _FakePool()))
 
         with pytest.raises(RuntimeError, match="boom"):
-            with parse_pool.acquire_parse_browser_session():
+            async with parse_pool.acquire_parse_browser_session():
                 raise AssertionError("should not enter context")
 
-        assert lease.release_calls == 1
+    @pytest.mark.asyncio
+    async def test_acquire_parse_browser_session_raises_when_session_has_no_driver(self, patch_attrs) -> None:
+        class _FakePool:
+            async def open_session(self, **_kwargs):
+                return _FakeSession(None)
 
-    def test_acquire_parse_browser_session_raises_when_pool_unavailable(self, patch_attrs) -> None:
-        pool = SimpleNamespace(acquire_owner_lease=lambda **_kwargs: None)
-        patch_attrs((parse_pool, "_get_parse_pool", lambda: pool))
+        patch_attrs((parse_pool, "_get_parse_pool", lambda: _FakePool()))
 
-        with pytest.raises(RuntimeError, match="当前不可用"):
-            with parse_pool.acquire_parse_browser_session():
+        with pytest.raises(RuntimeError, match="创建失败"):
+            async with parse_pool.acquire_parse_browser_session():
                 raise AssertionError("should not enter context")
-

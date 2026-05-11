@@ -15,6 +15,13 @@ from software.network.http.client import (
     put,
     request,
 )
+from software.network.http.async_client import (
+    delete as adelete,
+    get as aget,
+    post as apost,
+    put as aput,
+    request as arequest,
+)
 
 __all__ = [
     "RequestException",
@@ -26,9 +33,14 @@ __all__ = [
     "close",
     "prewarm",
     "request",
+    "arequest",
     "get",
+    "aget",
     "post",
+    "apost",
     "put",
+    "aput",
     "delete",
+    "adelete",
 ]
 

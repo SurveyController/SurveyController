@@ -129,7 +129,7 @@ class AsyncBrowserOwnerLargeTests:
 
     @pytest.mark.asyncio
     async def test_shutdown_browser_swallows_browser_and_playwright_close_errors(self, monkeypatch) -> None:
-        owner = AsyncBrowserOwner(owner_id=1, portal=SimpleNamespace(), prefer_browsers=["edge"])
+        owner = AsyncBrowserOwner(owner_id=1, prefer_browsers=["edge"])
         owner._browser = _FakeBrowser(close_error=RuntimeError("browser close boom"))
         owner._playwright = SimpleNamespace(stop=lambda: (_ for _ in ()).throw(RuntimeError("pw stop boom")))
         owner._browser_name = "edge"
@@ -145,7 +145,7 @@ class AsyncBrowserOwnerLargeTests:
 
     @pytest.mark.asyncio
     async def test_launch_browser_falls_back_and_stops_failed_playwright(self, monkeypatch) -> None:
-        owner = AsyncBrowserOwner(owner_id=2, portal=SimpleNamespace(), prefer_browsers=["edge", "chrome"], headless=True, window_position=(10, 20))
+        owner = AsyncBrowserOwner(owner_id=2, prefer_browsers=["edge", "chrome"], headless=True, window_position=(10, 20))
         failed_playwright = _FakePlaywright(browser=RuntimeError("launch edge failed"))
         success_browser = _FakeBrowser()
         success_playwright = _FakePlaywright(browser=success_browser)
@@ -164,7 +164,7 @@ class AsyncBrowserOwnerLargeTests:
 
     @pytest.mark.asyncio
     async def test_launch_browser_raises_friendly_error_on_environment_failure(self, monkeypatch) -> None:
-        owner = AsyncBrowserOwner(owner_id=3, portal=SimpleNamespace(), prefer_browsers=["edge"])
+        owner = AsyncBrowserOwner(owner_id=3, prefer_browsers=["edge"])
         failed_playwright = _FakePlaywright(browser=RuntimeError("env broken"))
         monkeypatch.setattr(async_owner_pool, "_build_launch_args", lambda **_kwargs: {})
         monkeypatch.setattr(async_owner_pool, "_format_exception_chain", lambda exc: str(exc))
@@ -179,7 +179,7 @@ class AsyncBrowserOwnerLargeTests:
 
     @pytest.mark.asyncio
     async def test_launch_browser_raises_startup_error_on_driver_disconnect(self, monkeypatch) -> None:
-        owner = AsyncBrowserOwner(owner_id=33, portal=SimpleNamespace(), prefer_browsers=["edge"])
+        owner = AsyncBrowserOwner(owner_id=33, prefer_browsers=["edge"])
         monkeypatch.setattr(async_owner_pool, "_build_launch_args", lambda **_kwargs: {})
         monkeypatch.setattr(
             async_owner_pool,
@@ -193,7 +193,7 @@ class AsyncBrowserOwnerLargeTests:
 
     @pytest.mark.asyncio
     async def test_ensure_browser_reuses_existing_and_relaunches_when_broken(self, monkeypatch) -> None:
-        owner = AsyncBrowserOwner(owner_id=4, portal=SimpleNamespace(), prefer_browsers=["edge"])
+        owner = AsyncBrowserOwner(owner_id=4, prefer_browsers=["edge"])
         existing_browser = _FakeBrowser()
         owner._browser = existing_browser
         owner._browser_name = "edge"
@@ -215,7 +215,7 @@ class AsyncBrowserOwnerLargeTests:
 
     @pytest.mark.asyncio
     async def test_ensure_browser_rejects_closed_owner(self) -> None:
-        owner = AsyncBrowserOwner(owner_id=5, portal=SimpleNamespace(), prefer_browsers=["edge"])
+        owner = AsyncBrowserOwner(owner_id=5, prefer_browsers=["edge"])
         owner._closed = True
 
         with pytest.raises(RuntimeError, match="已关闭"):
@@ -223,7 +223,7 @@ class AsyncBrowserOwnerLargeTests:
 
     @pytest.mark.asyncio
     async def test_open_session_builds_driver_and_release_callback(self, monkeypatch) -> None:
-        owner = AsyncBrowserOwner(owner_id=6, portal=SimpleNamespace(), prefer_browsers=["edge"])
+        owner = AsyncBrowserOwner(owner_id=6, prefer_browsers=["edge"])
         context = _FakeContext()
         browser = _FakeBrowser(context=context)
         monkeypatch.setattr(owner, "_ensure_browser", lambda: asyncio.sleep(0, result=(browser, "edge")))
@@ -234,7 +234,7 @@ class AsyncBrowserOwnerLargeTests:
             captured.update(kwargs)
             return SimpleNamespace(aclose=lambda: asyncio.sleep(0))
 
-        monkeypatch.setattr(async_owner_pool, "AsyncBrowserDriver", _fake_driver)
+        monkeypatch.setattr(async_owner_pool, "PlaywrightAsyncDriver", _fake_driver)
         session = await owner.open_session(proxy_address="http://1.1.1.1:80", user_agent="UA")
 
         assert isinstance(session, AsyncBrowserSession)
@@ -249,7 +249,7 @@ class AsyncBrowserOwnerLargeTests:
 
     @pytest.mark.asyncio
     async def test_open_session_closes_context_and_marks_broken_on_disconnect(self, monkeypatch) -> None:
-        owner = AsyncBrowserOwner(owner_id=7, portal=SimpleNamespace(), prefer_browsers=["edge"])
+        owner = AsyncBrowserOwner(owner_id=7, prefer_browsers=["edge"])
         context = _FakeContext(fail_new_page=True)
         browser = _FakeBrowser(context=context)
         monkeypatch.setattr(owner, "_ensure_browser", lambda: asyncio.sleep(0, result=(browser, "edge")))
@@ -265,7 +265,7 @@ class AsyncBrowserOwnerLargeTests:
 
     @pytest.mark.asyncio
     async def test_ensure_ready_starts_browser_without_context(self, monkeypatch) -> None:
-        owner = AsyncBrowserOwner(owner_id=77, portal=SimpleNamespace(), prefer_browsers=["edge"])
+        owner = AsyncBrowserOwner(owner_id=77, prefer_browsers=["edge"])
         browser = _FakeBrowser()
         monkeypatch.setattr(owner, "_ensure_browser", lambda: asyncio.sleep(0, result=(browser, "edge")))
 
@@ -276,7 +276,7 @@ class AsyncBrowserOwnerLargeTests:
 
     @pytest.mark.asyncio
     async def test_release_slot_ignores_over_release(self) -> None:
-        owner = AsyncBrowserOwner(owner_id=8, portal=SimpleNamespace(), prefer_browsers=["edge"])
+        owner = AsyncBrowserOwner(owner_id=8, prefer_browsers=["edge"])
 
         owner._release_slot()
 
@@ -284,7 +284,7 @@ class AsyncBrowserOwnerLargeTests:
 
     @pytest.mark.asyncio
     async def test_shutdown_marks_closed_and_delegates(self, monkeypatch) -> None:
-        owner = AsyncBrowserOwner(owner_id=9, portal=SimpleNamespace(), prefer_browsers=["edge"])
+        owner = AsyncBrowserOwner(owner_id=9, prefer_browsers=["edge"])
         shutdown_calls: list[str] = []
         monkeypatch.setattr(owner, "_shutdown_browser", lambda: asyncio.sleep(0, result=shutdown_calls.append("shutdown")))
 
@@ -314,7 +314,6 @@ class AsyncBrowserOwnerPoolLargeTests:
     async def test_owner_pool_open_session_closed_and_non_disconnect_paths(self, monkeypatch) -> None:
         pool = AsyncBrowserOwnerPool(
             config=BrowserPoolConfig(owner_count=2, contexts_per_owner=1, logical_concurrency=2),
-            portal=SimpleNamespace(),
             headless=True,
         )
         pool._closed = True
@@ -323,7 +322,6 @@ class AsyncBrowserOwnerPoolLargeTests:
 
         pool = AsyncBrowserOwnerPool(
             config=BrowserPoolConfig(owner_count=2, contexts_per_owner=1, logical_concurrency=2),
-            portal=SimpleNamespace(),
             headless=True,
         )
         first_owner, second_owner = pool.owners
@@ -338,7 +336,6 @@ class AsyncBrowserOwnerPoolLargeTests:
     async def test_owner_pool_open_session_retries_and_shutdown_gathers_owners(self, monkeypatch) -> None:
         pool = AsyncBrowserOwnerPool(
             config=BrowserPoolConfig(owner_count=2, contexts_per_owner=1, logical_concurrency=2),
-            portal=SimpleNamespace(),
             headless=False,
             window_positions=[(1, 2)],
         )
@@ -372,7 +369,6 @@ class AsyncBrowserOwnerPoolLargeTests:
     async def test_owner_pool_ensure_ready_retries_disconnected_owner(self, monkeypatch) -> None:
         pool = AsyncBrowserOwnerPool(
             config=BrowserPoolConfig(owner_count=2, contexts_per_owner=1, logical_concurrency=2),
-            portal=SimpleNamespace(),
             headless=True,
         )
         first_owner, second_owner = pool.owners

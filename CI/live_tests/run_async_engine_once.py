@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import asyncio
 import logging
 import sys
 from pathlib import Path
@@ -21,7 +22,7 @@ from software.core.config.schema import RuntimeConfig  # noqa: E402
 from software.core.engine.async_engine import AsyncEngineClient  # noqa: E402
 from software.core.questions.config import build_default_question_entries  # noqa: E402
 from software.core.task import ExecutionState  # noqa: E402
-from software.providers.registry import parse_survey_sync  # noqa: E402
+from software.providers.registry import parse_survey  # noqa: E402
 from software.ui.controller.run_controller_parts.runtime_preparation import prepare_execution_artifacts  # noqa: E402
 
 
@@ -30,7 +31,7 @@ def _build_live_test_config(url: str, *, headless: bool) -> RuntimeConfig:
     if not normalized_url:
         raise ValueError("问卷链接为空")
 
-    definition = parse_survey_sync(normalized_url)
+    definition = asyncio.run(parse_survey(normalized_url))
     questions_info = [question for question in definition.questions if not question.is_description]
     question_entries = build_default_question_entries(
         questions_info,

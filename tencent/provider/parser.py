@@ -148,7 +148,7 @@ def _build_qq_api_headers(page_url: str) -> Dict[str, str]:
     }
 
 
-def _request_qq_api(
+async def _request_qq_api(
     survey_id: str,
     endpoint: str,
     *,
@@ -163,7 +163,7 @@ def _request_qq_api(
     }
     if extra_params:
         params.update(extra_params)
-    response = http_client.get(
+    response = await http_client.aget(
         url,
         params=params,
         headers=headers,
@@ -198,11 +198,11 @@ def _ensure_qq_api_ok(payload: Dict[str, Any], endpoint: str) -> Dict[str, Any]:
     return data
 
 
-def _fetch_qq_survey_via_http(survey_id: str, hash_value: str) -> Tuple[List[Dict[str, Any]], str]:
+async def _fetch_qq_survey_via_http(survey_id: str, hash_value: str) -> Tuple[List[Dict[str, Any]], str]:
     page_url = _build_qq_survey_page_url(survey_id, hash_value)
     headers = _build_qq_api_headers(page_url)
 
-    session_payload = _request_qq_api(
+    session_payload = await _request_qq_api(
         survey_id,
         "session",
         hash_value=hash_value,
@@ -213,7 +213,7 @@ def _fetch_qq_survey_via_http(survey_id: str, hash_value: str) -> Tuple[List[Dic
     last_error: Optional[Exception] = None
     for locale in _QQ_HTTP_LOCALES:
         try:
-            meta_payload = _request_qq_api(
+            meta_payload = await _request_qq_api(
                 survey_id,
                 "meta",
                 hash_value=hash_value,
@@ -222,7 +222,7 @@ def _fetch_qq_survey_via_http(survey_id: str, hash_value: str) -> Tuple[List[Dic
             )
             meta_data = _ensure_qq_api_ok(meta_payload, f"meta?locale={locale}")
 
-            questions_payload = _request_qq_api(
+            questions_payload = await _request_qq_api(
                 survey_id,
                 "questions",
                 hash_value=hash_value,
@@ -407,44 +407,44 @@ def _standardize_qq_questions(questions: List[Dict[str, Any]]) -> List[Dict[str,
     return normalized
 
 
-def parse_qq_survey(url: str) -> Tuple[List[Dict[str, Any]], str]:
+async def parse_qq_survey(url: str) -> Tuple[List[Dict[str, Any]], str]:
     if _is_qq_login_required_url(url):
         _raise_qq_login_required()
     survey_id, hash_value = _extract_qq_identifiers(url)
 
     try:
-        return _fetch_qq_survey_via_http(survey_id, hash_value)
+        return await _fetch_qq_survey_via_http(survey_id, hash_value)
     except Exception as exc:
         if _is_qq_login_required_error(exc):
             _raise_qq_login_required()
         logging.exception("腾讯问卷 HTTP 解析失败，准备回退 Playwright，url=%r", url)
 
     try:
-        with acquire_parse_browser_session() as driver:
-            driver.get(url)
-            page = getattr(driver, "page", None)
+        async with acquire_parse_browser_session() as driver:
+            await driver.get(url)
+            page = await driver.page()
             if page is None:
                 raise RuntimeError("当前浏览器驱动不支持腾讯问卷解析")
             try:
-                current_url = str(getattr(page, "url", "") or getattr(driver, "current_url", "") or "")
+                current_url = str(getattr(page, "url", "") or await driver.current_url() or "")
             except Exception:
                 current_url = ""
             if _is_qq_login_required_url(current_url):
                 _raise_qq_login_required()
             try:
-                page.wait_for_selector("main, .question-list, .page-control", state="visible", timeout=12000)
+                await page.wait_for_selector("main, .question-list, .page-control", state="visible", timeout=12000)
             except Exception:
                 try:
-                    page.wait_for_load_state("networkidle", timeout=1500)
+                    await page.wait_for_load_state("networkidle", timeout=1500)
                 except Exception:
                     pass
                 try:
-                    current_url = str(getattr(page, "url", "") or getattr(driver, "current_url", "") or "")
+                    current_url = str(getattr(page, "url", "") or await driver.current_url() or "")
                 except Exception:
                     current_url = ""
                 if _is_qq_login_required_url(current_url):
                     _raise_qq_login_required()
-            payload = page.evaluate(
+            payload = await page.evaluate(
                 """async ({ surveyId, hashValue }) => {
                     const sessionUrl = `https://wj.qq.com/api/v2/respondent/surveys/${surveyId}/session?_=${Date.now()}&hash=${encodeURIComponent(hashValue)}`;
                     await fetch(sessionUrl, {
@@ -489,7 +489,7 @@ def parse_qq_survey(url: str) -> Tuple[List[Dict[str, Any]], str]:
             questions_payload = questions_data.get("questions")
             if not isinstance(questions_payload, list) or not questions_payload:
                 raise RuntimeError("腾讯问卷题目接口未返回可解析的题目数据")
-            title = _normalize_qq_title(meta_data.get("title") or payload.get("title") or driver.title or "")
+            title = _normalize_qq_title(meta_data.get("title") or payload.get("title") or await driver.title() or "")
             info = _standardize_qq_questions(questions_payload)
             if not info:
                 raise RuntimeError("腾讯问卷解析结果为空，请确认链接有效且公开可访问")

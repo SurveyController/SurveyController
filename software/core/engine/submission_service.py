@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import random
-import time
 from dataclasses import dataclass
 from typing import Any, Optional
 
@@ -18,15 +18,16 @@ from software.app.config import (
 from software.core.engine.failure_reason import FailureReason
 from software.core.engine.run_stop_policy import RunStopPolicy
 from software.core.engine.stop_signal import StopSignalLike
+from software.core.engine.async_wait import sleep_or_stop
 from software.core.task import ExecutionConfig, ExecutionState
 from software.logging.log_utils import log_suppressed_exception
-from software.network.browser import BrowserDriver
+from software.network.browser.runtime_async import BrowserDriver
 from software.providers.registry import (
-    attempt_submission_recovery_sync as _provider_attempt_submission_recovery,
-    handle_submission_verification_detected_sync as _provider_handle_submission_verification_detected,
-    submission_requires_verification_sync as _provider_submission_requires_verification,
-    submission_validation_message_sync as _provider_submission_validation_message,
-    wait_for_submission_verification_sync as _provider_wait_for_submission_verification,
+    attempt_submission_recovery as _provider_attempt_submission_recovery,
+    handle_submission_verification_detected as _provider_handle_submission_verification_detected,
+    submission_requires_verification as _provider_submission_requires_verification,
+    submission_validation_message as _provider_submission_validation_message,
+    wait_for_submission_verification as _provider_wait_for_submission_verification,
 )
 
 
@@ -83,7 +84,7 @@ class SubmissionService:
                 level=logging.WARNING,
             )
 
-    def _build_success_outcome(
+    async def _build_success_outcome(
         self,
         driver: BrowserDriver,
         stop_signal: StopSignalLike,
@@ -92,50 +93,51 @@ class SubmissionService:
     ) -> SubmissionOutcome:
         self._mark_successful_submit_proxies(driver)
         grace_seconds = self._resolve_post_submit_close_grace_seconds()
-        if grace_seconds > 0 and stop_signal.wait(grace_seconds):
+        if grace_seconds > 0 and await sleep_or_stop(stop_signal, grace_seconds):
             return SubmissionOutcome("aborted", FailureReason.USER_STOPPED, "任务已停止", False, True, False)
         should_stop = self.stop_policy.record_success(stop_signal, thread_name=thread_name)
         return SubmissionOutcome("success", None, "提交成功", True, should_stop, self.config.random_proxy_ip_enabled)
 
-    def _detect_completion_once(self, driver: BrowserDriver) -> bool:
+    async def _detect_completion_once(self, driver: BrowserDriver) -> bool:
         try:
-            current_url = driver.current_url
+            current_url = await driver.current_url()
         except Exception:
             current_url = ""
         if "complete" in str(current_url).lower():
             return True
         try:
-            return bool(duration_control.is_survey_completion_page(driver, provider=self.config.survey_provider))
+            return bool(await duration_control.is_survey_completion_page(driver, provider=self.config.survey_provider))
         except Exception as exc:
             log_suppressed_exception("SubmissionService._detect_completion_once", exc, level=logging.WARNING)
             return False
 
-    def _wait_for_completion_page(
+    async def _wait_for_completion_page(
         self,
         driver: BrowserDriver,
         stop_signal: StopSignalLike,
         max_wait_seconds: float,
         poll_interval: float,
     ) -> bool:
-        deadline = time.time() + max_wait_seconds
-        while time.time() < deadline:
+        deadline = asyncio.get_running_loop().time() + max_wait_seconds
+        while asyncio.get_running_loop().time() < deadline:
             if stop_signal.is_set():
                 return False
             try:
-                current_url = driver.current_url
+                current_url = await driver.current_url()
             except Exception:
                 current_url = ""
             if "complete" in str(current_url).lower():
                 return True
             try:
-                if duration_control.is_survey_completion_page(driver, provider=self.config.survey_provider):
+                if await duration_control.is_survey_completion_page(driver, provider=self.config.survey_provider):
                     return True
             except Exception as exc:
                 log_suppressed_exception("SubmissionService._wait_for_completion_page", exc, level=logging.WARNING)
-            time.sleep(poll_interval)
+            if await sleep_or_stop(stop_signal, poll_interval):
+                return False
         return False
 
-    def _handle_detected_submission_verification(
+    async def _handle_detected_submission_verification(
         self,
         driver: BrowserDriver,
         stop_signal: StopSignalLike,
@@ -144,7 +146,7 @@ class SubmissionService:
     ) -> SubmissionOutcome:
         survey_provider = self._survey_provider_key()
         fallback_message = "提交命中平台安全验证，当前版本暂不支持自动处理"
-        message = _provider_submission_validation_message(driver, provider=survey_provider) or fallback_message
+        message = await _provider_submission_validation_message(driver, provider=survey_provider) or fallback_message
         logging.warning("%s", message)
         self.state.mark_terminal_stop(
             "submission_verification",
@@ -159,7 +161,7 @@ class SubmissionService:
             log_message=message,
             consume_reverse_fill_attempt=False,
         )
-        _provider_handle_submission_verification_detected(
+        await _provider_handle_submission_verification_detected(
             self.state,
             gui_instance,
             stop_signal,
@@ -174,7 +176,7 @@ class SubmissionService:
             should_rotate_proxy=False,
         )
 
-    def _check_submission_verification_after_submit(
+    async def _check_submission_verification_after_submit(
         self,
         driver: BrowserDriver,
         stop_signal: StopSignalLike,
@@ -183,23 +185,23 @@ class SubmissionService:
     ) -> Optional[SubmissionOutcome]:
         survey_provider = self._survey_provider_key()
         if survey_provider == "qq":
-            if _provider_submission_requires_verification(driver, provider=survey_provider):
-                return self._handle_detected_submission_verification(driver, stop_signal, gui_instance, thread_name=thread_name)
+            if await _provider_submission_requires_verification(driver, provider=survey_provider):
+                return await self._handle_detected_submission_verification(driver, stop_signal, gui_instance, thread_name=thread_name)
             return None
         try:
-            detected = _provider_wait_for_submission_verification(
+            detected = await _provider_wait_for_submission_verification(
                 driver,
                 provider=survey_provider,
                 timeout=3,
                 stop_signal=stop_signal,
             )
             if detected:
-                return self._handle_detected_submission_verification(driver, stop_signal, gui_instance, thread_name=thread_name)
+                return await self._handle_detected_submission_verification(driver, stop_signal, gui_instance, thread_name=thread_name)
         except Exception as exc:
             logging.warning("提交后安全验证检测过程出现异常：%s", exc)
         return None
 
-    def _attempt_submission_recovery(
+    async def _attempt_submission_recovery(
         self,
         driver: BrowserDriver,
         stop_signal: StopSignalLike,
@@ -208,7 +210,7 @@ class SubmissionService:
         thread_name: str,
     ) -> bool:
         try:
-            recovered = _provider_attempt_submission_recovery(
+            recovered = await _provider_attempt_submission_recovery(
                 driver,
                 self.state,
                 gui_instance,
@@ -223,7 +225,7 @@ class SubmissionService:
             logging.info("提交后自动补答已执行，准备重新等待完成页。")
         return bool(recovered)
 
-    def finalize_after_submit(
+    async def finalize_after_submit(
         self,
         driver: BrowserDriver,
         *,
@@ -231,15 +233,15 @@ class SubmissionService:
         gui_instance: Any,
         thread_name: str,
     ) -> SubmissionOutcome:
-        if stop_signal.wait(random.uniform(0.2, 0.6)):
+        if await sleep_or_stop(stop_signal, random.uniform(0.2, 0.6)):
             return SubmissionOutcome("aborted", FailureReason.USER_STOPPED, "任务已停止", False, True, False)
 
         if self._is_wjx_provider():
-            if self._detect_completion_once(driver):
-                return self._build_success_outcome(driver, stop_signal, thread_name=thread_name)
+            if await self._detect_completion_once(driver):
+                return await self._build_success_outcome(driver, stop_signal, thread_name=thread_name)
             wait_seconds = max(1.0, float(POST_SUBMIT_URL_MAX_WAIT or 0.0) * 2.0)
         else:
-            verification_outcome = self._check_submission_verification_after_submit(
+            verification_outcome = await self._check_submission_verification_after_submit(
                 driver,
                 stop_signal,
                 gui_instance,
@@ -248,26 +250,26 @@ class SubmissionService:
             if verification_outcome is not None:
                 return verification_outcome
 
-            if not stop_signal.is_set() and _provider_submission_requires_verification(
+            if not stop_signal.is_set() and await _provider_submission_requires_verification(
                 driver,
                 provider=self.config.survey_provider,
             ):
-                return self._handle_detected_submission_verification(driver, stop_signal, gui_instance, thread_name=thread_name)
+                return await self._handle_detected_submission_verification(driver, stop_signal, gui_instance, thread_name=thread_name)
 
             wait_seconds = max(3.0, float(POST_SUBMIT_URL_MAX_WAIT or 0.0) * 6.0)
 
         poll_interval = max(0.05, float(POST_SUBMIT_URL_POLL_INTERVAL or 0.1))
-        completion_detected = self._wait_for_completion_page(driver, stop_signal, wait_seconds, poll_interval)
+        completion_detected = await self._wait_for_completion_page(driver, stop_signal, wait_seconds, poll_interval)
 
         if completion_detected:
-            return self._build_success_outcome(driver, stop_signal, thread_name=thread_name)
+            return await self._build_success_outcome(driver, stop_signal, thread_name=thread_name)
 
         if not completion_detected and not stop_signal.is_set():
-            if _provider_submission_requires_verification(driver, provider=self.config.survey_provider):
-                return self._handle_detected_submission_verification(driver, stop_signal, gui_instance, thread_name=thread_name)
+            if await _provider_submission_requires_verification(driver, provider=self.config.survey_provider):
+                return await self._handle_detected_submission_verification(driver, stop_signal, gui_instance, thread_name=thread_name)
 
         if not completion_detected and not stop_signal.is_set():
-            verification_outcome = self._check_submission_verification_after_submit(
+            verification_outcome = await self._check_submission_verification_after_submit(
                 driver,
                 stop_signal,
                 gui_instance,
@@ -279,16 +281,16 @@ class SubmissionService:
         if not completion_detected and not stop_signal.is_set():
             extra_wait_seconds = max(1.0, float(POST_SUBMIT_URL_MAX_WAIT or 0.0) * 3.0)
             extra_poll = max(0.05, float(POST_SUBMIT_URL_POLL_INTERVAL or 0.1))
-            completion_detected = self._wait_for_completion_page(driver, stop_signal, extra_wait_seconds, extra_poll)
+            completion_detected = await self._wait_for_completion_page(driver, stop_signal, extra_wait_seconds, extra_poll)
 
         if not completion_detected and not stop_signal.is_set():
             try:
-                completion_detected = self._detect_completion_once(driver)
+                completion_detected = await self._detect_completion_once(driver)
             except Exception:
                 completion_detected = False
 
         if not completion_detected and not stop_signal.is_set():
-            recovered = self._attempt_submission_recovery(
+            recovered = await self._attempt_submission_recovery(
                 driver,
                 stop_signal,
                 gui_instance,
@@ -297,14 +299,14 @@ class SubmissionService:
             if recovered and not stop_signal.is_set():
                 recovery_wait_seconds = max(2.0, float(POST_SUBMIT_URL_MAX_WAIT or 0.0) * 4.0)
                 recovery_poll = max(0.05, float(POST_SUBMIT_URL_POLL_INTERVAL or 0.1))
-                completion_detected = self._wait_for_completion_page(
+                completion_detected = await self._wait_for_completion_page(
                     driver,
                     stop_signal,
                     recovery_wait_seconds,
                     recovery_poll,
                 )
                 if not completion_detected and not stop_signal.is_set():
-                    verification_outcome = self._check_submission_verification_after_submit(
+                    verification_outcome = await self._check_submission_verification_after_submit(
                         driver,
                         stop_signal,
                         gui_instance,
@@ -314,7 +316,7 @@ class SubmissionService:
                         return verification_outcome
                 if not completion_detected and not stop_signal.is_set():
                     try:
-                        completion_detected = self._detect_completion_once(driver)
+                        completion_detected = await self._detect_completion_once(driver)
                     except Exception:
                         completion_detected = False
 
@@ -336,7 +338,7 @@ class SubmissionService:
                 should_rotate_proxy=False,
             )
 
-        return self._build_success_outcome(driver, stop_signal, thread_name=thread_name)
+        return await self._build_success_outcome(driver, stop_signal, thread_name=thread_name)
 
 
 __all__ = ["SubmissionOutcome", "SubmissionService"]

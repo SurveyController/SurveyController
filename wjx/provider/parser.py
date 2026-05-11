@@ -6,6 +6,7 @@ import logging
 import re
 from typing import Any, Dict, List, Optional, Tuple
 
+import software.network.http as http_client
 from software.network.browser import (
     describe_playwright_startup_error,
     is_playwright_startup_environment_error,
@@ -16,7 +17,6 @@ from wjx.provider.html_parser import (
     extract_survey_title_from_html,
     parse_survey_questions_from_html,
 )
-import software.network.http as http_client
 from software.app.config import DEFAULT_HTTP_HEADERS
 
 PAUSED_SURVEY_ERROR_MESSAGE = "问卷已暂停，需要前往问卷星后台重新发布"
@@ -134,23 +134,23 @@ def build_not_open_survey_message(html: str) -> Optional[str]:
     return NOT_OPEN_SURVEY_ERROR_MESSAGE
 
 
-def _load_rendered_wjx_parse_result(url: str) -> Tuple[Optional[List[Dict[str, Any]]], str]:
-    with acquire_parse_browser_session() as driver:
-        driver.get(url, timeout=20000, wait_until="domcontentloaded")
-        page = getattr(driver, "page", None)
+async def _load_rendered_wjx_parse_result(url: str) -> Tuple[Optional[List[Dict[str, Any]]], str]:
+    async with acquire_parse_browser_session() as driver:
+        await driver.get(url, timeout=20000, wait_until="domcontentloaded")
+        page = await driver.page()
         if page is not None:
             try:
-                page.wait_for_selector("#divQuestion, div[topic], fieldset", state="attached", timeout=6000)
+                await page.wait_for_selector("#divQuestion, div[topic], fieldset", state="attached", timeout=6000)
             except Exception:
                 try:
-                    page.wait_for_load_state("networkidle", timeout=2000)
+                    await page.wait_for_load_state("networkidle", timeout=2000)
                 except Exception:
                     pass
             try:
-                page.wait_for_load_state("networkidle", timeout=2000)
+                await page.wait_for_load_state("networkidle", timeout=2000)
             except Exception:
                 pass
-        page_source = driver.page_source
+        page_source = await driver.page_source()
         if is_paused_survey_page(page_source):
             raise SurveyPausedError(PAUSED_SURVEY_ERROR_MESSAGE)
         not_open_message = build_not_open_survey_message(page_source)
@@ -159,14 +159,14 @@ def _load_rendered_wjx_parse_result(url: str) -> Tuple[Optional[List[Dict[str, A
         return parse_survey_questions_from_html(page_source), extract_survey_title_from_html(page_source) or ""
 
 
-def parse_wjx_survey(url: str) -> Tuple[List[Dict[str, Any]], str]:
+async def parse_wjx_survey(url: str) -> Tuple[List[Dict[str, Any]], str]:
     info: Optional[List[Dict[str, Any]]] = None
     title = ""
     http_exc: Optional[BaseException] = None
     browser_exc: Optional[BaseException] = None
 
     try:
-        resp = http_client.get(url, timeout=12, headers=DEFAULT_HTTP_HEADERS, proxies={})
+        resp = await http_client.aget(url, timeout=12, headers=DEFAULT_HTTP_HEADERS, proxies={})
         resp.raise_for_status()
         html = resp.text
         if is_paused_survey_page(html):
@@ -187,7 +187,7 @@ def parse_wjx_survey(url: str) -> Tuple[List[Dict[str, Any]], str]:
 
     if info is None:
         try:
-            info, rendered_title = _load_rendered_wjx_parse_result(url)
+            info, rendered_title = await _load_rendered_wjx_parse_result(url)
             title = rendered_title or title
         except SurveyPausedError:
             raise

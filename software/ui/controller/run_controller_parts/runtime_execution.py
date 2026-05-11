@@ -147,10 +147,10 @@ class RunControllerExecutionMixin:
         def sync_runtime_ui_state_from_config(
             self, config: RuntimeConfig, *, emit: bool = True
         ) -> Dict[str, Any]: ...
-        def refresh_random_ip_counter(
-            self, *, adapter: Optional[Any] = None, async_mode: bool = True
-        ) -> None: ...
-        def toggle_random_ip(self, enabled: bool, *, adapter: Optional[Any] = None) -> bool: ...
+        def refresh_random_ip_counter(self, *, adapter: Optional[Any] = None) -> None: ...
+        def submit_toggle_random_ip(
+            self, enabled: bool, *, adapter: Optional[Any] = None
+        ) -> Any: ...
         def handle_random_ip_submission(
             self,
             *,
@@ -187,14 +187,13 @@ class RunControllerExecutionMixin:
         adapter.random_ip_enabled_var.set(bool(random_ip_enabled))
         self._sync_adapter_ui_bridge(adapter)
         adapter.bind_runtime_actions(
-            refresh_random_ip_counter=lambda async_mode, _adapter=adapter: self.refresh_random_ip_counter(
+            refresh_random_ip_counter=lambda _adapter=adapter: self.refresh_random_ip_counter(
                 adapter=_adapter,
-                async_mode=async_mode,
             ),
-            toggle_random_ip=lambda enabled, _adapter=adapter: self.toggle_random_ip(
+            toggle_random_ip=lambda enabled, _adapter=adapter: bool(self.submit_toggle_random_ip(
                 _adapter.is_random_ip_enabled() if enabled is None else bool(enabled),
                 adapter=_adapter,
-            ),
+            ).result()),
             handle_random_ip_submission=lambda stop_signal=None, _adapter=adapter: self.handle_random_ip_submission(
                 stop_signal=stop_signal,
                 adapter=_adapter,
@@ -324,8 +323,9 @@ class RunControllerExecutionMixin:
         self._status_timer.start()
 
         logging.debug("启动 async-first 后台运行内核，总并发=%s", worker_count)
-        engine_client = AsyncEngineClient()
-        self._async_engine_client = engine_client
+        engine_client = self._async_engine_client
+        if engine_client is None:
+            raise RuntimeError("AsyncEngineClient 未初始化")
         run_future = engine_client.start_run(
             execution_config,
             execution_state,
@@ -378,7 +378,6 @@ class RunControllerExecutionMixin:
         self._status_timer.stop()
         self._release_sleep_blocker()
         self.running = False
-        self._async_engine_client = None
         if was_active:
             self.runStateChanged.emit(False)
         self._emit_status()
@@ -515,14 +514,13 @@ class RunControllerExecutionMixin:
                 except Exception:
                     logging.debug("关闭等待期间处理事件失败", exc_info=True)
 
-        try:
-            engine_client = getattr(self, "_async_engine_client", None)
-            if engine_client is not None:
+        engine_client = self._async_engine_client
+        if engine_client is not None:
+            try:
                 remaining = max(0.0, deadline - time.monotonic())
                 engine_client.shutdown(timeout=remaining)
-                self._async_engine_client = None
-        except Exception:
-            logging.warning("关闭窗口时停止 async-first 内核失败", exc_info=True)
+            except Exception:
+                logging.warning("关闭窗口时停止 async-first 内核失败", exc_info=True)
 
         self.worker_threads = [thread for thread in self.worker_threads if thread.is_alive()]
         if self._monitor_thread is not None and not self._monitor_thread.is_alive():

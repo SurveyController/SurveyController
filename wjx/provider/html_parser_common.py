@@ -42,6 +42,55 @@ def _is_select_placeholder_option(index: int, value: Any, text: Any) -> bool:
         return True
     return _text_looks_like_select_placeholder(normalized_text)
 
+
+def _soup_question_is_required(question_div) -> bool:
+    if question_div is None:
+        return False
+    try:
+        if str(question_div.get("req") or "").strip() in {"1", "true", "True"}:
+            return True
+        if str(question_div.get("required") or "").strip().lower() in {"1", "true", "required"}:
+            return True
+        if str(question_div.get("must") or "").strip() in {"1", "true", "True"}:
+            return True
+        if str(question_div.get("wjxreq") or "").strip() in {"1", "true", "True"}:
+            return True
+        if str(question_div.get("aria-required") or "").strip().lower() == "true":
+            return True
+    except Exception:
+        pass
+
+    marker_selectors = (
+        ".req",
+        ".required",
+        ".must",
+        ".star",
+        ".red",
+        ".wjxreq",
+        "[aria-required='true']",
+    )
+    for selector in marker_selectors:
+        try:
+            if question_div.select_one(selector):
+                return True
+        except Exception:
+            continue
+
+    heading_text = _extract_display_heading_text(question_div)
+    normalized_heading = _normalize_html_text(heading_text)
+    if normalized_heading.startswith("*"):
+        return True
+    if "必答" in normalized_heading:
+        return True
+
+    try:
+        text = _normalize_html_text(question_div.get_text(" ", strip=True))
+    except Exception:
+        text = normalized_heading
+    if text.startswith("*"):
+        return True
+    return False
+
 def extract_survey_title_from_html(html: str) -> Optional[str]:
     """尝试从问卷 HTML 文本中提取标题。"""
 

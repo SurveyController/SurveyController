@@ -1,21 +1,27 @@
 from __future__ import annotations
 
+import pytest
+
 from software.core.ai import runtime as ai_runtime
 
 
 class AiRuntimeTests:
-    def test_generate_ai_answer_retries_up_to_three_times_after_initial_try(self, monkeypatch) -> None:
+    @pytest.mark.asyncio
+    async def test_agenerate_ai_answer_retries_up_to_three_times_after_initial_try(self, monkeypatch) -> None:
         calls: list[int] = []
 
-        def _raise(*_args, **_kwargs):
+        async def _raise(*_args, **_kwargs):
             calls.append(1)
             raise RuntimeError("临时故障")
 
-        monkeypatch.setattr(ai_runtime, "generate_answer", _raise)
-        monkeypatch.setattr(ai_runtime.time, "sleep", lambda *_args, **_kwargs: None)
+        async def _sleep(*_args, **_kwargs):
+            return None
+
+        monkeypatch.setattr(ai_runtime, "agenerate_answer", _raise)
+        monkeypatch.setattr(ai_runtime.asyncio, "sleep", _sleep)
 
         try:
-            ai_runtime.generate_ai_answer("题目", question_type="fill_blank")
+            await ai_runtime.agenerate_ai_answer("题目", question_type="fill_blank")
         except ai_runtime.AIRuntimeError as exc:
             assert "临时故障" in str(exc)
 

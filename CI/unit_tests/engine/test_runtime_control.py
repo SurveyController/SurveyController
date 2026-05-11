@@ -1,6 +1,9 @@
 from __future__ import annotations
 from types import SimpleNamespace
 from unittest.mock import patch
+
+import pytest
+
 from software.core.engine.runtime_control import _is_headless_mode, _sleep_with_stop, _wait_if_paused
 
 class RuntimeControlTests:
@@ -22,18 +25,29 @@ class RuntimeControlTests:
             _wait_if_paused(gui, None)
         log_mock.assert_called_once()
 
-    def test_sleep_with_stop_returns_false_for_non_positive_seconds(self) -> None:
-        assert not _sleep_with_stop(None, 0)
+    @pytest.mark.asyncio
+    async def test_sleep_with_stop_returns_false_for_non_positive_seconds(self) -> None:
+        assert not await _sleep_with_stop(None, 0)
 
-    def test_sleep_with_stop_returns_true_only_when_signal_is_set_after_wait(self, make_mock_event) -> None:
+    @pytest.mark.asyncio
+    async def test_sleep_with_stop_returns_true_only_when_signal_is_set_after_wait(self, make_mock_event) -> None:
         stop_signal = make_mock_event(is_set=True, wait_return=True)
-        assert _sleep_with_stop(stop_signal, 0.2)
+        assert await _sleep_with_stop(stop_signal, 0.2)
 
-    def test_sleep_with_stop_returns_false_when_wait_completes_without_stop(self, make_mock_event) -> None:
+    @pytest.mark.asyncio
+    async def test_sleep_with_stop_returns_false_when_wait_completes_without_stop(self, make_mock_event) -> None:
         stop_signal = make_mock_event(wait_return=False)
-        assert not _sleep_with_stop(stop_signal, 0.2)
+        assert not await _sleep_with_stop(stop_signal, 0.2)
 
-    def test_sleep_with_stop_uses_time_sleep_without_signal(self) -> None:
-        with patch('software.core.engine.runtime_control.time.sleep') as sleep_mock:
-            assert not _sleep_with_stop(None, 0.3)
-        sleep_mock.assert_called_once_with(0.3)
+    @pytest.mark.asyncio
+    async def test_sleep_with_stop_uses_sleep_or_stop_without_signal(self, monkeypatch) -> None:
+        waited: list[float] = []
+
+        async def _fake_sleep_or_stop(_stop_signal, seconds: float) -> bool:
+            waited.append(seconds)
+            return False
+
+        monkeypatch.setattr("software.core.engine.runtime_control.sleep_or_stop", _fake_sleep_or_stop)
+
+        assert not await _sleep_with_stop(None, 0.3)
+        assert waited == [0.3]

@@ -6,9 +6,9 @@ from typing import Any
 
 import pytest
 
+from software.core.task import ExecutionConfig, ExecutionState
 from software.providers.contracts import SurveyQuestionMeta
 from tencent.provider import submission
-from software.core.task import ExecutionConfig, ExecutionState
 
 
 class _FakeDriver:
@@ -17,29 +17,43 @@ class _FakeDriver:
         self.session_id = "test-session"
         self.browser_pid: int | None = None
         self.browser_pids: set[int] = set()
-        self.current_url = ""
+        self._current_url = ""
         self.page = None
         self.page_source = ""
         self.title = ""
 
-    def find_element(self, *_args, **_kwargs):
+    async def find_element(self, *_args, **_kwargs):
         raise RuntimeError("unused")
 
-    def find_elements(self, *_args, **_kwargs):
+    async def find_elements(self, *_args, **_kwargs):
         return []
 
-    def execute_script(self, script: str, *args: Any):
-        del script
-        del args
+    async def execute_script(self, script: str, *args: Any):
+        del script, args
         return None
 
-    def get(self, *_args, **_kwargs) -> None:
+    async def get(self, *_args, **_kwargs) -> None:
         return None
 
-    def set_window_size(self, *_args, **_kwargs) -> None:
+    async def current_url(self) -> str:
+        return self._current_url
+
+    async def page(self) -> Any:
+        return self.page
+
+    async def page_source(self) -> str:
+        return self.page_source
+
+    async def title(self) -> str:
+        return self.title
+
+    async def set_window_size(self, *_args, **_kwargs) -> None:
         return None
 
-    def refresh(self) -> None:
+    async def refresh(self) -> None:
+        return None
+
+    async def aclose(self) -> None:
         return None
 
     def mark_cleanup_done(self) -> bool:
@@ -49,35 +63,49 @@ class _FakeDriver:
         return None
 
 
+def _async_return(value=None):
+    async def _runner(*_args, **_kwargs):
+        return value
+
+    return _runner
+
+
 class TencentSubmissionTests:
-    def test_submit_reads_runtime_state_when_submit_button_missing(self, patch_attrs) -> None:
+    @pytest.mark.asyncio
+    async def test_submit_reads_runtime_state_when_submit_button_missing(self, patch_attrs) -> None:
         driver = _FakeDriver()
         reads: list[str] = []
         patch_attrs(
-            (submission, "_click_submit_button", lambda *_args, **_kwargs: False),
+            (submission, "_click_submit_button", _async_return(False)),
             (submission, "_is_headless_mode", lambda _ctx: True),
             (submission, "HEADLESS_SUBMIT_INITIAL_DELAY", 0.0),
             (submission, "HEADLESS_SUBMIT_CLICK_SETTLE_DELAY", 0.0),
-            (submission, "peek_qq_runtime_state", lambda _driver: reads.append("peek") or SimpleNamespace(page_index=2, page_question_ids=["q1"])),
+            (
+                submission,
+                "peek_qq_runtime_state",
+                lambda _driver: reads.append("peek") or SimpleNamespace(page_index=2, page_question_ids=["q1"]),
+            ),
         )
 
         with pytest.raises(Exception, match="Submit button not found"):
-            submission.submit(driver, ctx=None, stop_signal=threading.Event())
+            await submission.submit(driver, ctx=None, stop_signal=threading.Event())
 
         assert reads == ["peek"]
 
-    def test_runtime_context_summary_reads_runtime_state_for_status_helpers(self, patch_attrs) -> None:
+    @pytest.mark.asyncio
+    async def test_runtime_context_summary_reads_runtime_state_for_status_helpers(self, patch_attrs) -> None:
         driver = _FakeDriver()
         reads: list[str] = []
         patch_attrs(
             (submission, "peek_qq_runtime_state", lambda _driver: reads.append("peek") or None),
         )
 
-        assert not submission.consume_submission_success_signal(driver)
-        assert not submission.is_device_quota_limit_page(driver)
+        assert not await submission.consume_submission_success_signal(driver)
+        assert not await submission.is_device_quota_limit_page(driver)
         assert reads == ["peek", "peek"]
 
-    def test_attempt_submission_recovery_refills_questions_and_resubmits_once(self, patch_attrs) -> None:
+    @pytest.mark.asyncio
+    async def test_attempt_submission_recovery_refills_questions_and_resubmits_once(self, patch_attrs) -> None:
         driver = _FakeDriver()
         state = ExecutionState(config=ExecutionConfig(survey_provider="qq"))
         state.config.questions_metadata = {
@@ -93,11 +121,25 @@ class TencentSubmissionTests:
         refill_calls: list[tuple[list[int], str, Any]] = []
         submit_calls: list[str] = []
         patch_attrs(
-            (submission, "qq_submission_requires_verification", lambda _driver: False),
+            (submission, "qq_submission_requires_verification", _async_return(False)),
             (submission, "peek_qq_runtime_state", lambda _driver: runtime_state),
-            (submission, "_extract_submission_recovery_hint", lambda _driver: submission.SubmissionRecoveryHint((3, 4), "请填写")),
-            (submission, "submit", lambda _driver, ctx=None, stop_signal=None: submit_calls.append(ctx.config.survey_provider if ctx else "")),
+            (
+                submission,
+                "_extract_submission_recovery_hint",
+                _async_return(submission.SubmissionRecoveryHint((3, 4), "请填写")),
+            ),
+            (
+                submission,
+                "submit",
+                _async_return(None),
+            ),
         )
+
+        async def _submit(_driver, ctx=None, stop_signal=None):
+            del stop_signal
+            submit_calls.append(ctx.config.survey_provider if ctx else "")
+
+        patch_attrs((submission, "submit", _submit))
 
         from tencent.provider import runtime as qq_runtime
 
@@ -105,16 +147,29 @@ class TencentSubmissionTests:
             mp.setattr(
                 qq_runtime,
                 "refill_required_questions_on_current_page",
-                lambda _driver, ctx, *, question_numbers, thread_name, psycho_plan: refill_calls.append((list(question_numbers), thread_name, psycho_plan)) or 2,
+                _async_return(2),
             )
-            recovered = submission.attempt_submission_recovery(driver, state, None, threading.Event(), thread_name="Worker-1")
+
+            async def _refill(_driver, ctx, *, question_numbers, thread_name, psycho_plan):
+                refill_calls.append((list(question_numbers), thread_name, psycho_plan))
+                return 2
+
+            mp.setattr(qq_runtime, "refill_required_questions_on_current_page", _refill)
+            recovered = await submission.attempt_submission_recovery(
+                driver,
+                state,
+                None,
+                threading.Event(),
+                thread_name="Worker-1",
+            )
 
         assert recovered is True
         assert runtime_state.submission_recovery_attempts == 1
         assert refill_calls == [([3, 4], "Worker-1", "plan")]
         assert submit_calls == ["qq"]
 
-    def test_attempt_submission_recovery_falls_back_to_current_page_required_questions(self, patch_attrs) -> None:
+    @pytest.mark.asyncio
+    async def test_attempt_submission_recovery_falls_back_to_current_page_required_questions(self, patch_attrs) -> None:
         driver = _FakeDriver()
         state = ExecutionState(config=ExecutionConfig(survey_provider="qq"))
         state.config.questions_metadata = {
@@ -129,26 +184,38 @@ class TencentSubmissionTests:
         )
         refill_calls: list[list[int]] = []
         patch_attrs(
-            (submission, "qq_submission_requires_verification", lambda _driver: False),
+            (submission, "qq_submission_requires_verification", _async_return(False)),
             (submission, "peek_qq_runtime_state", lambda _driver: runtime_state),
-            (submission, "_extract_submission_recovery_hint", lambda _driver: submission.SubmissionRecoveryHint((), "此题必填")),
-            (submission, "submit", lambda *_args, **_kwargs: None),
+            (
+                submission,
+                "_extract_submission_recovery_hint",
+                _async_return(submission.SubmissionRecoveryHint((), "此题必填")),
+            ),
+            (submission, "submit", _async_return(None)),
         )
 
         from tencent.provider import runtime as qq_runtime
 
         with pytest.MonkeyPatch.context() as mp:
-            mp.setattr(
-                qq_runtime,
-                "refill_required_questions_on_current_page",
-                lambda _driver, ctx, *, question_numbers, thread_name, psycho_plan: refill_calls.append(list(question_numbers)) or 1,
+            async def _refill(_driver, ctx, *, question_numbers, thread_name, psycho_plan):
+                del ctx, thread_name, psycho_plan
+                refill_calls.append(list(question_numbers))
+                return 1
+
+            mp.setattr(qq_runtime, "refill_required_questions_on_current_page", _refill)
+            recovered = await submission.attempt_submission_recovery(
+                driver,
+                state,
+                None,
+                threading.Event(),
+                thread_name="Worker-1",
             )
-            recovered = submission.attempt_submission_recovery(driver, state, None, threading.Event(), thread_name="Worker-1")
 
         assert recovered is True
         assert refill_calls == [[3]]
 
-    def test_attempt_submission_recovery_stops_when_no_question_was_refilled(self, patch_attrs) -> None:
+    @pytest.mark.asyncio
+    async def test_attempt_submission_recovery_stops_when_no_question_was_refilled(self, patch_attrs) -> None:
         driver = _FakeDriver()
         state = ExecutionState(config=ExecutionConfig(survey_provider="qq"))
         runtime_state = SimpleNamespace(
@@ -158,11 +225,18 @@ class TencentSubmissionTests:
             submission_recovery_attempts=0,
         )
         submit_calls: list[str] = []
+        async def _submit(*_args, **_kwargs):
+            submit_calls.append("submit")
+
         patch_attrs(
-            (submission, "qq_submission_requires_verification", lambda _driver: False),
+            (submission, "qq_submission_requires_verification", _async_return(False)),
             (submission, "peek_qq_runtime_state", lambda _driver: runtime_state),
-            (submission, "_extract_submission_recovery_hint", lambda _driver: submission.SubmissionRecoveryHint((3,), "请填写")),
-            (submission, "submit", lambda *_args, **_kwargs: submit_calls.append("submit")),
+            (
+                submission,
+                "_extract_submission_recovery_hint",
+                _async_return(submission.SubmissionRecoveryHint((3,), "请填写")),
+            ),
+            (submission, "submit", _submit),
         )
 
         from tencent.provider import runtime as qq_runtime
@@ -171,9 +245,15 @@ class TencentSubmissionTests:
             mp.setattr(
                 qq_runtime,
                 "refill_required_questions_on_current_page",
-                lambda *_args, **_kwargs: 0,
+                _async_return(0),
             )
-            recovered = submission.attempt_submission_recovery(driver, state, None, threading.Event(), thread_name="Worker-1")
+            recovered = await submission.attempt_submission_recovery(
+                driver,
+                state,
+                None,
+                threading.Event(),
+                thread_name="Worker-1",
+            )
 
         assert recovered is False
         assert runtime_state.submission_recovery_attempts == 0

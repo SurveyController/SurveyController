@@ -2,9 +2,8 @@
 
 from __future__ import annotations
 
+import asyncio
 import logging
-import threading
-import time
 from dataclasses import dataclass
 from typing import Any, Optional
 
@@ -15,9 +14,11 @@ from software.app.config import (
     SUBMIT_INITIAL_DELAY,
 )
 from software.core.engine.runtime_control import _is_headless_mode, _sleep_with_stop
-from software.core.questions.utils import extract_text_from_element as _extract_text_from_element
+from software.core.engine.stop_signal import StopSignalLike
+from software.core.questions.runtime_async import extract_text_from_runtime_element
 from software.core.task import ExecutionState
-from software.network.browser import By, BrowserDriver, NoSuchElementException
+from software.network.browser import By, NoSuchElementException
+from software.network.browser.runtime_async import BrowserDriver
 from tencent.provider.runtime_flow import QQ_VALIDATION_MARKERS, qq_submission_requires_verification
 from tencent.provider.runtime_state import peek_qq_runtime_state
 
@@ -44,7 +45,7 @@ def _runtime_context_summary(driver: BrowserDriver) -> str:
     return " ".join(parts)
 
 
-def _extract_submission_recovery_hint(driver: BrowserDriver) -> Optional[SubmissionRecoveryHint]:
+async def _extract_submission_recovery_hint(driver: BrowserDriver) -> Optional[SubmissionRecoveryHint]:
     script = r"""
 return (() => {
     const visible = (el) => {
@@ -99,9 +100,9 @@ return (() => {
         messages: Array.from(new Set(messages)).slice(0, 5),
     };
 })();
-"""
+    """
     try:
-        payload = driver.execute_script(script) or {}
+        payload = await driver.execute_script(script) or {}
     except Exception:
         payload = {}
     if not isinstance(payload, dict):
@@ -132,7 +133,7 @@ return (() => {
     return SubmissionRecoveryHint(tuple(question_numbers), message)
 
 
-def _click_submit_button(driver: BrowserDriver, max_wait: float = 10.0) -> bool:
+async def _click_submit_button(driver: BrowserDriver, max_wait: float = 10.0) -> bool:
     submit_keywords = ("提交", "完成", "交卷", "确认提交", "确认")
     locator_candidates = [
         (By.CSS_SELECTOR, "#ctlNext"),
@@ -147,46 +148,49 @@ def _click_submit_button(driver: BrowserDriver, max_wait: float = 10.0) -> bool:
         (By.XPATH, "//button[normalize-space(.)='提交' or normalize-space(.)='完成' or normalize-space(.)='交卷' or normalize-space(.)='确认提交' or normalize-space(.)='确认']"),
     ]
 
-    def _text_looks_like_submit(element) -> bool:
-        text = (_extract_text_from_element(element) or "").strip()
+    async def _text_looks_like_submit(element) -> bool:
+        text = (await extract_text_from_runtime_element(element)).strip()
         if not text:
-            text = (element.get_attribute("value") or "").strip()
+            text = (await element.get_attribute("value") or "").strip()
         if not text:
             return False
         return any(keyword in text for keyword in submit_keywords)
 
-    deadline = time.time() + max(0.0, float(max_wait or 0.0))
+    loop = asyncio.get_running_loop()
+    deadline = loop.time() + max(0.0, float(max_wait or 0.0))
     while True:
         for by, value in locator_candidates:
             try:
-                elements = driver.find_elements(by, value)
+                elements = await driver.find_elements(by, value)
             except Exception:
                 continue
             for element in elements:
                 try:
-                    if not element.is_displayed():
+                    if not await element.is_displayed():
                         continue
                 except Exception:
                     continue
-                if by == By.CSS_SELECTOR and value == "button[type='submit']" and not _text_looks_like_submit(element):
+                if by == By.CSS_SELECTOR and value == "button[type='submit']" and not await _text_looks_like_submit(element):
                     continue
                 for click_method in (
                     lambda: element.click(),
                     lambda: driver.execute_script("arguments[0].click();", element),
                 ):
                     try:
-                        click_method()
+                        result = click_method()
+                        if asyncio.iscoroutine(result):
+                            await result
                         logging.info("腾讯问卷提交按钮已点击：%s=%s", by, value)
                         return True
                     except Exception:
                         continue
-        if time.time() >= deadline:
+        if loop.time() >= deadline:
             break
-        time.sleep(0.2)
+        await asyncio.sleep(0.2)
 
     try:
         force_triggered = bool(
-            driver.execute_script(
+            await driver.execute_script(
                 r"""
                 return (() => {
                     const clickVisible = (el) => {
@@ -223,7 +227,7 @@ def _click_submit_button(driver: BrowserDriver, max_wait: float = 10.0) -> bool:
     return False
 
 
-def _click_submit_confirm_button(driver: BrowserDriver, settle_delay: float = 0.0) -> None:
+async def _click_submit_confirm_button(driver: BrowserDriver, settle_delay: float = 0.0) -> None:
     confirm_candidates = [
         (By.XPATH, '//*[@id="layui-layer1"]/div[3]/a'),
         (By.CSS_SELECTOR, "#layui-layer1 .layui-layer-btn a"),
@@ -231,72 +235,72 @@ def _click_submit_confirm_button(driver: BrowserDriver, settle_delay: float = 0.
     ]
     for by, value in confirm_candidates:
         try:
-            element = driver.find_element(by, value)
+            element = await driver.find_element(by, value)
         except Exception:
             element = None
         if not element:
             continue
         try:
-            if not element.is_displayed():
+            if not await element.is_displayed():
                 continue
         except Exception:
             continue
         try:
-            element.click()
+            await element.click()
             if settle_delay > 0:
-                time.sleep(settle_delay)
+                await asyncio.sleep(settle_delay)
             return
         except Exception:
             continue
 
 
-def submit(
+async def submit(
     driver: BrowserDriver,
     ctx: Optional[ExecutionState] = None,
-    stop_signal: Optional[threading.Event] = None,
+    stop_signal: StopSignalLike | None = None,
 ) -> None:
     headless_mode = _is_headless_mode(ctx)
     settle_delay = float(HEADLESS_SUBMIT_CLICK_SETTLE_DELAY if headless_mode else SUBMIT_CLICK_SETTLE_DELAY)
     pre_submit_delay = float(HEADLESS_SUBMIT_INITIAL_DELAY if headless_mode else SUBMIT_INITIAL_DELAY)
 
-    if pre_submit_delay > 0 and _sleep_with_stop(stop_signal, pre_submit_delay):
+    if pre_submit_delay > 0 and await _sleep_with_stop(stop_signal, pre_submit_delay):
         return
     if stop_signal and stop_signal.is_set():
         return
 
-    clicked = _click_submit_button(driver, max_wait=10.0)
+    clicked = await _click_submit_button(driver, max_wait=10.0)
     if not clicked:
         runtime_context = _runtime_context_summary(driver)
         if runtime_context:
             logging.warning("腾讯问卷提交按钮未找到：%s", runtime_context)
         raise NoSuchElementException("Submit button not found")
     if settle_delay > 0:
-        time.sleep(settle_delay)
-    _click_submit_confirm_button(driver, settle_delay=settle_delay)
+        await asyncio.sleep(settle_delay)
+    await _click_submit_confirm_button(driver, settle_delay=settle_delay)
 
 
-def consume_submission_success_signal(driver: BrowserDriver) -> bool:
+async def consume_submission_success_signal(driver: BrowserDriver) -> bool:
     _runtime_context_summary(driver)
     return False
 
 
-def is_device_quota_limit_page(driver: BrowserDriver) -> bool:
+async def is_device_quota_limit_page(driver: BrowserDriver) -> bool:
     _runtime_context_summary(driver)
     return False
 
 
-def attempt_submission_recovery(
+async def attempt_submission_recovery(
     driver: BrowserDriver,
     ctx: ExecutionState,
     gui_instance: Optional[Any],
-    stop_signal: Optional[threading.Event],
+    stop_signal: StopSignalLike | None,
     *,
     thread_name: str = "",
 ) -> bool:
     del gui_instance
     if stop_signal and stop_signal.is_set():
         return False
-    if qq_submission_requires_verification(driver):
+    if await qq_submission_requires_verification(driver):
         return False
 
     runtime_state = peek_qq_runtime_state(driver)
@@ -306,7 +310,7 @@ def attempt_submission_recovery(
     if recovery_attempts >= 1:
         return False
 
-    hint = _extract_submission_recovery_hint(driver)
+    hint = await _extract_submission_recovery_hint(driver)
     if hint is None:
         return False
 
@@ -338,7 +342,7 @@ def attempt_submission_recovery(
 
     from tencent.provider.runtime import refill_required_questions_on_current_page
 
-    filled_count = refill_required_questions_on_current_page(
+    filled_count = await refill_required_questions_on_current_page(
         driver,
         ctx,
         question_numbers=target_questions,
@@ -350,7 +354,7 @@ def attempt_submission_recovery(
         return False
 
     runtime_state.submission_recovery_attempts = recovery_attempts + 1
-    submit(driver, ctx=ctx, stop_signal=stop_signal)
+    await submit(driver, ctx=ctx, stop_signal=stop_signal)
     return True
 
 

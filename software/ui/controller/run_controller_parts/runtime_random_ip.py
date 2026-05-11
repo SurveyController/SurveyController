@@ -9,7 +9,7 @@ from typing import Any, Dict, Optional, TYPE_CHECKING
 
 from software.network.proxy.session import (
     RandomIPAuthError,
-    activate_trial,
+    activate_trial_async,
     format_random_ip_error,
     format_quota_value,
     get_fresh_quota_snapshot,
@@ -18,7 +18,7 @@ from software.network.proxy.session import (
     has_authenticated_session,
     is_quota_exhausted,
     load_session_for_startup,
-    sync_quota_snapshot_from_server,
+    sync_quota_snapshot_from_server_async,
 )
 from software.network.proxy import is_custom_proxy_api_active
 from software.network.proxy.policy.source import (
@@ -35,6 +35,7 @@ _RANDOM_IP_SYNC_FAILURE_LOG_KEY = "random_ip_quota_sync_failure"
 class RunControllerRandomIPMixin:
     if TYPE_CHECKING:
         adapter: Any
+        _async_engine_client: Any
 
         def notify_random_ip_loading(self, loading: bool, message: str = "") -> None: ...
 
@@ -143,20 +144,61 @@ class RunControllerRandomIPMixin:
             used, total, custom_api = self._get_counter_snapshot()
         self._apply_random_ip_counter(adapter, used=used, total=total, custom_api=custom_api)
 
-    def refresh_random_ip_counter(
-        self, *, adapter: Optional[Any] = None, async_mode: bool = True
-    ) -> None:
+    async def _refresh_random_ip_counter_async(self, adapter: Optional[Any]) -> None:
+        self._refresh_random_ip_counter_now(adapter)
+
+    def _submit_random_ip_task(self, task_name: str, coro_factory: Any) -> Any:
+        engine_client = getattr(self, "_async_engine_client", None)
+        if engine_client is None:
+            raise RuntimeError("异步引擎未初始化")
+        return engine_client.submit_ui_task(task_name, coro_factory)
+
+    def refresh_random_ip_counter(self, *, adapter: Optional[Any] = None) -> None:
         adapter = adapter or getattr(self, "adapter", None)
         if not adapter:
             return
-        if async_mode and threading.current_thread() is threading.main_thread():
-            threading.Thread(
-                target=lambda: self._refresh_random_ip_counter_now(adapter),
-                daemon=True,
-                name="RandomIPCounterRefresh",
-            ).start()
+        try:
+            self._submit_random_ip_task(
+                "refresh_random_ip_counter",
+                lambda: self._refresh_random_ip_counter_async(adapter),
+            )
+        except Exception:
+            logging.info("提交随机IP计数刷新任务失败", exc_info=True)
+
+    async def _sync_random_ip_counter_from_server_task(
+        self,
+        *,
+        adapter: Optional[Any],
+        silent: bool,
+        min_interval_seconds: float,
+    ) -> None:
+        if not adapter:
             return
-        self._refresh_random_ip_counter_now(adapter)
+        if not self._begin_random_ip_server_sync(min_interval_seconds=min_interval_seconds):
+            return
+        succeeded = False
+        try:
+            snapshot = await sync_quota_snapshot_from_server_async(emit_logs=not silent)
+            used, total = self._resolve_counter_snapshot_values(snapshot)
+            self._apply_random_ip_counter(adapter, used=used, total=total, custom_api=False)
+            reset_deduped_log_message(_RANDOM_IP_SYNC_FAILURE_LOG_KEY)
+            succeeded = True
+        except Exception as exc:
+            message = format_random_ip_error(exc)
+            log_level = logging.INFO if silent else logging.WARNING
+            log_deduped_message(
+                _RANDOM_IP_SYNC_FAILURE_LOG_KEY,
+                f"同步随机IP额度失败：{message}",
+                level=log_level,
+            )
+            if not silent:
+                self._show_random_ip_message(adapter, "随机IP同步失败", message, level="warning")
+            try:
+                self._refresh_random_ip_counter_now(adapter)
+            except Exception:
+                logging.info("同步失败后回退随机IP本地额度显示失败", exc_info=True)
+        finally:
+            self._finish_random_ip_server_sync(succeeded=succeeded)
 
     def _begin_random_ip_server_sync(self, *, min_interval_seconds: float = 0.0) -> bool:
         if is_custom_proxy_api_active() or not has_authenticated_session():
@@ -187,56 +229,31 @@ class RunControllerRandomIPMixin:
         self,
         *,
         adapter: Optional[Any] = None,
-        async_mode: bool = True,
         silent: bool = True,
         min_interval_seconds: float = 0.0,
     ) -> None:
         adapter = adapter or getattr(self, "adapter", None)
         if not adapter:
             return
-        if not self._begin_random_ip_server_sync(min_interval_seconds=min_interval_seconds):
-            return
+        try:
+            self._submit_random_ip_task(
+                "sync_random_ip_counter_from_server",
+                lambda: self._sync_random_ip_counter_from_server_task(
+                    adapter=adapter,
+                    silent=silent,
+                    min_interval_seconds=min_interval_seconds,
+                ),
+            )
+        except Exception:
+            logging.info("提交随机IP额度同步任务失败", exc_info=True)
 
-        def _worker() -> None:
-            succeeded = False
-            try:
-                snapshot = sync_quota_snapshot_from_server(emit_logs=not silent)
-                used, total = self._resolve_counter_snapshot_values(snapshot)
-                self._apply_random_ip_counter(adapter, used=used, total=total, custom_api=False)
-                reset_deduped_log_message(_RANDOM_IP_SYNC_FAILURE_LOG_KEY)
-                succeeded = True
-            except Exception as exc:
-                message = format_random_ip_error(exc)
-                log_level = logging.INFO if silent else logging.WARNING
-                log_deduped_message(
-                    _RANDOM_IP_SYNC_FAILURE_LOG_KEY,
-                    f"同步随机IP额度失败：{message}",
-                    level=log_level,
-                )
-                if not silent:
-                    self._show_random_ip_message(
-                        adapter, "随机IP同步失败", message, level="warning"
-                    )
-                try:
-                    self._refresh_random_ip_counter_now(adapter)
-                except Exception:
-                    logging.info("同步失败后回退随机IP本地额度显示失败", exc_info=True)
-            finally:
-                self._finish_random_ip_server_sync(succeeded=succeeded)
-
-        if async_mode and threading.current_thread() is threading.main_thread():
-            threading.Thread(
-                target=_worker,
-                daemon=True,
-                name="RandomIPQuotaSync",
-            ).start()
-            return
-        _worker()
-
-    def _try_activate_random_ip_trial(self, adapter: Optional[Any]) -> tuple[bool, bool]:
+    async def _try_activate_random_ip_trial_async(
+        self,
+        adapter: Optional[Any],
+    ) -> tuple[bool, bool]:
         try:
             self._set_random_ip_loading(adapter, True, "正在领取试用...")
-            session = activate_trial()
+            session = await activate_trial_async()
         except RandomIPAuthError as exc:
             message = format_random_ip_error(exc)
             if exc.detail in {
@@ -275,10 +292,10 @@ class RunControllerRandomIPMixin:
             )
         return True, False
 
-    def _ensure_random_ip_ready(self, adapter: Optional[Any]) -> bool:
+    async def _ensure_random_ip_ready_async(self, adapter: Optional[Any]) -> bool:
         if has_authenticated_session():
             return True
-        activated, should_fallback_to_form = self._try_activate_random_ip_trial(adapter)
+        activated, should_fallback_to_form = await self._try_activate_random_ip_trial_async(adapter)
         if activated:
             return True
         if not should_fallback_to_form:
@@ -297,7 +314,7 @@ class RunControllerRandomIPMixin:
             )
             return False
 
-    def toggle_random_ip(self, enabled: bool, *, adapter: Optional[Any] = None) -> bool:
+    async def _toggle_random_ip_async(self, enabled: bool, adapter: Optional[Any]) -> bool:
         adapter = adapter or getattr(self, "adapter", None)
         enabled = bool(enabled)
         if not adapter:
@@ -307,9 +324,9 @@ class RunControllerRandomIPMixin:
             return False
         if is_custom_proxy_api_active():
             self._set_random_ip_enabled(adapter, True)
-            self.refresh_random_ip_counter(adapter=adapter)
+            self._refresh_random_ip_counter_now(adapter)
             return True
-        if not self._ensure_random_ip_ready(adapter):
+        if not await self._ensure_random_ip_ready_async(adapter):
             self._set_random_ip_enabled(adapter, False)
             return False
         _count, _limit, _ = get_random_ip_counter_snapshot_local()
@@ -321,12 +338,12 @@ class RunControllerRandomIPMixin:
         )
         try:
             self._set_random_ip_loading(adapter, True, "正在同步服务端额度...")
-            snapshot = sync_quota_snapshot_from_server()
+            snapshot = await sync_quota_snapshot_from_server_async()
         except Exception as exc:
             message = format_random_ip_error(exc)
             self._show_random_ip_message(adapter, "随机IP暂不可用", message, level="warning")
             self._set_random_ip_enabled(adapter, False)
-            self.refresh_random_ip_counter(adapter=adapter)
+            self._refresh_random_ip_counter_now(adapter)
             return False
         finally:
             self._set_random_ip_loading(adapter, False, "")
@@ -345,7 +362,13 @@ class RunControllerRandomIPMixin:
         self._set_random_ip_enabled(adapter, True)
         return True
 
-    def handle_random_ip_submission(
+    def submit_toggle_random_ip(self, enabled: bool, *, adapter: Optional[Any] = None) -> Any:
+        return self._submit_random_ip_task(
+            "toggle_random_ip",
+            lambda: self._toggle_random_ip_async(enabled, adapter),
+        )
+
+    async def _handle_random_ip_submission_async(
         self,
         *,
         stop_signal: Optional[threading.Event],
@@ -354,14 +377,28 @@ class RunControllerRandomIPMixin:
         adapter = adapter or getattr(self, "adapter", None)
         if not adapter or is_custom_proxy_api_active():
             return
+        snapshot = get_session_snapshot()
+        if not bool(snapshot.get("authenticated")):
+            if stop_signal:
+                stop_signal.set()
+            self._set_random_ip_enabled(adapter, False)
+            return
+        await self._refresh_random_ip_counter_async(adapter)
+
+    def handle_random_ip_submission(
+        self,
+        *,
+        stop_signal: Optional[threading.Event],
+        adapter: Optional[Any] = None,
+    ) -> None:
         try:
-            snapshot = get_session_snapshot()
-            if not bool(snapshot.get("authenticated")):
-                if stop_signal:
-                    stop_signal.set()
-                self._set_random_ip_enabled(adapter, False)
-                return
-            self.refresh_random_ip_counter(adapter=adapter)
+            self._submit_random_ip_task(
+                "handle_random_ip_submission",
+                lambda: self._handle_random_ip_submission_async(
+                    stop_signal=stop_signal,
+                    adapter=adapter,
+                ),
+            )
         except Exception as exc:
             message = format_random_ip_error(exc)
             logging.warning("刷新随机IP状态失败：%s", message)

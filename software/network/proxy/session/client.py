@@ -121,6 +121,26 @@ def _post_json(url: str, *, json_body: Dict[str, Any]) -> Any:
         )
         raise RandomIPAuthError(f"network_error:{exc}") from exc
 
+
+async def _apost_json(url: str, *, json_body: Dict[str, Any]) -> Any:
+    from .auth import _endpoint_name
+
+    try:
+        return await http_client.apost(
+            url,
+            json=json_body,
+            headers=_build_headers(),
+            timeout=10,
+            proxies={},
+        )
+    except Exception as exc:
+        logging.warning(
+            "随机IP异步请求失败：endpoint=%s error=%s",
+            _endpoint_name(url),
+            exc,
+        )
+        raise RandomIPAuthError(f"network_error:{exc}") from exc
+
 def _extract_proxy_item(data: Dict[str, Any]) -> Optional[Dict[str, Any]]:
     host = str(data.get("host") or "").strip()
     port = _to_non_negative_int(data.get("port"), 0)

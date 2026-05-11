@@ -4,7 +4,7 @@ from __future__ import annotations
 from typing import Dict, List
 
 from software.core.task import ExecutionState
-from software.network.browser import BrowserDriver
+from software.network.browser.runtime_async import BrowserDriver
 from software.providers.contracts import SurveyQuestionMeta
 
 QQ_COMPLETION_MARKERS = (
@@ -37,10 +37,11 @@ QQ_VALIDATION_MARKERS = (
 
 from .runtime_interactions import _page
 
-def qq_submission_requires_verification(driver: BrowserDriver) -> bool:
+async def qq_submission_requires_verification(driver: BrowserDriver) -> bool:
     try:
+        page = await _page(driver)
         return bool(
-            _page(driver).evaluate(
+            await page.evaluate(
                 """(markers) => {
                     const visible = (el) => {
                         if (!el) return false;
@@ -70,9 +71,10 @@ def qq_submission_requires_verification(driver: BrowserDriver) -> bool:
     except Exception:
         return False
 
-def qq_submission_validation_message(driver: BrowserDriver) -> str:
+async def qq_submission_validation_message(driver: BrowserDriver) -> str:
     try:
-        message = _page(driver).evaluate(
+        page = await _page(driver)
+        message = await page.evaluate(
             """(markers) => {
                 const visible = (el) => {
                     if (!el) return false;
@@ -105,10 +107,11 @@ def qq_submission_validation_message(driver: BrowserDriver) -> str:
     except Exception:
         return ""
 
-def qq_is_completion_page(driver: BrowserDriver) -> bool:
+async def qq_is_completion_page(driver: BrowserDriver) -> bool:
     try:
+        page = await _page(driver)
         return bool(
-            _page(driver).evaluate(
+            await page.evaluate(
                 """(markers) => {
                     const visible = (el) => {
                         if (!el) return false;
@@ -143,17 +146,17 @@ def _group_questions_by_page(ctx: ExecutionState) -> List[List[SurveyQuestionMet
         grouped.setdefault(page_number, []).append(item)
     return [grouped[key] for key in sorted(grouped.keys())]
 
-def _wait_for_page_transition(
+async def _wait_for_page_transition(
     driver: BrowserDriver,
     current_first_question_id: str,
     next_first_question_id: str,
     timeout_ms: int = 5000,
 ) -> None:
-    page = _page(driver)
+    page = await _page(driver)
     current_selector = f'section.question[data-question-id="{current_first_question_id}"]'
     next_selector = f'section.question[data-question-id="{next_first_question_id}"]'
     try:
-        page.wait_for_selector(current_selector, state="hidden", timeout=min(4000, timeout_ms))
+        await page.wait_for_selector(current_selector, state="hidden", timeout=min(4000, timeout_ms))
     except Exception:
         pass
-    page.wait_for_selector(next_selector, state="visible", timeout=timeout_ms)
+    await page.wait_for_selector(next_selector, state="visible", timeout=timeout_ms)

@@ -4,8 +4,8 @@
 from __future__ import annotations
 
 import logging
-import time
-from typing import Any, Dict, Iterable
+import asyncio
+from typing import Any, Awaitable, Callable, Dict, Iterable, TypeVar
 from urllib.parse import urlsplit, urlunsplit
 
 import software.network.http as http_client
@@ -19,12 +19,12 @@ _AI_RETRYABLE_STATUS_CODES = frozenset({429, 502, 503, 504})
 _AI_RETRY_BACKOFF_SECONDS = 1.0
 
 logger = logging.getLogger(__name__)
+_ResponseT = TypeVar("_ResponseT")
 
 __all__ = [
     "_AI_REQUEST_TIMEOUT_SECONDS",
     "_CHAT_COMPLETIONS_SUFFIX",
     "_RESPONSES_SUFFIX",
-    "_execute_ai_request_with_retry",
     "_extract_chat_completion_text",
     "_extract_json_dict",
     "_extract_responses_text",
@@ -32,8 +32,8 @@ __all__ = [
     "_is_endpoint_mismatch_error",
     "_normalize_endpoint_url",
     "_resolve_custom_endpoint",
-    "call_chat_completions",
-    "call_responses_api",
+    "acall_chat_completions",
+    "acall_responses_api",
 ]
 
 
@@ -167,11 +167,14 @@ def _is_ai_timeout_exception(exc: Exception) -> bool:
     return isinstance(exc, (http_client.Timeout, http_client.ConnectTimeout, http_client.ReadTimeout))
 
 
-def _execute_ai_request_with_retry(request_name: str, request_func):
+async def _aexecute_ai_request_with_retry(
+    request_name: str,
+    request_func: Callable[[], Awaitable[_ResponseT]],
+) -> _ResponseT:
     last_error: Exception | None = None
     for attempt in range(1, _AI_MAX_RETRY_ATTEMPTS + 1):
         try:
-            return request_func()
+            return await request_func()
         except Exception as exc:
             last_error = exc
             should_retry = attempt < _AI_MAX_RETRY_ATTEMPTS and _should_retry_ai_request(exc)
@@ -184,13 +187,13 @@ def _execute_ai_request_with_retry(request_name: str, request_func):
                 _AI_MAX_RETRY_ATTEMPTS,
                 exc,
             )
-            time.sleep(_AI_RETRY_BACKOFF_SECONDS)
+            await asyncio.sleep(_AI_RETRY_BACKOFF_SECONDS)
     if last_error is not None:
         raise last_error
     raise RuntimeError(f"AI 请求执行失败：{request_name}")
 
 
-def call_chat_completions(
+async def acall_chat_completions(
     url: str,
     api_key: str,
     model: str,
@@ -212,17 +215,17 @@ def call_chat_completions(
         "temperature": 0.7,
     }
     try:
-        resp = _execute_ai_request_with_retry(
+        response = await _aexecute_ai_request_with_retry(
             "chat_completions",
-            lambda: http_client.post(url, headers=headers, json=payload, timeout=timeout, proxies={}).raise_for_status(),
+            lambda: http_client.apost(url, headers=headers, json=payload, timeout=timeout, proxies={}),
         )
-        data = resp.json()
-        return _extract_chat_completion_text(data)
+        response.raise_for_status()
+        return _extract_chat_completion_text(response.json())
     except Exception as exc:
         raise RuntimeError(f"API 调用失败: {exc}") from exc
 
 
-def call_responses_api(
+async def acall_responses_api(
     url: str,
     api_key: str,
     model: str,
@@ -242,11 +245,11 @@ def call_responses_api(
         "temperature": 0.7,
     }
     try:
-        resp = _execute_ai_request_with_retry(
+        response = await _aexecute_ai_request_with_retry(
             "responses",
-            lambda: http_client.post(url, headers=headers, json=payload, timeout=timeout, proxies={}).raise_for_status(),
+            lambda: http_client.apost(url, headers=headers, json=payload, timeout=timeout, proxies={}),
         )
-        data = resp.json()
-        return _extract_responses_text(data)
+        response.raise_for_status()
+        return _extract_responses_text(response.json())
     except Exception as exc:
         raise RuntimeError(f"API 调用失败: {exc}") from exc

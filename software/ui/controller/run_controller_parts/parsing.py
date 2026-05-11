@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
+import concurrent.futures
 import logging
-import threading
 from typing import TYPE_CHECKING, Any, List
 
 from software.core.questions.config import (
@@ -26,12 +26,13 @@ class RunControllerParsingMixin:
         question_entries: List[QuestionEntry]
         survey_title: str
         survey_provider: str
+        _async_engine_client: Any
 
         def _dispatch_to_ui_async(self, callback: Any) -> None: ...
 
     # -------------------- Parsing --------------------
     def parse_survey(self, url: str):
-        """Parse survey structure in a worker thread."""
+        """通过异步引擎解析问卷结构。"""
         if not url:
             self.surveyParseFailed.emit("请填写问卷链接")
             return
@@ -63,9 +64,11 @@ class RunControllerParsingMixin:
         def _apply_parse_failure(message: str) -> None:
             self.surveyParseFailed.emit(str(message or "解析失败，请稍后重试"))
 
-        def _worker():
+        future = self._async_engine_client.parse_survey(normalized_url)
+
+        def _on_done(done_future: concurrent.futures.Future[SurveyDefinition]) -> None:
             try:
-                definition = self._parse_questions(normalized_url)
+                definition = done_future.result()
                 self._dispatch_to_ui_async(
                     lambda parsed_definition=definition: _apply_parse_success(parsed_definition)
                 )
@@ -74,9 +77,4 @@ class RunControllerParsingMixin:
                 friendly = str(exc) or "解析失败，请稍后重试"
                 self._dispatch_to_ui_async(lambda msg=friendly: _apply_parse_failure(msg))
 
-        threading.Thread(target=_worker, daemon=True, name="SurveyParse").start()
-
-    def _parse_questions(self, url: str) -> SurveyDefinition:
-        from software.providers.registry import parse_survey_sync
-
-        return parse_survey_sync(url)
+        future.add_done_callback(_on_done)

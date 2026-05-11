@@ -3,7 +3,7 @@ from __future__ import annotations
 import gc
 from dataclasses import dataclass
 
-from software.network.browser.session import BrowserDriver
+from software.network.browser.runtime_async import BrowserDriver
 from software.providers.common import SURVEY_PROVIDER_WJX
 from software.providers.runtime_state import ProviderRuntimeState, get_provider_runtime_state_store
 

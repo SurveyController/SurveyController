@@ -1,19 +1,25 @@
 from __future__ import annotations
 
+import pytest
+
 from wjx.provider import submission_pages
 
 
 class _FakeDriver:
-    def __init__(self, *, script_result=None, script_error: Exception | None = None) -> None:
+    def __init__(self, *, script_result=None, script_error: Exception | None = None, current_url: str = "") -> None:
         self.script_result = script_result
         self.script_error = script_error
+        self._current_url = current_url
         self.scripts: list[str] = []
 
-    def execute_script(self, script: str):
+    async def execute_script(self, script: str):
         self.scripts.append(script)
         if self.script_error is not None:
             raise self.script_error
         return self.script_result
+
+    async def current_url(self) -> str:
+        return self._current_url
 
 
 class WjxSubmissionPagesTests:
@@ -39,18 +45,27 @@ class WjxSubmissionPagesTests:
         assert not submission_pages._looks_like_wjx_survey_url("https://www.wjx.cn/complete.aspx")
         assert not submission_pages._looks_like_wjx_survey_url("https://www.wjx.cn/api/demo")
 
-    def test_page_looks_like_wjx_questionnaire_returns_false_when_script_fails(self) -> None:
+    @pytest.mark.asyncio
+    async def test_page_looks_like_wjx_questionnaire_returns_false_when_script_fails(self) -> None:
         driver = _FakeDriver(script_error=RuntimeError("js boom"))
-        assert not submission_pages._page_looks_like_wjx_questionnaire(driver)
+        assert not await submission_pages._page_looks_like_wjx_questionnaire(driver)
 
-    def test_page_looks_like_wjx_questionnaire_returns_script_result(self) -> None:
+    @pytest.mark.asyncio
+    async def test_page_looks_like_wjx_questionnaire_returns_script_result(self) -> None:
         driver = _FakeDriver(script_result=True)
-        assert submission_pages._page_looks_like_wjx_questionnaire(driver)
+        assert await submission_pages._page_looks_like_wjx_questionnaire(driver)
 
-    def test_is_device_quota_limit_page_returns_false_when_script_fails(self) -> None:
+    @pytest.mark.asyncio
+    async def test_is_device_quota_limit_page_returns_false_when_script_fails(self) -> None:
         driver = _FakeDriver(script_error=RuntimeError("js boom"))
-        assert not submission_pages._is_device_quota_limit_page(driver)
+        assert not await submission_pages._is_device_quota_limit_page(driver)
 
-    def test_is_device_quota_limit_page_returns_script_result(self) -> None:
+    @pytest.mark.asyncio
+    async def test_is_device_quota_limit_page_returns_script_result(self) -> None:
         driver = _FakeDriver(script_result=True)
-        assert submission_pages._is_device_quota_limit_page(driver)
+        assert await submission_pages._is_device_quota_limit_page(driver)
+
+    @pytest.mark.asyncio
+    async def test_is_completion_page_short_circuits_complete_url(self) -> None:
+        driver = _FakeDriver(current_url="https://www.wjx.cn/complete.aspx")
+        assert await submission_pages.is_completion_page(driver)
