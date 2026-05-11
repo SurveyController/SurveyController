@@ -283,7 +283,6 @@ async def _fill_text_input(
     q_num = int(question_number or 0)
     if q_num <= 0:
         return False
-    page = await _page(driver)
     selectors = (
         f"#div{q_num} input[id^='q{q_num}_']",
         f"#div{q_num} textarea[id^='q{q_num}_']",
@@ -293,6 +292,71 @@ async def _fill_text_input(
         f"#q{q_num}",
     )
     text = str(value or "")
+    gapfill_script = r"""
+        return (() => {
+            const questionNumber = Number(arguments[0] || 0);
+            const value = String(arguments[1] || '');
+            const blankIndex = Number(arguments[2] || 0);
+            const root = document.querySelector(`#div${questionNumber}`);
+            if (!root) return false;
+            const visible = (el) => {
+                if (!el) return false;
+                const style = window.getComputedStyle(el);
+                if (!style) return false;
+                if (style.display === 'none' || style.visibility === 'hidden' || style.opacity === '0') return false;
+                const rect = el.getBoundingClientRect();
+                return rect.width > 0 && rect.height > 0;
+            };
+            const dispatchEditableEvents = (target) => {
+                ['beforeinput', 'input', 'change', 'blur'].forEach((name) => {
+                    try { target.dispatchEvent(new Event(name, { bubbles: true })); } catch (e) {}
+                });
+            };
+            const setNativeValue = (target, nextValue) => {
+                try {
+                    const descriptor = Object.getOwnPropertyDescriptor(window.HTMLInputElement?.prototype || {}, 'value');
+                    if (descriptor && descriptor.set) descriptor.set.call(target, nextValue);
+                    else target.value = nextValue;
+                } catch (e) {
+                    try { target.value = nextValue; } catch (err) {}
+                }
+            };
+            const editableNodes = Array.from(root.querySelectorAll('.textEdit .textCont[contenteditable="true"], .textCont[contenteditable="true"], [contenteditable="true"]'))
+                .filter((el) => visible(el) || visible(el.closest('.textEdit')));
+            if (!editableNodes.length) return false;
+            const hiddenInputs = Array.from(root.querySelectorAll('input[id^="q"], input[type="hidden"], input[type="text"]'))
+                .filter((el) => {
+                    const id = String(el.id || '');
+                    const name = String(el.name || '');
+                    return id.startsWith(`q${questionNumber}_`) || name.startsWith(`q${questionNumber}_`);
+                });
+            const index = Math.max(0, Math.min(blankIndex, editableNodes.length - 1));
+            const editable = editableNodes[index];
+            const hidden = hiddenInputs[index] || null;
+            try { editable.scrollIntoView({ block: 'center', inline: 'nearest' }); } catch (e) {}
+            try { editable.focus(); } catch (e) {}
+            try { editable.textContent = value; } catch (e) {}
+            try { editable.innerText = value; } catch (e) {}
+            dispatchEditableEvents(editable);
+            const label = editable.closest('.textEdit');
+            if (label) {
+                try { label.classList.remove('initStyle'); } catch (e) {}
+                try { label.setAttribute('value', value); } catch (e) {}
+                dispatchEditableEvents(label);
+            }
+            if (hidden) {
+                setNativeValue(hidden, value);
+                dispatchEditableEvents(hidden);
+            }
+            return String((hidden && hidden.value) || editable.textContent || editable.innerText || '') === value;
+        })();
+    """
+    try:
+        if await driver.execute_script(gapfill_script, q_num, text, int(blank_index)):
+            return True
+    except Exception:
+        pass
+    page = await _page(driver)
     for selector in selectors:
         try:
             locator = page.locator(selector)
@@ -338,22 +402,58 @@ async def _fill_text_input(
                 const type = String(el.getAttribute('type') || '').toLowerCase();
                 return !type || ['text', 'search', 'tel', 'number'].includes(type);
             };
+            const setNativeValue = (target, nextValue) => {
+                try {
+                    const proto = target.tagName === 'TEXTAREA' ? window.HTMLTextAreaElement?.prototype : window.HTMLInputElement?.prototype;
+                    const descriptor = proto ? Object.getOwnPropertyDescriptor(proto, 'value') : null;
+                    if (descriptor && descriptor.set) descriptor.set.call(target, nextValue);
+                    else target.value = nextValue;
+                } catch (e) {
+                    try { target.value = nextValue; } catch (err) {}
+                }
+            };
+            const dispatchEditableEvents = (target) => {
+                ['beforeinput', 'input', 'change', 'blur'].forEach((name) => {
+                    try { target.dispatchEvent(new Event(name, { bubbles: true })); } catch (e) {}
+                });
+            };
+            const hiddenInputs = Array.from(root.querySelectorAll('input[id^="q"], input[type="hidden"], input[type="text"]'))
+                .filter((el) => {
+                    if (!isTextInput(el)) return false;
+                    const id = String(el.id || '');
+                    const name = String(el.name || '');
+                    return id.startsWith(`q${questionNumber}_`) || name.startsWith(`q${questionNumber}_`);
+                });
+            const editableNodes = Array.from(root.querySelectorAll('.textEdit .textCont[contenteditable="true"], .textCont[contenteditable="true"], [contenteditable="true"]'))
+                .filter((el) => visible(el) || visible(el.closest('.textEdit')));
+            if (editableNodes.length) {
+                const index = Math.max(0, Math.min(blankIndex, editableNodes.length - 1));
+                const editable = editableNodes[index];
+                const hidden = hiddenInputs[index] || null;
+                try { editable.scrollIntoView({ block: 'center', inline: 'nearest' }); } catch (e) {}
+                try { editable.focus(); } catch (e) {}
+                try { editable.textContent = value; } catch (e) {}
+                try { editable.innerText = value; } catch (e) {}
+                dispatchEditableEvents(editable);
+                const label = editable.closest('.textEdit');
+                if (label) {
+                    try { label.classList.remove('initStyle'); } catch (e) {}
+                    try { label.setAttribute('value', value); } catch (e) {}
+                    dispatchEditableEvents(label);
+                }
+                if (hidden) {
+                    setNativeValue(hidden, value);
+                    dispatchEditableEvents(hidden);
+                }
+                return String((hidden && hidden.value) || editable.textContent || editable.innerText || '') === value;
+            }
             const inputs = Array.from(root.querySelectorAll('input, textarea')).filter((el) => visible(el) && isTextInput(el));
             const target = inputs[Math.max(0, Math.min(blankIndex, inputs.length - 1))];
             if (!target) return false;
             try { target.scrollIntoView({ block: 'center', inline: 'nearest' }); } catch (e) {}
             try { target.focus(); } catch (e) {}
-            try {
-                const proto = target.tagName === 'TEXTAREA' ? window.HTMLTextAreaElement?.prototype : window.HTMLInputElement?.prototype;
-                const descriptor = proto ? Object.getOwnPropertyDescriptor(proto, 'value') : null;
-                if (descriptor && descriptor.set) descriptor.set.call(target, value);
-                else target.value = value;
-            } catch (e) {
-                try { target.value = value; } catch (err) {}
-            }
-            ['input', 'change', 'blur'].forEach((name) => {
-                try { target.dispatchEvent(new Event(name, { bubbles: true })); } catch (e) {}
-            });
+            setNativeValue(target, value);
+            dispatchEditableEvents(target);
             return String(target.value || '') === value;
         })();
     """
@@ -496,6 +596,23 @@ async def _click_matrix_cell(driver: BrowserDriver, question_number: int, row_in
             });
             const targetRow = rowNodes[rowIndex];
             if (!targetRow) return false;
+            const anchors = Array.from(targetRow.querySelectorAll("a[dval]")).filter(visible);
+            const anchor = anchors[columnIndex];
+            if (anchor) {
+                const value = String(anchor.getAttribute('dval') || columnIndex + 1);
+                try { anchor.scrollIntoView({ block: 'center', inline: 'nearest' }); } catch (e) {}
+                try { anchor.click(); } catch (e) {}
+                try { anchor.classList.add('rate-on'); } catch (e) {}
+                const fid = String(targetRow.getAttribute('fid') || '');
+                const hidden = fid ? document.getElementById(fid) : null;
+                if (hidden) {
+                    try { hidden.value = value; } catch (e) {}
+                    ['input', 'change', 'click'].forEach((name) => {
+                        try { hidden.dispatchEvent(new Event(name, { bubbles: true })); } catch (e) {}
+                    });
+                }
+                return !hidden || String(hidden.value || '') === value;
+            }
             const inputs = Array.from(targetRow.querySelectorAll("input[type='radio'], input[type='checkbox']")).filter(visible);
             const target = inputs[columnIndex];
             if (!target) return false;
@@ -687,31 +804,15 @@ async def _click_reorder_sequence(driver: BrowserDriver, question_number: int, o
             };
             const items = Array.from(root.querySelectorAll('li')).filter(visible);
             if (!items.length) return false;
+            let clicked = 0;
             for (let rank = 0; rank < orderedIndices.length; rank += 1) {
                 const item = items[orderedIndices[rank]];
                 if (!item) continue;
-                const input = item.querySelector("input:not([type='hidden'])");
-                if (input) {
-                    try {
-                        if (input.type === 'checkbox' || input.type === 'radio') {
-                            input.checked = true;
-                        } else {
-                            input.value = String(rank + 1);
-                        }
-                        ['input', 'change', 'click'].forEach((name) => {
-                            try { input.dispatchEvent(new Event(name, { bubbles: true })); } catch (e) {}
-                        });
-                    } catch (e) {}
-                }
-                const badge = item.querySelector('.sortnum, .sortnum-sel, .order-number, .order-index');
-                if (badge) {
-                    try { badge.textContent = String(rank + 1); } catch (e) {}
-                }
-                try { item.setAttribute('data-checked', 'true'); } catch (e) {}
-                try { item.setAttribute('aria-checked', 'true'); } catch (e) {}
-                try { item.classList.add('selected', 'checked', 'on'); } catch (e) {}
+                try { item.scrollIntoView({ block: 'center', inline: 'nearest' }); } catch (e) {}
+                try { item.click(); } catch (e) {}
+                clicked += 1;
             }
-            return true;
+            return clicked > 0;
         })();
     """
     try:

@@ -216,6 +216,29 @@ def _proxy_is_responsive(proxy_address: str, skip_for_default: bool = True) -> b
     return True
 
 
+async def _proxy_is_responsive_async(proxy_address: str, skip_for_default: bool = True) -> bool:
+    masked_proxy = _mask_proxy_for_log(proxy_address)
+    if skip_for_default and is_official_proxy_source(get_proxy_source()):
+        logging.info(f"官方代理源，跳过健康检查: {masked_proxy}")
+        return True
+    proxy_address = _normalize_proxy_address(proxy_address) or ""
+    if not proxy_address:
+        return False
+    proxies = {"http": proxy_address, "https": proxy_address}
+    try:
+        start = time.perf_counter()
+        response = await http_client.aget(PROXY_HEALTH_CHECK_URL, proxies=proxies, timeout=PROXY_HEALTH_CHECK_TIMEOUT)
+        elapsed = time.perf_counter() - start
+    except Exception as exc:
+        logging.info(f"代理 {masked_proxy} 验证失败: {exc}")
+        return False
+    if response.status_code >= 400:
+        logging.warning(f"代理 {masked_proxy} 返回状态码 {response.status_code}")
+        return False
+    logging.info(f"代理 {masked_proxy} 验证通过，耗时 {elapsed:.2f}s")
+    return True
+
+
 def normalize_proxy_address(proxy_address: Optional[str]) -> Optional[str]:
     """公开的代理地址规范化接口。"""
     return _normalize_proxy_address(proxy_address)
@@ -236,10 +259,16 @@ def is_proxy_responsive(proxy_address: str, *, skip_for_default: bool = True) ->
     return _proxy_is_responsive(proxy_address, skip_for_default=skip_for_default)
 
 
+async def is_proxy_responsive_async(proxy_address: str, *, skip_for_default: bool = True) -> bool:
+    """公开的异步代理可用性检测接口。"""
+    return await _proxy_is_responsive_async(proxy_address, skip_for_default=skip_for_default)
+
+
 __all__ = [
     "coerce_proxy_lease",
     "get_proxy_required_ttl_seconds",
     "is_proxy_responsive",
+    "is_proxy_responsive_async",
     "mask_proxy_for_log",
     "normalize_proxy_address",
     "proxy_lease_has_sufficient_ttl",

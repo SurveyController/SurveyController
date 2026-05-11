@@ -40,8 +40,12 @@ class AsyncBrowserSession:
         await self.driver.aclose()
 
 
+class _OwnerBusyError(RuntimeError):
+    """owner 当前没有可用上下文槽位。"""
+
+
 class AsyncBrowserOwner:
-    """One real browser process with multiple async contexts."""
+    """Async semaphore gate for browser contexts owned by one pool shard."""
 
     def __init__(
         self,
@@ -56,19 +60,16 @@ class AsyncBrowserOwner:
         self._prefer_browsers = list(prefer_browsers or BROWSER_PREFERENCE)
         self._headless = bool(headless)
         self._window_position = window_position
-        self._semaphore = asyncio.Semaphore(max(1, int(max_contexts or 1)))
-        self._browser = None
-        self._playwright = None
-        self._browser_name = ""
-        self._browser_pid: Optional[int] = None
+        self._max_contexts = max(1, int(max_contexts or 1))
         self._broken = False
         self._closed = False
         self._ensure_lock = asyncio.Lock()
+        self._context_semaphore = asyncio.Semaphore(self._max_contexts)
         self._active_contexts = 0
 
     @property
     def browser_name(self) -> str:
-        return str(self._browser_name or "")
+        return ""
 
     @property
     def active_contexts(self) -> int:
@@ -77,13 +78,7 @@ class AsyncBrowserOwner:
     def mark_broken(self) -> None:
         self._broken = True
 
-    async def _shutdown_browser(self) -> None:
-        browser = self._browser
-        playwright_instance = self._playwright
-        self._browser = None
-        self._playwright = None
-        self._browser_name = ""
-        self._browser_pid = None
+    async def _shutdown_browser(self, browser: Any = None, playwright_instance: Any = None) -> None:
         if browser is not None:
             try:
                 await browser.close()
@@ -95,7 +90,7 @@ class AsyncBrowserOwner:
             except Exception as exc:
                 log_suppressed_exception("AsyncBrowserOwner._shutdown_browser playwright.stop", exc, level=logging.WARNING)
 
-    async def _launch_browser(self) -> tuple[Any, str]:
+    async def _launch_browser(self) -> tuple[Any, str, Any, Optional[int]]:
         candidates = list(self._prefer_browsers or BROWSER_PREFERENCE)
         if not candidates:
             candidates = list(BROWSER_PREFERENCE)
@@ -111,13 +106,9 @@ class AsyncBrowserOwner:
                 )
                 pw = await _start_playwright_async_runtime()
                 browser = await pw.chromium.launch(**launch_args)
-                self._playwright = pw
-                self._browser = browser
-                self._browser_name = browser_name
                 self._broken = False
-                self._browser_pid = self._extract_browser_pid(browser)
                 logging.info("[Action Log] AsyncBrowserOwner 启动底座成功：owner=%s browser=%s", self.owner_id, browser_name)
-                return browser, browser_name
+                return browser, browser_name, pw, self._extract_browser_pid(browser)
             except Exception as exc:
                 last_exc = exc
                 logging.warning("AsyncBrowserOwner 启动 %s 失败(owner=%s): %s", browser_name, self.owner_id, exc)
@@ -153,25 +144,36 @@ class AsyncBrowserOwner:
         except Exception:
             return None
 
-    async def _ensure_browser(self) -> tuple[Any, str]:
+    async def _ensure_browser(self) -> tuple[Any, str, Any, Optional[int]]:
         if self._closed:
             raise RuntimeError("AsyncBrowserOwner 已关闭")
-        if self._browser is not None and not self._broken:
-            return self._browser, self.browser_name
         async with self._ensure_lock:
             if self._closed:
                 raise RuntimeError("AsyncBrowserOwner 已关闭")
-            if self._browser is not None and not self._broken:
-                return self._browser, self.browser_name
-            await self._shutdown_browser()
             return await self._launch_browser()
 
-    async def open_session(self, *, proxy_address: Optional[str], user_agent: Optional[str]) -> AsyncBrowserSession:
-        await self._semaphore.acquire()
+    async def _acquire_slot(self, *, wait: bool) -> None:
+        if self._closed:
+            raise RuntimeError("AsyncBrowserOwner 已关闭")
+        if not wait and self._context_semaphore.locked():
+            raise _OwnerBusyError("AsyncBrowserOwner 没有可用上下文槽位")
+        await self._context_semaphore.acquire()
+        if self._closed:
+            self._context_semaphore.release()
+            raise RuntimeError("AsyncBrowserOwner 已关闭")
         self._active_contexts += 1
+
+    async def open_session(
+        self,
+        *,
+        proxy_address: Optional[str],
+        user_agent: Optional[str],
+        wait: bool = True,
+    ) -> AsyncBrowserSession:
+        await self._acquire_slot(wait=wait)
         context = None
         try:
-            browser, browser_name = await self._ensure_browser()
+            browser, browser_name, playwright_instance, browser_pid = await self._ensure_browser()
             context_args = _build_context_args(
                 headless=self._headless,
                 proxy_address=proxy_address,
@@ -187,8 +189,9 @@ class AsyncBrowserOwner:
                 context=context,
                 page=page,
                 browser_name=browser_name,
-                browser_pid=self._browser_pid,
+                browser_pid=browser_pid,
                 release_callback=self._release_slot,
+                browser_close_callback=lambda: self._shutdown_browser(browser, playwright_instance),
             )
             return AsyncBrowserSession(driver=driver, owner_id=self.owner_id, browser_name=browser_name)
         except Exception as exc:
@@ -203,17 +206,16 @@ class AsyncBrowserOwner:
             raise
 
     async def ensure_ready(self) -> str:
-        """确保浏览器底座已启动，但不创建页面上下文。"""
-        _browser, browser_name = await self._ensure_browser()
+        """验证浏览器能启动，并立即释放底座。"""
+        browser, browser_name, playwright_instance, _browser_pid = await self._ensure_browser()
+        await self._shutdown_browser(browser, playwright_instance)
         return browser_name
 
     def _release_slot(self) -> None:
-        if self._active_contexts > 0:
-            self._active_contexts -= 1
-        try:
-            self._semaphore.release()
-        except ValueError:
-            pass
+        if self._active_contexts <= 0:
+            return
+        self._active_contexts -= 1
+        self._context_semaphore.release()
 
     async def shutdown(self) -> None:
         self._closed = True
@@ -289,19 +291,31 @@ class AsyncBrowserOwnerPool:
     async def open_session(self, *, proxy_address: Optional[str], user_agent: Optional[str]) -> AsyncBrowserSession:
         if self._closed:
             raise RuntimeError("AsyncBrowserOwnerPool 已关闭")
-        owners = sorted(self._owners, key=self._owner_sort_key)
         last_exc: Optional[Exception] = None
-        for owner in owners:
-            try:
-                return await owner.open_session(proxy_address=proxy_address, user_agent=user_agent)
-            except Exception as exc:
-                last_exc = exc
-                if _is_browser_disconnected_error(exc):
+        while True:
+            owners = sorted(self._owners, key=self._owner_sort_key)
+            busy_seen = False
+            for owner in owners:
+                try:
+                    return await owner.open_session(
+                        proxy_address=proxy_address,
+                        user_agent=user_agent,
+                        wait=False,
+                    )
+                except _OwnerBusyError:
+                    busy_seen = True
                     continue
-                raise
-        if last_exc is not None:
-            raise last_exc
-        raise RuntimeError("AsyncBrowserOwnerPool 没有可用 owner")
+                except Exception as exc:
+                    last_exc = exc
+                    if _is_browser_disconnected_error(exc):
+                        continue
+                    raise
+            if busy_seen:
+                await asyncio.sleep(0.01)
+                continue
+            if last_exc is not None:
+                raise last_exc
+            raise RuntimeError("AsyncBrowserOwnerPool 没有可用 owner")
 
     async def ensure_ready(self) -> str:
         if self._closed:

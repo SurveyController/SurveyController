@@ -13,6 +13,7 @@ from software.core.questions.meta_helpers import (
     normalize_fillable_option_indices,
 )
 from software.core.questions.schema import QuestionEntry
+from software.core.questions.schema import _TEXT_RANDOM_ID_CARD, _TEXT_RANDOM_MOBILE, _TEXT_RANDOM_NAME, _TEXT_RANDOM_NONE
 from software.providers.contracts import SurveyQuestionMeta
 from software.providers.common import (
     SURVEY_PROVIDER_WJX,
@@ -76,6 +77,26 @@ def _normalize_forced_option_index(raw: Any, option_count: int) -> Optional[int]
 def _build_forced_single_weights(option_count: int, forced_index: int) -> List[float]:
     total = max(1, int(option_count or 1))
     return [1.0 if idx == forced_index else 0.0 for idx in range(total)]
+
+
+def _infer_multi_text_blank_modes(q: SurveyQuestionMeta, blank_count: int) -> List[str]:
+    labels = [str(item or "").strip() for item in list(q.get("text_input_labels") or [])]
+    title = str(q.get("title") or "").strip()
+    modes: List[str] = []
+    for index in range(max(0, int(blank_count or 0))):
+        text = labels[index] if index < len(labels) else ""
+        if not text and blank_count <= 1:
+            text = title
+        normalized = "".join(str(text or "").split()).lower()
+        if any(marker in normalized for marker in ("手机号", "手机号码", "手机", "电话", "联系电话", "联系方式")):
+            modes.append(_TEXT_RANDOM_MOBILE)
+        elif any(marker in normalized for marker in ("身份证", "证件号", "证件号码")):
+            modes.append(_TEXT_RANDOM_ID_CARD)
+        elif any(marker in normalized for marker in ("姓名", "名字", "联系人")):
+            modes.append(_TEXT_RANDOM_NAME)
+        else:
+            modes.append(_TEXT_RANDOM_NONE)
+    return modes
 
 
 def build_default_question_entries(
@@ -206,7 +227,11 @@ def build_default_question_entries(
             ai_enabled_from_existing = False
             text_random_mode_from_existing = "none"
             text_random_int_range_from_existing = []
-            multi_text_blank_modes_from_existing = []
+            multi_text_blank_modes_from_existing = (
+                _infer_multi_text_blank_modes(q, text_inputs)
+                if q_type == "multi_text"
+                else []
+            )
             multi_text_blank_ai_flags_from_existing = []
             multi_text_blank_int_ranges_from_existing = []
             option_fill_texts_from_existing = None

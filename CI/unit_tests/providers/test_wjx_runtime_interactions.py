@@ -152,6 +152,27 @@ class WjxRuntimeInteractionsTests:
         assert not await runtime_interactions._fill_choice_option_additional_text(driver, 5, 1, "", input_type="checkbox")
 
     @pytest.mark.asyncio
+    async def test_fill_text_input_falls_back_to_gapfill_contenteditable(self) -> None:
+        page = _Page()
+        for selector in (
+            "#div11 input[id^='q11_']",
+            "#div11 textarea[id^='q11_']",
+            "#div11 input[type='text']",
+            "#div11 textarea",
+            "#div11 input",
+            "#q11",
+        ):
+            page.selector_counts[selector] = 0
+        driver = _Driver(page)
+        driver.script_results = [True]
+
+        assert await runtime_interactions._fill_text_input(driver, 11, "测试文本", blank_index=2)
+        script, args = driver.script_calls[-1]
+        assert ".textCont[contenteditable=\"true\"]" in script
+        assert "q${questionNumber}_" in script
+        assert args == (11, "测试文本", 2)
+
+    @pytest.mark.asyncio
     async def test_slider_matrix_page_meta_and_submit_helpers_cover_main_paths(self, monkeypatch) -> None:
         page = _Page()
         driver = _Driver(page)

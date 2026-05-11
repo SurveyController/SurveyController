@@ -106,6 +106,22 @@ class WjxNavigationTests:
         assert cancel_button.clicked == 1
 
     @pytest.mark.asyncio
+    async def test_dismiss_resume_dialog_clicks_english_restart_survey_action(self, monkeypatch) -> None:
+        restart_button = _FakeTarget(text="Restart survey")
+        page = _FakePage({"button": [restart_button]})
+        driver = _FakeDriver(page, body_text="Continue previous answers")
+
+        async def _sleep(*_args, **_kwargs):
+            return False
+
+        monkeypatch.setattr(navigation, "sleep_or_stop", _sleep)
+
+        closed = await navigation.dismiss_resume_dialog_if_present(driver, timeout=0.1, stop_signal=None)
+
+        assert closed is True
+        assert restart_button.clicked == 1
+
+    @pytest.mark.asyncio
     async def test_try_click_start_answer_button_falls_back_to_text_button(self, monkeypatch) -> None:
         start_button = _FakeTarget(text="开始作答")
         page = _FakePage({"button": [start_button]})

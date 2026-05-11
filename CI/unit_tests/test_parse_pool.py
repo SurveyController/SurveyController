@@ -23,7 +23,8 @@ class _FakeSession:
 
 
 class ParsePoolTests:
-    def test_get_parse_pool_builds_once_and_reuses_cached_pool(self, patch_attrs) -> None:
+    @pytest.mark.asyncio
+    async def test_get_parse_pool_builds_once_per_event_loop(self, patch_attrs) -> None:
         built_pools: list[object] = []
 
         def _build_pool():
@@ -32,7 +33,7 @@ class ParsePoolTests:
             return pool
 
         patch_attrs(
-            (parse_pool, "_POOL", None),
+            (parse_pool, "_POOLS", {}),
             (parse_pool, "_build_parse_pool", _build_pool),
         )
 
@@ -41,6 +42,15 @@ class ParsePoolTests:
 
         assert first is second
         assert built_pools == [first]
+
+    def test_get_parse_pool_uses_cached_pool_for_same_loop_key(self, patch_attrs, monkeypatch) -> None:
+        fake_loop = object()
+        cached_pool = object()
+
+        patch_attrs((parse_pool, "_POOLS", {id(fake_loop): cached_pool}))
+        monkeypatch.setattr(parse_pool.asyncio, "get_running_loop", lambda: fake_loop)
+
+        assert parse_pool._get_parse_pool() is cached_pool
 
     @pytest.mark.asyncio
     async def test_acquire_parse_browser_session_closes_driver_after_use(self, patch_attrs) -> None:

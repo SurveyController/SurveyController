@@ -124,6 +124,14 @@ class WjxHtmlParserTests:
                   姓名：<input type="text" />
                   电话：<input type="text" />
                 </div>
+                <div topic="7" id="div7" type="9" gapfill="1">
+                  <div class="topichtml">
+                    项目评价<input id="q7_1" style="display:none" type="text" />
+                    <label class="textEdit"><span class="textCont" contenteditable="true"></span></label>
+                    <div>请输入手机号<input id="q7_2" style="display:none" type="text" />
+                    <label class="textEdit"><span class="textCont" contenteditable="true"></span></label></div>
+                  </div>
+                </div>
               </fieldset>
             </div>
           </body>
@@ -141,6 +149,7 @@ class WjxHtmlParserTests:
         assert multi_text["text_input_labels"] == ["姓名", "电话"]
         assert multi_text["is_multi_text"]
         assert multi_text["is_text_like"]
+        assert questions[2]["text_input_labels"] == ["项目评价", "请输入手机号"]
 
     def test_parse_survey_questions_keeps_internal_num_when_explicit_display_num_matches_visible_order(self) -> None:
         html = """

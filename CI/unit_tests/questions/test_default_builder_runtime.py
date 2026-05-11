@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from software.core.questions.default_builder import build_default_question_entries
-from software.core.questions.schema import QuestionEntry
+from software.core.questions.schema import QuestionEntry, _TEXT_RANDOM_MOBILE, _TEXT_RANDOM_NONE
 from software.providers.contracts import SurveyQuestionMeta
 
 
@@ -34,6 +34,24 @@ class DefaultBuilderRuntimeTests:
         assert entries[4].probabilities == -1
         assert entries[5].question_type == "text"
         assert entries[5].texts == ["指定文本"]
+
+    def test_build_default_question_entries_infers_multi_text_mobile_blank(self) -> None:
+        questions = [
+            SurveyQuestionMeta(
+                num=11,
+                title="多项填空",
+                type_code="9",
+                text_inputs=3,
+                is_text_like=True,
+                is_multi_text=True,
+                text_input_labels=["项目评价", "请输入手机号", "备注"],
+            )
+        ]
+
+        entries = build_default_question_entries(questions, survey_url="https://www.wjx.cn/vm/demo.aspx")
+
+        assert entries[0].question_type == "multi_text"
+        assert entries[0].multi_text_blank_modes == [_TEXT_RANDOM_NONE, _TEXT_RANDOM_MOBILE, _TEXT_RANDOM_NONE]
 
     def test_build_default_question_entries_reuses_existing_by_provider_num_and_title(self) -> None:
         existing_by_provider = QuestionEntry(

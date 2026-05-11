@@ -193,7 +193,7 @@ class AsyncRuntimeLoopLargeTests:
             return "http://1.1.1.1:80"
         monkeypatch.setattr(runtime_loop, "_select_proxy_for_session_async", fake_select_proxy_for_session_async)
         monkeypatch.setattr(runtime_loop, "_record_bad_proxy_and_maybe_pause", lambda *_args, **_kwargs: False)
-        monkeypatch.setattr(runtime_loop, "is_proxy_responsive", lambda proxy: False)
+        monkeypatch.setattr(runtime_loop, "is_proxy_responsive_async", lambda proxy: asyncio.sleep(0, result=False))
         monkeypatch.setattr(runtime_loop, "_discard_unresponsive_proxy", lambda *_args, **_kwargs: None)
         monkeypatch.setattr(runtime_loop, "_select_user_agent_for_session", lambda *_args, **_kwargs: ("UA", None))
         runner, _state, _ctx, _loop, _scheduler = _build_runner(config=config, state=state)
@@ -214,7 +214,7 @@ class AsyncRuntimeLoopLargeTests:
 
         opened = await runner._open_session()
         assert opened is session
-        assert browser_pool.ensure_ready_calls == 1
+        assert browser_pool.ensure_ready_calls == 0
         assert session.driver._thread_name == "Slot-1"
         assert session.driver._session_state is state
         assert session.driver._session_proxy_address == "http://1.1.1.1:80"

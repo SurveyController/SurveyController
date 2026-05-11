@@ -90,10 +90,10 @@ class _Page:
         self.evaluate_calls.append((wrapper, args))
         return {"ok": True}
 
-    async def set_default_navigation_timeout(self, timeout: int) -> None:
+    def set_default_navigation_timeout(self, timeout: int) -> None:
         self.timeout_calls.append(timeout)
 
-    async def set_default_timeout(self, timeout: int) -> None:
+    def set_default_timeout(self, timeout: int) -> None:
         self.timeout_calls.append(timeout)
 
     async def goto(self, _url: str, *, wait_until: str, timeout: int) -> None:

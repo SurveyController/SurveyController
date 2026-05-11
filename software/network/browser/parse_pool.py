@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import threading
 from contextlib import asynccontextmanager
@@ -15,7 +16,7 @@ from software.network.browser.runtime_async import BrowserDriver as AsyncBrowser
 _PARSE_POOL_HEADLESS = True
 _PARSE_POOL_MAX_CONCURRENCY = 2
 _POOL_LOCK = threading.RLock()
-_POOL: Optional[AsyncBrowserOwnerPool] = None
+_POOLS: dict[int, AsyncBrowserOwnerPool] = {}
 
 
 def _build_parse_pool() -> AsyncBrowserOwnerPool:
@@ -33,11 +34,13 @@ def _build_parse_pool() -> AsyncBrowserOwnerPool:
 
 
 def _get_parse_pool() -> AsyncBrowserOwnerPool:
-    global _POOL
+    loop_key = id(asyncio.get_running_loop())
     with _POOL_LOCK:
-        if _POOL is None:
-            _POOL = _build_parse_pool()
-        return _POOL
+        pool = _POOLS.get(loop_key)
+        if pool is None:
+            pool = _build_parse_pool()
+            _POOLS[loop_key] = pool
+        return pool
 
 
 @asynccontextmanager

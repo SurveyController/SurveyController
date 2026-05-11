@@ -30,7 +30,7 @@ from software.network.browser import ProxyConnectionError
 from software.network.browser.async_owner_pool import AsyncBrowserOwnerPool, AsyncBrowserSession
 from software.network.browser.runtime_async import BrowserDriver as AsyncBrowserDriver
 from software.network.browser.startup import BrowserStartupRuntimeError
-from software.network.proxy.pool import is_proxy_responsive
+from software.network.proxy.pool import is_proxy_responsive_async
 from software.network.session_policy import (
     _discard_unresponsive_proxy,
     _mark_proxy_temporarily_bad,
@@ -213,7 +213,7 @@ class AsyncSlotRunner:
         if self.config.random_proxy_ip_enabled and not proxy_address:
             if _record_bad_proxy_and_maybe_pause(self.state, self.gui_instance):
                 return None, None
-        if proxy_address and not is_proxy_responsive(proxy_address):
+        if proxy_address and not await is_proxy_responsive_async(proxy_address):
             logging.warning("提取到的代理质量过低，自动弃用更换下一个")
             _discard_unresponsive_proxy(self.state, proxy_address)
             self.state.release_proxy_in_use(self.slot_label)
@@ -224,15 +224,13 @@ class AsyncSlotRunner:
     async def _open_session(self) -> Optional[AsyncBrowserSession]:
         if self.run_context.stop_requested():
             return None
-        self._update_step("准备浏览器底座")
-        await self.browser_pool.ensure_ready()
         proxy_address, ua_value = await self._select_session_proxy_and_ua()
         if self.run_context.stop_requested():
             return None
         if self.config.random_proxy_ip_enabled and not proxy_address:
             return None
         self.proxy_address = proxy_address
-        self._update_step("创建浏览器会话")
+        self._update_step("启动浏览器会话")
         session = await self.browser_pool.open_session(proxy_address=proxy_address, user_agent=ua_value)
         driver = session.driver
         setattr(driver, "_thread_name", self.slot_label)

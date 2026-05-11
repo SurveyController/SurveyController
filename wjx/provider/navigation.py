@@ -37,7 +37,17 @@ _RESUME_DIALOG_MARKERS = (
     "Start again",
     "Restart survey",
 )
-_RESUME_ACTION_TEXTS = ("取消", "重新填写", "重新作答", "重新开始", "Start over", "Restart", "Cancel")
+_RESUME_ACTION_TEXTS = (
+    "取消",
+    "重新填写",
+    "重新作答",
+    "重新开始",
+    "Start over",
+    "Start again",
+    "Restart",
+    "Restart survey",
+    "Cancel",
+)
 _NEXT_ACTION_TEXTS = ("下一页", "下一步", "下一题", "下一")
 
 
@@ -57,16 +67,15 @@ async def _body_text(driver: BrowserDriver) -> str:
 
 
 def _contains_any(text: str, candidates: tuple[str, ...]) -> bool:
-    normalized = str(text or "").strip()
+    normalized = str(text or "").replace(" ", "").strip()
     if not normalized:
         return False
-    return any(candidate in normalized for candidate in candidates)
+    return any(str(candidate or "").replace(" ", "").strip() in normalized for candidate in candidates)
 
 
 async def _page_contains_any_text(driver: BrowserDriver, candidates: tuple[str, ...]) -> bool:
     body_text = await _body_text(driver)
-    compact = body_text.replace(" ", "")
-    return _contains_any(compact, candidates)
+    return _contains_any(body_text, candidates)
 
 
 async def try_click_start_answer_button(

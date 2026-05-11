@@ -290,6 +290,25 @@ def _count_text_inputs_in_soup(question_div) -> int:
 def _extract_text_input_labels(question_div) -> List[str]:
     """提取多项填空题每个输入框的标签信息"""
     labels = []
+
+    def _label_before_node(node) -> str:
+        parts: List[str] = []
+        current = getattr(node, "previous_sibling", None)
+        while current is not None:
+            name = str(getattr(current, "name", "") or "").lower()
+            if name in {"input", "textarea", "label", "span"}:
+                if name == "input":
+                    current = getattr(current, "previous_sibling", None)
+                    continue
+                break
+            if name in {"br"}:
+                break
+            text = _normalize_html_text(current.get_text(" ", strip=True) if hasattr(current, "get_text") else str(current))
+            if text:
+                parts.append(text)
+            current = getattr(current, "previous_sibling", None)
+        return _normalize_html_text(" ".join(reversed(parts))).rstrip("：:").strip()
+
     try:
         candidates = question_div.find_all(["input", "textarea", "span", "div"])
     except Exception:
@@ -324,6 +343,12 @@ def _extract_text_input_labels(question_div) -> List[str]:
                     prev = cand.find_previous_sibling(string=True)
                     if prev:
                         label = prev.strip().rstrip("：:").strip()
+                if not label:
+                    label = _label_before_node(cand)
+                if not label and is_textcont:
+                    parent = cand.find_parent()
+                    if parent is not None:
+                        label = _label_before_node(parent)
                 labels.append(label if label else f"填空{len(labels) + 1}")
         except Exception:
             continue

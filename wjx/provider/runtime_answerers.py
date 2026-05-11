@@ -28,10 +28,20 @@ from software.core.questions.strict_ratio import (
 )
 from software.core.questions.tendency import get_tendency_index
 from software.core.questions.utils import (
+    build_random_int_token,
     normalize_droplist_probs,
     normalize_probabilities,
     resolve_dynamic_text_token,
     weighted_index,
+)
+from software.core.questions.schema import (
+    _TEXT_RANDOM_ID_CARD,
+    _TEXT_RANDOM_ID_CARD_TOKEN,
+    _TEXT_RANDOM_INTEGER,
+    _TEXT_RANDOM_MOBILE,
+    _TEXT_RANDOM_MOBILE_TOKEN,
+    _TEXT_RANDOM_NAME,
+    _TEXT_RANDOM_NAME_TOKEN,
 )
 from software.core.reverse_fill.runtime import resolve_current_reverse_fill_answer
 from software.core.reverse_fill.schema import (
@@ -287,6 +297,28 @@ async def _answer_wjx_text(
         text_values = [DEFAULT_FILL_TEXT]
     if len(text_values) < blank_count:
         text_values.extend([text_values[-1]] * (blank_count - len(text_values)))
+    text_entry_types = list(getattr(ctx.config, "text_entry_types", []) or [])
+    if str(text_entry_types[config_index] if config_index < len(text_entry_types) else "") == "multi_text":
+        multi_text_blank_modes = list(getattr(ctx.config, "multi_text_blank_modes", []) or [])
+        multi_text_blank_ranges = list(getattr(ctx.config, "multi_text_blank_int_ranges", []) or [])
+        blank_modes = list(multi_text_blank_modes[config_index] if config_index < len(multi_text_blank_modes) else [])
+        blank_ranges = list(
+            multi_text_blank_ranges[config_index]
+            if config_index < len(multi_text_blank_ranges)
+            else []
+        )
+        for blank_index in range(blank_count):
+            mode = str(blank_modes[blank_index] if blank_index < len(blank_modes) else "").strip().lower()
+            if mode == _TEXT_RANDOM_NAME:
+                text_values[blank_index] = resolve_dynamic_text_token(_TEXT_RANDOM_NAME_TOKEN)
+            elif mode == _TEXT_RANDOM_MOBILE:
+                text_values[blank_index] = resolve_dynamic_text_token(_TEXT_RANDOM_MOBILE_TOKEN)
+            elif mode == _TEXT_RANDOM_ID_CARD:
+                text_values[blank_index] = resolve_dynamic_text_token(_TEXT_RANDOM_ID_CARD_TOKEN)
+            elif mode == _TEXT_RANDOM_INTEGER:
+                int_range = blank_ranges[blank_index] if blank_index < len(blank_ranges) else []
+                if isinstance(int_range, list) and len(int_range) >= 2:
+                    text_values[blank_index] = resolve_dynamic_text_token(build_random_int_token(int_range[0], int_range[1]))
 
     applied_values: list[str] = []
     for blank_index in range(blank_count):

@@ -6,6 +6,7 @@ import logging
 import subprocess
 import threading
 import time
+from inspect import isawaitable
 from typing import Any, Optional, Protocol, Set, TypeVar
 
 from software.logging.log_utils import log_suppressed_exception
@@ -14,6 +15,12 @@ from software.network.browser.options import _build_selector, _is_proxy_tunnel_e
 from software.network.browser.subprocess_utils import build_local_text_subprocess_kwargs
 
 _BrowserElementT = TypeVar("_BrowserElementT", bound="BrowserElement")
+
+
+async def _maybe_await(value: Any) -> Any:
+    if isawaitable(value):
+        return await value
+    return value
 
 
 class BrowserElement(Protocol):
@@ -202,10 +209,12 @@ class PlaywrightAsyncDriver:
         browser_name: str,
         browser_pid: Optional[int] = None,
         release_callback: Optional[Any] = None,
+        browser_close_callback: Optional[Any] = None,
     ) -> None:
         self._context = context
         self._page = page
         self._release_callback = release_callback
+        self._browser_close_callback = browser_close_callback
         self.browser_name = str(browser_name or "")
         self.session_id = f"apw-{int(time.time() * 1000)}"
         self.browser_pid = int(browser_pid or 0) or None
@@ -246,8 +255,8 @@ class PlaywrightAsyncDriver:
 
     async def get(self, url: str, timeout: int = 20000, wait_until: str = "domcontentloaded") -> None:
         try:
-            await self._page.set_default_navigation_timeout(timeout)
-            await self._page.set_default_timeout(timeout)
+            await _maybe_await(self._page.set_default_navigation_timeout(timeout))
+            await _maybe_await(self._page.set_default_timeout(timeout))
             await self._page.goto(url, wait_until=wait_until, timeout=timeout)
         except Exception as exc:
             if _is_proxy_tunnel_error(exc):
@@ -304,11 +313,18 @@ class PlaywrightAsyncDriver:
             await self._context.close()
         except Exception as exc:
             log_suppressed_exception("PlaywrightAsyncDriver.aclose context.close", exc, level=logging.WARNING)
-        if callable(self._release_callback):
-            try:
-                self._release_callback()
-            except Exception as exc:
-                log_suppressed_exception("PlaywrightAsyncDriver.aclose release_callback", exc, level=logging.WARNING)
+        try:
+            if callable(self._browser_close_callback):
+                result = self._browser_close_callback()
+                await _maybe_await(result)
+        except Exception as exc:
+            log_suppressed_exception("PlaywrightAsyncDriver.aclose browser_close_callback", exc, level=logging.WARNING)
+        finally:
+            if callable(self._release_callback):
+                try:
+                    self._release_callback()
+                except Exception as exc:
+                    log_suppressed_exception("PlaywrightAsyncDriver.aclose release_callback", exc, level=logging.WARNING)
 
     def _force_terminate_browser_process_tree(self) -> bool:
         pids = {int(pid) for pid in self.browser_pids if pid}

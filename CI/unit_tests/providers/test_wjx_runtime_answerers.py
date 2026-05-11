@@ -5,6 +5,7 @@ from types import SimpleNamespace
 import pytest
 
 from wjx.provider import runtime_answerers
+from software.core.questions.schema import _TEXT_RANDOM_MOBILE
 
 
 def _question(num: int, **overrides):
@@ -161,6 +162,33 @@ class WjxRuntimeAnswerersTests:
         monkeypatch.setattr(runtime_answerers, "agenerate_ai_answer", _ai_fail)
         with pytest.raises(runtime_answerers.AIRuntimeError, match="问卷星第9题 AI 生成失败"):
             await runtime_answerers._answer_wjx_text(object(), question, 0, ctx_ai)
+
+    @pytest.mark.asyncio
+    async def test_answer_wjx_text_applies_multi_text_blank_modes(self, monkeypatch) -> None:
+        ctx = _ctx(
+            texts=[["默认文本"]],
+            texts_prob=[[1.0]],
+            text_ai_flags=[False],
+            text_entry_types=["multi_text"],
+            multi_text_blank_modes=[["none", _TEXT_RANDOM_MOBILE, "none"]],
+            multi_text_blank_int_ranges=[[]],
+        )
+        question = _question(9, text_inputs=3)
+        fill_calls: list[tuple[object, ...]] = []
+
+        monkeypatch.setattr(runtime_answerers, "weighted_index", lambda _probs: 0)
+        monkeypatch.setattr(runtime_answerers, "resolve_dynamic_text_token", lambda value: "13900001111" if value == "__RANDOM_MOBILE__" else str(value))
+
+        async def _fill_text(*args, **kwargs):
+            fill_calls.append((args, kwargs))
+            return True
+
+        monkeypatch.setattr(runtime_answerers, "_fill_text_input", _fill_text)
+        monkeypatch.setattr(runtime_answerers, "record_answer", lambda *args, **kwargs: None)
+
+        await runtime_answerers._answer_wjx_text(object(), question, 0, ctx)
+
+        assert [call[0][2] for call in fill_calls] == ["默认文本", "13900001111", "默认文本"]
 
     @pytest.mark.asyncio
     async def test_answer_wjx_score_matrix_slider_and_order_cover_main_paths(self, monkeypatch) -> None:
