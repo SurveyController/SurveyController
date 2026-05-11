@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import pytest
 
+import software.network.http.async_client as async_http_client
 import software.network.http.client as http_client
 
 
@@ -56,6 +57,70 @@ class _FakeClient:
         return self.stream_ctx
 
     def close(self) -> None:
+        self.close_calls += 1
+
+
+class _FakeAsyncResponse:
+    def __init__(self, *, status_code: int = 200, text: str = "ok", content: bytes = b"ok", chunks=None) -> None:
+        self.status_code = status_code
+        self.headers = {"x-test": "1"}
+        self.text = text
+        self.content = content
+        self._chunks = list(chunks or [b"a", b"", b"b"])
+        self.raise_called = 0
+        self.closed = False
+
+    def json(self):
+        return {"ok": True}
+
+    def raise_for_status(self) -> None:
+        self.raise_called += 1
+
+    async def aiter_bytes(self, chunk_size: int):
+        del chunk_size
+        for chunk in self._chunks:
+            yield chunk
+
+    async def aclose(self) -> None:
+        self.closed = True
+
+
+class _FakeAsyncStreamCtx:
+    def __init__(self, response: _FakeAsyncResponse, enter_error: Exception | None = None) -> None:
+        self.response = response
+        self.enter_error = enter_error
+        self.enter_calls = 0
+        self.exit_calls = 0
+
+    async def __aenter__(self):
+        self.enter_calls += 1
+        if self.enter_error is not None:
+            raise self.enter_error
+        return self.response
+
+    async def __aexit__(self, exc_type, exc, tb) -> None:
+        del exc_type, exc, tb
+        self.exit_calls += 1
+
+
+class _FakeAsyncClient:
+    def __init__(self, *, request_response=None, stream_ctx=None, stream_error: Exception | None = None, **kwargs) -> None:
+        del kwargs
+        self.request_response = request_response or _FakeAsyncResponse()
+        self.stream_ctx = stream_ctx or _FakeAsyncStreamCtx(_FakeAsyncResponse(), enter_error=stream_error)
+        self.request_calls: list[dict[str, object]] = []
+        self.stream_calls: list[dict[str, object]] = []
+        self.close_calls = 0
+
+    async def request(self, method: str, url: str, **kwargs):
+        self.request_calls.append({"method": method, "url": url, **kwargs})
+        return self.request_response
+
+    def stream(self, method: str, url: str, **kwargs):
+        self.stream_calls.append({"method": method, "url": url, **kwargs})
+        return self.stream_ctx
+
+    async def aclose(self) -> None:
         self.close_calls += 1
 
 
@@ -161,3 +226,51 @@ class HttpClientTests:
         assert http_client._PREWARMED is True
         assert fake_client.close_calls == 1
 
+    @pytest.mark.asyncio
+    async def test_async_stream_response_aiter_content_closes_once(self) -> None:
+        response = _FakeAsyncResponse(chunks=[b"a", b"", b"b"])
+        client = _FakeAsyncClient(send_response=response)
+        stream_ctx = _FakeAsyncStreamCtx(response)
+        wrapper = async_http_client._AsyncStreamResponse(response, stream_ctx, client)
+
+        chunks = [chunk async for chunk in wrapper.aiter_content(chunk_size=16)]
+        await wrapper.aclose()
+
+        assert chunks == [b"a", b"b"]
+        assert stream_ctx.exit_calls == 1
+        assert client.close_calls == 1
+
+    @pytest.mark.asyncio
+    async def test_async_request_stream_uses_send_with_stream_and_keeps_client_open_until_close(self, monkeypatch) -> None:
+        response = _FakeAsyncResponse()
+        stream_ctx = _FakeAsyncStreamCtx(response)
+        fake_client = _FakeAsyncClient(stream_ctx=stream_ctx)
+        monkeypatch.setattr(async_http_client.httpx, "AsyncClient", lambda **kwargs: fake_client)
+
+        wrapped = await async_http_client.request("GET", "https://example.com", stream=True, timeout=(1, 2))
+
+        assert isinstance(wrapped, async_http_client._AsyncStreamResponse)
+        assert fake_client.request_calls == []
+        assert len(fake_client.stream_calls) == 1
+        assert fake_client.stream_calls[0]["method"] == "GET"
+        timeout = fake_client.stream_calls[0]["timeout"]
+        assert timeout.connect == 1.0
+        assert timeout.read == 2.0
+        assert timeout.write == 2.0
+        assert timeout.pool == 1.0
+        assert fake_client.close_calls == 0
+        assert stream_ctx.enter_calls == 1
+
+        await wrapped.aclose()
+        assert fake_client.close_calls == 1
+        assert stream_ctx.exit_calls == 1
+
+    @pytest.mark.asyncio
+    async def test_async_request_stream_closes_client_when_send_fails(self, monkeypatch) -> None:
+        fake_client = _FakeAsyncClient(stream_error=RuntimeError("boom"))
+        monkeypatch.setattr(async_http_client.httpx, "AsyncClient", lambda **kwargs: fake_client)
+
+        with pytest.raises(RuntimeError, match="boom"):
+            await async_http_client.request("GET", "https://example.com", stream=True)
+
+        assert fake_client.close_calls == 1

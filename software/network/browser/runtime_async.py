@@ -345,13 +345,7 @@ class PlaywrightAsyncDriver:
         return terminated
 
     def quit(self) -> None:
-        if not self.mark_cleanup_done():
-            return
-        try:
-            loop = threading.get_ident()
-            del loop
-        except Exception:
-            pass
+        self.mark_cleanup_done()
         self._force_terminate_browser_process_tree()
 
 

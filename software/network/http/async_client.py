@@ -11,8 +11,9 @@ from software.network.http.client import _CLIENT_LIMITS, _normalize_timeout, _re
 class _AsyncStreamResponse:
     """给异步流响应补一个兼容接口。"""
 
-    def __init__(self, response: httpx.Response, client: httpx.AsyncClient) -> None:
+    def __init__(self, response: httpx.Response, stream_ctx: Any, client: httpx.AsyncClient) -> None:
         self._response = response
+        self._stream_ctx = stream_ctx
         self._client = client
         self._closed = False
 
@@ -50,8 +51,10 @@ class _AsyncStreamResponse:
         if self._closed:
             return
         self._closed = True
-        await self._response.aclose()
-        await self._client.aclose()
+        try:
+            await self._stream_ctx.__aexit__(None, None, None)
+        finally:
+            await self._client.aclose()
 
 
 @overload
@@ -80,8 +83,13 @@ async def request(method: str, url: str, **kwargs: Any) -> httpx.Response | _Asy
         limits=_CLIENT_LIMITS,
     )
     if stream:
-        response = await client.request(method, url, timeout=timeout, **kwargs)
-        return _AsyncStreamResponse(response, client)
+        stream_ctx = client.stream(method, url, timeout=timeout, **kwargs)
+        try:
+            response = await stream_ctx.__aenter__()
+        except Exception:
+            await client.aclose()
+            raise
+        return _AsyncStreamResponse(response, stream_ctx, client)
     try:
         return await client.request(method, url, timeout=timeout, **kwargs)
     finally:

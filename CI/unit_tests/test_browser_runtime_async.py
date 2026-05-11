@@ -209,3 +209,11 @@ class BrowserRuntimeAsyncTests:
         driver._cleanup_done = False
         driver.quit()
         assert runs == [["taskkill", "/PID", "123", "/T", "/F"]]
+
+        driver._cleanup_done = False
+        assert driver.mark_cleanup_done() is True
+        driver.quit()
+        assert runs == [
+            ["taskkill", "/PID", "123", "/T", "/F"],
+            ["taskkill", "/PID", "123", "/T", "/F"],
+        ]
