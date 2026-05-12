@@ -53,3 +53,17 @@ async def test_scheduler_close_unblocks_waiters_and_ignores_non_requeue_release(
         assert await asyncio.wait_for(waiter, timeout=1.0) is None
     finally:
         await scheduler.close()
+
+
+async def test_scheduler_release_before_wait_does_not_lose_wakeup() -> None:
+    scheduler = AsyncScheduler(concurrency=1)
+    try:
+        token = await scheduler.acquire()
+        assert token is not None
+
+        await scheduler.release(token, requeue=True)
+        reacquired = await asyncio.wait_for(scheduler.acquire(), timeout=1.0)
+
+        assert reacquired == token
+    finally:
+        await scheduler.close()

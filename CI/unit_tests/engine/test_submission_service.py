@@ -5,7 +5,7 @@ from unittest.mock import AsyncMock, patch
 import pytest
 
 from software.core.engine.failure_reason import FailureReason
-from software.core.engine.submission_service import SubmissionOutcome, SubmissionService
+from software.core.engine.submission_service import SubmissionService
 from software.core.task import ExecutionConfig, ExecutionState
 
 

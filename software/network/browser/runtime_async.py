@@ -209,12 +209,10 @@ class PlaywrightAsyncDriver:
         browser_name: str,
         browser_pid: Optional[int] = None,
         release_callback: Optional[Any] = None,
-        browser_close_callback: Optional[Any] = None,
     ) -> None:
         self._context = context
         self._page = page
         self._release_callback = release_callback
-        self._browser_close_callback = browser_close_callback
         self.browser_name = str(browser_name or "")
         self.session_id = f"apw-{int(time.time() * 1000)}"
         self.browser_pid = int(browser_pid or 0) or None
@@ -313,18 +311,11 @@ class PlaywrightAsyncDriver:
             await self._context.close()
         except Exception as exc:
             log_suppressed_exception("PlaywrightAsyncDriver.aclose context.close", exc, level=logging.WARNING)
-        try:
-            if callable(self._browser_close_callback):
-                result = self._browser_close_callback()
-                await _maybe_await(result)
-        except Exception as exc:
-            log_suppressed_exception("PlaywrightAsyncDriver.aclose browser_close_callback", exc, level=logging.WARNING)
-        finally:
-            if callable(self._release_callback):
-                try:
-                    self._release_callback()
-                except Exception as exc:
-                    log_suppressed_exception("PlaywrightAsyncDriver.aclose release_callback", exc, level=logging.WARNING)
+        if callable(self._release_callback):
+            try:
+                self._release_callback()
+            except Exception as exc:
+                log_suppressed_exception("PlaywrightAsyncDriver.aclose release_callback", exc, level=logging.WARNING)
 
     def _force_terminate_browser_process_tree(self) -> bool:
         pids = {int(pid) for pid in self.browser_pids if pid}

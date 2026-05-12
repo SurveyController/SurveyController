@@ -43,7 +43,7 @@ class _FakeAsyncPlaywrightFactory:
         factory = self
 
         class _Starter:
-            async def start(self_inner):
+            async def start(_self):
                 return factory._playwrights.pop(0)
 
         return _Starter()
@@ -194,13 +194,24 @@ class AsyncBrowserOwnerLargeTests:
         owner = AsyncBrowserOwner(owner_id=4, prefer_browsers=["edge"])
         launched_browser = _FakeBrowser()
         launched_playwright = object()
-        monkeypatch.setattr(owner, "_launch_browser", lambda: asyncio.sleep(0, result=(launched_browser, "chrome", launched_playwright, 4321)))
+        launch_calls: list[str] = []
+        monkeypatch.setattr(
+            owner,
+            "_launch_browser",
+            lambda: asyncio.sleep(0, result=launch_calls.append("launch") or (launched_browser, "chrome", launched_playwright, 4321)),
+        )
 
         browser, browser_name, playwright, browser_pid = await owner._ensure_browser()
+        browser2, browser_name2, playwright2, browser_pid2 = await owner._ensure_browser()
         assert browser is launched_browser
         assert browser_name == "chrome"
         assert playwright is launched_playwright
         assert browser_pid == 4321
+        assert browser2 is launched_browser
+        assert browser_name2 == "chrome"
+        assert playwright2 is launched_playwright
+        assert browser_pid2 == 4321
+        assert launch_calls == ["launch"]
 
     @pytest.mark.asyncio
     async def test_ensure_browser_rejects_closed_owner(self) -> None:
@@ -233,7 +244,7 @@ class AsyncBrowserOwnerLargeTests:
         assert context.route_calls[0][0] == "**/*"
         assert owner.active_contexts == 1
         assert captured["browser_pid"] == 4321
-        assert callable(captured["browser_close_callback"])
+        assert "browser_close_callback" not in captured
 
         captured["release_callback"]()
         assert owner.active_contexts == 0
@@ -265,6 +276,18 @@ class AsyncBrowserOwnerLargeTests:
 
         assert browser_name == "edge"
         assert browser.new_context_calls == []
+
+    @pytest.mark.asyncio
+    async def test_wait_until_available_blocks_until_release(self) -> None:
+        owner = AsyncBrowserOwner(owner_id=78, prefer_browsers=["edge"], max_contexts=1)
+        await owner._acquire_slot(wait=True)
+        waiter = asyncio.create_task(owner.wait_until_available())
+        await asyncio.sleep(0.01)
+        assert not waiter.done()
+
+        owner._release_slot()
+
+        await asyncio.wait_for(waiter, timeout=1.0)
 
     @pytest.mark.asyncio
     async def test_release_slot_ignores_over_release(self) -> None:
@@ -356,6 +379,40 @@ class AsyncBrowserOwnerPoolLargeTests:
 
         assert pool._closed is True
         assert shutdown_calls == [1, 2]
+
+    @pytest.mark.asyncio
+    async def test_owner_pool_waits_on_owner_signal_instead_of_spin_sleep(self, monkeypatch) -> None:
+        pool = AsyncBrowserOwnerPool(
+            config=BrowserPoolConfig(owner_count=2, contexts_per_owner=1, logical_concurrency=2),
+            headless=True,
+        )
+        first_owner, second_owner = pool.owners
+        wait_calls: list[int] = []
+        release_gate = asyncio.Event()
+
+        async def _busy_open_session(**_kwargs):
+            raise _OwnerBusyError("busy")
+
+        async def _wait_available(owner_id: int) -> None:
+            wait_calls.append(owner_id)
+            await release_gate.wait()
+
+        monkeypatch.setattr(first_owner, "open_session", _busy_open_session)
+        monkeypatch.setattr(second_owner, "open_session", _busy_open_session)
+        monkeypatch.setattr(first_owner, "wait_until_available", lambda: _wait_available(first_owner.owner_id))
+        monkeypatch.setattr(second_owner, "wait_until_available", lambda: _wait_available(second_owner.owner_id))
+
+        async def _close_pool() -> None:
+            while len(wait_calls) < 2:
+                await asyncio.sleep(0)
+            pool._closed = True
+            release_gate.set()
+
+        stopper = asyncio.create_task(_close_pool())
+        with pytest.raises(RuntimeError, match="已关闭|没有可用 owner"):
+            await asyncio.wait_for(pool.open_session(proxy_address=None, user_agent=None), timeout=2.0)
+        await stopper
+        assert wait_calls == [first_owner.owner_id, second_owner.owner_id]
 
     @pytest.mark.asyncio
     async def test_owner_pool_open_session_uses_next_idle_owner_before_waiting(self, monkeypatch) -> None:

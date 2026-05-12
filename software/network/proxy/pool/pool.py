@@ -50,8 +50,6 @@ def _mask_proxy_for_log(proxy_address: Optional[str]) -> str:
     text = str(proxy_address).strip()
     if not text:
         return ""
-    if not is_official_proxy_source(get_proxy_source()):
-        return text
     candidate = text if "://" in text else f"http://{text}"
     try:
         parsed = urlsplit(candidate)

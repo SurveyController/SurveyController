@@ -8,6 +8,10 @@ import pytest
 from wjx.provider import parser as wjx_parser
 
 
+async def _raise_browser_error(exc: Exception) -> None:
+    raise exc
+
+
 class _FakeHttpResponse:
     def __init__(self, html: str, *, should_raise: Exception | None = None) -> None:
         self.text = html
@@ -162,7 +166,7 @@ class WjxParserTests:
 
         @asynccontextmanager
         async def fake_pool_with_error():
-            raise browser_exc
+            await _raise_browser_error(browser_exc)
             yield
 
         patch_attrs(
@@ -182,7 +186,7 @@ class WjxParserTests:
 
         @asynccontextmanager
         async def fake_pool():
-            raise browser_exc
+            await _raise_browser_error(browser_exc)
             yield
 
         patch_attrs(

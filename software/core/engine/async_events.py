@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import asyncio
-import threading
 from dataclasses import dataclass
 from typing import Any, Callable, Optional
 
@@ -62,7 +61,12 @@ class ThreadEventProxy:
     def wait(self, timeout: Optional[float] = None) -> bool:
         if self.is_set():
             return True
-        waiter = threading.Event()
+        try:
+            running_loop = asyncio.get_running_loop()
+        except RuntimeError:
+            running_loop = None
+        if running_loop is self._loop:
+            raise RuntimeError("ThreadEventProxy.wait() 不能在绑定的事件循环线程里阻塞调用")
 
         async def _wait() -> bool:
             try:
@@ -75,10 +79,7 @@ class ThreadEventProxy:
                 return bool(self._event.is_set())
 
         future = asyncio.run_coroutine_threadsafe(_wait(), self._loop)
-        try:
-            return bool(future.result())
-        finally:
-            waiter.set()
+        return bool(future.result())
 
 
 @dataclass(frozen=True)

@@ -45,6 +45,11 @@ class ProxyPoolTests:
         assert pool.mask_proxy_for_log("http://user:pass@[2001:db8::1]:8080") == "[2001:db8::1]:8080"
         assert pool.mask_proxy_for_log("") == ""
 
+    def test_mask_proxy_for_log_hides_credentials_for_custom_sources_too(self, patch_attrs) -> None:
+        patch_attrs((pool, "get_proxy_source", lambda: "custom"))
+
+        assert pool.mask_proxy_for_log("http://user:pass@9.9.9.9:8080") == "9.9.9.9:8080"
+
     def test_build_default_proxy_leases_handles_missing_and_batch_payloads(self) -> None:
         assert pool._build_default_proxy_lease({}) is None
 

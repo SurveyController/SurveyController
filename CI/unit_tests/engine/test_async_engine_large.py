@@ -198,12 +198,18 @@ class AsyncRuntimeEngineLargeTests:
 
         class _FakeRunner:
             def __init__(self, **kwargs) -> None:
-                created_runners.append(SimpleNamespace(**kwargs))
                 self.slot_id = kwargs["slot_id"]
+                self.cancelled = False
+                created_runners.append(self)
 
             async def run(self) -> None:
                 if self.slot_id == 2:
                     raise RuntimeError("slot boom")
+                try:
+                    await asyncio.sleep(10)
+                except asyncio.CancelledError:
+                    self.cancelled = True
+                    raise
 
         class _FakeScheduler:
             def __init__(self, *, concurrency: int) -> None:
@@ -236,6 +242,7 @@ class AsyncRuntimeEngineLargeTests:
         assert len(created_runners) == 2
         assert created_runners[0].slot_id == 1
         assert created_runners[1].slot_id == 2
+        assert created_runners[0].cancelled is True
         assert created_schedulers[0].close_calls == 1
         assert created_pools[0].shutdown_calls == 1
         assert state.stop_event.is_set()

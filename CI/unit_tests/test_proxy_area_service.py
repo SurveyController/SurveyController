@@ -11,6 +11,42 @@ def _reset_area_caches() -> None:
 
 
 class ProxyAreaServiceTests:
+    @staticmethod
+    def _fake_area_codes_for_benefit_online(supported_only: bool = False):
+        assert supported_only is False
+        return [
+            {
+                "code": "440000",
+                "name": "广东省",
+                "cities": [
+                    {"code": "440100", "name": "广州市"},
+                    {"code": "440300", "name": "深圳市"},
+                    {"code": "441900", "name": "东莞市"},
+                ],
+            },
+            {
+                "code": "110000",
+                "name": "北京市",
+                "cities": [{"code": "110100", "name": "市辖区"}],
+            },
+        ]
+
+    @staticmethod
+    def _fake_area_codes_for_benefit_fallback(supported_only: bool = False):
+        assert supported_only is False
+        return [
+            {
+                "code": "440000",
+                "name": "广东省",
+                "cities": [{"code": "440100", "name": "广州市"}],
+            },
+            {
+                "code": "110000",
+                "name": "北京市",
+                "cities": [{"code": "110100", "name": "市辖区"}],
+            },
+        ]
+
     def test_load_supported_area_codes_ignores_comments_and_tracks_all(self, patch_attrs) -> None:
         _reset_area_caches()
         patch_attrs(
@@ -88,22 +124,7 @@ class ProxyAreaServiceTests:
             (
                 service,
                 "load_area_codes",
-                lambda supported_only=False: [
-                    {
-                        "code": "440000",
-                        "name": "广东省",
-                        "cities": [
-                            {"code": "440100", "name": "广州市"},
-                            {"code": "440300", "name": "深圳市"},
-                            {"code": "441900", "name": "东莞市"},
-                        ],
-                    },
-                    {
-                        "code": "110000",
-                        "name": "北京市",
-                        "cities": [{"code": "110100", "name": "市辖区"}],
-                    },
-                ],
+                self._fake_area_codes_for_benefit_online,
             ),
             (
                 service,
@@ -131,18 +152,7 @@ class ProxyAreaServiceTests:
             (
                 service,
                 "load_area_codes",
-                lambda supported_only=False: [
-                    {
-                        "code": "440000",
-                        "name": "广东省",
-                        "cities": [{"code": "440100", "name": "广州市"}],
-                    },
-                    {
-                        "code": "110000",
-                        "name": "北京市",
-                        "cities": [{"code": "110100", "name": "市辖区"}],
-                    },
-                ],
+                self._fake_area_codes_for_benefit_fallback,
             ),
             (
                 service,

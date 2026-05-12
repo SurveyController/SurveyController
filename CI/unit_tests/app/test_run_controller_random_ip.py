@@ -145,6 +145,7 @@ class RunControllerRandomIPTests:
         monkeypatch.setattr(random_ip_module.time, "monotonic", lambda: 100.0)
 
         async def fake_sync_quota_snapshot_from_server_async(*, emit_logs=True):
+            assert emit_logs is False
             return {"used_quota": 7, "total_quota": 12}
 
         monkeypatch.setattr(
@@ -160,6 +161,7 @@ class RunControllerRandomIPTests:
         logged: list[tuple[str, str]] = []
 
         async def fake_failed_sync_quota_snapshot_from_server_async(*, emit_logs=True):
+            assert emit_logs is True
             raise RuntimeError("net")
 
         monkeypatch.setattr(
@@ -205,6 +207,7 @@ class RunControllerRandomIPTests:
         )
 
         async def fake_sync_quota_snapshot_from_server_async(*, emit_logs=True):
+            assert emit_logs is True
             return {"used_quota": 2, "total_quota": 8}
 
         monkeypatch.setattr(

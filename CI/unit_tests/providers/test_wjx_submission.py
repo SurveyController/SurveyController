@@ -6,7 +6,6 @@ from types import SimpleNamespace
 import pytest
 
 from software.core.task import ExecutionConfig, ExecutionState
-from software.providers.contracts import SurveyQuestionMeta
 from wjx.provider import submission
 
 

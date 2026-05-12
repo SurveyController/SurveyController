@@ -56,7 +56,8 @@ class _FakeBrowserPool:
 
 
 class _FakeStopPolicy:
-    def __init__(self) -> None:
+    def __init__(self, state: ExecutionState | None = None) -> None:
+        self.state = state
         self.failure_calls: list[dict[str, object]] = []
         self.success_calls: list[dict[str, object]] = []
         self.proxy_threshold = 3
@@ -68,6 +69,11 @@ class _FakeStopPolicy:
     def record_success(self, stop_signal, **kwargs):
         self.success_calls.append({"stop_signal": stop_signal, **kwargs})
         return False
+
+    def trigger_target_reached_stop(self, stop_signal):
+        if self.state is not None:
+            self.state.mark_terminal_stop("target_reached", message="目标份数已达成")
+        stop_signal.set()
 
     def proxy_unavailable_threshold(self):
         return self.proxy_threshold
@@ -97,7 +103,7 @@ def _build_runner(*, config: ExecutionConfig | None = None, state: ExecutionStat
         browser_pool=_FakeBrowserPool(),
         gui_instance=SimpleNamespace(active_drivers=[]),
     )
-    runner.stop_policy = _FakeStopPolicy()
+    runner.stop_policy = _FakeStopPolicy(state)
     runner.submission_service = SimpleNamespace(finalize_after_submit=lambda *_args, **_kwargs: None)
     return runner, state, run_context, loop, scheduler
 
@@ -134,7 +140,7 @@ class AsyncRuntimeLoopLargeTests:
         assert runner._resolve_dispatch_delay_seconds() == 2.0
 
         config.submit_interval_range_seconds = [1, 3]
-        monkeypatch.setattr(runtime_loop.random, "uniform", lambda a, b: 2.5)
+        monkeypatch.setattr(runtime_loop.random, "uniform", lambda _a, _b: 2.5)
         assert runner._resolve_dispatch_delay_seconds() == 2.5
 
     @pytest.mark.asyncio
@@ -165,6 +171,76 @@ class AsyncRuntimeLoopLargeTests:
 
         assert await runner._prepare_round_context() is True
         assert released == ["reverse"]
+
+    @pytest.mark.asyncio
+    async def test_prepare_round_context_finishes_idle_slot_when_joint_slots_allocated(self, monkeypatch) -> None:
+        config = ExecutionConfig(target_num=2, survey_provider="wjx")
+        state = ExecutionState(config=config)
+        state.reset_pending_distribution = lambda *_args, **_kwargs: None
+        state.reserve_joint_sample = lambda *_args, **_kwargs: None
+        state.acquire_reverse_fill_sample = lambda *_args, **_kwargs: SimpleNamespace(
+            status="acquired",
+            sample=SimpleNamespace(data_row_number=1, worksheet_row_number=2),
+        )
+        state.is_joint_sample_quota_exhausted = lambda *_args, **_kwargs: False
+        expire_calls: list[str] = []
+        state.expire_stale_joint_sample_reservations = lambda *_args, **_kwargs: expire_calls.append("expire") or 0
+        released: list[bool] = []
+        state.release_reverse_fill_sample = lambda *_args, **kwargs: released.append(bool(kwargs.get("requeue")))
+        terminal: list[tuple[str, str]] = []
+        state.mark_terminal_stop = lambda category, *, message, **_kwargs: terminal.append((category, message))
+        monkeypatch.setattr(runtime_loop, "ensure_joint_psychometric_answer_plan", lambda _config: SimpleNamespace(sample_count=2))
+        real_sleep = asyncio.sleep
+        sleep_calls = 0
+
+        async def fake_sleep(_seconds):
+            nonlocal sleep_calls
+            sleep_calls += 1
+            if sleep_calls >= 2:
+                ctx.stop_event.set()
+            await real_sleep(0)
+
+        monkeypatch.setattr(runtime_loop.asyncio, "sleep", fake_sleep)
+        runner, _state, ctx, _loop, _scheduler = _build_runner(config=config, state=state)
+
+        assert await runner._prepare_round_context() is False
+        assert released == [True, True]
+        assert terminal == []
+        assert expire_calls == ["expire", "expire"]
+        assert ctx.stop_event.is_set()
+
+    @pytest.mark.asyncio
+    async def test_prepare_round_context_stops_when_joint_slots_exhausted(self, monkeypatch) -> None:
+        config = ExecutionConfig(target_num=2, survey_provider="wjx")
+        state = ExecutionState(config=config)
+        state.reset_pending_distribution = lambda *_args, **_kwargs: None
+        state.reserve_joint_sample = lambda *_args, **_kwargs: None
+        state.acquire_reverse_fill_sample = lambda *_args, **_kwargs: SimpleNamespace(status="waiting", sample=None)
+        state.is_joint_sample_quota_exhausted = lambda *_args, **_kwargs: True
+        terminal: list[tuple[str, str]] = []
+        state.mark_terminal_stop = lambda category, *, message, **_kwargs: terminal.append((category, message))
+        monkeypatch.setattr(runtime_loop, "ensure_joint_psychometric_answer_plan", lambda _config: SimpleNamespace(sample_count=2))
+        runner, _state, ctx, _loop, _scheduler = _build_runner(config=config, state=state)
+
+        assert await runner._prepare_round_context() is False
+        assert terminal == [("target_reached", "联合信效度样本槽位已全部完成")]
+        assert ctx.stop_event.is_set()
+
+    @pytest.mark.asyncio
+    async def test_prepare_round_context_stops_when_target_already_reached_while_waiting_joint_slot(self, monkeypatch) -> None:
+        config = ExecutionConfig(target_num=11, survey_provider="wjx")
+        state = ExecutionState(config=config, cur_num=11)
+        state.reset_pending_distribution = lambda *_args, **_kwargs: None
+        state.reserve_joint_sample = lambda *_args, **_kwargs: None
+        state.acquire_reverse_fill_sample = lambda *_args, **_kwargs: SimpleNamespace(status="acquired", sample=SimpleNamespace())
+        monkeypatch.setattr(runtime_loop, "ensure_joint_psychometric_answer_plan", lambda _config: SimpleNamespace(sample_count=11))
+        runner, _state, ctx, _loop, _scheduler = _build_runner(config=config, state=state)
+
+        assert await runner._prepare_round_context() is False
+        assert state.get_terminal_stop_snapshot()[0] == "target_reached"
+        await asyncio.sleep(0)
+        assert ctx.stop_event.is_set()
+        assert runner._resolve_finished_status_text() == "已完成"
 
     @pytest.mark.asyncio
     async def test_prepare_round_context_marks_terminal_stop_when_reverse_fill_exhausted(self, monkeypatch) -> None:
@@ -313,6 +389,42 @@ class AsyncRuntimeLoopLargeTests:
         assert finished == [("Slot-1", "已停止")]
 
     @pytest.mark.asyncio
+    async def test_run_marks_thread_completed_when_target_reached(self) -> None:
+        runner, state, ctx, _loop, scheduler = _build_runner()
+        scheduler.acquire_values = [None]
+        state.release_joint_sample = lambda *_args, **_kwargs: None
+        state.release_reverse_fill_sample = lambda *_args, **_kwargs: None
+        state.mark_terminal_stop("target_reached", message="目标份数已达成")
+        ctx.stop_event.set()
+        finished: list[tuple[str, str]] = []
+        state.mark_thread_finished = lambda thread_name, *, status_text: finished.append((thread_name, status_text))
+
+        await runner.run()
+
+        assert finished == [("Slot-1", "已完成")]
+
+    @pytest.mark.asyncio
+    async def test_run_requeues_when_joint_pre_answer_step_times_out(self, monkeypatch) -> None:
+        runner, state, _ctx, _loop, scheduler = _build_runner()
+        scheduler.acquire_values = [8, None]
+        state.release_joint_sample = lambda *_args, **_kwargs: None
+        state.release_reverse_fill_sample = lambda *_args, **_kwargs: None
+        state.mark_thread_finished = lambda *_args, **_kwargs: None
+        monkeypatch.setattr(runner, "_prepare_round_context", lambda: asyncio.sleep(0, result=True))
+
+        async def fake_open_session():
+            runner._joint_pre_answer_timed_out = True
+            return None
+
+        monkeypatch.setattr(runner, "_open_session", fake_open_session)
+
+        await runner.run()
+
+        assert scheduler.release_calls[0]["token_id"] == 8
+        assert scheduler.release_calls[0]["requeue"] is True
+        assert scheduler.release_calls[0]["delay_seconds"] == runtime_loop.JOINT_PRE_ANSWER_ATTEMPT_REQUEUE_DELAY_SECONDS
+
+    @pytest.mark.asyncio
     async def test_run_success_path_requeues_scheduler_with_delay(self, monkeypatch) -> None:
         runner, state, _ctx, _loop, scheduler = _build_runner()
         scheduler.acquire_values = [7, None]
@@ -425,12 +537,14 @@ class AsyncRuntimeLoopLargeTests:
         state.mark_thread_finished = lambda *_args, **_kwargs: None
         monkeypatch.setattr(runner, "_prepare_round_context", lambda: (_ for _ in ()).throw(RuntimeError("boom")))
         release_flags: list[bool] = []
+        logged: list[str] = []
         monkeypatch.setattr(runner, "_release_round_resources", lambda *, requeue_reverse_fill: release_flags.append(requeue_reverse_fill))
         runner.stop_policy.record_failure = lambda *_args, **_kwargs: False
-        monkeypatch.setattr(runtime_loop.traceback, "print_exc", lambda: None)
+        monkeypatch.setattr(runtime_loop.logging, "exception", lambda message, *args, **_kwargs: logged.append(message % args))
 
         await runner.run()
 
+        assert logged == ["异步会话[Slot-1]运行异常"]
         assert release_flags == [True]
         assert scheduler.release_calls[0]["requeue"] is True
 
@@ -462,7 +576,6 @@ class AsyncOwnerPoolLargeTests:
         import software.network.browser.async_owner_pool as async_owner_pool_module
         from software.network.browser.async_owner_pool import AsyncBrowserOwnerPool, BrowserPoolConfig
 
-        portal = SimpleNamespace()
         pool = AsyncBrowserOwnerPool(
             config=BrowserPoolConfig(owner_count=2, contexts_per_owner=1, logical_concurrency=2),
             headless=True,

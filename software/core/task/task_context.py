@@ -96,7 +96,9 @@ class ExecutionState(
     distribution_runtime_stats: Dict[str, Dict[str, Any]] = field(default_factory=dict)
     distribution_pending_by_thread: Dict[str, List[Tuple[str, int, int]]] = field(default_factory=dict)
     joint_reserved_sample_by_thread: Dict[str, int] = field(default_factory=dict)
+    joint_reserved_sample_started_at_by_thread: Dict[str, float] = field(default_factory=dict)
     joint_committed_sample_indexes: set[int] = field(default_factory=set)
+    joint_answering_threads: set[str] = field(default_factory=set)
 
     proxy_waiting_threads: int = 0
     proxy_in_use_by_thread: Dict[str, ProxyLease] = field(default_factory=dict)

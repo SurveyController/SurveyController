@@ -66,10 +66,16 @@ class AsyncBrowserOwner:
         self._ensure_lock = asyncio.Lock()
         self._context_semaphore = asyncio.Semaphore(self._max_contexts)
         self._active_contexts = 0
+        self._browser: Any = None
+        self._playwright_instance: Any = None
+        self._browser_name = ""
+        self._browser_pid: Optional[int] = None
+        self._availability_event = asyncio.Event()
+        self._availability_event.set()
 
     @property
     def browser_name(self) -> str:
-        return ""
+        return self._browser_name
 
     @property
     def active_contexts(self) -> int:
@@ -78,7 +84,28 @@ class AsyncBrowserOwner:
     def mark_broken(self) -> None:
         self._broken = True
 
+    def _notify_availability(self) -> None:
+        if self._closed or self._active_contexts < self._max_contexts:
+            self._availability_event.set()
+            return
+        self._availability_event.clear()
+
+    async def wait_until_available(self) -> None:
+        while not self._closed:
+            await self._availability_event.wait()
+            if self._closed or self._active_contexts < self._max_contexts:
+                return
+
     async def _shutdown_browser(self, browser: Any = None, playwright_instance: Any = None) -> None:
+        if browser is None:
+            browser = self._browser
+        if playwright_instance is None:
+            playwright_instance = self._playwright_instance
+        self._browser = None
+        self._playwright_instance = None
+        self._browser_name = ""
+        self._browser_pid = None
+        self._broken = False
         if browser is not None:
             try:
                 await browser.close()
@@ -150,18 +177,27 @@ class AsyncBrowserOwner:
         async with self._ensure_lock:
             if self._closed:
                 raise RuntimeError("AsyncBrowserOwner 已关闭")
-            return await self._launch_browser()
+            if self._browser is not None and not self._broken:
+                return self._browser, self._browser_name, self._playwright_instance, self._browser_pid
+            await self._shutdown_browser()
+            browser, browser_name, playwright_instance, browser_pid = await self._launch_browser()
+            self._browser = browser
+            self._playwright_instance = playwright_instance
+            self._browser_name = browser_name
+            self._browser_pid = browser_pid
+            return browser, browser_name, playwright_instance, browser_pid
 
     async def _acquire_slot(self, *, wait: bool) -> None:
         if self._closed:
             raise RuntimeError("AsyncBrowserOwner 已关闭")
-        if not wait and self._context_semaphore.locked():
+        if not wait and self._active_contexts >= self._max_contexts:
             raise _OwnerBusyError("AsyncBrowserOwner 没有可用上下文槽位")
         await self._context_semaphore.acquire()
         if self._closed:
             self._context_semaphore.release()
             raise RuntimeError("AsyncBrowserOwner 已关闭")
         self._active_contexts += 1
+        self._notify_availability()
 
     async def open_session(
         self,
@@ -173,7 +209,7 @@ class AsyncBrowserOwner:
         await self._acquire_slot(wait=wait)
         context = None
         try:
-            browser, browser_name, playwright_instance, browser_pid = await self._ensure_browser()
+            browser, browser_name, _playwright_instance, browser_pid = await self._ensure_browser()
             context_args = _build_context_args(
                 headless=self._headless,
                 proxy_address=proxy_address,
@@ -191,7 +227,6 @@ class AsyncBrowserOwner:
                 browser_name=browser_name,
                 browser_pid=browser_pid,
                 release_callback=self._release_slot,
-                browser_close_callback=lambda: self._shutdown_browser(browser, playwright_instance),
             )
             return AsyncBrowserSession(driver=driver, owner_id=self.owner_id, browser_name=browser_name)
         except Exception as exc:
@@ -206,9 +241,8 @@ class AsyncBrowserOwner:
             raise
 
     async def ensure_ready(self) -> str:
-        """验证浏览器能启动，并立即释放底座。"""
-        browser, browser_name, playwright_instance, _browser_pid = await self._ensure_browser()
-        await self._shutdown_browser(browser, playwright_instance)
+        """验证浏览器能启动，并保留底座供后续复用。"""
+        _browser, browser_name, _playwright_instance, _browser_pid = await self._ensure_browser()
         return browser_name
 
     def _release_slot(self) -> None:
@@ -216,9 +250,11 @@ class AsyncBrowserOwner:
             return
         self._active_contexts -= 1
         self._context_semaphore.release()
+        self._notify_availability()
 
     async def shutdown(self) -> None:
         self._closed = True
+        self._availability_event.set()
         await self._shutdown_browser()
 
 
@@ -293,6 +329,8 @@ class AsyncBrowserOwnerPool:
             raise RuntimeError("AsyncBrowserOwnerPool 已关闭")
         last_exc: Optional[Exception] = None
         while True:
+            if self._closed:
+                raise RuntimeError("AsyncBrowserOwnerPool 已关闭")
             owners = sorted(self._owners, key=self._owner_sort_key)
             busy_seen = False
             for owner in owners:
@@ -311,7 +349,9 @@ class AsyncBrowserOwnerPool:
                         continue
                     raise
             if busy_seen:
-                await asyncio.sleep(0.01)
+                await asyncio.gather(*(owner.wait_until_available() for owner in owners))
+                if self._closed:
+                    raise RuntimeError("AsyncBrowserOwnerPool 已关闭")
                 continue
             if last_exc is not None:
                 raise last_exc

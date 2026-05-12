@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import threading
+import time
 from typing import TYPE_CHECKING, Any, List, Optional, Protocol, Tuple
 
 
@@ -12,11 +13,16 @@ if TYPE_CHECKING:
         distribution_runtime_stats: dict[str, dict[str, Any]]
         distribution_pending_by_thread: dict[str, list[tuple[str, int, int]]]
         joint_reserved_sample_by_thread: dict[str, int]
+        joint_reserved_sample_started_at_by_thread: dict[str, float]
         joint_committed_sample_indexes: set[int]
+        joint_answering_threads: set[str]
 
         @staticmethod
         def _normalize_distribution_counts(raw_counts: Any, option_count: int) -> List[int]: ...
         def reserve_joint_sample(self, sample_count: int, thread_name: Optional[str] = None) -> Optional[int]: ...
+        def is_joint_sample_quota_exhausted(self, sample_count: int) -> bool: ...
+        def expire_stale_joint_sample_reservations(self, max_age_seconds: float) -> int: ...
+        def release_reverse_fill_sample(self, thread_name: Optional[str] = None, *, requeue: bool = True) -> Optional[int]: ...
 
         def notify_runtime_change(self) -> None: ...
         def wait_for_runtime_change(
@@ -129,8 +135,61 @@ class DistributionRuntimeMixin:
                 if sample_index in reserved_values or sample_index in self.joint_committed_sample_indexes:
                     continue
                 self.joint_reserved_sample_by_thread[key] = sample_index
+                self.joint_reserved_sample_started_at_by_thread[key] = time.monotonic()
                 return sample_index
         return None
+
+    def mark_joint_sample_answering(
+        self: "_DistributionRuntimeHost",
+        thread_name: Optional[str] = None,
+    ) -> bool:
+        key = str(thread_name or threading.current_thread().name or "Worker-?").strip() or "Worker-?"
+        with self.lock:
+            if key not in self.joint_reserved_sample_by_thread:
+                return False
+            self.joint_answering_threads.add(key)
+            return True
+
+    def expire_stale_joint_sample_reservations(
+        self: "_DistributionRuntimeHost",
+        max_age_seconds: float,
+    ) -> int:
+        max_age = max(0.0, float(max_age_seconds or 0.0))
+        if max_age <= 0:
+            return 0
+        now = time.monotonic()
+        expired_keys: list[str] = []
+        with self.lock:
+            for key, reserved_at in list(self.joint_reserved_sample_started_at_by_thread.items()):
+                if key in self.joint_answering_threads:
+                    continue
+                if key not in self.joint_reserved_sample_by_thread:
+                    self.joint_reserved_sample_started_at_by_thread.pop(key, None)
+                    continue
+                if now - float(reserved_at or now) >= max_age:
+                    expired_keys.append(key)
+            for key in expired_keys:
+                self.joint_reserved_sample_by_thread.pop(key, None)
+                self.joint_reserved_sample_started_at_by_thread.pop(key, None)
+                self.joint_answering_threads.discard(key)
+        for key in expired_keys:
+            try:
+                self.release_reverse_fill_sample(key, requeue=True)
+            except Exception:
+                pass
+        if expired_keys:
+            self.notify_runtime_change()
+        return len(expired_keys)
+
+    def is_joint_sample_quota_exhausted(
+        self: "_DistributionRuntimeHost",
+        sample_count: int,
+    ) -> bool:
+        total = max(0, int(sample_count or 0))
+        if total <= 0:
+            return False
+        with self.lock:
+            return len(self.joint_committed_sample_indexes) >= total
 
     def release_joint_sample(
         self: "_DistributionRuntimeHost",
@@ -139,6 +198,8 @@ class DistributionRuntimeMixin:
         key = str(thread_name or threading.current_thread().name or "Worker-?").strip() or "Worker-?"
         with self.lock:
             reserved = self.joint_reserved_sample_by_thread.pop(key, None)
+            self.joint_reserved_sample_started_at_by_thread.pop(key, None)
+            self.joint_answering_threads.discard(key)
         if reserved is not None:
             self.notify_runtime_change()
             return int(reserved)
@@ -151,6 +212,8 @@ class DistributionRuntimeMixin:
         key = str(thread_name or threading.current_thread().name or "Worker-?").strip() or "Worker-?"
         with self.lock:
             reserved = self.joint_reserved_sample_by_thread.pop(key, None)
+            self.joint_reserved_sample_started_at_by_thread.pop(key, None)
+            self.joint_answering_threads.discard(key)
             if reserved is None:
                 return None
             self.joint_committed_sample_indexes.add(int(reserved))

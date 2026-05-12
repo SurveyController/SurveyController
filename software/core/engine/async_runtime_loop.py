@@ -5,7 +5,6 @@ from __future__ import annotations
 import asyncio
 import logging
 import random
-import traceback
 from typing import Any, Optional, cast
 
 import software.core.modes.timed_mode as timed_mode
@@ -40,6 +39,11 @@ from software.network.session_policy import (
 )
 from software.providers.registry import fill_survey
 from software.providers.registry import is_device_quota_limit_page as _provider_is_device_quota_limit_page
+
+JOINT_PRE_ANSWER_RESERVATION_LEASE_SECONDS = 45.0
+JOINT_SLOT_WAIT_POLL_SECONDS = 0.5
+JOINT_PRE_ANSWER_ATTEMPT_REQUEUE_DELAY_SECONDS = 0.2
+_JOINT_PRE_ANSWER_TIMEOUT = object()
 
 
 async def _load_survey_page(driver: Any, config: ExecutionConfig, *, phase_updater: Any = None) -> None:
@@ -77,6 +81,7 @@ class AsyncSlotRunner:
         self.stop_policy = RunStopPolicy(config, state, gui_instance)
         self.submission_service = SubmissionService(config, state, self.stop_policy)
         self.proxy_address: Optional[str] = None
+        self._joint_pre_answer_timed_out = False
 
     def _update_status(self, status_text: str, *, running: bool = True) -> None:
         try:
@@ -104,7 +109,11 @@ class AsyncSlotRunner:
         if self.run_context.stop_requested():
             return True
         with self.state.lock:
-            return bool(self.config.target_num > 0 and self.state.cur_num >= self.config.target_num)
+            target_reached = bool(self.config.target_num > 0 and self.state.cur_num >= self.config.target_num)
+        if target_reached:
+            self.stop_policy.trigger_target_reached_stop(self.stop_proxy)
+            return True
+        return False
 
     async def _sleep_or_stop(self, seconds: float) -> bool:
         delay = max(0.0, float(seconds or 0.0))
@@ -124,6 +133,34 @@ class AsyncSlotRunner:
             return float(min_wait)
         return float(random.uniform(min_wait, max_wait))
 
+    def _resolve_finished_status_text(self) -> str:
+        if self.run_context.stop_requested():
+            try:
+                terminal_category = str(self.state.get_terminal_stop_snapshot()[0] or "").strip()
+            except Exception:
+                terminal_category = ""
+            if terminal_category == "target_reached":
+                return "已完成"
+        return "已停止"
+
+    def _expire_stale_joint_reservations(self) -> None:
+        try:
+            expired_count = self.state.expire_stale_joint_sample_reservations(
+                JOINT_PRE_ANSWER_RESERVATION_LEASE_SECONDS,
+            )
+        except Exception:
+            logging.info("清理过期联合信效度槽位租约失败", exc_info=True)
+            return
+        if expired_count > 0:
+            logging.warning("已释放%s个超时未进入答题的联合信效度槽位", expired_count)
+
+    def _requires_joint_sample(self) -> bool:
+        joint_answer_plan = ensure_joint_psychometric_answer_plan(self.config)
+        if joint_answer_plan is None:
+            return False
+        sample_count = int(getattr(joint_answer_plan, "sample_count", self.config.target_num) or self.config.target_num)
+        return sample_count > 0
+
     async def _prepare_round_context(self) -> bool:
         try:
             self.state.reset_pending_distribution(self.slot_label)
@@ -138,6 +175,9 @@ class AsyncSlotRunner:
         while True:
             if self.run_context.stop_requested():
                 return False
+            if await self._should_stop_loop():
+                return False
+            self._expire_stale_joint_reservations()
 
             reserved_sample_index = None
             if sample_count > 0:
@@ -151,8 +191,15 @@ class AsyncSlotRunner:
                         self.state.release_reverse_fill_sample(self.slot_label, requeue=True)
                     except Exception:
                         logging.info("等待信效度配额时回收反填样本失败", exc_info=True)
+                if self.state.is_joint_sample_quota_exhausted(sample_count):
+                    message = "联合信效度样本槽位已全部完成"
+                    logging.info("%s，剩余会话自动收尾。", message)
+                    self.state.mark_terminal_stop("target_reached", message=message)
+                    self.run_context.stop_event.set()
+                    self._update_status("信效度配额已完成", running=False)
+                    return False
                 self._update_status("等待信效度配额槽位")
-                await asyncio.sleep(0.5)
+                await asyncio.sleep(JOINT_SLOT_WAIT_POLL_SECONDS)
                 continue
 
             if reverse_fill_sample.status == "waiting":
@@ -162,7 +209,7 @@ class AsyncSlotRunner:
                     except Exception:
                         logging.info("等待反填样本时释放联合信效度样本槽位失败", exc_info=True)
                 self._update_status("等待反填样本")
-                await asyncio.sleep(0.5)
+                await asyncio.sleep(JOINT_SLOT_WAIT_POLL_SECONDS)
                 continue
 
             if reverse_fill_sample.status == "exhausted":
@@ -224,14 +271,25 @@ class AsyncSlotRunner:
     async def _open_session(self) -> Optional[AsyncBrowserSession]:
         if self.run_context.stop_requested():
             return None
-        proxy_address, ua_value = await self._select_session_proxy_and_ua()
+        proxy_result = await self._run_pre_answer_step_with_joint_lease(
+            "获取代理",
+            self._select_session_proxy_and_ua,
+        )
+        if proxy_result is _JOINT_PRE_ANSWER_TIMEOUT:
+            return None
+        proxy_address, ua_value = proxy_result
         if self.run_context.stop_requested():
             return None
         if self.config.random_proxy_ip_enabled and not proxy_address:
             return None
         self.proxy_address = proxy_address
         self._update_step("启动浏览器会话")
-        session = await self.browser_pool.open_session(proxy_address=proxy_address, user_agent=ua_value)
+        session = await self._run_pre_answer_step_with_joint_lease(
+            "启动浏览器",
+            lambda: self.browser_pool.open_session(proxy_address=proxy_address, user_agent=ua_value),
+        )
+        if session is _JOINT_PRE_ANSWER_TIMEOUT:
+            return None
         driver = session.driver
         setattr(driver, "_thread_name", self.slot_label)
         setattr(driver, "_session_state", self.state)
@@ -255,22 +313,36 @@ class AsyncSlotRunner:
         self._update_step("加载问卷")
         try:
             if self.config.timed_mode_enabled:
-                ready = await timed_mode.wait_until_open(
-                    cast(AsyncBrowserDriver, session.driver),
-                    self.config.url,
-                    self.stop_proxy,
-                    refresh_interval=self._resolve_timed_refresh_interval(),
-                    logger=logging.info,
+                ready = await self._run_pre_answer_step_with_joint_lease(
+                    "加载问卷",
+                    lambda: timed_mode.wait_until_open(
+                        cast(AsyncBrowserDriver, session.driver),
+                        self.config.url,
+                        self.stop_proxy,
+                        refresh_interval=self._resolve_timed_refresh_interval(),
+                        logger=logging.info,
+                    ),
                 )
+                if ready is _JOINT_PRE_ANSWER_TIMEOUT:
+                    return False
                 if not ready:
                     self.run_context.stop_event.set()
                     return False
             else:
-                await _load_survey_page(
-                    session.driver,
-                    self.config,
-                    phase_updater=lambda status_text: self._update_step(status_text),
+                async def _load_and_confirm() -> bool:
+                    await _load_survey_page(
+                        session.driver,
+                        self.config,
+                        phase_updater=lambda status_text: self._update_step(status_text),
+                    )
+                    return True
+
+                loaded = await self._run_pre_answer_step_with_joint_lease(
+                    "加载问卷",
+                    _load_and_confirm,
                 )
+                if loaded is _JOINT_PRE_ANSWER_TIMEOUT:
+                    return False
         except ProxyConnectionError:
             raise
         except Exception as exc:
@@ -329,6 +401,25 @@ class AsyncSlotRunner:
                 return False
             return True
         return False
+
+    async def _run_pre_answer_step_with_joint_lease(self, label: str, operation: Any) -> Any:
+        if self.state.peek_reserved_joint_sample(self.slot_label) is None:
+            return await operation()
+        try:
+            return await asyncio.wait_for(
+                operation(),
+                timeout=JOINT_PRE_ANSWER_RESERVATION_LEASE_SECONDS,
+            )
+        except asyncio.TimeoutError:
+            logging.warning(
+                "会话[%s]在%s阶段超过%.0f秒未进入答题，释放联合信效度槽位",
+                self.slot_label,
+                label,
+                JOINT_PRE_ANSWER_RESERVATION_LEASE_SECONDS,
+            )
+            self._release_round_resources(requeue_reverse_fill=True)
+            self._joint_pre_answer_timed_out = True
+            return _JOINT_PRE_ANSWER_TIMEOUT
 
     def _handle_proxy_unavailable(self, *, status_text: str, log_message: str) -> bool:
         threshold_getter = getattr(self.stop_policy, "proxy_unavailable_threshold", None)
@@ -417,20 +508,25 @@ class AsyncSlotRunner:
             should_requeue_dispatch = True
             dispatch_delay_seconds = 0.0
             try:
+                self._joint_pre_answer_timed_out = False
                 if not await self._prepare_round_context():
                     should_requeue_dispatch = False
-                    if self.run_context.stop_requested():
-                        break
-                    continue
+                    break
                 session = await self._open_session()
                 if session is None:
-                    self._release_round_resources(requeue_reverse_fill=True)
+                    if not self._joint_pre_answer_timed_out:
+                        self._release_round_resources(requeue_reverse_fill=True)
+                    else:
+                        dispatch_delay_seconds = JOINT_PRE_ANSWER_ATTEMPT_REQUEUE_DELAY_SECONDS
                     if self.run_context.stop_requested():
                         should_requeue_dispatch = False
                         break
                     continue
                 if not await self._load_survey_or_record_failure(session):
-                    self._release_round_resources(requeue_reverse_fill=True)
+                    if not self._joint_pre_answer_timed_out:
+                        self._release_round_resources(requeue_reverse_fill=True)
+                    else:
+                        dispatch_delay_seconds = JOINT_PRE_ANSWER_ATTEMPT_REQUEUE_DELAY_SECONDS
                     if self.run_context.stop_requested():
                         should_requeue_dispatch = False
                         break
@@ -440,6 +536,16 @@ class AsyncSlotRunner:
                     if self.run_context.stop_requested():
                         should_requeue_dispatch = False
                         break
+                    continue
+                try:
+                    marked_answering = self.state.mark_joint_sample_answering(self.slot_label)
+                except Exception:
+                    logging.info("标记联合信效度槽位进入答题失败", exc_info=True)
+                    marked_answering = False
+                if self._requires_joint_sample() and not marked_answering:
+                    logging.warning("会话[%s]进入答题前发现联合信效度槽位已释放，本轮放弃并重试", self.slot_label)
+                    self._release_round_resources(requeue_reverse_fill=True)
+                    dispatch_delay_seconds = JOINT_PRE_ANSWER_ATTEMPT_REQUEUE_DELAY_SECONDS
                     continue
                 finished = await fill_survey(
                     session.driver,
@@ -496,7 +602,7 @@ class AsyncSlotRunner:
                 if self.run_context.stop_requested():
                     should_requeue_dispatch = False
                     break
-                traceback.print_exc()
+                logging.exception("异步会话[%s]运行异常", self.slot_label)
                 if self.stop_policy.record_failure(
                     self.stop_proxy,
                     thread_name=self.slot_label,
@@ -516,7 +622,7 @@ class AsyncSlotRunner:
         try:
             self.state.release_joint_sample(self.slot_label)
             self.state.release_reverse_fill_sample(self.slot_label, requeue=True)
-            self.state.mark_thread_finished(self.slot_label, status_text="已停止")
+            self.state.mark_thread_finished(self.slot_label, status_text=self._resolve_finished_status_text())
         except Exception:
             logging.info("slot 收尾状态更新失败", exc_info=True)
 

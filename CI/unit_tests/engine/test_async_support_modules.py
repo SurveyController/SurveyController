@@ -179,3 +179,11 @@ class ThreadEventProxyTests:
             assert proxy.wait(timeout=0.01) is False
         finally:
             loop.close()
+
+    @pytest.mark.asyncio
+    async def test_wait_rejects_call_on_bound_event_loop_thread(self) -> None:
+        event = asyncio.Event()
+        proxy = ThreadEventProxy(event, loop=asyncio.get_running_loop())
+
+        with pytest.raises(RuntimeError, match="不能在绑定的事件循环线程里阻塞调用"):
+            proxy.wait(timeout=0.01)

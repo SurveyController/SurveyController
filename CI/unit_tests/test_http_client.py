@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 
 import pytest
 
@@ -229,22 +230,23 @@ class HttpClientTests:
     @pytest.mark.asyncio
     async def test_async_stream_response_aiter_content_closes_once(self) -> None:
         response = _FakeAsyncResponse(chunks=[b"a", b"", b"b"])
-        client = _FakeAsyncClient(send_response=response)
+        release_calls: list[str] = []
         stream_ctx = _FakeAsyncStreamCtx(response)
-        wrapper = async_http_client._AsyncStreamResponse(response, stream_ctx, client)
+        wrapper = async_http_client._AsyncStreamResponse(response, stream_ctx, lambda: asyncio.sleep(0, result=release_calls.append("released")))
 
         chunks = [chunk async for chunk in wrapper.aiter_content(chunk_size=16)]
         await wrapper.aclose()
 
         assert chunks == [b"a", b"b"]
         assert stream_ctx.exit_calls == 1
-        assert client.close_calls == 1
+        assert release_calls == ["released"]
 
     @pytest.mark.asyncio
-    async def test_async_request_stream_uses_send_with_stream_and_keeps_client_open_until_close(self, monkeypatch) -> None:
+    async def test_async_request_stream_uses_cached_client_and_keeps_it_open_until_close(self, monkeypatch) -> None:
         response = _FakeAsyncResponse()
         stream_ctx = _FakeAsyncStreamCtx(response)
         fake_client = _FakeAsyncClient(stream_ctx=stream_ctx)
+        monkeypatch.setattr(async_http_client, "_client_manager", async_http_client._AsyncClientManager())
         monkeypatch.setattr(async_http_client.httpx, "AsyncClient", lambda **kwargs: fake_client)
 
         wrapped = await async_http_client.request("GET", "https://example.com", stream=True, timeout=(1, 2))
@@ -262,15 +264,49 @@ class HttpClientTests:
         assert stream_ctx.enter_calls == 1
 
         await wrapped.aclose()
-        assert fake_client.close_calls == 1
+        assert fake_client.close_calls == 0
         assert stream_ctx.exit_calls == 1
 
     @pytest.mark.asyncio
-    async def test_async_request_stream_closes_client_when_send_fails(self, monkeypatch) -> None:
+    async def test_async_request_stream_releases_client_when_send_fails(self, monkeypatch) -> None:
         fake_client = _FakeAsyncClient(stream_error=RuntimeError("boom"))
+        manager = async_http_client._AsyncClientManager()
+        monkeypatch.setattr(async_http_client, "_client_manager", manager)
         monkeypatch.setattr(async_http_client.httpx, "AsyncClient", lambda **kwargs: fake_client)
 
         with pytest.raises(RuntimeError, match="boom"):
             await async_http_client.request("GET", "https://example.com", stream=True)
 
-        assert fake_client.close_calls == 1
+        assert fake_client.close_calls == 0
+        assert list(manager._clients.values())[0].active_requests == 0
+
+    @pytest.mark.asyncio
+    async def test_async_client_manager_reuses_client_in_same_loop(self, monkeypatch) -> None:
+        manager = async_http_client._AsyncClientManager()
+        created_clients: list[_FakeAsyncClient] = []
+
+        def _fake_create_client(**kwargs):
+            del kwargs
+            client = _FakeAsyncClient()
+            created_clients.append(client)
+            return client
+
+        monkeypatch.setattr(manager, "_create_client", _fake_create_client)
+
+        first = await manager.request("GET", "https://example.com")
+        second = await manager.request("GET", "https://example.com")
+
+        assert isinstance(first, _FakeAsyncResponse)
+        assert isinstance(second, _FakeAsyncResponse)
+        assert len(created_clients) == 1
+
+    def test_async_close_without_running_loop_closes_cached_clients(self, monkeypatch) -> None:
+        manager = async_http_client._AsyncClientManager()
+        client = _FakeAsyncClient()
+        key = (123, async_http_client._AsyncClientKey(proxy=None, verify=True, follow_redirects=True, trust_env=True))
+        manager._clients[key] = async_http_client._AsyncClientEntry(client=client, last_used=0.0)
+        monkeypatch.setattr(async_http_client, "_client_manager", manager)
+
+        async_http_client.close()
+
+        assert client.close_calls == 1

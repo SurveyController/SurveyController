@@ -111,20 +111,30 @@ class AsyncRuntimeEngine:
         )
         logging.info("目标份数: %s, 当前进度: %s/%s", config.target_num, state.cur_num, config.target_num)
         try:
-            runners = [
-                AsyncSlotRunner(
-                    slot_id=slot_index + 1,
-                    config=config,
-                    state=state,
-                    run_context=run_context,
-                    scheduler=scheduler,
-                    browser_pool=self._browser_pool,
-                    gui_instance=gui_instance,
-                ).run()
-                for slot_index in range(worker_count)
-            ]
-            await asyncio.gather(*runners)
+            async with asyncio.TaskGroup() as task_group:
+                for slot_index in range(worker_count):
+                    task_group.create_task(
+                        AsyncSlotRunner(
+                            slot_id=slot_index + 1,
+                            config=config,
+                            state=state,
+                            run_context=run_context,
+                            scheduler=scheduler,
+                            browser_pool=self._browser_pool,
+                            gui_instance=gui_instance,
+                        ).run(),
+                        name=f"AsyncSlotRunner-{slot_index + 1}",
+                    )
+        except* Exception as exc_group:
+            errors = [exc for exc in exc_group.exceptions if not isinstance(exc, asyncio.CancelledError)]
+            if not errors:
+                raise
+            if len(errors) == 1:
+                raise errors[0]
+            raise ExceptionGroup("AsyncRuntimeEngine slot 运行失败", errors)
         finally:
+            if self._stop_event is not None:
+                self._stop_event.set()
             await scheduler.close()
             if self._browser_pool is not None:
                 await self._browser_pool.shutdown()
