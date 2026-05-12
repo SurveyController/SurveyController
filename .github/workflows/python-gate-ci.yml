@@ -63,11 +63,30 @@ jobs:
       - name: Run main window smoke check
         run: uv run python -m CI.python_checks.window_smoke_check
 
-  live-runtime-regression-matrix:
-    name: Live Runtime Checks
+  import-and-window-smoke:
+    name: Import And Window Smoke
+    if: ${{ always() }}
     needs:
       - import-check
       - window-smoke
+    runs-on: windows-latest
+
+    steps:
+      - name: Verify import and window smoke checks
+        shell: powershell
+        run: |
+          $importResult = "${{ needs.import-check.result }}"
+          $windowResult = "${{ needs.window-smoke.result }}"
+          Write-Host "Import smoke result: $importResult"
+          Write-Host "Window smoke result: $windowResult"
+          if ($importResult -ne "success" -or $windowResult -ne "success") {
+            throw "Import or window smoke check did not pass."
+          }
+
+  live-runtime-regression-matrix:
+    name: Live Runtime Checks
+    needs:
+      - import-and-window-smoke
     runs-on: windows-latest
     strategy:
       fail-fast: false
@@ -102,11 +121,10 @@ jobs:
         run: uv run pytest CI/live_tests/test_live_runtime_regression.py -ra -vv --tb=short --durations=10 --color=yes
 
   live-runtime-regression:
-    name: Live Runtime Gate
-    if: ${{ always() && needs.import-check.result == 'success' && needs.window-smoke.result == 'success' }}
+    name: Live Parser Regression
+    if: ${{ always() && needs.import-and-window-smoke.result == 'success' }}
     needs:
-      - import-check
-      - window-smoke
+      - import-and-window-smoke
       - live-runtime-regression-matrix
     runs-on: windows-latest
 

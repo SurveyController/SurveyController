@@ -16,7 +16,7 @@ concurrency:
 
 jobs:
   static-checks:
-    name: Static Analysis
+    name: Static Checks
     runs-on: windows-latest
 
     steps:
