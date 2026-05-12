@@ -237,7 +237,8 @@ def _extract_display_heading_text(question_div) -> str:
 def _count_text_inputs_in_soup(question_div) -> int:
     try:
         candidates = question_div.find_all(["input", "textarea", "span", "div"])
-    except Exception:
+    except Exception as exc:
+        log_suppressed_exception("survey.parser._count_text_inputs candidates", exc, level=logging.ERROR)
         return 0
     count = 0
     for cand in candidates:
@@ -311,7 +312,8 @@ def _extract_text_input_labels(question_div) -> List[str]:
 
     try:
         candidates = question_div.find_all(["input", "textarea", "span", "div"])
-    except Exception:
+    except Exception as exc:
+        log_suppressed_exception("survey.parser._extract_text_input_labels candidates", exc, level=logging.ERROR)
         return labels
 
     for cand in candidates:
@@ -350,7 +352,8 @@ def _extract_text_input_labels(question_div) -> List[str]:
                     if parent is not None:
                         label = _label_before_node(parent)
                 labels.append(label if label else f"填空{len(labels) + 1}")
-        except Exception:
+        except Exception as exc:
+            log_suppressed_exception("survey.parser._extract_text_input_labels candidate", exc, level=logging.ERROR)
             continue
 
     return labels

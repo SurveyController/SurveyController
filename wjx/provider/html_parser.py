@@ -58,6 +58,27 @@ def _question_div_is_initially_hidden(question_div) -> bool:
     )
 
 
+def _question_div_or_ancestors_are_hidden(question_div) -> bool:
+    current = question_div
+    while current is not None:
+        if _question_div_is_initially_hidden(current):
+            return True
+        current = getattr(current, "parent", None)
+    return False
+
+
+def _question_div_has_question_ancestor(question_div, fieldset) -> bool:
+    current = getattr(question_div, "parent", None)
+    while current is not None and current is not fieldset:
+        try:
+            if current.name == "div" and current.get("topic") is not None:
+                return True
+        except Exception:
+            return False
+        current = getattr(current, "parent", None)
+    return False
+
+
 def parse_survey_questions_from_html(html: str) -> List[Dict[str, Any]]:
     """从 HTML 解析问卷题目列表"""
     if not BeautifulSoup:
@@ -71,9 +92,11 @@ def parse_survey_questions_from_html(html: str) -> List[Dict[str, Any]]:
         fieldsets = [container]
     questions_info: List[Dict[str, Any]] = []
     for page_index, fieldset in enumerate(fieldsets, 1):
-        question_divs = fieldset.find_all("div", attrs={"topic": True}, recursive=False)
-        if not question_divs:
-            question_divs = fieldset.find_all("div", attrs={"topic": True})
+        question_divs = [
+            item
+            for item in fieldset.find_all("div", attrs={"topic": True})
+            if not _question_div_has_question_ancestor(item, fieldset)
+        ]
         current_display_num: Optional[int] = None
         visible_question_counter = 0
         for question_div in question_divs:
@@ -101,7 +124,7 @@ def parse_survey_questions_from_html(html: str) -> List[Dict[str, Any]]:
                 display_num = current_display_num
             elif display_num > 0:
                 current_display_num = display_num
-            if not _question_div_is_initially_hidden(question_div):
+            if not _question_div_or_ancestors_are_hidden(question_div):
                 visible_question_counter += 1
                 if display_num is None or display_num != visible_question_counter:
                     display_num = visible_question_counter

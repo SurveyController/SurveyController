@@ -411,6 +411,13 @@ async def parse_survey_with_cache(url: str, parser: Callable[[str], Awaitable[Su
             on_success=lambda refreshed: _write_cached_definition(path, refreshed, f"ttl-only:{provider}", expected_epoch=cache_epoch),
         )
 
+    if cached is not None:
+        definition, _cached_fingerprint, cached_at = cached
+        cache_age = _cache_age_seconds(cached_at)
+        if cache_age <= refresh_after_seconds:
+            logging.info("短时命中问卷解析缓存，url=%r provider=%s", normalized_url, provider)
+            return definition
+
     remote_fingerprint = await _resolve_maybe_awaitable(_fetch_remote_fingerprint(normalized_url, provider))
     if cached is not None:
         definition, cached_fingerprint, cached_at = cached
@@ -423,6 +430,7 @@ async def parse_survey_with_cache(url: str, parser: Callable[[str], Awaitable[Su
             return definition
         if (
             stale_window_seconds is not None
+            and not remote_fingerprint
             and cache_age > refresh_after_seconds
             and cache_age <= stale_window_seconds
         ):

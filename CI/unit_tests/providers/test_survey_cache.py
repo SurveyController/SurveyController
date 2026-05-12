@@ -91,6 +91,8 @@ class SurveyCacheTests:
             titles = ["旧标题", "新标题"]
             original_runtime_directory = self._patch_cache_directory(temp_dir)
             original_fetch_fingerprint = survey_cache._fetch_remote_fingerprint
+            original_now = survey_cache._now
+            now_values = [1000, 1000 + survey_cache._SURVEY_PARSE_CACHE_TTL_SECONDS + 1, 2000, 2000]
 
             async def parser(_url: str):
                 title = titles.pop(0)
@@ -101,11 +103,13 @@ class SurveyCacheTests:
 
             try:
                 survey_cache._fetch_remote_fingerprint = next_fingerprint
+                survey_cache._now = lambda: now_values.pop(0)
                 first = await parse_survey_with_cache("https://www.wjx.cn/vm/demo.aspx", parser)
                 second = await parse_survey_with_cache("https://www.wjx.cn/vm/demo.aspx", parser)
             finally:
                 survey_cache.get_user_cache_directory = original_runtime_directory
                 survey_cache._fetch_remote_fingerprint = original_fetch_fingerprint
+                survey_cache._now = original_now
             assert first.title == "旧标题"
             assert second.title == "新标题"
             assert titles == []
@@ -197,6 +201,38 @@ class SurveyCacheTests:
             assert first.title == "旧标题"
             assert second.title == "旧标题"
 
+    @pytest.mark.asyncio
+    async def test_recent_cache_hit_does_not_fetch_remote_fingerprint(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            calls: list[str] = []
+            fingerprint_calls: list[str] = []
+            original_runtime_directory = self._patch_cache_directory(temp_dir)
+            original_fetch_fingerprint = survey_cache._fetch_remote_fingerprint
+            original_now = survey_cache._now
+            now_values = [1000, 1005]
+
+            async def parser(url: str):
+                calls.append(url)
+                return build_survey_definition("wjx", "缓存标题", [{"num": 1, "title": "缓存题目", "type_code": "3"}])
+
+            def fingerprint(url: str, _provider: str) -> str:
+                fingerprint_calls.append(url)
+                return "same"
+
+            try:
+                survey_cache._fetch_remote_fingerprint = fingerprint
+                survey_cache._now = lambda: now_values.pop(0)
+                first = await parse_survey_with_cache("https://www.wjx.cn/vm/demo.aspx", parser)
+                second = await parse_survey_with_cache("https://www.wjx.cn/vm/demo.aspx", parser)
+            finally:
+                survey_cache.get_user_cache_directory = original_runtime_directory
+                survey_cache._fetch_remote_fingerprint = original_fetch_fingerprint
+                survey_cache._now = original_now
+            assert len(calls) == 1
+            assert len(fingerprint_calls) == 1
+            assert first.title == "缓存标题"
+            assert second.title == "缓存标题"
+
     def test_clear_survey_parse_cache_removes_cached_entries(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             original_runtime_directory = self._patch_cache_directory(temp_dir)
@@ -279,7 +315,7 @@ class SurveyCacheTests:
             assert results == ["并发标题"] * 5
 
     @pytest.mark.asyncio
-    async def test_stale_cache_returns_immediately_and_triggers_single_background_refresh(self) -> None:
+    async def test_stale_cache_refreshes_immediately_when_fingerprint_changed(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             original_runtime_directory = self._patch_cache_directory(temp_dir)
             original_fetch_fingerprint = survey_cache._fetch_remote_fingerprint
@@ -287,13 +323,10 @@ class SurveyCacheTests:
             now_values = [1000, 1000 + survey_cache._SURVEY_PARSE_CACHE_TTL_SECONDS + 10]
             titles = ["旧标题", "新标题"]
             parser_calls: list[str] = []
-            refresh_event = threading.Event()
 
             async def parser(url: str):
                 parser_calls.append(url)
                 title = titles.pop(0)
-                if title == "新标题":
-                    refresh_event.set()
                 return build_survey_definition("wjx", title, [{"num": 1, "title": title, "type_code": "3"}])
 
             fingerprint_calls = iter(["old", "changed", "changed"])
@@ -304,17 +337,10 @@ class SurveyCacheTests:
                 survey_cache._fetch_remote_fingerprint = lambda url, provider: next(fingerprint_calls, "changed")
                 first = await parse_survey_with_cache("https://www.wjx.cn/vm/demo.aspx", parser)
                 second = await parse_survey_with_cache("https://www.wjx.cn/vm/demo.aspx", parser)
-                refresh_event.wait(timeout=3)
-                for _ in range(30):
-                    third = await parse_survey_with_cache("https://www.wjx.cn/vm/demo.aspx", parser)
-                    if third.title == "新标题":
-                        break
-                    time.sleep(0.05)
             finally:
                 survey_cache.get_user_cache_directory = original_runtime_directory
                 survey_cache._fetch_remote_fingerprint = original_fetch_fingerprint
                 survey_cache._now = original_now
             assert first.title == "旧标题"
-            assert second.title == "旧标题"
-            assert third.title == "新标题"
+            assert second.title == "新标题"
             assert len(parser_calls) == 2

@@ -217,6 +217,38 @@ class WjxHtmlParserTests:
         assert questions[2]["num"] == 23
         assert questions[2]["display_num"] == 2
 
+    def test_parse_survey_questions_treats_hidden_ancestor_question_as_hidden(self) -> None:
+        html = """
+        <html>
+          <body>
+            <div id="divQuestion">
+              <fieldset>
+                <section style="display:none;">
+                  <div topic="20" id="div20" type="5">
+                    <div class="field-label">
+                      <div class="topicnumber">20.</div>
+                      <div class="topichtml">隐藏题</div>
+                    </div>
+                  </div>
+                </section>
+                <div topic="21" id="div21" type="4">
+                  <div class="field-label">
+                    <div class="topicnumber">21.</div>
+                    <div class="topichtml">显示题一</div>
+                  </div>
+                  <div class="ui-controlgroup"><div><span class="label">A</span></div></div>
+                </div>
+              </fieldset>
+            </div>
+          </body>
+        </html>
+        """
+
+        questions = parse_survey_questions_from_html(html)
+
+        assert questions[0]["display_num"] == 20
+        assert questions[1]["display_num"] == 1
+
     def test_parse_survey_questions_matches_shifted_visible_numbering_after_hidden_question(self) -> None:
         question_blocks = []
         for num in range(1, 20):

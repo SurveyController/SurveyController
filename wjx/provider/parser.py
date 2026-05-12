@@ -190,17 +190,20 @@ async def _load_rendered_wjx_parse_result(url: str) -> Tuple[Optional[List[Dict[
         await driver.get(url, timeout=20000, wait_until="domcontentloaded")
         page = await driver.page()
         if page is not None:
+            selector_seen = True
             try:
                 await page.wait_for_selector("#divQuestion, div[topic], fieldset", state="attached", timeout=6000)
             except Exception:
+                selector_seen = False
                 try:
                     await page.wait_for_load_state("networkidle", timeout=2000)
                 except Exception:
                     pass
-            try:
-                await page.wait_for_load_state("networkidle", timeout=2000)
-            except Exception:
-                pass
+            if selector_seen:
+                try:
+                    await page.wait_for_load_state("networkidle", timeout=1000)
+                except Exception:
+                    pass
         page_source = await driver.page_source()
         if is_paused_survey_page(page_source):
             raise SurveyPausedError(PAUSED_SURVEY_ERROR_MESSAGE)
