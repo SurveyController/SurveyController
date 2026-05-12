@@ -9,6 +9,7 @@ permissions:
 
 env:
   R2_FEED_PREFIX: "surveycontroller/win/stable"
+  VELOPACK_CHANNEL: "stable"
   VELOPACK_KEEP_FULL_VERSIONS: "6"
 
 concurrency:
@@ -28,12 +29,13 @@ jobs:
         shell: powershell
         continue-on-error: true
         run: |
+          $channel = "${env:VELOPACK_CHANNEL}"
           $releaseDir = Join-Path "${{ github.workspace }}" "Releases"
           New-Item -ItemType Directory -Path $releaseDir -Force | Out-Null
           $feedBase = "https://dl.hungrym0.top/${env:R2_FEED_PREFIX}"
-          $manifestPath = Join-Path $releaseDir "releases.stable.json"
+          $manifestPath = Join-Path $releaseDir "releases.$channel.json"
           try {
-            Invoke-WebRequest -Uri "$feedBase/releases.stable.json" -OutFile $manifestPath -UseBasicParsing
+            Invoke-WebRequest -Uri "$feedBase/releases.$channel.json" -OutFile $manifestPath -UseBasicParsing
             $manifest = Get-Content $manifestPath -Raw | ConvertFrom-Json
             $assets = @($manifest.Assets)
             foreach ($asset in $assets) {
@@ -43,7 +45,7 @@ jobs:
               }
               Invoke-WebRequest -Uri "$feedBase/$fileName" -OutFile (Join-Path $releaseDir $fileName) -UseBasicParsing
             }
-            foreach ($extraName in @("assets.stable.json", "RELEASES-stable")) {
+            foreach ($extraName in @("assets.$channel.json", "RELEASES-$channel")) {
               try {
                 Invoke-WebRequest -Uri "$feedBase/$extraName" -OutFile (Join-Path $releaseDir $extraName) -UseBasicParsing
               } catch {
@@ -56,7 +58,7 @@ jobs:
       - name: Set up uv
         uses: astral-sh/setup-uv@08807647e7069bb48b6ef5acd8ec9567f424441b # v8.1.0
         with:
-          python-version: "3.11"
+          python-version: "3.13"
           enable-cache: true
           cache-dependency-glob: |
             pyproject.toml
@@ -87,129 +89,25 @@ jobs:
         run: |
           $tag = "${{ github.event.release.tag_name }}"
           $packVersion = $tag.TrimStart('v')
-          $channel = "stable"
+          $channel = "${env:VELOPACK_CHANNEL}"
           $releaseDir = Join-Path "${{ github.workspace }}" "Releases"
-          $setupName = "SurveyController_${tag}_setup.exe"
-          $generatedSetupName = "SurveyController-$channel-Setup.exe"
-          $generatedSetupPath = Join-Path $releaseDir $generatedSetupName
+          $setupName = "SurveyController_${packVersion}_setup.exe"
           $setupPath = Join-Path $releaseDir $setupName
           "tag=$tag" >> $env:GITHUB_OUTPUT
           "pack_version=$packVersion" >> $env:GITHUB_OUTPUT
           "channel=$channel" >> $env:GITHUB_OUTPUT
           "release_dir=$releaseDir" >> $env:GITHUB_OUTPUT
           "setup_name=$setupName" >> $env:GITHUB_OUTPUT
-          "generated_setup_name=$generatedSetupName" >> $env:GITHUB_OUTPUT
-          "generated_setup_path=$generatedSetupPath" >> $env:GITHUB_OUTPUT
           "setup_path=$setupPath" >> $env:GITHUB_OUTPUT
 
-      - name: Build Nuitka bundle
+      - name: Build release installer
         shell: powershell
         run: |
-          .\Setup\build-local-nuitka.ps1 -SkipSync
-
-      - name: Verify Playwright package trim
-        shell: powershell
-        run: |
-          $blockedPaths = @(
-            "dist/lib/playwright/driver/package/api.json",
-            "dist/lib/playwright/driver/package/types",
-            "dist/lib/playwright/driver/package/index.d.ts",
-            "dist/lib/playwright/driver/package/index.mjs",
-            "dist/lib/playwright/driver/package/README.md",
-            "dist/lib/playwright/driver/package/protocol.yml",
-            "dist/lib/playwright/driver/package/lib/vite",
-            "dist/lib/playwright/driver/package/lib/tools/backend",
-            "dist/lib/playwright/driver/package/lib/tools/cli-client",
-            "dist/lib/playwright/driver/package/lib/tools/cli-daemon",
-            "dist/lib/playwright/driver/package/lib/tools/dashboard",
-            "dist/lib/playwright/driver/package/lib/tools/mcp",
-            "dist/lib/playwright/driver/package/lib/tools/utils",
-            "dist/lib/playwright/driver/package/lib/tools/exports.js",
-            "dist/lib/playwright/driver/package/lib/mcpBundle.js",
-            "dist/lib/playwright/driver/package/lib/mcpBundleImpl.js",
-            "dist/lib/playwright/driver/package/lib/zodBundle.js",
-            "dist/lib/playwright/driver/package/lib/zodBundleImpl.js"
-          )
-          foreach ($path in $blockedPaths) {
-            if (Test-Path $path) {
-              throw "Blocked Playwright tool payload was packaged: $path"
-            }
-          }
-          foreach ($path in @(
-            "dist/lib/playwright/driver/node.exe",
-            "dist/lib/playwright/driver/package/cli.js"
-          )) {
-            if (-not (Test-Path $path)) {
-              throw "Required Playwright driver file missing: $path"
-            }
-          }
-
-      - name: Drop existing Velopack version
-        shell: powershell
-        run: |
-          python CI/release_tools/trim_velopack_feed.py `
-            --release-dir "${{ steps.release_meta.outputs.release_dir }}" `
-            --channel "${{ steps.release_meta.outputs.channel }}" `
-            --keep-full "${env:VELOPACK_KEEP_FULL_VERSIONS}" `
-            --drop-version "${{ steps.release_meta.outputs.pack_version }}"
-
-      - name: Build Velopack release package
-        shell: powershell
-        run: |
-          $releaseDir = "${{ steps.release_meta.outputs.release_dir }}"
-          New-Item -ItemType Directory -Path $releaseDir -Force | Out-Null
-          $env:PATH = "$env:USERPROFILE\.dotnet\tools;$env:PATH"
-          vpk pack `
-            --packId SurveyController `
-            --packTitle "SurveyController" `
-            --packVersion "${{ steps.release_meta.outputs.pack_version }}" `
-            --packDir "dist/lib" `
-            --mainExe "SurveyController.exe" `
-            --icon "dist/lib/icon.ico" `
-            --delta "BestSpeed" `
-            --channel "${{ steps.release_meta.outputs.channel }}" `
-            --outputDir $releaseDir
-
-      - name: Trim Velopack feed history
-        shell: powershell
-        run: |
-          python CI/release_tools/trim_velopack_feed.py `
-            --release-dir "${{ steps.release_meta.outputs.release_dir }}" `
-            --channel "${{ steps.release_meta.outputs.channel }}" `
-            --keep-full "${env:VELOPACK_KEEP_FULL_VERSIONS}"
-
-      - name: Rename setup installer
-        shell: powershell
-        run: |
-          $generatedSetup = "${{ steps.release_meta.outputs.generated_setup_path }}"
-          $targetSetup = "${{ steps.release_meta.outputs.setup_path }}"
-          if (-not (Test-Path $generatedSetup)) {
-            throw "Velopack setup executable not found: $generatedSetup"
-          }
-          Move-Item -LiteralPath $generatedSetup -Destination $targetSetup -Force
-
-      - name: Verify release output
-        shell: powershell
-        run: |
-          $releaseDir = "${{ steps.release_meta.outputs.release_dir }}"
-          $setupPath = "${{ steps.release_meta.outputs.setup_path }}"
-          if (-not (Test-Path $setupPath)) {
-            throw "Setup installer not found: $setupPath"
-          }
-          $requiredFiles = @(
-            $setupPath,
-            (Join-Path $releaseDir "releases.stable.json")
-          )
-          foreach ($required in $requiredFiles) {
-            if (-not (Test-Path $required)) {
-              throw "Required release asset missing: $required"
-            }
-          }
-          $nupkgs = Get-ChildItem -Path $releaseDir -Filter "*.nupkg"
-          if (-not $nupkgs) {
-            throw "No Velopack nupkg packages were produced"
-          }
-          Get-ChildItem $releaseDir | Format-Table Name, Length, LastWriteTime
+          .\Setup\build-release-installer.ps1 `
+            -SkipSync `
+            -Channel "${{ steps.release_meta.outputs.channel }}" `
+            -PackVersion "${{ steps.release_meta.outputs.pack_version }}" `
+            -KeepFullVersions "${env:VELOPACK_KEEP_FULL_VERSIONS}"
 
       - name: Upload workflow artifact
         uses: actions/upload-artifact@v7
@@ -336,7 +234,7 @@ jobs:
           Write-Host "https://github.com/${{ github.repository }}/releases/tag/${{ steps.release_meta.outputs.tag }}"
           Write-Host ""
           Write-Host "Velopack feed:"
-          Write-Host "https://dl.hungrym0.top/${env:R2_FEED_PREFIX}/releases.stable.json"
+          Write-Host "https://dl.hungrym0.top/${env:R2_FEED_PREFIX}/releases.${env:VELOPACK_CHANNEL}.json"
           Write-Host ""
           Write-Host "Setup installer:"
           Write-Host "https://dl.hungrym0.top/${env:R2_FEED_PREFIX}/${{ steps.release_meta.outputs.setup_name }}"

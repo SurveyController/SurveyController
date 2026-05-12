@@ -139,12 +139,12 @@ class UpdateHelperTests:
             assert updater.UpdateManager.download_update(object(), progress_callback=on_progress)
         assert progress_values == [(5, 100, 0.0), (100, 100, 0.0)]
 
-    def test_apply_downloaded_update_uses_wait_exit_then_apply(self) -> None:
+    def test_apply_downloaded_update_uses_apply_updates_and_exit(self) -> None:
         manager = MagicMock()
         update_info = object()
         with patch.object(updater, "_safe_create_update_manager", return_value=manager):
             updater.UpdateManager.apply_downloaded_update(update_info)
-        manager.wait_exit_then_apply_updates.assert_called_once_with(update_info, silent=True, restart=True)
+        manager.apply_updates_and_exit.assert_called_once_with(update_info)
 
     def test_build_github_update_result_returns_unknown_when_version_cannot_be_parsed(self) -> None:
         with (

@@ -3,8 +3,22 @@ param(
     [Parameter(Mandatory = $false)]
     [string]$OutputDir = "dist",
 
+    [Parameter(Mandatory = $false)]
+    [string]$ReleaseDir = "Releases",
+
+    [Parameter(Mandatory = $false)]
+    [string]$Channel = "stable",
+
+    [Parameter(Mandatory = $false)]
+    [string]$PackVersion = "",
+
+    [Parameter(Mandatory = $false)]
+    [int]$KeepFullVersions = 6,
+
     [switch]$SkipClean,
-    [switch]$SkipSync
+    [switch]$SkipSync,
+    [switch]$SkipVelopack,
+    [switch]$SkipRenameSetup
 )
 
 $ErrorActionPreference = "Stop"
@@ -34,6 +48,25 @@ function Resolve-RepoRoot {
         $scriptRoot = Split-Path -Parent $PSCommandPath
     }
     return (Resolve-Path (Join-Path $scriptRoot "..")).Path
+}
+
+function Get-PackVersion {
+    param(
+        [string]$RepoRoot,
+        [string]$ProvidedVersion
+    )
+
+    if (-not [string]::IsNullOrWhiteSpace($ProvidedVersion)) {
+        return $ProvidedVersion.Trim()
+    }
+
+    $versionFile = Join-Path $RepoRoot "software\app\version.py"
+    $versionContent = Get-Content -LiteralPath $versionFile -Raw
+    $match = [regex]::Match($versionContent, '__VERSION__\s*=\s*"([^"]+)"')
+    if (-not $match.Success) {
+        throw ("Failed to resolve version from: {0}" -f $versionFile)
+    }
+    return $match.Groups[1].Value.Trim()
 }
 
 function Get-NuitkaDistDirectory {
@@ -72,11 +105,28 @@ function Remove-PathsByPattern {
     }
 }
 
+function Remove-ReleaseSetupIfExists {
+    param(
+        [string]$ReleaseRoot,
+        [string[]]$FileNames
+    )
+
+    foreach ($fileName in $FileNames) {
+        Remove-IfExists -Path (Join-Path $ReleaseRoot $fileName)
+    }
+}
+
 $repoRoot = Resolve-RepoRoot
 $targetRoot = Join-Path $repoRoot $OutputDir
+$releaseRoot = Join-Path $repoRoot $ReleaseDir
 $buildRoot = Join-Path $repoRoot "build\nuitka"
 $packDir = Join-Path $targetRoot "lib"
 $mainExe = Join-Path $packDir "SurveyController.exe"
+$packVersion = Get-PackVersion -RepoRoot $repoRoot -ProvidedVersion $PackVersion
+$setupName = "SurveyController_$($packVersion)_setup.exe"
+$generatedSetupName = "SurveyController-$Channel-Setup.exe"
+$expectedSetupName = if ($SkipRenameSetup) { $generatedSetupName } else { $setupName }
+$manifestPath = Join-Path $releaseRoot "releases.$Channel.json"
 
 Write-Step "Check environment"
 Assert-CommandAvailable -Name "python" -InstallHint "Install Python first and ensure python is available in PATH."
@@ -85,6 +135,8 @@ Assert-CommandAvailable -Name "uv" -InstallHint "Install uv first: powershell -E
 Write-Host ("Repo root: {0}" -f $repoRoot)
 Write-Host ("Output dir: {0}" -f $targetRoot)
 Write-Host ("Pack dir: {0}" -f $packDir)
+Write-Host ("Release dir: {0}" -f $releaseRoot)
+Write-Host ("Pack version: {0}" -f $packVersion)
 
 if (-not $SkipClean) {
     Write-Step "Clean old artifacts"
@@ -221,6 +273,71 @@ $blockedQtPluginPatterns = @(
 )
 Remove-PathsByPattern -BaseDir (Join-Path $packDir "PySide6\qt-plugins") -Patterns $blockedQtPluginPatterns
 
+if (-not $SkipVelopack) {
+    Write-Step "Check Velopack environment"
+    $env:PATH = "$env:USERPROFILE\.dotnet\tools;$env:PATH"
+    Assert-CommandAvailable -Name "dotnet" -InstallHint "Install .NET SDK first."
+    Assert-CommandAvailable -Name "vpk" -InstallHint "Install Velopack CLI: dotnet tool install -g vpk"
+
+    Write-Step "Build Velopack release"
+    New-Item -ItemType Directory -Path $releaseRoot -Force | Out-Null
+    Remove-ReleaseSetupIfExists -ReleaseRoot $releaseRoot -FileNames @($setupName, $generatedSetupName)
+
+    if (Test-Path $manifestPath) {
+        Write-Step "Drop existing same-version assets"
+        Push-Location $repoRoot
+        try {
+            uv run python CI/release_tools/trim_velopack_feed.py `
+                --release-dir $releaseRoot `
+                --channel $Channel `
+                --keep-full $KeepFullVersions `
+                --drop-version $packVersion
+        }
+        finally {
+            Pop-Location
+        }
+    }
+
+    Push-Location $repoRoot
+    try {
+        vpk pack `
+            --packId SurveyController `
+            --packTitle "SurveyController" `
+            --packVersion $packVersion `
+            --packDir $packDir `
+            --mainExe "SurveyController.exe" `
+            --icon (Join-Path $packDir "icon.ico") `
+            --delta "BestSpeed" `
+            --channel $Channel `
+            --outputDir $releaseRoot
+    }
+    finally {
+        Pop-Location
+    }
+
+    if (-not $SkipRenameSetup) {
+        Write-Step "Rename setup installer"
+        $generatedSetupPath = Join-Path $releaseRoot $generatedSetupName
+        $setupPath = Join-Path $releaseRoot $setupName
+        if (-not (Test-Path $generatedSetupPath)) {
+            throw ("Velopack setup executable not found: {0}" -f $generatedSetupPath)
+        }
+        Move-Item -LiteralPath $generatedSetupPath -Destination $setupPath -Force
+    }
+
+    Write-Step "Trim Velopack feed history"
+    Push-Location $repoRoot
+    try {
+        uv run python CI/release_tools/trim_velopack_feed.py `
+            --release-dir $releaseRoot `
+            --channel $Channel `
+            --keep-full $KeepFullVersions
+    }
+    finally {
+        Pop-Location
+    }
+}
+
 Write-Step "Verify bundle"
 if (-not (Test-Path $packDir)) {
     throw ("Pack directory not found: {0}" -f $packDir)
@@ -244,9 +361,34 @@ foreach ($relativePath in @(
     }
 }
 
+if (-not $SkipVelopack) {
+    Write-Step "Verify release output"
+    $setupPath = Join-Path $releaseRoot $expectedSetupName
+    if (-not (Test-Path $releaseRoot)) {
+        throw ("Release directory not found: {0}" -f $releaseRoot)
+    }
+    if (-not (Test-Path $setupPath)) {
+        throw ("Setup installer not found: {0}" -f $setupPath)
+    }
+    if (-not (Test-Path $manifestPath)) {
+        throw ("Velopack feed manifest not found: {0}" -f $manifestPath)
+    }
+    $nupkgs = Get-ChildItem -Path $releaseRoot -Filter "*.nupkg"
+    if (-not $nupkgs) {
+        throw "No Velopack nupkg packages were produced"
+    }
+}
+
 Write-Step "Build finished"
 Get-ChildItem $packDir | Sort-Object Name | Format-Table Name, Length, LastWriteTime -AutoSize
+if (-not $SkipVelopack) {
+    Get-ChildItem $releaseRoot | Sort-Object Name | Format-Table Name, Length, LastWriteTime -AutoSize
+}
 
 Write-Host ""
 Write-Host ("Standalone bundle: {0}" -f $packDir) -ForegroundColor Green
 Write-Host ("Main executable: {0}" -f $mainExe) -ForegroundColor Green
+if (-not $SkipVelopack) {
+    Write-Host ("Release dir: {0}" -f $releaseRoot) -ForegroundColor Green
+    Write-Host ("Setup installer: {0}" -f (Join-Path $releaseRoot $expectedSetupName)) -ForegroundColor Green
+}
