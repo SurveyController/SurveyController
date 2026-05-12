@@ -20,7 +20,6 @@ class DashboardRunActionsMixin:
         strategy_page: Any
         target_spin: Any
         thread_spin: Any
-        time_estimate_label: Any
         random_ip_cb: Any
         progress_bar: Any
         progress_pct: Any
@@ -43,7 +42,6 @@ class DashboardRunActionsMixin:
         def _refresh_entry_table(self) -> None: ...
         def _refresh_ip_cost_infobar(self) -> None: ...
         def _sync_random_ip_toggle_presentation(self, enabled: bool) -> None: ...
-        def _refresh_time_estimate(self, current: int | None = None, target: int | None = None) -> None: ...
         def window(self) -> Any: ...
 
     def _on_start_clicked(self, enable_reverse_fill: bool = False):
@@ -68,7 +66,6 @@ class DashboardRunActionsMixin:
         self._refresh_entry_table()
         self._sync_start_button_state()
         self._refresh_ip_cost_infobar()
-        self._refresh_time_estimate()
 
     def _apply_runtime_ui_state(self, state: dict) -> None:
         target = state.get("target")
@@ -99,7 +96,6 @@ class DashboardRunActionsMixin:
             self._sync_random_ip_toggle_presentation(bool(random_ip_enabled))
 
         self._refresh_ip_cost_infobar()
-        self._refresh_time_estimate()
 
     def apply_config(self, cfg: RuntimeConfig):
         self.url_edit.setText(cfg.url)
@@ -134,7 +130,6 @@ class DashboardRunActionsMixin:
         self._refresh_entry_table()
         self._sync_start_button_state()
         self._refresh_ip_cost_infobar()
-        self._refresh_time_estimate()
         self.controller.sync_runtime_ui_state_from_config(cfg)
 
     def _go_to_runtime_page(self) -> None:

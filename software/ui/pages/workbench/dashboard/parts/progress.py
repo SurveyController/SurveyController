@@ -75,7 +75,6 @@ class DashboardProgressMixin:
 
         def _sync_start_button_state(self, running: Optional[bool] = None) -> None: ...
         def _has_question_entries(self) -> bool: ...
-        def _refresh_time_estimate(self, current: int | None = None, target: int | None = None) -> None: ...
         def _toast(
             self,
             text: str,
@@ -344,7 +343,6 @@ class DashboardProgressMixin:
         self.progress_bar.setValue(progress)
         self.progress_pct.setText(f"{progress}%")
         self._last_progress = progress
-        self._refresh_time_estimate(current=current, target=target)
         if target > 0 and current >= target and not self._completion_notified:
             self._completion_notified = True
             self._toast("全部份数已完成", "success", duration=5000)
@@ -577,7 +575,6 @@ class DashboardProgressMixin:
             self._clear_thread_progress_rows()
             self._last_device_quota_fail_count = 0
             self._apply_progress_visual_state(False)
-            self._refresh_time_estimate(current=0, target=self.target_spin.value())
             if self._controller_initializing():
                 self.status_label.setText("正在初始化")
                 self._set_main_progress_indeterminate(True)
@@ -602,8 +599,6 @@ class DashboardProgressMixin:
             if self._pending_restart:
                 self._pending_restart = False
                 self._on_start_clicked()
-            else:
-                self._refresh_time_estimate()
 
     def on_cleanup_finished(self):
         if self._show_end_toast_after_cleanup:
