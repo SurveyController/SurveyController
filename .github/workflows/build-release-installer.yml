@@ -1,8 +1,9 @@
 name: Build Release Installer
 
 on:
-  release:
-    types: [published]
+  push:
+    tags:
+      - "v*"
 
 permissions:
   contents: write
@@ -13,7 +14,7 @@ env:
   VELOPACK_KEEP_FULL_VERSIONS: "6"
 
 concurrency:
-  group: build-release-installer-${{ github.event.release.id }}
+  group: build-release-installer-${{ github.ref_name }}
   cancel-in-progress: false
 
 jobs:
@@ -87,7 +88,7 @@ jobs:
         id: release_meta
         shell: powershell
         run: |
-          $tag = "${{ github.event.release.tag_name }}"
+          $tag = "${{ github.ref_name }}"
           $packVersion = $tag.TrimStart('v')
           $channel = "${env:VELOPACK_CHANNEL}"
           $releaseDir = Join-Path "${{ github.workspace }}" "Releases"
@@ -99,6 +100,21 @@ jobs:
           "release_dir=$releaseDir" >> $env:GITHUB_OUTPUT
           "setup_name=$setupName" >> $env:GITHUB_OUTPUT
           "setup_path=$setupPath" >> $env:GITHUB_OUTPUT
+
+      - name: Verify matching draft release exists
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: powershell
+        run: |
+          $tag = "${{ steps.release_meta.outputs.tag }}"
+          $releaseJson = gh release view $tag --json isDraft --repo "${{ github.repository }}" 2>$null
+          if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrWhiteSpace($releaseJson)) {
+            throw "Missing GitHub Release draft for tag: $tag. Create the draft release first, then push the matching tag."
+          }
+          $release = $releaseJson | ConvertFrom-Json
+          if (-not $release.isDraft) {
+            throw "GitHub Release for tag $tag is not a draft. Keep it as a draft until this workflow publishes it."
+          }
 
       - name: Build release installer
         shell: powershell
@@ -226,6 +242,13 @@ jobs:
             --cache-control "no-cache, no-store, must-revalidate" `
             --content-type "application/vnd.microsoft.portable-executable" `
             --endpoint-url "${{ steps.r2_endpoint.outputs.endpoint }}"
+
+      - name: Publish GitHub Release draft
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: powershell
+        run: |
+          gh release edit "${{ steps.release_meta.outputs.tag }}" --draft=false --repo "${{ github.repository }}"
 
       - name: Show release download URLs
         shell: powershell
