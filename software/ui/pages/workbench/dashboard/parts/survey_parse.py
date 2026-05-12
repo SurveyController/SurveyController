@@ -150,15 +150,27 @@ class DashboardSurveyParseMixin:
 
         text = str(error_msg or "").strip()
         if text == _QQ_LOGIN_REQUIRED_MESSAGE:
-            self._toast(text, "warning", duration=4500)
+            self._toast(text, "warning", duration=2200)
         elif "问卷已暂停" in text:
             self._toast(
                 "问卷已暂停，需要前往问卷星后台重新发布",
                 "warning",
-                duration=4500,
+                duration=2200,
+            )
+        elif "问卷已停止" in text or "停止状态" in text:
+            self._toast(
+                "问卷已停止，无法作答",
+                "warning",
+                duration=2200,
+            )
+        elif "企业标准版" in text:
+            self._toast(
+                "问卷发布者企业标准版未购买或已到期，暂时不能填写",
+                "warning",
+                duration=2200,
             )
         elif "暂未开放" in text:
-            self._toast(text, "warning", duration=5000)
+            self._toast(text, "warning", duration=2200)
         else:
             # 显示解析失败消息
             self._toast(

@@ -26,6 +26,14 @@ from software.providers.common import (
     normalize_survey_provider,
 )
 from software.providers.contracts import SurveyQuestionMeta
+from wjx.provider.parser import (
+    ENTERPRISE_UNAVAILABLE_SURVEY_ERROR_MESSAGE,
+    STOPPED_SURVEY_ERROR_MESSAGE,
+    SurveyEnterpriseUnavailableError,
+    SurveyStoppedError,
+    is_enterprise_unavailable_survey_page,
+    is_stopped_survey_page,
+)
 
 
 @dataclass(frozen=True)
@@ -80,6 +88,28 @@ def _resolve_proxy_answer_duration(config: RuntimeConfig) -> Tuple[int, int]:
     if bool(getattr(config, "timed_mode_enabled", False)):
         return (0, 0)
     return (int(raw[0]), int(raw[1]))
+
+
+def _verify_wjx_survey_is_answerable(config: RuntimeConfig, survey_provider: str) -> None:
+    if survey_provider != SURVEY_PROVIDER_WJX:
+        return
+    url = str(getattr(config, "url", "") or "").strip()
+    if not url:
+        return
+    try:
+        import software.network.http as http_client
+        from software.app.config import DEFAULT_HTTP_HEADERS
+
+        response = http_client.get(url, timeout=8, headers=DEFAULT_HTTP_HEADERS, proxies={})
+        response.raise_for_status()
+    except Exception:
+        logging.info("启动前问卷星状态复查失败，已放行到运行时处理", exc_info=True)
+        return
+    html = str(getattr(response, "text", "") or "")
+    if is_stopped_survey_page(html):
+        raise SurveyStoppedError(STOPPED_SURVEY_ERROR_MESSAGE)
+    if is_enterprise_unavailable_survey_page(html):
+        raise SurveyEnterpriseUnavailableError(ENTERPRISE_UNAVAILABLE_SURVEY_ERROR_MESSAGE)
 
 
 def _build_questions_metadata(
@@ -182,6 +212,14 @@ def prepare_execution_artifacts(
         )
 
     survey_provider = _resolve_survey_provider(config)
+    try:
+        _verify_wjx_survey_is_answerable(config, survey_provider)
+    except (SurveyStoppedError, SurveyEnterpriseUnavailableError) as exc:
+        raise RuntimePreparationError(
+            str(exc),
+            log_message=f"启动前问卷状态检查失败：{exc}",
+        ) from exc
+
     questions_info = clone_questions_info(
         getattr(config, "questions_info", []) or [],
         default_provider=survey_provider,

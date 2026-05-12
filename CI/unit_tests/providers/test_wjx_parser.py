@@ -56,6 +56,68 @@ class WjxParserTests:
         html = "<html><body>此问卷（123）已暂停，不能填写</body></html>"
         assert wjx_parser.is_paused_survey_page(html)
 
+    def test_is_stopped_survey_page_accepts_work_error_copy(self) -> None:
+        html = """
+        <html>
+          <body>
+            <div id="divWorkError">
+              <div><div><p>此问卷处于停止状态，无法作答！</p></div></div>
+            </div>
+          </body>
+        </html>
+        """
+        assert wjx_parser.is_stopped_survey_page(html)
+
+    def test_is_stopped_survey_page_skips_question_content_with_same_copy(self) -> None:
+        html = """
+        <html>
+          <body>
+            <div id="divQuestion">
+              <fieldset><div topic="1" type="1">为什么此问卷处于停止状态，无法作答？</div></fieldset>
+            </div>
+          </body>
+        </html>
+        """
+        assert not wjx_parser.is_stopped_survey_page(html)
+
+    def test_is_stopped_survey_page_accepts_div_tip_even_with_questions(self) -> None:
+        html = """
+        <html>
+          <body>
+            <div id="divTip">此问卷处于停止状态，无法作答！</div>
+            <div id="divQuestion">
+              <fieldset><div topic="1" type="3">题目 1</div></fieldset>
+            </div>
+          </body>
+        </html>
+        """
+        assert wjx_parser.is_stopped_survey_page(html)
+
+    def test_is_enterprise_unavailable_survey_page_accepts_banner_with_questions(self) -> None:
+        html = """
+        <html>
+          <body>
+            <div class="banner">问卷发布者还未购买企业标准版或企业标准版已到期，此问卷暂时不能被填写！</div>
+            <div id="divQuestion">
+              <fieldset><div topic="1" type="3">题目 1</div></fieldset>
+            </div>
+          </body>
+        </html>
+        """
+        assert wjx_parser.is_enterprise_unavailable_survey_page(html)
+
+    def test_is_enterprise_unavailable_survey_page_skips_plain_question_copy(self) -> None:
+        html = """
+        <html>
+          <body>
+            <div id="divQuestion">
+              <fieldset><div topic="1" type="1">你是否购买企业标准版？</div></fieldset>
+            </div>
+          </body>
+        </html>
+        """
+        assert not wjx_parser.is_enterprise_unavailable_survey_page(html)
+
     def test_build_not_open_survey_message_returns_time_when_gate_page_detected(self) -> None:
         html = """
         <html>
@@ -92,6 +154,31 @@ class WjxParserTests:
         )
 
         with pytest.raises(wjx_parser.SurveyPausedError, match="问卷已暂停"):
+            await wjx_parser.parse_wjx_survey("https://www.wjx.cn/vm/demo.aspx")
+
+    @pytest.mark.asyncio
+    async def test_parse_wjx_survey_raises_stopped_error_from_http_html(self, patch_attrs) -> None:
+        html = "<html><body><div id='divWorkError'>此问卷处于停止状态，无法作答！</div></body></html>"
+        patch_attrs(
+            (wjx_parser.http_client, "aget", AsyncMock(return_value=_FakeHttpResponse(html))),
+        )
+
+        with pytest.raises(wjx_parser.SurveyStoppedError, match="问卷已停止"):
+            await wjx_parser.parse_wjx_survey("https://www.wjx.cn/vm/demo.aspx")
+
+    @pytest.mark.asyncio
+    async def test_parse_wjx_survey_raises_enterprise_unavailable_from_http_html(self, patch_attrs) -> None:
+        html = """
+        <html><body>
+          <div>问卷发布者还未购买企业标准版或企业标准版已到期，此问卷暂时不能被填写！</div>
+          <div id="divQuestion"><fieldset><div topic="1" type="3">Q1</div></fieldset></div>
+        </body></html>
+        """
+        patch_attrs(
+            (wjx_parser.http_client, "aget", AsyncMock(return_value=_FakeHttpResponse(html))),
+        )
+
+        with pytest.raises(wjx_parser.SurveyEnterpriseUnavailableError, match="企业标准版"):
             await wjx_parser.parse_wjx_survey("https://www.wjx.cn/vm/demo.aspx")
 
     @pytest.mark.asyncio

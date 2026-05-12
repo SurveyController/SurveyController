@@ -6,6 +6,15 @@ from software.io.config import RuntimeConfig
 from software.core.reverse_fill.schema import ReverseFillSpec
 from software.ui.controller.run_controller_parts.runtime_preparation import PreparedExecutionArtifacts, RuntimePreparationError, prepare_execution_artifacts
 
+class _FakeHttpResponse:
+
+    def __init__(self, text: str) -> None:
+        self.text = text
+
+    def raise_for_status(self) -> None:
+        return None
+
+
 class RuntimePreparationTests:
 
     def _build_config(self) -> RuntimeConfig:
@@ -38,6 +47,35 @@ class RuntimePreparationTests:
                 prepare_execution_artifacts(config)
         assert '题目配置存在冲突' in cm.value.user_message
         assert '第1题配置冲突' in cm.value.log_message
+
+    def test_prepare_execution_artifacts_blocks_stopped_wjx_before_runtime(self) -> None:
+        config = self._build_config()
+        config.url = 'https://v.wjx.cn/vm/demo.aspx'
+        config.survey_provider = 'wjx'
+        config.question_entries[0].survey_provider = 'wjx'
+        config.questions_info[0]['provider'] = 'wjx'
+        html = "<html><body><div id='divWorkError'>此问卷处于停止状态，无法作答！</div></body></html>"
+        with patch('software.network.http.get', return_value=_FakeHttpResponse(html)), patch('software.ui.controller.run_controller_parts.runtime_preparation.validate_question_config', return_value=''):
+            with pytest.raises(RuntimePreparationError) as cm:
+                prepare_execution_artifacts(config)
+        assert cm.value.user_message == '问卷已停止，无法作答'
+
+    def test_prepare_execution_artifacts_blocks_enterprise_unavailable_wjx_before_runtime(self) -> None:
+        config = self._build_config()
+        config.url = 'https://v.wjx.cn/vm/demo.aspx'
+        config.survey_provider = 'wjx'
+        config.question_entries[0].survey_provider = 'wjx'
+        config.questions_info[0]['provider'] = 'wjx'
+        html = """
+        <html><body>
+          <div>问卷发布者还未购买企业标准版或企业标准版已到期，此问卷暂时不能被填写！</div>
+          <div id="divQuestion"><fieldset><div topic="1" type="3">Q1</div></fieldset></div>
+        </body></html>
+        """
+        with patch('software.network.http.get', return_value=_FakeHttpResponse(html)), patch('software.ui.controller.run_controller_parts.runtime_preparation.validate_question_config', return_value=''):
+            with pytest.raises(RuntimePreparationError) as cm:
+                prepare_execution_artifacts(config)
+        assert cm.value.user_message == '问卷发布者企业标准版未购买或已到期，暂时不能填写'
 
     def test_prepare_execution_artifacts_marks_reverse_fill_error_as_detailed(self) -> None:
         config = self._build_config()

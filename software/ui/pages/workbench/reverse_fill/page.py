@@ -837,6 +837,18 @@ class ReverseFillPage(SurveyClipboardMixin, QWidget):
             return
         self._parse_requested_from_reverse_fill = False
         text = str(error_msg or "").strip() or "请确认链接有效且网络正常"
+        if "问卷已停止" in text or "停止状态" in text:
+            self._toast("问卷已停止，无法作答", "warning", duration=2200)
+            return
+        if "企业标准版" in text:
+            self._toast("问卷发布者企业标准版未购买或已到期，暂时不能填写", "warning", duration=2200)
+            return
+        if "问卷已暂停" in text:
+            self._toast("问卷已暂停，需要前往问卷星后台重新发布", "warning", duration=2200)
+            return
+        if "暂未开放" in text:
+            self._toast(text, "warning", duration=2200)
+            return
         self._toast(f"解析失败：{text}", "error", duration=3200)
 
     def _open_wizard(self) -> None:

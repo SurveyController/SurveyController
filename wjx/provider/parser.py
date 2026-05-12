@@ -20,6 +20,8 @@ from wjx.provider.html_parser import (
 from software.app.config import DEFAULT_HTTP_HEADERS
 
 PAUSED_SURVEY_ERROR_MESSAGE = "问卷已暂停，需要前往问卷星后台重新发布"
+STOPPED_SURVEY_ERROR_MESSAGE = "问卷已停止，无法作答"
+ENTERPRISE_UNAVAILABLE_SURVEY_ERROR_MESSAGE = "问卷发布者企业标准版未购买或已到期，暂时不能填写"
 NOT_OPEN_SURVEY_ERROR_MESSAGE = "该问卷暂未开放，无法解析"
 _PAUSED_SURVEY_ID_RE = re.compile(r"此问卷[（(]\d+[）)]已暂停")
 _NOT_OPEN_TIME_RE = re.compile(
@@ -29,6 +31,14 @@ _NOT_OPEN_TIME_RE = re.compile(
 
 class SurveyPausedError(RuntimeError):
     """问卷已暂停时抛出的业务异常。"""
+
+
+class SurveyStoppedError(RuntimeError):
+    """问卷处于停止状态时抛出的业务异常。"""
+
+
+class SurveyEnterpriseUnavailableError(RuntimeError):
+    """问卷发布者企业标准版不可用时抛出的业务异常。"""
 
 
 class SurveyNotOpenError(RuntimeError):
@@ -86,31 +96,72 @@ def is_paused_survey_page(html: str) -> bool:
     return bool(_PAUSED_SURVEY_ID_RE.search(text))
 
 
+def _html_has_question_content(html: str) -> bool:
+    try:
+        from bs4 import BeautifulSoup
+
+        soup = BeautifulSoup(html, "html.parser")
+        question_container = soup.find("div", id="divQuestion")
+        if not question_container:
+            return False
+        return bool(
+            question_container.find_all("fieldset")
+            or question_container.find_all("div", attrs={"topic": True})
+        )
+    except Exception:
+        return False
+
+
+def is_stopped_survey_page(html: str) -> bool:
+    """检测页面是否为“问卷停止作答”提示页。"""
+    text = _normalize_html_text(html)
+    if not text or "停止状态" not in text or "无法作答" not in text:
+        return False
+
+    try:
+        from bs4 import BeautifulSoup
+
+        soup = BeautifulSoup(html, "html.parser")
+        for selector_id in ("divWorkError", "divTip"):
+            error_container = soup.find("div", id=selector_id)
+            if error_container is not None:
+                error_text = _normalize_html_text(error_container.get_text(" ", strip=True))
+                if "停止状态" in error_text and "无法作答" in error_text:
+                    return True
+    except Exception:
+        pass
+
+    if _html_has_question_content(html):
+        return False
+
+    normalized = "".join(text.split())
+    return "此问卷处于停止状态，无法作答" in normalized
+
+
+def is_enterprise_unavailable_survey_page(html: str) -> bool:
+    """检测企业标准版未购买或到期导致的不可填写提示。"""
+    text = _normalize_html_text(html)
+    if not text:
+        return False
+    normalized = "".join(text.split())
+    if "企业标准版" not in normalized:
+        return False
+    if "问卷发布者" not in normalized:
+        return False
+    if "未购买" not in normalized and "已到期" not in normalized:
+        return False
+    return "暂时不能被填写" in normalized or "暂时不能填写" in normalized
+
+
 def build_not_open_survey_message(html: str) -> Optional[str]:
     """构造"问卷暂未开放"提示文案。"""
     text = _normalize_html_text(html)
     if not text:
         return None
-    
-    # 首先检查是否存在问卷题目容器，如果存在则说明问卷已开放
-    try:
-        from bs4 import BeautifulSoup
-        soup = BeautifulSoup(html, "html.parser")
-        # 检查是否有题目容器
-        question_container = soup.find("div", id="divQuestion")
-        if question_container:
-            # 检查是否有实际的题目（fieldset 或 topic 属性的 div）
-            has_questions = (
-                question_container.find_all("fieldset") or
-                question_container.find_all("div", attrs={"topic": True})
-            )
-            if has_questions:
-                # 有题目说明问卷已开放，不应该判定为未开放
-                return None
-    except Exception:
-        # 如果 BeautifulSoup 解析失败，继续使用文本检测
-        pass
-    
+
+    if _html_has_question_content(html):
+        return None
+
     normalized = "".join(text.split())
     
     # 保留所有关键词，但通过DOM检查优先避免误判
@@ -153,6 +204,10 @@ async def _load_rendered_wjx_parse_result(url: str) -> Tuple[Optional[List[Dict[
         page_source = await driver.page_source()
         if is_paused_survey_page(page_source):
             raise SurveyPausedError(PAUSED_SURVEY_ERROR_MESSAGE)
+        if is_stopped_survey_page(page_source):
+            raise SurveyStoppedError(STOPPED_SURVEY_ERROR_MESSAGE)
+        if is_enterprise_unavailable_survey_page(page_source):
+            raise SurveyEnterpriseUnavailableError(ENTERPRISE_UNAVAILABLE_SURVEY_ERROR_MESSAGE)
         not_open_message = build_not_open_survey_message(page_source)
         if not_open_message:
             raise SurveyNotOpenError(not_open_message)
@@ -171,12 +226,20 @@ async def parse_wjx_survey(url: str) -> Tuple[List[Dict[str, Any]], str]:
         html = resp.text
         if is_paused_survey_page(html):
             raise SurveyPausedError(PAUSED_SURVEY_ERROR_MESSAGE)
+        if is_stopped_survey_page(html):
+            raise SurveyStoppedError(STOPPED_SURVEY_ERROR_MESSAGE)
+        if is_enterprise_unavailable_survey_page(html):
+            raise SurveyEnterpriseUnavailableError(ENTERPRISE_UNAVAILABLE_SURVEY_ERROR_MESSAGE)
         not_open_message = build_not_open_survey_message(html)
         if not_open_message:
             raise SurveyNotOpenError(not_open_message)
         info = parse_survey_questions_from_html(html)
         title = extract_survey_title_from_html(html) or title
     except SurveyPausedError:
+        raise
+    except SurveyStoppedError:
+        raise
+    except SurveyEnterpriseUnavailableError:
         raise
     except SurveyNotOpenError:
         raise
@@ -190,6 +253,10 @@ async def parse_wjx_survey(url: str) -> Tuple[List[Dict[str, Any]], str]:
             info, rendered_title = await _load_rendered_wjx_parse_result(url)
             title = rendered_title or title
         except SurveyPausedError:
+            raise
+        except SurveyStoppedError:
+            raise
+        except SurveyEnterpriseUnavailableError:
             raise
         except SurveyNotOpenError:
             raise
@@ -207,11 +274,17 @@ async def parse_wjx_survey(url: str) -> Tuple[List[Dict[str, Any]], str]:
 
 __all__ = [
     "PAUSED_SURVEY_ERROR_MESSAGE",
+    "STOPPED_SURVEY_ERROR_MESSAGE",
+    "ENTERPRISE_UNAVAILABLE_SURVEY_ERROR_MESSAGE",
     "NOT_OPEN_SURVEY_ERROR_MESSAGE",
     "SurveyPausedError",
+    "SurveyStoppedError",
+    "SurveyEnterpriseUnavailableError",
     "SurveyNotOpenError",
     "build_not_open_survey_message",
+    "is_enterprise_unavailable_survey_page",
     "is_paused_survey_page",
+    "is_stopped_survey_page",
     "parse_wjx_survey",
 ]
 

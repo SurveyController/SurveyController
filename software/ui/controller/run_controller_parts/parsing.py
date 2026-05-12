@@ -12,6 +12,12 @@ from software.core.questions.config import (
 )
 from software.providers.common import is_supported_survey_url
 from software.providers.contracts import SurveyDefinition, SurveyQuestionMeta
+from wjx.provider.parser import (
+    SurveyEnterpriseUnavailableError,
+    SurveyNotOpenError,
+    SurveyPausedError,
+    SurveyStoppedError,
+)
 
 if TYPE_CHECKING:
     from software.io.config import RuntimeConfig
@@ -72,6 +78,15 @@ class RunControllerParsingMixin:
                 self._dispatch_to_ui_async(
                     lambda parsed_definition=definition: _apply_parse_success(parsed_definition)
                 )
+            except (
+                SurveyPausedError,
+                SurveyStoppedError,
+                SurveyEnterpriseUnavailableError,
+                SurveyNotOpenError,
+            ) as exc:
+                friendly = str(exc) or "解析失败，请稍后重试"
+                logging.info("解析问卷被业务状态拦截，url=%r：%s", normalized_url, friendly)
+                self._dispatch_to_ui_async(lambda msg=friendly: _apply_parse_failure(msg))
             except Exception as exc:
                 logging.exception("解析问卷流程失败，url=%r", normalized_url)
                 friendly = str(exc) or "解析失败，请稍后重试"
