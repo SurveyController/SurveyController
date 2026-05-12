@@ -7,7 +7,7 @@ import os
 import sys
 
 if getattr(sys, 'frozen', False):
-    # 冻结模式下，sys._MEIPASS 是 PyInstaller 解包的临时目录
+    # 冻结模式下，sys._MEIPASS 是单文件包解包的临时目录
     # 但 contents_directory='.' 时，所有文件直接在 exe 同目录
     app_dir = os.path.dirname(sys.executable)
 

@@ -27,7 +27,7 @@ dev = [
     "ruff",
 ]
 build = [
-    "pyinstaller",
+    "nuitka>=2.7.11,<3",
 ]
 
 [tool.uv]

@@ -7,13 +7,11 @@ import gc
 import logging
 import asyncio
 import threading
-import time
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, List, Optional
 
 if TYPE_CHECKING:
     from playwright.async_api import Playwright as AsyncPlaywright
-    from playwright.sync_api import Playwright
 
 _PW_START_LOCK = threading.Lock()
 _PLAYWRIGHT_START_RETRY_DELAYS = (0.35, 0.8, 1.5)
@@ -43,21 +41,11 @@ __all__ = [
     "_PW_START_LOCK",
     "_load_playwright_async",
     "_format_exception_chain",
-    "_load_playwright_sync",
     "_start_playwright_async_runtime",
-    "_start_playwright_runtime",
     "classify_playwright_startup_error",
     "describe_playwright_startup_error",
     "is_playwright_startup_environment_error",
 ]
-
-
-def _load_playwright_sync():
-    """延迟导入 Playwright，避免应用启动阶段就触发底层 asyncio/系统依赖。"""
-    from playwright.sync_api import TimeoutError as playwright_timeout_error
-    from playwright.sync_api import sync_playwright
-
-    return sync_playwright, playwright_timeout_error
 
 
 def _load_playwright_async():
@@ -147,36 +135,6 @@ def classify_playwright_startup_error(exc: BaseException) -> BrowserStartupError
         message=describe_playwright_startup_error(exc),
         is_environment_error=is_environment,
     )
-
-
-def _start_playwright_runtime() -> Playwright:
-    """启动 Playwright；若命中已知的 Windows 启动抖动，做有限自愈重试。"""
-    sync_playwright, _ = _load_playwright_sync()
-    last_exc: Optional[Exception] = None
-    max_attempts = max(1, len(_PLAYWRIGHT_START_RETRY_DELAYS) + 1)
-
-    for attempt in range(1, max_attempts + 1):
-        try:
-            return sync_playwright().start()
-        except Exception as exc:
-            last_exc = exc
-            if not is_playwright_startup_environment_error(exc) or attempt >= max_attempts:
-                raise
-
-            wait_seconds = _PLAYWRIGHT_START_RETRY_DELAYS[attempt - 1]
-            logging.warning(
-                "[Action Log] Playwright 底座启动第 %s/%s 次失败，%.2f 秒后重试：%s",
-                attempt,
-                max_attempts,
-                wait_seconds,
-                describe_playwright_startup_error(exc),
-            )
-            gc.collect()
-            time.sleep(wait_seconds)
-
-    if last_exc is not None:
-        raise last_exc
-    raise RuntimeError("Playwright 底座启动失败：未知错误")
 
 
 async def _start_playwright_async_runtime() -> AsyncPlaywright:

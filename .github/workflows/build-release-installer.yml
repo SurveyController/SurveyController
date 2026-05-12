@@ -66,11 +66,11 @@ jobs:
         run: |
           uv sync --locked --no-dev --group build
 
-      - name: Show Python and PyInstaller version
+      - name: Show Python and Nuitka version
         shell: powershell
         run: |
           uv run python --version
-          uv run python -m PyInstaller --version
+          uv run python -m nuitka --version
 
       - name: Install .NET SDK
         uses: actions/setup-dotnet@v5
@@ -102,27 +102,45 @@ jobs:
           "generated_setup_path=$generatedSetupPath" >> $env:GITHUB_OUTPUT
           "setup_path=$setupPath" >> $env:GITHUB_OUTPUT
 
-      - name: Build PyInstaller bundle
+      - name: Build Nuitka bundle
         shell: powershell
         run: |
-          Remove-Item -Recurse -Force build, dist -ErrorAction SilentlyContinue
-          uv run python -m PyInstaller SurveyController.spec --noconfirm --clean
+          .\Setup\build-local-nuitka.ps1 -SkipSync
 
       - name: Verify Playwright package trim
         shell: powershell
         run: |
           $blockedPaths = @(
+            "dist/lib/playwright/driver/package/api.json",
+            "dist/lib/playwright/driver/package/types",
+            "dist/lib/playwright/driver/package/index.d.ts",
+            "dist/lib/playwright/driver/package/index.mjs",
+            "dist/lib/playwright/driver/package/README.md",
+            "dist/lib/playwright/driver/package/protocol.yml",
+            "dist/lib/playwright/driver/package/lib/vite",
             "dist/lib/playwright/driver/package/lib/tools/backend",
             "dist/lib/playwright/driver/package/lib/tools/cli-client",
             "dist/lib/playwright/driver/package/lib/tools/cli-daemon",
             "dist/lib/playwright/driver/package/lib/tools/dashboard",
             "dist/lib/playwright/driver/package/lib/tools/mcp",
             "dist/lib/playwright/driver/package/lib/tools/utils",
-            "dist/lib/playwright/driver/package/lib/tools/exports.js"
+            "dist/lib/playwright/driver/package/lib/tools/exports.js",
+            "dist/lib/playwright/driver/package/lib/mcpBundle.js",
+            "dist/lib/playwright/driver/package/lib/mcpBundleImpl.js",
+            "dist/lib/playwright/driver/package/lib/zodBundle.js",
+            "dist/lib/playwright/driver/package/lib/zodBundleImpl.js"
           )
           foreach ($path in $blockedPaths) {
             if (Test-Path $path) {
               throw "Blocked Playwright tool payload was packaged: $path"
+            }
+          }
+          foreach ($path in @(
+            "dist/lib/playwright/driver/node.exe",
+            "dist/lib/playwright/driver/package/cli.js"
+          )) {
+            if (-not (Test-Path $path)) {
+              throw "Required Playwright driver file missing: $path"
             }
           }
 

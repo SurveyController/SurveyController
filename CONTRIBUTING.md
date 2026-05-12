@@ -341,13 +341,11 @@ Fixes #123
 │   ├── io/                  # 文件读写、报告、二维码、表格
 │   ├── logging/             # 日志
 │   ├── network/             # 浏览器、HTTP、代理配置
-│   ├── proxy_service/       # Go 代理 sidecar
 │   ├── providers/           # 平台提供方公共层
 │   ├── system/              # 系统能力封装
 │   ├── ui/                  # PySide6 / QFluentWidgets 界面
 │   └── update/              # 应用更新
 ├── tencent/                 # 腾讯问卷适配
 ├── wjx/                     # 问卷星适配
-├── SurveyController.py      # 桌面应用入口
-└── SurveyController.spec    # PyInstaller 配置
+└── SurveyController.py      # 桌面应用入口
 ```

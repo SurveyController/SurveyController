@@ -1,0 +1,252 @@
+[CmdletBinding()]
+param(
+    [Parameter(Mandatory = $false)]
+    [string]$OutputDir = "dist",
+
+    [switch]$SkipClean,
+    [switch]$SkipSync
+)
+
+$ErrorActionPreference = "Stop"
+Set-StrictMode -Version Latest
+
+function Write-Step {
+    param([string]$Message)
+    Write-Host ""
+    Write-Host "==> $Message" -ForegroundColor Cyan
+}
+
+function Assert-CommandAvailable {
+    param(
+        [string]$Name,
+        [string]$InstallHint
+    )
+
+    $command = Get-Command $Name -ErrorAction SilentlyContinue
+    if (-not $command) {
+        throw ("Missing command: {0}. {1}" -f $Name, $InstallHint)
+    }
+}
+
+function Resolve-RepoRoot {
+    $scriptRoot = $PSScriptRoot
+    if ([string]::IsNullOrWhiteSpace($scriptRoot)) {
+        $scriptRoot = Split-Path -Parent $PSCommandPath
+    }
+    return (Resolve-Path (Join-Path $scriptRoot "..")).Path
+}
+
+function Get-NuitkaDistDirectory {
+    param([string]$BuildRoot)
+
+    $candidates = @(Get-ChildItem -Path $BuildRoot -Directory -Filter "*.dist" -ErrorAction SilentlyContinue)
+    if ($candidates.Count -eq 0) {
+        throw ("Nuitka output directory not found under: {0}" -f $BuildRoot)
+    }
+    if ($candidates.Count -gt 1) {
+        throw ("Multiple Nuitka output directories found under: {0}" -f $BuildRoot)
+    }
+    return $candidates[0].FullName
+}
+
+function Remove-IfExists {
+    param([string]$Path)
+
+    if (Test-Path $Path) {
+        Remove-Item -LiteralPath $Path -Recurse -Force
+    }
+}
+
+function Remove-PathsByPattern {
+    param(
+        [string]$BaseDir,
+        [string[]]$Patterns
+    )
+
+    foreach ($pattern in $Patterns) {
+        Get-ChildItem -Path $BaseDir -Recurse -Force -ErrorAction SilentlyContinue |
+            Where-Object { $_.Name -like $pattern } |
+            ForEach-Object {
+                Remove-Item -LiteralPath $_.FullName -Recurse -Force
+            }
+    }
+}
+
+$repoRoot = Resolve-RepoRoot
+$targetRoot = Join-Path $repoRoot $OutputDir
+$buildRoot = Join-Path $repoRoot "build\nuitka"
+$packDir = Join-Path $targetRoot "lib"
+$mainExe = Join-Path $packDir "SurveyController.exe"
+
+Write-Step "Check environment"
+Assert-CommandAvailable -Name "python" -InstallHint "Install Python first and ensure python is available in PATH."
+Assert-CommandAvailable -Name "uv" -InstallHint "Install uv first: powershell -ExecutionPolicy ByPass -c ""irm https://astral.sh/uv/install.ps1 | iex"""
+
+Write-Host ("Repo root: {0}" -f $repoRoot)
+Write-Host ("Output dir: {0}" -f $targetRoot)
+Write-Host ("Pack dir: {0}" -f $packDir)
+
+if (-not $SkipClean) {
+    Write-Step "Clean old artifacts"
+    foreach ($path in @($buildRoot, $packDir)) {
+        if (Test-Path $path) {
+            Remove-Item -Recurse -Force $path
+        }
+    }
+}
+
+if (-not $SkipSync) {
+    Write-Step "Sync Python dependencies"
+    Push-Location $repoRoot
+    try {
+        uv sync --locked --no-dev --group build
+    }
+    finally {
+        Pop-Location
+    }
+}
+
+Write-Step "Build standalone bundle with Nuitka"
+New-Item -ItemType Directory -Path $buildRoot -Force | Out-Null
+Push-Location $repoRoot
+try {
+    $nuitkaArgs = @(
+        "-m"
+        "nuitka"
+        "--standalone"
+        "--assume-yes-for-downloads"
+        "--windows-console-mode=disable"
+        "--enable-plugin=pyside6"
+        "--enable-plugin=anti-bloat"
+        "--python-flag=no_asserts"
+        "--python-flag=no_docstrings"
+        "--noinclude-pytest-mode=nofollow"
+        "--noinclude-setuptools-mode=nofollow"
+        "--include-qt-plugins=platforms,styles,imageformats,networkinformation,tls"
+        "--nofollow-import-to=qfluentwidgets.multimedia"
+        "--nofollow-import-to=PySide6.QtMultimedia"
+        "--nofollow-import-to=PySide6.QtMultimediaWidgets"
+        "--nofollow-import-to=PySide6.QtPdf"
+        "--nofollow-import-to=PySide6.QtPdfWidgets"
+        "--nofollow-import-to=playwright.sync_api"
+        "--nofollow-import-to=pytest"
+        "--nofollow-import-to=setuptools"
+        "--nofollow-import-to=unittest"
+        "--include-module=software.ui.shell.main_window"
+        "--include-module=wjx.provider.parser"
+        "--include-module=wjx.provider.runtime"
+        "--include-module=wjx.provider.submission"
+        "--include-module=wjx.provider.submission_pages"
+        "--include-module=tencent.provider.parser"
+        "--include-module=tencent.provider.runtime"
+        "--include-module=tencent.provider.runtime_flow"
+        "--include-module=tencent.provider.submission"
+        "--include-module=credamo.provider.parser"
+        "--include-module=credamo.provider.runtime"
+        "--include-module=credamo.provider.submission"
+        "--include-module=win32api"
+        "--include-module=win32con"
+        "--include-module=win32gui"
+        "--include-module=win32print"
+        "--include-data-dir=assets=assets"
+        "--include-data-dir=software/assets=software/assets"
+        "--include-data-file=software/ui/theme.json=software/ui/theme.json"
+        "--include-data-file=icon.ico=icon.ico"
+        "--windows-icon-from-ico=icon.ico"
+        "--output-dir=$buildRoot"
+        "--output-filename=SurveyController.exe"
+        "SurveyController.py"
+    )
+    uv run python @nuitkaArgs
+}
+finally {
+    Pop-Location
+}
+
+Write-Step "Move Nuitka bundle into dist/lib"
+$compiledDistDir = Get-NuitkaDistDirectory -BuildRoot $buildRoot
+if (Test-Path $packDir) {
+    Remove-Item -Recurse -Force $packDir
+}
+New-Item -ItemType Directory -Path $targetRoot -Force | Out-Null
+Move-Item -LiteralPath $compiledDistDir -Destination $packDir -Force
+
+Write-Step "Trim packaged bloat"
+$blockedPlaywrightPaths = @(
+    "playwright\driver\package\api.json",
+    "playwright\driver\package\types",
+    "playwright\driver\package\index.d.ts",
+    "playwright\driver\package\index.mjs",
+    "playwright\driver\package\README.md",
+    "playwright\driver\package\protocol.yml",
+    "playwright\driver\package\lib\vite",
+    "playwright\driver\package\lib\tools\backend",
+    "playwright\driver\package\lib\tools\cli-client",
+    "playwright\driver\package\lib\tools\cli-daemon",
+    "playwright\driver\package\lib\tools\dashboard",
+    "playwright\driver\package\lib\tools\mcp",
+    "playwright\driver\package\lib\tools\utils",
+    "playwright\driver\package\lib\tools\exports.js",
+    "playwright\driver\package\lib\mcpBundle.js",
+    "playwright\driver\package\lib\mcpBundleImpl.js",
+    "playwright\driver\package\lib\zodBundle.js",
+    "playwright\driver\package\lib\zodBundleImpl.js"
+)
+foreach ($relativePath in $blockedPlaywrightPaths) {
+    Remove-IfExists -Path (Join-Path $packDir $relativePath)
+}
+
+$blockedQtFiles = @(
+    "qt6multimedia.dll",
+    "qt6multimediawidgets.dll",
+    "qt6pdf.dll",
+    "PySide6\QtMultimedia.pyd",
+    "PySide6\QtMultimediaWidgets.pyd",
+    "PySide6\qt-plugins\platforms\qminimal.dll",
+    "PySide6\qt-plugins\platforms\qoffscreen.dll",
+    "PySide6\qt-plugins\platforms\qdirect2d.dll"
+)
+foreach ($relativePath in $blockedQtFiles) {
+    Remove-IfExists -Path (Join-Path $packDir $relativePath)
+}
+
+$blockedQtPluginPatterns = @(
+    "qicns.dll",
+    "qpdf.dll",
+    "qtga.dll",
+    "qwbmp.dll",
+    "qtiff.dll",
+    "qcertonlybackend.dll",
+    "qopensslbackend.dll"
+)
+Remove-PathsByPattern -BaseDir (Join-Path $packDir "PySide6\qt-plugins") -Patterns $blockedQtPluginPatterns
+
+Write-Step "Verify bundle"
+if (-not (Test-Path $packDir)) {
+    throw ("Pack directory not found: {0}" -f $packDir)
+}
+if (-not (Test-Path $mainExe)) {
+    throw ("Main executable not found: {0}" -f $mainExe)
+}
+foreach ($relativePath in $blockedPlaywrightPaths + $blockedQtFiles) {
+    $candidate = Join-Path $packDir $relativePath
+    if (Test-Path $candidate) {
+        throw ("Blocked payload still exists: {0}" -f $candidate)
+    }
+}
+foreach ($relativePath in @(
+    "playwright\driver\node.exe",
+    "playwright\driver\package\cli.js"
+)) {
+    $candidate = Join-Path $packDir $relativePath
+    if (-not (Test-Path $candidate)) {
+        throw ("Required Playwright driver file missing: {0}" -f $candidate)
+    }
+}
+
+Write-Step "Build finished"
+Get-ChildItem $packDir | Sort-Object Name | Format-Table Name, Length, LastWriteTime -AutoSize
+
+Write-Host ""
+Write-Host ("Standalone bundle: {0}" -f $packDir) -ForegroundColor Green
+Write-Host ("Main executable: {0}" -f $mainExe) -ForegroundColor Green

@@ -82,15 +82,16 @@ class BrowserStartupTests:
         message = browser_startup.describe_playwright_startup_error(RuntimeError())
         assert message == "RuntimeError"
 
-    def test_start_playwright_runtime_retries_known_environment_error_then_succeeds(self, patch_attrs) -> None:
-        class _FakeSyncPlaywright:
+    @pytest.mark.asyncio
+    async def test_start_playwright_async_runtime_retries_known_environment_error_then_succeeds(self, patch_attrs) -> None:
+        class _FakeAsyncPlaywright:
             def __init__(self) -> None:
                 self.start_calls = 0
 
             def __call__(self):
                 return self
 
-            def start(self):
+            async def start(self):
                 self.start_calls += 1
                 if self.start_calls == 1:
                     exc = PermissionError(errno.EACCES, "socket blocked")
@@ -98,28 +99,36 @@ class BrowserStartupTests:
                     raise exc
                 return "pw-runtime"
 
-        fake_sync = _FakeSyncPlaywright()
+        fake_async = _FakeAsyncPlaywright()
         sleep_calls: list[float] = []
+
+        async def _fake_sleep(seconds: float) -> None:
+            sleep_calls.append(seconds)
+
         patch_attrs(
-            (browser_startup, "_load_playwright_sync", lambda: (fake_sync, object())),
+            (browser_startup, "_load_playwright_async", lambda: (fake_async, object())),
             (browser_startup.gc, "collect", lambda: None),
-            (browser_startup.time, "sleep", lambda seconds: sleep_calls.append(seconds)),
+            (browser_startup.asyncio, "sleep", _fake_sleep),
         )
-        runtime = browser_startup._start_playwright_runtime()
+
+        runtime = await browser_startup._start_playwright_async_runtime()
+
         assert runtime == "pw-runtime"
-        assert fake_sync.start_calls == 2
+        assert fake_async.start_calls == 2
         assert sleep_calls == [0.35]
 
-    def test_start_playwright_runtime_does_not_retry_unknown_error(self, patch_attrs) -> None:
-        class _FakeSyncPlaywright:
+    @pytest.mark.asyncio
+    async def test_start_playwright_async_runtime_does_not_retry_unknown_error(self, patch_attrs) -> None:
+        class _FakeAsyncPlaywright:
             def __call__(self):
                 return self
 
-            def start(self):
+            async def start(self):
                 raise RuntimeError("boom")
 
         patch_attrs(
-            (browser_startup, "_load_playwright_sync", lambda: (_FakeSyncPlaywright(), object())),
+            (browser_startup, "_load_playwright_async", lambda: (_FakeAsyncPlaywright(), object())),
         )
+
         with pytest.raises(RuntimeError, match="boom"):
-            browser_startup._start_playwright_runtime()
+            await browser_startup._start_playwright_async_runtime()

@@ -38,7 +38,7 @@ def get_bundle_resource_root() -> str:
 
 
 def get_assets_directory() -> str:
-    """返回包内 assets 目录，兼容不同 PyInstaller 布局。"""
+    """返回包内 assets 目录，兼容不同冻结包布局。"""
     bundle_root = get_bundle_resource_root()
     candidates = [os.path.join(bundle_root, "assets")]
 
