@@ -169,6 +169,15 @@ def question_dimension(entry: QuestionEntry) -> str:
     return entry_dimension_label(entry)
 
 
+def _build_entry_row_signature(entry: QuestionEntry, index: int) -> tuple[str, str, str, str]:
+    return (
+        str(index + 1),
+        _get_entry_type_label(entry),
+        question_dimension(entry),
+        question_summary(entry),
+    )
+
+
 class DashboardEntriesMixin:
     """题目配置表与编辑向导相关方法。"""
 
@@ -182,6 +191,7 @@ class DashboardEntriesMixin:
         runtime_page: Any
         window: Any
         controller: Any
+        _entry_table_signatures: Any
 
     def _show_add_question_dialog(self):
         if self.workbench_state.open_add_question_dialog(self.window() or self):
@@ -362,29 +372,31 @@ class DashboardEntriesMixin:
     def _refresh_entry_table(self):
         entries = self.workbench_state.get_entries()
         table = self.entry_table
+        previous_signatures = list(getattr(self, "_entry_table_signatures", []) or [])
+        current_signatures = [_build_entry_row_signature(entry, idx) for idx, entry in enumerate(entries)]
         previous_updates_enabled = table.updatesEnabled()
         previous_sorting_enabled = table.isSortingEnabled()
         table.setUpdatesEnabled(False)
         table.setSortingEnabled(False)
         table.blockSignals(True)
         try:
-            table.setRowCount(len(entries))
+            previous_row_count = table.rowCount()
+            target_row_count = len(entries)
+            if previous_row_count != target_row_count:
+                table.setRowCount(target_row_count)
             self.count_label.setText(f"{len(entries)} 题")
-            for idx, entry in enumerate(entries):
-                _set_table_text(table, idx, 0, str(idx + 1), align_center=True)
-                _set_table_text(
-                    table,
-                    idx,
-                    1,
-                    _get_entry_type_label(entry),
-                    align_center=True,
-                )
-                _set_table_text(table, idx, 2, question_dimension(entry), align_center=True)
-                _set_table_text(table, idx, 3, question_summary(entry))
+            for idx, row_signature in enumerate(current_signatures):
+                if idx < len(previous_signatures) and previous_signatures[idx] == row_signature:
+                    continue
+                _set_table_text(table, idx, 0, row_signature[0], align_center=True)
+                _set_table_text(table, idx, 1, row_signature[1], align_center=True)
+                _set_table_text(table, idx, 2, row_signature[2], align_center=True)
+                _set_table_text(table, idx, 3, row_signature[3])
         finally:
             table.blockSignals(False)
             table.setSortingEnabled(previous_sorting_enabled)
             table.setUpdatesEnabled(previous_updates_enabled)
+        self._entry_table_signatures = current_signatures
         self._sync_start_button_state()
 
     def _checked_rows(self) -> List[int]:

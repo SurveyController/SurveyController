@@ -211,27 +211,30 @@ class MainWindowDialogsMixin:
         cancel_text: str,
     ) -> bool:
         """在 UI 线程显示自定义按钮确认框。"""
-        log_action(
-            "DIALOG",
-            "confirm",
-            "message_box",
-            "main_window",
-            result="shown",
-            detail=title,
-        )
-        box = MessageBox(title, message, self)
-        box.yesButton.setText(str(yes_text or "确定"))
-        box.cancelButton.setText(str(cancel_text or "取消"))
-        accepted = bool(box.exec())
-        log_action(
-            "DIALOG",
-            "confirm",
-            "message_box",
-            "main_window",
-            result="confirmed" if accepted else "cancelled",
-            detail=title,
-        )
-        return accepted
+        def _show() -> bool:
+            log_action(
+                "DIALOG",
+                "confirm",
+                "message_box",
+                "main_window",
+                result="shown",
+                detail=title,
+            )
+            box = MessageBox(title, message, self)
+            box.yesButton.setText(str(yes_text or "确定"))
+            box.cancelButton.setText(str(cancel_text or "取消"))
+            accepted = bool(box.exec())
+            log_action(
+                "DIALOG",
+                "confirm",
+                "message_box",
+                "main_window",
+                result="confirmed" if accepted else "cancelled",
+                detail=title,
+            )
+            return accepted
+
+        return bool(self._dispatch_to_ui(_show))
 
     def show_message_dialog(self, title: str, message: str, *, level: str = "info") -> None:
         """显示消息对话框。level 仅用于日志/调用语义，不影响窗口样式。"""

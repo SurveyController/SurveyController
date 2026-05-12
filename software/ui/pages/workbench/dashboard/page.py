@@ -111,6 +111,7 @@ class DashboardPage(
         self._pending_restart = False
         self._show_end_toast_after_cleanup = False
         self._last_progress = 0
+        self._entry_table_signatures = []
         self._progress_infobar: Optional[InfoBar] = None  # 存储进度消息条的引用
         self._ip_low_infobar: Optional[FullWidthInfoBar] = None
         self._ip_cost_infobar: Optional[FullWidthInfoBar] = None

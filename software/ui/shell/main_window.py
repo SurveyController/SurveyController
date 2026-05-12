@@ -108,6 +108,7 @@ class MainWindow(
         self._startup_update_check_suspended = False
         self._startup_update_notification_timer = None
         self._startup_update_pending_info = None
+        self._startup_post_init_done = False
         self._random_ip_quota_auto_sync_interval_ms = 90000
         self._random_ip_quota_auto_sync_timer = QTimer(self)
         self._random_ip_quota_auto_sync_timer.setInterval(
@@ -196,13 +197,11 @@ class MainWindow(
         self._refresh_title_random_ip_user_id()
         self._sync_reverse_fill_context()
         self._register_popups()
-        if not self._import_check_mode:
-            self._load_saved_config()
-            self._start_random_ip_quota_auto_sync()
         self._center_on_screen()
 
         if not self._import_check_mode:
             finish_boot_splash(1500)
+            QTimer.singleShot(0, self._run_post_init_tasks)
 
         # 连接下载开始信号（显示转圈动画）
         self.downloadStarted.connect(self._on_download_started)
@@ -219,13 +218,6 @@ class MainWindow(
         self._download_infobar = None
         self._download_progress_bar = None
         self._download_cancelled = False
-
-        # 检查是否为预览版本，如果是则显示预览徽章
-        self._check_preview_version()
-
-        # 根据设置检查更新
-        if not self._import_check_mode:
-            self._check_update_on_startup()
 
     def _apply_theme_mode(self, theme_mode: Theme):
         """按指定主题模式应用样式（不覆盖用户配置文件）。"""
@@ -534,6 +526,15 @@ class MainWindow(
             self.move(frame.topLeft())
         except Exception:
             logging.info("窗口居中失败", exc_info=True)
+
+    def _run_post_init_tasks(self) -> None:
+        if self._startup_post_init_done or self._import_check_mode:
+            return
+        self._startup_post_init_done = True
+        self._load_saved_config()
+        self._start_random_ip_quota_auto_sync()
+        self._check_preview_version()
+        self._check_update_on_startup()
 
     def apply_topmost_state(self, checked: bool, show: bool = False):
         """应用窗口置顶状态，并刷新无边框特效以保留圆角。"""
