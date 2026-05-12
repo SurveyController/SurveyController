@@ -144,16 +144,45 @@ def _fetch_latest_github_release() -> Optional[dict[str, Any]]:
     return None
 
 
-def _build_github_update_result(current_version: str) -> dict[str, Any]:
-    github_release = _fetch_latest_github_release()
-    if not github_release:
-        return {"has_update": False, "status": "unknown", "current_version": current_version}
+def _fetch_latest_velopack_feed_release() -> Optional[dict[str, Any]]:
+    feed_url = f"{VELOPACK_FEED_URL.rstrip('/')}/releases.{VELOPACK_CHANNEL}.json"
+    try:
+        response = http_client.get(feed_url, timeout=(10, 30))
+        response.raise_for_status()
+        payload = response.json()
+    except Exception as exc:
+        logging.warning("获取 Velopack 远端 feed 失败: %s", exc)
+        return None
 
-    latest_version = str(github_release.get("tag_name", "")).lstrip("v").strip()
+    assets = payload.get("Assets") if isinstance(payload, dict) else None
+    if not isinstance(assets, list):
+        return None
+
+    latest_asset: Optional[dict[str, Any]] = None
+    latest_parsed = None
+    for asset in assets:
+        if not isinstance(asset, dict):
+            continue
+        if str(asset.get("Type", "")).lower() != "full":
+            continue
+        version_text = str(asset.get("Version", "") or "").strip()
+        parsed = _parse_version_text(version_text)
+        if parsed is None:
+            continue
+        if latest_parsed is None or parsed > latest_parsed:
+            latest_parsed = parsed
+            latest_asset = asset
+    return latest_asset
+
+
+def _build_remote_version_result(
+    current_version: str,
+    latest_version: str,
+    *,
+    release_notes: str = "",
+) -> dict[str, Any]:
     latest_parsed = _parse_version_text(latest_version)
     current_parsed = _parse_version_text(current_version)
-    release_notes = str(github_release.get("body", "") or "").strip()
-
     if latest_parsed is None or current_parsed is None:
         return {
             "has_update": False,
@@ -172,7 +201,7 @@ def _build_github_update_result(current_version: str) -> dict[str, Any]:
             "release_notes": release_notes,
             "current_version": current_version,
             "manual_only": True,
-            "manual_release_url": str(github_release.get("html_url", "") or "").strip() or f"{GITHUB_RELEASE_TAG_URL}/v{latest_version}",
+            "manual_release_url": f"{GITHUB_RELEASE_TAG_URL}/v{latest_version}",
         }
 
     if current_parsed > latest_parsed:
@@ -191,6 +220,34 @@ def _build_github_update_result(current_version: str) -> dict[str, Any]:
         "latest_version": latest_version,
         "release_notes": release_notes,
     }
+
+
+def _build_github_update_result(current_version: str) -> dict[str, Any]:
+    github_release = _fetch_latest_github_release()
+    if not github_release:
+        return {"has_update": False, "status": "unknown", "current_version": current_version}
+
+    latest_version = str(github_release.get("tag_name", "")).lstrip("v").strip()
+    release_notes = str(github_release.get("body", "") or "").strip()
+    result = _build_remote_version_result(
+        current_version,
+        latest_version,
+        release_notes=release_notes,
+    )
+    if result.get("status") == "outdated":
+        result["manual_release_url"] = (
+            str(github_release.get("html_url", "") or "").strip()
+            or f"{GITHUB_RELEASE_TAG_URL}/v{latest_version}"
+        )
+    return result
+
+
+def _build_velopack_feed_update_result(current_version: str) -> dict[str, Any]:
+    latest_asset = _fetch_latest_velopack_feed_release()
+    if not latest_asset:
+        return {"has_update": False, "status": "unknown", "current_version": current_version}
+    latest_version = str(latest_asset.get("Version", "") or "").strip()
+    return _build_remote_version_result(current_version, latest_version)
 
 
 def _safe_create_update_manager():
@@ -253,16 +310,7 @@ class UpdateManager:
         if update_info:
             return _build_update_result_from_release(update_info, installed_version)
 
-        local_parsed = _parse_version_text(installed_version)
-        current_parsed = _parse_version_text(current_version)
-        if local_parsed is not None and current_parsed is not None and current_parsed > local_parsed:
-            return {
-                "has_update": False,
-                "status": "preview",
-                "current_version": current_version,
-                "latest_version": installed_version,
-            }
-        return {"has_update": False, "status": "latest", "current_version": installed_version}
+        return _build_velopack_feed_update_result(installed_version)
 
     @staticmethod
     def get_all_releases() -> list[dict[str, Any]]:

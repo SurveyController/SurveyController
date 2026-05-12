@@ -32,6 +32,16 @@ def _get_velopack_module() -> Optional[Any]:
     return cast(Any, velopack)
 
 
+def _is_velopack_lifecycle_hook(args: list[str]) -> bool:
+    hook_args = {
+        "--veloapp-install",
+        "--veloapp-updated",
+        "--veloapp-obsolete",
+        "--veloapp-uninstall",
+    }
+    return any(str(arg).lower() in hook_args for arg in args[1:])
+
+
 def _run_velopack_startup() -> None:
     """在安装版启动早期接入 Velopack 生命周期。"""
     if not getattr(sys, "frozen", False):
@@ -101,6 +111,9 @@ def _qt_message_handler(mode, context, message):
 
 def main():
     _run_velopack_startup()
+    if _is_velopack_lifecycle_hook(sys.argv):
+        return
+
     ensure_user_data_directories()
     _enable_fault_handler()
     setup_logging()

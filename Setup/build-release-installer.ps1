@@ -120,6 +120,7 @@ $repoRoot = Resolve-RepoRoot
 $targetRoot = Join-Path $repoRoot $OutputDir
 $releaseRoot = Join-Path $repoRoot $ReleaseDir
 $buildRoot = Join-Path $repoRoot "build\nuitka"
+$nuitkaCacheRoot = Join-Path $repoRoot "build\nuitka-cache"
 $packDir = Join-Path $targetRoot "lib"
 $mainExe = Join-Path $packDir "SurveyController.exe"
 $packVersion = Get-PackVersion -RepoRoot $repoRoot -ProvidedVersion $PackVersion
@@ -137,6 +138,7 @@ Write-Host ("Output dir: {0}" -f $targetRoot)
 Write-Host ("Pack dir: {0}" -f $packDir)
 Write-Host ("Release dir: {0}" -f $releaseRoot)
 Write-Host ("Pack version: {0}" -f $packVersion)
+Write-Host ("Nuitka cache dir: {0}" -f $nuitkaCacheRoot)
 
 if (-not $SkipClean) {
     Write-Step "Clean old artifacts"
@@ -151,7 +153,7 @@ if (-not $SkipSync) {
     Write-Step "Sync Python dependencies"
     Push-Location $repoRoot
     try {
-        uv sync --locked --no-dev --group build
+        uv sync --locked --group build
     }
     finally {
         Pop-Location
@@ -160,8 +162,17 @@ if (-not $SkipSync) {
 
 Write-Step "Build standalone bundle with Nuitka"
 New-Item -ItemType Directory -Path $buildRoot -Force | Out-Null
+New-Item -ItemType Directory -Path $nuitkaCacheRoot -Force | Out-Null
 Push-Location $repoRoot
 try {
+    $env:NUITKA_CACHE_DIR = $nuitkaCacheRoot
+    $env:NUITKA_CACHE_DIR_CLCACHE = Join-Path $nuitkaCacheRoot "clcache"
+    $env:NUITKA_CACHE_DIR_DOWNLOADS = Join-Path $nuitkaCacheRoot "downloads"
+    $env:NUITKA_CACHE_DIR_BYTECODE = Join-Path $nuitkaCacheRoot "bytecode"
+    $env:NUITKA_CACHE_DIR_DLL_DEPENDENCIES = Join-Path $nuitkaCacheRoot "dll-dependencies"
+
+    Write-Host "Nuitka compiler cache: use Nuitka bundled clcache when MSVC is selected" -ForegroundColor DarkGreen
+
     $nuitkaArgs = @(
         "-m"
         "nuitka"

@@ -49,9 +49,18 @@ class UpdateHelperTests:
         manager = MagicMock()
         manager.get_current_version.return_value = "3.1.2"
         manager.check_for_updates.return_value = None
-        with patch.object(updater, "_safe_create_update_manager", return_value=manager), patch.object(updater, "__VERSION__", "3.1.2"):
+        with (
+            patch.object(updater, "_safe_create_update_manager", return_value=manager),
+            patch.object(updater, "_fetch_latest_velopack_feed_release", return_value={"Version": "3.1.2", "Type": "Full"}),
+        ):
             result = updater.UpdateManager.check_updates()
-        assert result == {"has_update": False, "status": "latest", "current_version": "3.1.2"}
+        assert result == {
+            "has_update": False,
+            "status": "latest",
+            "current_version": "3.1.2",
+            "latest_version": "3.1.2",
+            "release_notes": "",
+        }
 
     def test_check_updates_returns_outdated_when_release_exists(self) -> None:
         asset = SimpleNamespace(Version="3.2.0", NotesMarkdown="修复一堆破事", Size=123456)
@@ -109,12 +118,29 @@ class UpdateHelperTests:
 
     def test_check_updates_returns_preview_when_local_version_is_newer(self) -> None:
         manager = MagicMock()
-        manager.get_current_version.return_value = "3.1.1"
+        manager.get_current_version.return_value = "3.1.4"
         manager.check_for_updates.return_value = None
-        with patch.object(updater, "_safe_create_update_manager", return_value=manager), patch.object(updater, "__VERSION__", "3.1.2b1"):
+        with (
+            patch.object(updater, "_safe_create_update_manager", return_value=manager),
+            patch.object(updater, "_fetch_latest_velopack_feed_release", return_value={"Version": "3.1.3", "Type": "Full"}),
+        ):
             result = updater.UpdateManager.check_updates()
         assert result["status"] == "preview"
-        assert result["current_version"] == "3.1.2b1"
+        assert result["current_version"] == "3.1.4"
+        assert result["latest_version"] == "3.1.3"
+
+    def test_fetch_latest_velopack_feed_release_uses_highest_full_version(self) -> None:
+        response = MagicMock()
+        response.json.return_value = {
+            "Assets": [
+                {"Version": "3.1.3", "Type": "Delta"},
+                {"Version": "3.1.2", "Type": "Full"},
+                {"Version": "3.1.3", "Type": "Full"},
+            ]
+        }
+        with patch.object(updater.http_client, "get", return_value=response):
+            result = updater._fetch_latest_velopack_feed_release()
+        assert result == {"Version": "3.1.3", "Type": "Full"}
 
     def test_check_updates_returns_unknown_when_manager_raises(self) -> None:
         manager = MagicMock()

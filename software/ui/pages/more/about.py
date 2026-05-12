@@ -283,7 +283,7 @@ class AboutPage(ScrollArea):
             latest = update_info.get("latest_version", "?") if update_info else "?"
             InfoBar.warning(
                 "",
-                f"当前版本 v{__VERSION__} 高于远程最新版 v{latest}，属于预览版",
+                f"远端最新版是 v{latest}，当前安装的是 v{__VERSION__}",
                 parent=win,
                 position=InfoBarPosition.TOP,
                 duration=4000,
