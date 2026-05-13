@@ -9,6 +9,7 @@ from dataclasses import dataclass
 from typing import Any, Optional
 
 from software.core.engine.async_wait import sleep_or_stop
+from software.core.engine.runtime_actions import RuntimeActionResult
 from software.core.task import ExecutionState
 from software.network.browser.runtime_async import BrowserDriver
 from credamo.provider.runtime_dom import _page, _question_number_from_root, _question_roots, _unanswered_question_roots
@@ -318,8 +319,9 @@ async def wait_for_submission_verification(
     return await submission_requires_verification(driver)
 
 
-async def handle_submission_verification_detected(ctx: Any, gui_instance: Any, stop_signal: Any) -> None:
-    del ctx, gui_instance, stop_signal
+async def handle_submission_verification_detected(ctx: Any, stop_signal: Any) -> RuntimeActionResult:
+    del ctx, stop_signal
+    return RuntimeActionResult.empty()
 
 
 async def consume_submission_success_signal(driver: BrowserDriver) -> bool:

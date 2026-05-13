@@ -1,12 +1,9 @@
-"""问卷星提交流程能力。"""
+"""问卷星提交流程公共出口。"""
 
 from __future__ import annotations
 
 import asyncio
 import logging
-import threading
-import time
-from dataclasses import dataclass
 from typing import Any, Optional
 
 from software.app.config import (
@@ -17,12 +14,11 @@ from software.app.config import (
 )
 from software.core.engine.runtime_control import _is_headless_mode, _sleep_with_stop
 from software.core.task import ExecutionState
-from software.logging.log_utils import log_popup_confirm, log_popup_warning
-from software.network.browser import By, NoSuchElementException
+from software.network.browser import NoSuchElementException
 from software.network.browser.runtime_async import BrowserDriver
 
 from .runtime_interactions import _click_submit_button
-from .runtime_state import get_wjx_runtime_state, peek_wjx_runtime_state
+from .runtime_state import peek_wjx_runtime_state
 from .submission_pages import (
     _is_device_quota_limit_page,
     _is_wjx_domain,
@@ -30,43 +26,22 @@ from .submission_pages import (
     _normalize_url_for_compare,
     _page_looks_like_wjx_questionnaire,
 )
-
-_ALIYUN_CAPTCHA_MESSAGE = "检测到问卷星阿里云智能验证，当前版本暂不支持自动处理，请更换或启用随机 IP 后重试。"
-_ALIYUN_CAPTCHA_DOM_IDS = (
-    "aliyunCaptcha-window-popup",
-    "aliyunCaptcha-title",
-    "aliyunCaptcha-checkbox",
-    "aliyunCaptcha-checkbox-wrapper",
-    "aliyunCaptcha-checkbox-body",
-    "aliyunCaptcha-checkbox-icon",
-    "aliyunCaptcha-checkbox-left",
-    "aliyunCaptcha-checkbox-text",
-    "aliyunCaptcha-loading",
-    "aliyunCaptcha-certifyId",
+from .submission_recovery import (
+    SubmissionRecoveryHint,
 )
-_ALIYUN_CAPTCHA_LOCATORS = (
-    (By.ID, "aliyunCaptcha-window-popup"),
-    (By.ID, "aliyunCaptcha-checkbox-icon"),
-    (By.ID, "aliyunCaptcha-checkbox-left"),
-    (By.ID, "aliyunCaptcha-checkbox-text"),
+from .submission_verification import (
+    _ALIYUN_CAPTCHA_DOM_IDS,
+    _aliyun_captcha_element_exists,
+    _aliyun_captcha_visible_with_js,
+    submission_validation_message,
 )
-_WJX_MISSING_ANSWER_MARKERS = (
-    "此题未作答",
-    "本题未作答",
-    "请选择",
-    "请填写",
-    "必答题",
-)
+from . import submission_recovery as _submission_recovery
+from . import submission_verification as _submission_verification
+from .runtime_state import get_wjx_runtime_state
 
 
 class AliyunCaptchaBypassError(RuntimeError):
     """检测到问卷星阿里云智能验证（需要人工交互）时抛出。"""
-
-
-@dataclass(frozen=True)
-class SubmissionRecoveryHint:
-    question_numbers: tuple[int, ...]
-    message: str
 
 
 def _runtime_context_summary(driver: BrowserDriver) -> str:
@@ -94,9 +69,9 @@ def _runtime_context_summary(driver: BrowserDriver) -> str:
 
 async def _click_submit_confirm_button(driver: BrowserDriver, settle_delay: float = 0.0) -> None:
     confirm_candidates = [
-        (By.XPATH, '//*[@id="layui-layer1"]/div[3]/a'),
-        (By.CSS_SELECTOR, "#layui-layer1 .layui-layer-btn a"),
-        (By.CSS_SELECTOR, ".layui-layer .layui-layer-btn a.layui-layer-btn0"),
+        ("xpath", '//*[@id="layui-layer1"]/div[3]/a'),
+        ("css selector", "#layui-layer1 .layui-layer-btn a"),
+        ("css selector", ".layui-layer .layui-layer-btn a.layui-layer-btn0"),
     ]
     for by, value in confirm_candidates:
         try:
@@ -144,79 +119,8 @@ async def submit(
     await _click_submit_confirm_button(driver, settle_delay=settle_delay)
 
 
-async def submission_validation_message(driver: Optional[BrowserDriver] = None) -> str:
-    if driver is not None:
-        _runtime_context_summary(driver)
-    return _ALIYUN_CAPTCHA_MESSAGE
-
-
-async def _aliyun_captcha_visible_with_js(driver: BrowserDriver) -> bool:
-    script = r"""
-        return (() => {
-            const ids = [
-                'aliyunCaptcha-window-popup',
-                'aliyunCaptcha-title',
-                'aliyunCaptcha-checkbox',
-                'aliyunCaptcha-checkbox-wrapper',
-                'aliyunCaptcha-checkbox-body',
-                'aliyunCaptcha-checkbox-icon',
-                'aliyunCaptcha-checkbox-left',
-                'aliyunCaptcha-checkbox-text',
-                'aliyunCaptcha-loading',
-                'aliyunCaptcha-certifyId',
-            ];
-
-            const visible = (el, win) => {
-                if (!el || !win) return false;
-                const style = win.getComputedStyle(el);
-                if (!style) return false;
-                if (style.display === 'none' || style.visibility === 'hidden' || style.opacity === '0') return false;
-                const rect = el.getBoundingClientRect();
-                return rect.width > 0 && rect.height > 0;
-            };
-
-            const checkDoc = (doc) => {
-                if (!doc) return false;
-                const win = doc.defaultView;
-                if (!win) return false;
-                for (const id of ids) {
-                    const el = doc.getElementById(id);
-                    if (visible(el, win)) return true;
-                }
-                return false;
-            };
-
-            if (checkDoc(document)) return true;
-            const frames = Array.from(document.querySelectorAll('iframe'));
-            for (const frame of frames) {
-                try {
-                    const doc = frame.contentDocument || frame.contentWindow?.document;
-                    if (checkDoc(doc)) return true;
-                } catch (e) {}
-            }
-            return false;
-        })();
-    """
-    try:
-        return bool(await driver.execute_script(script))
-    except Exception:
-        return False
-
-
-async def _aliyun_captcha_element_exists(driver: BrowserDriver) -> bool:
-    for locator in _ALIYUN_CAPTCHA_LOCATORS:
-        try:
-            element = await driver.find_element(*locator)
-        except Exception:
-            element = None
-        if not element:
-            continue
-        try:
-            if await element.is_displayed():
-                return True
-        except Exception:
-            continue
-    return False
+async def is_device_quota_limit_page(driver: BrowserDriver) -> bool:
+    return bool(await _is_device_quota_limit_page(driver))
 
 
 async def submission_requires_verification(driver: BrowserDriver) -> bool:
@@ -229,8 +133,8 @@ async def wait_for_submission_verification(
     timeout: int = 3,
     stop_signal: Any = None,
 ) -> bool:
-    deadline = time.time() + max(1, int(timeout or 1))
-    while time.time() < deadline:
+    deadline = __import__("time").time() + max(1, int(timeout or 1))
+    while __import__("time").time() < deadline:
         if stop_signal is not None and getattr(stop_signal, "is_set", lambda: False)():
             return False
         if await submission_requires_verification(driver):
@@ -239,225 +143,17 @@ async def wait_for_submission_verification(
     return bool(await submission_requires_verification(driver))
 
 
-async def _extract_missing_answer_hint(driver: BrowserDriver) -> Optional[SubmissionRecoveryHint]:
-    script = r"""
-        return (() => {
-            const visible = (el) => {
-                if (!el) return false;
-                const style = window.getComputedStyle(el);
-                if (!style) return false;
-                if (style.display === 'none' || style.visibility === 'hidden' || style.opacity === '0') return false;
-                const rect = el.getBoundingClientRect();
-                return rect.width > 0 && rect.height > 0;
-            };
-            const normalize = (text) => String(text || '').replace(/\s+/g, ' ').trim();
-            const markers = ['此题未作答', '本题未作答', '请选择', '请填写', '必答题'];
-            const selectors = [
-                '.error',
-                '.field-error',
-                '.data__error',
-                '.ui-input-error',
-                '.wjx-error',
-                '.req-tip',
-                '.validate-error',
-                '.layui-layer-content',
-            ];
-            const messages = [];
-            const questionNumbers = [];
-
-            const pushQuestionNumber = (node) => {
-                if (!node) return;
-                const root = node.closest('#divQuestion [topic], #divQuestion div[id^="div"]');
-                if (!root) return;
-                const rawTopic = String(root.getAttribute('topic') || '').trim();
-                const idMatch = String(root.getAttribute('id') || '').trim().match(/^div(\d+)$/);
-                const value = rawTopic && /^\d+$/.test(rawTopic)
-                    ? Number.parseInt(rawTopic, 10)
-                    : (idMatch ? Number.parseInt(idMatch[1], 10) : 0);
-                if (value > 0 && !questionNumbers.includes(value)) {
-                    questionNumbers.push(value);
-                }
-            };
-
-            for (const sel of selectors) {
-                for (const node of document.querySelectorAll(sel)) {
-                    if (!visible(node)) continue;
-                    const text = normalize(node.innerText || node.textContent || '');
-                    if (!text) continue;
-                    if (!markers.some((marker) => text.includes(marker))) continue;
-                    messages.push(text);
-                    pushQuestionNumber(node);
-                }
-            }
-
-            for (const marker of markers) {
-                const bodyText = normalize(document.body?.innerText || '');
-                if (bodyText.includes(marker) && !messages.some((item) => item.includes(marker))) {
-                    messages.push(marker);
-                }
-            }
-
-            return {
-                questionNumbers,
-                messages: Array.from(new Set(messages)).slice(0, 5),
-            };
-        })();
-    """
-    try:
-        payload = await driver.execute_script(script) or {}
-    except Exception:
-        payload = {}
-    if not isinstance(payload, dict):
-        return None
-
-    question_numbers: list[int] = []
-    for raw_num in list(payload.get("questionNumbers") or []):
-        try:
-            question_num = int(raw_num)
-        except Exception:
-            continue
-        if question_num > 0 and question_num not in question_numbers:
-            question_numbers.append(question_num)
-
-    messages: list[str] = []
-    for raw_message in list(payload.get("messages") or []):
-        text = str(raw_message or "").strip()
-        if not text:
-            continue
-        if not any(marker in text for marker in _WJX_MISSING_ANSWER_MARKERS):
-            continue
-        if text not in messages:
-            messages.append(text)
-
-    if not question_numbers and not messages:
-        return None
-    message = " | ".join(messages[:3]).strip() or "提交后检测到未作答提示"
-    return SubmissionRecoveryHint(tuple(question_numbers), message)
-
-
 def _trigger_aliyun_captcha_stop(
     ctx: ExecutionState,
-    gui_instance: Optional[Any],
-    stop_signal: Optional[threading.Event],
-) -> None:
-    with ctx._aliyun_captcha_stop_lock:
-        if ctx._aliyun_captcha_stop_triggered:
-            return
-        ctx._aliyun_captcha_stop_triggered = True
-
-    logging.warning("检测到问卷星阿里云智能验证，已触发全局暂停。")
-
-    if stop_signal and not stop_signal.is_set():
-        stop_signal.set()
-        logging.warning("智能验证命中：已设置 stop_signal，任务将立即停止")
-
-    try:
-        if gui_instance:
-            gui_instance.pause_run("触发智能验证")
-            logging.warning("智能验证命中：已调用 pause_run")
-    except Exception:
-        logging.info("阿里云智能验证触发暂停失败", exc_info=True)
-
-    def _notify() -> None:
-        try:
-            if threading.current_thread() is not threading.main_thread():
-                return
-
-            from software.network.proxy.policy.source import get_random_ip_counter_snapshot_local
-            from software.network.proxy.session import has_authenticated_session, is_quota_exhausted
-
-            is_enabled = bool(gui_instance.is_random_ip_enabled()) if gui_instance else False
-
-            if is_enabled:
-                message = (
-                    "检测到问卷星阿里云智能验证，为避免继续失败提交已停止所有任务。\n\n"
-                    "请尝试重新启动任务。"
-                )
-                if gui_instance:
-                    gui_instance.show_message_dialog("智能验证提示", message, level="warning")
-                else:
-                    log_popup_warning("智能验证提示", message)
-                return
-
-            used, total, custom_api = get_random_ip_counter_snapshot_local()
-            if custom_api:
-                message = (
-                    "检测到问卷星阿里云智能验证，为避免继续失败提交已停止所有任务。\n\n"
-                    "你当前使用的是自定义代理接口，请自行排查解决后重新启动任务。"
-                )
-                if gui_instance:
-                    gui_instance.show_message_dialog("智能验证提示", message, level="warning")
-                else:
-                    log_popup_warning("智能验证提示", message)
-                return
-
-            if not has_authenticated_session():
-                message = (
-                    "检测到问卷星阿里云智能验证，为避免继续失败提交已停止所有任务。\n\n"
-                    "默认随机 IP 现已需要先领取免费试用或提交额度申请。\n"
-                    "请先完成试用激活或额度申请，或切换自定义代理接口后再试。"
-                )
-                if gui_instance:
-                    gui_instance.show_message_dialog("智能验证提示", message, level="warning")
-                else:
-                    log_popup_warning("智能验证提示", message)
-                return
-
-            quota_exceeded = is_quota_exhausted(
-                {
-                    "authenticated": True,
-                    "used_quota": float(used or 0.0),
-                    "total_quota": float(total or 0.0),
-                }
-            )
-            if quota_exceeded:
-                message = (
-                    "检测到问卷星阿里云智能验证，为避免继续失败提交已停止所有任务。\n\n"
-                    "启用随机 IP 可以解决该问题，但当前使用额度达到上限。\n"
-                    "请先补充额度后再启用随机 IP。"
-                )
-                if gui_instance:
-                    gui_instance.show_message_dialog("智能验证提示", message, level="warning")
-                else:
-                    log_popup_warning("智能验证提示", message)
-                return
-
-            message = (
-                "检测到问卷星阿里云智能验证，为避免继续失败提交已停止所有任务。\n\n"
-                "启用随机 IP 能解决这个问题。\n"
-                "是否立即启用随机 IP 功能？"
-            )
-            if gui_instance:
-                confirmed = bool(gui_instance.show_confirm_dialog("智能验证提示", message))
-            else:
-                confirmed = bool(log_popup_confirm("智能验证提示", message))
-
-            if confirmed and gui_instance:
-                try:
-                    gui_instance.set_random_ip_enabled(True)
-                    refresh_counter = getattr(gui_instance, "refresh_random_ip_counter", None)
-                    if callable(refresh_counter):
-                        refresh_counter()
-                    logging.info("智能验证触发：用户已确认启用随机IP")
-                except Exception:
-                    logging.warning("自动启用随机IP失败", exc_info=True)
-        except Exception:
-            logging.warning("弹窗提示用户启用随机IP失败", exc_info=True)
-
-    if gui_instance:
-        try:
-            gui_instance.dispatch_to_ui_async(_notify)
-            return
-        except Exception:
-            logging.info("派发阿里云停止事件到主线程失败", exc_info=True)
-    _notify()
+    stop_signal: Optional[Any],
+):
+    return _submission_verification._trigger_aliyun_captcha_stop(ctx, stop_signal)
 
 
 async def handle_submission_verification_detected(
     ctx: ExecutionState,
-    gui_instance: Optional[Any],
     stop_signal: Optional[Any],
-) -> None:
+):
     config = getattr(ctx, "config", None)
     random_proxy_ip_enabled = bool(
         getattr(ctx, "random_proxy_ip_enabled", getattr(config, "random_proxy_ip_enabled", False))
@@ -468,15 +164,15 @@ async def handle_submission_verification_detected(
 
     if random_proxy_ip_enabled:
         logging.warning("随机IP模式命中问卷星阿里云智能验证：仅记录日志，不暂停。")
-        return
+        return _submission_verification.RuntimeActionResult.empty()
     if not pause_on_aliyun_captcha:
         logging.warning("检测到问卷星阿里云智能验证：pause_on_aliyun_captcha=False，仅记录告警。")
-        return
-    _trigger_aliyun_captcha_stop(ctx, gui_instance, stop_signal)
+        return _submission_verification.RuntimeActionResult.empty()
+    return _trigger_aliyun_captcha_stop(ctx, stop_signal)
 
 
-async def is_device_quota_limit_page(driver: BrowserDriver) -> bool:
-    return bool(await _is_device_quota_limit_page(driver))
+async def _extract_missing_answer_hint(driver: BrowserDriver):
+    return await _submission_recovery._extract_missing_answer_hint(driver)
 
 
 async def attempt_submission_recovery(
@@ -552,11 +248,17 @@ async def attempt_submission_recovery(
 
 __all__ = [
     "AliyunCaptchaBypassError",
+    "SubmissionRecoveryHint",
     "_ALIYUN_CAPTCHA_DOM_IDS",
+    "_aliyun_captcha_element_exists",
+    "_aliyun_captcha_visible_with_js",
+    "_extract_missing_answer_hint",
+    "get_wjx_runtime_state",
     "_is_wjx_domain",
     "_looks_like_wjx_survey_url",
     "_normalize_url_for_compare",
     "_page_looks_like_wjx_questionnaire",
+    "_trigger_aliyun_captcha_stop",
     "attempt_submission_recovery",
     "handle_submission_verification_detected",
     "is_device_quota_limit_page",

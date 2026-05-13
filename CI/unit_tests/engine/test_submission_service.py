@@ -5,6 +5,7 @@ from unittest.mock import AsyncMock, patch
 import pytest
 
 from software.core.engine.failure_reason import FailureReason
+from software.core.engine.runtime_actions import RuntimeActionKind, RuntimeActionRequest, RuntimeActionResult
 from software.core.engine.submission_service import SubmissionService
 from software.core.task import ExecutionConfig, ExecutionState
 
@@ -22,6 +23,14 @@ class _FakeDriver:
 
     async def current_url(self) -> str:
         return self._current_url
+
+
+class _RuntimeActionAdapter:
+    def __init__(self) -> None:
+        self.results: list[RuntimeActionResult] = []
+
+    def handle_runtime_actions(self, result: RuntimeActionResult) -> None:
+        self.results.append(result)
 
 
 class SubmissionServiceTests:
@@ -116,19 +125,26 @@ class SubmissionServiceTests:
         service = SubmissionService(config, state, stop_policy)
         stop_signal = make_mock_event()
 
+        runtime_adapter = _RuntimeActionAdapter()
+        action_result = RuntimeActionResult.from_actions(
+            [RuntimeActionRequest(RuntimeActionKind.SHOW_MESSAGE, "提示", "命中", "warning")],
+            should_stop=True,
+        )
+
         with (
             patch("software.core.engine.submission_service._provider_submission_requires_verification", new=AsyncMock(return_value=True)),
             patch("software.core.engine.submission_service._provider_submission_validation_message", new=AsyncMock(return_value="命中腾讯安全验证")),
-            patch("software.core.engine.submission_service._provider_handle_submission_verification_detected", new=AsyncMock()) as handle_mock,
+            patch("software.core.engine.submission_service._provider_handle_submission_verification_detected", new=AsyncMock(return_value=action_result)) as handle_mock,
             patch("software.core.engine.submission_service.random.uniform", return_value=0.2),
         ):
-            outcome = await service.finalize_after_submit(_FakeDriver(), stop_signal=stop_signal, gui_instance=object(), thread_name="Worker-1")
+            outcome = await service.finalize_after_submit(_FakeDriver(), stop_signal=stop_signal, gui_instance=runtime_adapter, thread_name="Worker-1")
 
         assert outcome.status == "failure"
         assert outcome.failure_reason == FailureReason.SUBMISSION_VERIFICATION_REQUIRED
         assert state.get_terminal_stop_snapshot()[0] == "submission_verification"
         assert outcome.should_stop
         handle_mock.assert_awaited_once()
+        assert runtime_adapter.results == [action_result]
 
     @pytest.mark.asyncio
     async def test_check_submission_verification_after_submit_ignores_waiter_exception(self, make_mock_event, make_stop_policy_mock) -> None:

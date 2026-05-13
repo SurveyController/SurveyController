@@ -5,6 +5,7 @@ from __future__ import annotations
 from typing import Any, Optional
 
 from software.core.engine.provider_common import provider_run_context
+from software.core.engine.runtime_actions import RuntimeActionResult
 from software.core.task import ExecutionConfig, ExecutionState
 from software.providers.adapter_base import CallableProviderAdapter, ProviderAdapterHooks
 from software.providers.common import (
@@ -225,15 +226,13 @@ async def attempt_submission_recovery(
 
 async def handle_submission_verification_detected(
     ctx: Any,
-    gui_instance: Any,
     stop_signal: Any,
     *,
     provider: Optional[str] = None,
-) -> None:
+) -> RuntimeActionResult:
     """Provider 提交后命中风控/验证时的后续策略分发。"""
-    await _get_provider_adapter(provider=provider, ctx=ctx).handle_submission_verification_detected_async(
+    return await _get_provider_adapter(provider=provider, ctx=ctx).handle_submission_verification_detected_async(
         ctx,
-        gui_instance,
         stop_signal,
     )
 

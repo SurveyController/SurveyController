@@ -12,6 +12,12 @@ from software.network.browser import (
     is_playwright_startup_environment_error,
 )
 from software.network.browser.parse_pool import acquire_parse_browser_session
+from software.providers.errors import (
+    SurveyEnterpriseUnavailableError,
+    SurveyNotOpenError,
+    SurveyPausedError,
+    SurveyStoppedError,
+)
 from wjx.provider.html_parser import (
     _normalize_html_text,
     extract_survey_title_from_html,
@@ -27,22 +33,6 @@ _PAUSED_SURVEY_ID_RE = re.compile(r"此问卷[（(]\d+[）)]已暂停")
 _NOT_OPEN_TIME_RE = re.compile(
     r"此问卷将于\s*(\d{4}[-/]\d{1,2}[-/]\d{1,2}\s+\d{1,2}:\d{2})\s*开放"
 )
-
-
-class SurveyPausedError(RuntimeError):
-    """问卷已暂停时抛出的业务异常。"""
-
-
-class SurveyStoppedError(RuntimeError):
-    """问卷处于停止状态时抛出的业务异常。"""
-
-
-class SurveyEnterpriseUnavailableError(RuntimeError):
-    """问卷发布者企业标准版不可用时抛出的业务异常。"""
-
-
-class SurveyNotOpenError(RuntimeError):
-    """问卷尚未开放时抛出的业务异常。"""
 
 
 def _walk_exception_chain(exc: BaseException):

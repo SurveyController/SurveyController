@@ -5,6 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any, Awaitable, Callable
 
+from software.core.engine.runtime_actions import RuntimeActionResult, ensure_runtime_action_result
 from software.core.task import ExecutionConfig, ExecutionState
 from software.providers.contracts import SurveyDefinition
 
@@ -13,7 +14,7 @@ FillSurveyHook = Callable[..., Awaitable[bool]]
 PagePredicateHook = Callable[[Any], Awaitable[bool]]
 ValidationMessageHook = Callable[[Any], Awaitable[str]]
 WaitVerificationHook = Callable[..., Awaitable[bool]]
-VerificationDetectedHook = Callable[[Any, Any, Any], Awaitable[None]]
+VerificationDetectedHook = Callable[[Any, Any], Awaitable[RuntimeActionResult]]
 SubmissionRecoveryHook = Callable[..., Awaitable[bool]]
 
 
@@ -25,8 +26,8 @@ async def _return_empty_text(*_args: Any, **_kwargs: Any) -> str:
     return ""
 
 
-async def _noop(*_args: Any, **_kwargs: Any) -> None:
-    return None
+async def _noop_action_result(*_args: Any, **_kwargs: Any) -> RuntimeActionResult:
+    return RuntimeActionResult.empty()
 
 
 @dataclass(frozen=True)
@@ -37,7 +38,7 @@ class ProviderAdapterHooks:
     submission_requires_verification: PagePredicateHook = _return_false
     submission_validation_message: ValidationMessageHook = _return_empty_text
     wait_for_submission_verification: WaitVerificationHook = _return_false
-    handle_submission_verification_detected: VerificationDetectedHook = _noop
+    handle_submission_verification_detected: VerificationDetectedHook = _noop_action_result
     attempt_submission_recovery: SubmissionRecoveryHook = _return_false
     consume_submission_success_signal: PagePredicateHook = _return_false
     is_device_quota_limit_page: PagePredicateHook = _return_false
@@ -96,8 +97,10 @@ class CallableProviderAdapter:
             )
         )
 
-    async def handle_submission_verification_detected_async(self, ctx: Any, gui_instance: Any, stop_signal: Any) -> None:
-        await self._hooks.handle_submission_verification_detected(ctx, gui_instance, stop_signal)
+    async def handle_submission_verification_detected_async(self, ctx: Any, stop_signal: Any) -> RuntimeActionResult:
+        return ensure_runtime_action_result(
+            await self._hooks.handle_submission_verification_detected(ctx, stop_signal)
+        )
 
     async def attempt_submission_recovery_async(
         self,

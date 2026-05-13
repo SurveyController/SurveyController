@@ -1,10 +1,10 @@
 from __future__ import annotations
 
 import threading
-from types import SimpleNamespace
 
 import pytest
 
+from software.core.engine.runtime_actions import RuntimeActionKind
 from software.core.task import ExecutionConfig, ExecutionState
 from wjx.provider import submission
 
@@ -66,33 +66,39 @@ class WjxSubmissionTests:
         monkeypatch.setattr(submission, "_trigger_aliyun_captcha_stop", lambda *_args, **_kwargs: calls.append("stop"))
 
         ctx_random = ExecutionState(config=ExecutionConfig(random_proxy_ip_enabled=True))
-        await submission.handle_submission_verification_detected(ctx_random, gui_instance=None, stop_signal=None)
+        await submission.handle_submission_verification_detected(ctx_random, stop_signal=None)
 
         ctx_pause_off = ExecutionState(config=ExecutionConfig(pause_on_aliyun_captcha=False))
-        await submission.handle_submission_verification_detected(ctx_pause_off, gui_instance=None, stop_signal=None)
+        await submission.handle_submission_verification_detected(ctx_pause_off, stop_signal=None)
 
         ctx_normal = ExecutionState(config=ExecutionConfig())
-        await submission.handle_submission_verification_detected(ctx_normal, gui_instance=None, stop_signal=None)
+        await submission.handle_submission_verification_detected(ctx_normal, stop_signal=None)
 
         assert calls == ["stop"]
 
-    def test_trigger_aliyun_captcha_stop_sets_flags_and_pauses_gui(self) -> None:
+    def test_trigger_aliyun_captcha_stop_sets_flags_and_returns_runtime_actions(self, monkeypatch) -> None:
         ctx = ExecutionState(config=ExecutionConfig())
         stop_signal = threading.Event()
-        calls: list[str] = []
-        gui = SimpleNamespace(
-            pause_run=lambda reason: calls.append(f"pause:{reason}"),
-            dispatch_to_ui_async=lambda callback: callback(),
-            is_random_ip_enabled=lambda: True,
-            show_message_dialog=lambda *_args, **_kwargs: calls.append("message"),
+
+        monkeypatch.setattr(
+            "software.network.proxy.policy.source.get_random_ip_counter_snapshot_local",
+            lambda: (1.0, 5.0, False),
+        )
+        monkeypatch.setattr("software.network.proxy.session.has_authenticated_session", lambda: True)
+        monkeypatch.setattr(
+            "software.network.proxy.session.is_quota_exhausted",
+            lambda _snapshot: False,
         )
 
-        submission._trigger_aliyun_captcha_stop(ctx, gui, stop_signal)
+        result = submission._trigger_aliyun_captcha_stop(ctx, stop_signal)
 
         assert ctx._aliyun_captcha_stop_triggered
         assert stop_signal.is_set()
-        assert "pause:触发智能验证" in calls
-        assert "message" in calls
+        assert result.should_stop
+        assert [action.kind for action in result.actions] == [
+            RuntimeActionKind.PAUSE_RUN,
+            RuntimeActionKind.CONFIRM_ENABLE_RANDOM_IP,
+        ]
 
     @pytest.mark.asyncio
     async def test_attempt_submission_recovery_refills_questions_and_resubmits_once(self, monkeypatch) -> None:

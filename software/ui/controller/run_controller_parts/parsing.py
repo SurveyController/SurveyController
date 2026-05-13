@@ -12,7 +12,7 @@ from software.core.questions.config import (
 )
 from software.providers.common import is_supported_survey_url
 from software.providers.contracts import SurveyDefinition, SurveyQuestionMeta
-from wjx.provider.parser import (
+from software.providers.errors import (
     SurveyEnterpriseUnavailableError,
     SurveyNotOpenError,
     SurveyPausedError,

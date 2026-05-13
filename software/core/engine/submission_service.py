@@ -16,6 +16,7 @@ from software.app.config import (
     POST_SUBMIT_URL_POLL_INTERVAL,
 )
 from software.core.engine.failure_reason import FailureReason
+from software.core.engine.runtime_actions import RuntimeActionResult
 from software.core.engine.run_stop_policy import RunStopPolicy
 from software.core.engine.stop_signal import StopSignalLike
 from software.core.engine.async_wait import sleep_or_stop
@@ -161,12 +162,12 @@ class SubmissionService:
             log_message=message,
             consume_reverse_fill_attempt=False,
         )
-        await _provider_handle_submission_verification_detected(
+        action_result = await _provider_handle_submission_verification_detected(
             self.state,
-            gui_instance,
             stop_signal,
             provider=survey_provider,
         )
+        self._dispatch_runtime_actions(gui_instance, action_result)
         return SubmissionOutcome(
             status="failure",
             failure_reason=FailureReason.SUBMISSION_VERIFICATION_REQUIRED,
@@ -175,6 +176,15 @@ class SubmissionService:
             should_stop=bool(stopped or stop_signal.is_set()),
             should_rotate_proxy=False,
         )
+
+    def _dispatch_runtime_actions(self, gui_instance: Any, action_result: RuntimeActionResult) -> None:
+        handler = getattr(gui_instance, "handle_runtime_actions", None)
+        if not callable(handler):
+            return
+        try:
+            handler(action_result)
+        except Exception:
+            logging.info("派发运行时动作失败", exc_info=True)
 
     async def _check_submission_verification_after_submit(
         self,

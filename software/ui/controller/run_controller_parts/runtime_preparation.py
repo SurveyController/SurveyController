@@ -26,11 +26,13 @@ from software.providers.common import (
     normalize_survey_provider,
 )
 from software.providers.contracts import SurveyQuestionMeta
+from software.providers.errors import (
+    SurveyEnterpriseUnavailableError,
+    SurveyStoppedError,
+)
 from wjx.provider.parser import (
     ENTERPRISE_UNAVAILABLE_SURVEY_ERROR_MESSAGE,
     STOPPED_SURVEY_ERROR_MESSAGE,
-    SurveyEnterpriseUnavailableError,
-    SurveyStoppedError,
     is_enterprise_unavailable_survey_page,
     is_stopped_survey_page,
 )

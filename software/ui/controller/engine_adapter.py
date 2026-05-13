@@ -7,6 +7,12 @@ import threading
 from typing import Any, Callable, List, Optional
 
 from software.core.engine.cleanup import CleanupRunner
+from software.core.engine.runtime_actions import (
+    RuntimeActionKind,
+    RuntimeActionRequest,
+    RuntimeActionResult,
+    ensure_runtime_action_result,
+)
 from software.core.task import ExecutionState
 
 
@@ -218,6 +224,35 @@ class EngineGuiAdapter:
             callback(stop_signal)
         except Exception:
             logging.info("处理随机IP提交流程失败", exc_info=True)
+
+    def handle_runtime_actions(self, result: RuntimeActionResult | RuntimeActionRequest | object) -> None:
+        action_result = ensure_runtime_action_result(result)
+        if not action_result.actions:
+            return
+
+        def _apply_actions() -> None:
+            for action in action_result.actions:
+                self._handle_runtime_action(action)
+
+        self.dispatch_to_ui_async(_apply_actions)
+
+    def _handle_runtime_action(self, action: RuntimeActionRequest) -> None:
+        if action.kind == RuntimeActionKind.PAUSE_RUN:
+            self.pause_run(action.reason or "已暂停")
+            return
+        if action.kind == RuntimeActionKind.SHOW_MESSAGE:
+            self.show_message_dialog(action.title, action.message, level=action.level or "info")
+            return
+        if action.kind == RuntimeActionKind.CONFIRM_ENABLE_RANDOM_IP:
+            if self.show_confirm_dialog(action.title, action.message):
+                self.set_random_ip_enabled(True)
+                self.refresh_random_ip_counter()
+            return
+        if action.kind == RuntimeActionKind.SET_RANDOM_IP_ENABLED:
+            self.set_random_ip_enabled(bool(action.enabled))
+            return
+        if action.kind == RuntimeActionKind.REFRESH_RANDOM_IP_COUNTER:
+            self.refresh_random_ip_counter()
 
     def register_cleanup_target(self, target: Any) -> None:
         if target is None:

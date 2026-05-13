@@ -7,6 +7,7 @@ from functools import lru_cache
 from importlib import import_module
 from typing import Any, TypeAlias
 
+from software.core.engine.runtime_actions import ensure_runtime_action_result
 from software.providers.contracts import SurveyDefinition, build_survey_definition
 
 HookTarget: TypeAlias = tuple[str, str]
@@ -99,8 +100,8 @@ def build_wait_from_predicate_hook(target: HookTarget):
 
 
 def build_action_hook(target: HookTarget):
-    async def _action(ctx: Any, gui_instance: Any, stop_signal: Any) -> None:
-        await _invoke(target, ctx, gui_instance, stop_signal)
+    async def _action(ctx: Any, stop_signal: Any):
+        return ensure_runtime_action_result(await _invoke(target, ctx, stop_signal))
 
     return _action
 

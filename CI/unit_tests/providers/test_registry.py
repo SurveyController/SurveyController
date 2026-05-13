@@ -70,9 +70,9 @@ async def test_handle_submission_verification_detected_uses_ctx_config_provider(
     adapter = registry._PROVIDER_REGISTRY[SURVEY_PROVIDER_CREDAMO]
 
     with patch.object(adapter, "handle_submission_verification_detected_async", new=AsyncMock()) as handler_mock:
-        await registry.handle_submission_verification_detected(ctx, "gui", "stop")
+        await registry.handle_submission_verification_detected(ctx, "stop")
 
-    handler_mock.assert_awaited_once_with(ctx, "gui", "stop")
+    handler_mock.assert_awaited_once_with(ctx, "stop")
 
 
 async def test_wait_for_submission_verification_routes_timeout_and_stop_signal() -> None:

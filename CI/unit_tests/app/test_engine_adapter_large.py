@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import threading
 
+from software.core.engine.runtime_actions import RuntimeActionKind, RuntimeActionRequest, RuntimeActionResult
 from software.ui.controller.engine_adapter import EngineGuiAdapter
 
 
@@ -69,3 +70,33 @@ class EngineGuiAdapterLargeTests:
         assert messages == [("提示", "内容", "warning")]
         assert confirmed == [("确认", "继续")]
         assert adapter.is_random_ip_enabled() is True
+
+    def test_runtime_actions_are_handled_by_adapter(self) -> None:
+        messages: list[tuple[str, str, str]] = []
+        confirms: list[tuple[str, str]] = []
+        refreshed: list[str] = []
+        adapter = EngineGuiAdapter(
+            dispatcher=lambda callback: callback(),
+            async_dispatcher=lambda callback: callback(),
+            stop_signal=threading.Event(),
+            message_handler=lambda title, message, level: messages.append((title, message, level)),
+            confirm_handler=lambda title, message: confirms.append((title, message)) or True,
+        )
+        adapter.bind_runtime_actions(refresh_random_ip_counter=lambda: refreshed.append("refresh"))
+
+        adapter.handle_runtime_actions(
+            RuntimeActionResult.from_actions(
+                [
+                    RuntimeActionRequest(RuntimeActionKind.PAUSE_RUN, reason="触发智能验证"),
+                    RuntimeActionRequest(RuntimeActionKind.SHOW_MESSAGE, "提示", "内容", "warning"),
+                    RuntimeActionRequest(RuntimeActionKind.CONFIRM_ENABLE_RANDOM_IP, "确认", "启用吗", "warning"),
+                ]
+            )
+        )
+
+        assert adapter.is_paused()
+        assert adapter.get_pause_reason() == "触发智能验证"
+        assert messages == [("提示", "内容", "warning")]
+        assert confirms == [("确认", "启用吗")]
+        assert adapter.is_random_ip_enabled()
+        assert refreshed == ["refresh"]
