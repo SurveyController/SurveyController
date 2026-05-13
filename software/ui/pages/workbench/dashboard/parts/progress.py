@@ -74,6 +74,7 @@ class DashboardProgressMixin:
         _show_task_result_windows_notification: Any
 
         def _sync_start_button_state(self, running: Optional[bool] = None) -> None: ...
+        def _sync_thread_slider_enabled(self, running: Optional[bool] = None) -> None: ...
         def _has_question_entries(self) -> bool: ...
         def _toast(
             self,
@@ -555,6 +556,7 @@ class DashboardProgressMixin:
 
     def on_run_state_changed(self, running: bool):
         self._sync_start_button_state(running=running)
+        self._sync_thread_slider_enabled(running=running)
         self.stop_btn.setEnabled(running)
         log_action(
             "RUN",

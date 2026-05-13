@@ -131,6 +131,7 @@ class DashboardPage(
         self.config_drawer = ConfigDrawer(self, self._load_config_from_path)
         self._bind_events()
         self._apply_runtime_ui_state(self.controller.get_runtime_ui_state())
+        self._sync_thread_slider_enabled()
         self._sync_start_button_state()
         self._refresh_ip_cost_infobar()
         self._init_random_ip_status_refresh()
@@ -558,6 +559,11 @@ class DashboardPage(
             running = bool(getattr(self.controller, "running", False))
         can_start = (not running) and self._has_question_entries()
         self.start_btn.setEnabled(bool(can_start))
+
+    def _sync_thread_slider_enabled(self, running: Optional[bool] = None) -> None:
+        if running is None:
+            running = bool(getattr(self.controller, "running", False))
+        self.thread_slider.setEnabled(not bool(running))
 
     def _on_question_entries_changed(self, _count: int):
         self.strategy_page.set_entries(
