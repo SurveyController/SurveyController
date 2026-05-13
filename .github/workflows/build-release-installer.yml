@@ -92,7 +92,7 @@ jobs:
           $packVersion = $tag.TrimStart('v')
           $channel = "${env:VELOPACK_CHANNEL}"
           $releaseDir = Join-Path "${{ github.workspace }}" "Releases"
-          $setupName = "SurveyController_${packVersion}_setup.exe"
+          $setupName = "SurveyController_v${packVersion}_setup.exe"
           $setupPath = Join-Path $releaseDir $setupName
           "tag=$tag" >> $env:GITHUB_OUTPUT
           "pack_version=$packVersion" >> $env:GITHUB_OUTPUT
