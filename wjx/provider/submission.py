@@ -18,7 +18,7 @@ from software.network.browser import NoSuchElementException
 from software.network.browser.runtime_async import BrowserDriver
 
 from .runtime_interactions import _click_submit_button
-from .runtime_state import peek_wjx_runtime_state
+from .runtime_state import get_wjx_runtime_state, peek_wjx_runtime_state
 from .submission_pages import (
     _is_device_quota_limit_page,
     _is_wjx_domain,
@@ -26,9 +26,7 @@ from .submission_pages import (
     _normalize_url_for_compare,
     _page_looks_like_wjx_questionnaire,
 )
-from .submission_recovery import (
-    SubmissionRecoveryHint,
-)
+from .submission_recovery import SubmissionRecoveryHint
 from .submission_verification import (
     _ALIYUN_CAPTCHA_DOM_IDS,
     _aliyun_captcha_element_exists,
@@ -37,7 +35,6 @@ from .submission_verification import (
 )
 from . import submission_recovery as _submission_recovery
 from . import submission_verification as _submission_verification
-from .runtime_state import get_wjx_runtime_state
 
 
 class AliyunCaptchaBypassError(RuntimeError):
@@ -133,14 +130,11 @@ async def wait_for_submission_verification(
     timeout: int = 3,
     stop_signal: Any = None,
 ) -> bool:
-    deadline = __import__("time").time() + max(1, int(timeout or 1))
-    while __import__("time").time() < deadline:
-        if stop_signal is not None and getattr(stop_signal, "is_set", lambda: False)():
-            return False
-        if await submission_requires_verification(driver):
-            return True
-        await asyncio.sleep(0.15)
-    return bool(await submission_requires_verification(driver))
+    return await _submission_verification.wait_for_submission_verification(
+        driver,
+        timeout=timeout,
+        stop_signal=stop_signal,
+    )
 
 
 def _trigger_aliyun_captcha_stop(
@@ -183,67 +177,13 @@ async def attempt_submission_recovery(
     *,
     thread_name: str = "",
 ) -> bool:
-    del gui_instance
-    if stop_signal is not None and getattr(stop_signal, "is_set", lambda: False)():
-        return False
-    if await submission_requires_verification(driver):
-        return False
-    if not await _page_looks_like_wjx_questionnaire(driver):
-        return False
-
-    runtime_state = get_wjx_runtime_state(driver)
-    recovery_attempts = int(runtime_state.submission_recovery_attempts or 0)
-    if recovery_attempts >= 1:
-        return False
-
-    hint = await _extract_missing_answer_hint(driver)
-    if hint is None:
-        return False
-
-    runtime_page_questions = list(runtime_state.page_questions or [])
-    current_page_required: list[int] = []
-    for item in runtime_page_questions:
-        if not isinstance(item, dict):
-            continue
-        try:
-            question_num = int(item.get("question_num") or 0)
-        except Exception:
-            question_num = 0
-        if question_num > 0 and bool(item.get("required")) and question_num not in current_page_required:
-            current_page_required.append(question_num)
-
-    target_questions: list[int] = []
-    for question_num in hint.question_numbers:
-        if question_num > 0 and question_num not in target_questions:
-            target_questions.append(question_num)
-    if not target_questions:
-        target_questions = list(current_page_required)
-    if not target_questions:
-        logging.warning("WJX 提交补救放弃：识别到未作答提示，但当前页没有可补题目。message=%s", hint.message)
-        return False
-
-    logging.warning("WJX 提交命中未作答提示，准备补答并重提：questions=%s message=%s", target_questions, hint.message)
-    try:
-        ctx.update_thread_status(thread_name or "Worker-?", "补答必答题", running=True)
-    except Exception:
-        logging.info("更新线程状态失败：补答必答题", exc_info=True)
-
-    from wjx.provider.runtime import refill_required_questions_on_current_page
-
-    filled_count = await refill_required_questions_on_current_page(
+    return await _submission_recovery.attempt_submission_recovery(
         driver,
         ctx,
-        question_numbers=target_questions,
-        thread_name=thread_name or "Worker-?",
-        psycho_plan=runtime_state.psycho_plan,
+        gui_instance,
+        stop_signal,
+        thread_name=thread_name,
     )
-    if filled_count <= 0:
-        logging.warning("WJX 提交补救失败：未成功补答任何题目。questions=%s", target_questions)
-        return False
-
-    runtime_state.submission_recovery_attempts = recovery_attempts + 1
-    await submit(driver, ctx=ctx, stop_signal=stop_signal)
-    return True
 
 
 __all__ = [

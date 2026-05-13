@@ -202,7 +202,7 @@ class SurveyCacheTests:
             assert second.title == "旧标题"
 
     @pytest.mark.asyncio
-    async def test_recent_cache_hit_does_not_fetch_remote_fingerprint(self) -> None:
+    async def test_recent_wjx_cache_hit_still_checks_remote_fingerprint(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             calls: list[str] = []
             fingerprint_calls: list[str] = []
@@ -229,7 +229,39 @@ class SurveyCacheTests:
                 survey_cache._fetch_remote_fingerprint = original_fetch_fingerprint
                 survey_cache._now = original_now
             assert len(calls) == 1
-            assert len(fingerprint_calls) == 1
+            assert len(fingerprint_calls) == 2
+            assert first.title == "缓存标题"
+            assert second.title == "缓存标题"
+
+    @pytest.mark.asyncio
+    async def test_recent_credamo_cache_hit_does_not_fetch_remote_fingerprint(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            calls: list[str] = []
+            fingerprint_calls: list[str] = []
+            original_runtime_directory = self._patch_cache_directory(temp_dir)
+            original_fetch_fingerprint = survey_cache._fetch_remote_fingerprint
+            original_now = survey_cache._now
+            now_values = [1000, 1005]
+
+            async def parser(url: str):
+                calls.append(url)
+                return build_survey_definition("credamo", "缓存标题", [{"num": 1, "title": "缓存题目", "type_code": "3"}])
+
+            def fingerprint(url: str, _provider: str) -> str:
+                fingerprint_calls.append(url)
+                return "same"
+
+            try:
+                survey_cache._fetch_remote_fingerprint = fingerprint
+                survey_cache._now = lambda: now_values.pop(0)
+                first = await parse_survey_with_cache("https://www.credamo.com/answer.html#/s/demo", parser)
+                second = await parse_survey_with_cache("https://www.credamo.com/answer.html#/s/demo", parser)
+            finally:
+                survey_cache.get_user_cache_directory = original_runtime_directory
+                survey_cache._fetch_remote_fingerprint = original_fetch_fingerprint
+                survey_cache._now = original_now
+            assert len(calls) == 1
+            assert len(fingerprint_calls) == 0
             assert first.title == "缓存标题"
             assert second.title == "缓存标题"
 

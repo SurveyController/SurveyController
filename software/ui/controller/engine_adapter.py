@@ -245,8 +245,7 @@ class EngineGuiAdapter:
             return
         if action.kind == RuntimeActionKind.CONFIRM_ENABLE_RANDOM_IP:
             if self.show_confirm_dialog(action.title, action.message):
-                self.set_random_ip_enabled(True)
-                self.refresh_random_ip_counter()
+                self.toggle_random_ip(True)
             return
         if action.kind == RuntimeActionKind.SET_RANDOM_IP_ENABLED:
             self.set_random_ip_enabled(bool(action.enabled))

@@ -74,7 +74,7 @@ class EngineGuiAdapterLargeTests:
     def test_runtime_actions_are_handled_by_adapter(self) -> None:
         messages: list[tuple[str, str, str]] = []
         confirms: list[tuple[str, str]] = []
-        refreshed: list[str] = []
+        toggles: list[bool] = []
         adapter = EngineGuiAdapter(
             dispatcher=lambda callback: callback(),
             async_dispatcher=lambda callback: callback(),
@@ -82,7 +82,9 @@ class EngineGuiAdapterLargeTests:
             message_handler=lambda title, message, level: messages.append((title, message, level)),
             confirm_handler=lambda title, message: confirms.append((title, message)) or True,
         )
-        adapter.bind_runtime_actions(refresh_random_ip_counter=lambda: refreshed.append("refresh"))
+        adapter.bind_runtime_actions(
+            toggle_random_ip=lambda enabled: toggles.append(bool(enabled)) or bool(enabled),
+        )
 
         adapter.handle_runtime_actions(
             RuntimeActionResult.from_actions(
@@ -98,5 +100,4 @@ class EngineGuiAdapterLargeTests:
         assert adapter.get_pause_reason() == "触发智能验证"
         assert messages == [("提示", "内容", "warning")]
         assert confirms == [("确认", "启用吗")]
-        assert adapter.is_random_ip_enabled()
-        assert refreshed == ["refresh"]
+        assert toggles == [True]

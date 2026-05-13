@@ -122,9 +122,9 @@ class WjxSubmissionTests:
         async def _hint(_driver):
             return submission.SubmissionRecoveryHint((3, 4), "请填写")
 
-        monkeypatch.setattr(submission, "submission_requires_verification", _verify)
-        monkeypatch.setattr(submission, "_page_looks_like_wjx_questionnaire", _questionnaire)
-        monkeypatch.setattr(submission, "_extract_missing_answer_hint", _hint)
+        monkeypatch.setattr(submission._submission_recovery, "submission_requires_verification", _verify)
+        monkeypatch.setattr(submission._submission_recovery, "_page_looks_like_wjx_questionnaire", _questionnaire)
+        monkeypatch.setattr(submission._submission_recovery, "_extract_missing_answer_hint", _hint)
         async def _submit(_driver, *, ctx=None, stop_signal=None):
             del stop_signal
             submit_calls.append(ctx.config.survey_provider if ctx else "")
@@ -176,9 +176,9 @@ class WjxSubmissionTests:
         async def _submit(*_args, **_kwargs):
             return None
 
-        monkeypatch.setattr(submission, "submission_requires_verification", _verify)
-        monkeypatch.setattr(submission, "_page_looks_like_wjx_questionnaire", _questionnaire)
-        monkeypatch.setattr(submission, "_extract_missing_answer_hint", _hint)
+        monkeypatch.setattr(submission._submission_recovery, "submission_requires_verification", _verify)
+        monkeypatch.setattr(submission._submission_recovery, "_page_looks_like_wjx_questionnaire", _questionnaire)
+        monkeypatch.setattr(submission._submission_recovery, "_extract_missing_answer_hint", _hint)
         monkeypatch.setattr(submission, "submit", _submit)
 
         from wjx.provider import runtime as wjx_runtime
