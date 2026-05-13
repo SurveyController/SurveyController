@@ -5,7 +5,7 @@ import threading
 import time
 import tempfile
 from unittest.mock import patch
-from software.logging.log_utils import AsyncFileHandler, LogBufferHandler
+from software.logging.log_utils import AsyncFileHandler, LogBufferHandler, setup_logging
 
 class LogBufferHandlerConcurrencyTests:
 
@@ -53,6 +53,12 @@ class LogBufferHandlerConcurrencyTests:
         handler.emit(logging.LogRecord(logger.name, logging.INFO, __file__, 10, 'QFluentWidgets Pro is now released', (), None))
         time.sleep(0.15)
         assert handler.get_records() == []
+
+    def test_setup_logging_suppresses_successful_http_request_noise(self) -> None:
+        setup_logging()
+        assert logging.getLogger("httpx").level == logging.WARNING
+        assert logging.getLogger("httpcore").level == logging.WARNING
+        assert logging.getLogger("urllib3").level == logging.WARNING
 
     def test_worker_survives_process_record_failure_and_handles_next_log(self) -> None:
         handler = self._create_handler()

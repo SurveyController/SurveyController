@@ -747,7 +747,7 @@ class ReliabilitySettingCard(ExpandGroupSettingCard):
     def __init__(self, parent=None):
         super().__init__(
             FluentIcon.CERTIFICATE,
-            "提升问卷信效度",
+            "提升问卷信度",
             "仅对量表/评分/矩阵量表题型生效，不确保信度完全符合预期，请勿用于正式环境。",
             parent,
         )

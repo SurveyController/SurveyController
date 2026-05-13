@@ -506,7 +506,7 @@ class MainWindow(
     def _prompt_quick_bug_report(self) -> None:
         confirmed = self.show_confirm_dialog(
             "运行异常",
-            "本次运行因异常提前终止，是否打开报错反馈？",
+            "本次运行因异常提前终止，是否打开报错反馈？\n\n遇到问题请提交完整的日志文件，而不是🤳💻或发送这个页面的截图",
         )
         if confirmed:
             self._open_contact_dialog(default_type="报错反馈", lock_message_type=True)
@@ -696,6 +696,9 @@ class MainWindow(
         url_edit.blockSignals(True)
         url_edit.setText(text)
         url_edit.blockSignals(False)
+        refresh_preview = getattr(self.reverse_fill_page, "_refresh_preview", None)
+        if callable(refresh_preview):
+            refresh_preview()
 
     def _sync_reverse_fill_url_from_dashboard(self, url: str) -> None:
         text = str(url or "").strip()

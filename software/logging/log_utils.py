@@ -610,9 +610,9 @@ def setup_logging():
         root_logger.addHandler(LOG_BUFFER_HANDLER)
     _ensure_session_log_handler(root_logger)
 
-    # 第三方日志统一到 INFO，避免与项目日志分裂成两套级别策略
-    logging.getLogger("urllib3").setLevel(logging.INFO)
-    logging.getLogger("httpx").setLevel(logging.INFO)
+    # HTTP 客户端在 INFO 会记录每个成功请求，日志页会被无诊断价值的 2xx 请求刷屏。
+    for noisy_logger in ("urllib3", "httpx", "httpcore"):
+        logging.getLogger(noisy_logger).setLevel(logging.WARNING)
 
     if not getattr(setup_logging, "_streams_hooked", False):
         stdout_logger = StreamToLogger(root_logger, logging.INFO, stream=ORIGINAL_STDOUT)

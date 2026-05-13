@@ -10,6 +10,7 @@ from PySide6.QtWidgets import (
     QHBoxLayout,
     QPlainTextEdit,
     QFileDialog,
+    QSizePolicy,
 )
 from PySide6.QtGui import QFont, QTextCursor
 from qfluentwidgets import (
@@ -17,6 +18,7 @@ from qfluentwidgets import (
     PrimaryPushButton,
     PushButton,
     InfoBar,
+    InfoBarIcon,
     InfoBarPosition,
     FluentIcon as FIF,
     isDarkTheme,
@@ -87,6 +89,23 @@ class LogPage(QWidget):
 
         # 标题
         layout.addWidget(SubtitleLabel("日志", self))
+
+        self.bug_report_tip_bar = InfoBar(
+            icon=InfoBarIcon.WARNING,
+            title="",
+            content="遇到问题请提交完整的日志文件，而不是🤳💻或发送这个页面的截图；报错反馈会自动附带诊断日志。",
+            orient=Qt.Orientation.Horizontal,
+            isClosable=False,
+            position=InfoBarPosition.NONE,
+            duration=-1,
+            parent=self,
+        )
+        self.bug_report_tip_bar.setSizePolicy(
+            QSizePolicy.Policy.Expanding,
+            QSizePolicy.Policy.Fixed,
+        )
+        self.bug_report_tip_bar.setMinimumWidth(0)
+        layout.addWidget(self.bug_report_tip_bar)
 
         # 工具栏
         toolbar = QHBoxLayout()

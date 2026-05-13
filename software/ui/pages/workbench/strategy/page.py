@@ -74,7 +74,7 @@ class ConditionRulePanel(QWidget):
 
         layout.addWidget(
             BodyLabel(
-                "按前题答案去约束后题选项。规则列表里越靠后，冲突时优先级越高。",
+                "适用于“选择了该选项，那么下一题就只能从这些选项中选”或“选择了该选项，那么下一题就不能从这些选项中选”的条件规则设置",
                 self,
             )
         )

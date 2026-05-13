@@ -139,6 +139,7 @@ class ReverseFillPage(SurveyClipboardMixin, QWidget):
         self._question_entries: List[Any] = []
         self._survey_provider: str = ""
         self._survey_title: str = ""
+        self._parsed_url: str = ""
         self._reverse_fill_threads_value: int = 1
         self._selected_format_value: str = REVERSE_FILL_FORMAT_AUTO
         self._start_row_value: int = 1
@@ -390,7 +391,7 @@ class ReverseFillPage(SurveyClipboardMixin, QWidget):
     def _bind_events(self) -> None:
         self.qr_btn.clicked.connect(self._on_qr_clicked)
         self.url_edit.returnPressed.connect(self._on_parse_clicked)
-        self.url_edit.textChanged.connect(self.surveyUrlChanged.emit)
+        self.url_edit.textChanged.connect(self._on_url_text_changed)
         self.file_edit.editingFinished.connect(self._refresh_preview)
         self.reverse_fill_threads_spin.valueChanged.connect(self._on_reverse_fill_threads_changed)
         self.random_ip_cb.toggled.connect(self._on_random_ip_toggled)
@@ -425,6 +426,8 @@ class ReverseFillPage(SurveyClipboardMixin, QWidget):
         self._question_entries = list(copy.deepcopy(list(question_entries or [])))
         self._survey_title = str(survey_title or "").strip()
         self._survey_provider = str(survey_provider or "").strip()
+        if self._questions_info:
+            self._parsed_url = self.url_edit.text().strip()
         self._refresh_preview()
         self._sync_start_button_state()
 
@@ -467,11 +470,15 @@ class ReverseFillPage(SurveyClipboardMixin, QWidget):
     def eventFilter(self, watched, event):
         if watched in getattr(self, "_file_drop_widgets", ()):
             if event.type() == QEvent.Type.DragEnter:
+                if not self._has_survey_link_text():
+                    return False
                 if isinstance(event, QDragEnterEvent) and self._mime_has_excel_file(event):
                     event.acceptProposedAction()
                     return True
                 return False
             if event.type() == QEvent.Type.Drop:
+                if not self._has_survey_link_text():
+                    return False
                 if isinstance(event, QDropEvent):
                     file_path = self._extract_excel_path_from_drop(event)
                     if file_path:
@@ -554,6 +561,9 @@ class ReverseFillPage(SurveyClipboardMixin, QWidget):
 
     def _has_excel_source_path(self) -> bool:
         return bool(self.file_edit.text().strip())
+
+    def _has_survey_link_text(self) -> bool:
+        return bool(self.url_edit.text().strip())
 
     def _sync_random_ip_toggle_presentation(self, enabled: bool) -> None:
         self.random_ip_row.sync_toggle_presentation(enabled)
@@ -677,6 +687,8 @@ class ReverseFillPage(SurveyClipboardMixin, QWidget):
         if coordinator is None:
             self._toast("主页尚未完成初始化，暂时不能开始执行", "error", duration=3000)
             return
+        if not self._validate_reverse_fill_start_url():
+            return
         if not self._prepare_reverse_fill_start_target():
             return
         should_reset = bool(coordinator.is_completed_run())
@@ -717,7 +729,33 @@ class ReverseFillPage(SurveyClipboardMixin, QWidget):
 
     def _context_ready(self) -> bool:
         provider = normalize_survey_provider(self._survey_provider, default="")
-        return provider == SURVEY_PROVIDER_WJX and bool(self._questions_info)
+        current_url = self.url_edit.text().strip()
+        return (
+            provider == SURVEY_PROVIDER_WJX
+            and bool(self._questions_info)
+            and bool(self._parsed_url)
+            and current_url == self._parsed_url
+        )
+
+    def _validate_reverse_fill_start_url(self) -> bool:
+        url = self.url_edit.text().strip()
+        if not url:
+            self._toast("请先输入问卷链接或贴入二维码", "warning")
+            return False
+        if not is_supported_survey_url(url):
+            self._toast(
+                "仅支持问卷星、腾讯问卷与 Credamo 见数链接",
+                "error",
+                duration=3000,
+            )
+            return False
+        if not is_wjx_survey_url(url):
+            self._toast("Excel 反填目前只支持问卷星公开问卷链接", "error", duration=3000)
+            return False
+        if url != self._parsed_url:
+            self._toast("反填链接已修改，请先按回车解析问卷结构", "warning", duration=3200)
+            return False
+        return True
 
     def _browse_excel_file(self) -> None:
         start_dir = (
@@ -805,6 +843,10 @@ class ReverseFillPage(SurveyClipboardMixin, QWidget):
             payload={"provider": provider},
         )
 
+    def _on_url_text_changed(self, text: str) -> None:
+        self.surveyUrlChanged.emit(str(text or ""))
+        self._refresh_preview()
+
     def _on_survey_parsed(self, info: list, title: str) -> None:
         if not self._parse_requested_from_reverse_fill:
             return
@@ -812,6 +854,7 @@ class ReverseFillPage(SurveyClipboardMixin, QWidget):
         parsed_info = ensure_survey_question_metas(info or [])
         unsupported_count = sum(1 for item in parsed_info if bool(item.unsupported))
         self._survey_title = str(title or "").strip()
+        self._parsed_url = self.url_edit.text().strip()
         self._survey_provider = normalize_survey_provider(
             getattr(self.controller, "survey_provider", "")
             or detect_survey_provider(self.url_edit.text().strip(), default=""),
@@ -938,16 +981,21 @@ class ReverseFillPage(SurveyClipboardMixin, QWidget):
         self._last_error = ""
         source_path = self.file_edit.text().strip()
         context_ready = self._context_ready()
+        has_link_text = self._has_survey_link_text()
         self._sync_start_button_state()
 
-        controls_enabled = context_ready
+        controls_enabled = has_link_text
         self.file_edit.setEnabled(controls_enabled)
         self.browse_btn.setEnabled(controls_enabled)
         self.open_wizard_btn.hide()
 
         if not context_ready:
             provider = normalize_survey_provider(self._survey_provider, default="")
-            if provider != SURVEY_PROVIDER_WJX:
+            if not has_link_text:
+                hint = ""
+            elif self._parsed_url and self.url_edit.text().strip() != self._parsed_url:
+                hint = ""
+            elif provider != SURVEY_PROVIDER_WJX:
                 hint = "该执行总线暂不能在当前平台环境接管反填覆盖支持，相关控制流已全托管休眠"
             else:
                 hint = ""
