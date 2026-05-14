@@ -32,16 +32,16 @@ class ProxyPolicySourceTests:
     def test_answer_duration_mapping_and_quota_cost(self) -> None:
         assert proxy_source.get_proxy_required_seconds_by_answer_seconds(100) == 100 + proxy_source.PROXY_TTL_GRACE_SECONDS
         assert proxy_source.get_proxy_minute_by_answer_seconds(10) == 1
-        assert proxy_source.get_proxy_minute_by_answer_seconds(70) == 3
-        assert proxy_source.get_proxy_minute_by_answer_seconds(250) == 5
+        assert proxy_source.get_proxy_minute_by_answer_seconds(70) == 1
+        assert proxy_source.get_proxy_minute_by_answer_seconds(250) == 1
         assert proxy_source.get_quota_cost_by_minute(999) == int(proxy_source.PROXY_QUOTA_COST_MAP.get(1, 1))
 
     def test_set_proxy_occupy_minute_by_answer_duration_uses_max_seconds(self) -> None:
         original = proxy_source.get_proxy_occupy_minute()
         try:
             minute = proxy_source.set_proxy_occupy_minute_by_answer_duration((30, 280))
-            assert minute == proxy_source.get_proxy_minute_by_answer_seconds(280)
-            assert proxy_source.get_proxy_occupy_minute() == minute
+            assert minute == 1
+            assert proxy_source.get_proxy_occupy_minute() == 1
         finally:
             proxy_source._proxy_occupy_minute = original
 
@@ -78,4 +78,3 @@ class ProxyPolicySourceTests:
             assert proxy_source.get_proxy_area_code() is None
         finally:
             proxy_source.set_proxy_area_code(original)
-

@@ -34,10 +34,7 @@ from software.ui.widgets.setting_cards import (
     SwitchSettingCard,
 )
 from software.io.config import RuntimeConfig
-from software.ui.helpers.proxy_access import (
-    apply_proxy_source_settings,
-    get_proxy_minute_by_answer_seconds,
-)
+from software.ui.helpers.proxy_access import apply_proxy_source_settings
 
 _PROXY_SOURCE_DEFAULT = "default"
 _PROXY_SOURCE_BENEFIT = "benefit"
@@ -283,39 +280,17 @@ class RuntimePage(ScrollArea):
         )
         return self._normalize_proxy_source(source)
 
-    def _current_proxy_required_minute(self) -> int:
-        try:
-            return int(get_proxy_minute_by_answer_seconds(self.answer_card.getValue()))
-        except Exception as exc:
-            log_suppressed_exception("_current_proxy_required_minute", exc, level=logging.WARNING)
-            return 1
-
     def _current_proxy_required_minute_for_benefit(self) -> int:
-        """限时福利兼容性判断按用户输入作答时长计算，不叠加安全缓冲。"""
-        try:
-            from software.app.config import PROXY_TTL_GRACE_SECONDS
-
-            raw_answer_seconds = max(0, int(self.answer_card.getValue()))
-            # 该函数内部会自动加缓冲秒，这里先减掉。
-            # 等价于“按用户输入时长本身判断”，避免 50 秒被提示为 3 分钟。
-            normalized_seconds = max(0, raw_answer_seconds - int(PROXY_TTL_GRACE_SECONDS))
-            return int(get_proxy_minute_by_answer_seconds(normalized_seconds))
-        except Exception as exc:
-            log_suppressed_exception(
-                "_current_proxy_required_minute_for_benefit",
-                exc,
-                level=logging.WARNING,
-            )
-            return 1
+        return 1
 
     def _show_benefit_proxy_limit_tip(self, minute: int) -> None:
+        del minute
         parent = self.window() or self.view
         InfoBar.warning(
             "",
             (
-                f"当前作答时长会要求 {minute} 分钟代理，"
-                "但“限时福利”只支持 1 分钟。请切回默认代理源，"
-                "或缩短作答时长后再试。"
+                "随机IP现在固定只拿 1 分钟代理。"
+                "限时福利源仍然只支持少部分城市，不适合长时间保活。"
             ),
             parent=parent,
             position=InfoBarPosition.TOP,

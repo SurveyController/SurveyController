@@ -21,8 +21,6 @@ from software.ui.helpers.proxy_access import (
     PROXY_SOURCE_BENEFIT,
     format_quota_value,
     format_status_payload,
-    get_proxy_minute_by_answer_seconds,
-    get_quota_cost_by_minute,
     get_random_ip_counter_snapshot_local,
     get_session_snapshot,
     has_authenticated_session,
@@ -315,13 +313,6 @@ class DashboardRandomIPMixin:
                 "_apply_random_ip_usage_ring_color", exc, level=logging.WARNING
             )
 
-    @staticmethod
-    def _format_duration_text(seconds: int) -> str:
-        total = max(0, int(seconds))
-        mins = total // 60
-        secs = total % 60
-        return f"{mins}分{secs}秒"
-
     def _refresh_ip_cost_infobar(self) -> None:
         """根据当前配置刷新随机IP成本提示条。"""
         try:
@@ -382,34 +373,7 @@ class DashboardRandomIPMixin:
             self._ip_cost_infobar.hide()
             return
 
-        try:
-            answer_duration = state.get("answer_duration", (0, 0))
-            answer_seconds = int(
-                answer_duration[1]
-                if isinstance(answer_duration, (list, tuple)) and len(answer_duration) >= 2
-                else 0
-            )
-        except Exception:
-            answer_seconds = 0
-
-        minute = int(get_proxy_minute_by_answer_seconds(answer_seconds))
-        if minute <= 1:
-            self._ip_cost_infobar.hide()
-            return
-
-        quota_cost = int(get_quota_cost_by_minute(minute))
-        duration_text = self._format_duration_text(answer_seconds)
-        content = (
-            f"当前作答时长约 {duration_text}，成本较高，"
-            f"将按 {quota_cost} 倍消耗速率扣减随机IP额度。"
-        )
-        try:
-            self._set_ip_cost_infobar_state(
-                title=content,
-                show_adjust_link=True,
-            )
-        except Exception as exc:
-            log_suppressed_exception("_update_ip_cost_infobar", exc, level=logging.WARNING)
+        self._ip_cost_infobar.hide()
 
     def _on_random_ip_toggled(self, enabled: bool):
         self._sync_random_ip_toggle_presentation(bool(enabled))

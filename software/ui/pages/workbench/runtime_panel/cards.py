@@ -165,8 +165,8 @@ class RandomIPSettingCard(ExpandGroupSettingCard):
         layout.addWidget(self.areaRow)
 
         self.benefitHintLabel = BodyLabel(
-            "限时福利仅支持 1 分钟以内的作答时长，"
-            "且只能支持少部分特定城市。如有更高需求请切换至默认或自备代理源",
+            "程序会固定申请 1 分钟代理。"
+            "限时福利源只支持少部分特定城市，如有更高需求请切换至默认或自备代理源",
             self._groupContainer,
         )
         self.benefitHintLabel.setStyleSheet("color: #D46B08; font-size: 12px;")

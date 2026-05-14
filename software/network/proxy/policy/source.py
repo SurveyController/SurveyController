@@ -106,31 +106,14 @@ def get_proxy_upstream(source: Optional[str] = None) -> str:
 
 # ==================== 代理占用时长 ====================
 
-def _map_answer_seconds_to_proxy_minute(total_seconds: int) -> int:
-    seconds = max(0, int(total_seconds))
-    if seconds < 60:
-        return 1
-    if seconds <= 180:
-        return 3
-    if seconds <= 300:
-        return 5
-    if seconds <= 600:
-        return 10
-    if seconds <= 900:
-        return 15
-    return 30
-
 
 def get_proxy_required_seconds_by_answer_seconds(total_seconds: int) -> int:
     return max(0, int(total_seconds)) + int(PROXY_TTL_GRACE_SECONDS)
 
 
 def get_proxy_minute_by_answer_seconds(total_seconds: int) -> int:
-    required_seconds = get_proxy_required_seconds_by_answer_seconds(total_seconds)
-    minute = int(_map_answer_seconds_to_proxy_minute(required_seconds))
-    if minute not in PROXY_MINUTE_OPTIONS:
-        return 1
-    return minute
+    del total_seconds
+    return 1
 
 
 def get_quota_cost_by_minute(minute: int) -> int:
@@ -176,16 +159,14 @@ def set_proxy_occupy_minute_by_answer_duration(answer_duration_range_seconds: Op
             min_seconds = _to_non_negative_int(answer_duration_range_seconds[0], 0)
         max_seconds = _to_non_negative_int(answer_duration_range_seconds[1], min_seconds) if len(answer_duration_range_seconds) >= 2 else min_seconds
     max_seconds = max(max_seconds, min_seconds)
-    minute = get_proxy_minute_by_answer_seconds(max_seconds)
-    required_seconds = get_proxy_required_seconds_by_answer_seconds(max_seconds)
+    minute = 1
     with _config_lock:
         _proxy_occupy_minute = minute
     logging.info(
-        "已根据作答时长更新代理 minute=%s（min=%s秒, max=%s秒, ttl=%s秒）",
+        "代理 minute 已固定为 %s（忽略作答时长，min=%s秒, max=%s秒）",
         minute,
         min_seconds,
         max_seconds,
-        required_seconds,
     )
     return minute
 
