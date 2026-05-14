@@ -321,7 +321,15 @@ class RunController(
     def get_runtime_ui_state(self) -> Dict[str, Any]:
         return self._runtime_ui_store.get()
 
+    def _threads_update_locked(self) -> bool:
+        return bool(self.running or self._starting or self._initializing)
+
     def set_runtime_ui_state(self, emit: bool = True, **updates: Any) -> Dict[str, Any]:
+        if "threads" in updates and self._threads_update_locked():
+            updates = dict(updates)
+            updates.pop("threads", None)
+            if not updates:
+                return self._runtime_ui_store.get()
         state, changed = self._runtime_ui_store.update(**updates)
         if emit and changed:
             self.runtimeUiStateChanged.emit(dict(state))
@@ -330,7 +338,18 @@ class RunController(
     def sync_runtime_ui_state_from_config(
         self, config: RuntimeConfig, *, emit: bool = True
     ) -> Dict[str, Any]:
-        state, changed = self._runtime_ui_store.sync_from_config(config)
+        if self._threads_update_locked():
+            state, changed = self._runtime_ui_store.update(
+                target=getattr(config, "target", 1),
+                random_ip_enabled=getattr(config, "random_ip_enabled", False),
+                headless_mode=getattr(config, "headless_mode", True),
+                timed_mode_enabled=getattr(config, "timed_mode_enabled", False),
+                proxy_source=getattr(config, "proxy_source", "default"),
+                submit_interval=getattr(config, "submit_interval", (0, 0)),
+                answer_duration=getattr(config, "answer_duration", (0, 0)),
+            )
+        else:
+            state, changed = self._runtime_ui_store.sync_from_config(config)
         if emit and changed:
             self.runtimeUiStateChanged.emit(dict(state))
         return dict(state)

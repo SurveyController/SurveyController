@@ -1,7 +1,23 @@
 import { jsonResponse } from "./response.js";
+import { TELEGRAM_FETCH_TIMEOUT_MS } from "./constants.js";
 
 async function sendTelegramRequest(apiBase, endpoint, init) {
-  const response = await fetch(`${apiBase}/${endpoint}`, init);
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort("telegram_timeout"), TELEGRAM_FETCH_TIMEOUT_MS);
+  let response;
+  try {
+    response = await fetch(`${apiBase}/${endpoint}`, {
+      ...init,
+      signal: controller.signal,
+    });
+  } catch (error) {
+    if (controller.signal.aborted) {
+      throw new Error("telegram_request_timeout");
+    }
+    throw error;
+  } finally {
+    clearTimeout(timeoutId);
+  }
   let payload = null;
 
   try {

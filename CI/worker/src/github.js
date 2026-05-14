@@ -1,4 +1,9 @@
-import { DEFAULT_GITHUB_OWNER, DEFAULT_GITHUB_REPO, GITHUB_API_VERSION } from "./constants.js";
+import {
+  DEFAULT_GITHUB_OWNER,
+  DEFAULT_GITHUB_REPO,
+  GITHUB_API_VERSION,
+  GITHUB_FETCH_TIMEOUT_MS,
+} from "./constants.js";
 import {
   extractIssueMessageContent,
   extractIssueTitleFromMessage,
@@ -7,6 +12,24 @@ import {
 } from "./message.js";
 
 const DEFAULT_GITHUB_ISSUE_LABELS = ["bot"];
+
+async function fetchWithTimeout(url, init, timeoutMs = GITHUB_FETCH_TIMEOUT_MS) {
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort("github_timeout"), timeoutMs);
+  try {
+    return await fetch(url, {
+      ...init,
+      signal: controller.signal,
+    });
+  } catch (error) {
+    if (controller.signal.aborted) {
+      throw new Error("github_request_timeout");
+    }
+    throw error;
+  } finally {
+    clearTimeout(timeoutId);
+  }
+}
 
 function escapeHtml(value) {
   return String(value)
@@ -114,7 +137,7 @@ function parseConfiguredIssueLabels(env) {
 }
 
 async function fetchExistingGitHubLabels({ owner, repo, token }) {
-  const response = await fetch(`https://api.github.com/repos/${owner}/${repo}/labels?per_page=100`, {
+  const response = await fetchWithTimeout(`https://api.github.com/repos/${owner}/${repo}/labels?per_page=100`, {
     method: "GET",
     headers: {
       Authorization: `Bearer ${token}`,
@@ -156,7 +179,7 @@ export async function createGitHubIssue(env, payload) {
   const repo = env.GITHUB_REPO || DEFAULT_GITHUB_REPO;
   const existingLabels = await fetchExistingGitHubLabels({ owner, repo, token });
   const labels = parseConfiguredIssueLabels(env).filter((label) => existingLabels.has(label));
-  const response = await fetch(`https://api.github.com/repos/${owner}/${repo}/issues`, {
+  const response = await fetchWithTimeout(`https://api.github.com/repos/${owner}/${repo}/issues`, {
     method: "POST",
     headers: {
       Authorization: `Bearer ${token}`,

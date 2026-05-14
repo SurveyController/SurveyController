@@ -66,6 +66,7 @@ class RuntimePage(ScrollArea):
         self._build_ui()
         self._bind_events()
         self.controller.runtimeUiStateChanged.connect(self._apply_runtime_ui_state)
+        self.controller.runStateChanged.connect(self.on_run_state_changed)
         self.controller.randomIpLoadingChanged.connect(self._apply_random_ip_loading)
         self._sync_random_ua(self.random_ua_card.isChecked())
         self._apply_thread_limit_by_headless(self.headless_card.isChecked())
@@ -80,6 +81,7 @@ class RuntimePage(ScrollArea):
             submit_interval=self._card_value_as_range(self.interval_card),
             answer_duration=self._card_value_as_range(self.answer_card),
         )
+        self.on_run_state_changed(bool(getattr(self.controller, "running", False)))
 
     def _build_ui(self):
         layout = QVBoxLayout(self.view)
@@ -387,6 +389,9 @@ class RuntimePage(ScrollArea):
             self.thread_card.slider.setValue(max_threads)
 
         return clamped
+
+    def on_run_state_changed(self, running: bool) -> None:
+        self.thread_card.slider.setEnabled(not bool(running))
 
     def _show_headless_limit_tip(self):
         parent = self.window() or self.view

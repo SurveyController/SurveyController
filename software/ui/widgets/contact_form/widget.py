@@ -413,6 +413,8 @@ class ContactForm(StatusPollingMixin, QWidget):
     quotaRequestSucceeded = Signal()
     cancelRequested = Signal()
 
+    _SEND_TIMEOUT_FALLBACK_MS = 12_000
+
     def __init__(
         self,
         parent: Optional[QWidget] = None,
@@ -435,6 +437,9 @@ class ContactForm(StatusPollingMixin, QWidget):
         self._current_message_type: str = ""
         self._current_has_email: bool = False
         self._send_in_progress: bool = False
+        self._send_generation: int = 0
+        self._send_finished_generation: int = 0
+        self._send_state_lock = threading.Lock()
         self._verify_code_requested: bool = False
         self._verify_code_requested_email: str = ""
         self._verify_code_sending: bool = False
@@ -1778,6 +1783,14 @@ class ContactForm(StatusPollingMixin, QWidget):
         self._set_send_loading(True)
         self._update_send_button_state()
         self._current_message_type = mtype
+        with self._send_state_lock:
+            self._send_generation += 1
+            send_generation = self._send_generation
+        QTimer.singleShot(
+            self._SEND_TIMEOUT_FALLBACK_MS,
+            cast(QWidget, self),
+            lambda generation=send_generation: self._finish_stuck_send_if_needed(generation),
+        )
 
         def _send():
             try:
@@ -1790,15 +1803,47 @@ class ContactForm(StatusPollingMixin, QWidget):
                     files_payload=files_payload,
                 )
                 timeout = 20 if files_payload else 10
-                resp = http_post(CONTACT_API_URL, files=multipart_fields, timeout=timeout)
+                resp = http_post(
+                    CONTACT_API_URL,
+                    files=multipart_fields,
+                    timeout=(10, timeout),
+                    proxies={},
+                )
                 if resp.status_code == 200:
-                    self._sendFinished.emit(True, "")
+                    self._emit_send_finished_if_current(send_generation, True, "")
                 else:
-                    self._sendFinished.emit(False, f"发送失败：{resp.status_code}")
+                    self._emit_send_finished_if_current(
+                        send_generation,
+                        False,
+                        f"发送失败：{resp.status_code}",
+                    )
             except Exception as exc:
-                self._sendFinished.emit(False, f"发送失败：{exc}")
+                self._emit_send_finished_if_current(
+                    send_generation,
+                    False,
+                    f"发送失败：{exc}",
+                )
 
         threading.Thread(target=_send, daemon=True).start()
+
+    def _emit_send_finished_if_current(
+        self,
+        generation: int,
+        success: bool,
+        message: str,
+    ) -> None:
+        with self._send_state_lock:
+            if generation != getattr(self, "_send_generation", 0):
+                return
+            if generation == getattr(self, "_send_finished_generation", 0):
+                return
+            if not getattr(self, "_send_in_progress", False):
+                return
+            self._send_finished_generation = generation
+        self._sendFinished.emit(success, message)
+
+    def _finish_stuck_send_if_needed(self, generation: int) -> None:
+        self._emit_send_finished_if_current(generation, False, "发送超时，请稍后重试")
 
     def _clear_email_selection(self):
         try:

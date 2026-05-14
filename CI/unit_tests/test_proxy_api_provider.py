@@ -81,6 +81,22 @@ class ProxyApiProviderTests:
         assert "小于当前建议值" in warning
         assert proxies == ["3.3.3.3:7000"]
 
+    def test_custom_api_validation_does_not_require_minute_parameter(self, patch_attrs) -> None:
+        patch_attrs(
+            (provider, "get_proxy_occupy_minute", lambda: 5),
+            (
+                provider.http_client,
+                "get",
+                lambda *_args, **_kwargs: _Response('{"data": ["3.3.3.3:7000"]}'),
+            ),
+        )
+
+        ok, warning, proxies = provider.test_custom_proxy_api("https://proxy.example/api")
+
+        assert ok is True
+        assert warning == ""
+        assert proxies == ["3.3.3.3:7000"]
+
     def test_fetch_custom_proxy_batch_uses_candidate_urls_and_normalizes_leases(self, patch_attrs) -> None:
         original_source = proxy_source.get_proxy_source()
         original_override = proxy_source.get_custom_proxy_api_override()
