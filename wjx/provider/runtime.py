@@ -9,7 +9,7 @@ from software.app.config import HEADLESS_PAGE_BUFFER_DELAY, HEADLESS_PAGE_CLICK_
 from software.core.engine.async_wait import sleep_or_stop
 from software.core.engine.navigation import _human_scroll_after_question
 from software.core.engine.runtime_control import _is_headless_mode
-from software.core.modes.duration_control import has_configured_answer_duration, simulate_answer_duration_delay
+from software.core.modes.duration_control import has_configured_answer_duration
 from software.core.task import ExecutionConfig, ExecutionState
 from software.network.browser import NoSuchElementException
 from software.network.browser.runtime_async import BrowserDriver
@@ -23,6 +23,7 @@ from .runtime_interactions import (
     _wait_for_any_visible_questions,
 )
 from .runtime_state import get_wjx_runtime_state
+from .starttime import prepare_answer_duration_before_submit
 from .submission import submit
 
 __all__ = ["brush", "brush_wjx", "refill_required_questions_on_current_page"]
@@ -179,10 +180,14 @@ async def _finalize_page(
     if is_last_page:
         if has_configured_answer_duration(runtime_config.answer_duration_range_seconds):
             try:
-                ctx.update_thread_status(thread_name, "等待时长中", running=True)
+                ctx.update_thread_status(thread_name, "处理作答时长", running=True)
             except Exception:
-                logging.info("更新线程状态失败：等待时长中", exc_info=True)
-        if await simulate_answer_duration_delay(active_stop, runtime_config.answer_duration_range_seconds):
+                logging.info("更新线程状态失败：处理作答时长", exc_info=True)
+        if await prepare_answer_duration_before_submit(
+            driver,
+            active_stop,
+            runtime_config.answer_duration_range_seconds,
+        ):
             _update_abort_status(ctx, thread_name)
             return False
         if _abort_requested(active_stop):

@@ -1807,7 +1807,6 @@ class ContactForm(StatusPollingMixin, QWidget):
                     CONTACT_API_URL,
                     files=multipart_fields,
                     timeout=(10, timeout),
-                    proxies={},
                 )
                 if resp.status_code == 200:
                     self._emit_send_finished_if_current(send_generation, True, "")
