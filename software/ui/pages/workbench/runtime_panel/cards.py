@@ -165,7 +165,6 @@ class RandomIPSettingCard(ExpandGroupSettingCard):
         layout.addWidget(self.areaRow)
 
         self.benefitHintLabel = BodyLabel(
-            "程序会固定申请 1 分钟代理。"
             "限时福利源只支持少部分特定城市，如有更高需求请切换至默认或自备代理源",
             self._groupContainer,
         )

@@ -6,7 +6,6 @@ import random
 from typing import Any, Optional, Tuple
 
 from software.core.engine.async_wait import sleep_or_stop
-from software.network.proxy.policy.source import _map_answer_seconds_to_proxy_minute
 from software.logging.log_utils import log_suppressed_exception
 
 _COMPLETION_MARKERS = (
@@ -52,16 +51,7 @@ def sample_answer_duration_seconds(
         min_delay = max(0, base - jitter)
         max_delay = base + jitter
 
-    proxy_ref_seconds = max(0, int(max(raw_min, raw_max)))
-    try:
-        ip_minute = _map_answer_seconds_to_proxy_minute(proxy_ref_seconds)
-    except Exception:
-        ip_minute = 0
-
     safe_upper = max_delay
-    if ip_minute > 0:
-        ip_limit_seconds = int(ip_minute) * 60
-        safe_upper = min(max_delay, max(min_delay, ip_limit_seconds - 1))
 
     center = (min_delay + safe_upper) / 2.0
     std_dev = (safe_upper - min_delay) / 6.0 if safe_upper > min_delay else 0.0

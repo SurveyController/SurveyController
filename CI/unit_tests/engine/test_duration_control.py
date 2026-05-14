@@ -63,7 +63,6 @@ class DurationControlTests:
     async def test_simulate_answer_duration_delay_uses_wait_on_stop_signal(self, make_mock_event, patch_attrs) -> None:
         stop_signal = make_mock_event(wait_return=True, is_set=True)
         patch_attrs(
-            (duration_control, "_map_answer_seconds_to_proxy_minute", lambda _seconds: 1),
             (duration_control.random, "gauss", lambda center, _std: center),
         )
 
@@ -74,7 +73,7 @@ class DurationControlTests:
 
         assert interrupted is True
         waited = stop_signal.wait.call_args.args[0]
-        assert 20 <= waited <= 59
+        assert 20 <= waited <= 80
 
     @pytest.mark.asyncio
     async def test_simulate_answer_duration_delay_expands_equal_bounds_and_sleeps(self, patch_attrs) -> None:
@@ -85,7 +84,6 @@ class DurationControlTests:
             return False
 
         patch_attrs(
-            (duration_control, "_map_answer_seconds_to_proxy_minute", lambda _seconds: 0),
             (duration_control.random, "gauss", lambda center, _std: center),
             (duration_control, "sleep_or_stop", _fake_sleep_or_stop),
         )

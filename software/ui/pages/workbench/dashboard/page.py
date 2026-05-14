@@ -316,8 +316,7 @@ class DashboardPage(
             icon=InfoBarIcon.SUCCESS,
             title="",
             content=(
-                "当前使用的是限时福利代理源。程序会固定申请 1 分钟代理，"
-                "该代理源只支持少部分城市。"
+                "该代理源按 0.5 倍率缓慢扣费。仅支持少部分城市。"
             ),
             orient=Qt.Orientation.Horizontal,
             isClosable=False,
