@@ -51,8 +51,6 @@ class RuntimePage(ScrollArea):
     NON_HEADLESS_MAX_THREADS = NON_HEADLESS_MAX_THREADS
     HEADLESS_MAX_THREADS = HEADLESS_MAX_THREADS
     SUBMIT_INTERVAL_MAX_SECONDS = 300
-    ANSWER_DURATION_MAX_SECONDS = 600
-
     def __init__(self, controller: RunController, parent=None):
         super().__init__(parent)
         self.controller = controller
@@ -168,8 +166,8 @@ class RuntimePage(ScrollArea):
         self.answer_card = TimeRangeSettingCard(
             FluentIcon.STOP_WATCH,
             "作答时长",
-            (f"设置单份作答耗时（0-{self.ANSWER_DURATION_MAX_SECONDS} 秒），按20%比例随机上下抖动"),
-            max_seconds=self.ANSWER_DURATION_MAX_SECONDS,
+            "设置单份作答耗时（大于等于 0 秒），按20%比例随机上下抖动",
+            max_seconds=None,
             parent=time_group,
         )
         self.timed_card = TimedModeSettingCard(

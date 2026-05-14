@@ -831,10 +831,10 @@ class TimeRangeSettingCard(SettingCard):
 
     valueChanged = Signal(int)
 
-    def __init__(self, icon, title, content, max_seconds: int = 300, parent=None):
+    def __init__(self, icon, title, content, max_seconds: Optional[int] = 300, parent=None):
         super().__init__(icon, title, content, parent)
 
-        self.max_seconds = max_seconds
+        self.max_seconds = None if max_seconds is None else max(0, int(max_seconds))
         self._current_value = 0
 
         self._input_container = QWidget(self)
@@ -843,11 +843,17 @@ class TimeRangeSettingCard(SettingCard):
         input_layout.setSpacing(8)
 
         self.inputEdit = LineEdit(self._input_container)
-        self.inputEdit.setValidator(QIntValidator(0, max_seconds, self.inputEdit))
+        validator_max = 2147483647 if self.max_seconds is None else self.max_seconds
+        self.inputEdit.setValidator(QIntValidator(0, validator_max, self.inputEdit))
         self.inputEdit.setFixedWidth(128)
         self.inputEdit.setFixedHeight(36)
         self.inputEdit.setText("0")
-        self.inputEdit.setToolTip(f"允许范围：0-{max_seconds} 秒")
+        tooltip_text = (
+            "允许范围：大于等于 0 秒"
+            if self.max_seconds is None
+            else f"允许范围：0-{self.max_seconds} 秒"
+        )
+        self.inputEdit.setToolTip(tooltip_text)
         install_tooltip_filter(self.inputEdit)
         self.inputEdit.textChanged.connect(self._on_text_changed)
         self.inputEdit.editingFinished.connect(self._normalize_text)
@@ -862,7 +868,10 @@ class TimeRangeSettingCard(SettingCard):
         self.hBoxLayout.addSpacing(16)
 
     def _clamp_value(self, value: int) -> int:
-        return max(0, min(int(value), self.max_seconds))
+        normalized = max(0, int(value))
+        if self.max_seconds is None:
+            return normalized
+        return min(normalized, self.max_seconds)
 
     @staticmethod
     def _parse_digits(text: str, fallback: int) -> int:
