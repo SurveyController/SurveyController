@@ -241,7 +241,7 @@ class DashboardRandomIPMixin:
         if shop_icon is not None:
             self.card_btn.setIcon(shop_icon)
         if authenticated:
-            self.card_btn.setToolTip("输入额度卡密后，系统会把额度直接充到当前随机IP账号")
+            self.card_btn.setToolTip("通常情况下，1额度即提交1份问卷")
         else:
             self.card_btn.setToolTip(
                 "先勾选随机IP领取试用账号，之后才能在这里兑换额度卡密"

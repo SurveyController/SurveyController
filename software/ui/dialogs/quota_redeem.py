@@ -1,4 +1,4 @@
-"""额度兑换弹窗。"""
+"""额度兑换弹窗"""
 
 from __future__ import annotations
 
@@ -6,12 +6,13 @@ import logging
 import os
 import threading
 
-from PySide6.QtCore import QTimer, Qt, QUrl, Signal, Slot
+from PySide6.QtCore import QEvent, QTimer, Qt, QUrl, Signal, Slot
 from PySide6.QtGui import QDesktopServices, QIcon
 from PySide6.QtWidgets import QHBoxLayout, QVBoxLayout, QWidget
 from qfluentwidgets import (
     BodyLabel,
     CaptionLabel,
+    IndeterminateProgressRing,
     InfoBar,
     InfoBarPosition,
     LineEdit,
@@ -23,6 +24,7 @@ from qfluentwidgets import (
 )
 
 from software.app.runtime_paths import get_resource_path
+from software.ui.helpers.qfluent_compat import set_indeterminate_progress_ring_active
 from software.ui.helpers.proxy_access import (
     RandomIPAuthError,
     format_quota_value,
@@ -34,7 +36,7 @@ from software.ui.helpers.proxy_access import (
 
 
 class QuotaRedeemDialog(MessageBoxBase):
-    """额度兑换弹窗。"""
+    """额度兑换弹窗"""
 
     _redeemFinished = Signal(bool, object)
     _SHOP_URL = "https://pay.ldxp.cn/shop/surveycontroller"
@@ -87,7 +89,7 @@ class QuotaRedeemDialog(MessageBoxBase):
             store_row,
         )
         self.storeHintLabel.setWordWrap(True)
-        self.storeButton = PushButton("前往发卡店铺", store_row)
+        self.storeButton = PushButton("前往卡密店铺", store_row)
         self._apply_shop_button_icon()
         self.storeButton.clicked.connect(self._open_shop)
         store_layout.addWidget(self.storeHintLabel, 1)
@@ -107,12 +109,29 @@ class QuotaRedeemDialog(MessageBoxBase):
         self.viewLayout.addWidget(self.loadingLabel)
 
         self.yesButton.setText("立即兑换")
+        self.yesButton.installEventFilter(self)
+        self.yesButtonSpinner = IndeterminateProgressRing(self.yesButton)
+        self.yesButtonSpinner.setFixedSize(16, 16)
+        self.yesButtonSpinner.setStrokeWidth(2)
+        self.yesButtonSpinner.hide()
         self.cancelButton.setText("取消")
+        self._layout_yes_button_spinner()
         self._refresh_account_hint()
 
     def showEvent(self, e) -> None:
         super().showEvent(e)
         self._refresh_account_hint()
+        self._layout_yes_button_spinner()
+
+    def eventFilter(self, obj, e) -> bool:
+        yes_button = getattr(self, "yesButton", None)
+        if yes_button is not None and obj is yes_button and e.type() in {
+            QEvent.Type.Resize,
+            QEvent.Type.Show,
+            QEvent.Type.FontChange,
+        }:
+            self._layout_yes_button_spinner()
+        return super().eventFilter(obj, e)
 
     def validate(self) -> bool:
         self._refresh_account_hint()
@@ -122,7 +141,7 @@ class QuotaRedeemDialog(MessageBoxBase):
         if not has_authenticated_session():
             InfoBar.warning(
                 "",
-                "请先领到随机IP试用账号，再来兑换卡密。",
+                "请先去测试随机ip是否真的可用，再来兑换卡密",
                 parent=self,
                 position=InfoBarPosition.TOP,
                 duration=2600,
@@ -133,18 +152,16 @@ class QuotaRedeemDialog(MessageBoxBase):
         if not card_code:
             InfoBar.warning(
                 "",
-                "请输入卡密。",
+                "请输入卡密",
                 parent=self,
                 position=InfoBarPosition.TOP,
                 duration=2000,
             )
             return False
 
-        snapshot = get_session_snapshot()
-        user_id = int(snapshot.get("user_id") or 0)
         confirm_box = MessageBox(
             "确认兑换",
-            f"当前会把这张卡密兑换到随机IP账号 {user_id}。\n\n兑换后不能撤回，确认继续？",
+            "兑换后无法撤回，确认继续？",
             self,
         )
         confirm_box.yesButton.setText("确认兑换")
@@ -176,7 +193,7 @@ class QuotaRedeemDialog(MessageBoxBase):
         snapshot = get_session_snapshot()
         if not has_authenticated_session():
             self.accountHintLabel.setText(
-                "还没有可兑换账号。先勾选一次随机 IP，领到试用账号后，才能把卡密充进来。"
+                "请先启用一次随机 IP，经测试确认随机 IP 可用后再来兑换卡密"
             )
             return
         user_id = int(snapshot.get("user_id") or 0)
@@ -189,17 +206,27 @@ class QuotaRedeemDialog(MessageBoxBase):
         self.cancelButton.setEnabled(not redeeming)
         self.yesButton.setEnabled(not redeeming)
         self.yesButton.setText("兑换中..." if redeeming else "立即兑换")
+        self._layout_yes_button_spinner()
+        set_indeterminate_progress_ring_active(self.yesButtonSpinner, redeeming)
         if redeeming:
-            self.loadingLabel.setText("正在兑换，请稍等。")
+            self.loadingLabel.setText("正在兑换，请稍等...")
             self.loadingLabel.show()
         else:
             self.loadingLabel.hide()
             self.loadingLabel.clear()
 
+    def _layout_yes_button_spinner(self) -> None:
+        text = self.yesButton.text() or ""
+        text_width = self.yesButton.fontMetrics().horizontalAdvance(text)
+        content_left = max(10, (self.yesButton.width() - text_width) // 2)
+        x = max(10, content_left - self.yesButtonSpinner.width() - 6)
+        y = max(0, (self.yesButton.height() - self.yesButtonSpinner.height()) // 2)
+        self.yesButtonSpinner.move(x, y)
+
     def _show_pending_warning(self) -> None:
         InfoBar.warning(
             "",
-            "额度兑换还没完成，请稍等。",
+            "额度兑换还未完成，请稍等...",
             parent=self,
             position=InfoBarPosition.TOP,
             duration=2200,
@@ -221,11 +248,9 @@ class QuotaRedeemDialog(MessageBoxBase):
         if success:
             data = payload if isinstance(payload, dict) else {}
             quota = format_quota_value(float(data.get("card_quota") or 0.0))
-            remaining = format_quota_value(float(data.get("remaining_quota") or 0.0))
-            total = format_quota_value(float(data.get("total_quota") or 0.0))
             InfoBar.success(
                 "",
-                f"兑换成功，已到账 {quota}。当前剩余额度 {remaining} / {total}",
+                f"兑换成功，已到账 {quota}！",
                 parent=self,
                 position=InfoBarPosition.TOP,
                 duration=3200,
@@ -243,13 +268,13 @@ class QuotaRedeemDialog(MessageBoxBase):
             message = format_random_ip_error(exc)
             detail = str(exc.detail or "").strip()
             if detail == "redeem_card_code_required":
-                message = "卡密不能为空。"
+                message = "卡密不能为空"
             elif detail == "invalid_redeem_card_code":
-                message = "卡密格式不对，请检查后重试。"
+                message = "卡密格式错误，复制错了？"
             elif detail == "redeem_card_not_found":
-                message = "这张卡密不存在，请检查是否输错。"
+                message = "该卡密不存在，请检查是否输错"
             elif detail == "redeem_card_already_redeemed":
-                message = "这张卡密已经兑换过了。"
+                message = "这张卡密已经被兑换过了"
         else:
             logging.warning("额度兑换失败", exc_info=exc)
             message = f"兑换失败：{exc}"
@@ -263,7 +288,7 @@ class QuotaRedeemDialog(MessageBoxBase):
 
 
 def load_shop_icon() -> QIcon | None:
-    """加载发卡店铺图标。"""
+    """加载发卡店铺图标"""
     icon_path = get_resource_path(QuotaRedeemDialog._SHOP_ICON_PATH)
     if not os.path.exists(icon_path):
         return None
