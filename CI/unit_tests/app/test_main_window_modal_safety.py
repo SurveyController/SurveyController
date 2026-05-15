@@ -21,6 +21,11 @@ class _FakeSignal:
             callback(*args)
 
 
+class _FakeQtApp:
+    def processEvents(self) -> None:
+        return
+
+
 class _FakeDialogsWindow(MainWindowDialogsMixin):
     def __init__(self) -> None:
         self._thread_token: Any = object()
@@ -269,7 +274,7 @@ class MainWindowModalSafetyTests:
             ),
             patch(
                 "software.ui.shell.main_window_parts.dialogs.QCoreApplication.instance",
-                return_value=object(),
+                return_value=_FakeQtApp(),
             ),
             patch(
                 "software.ui.shell.main_window_parts.dialogs.QTimer.singleShot",
@@ -290,7 +295,7 @@ class MainWindowModalSafetyTests:
             ),
             patch(
                 "software.ui.shell.main_window_parts.dialogs.QCoreApplication.instance",
-                return_value=object(),
+                return_value=_FakeQtApp(),
             ),
             patch(
                 "software.ui.shell.main_window_parts.dialogs.QTimer.singleShot",
@@ -317,7 +322,7 @@ class MainWindowModalSafetyTests:
             ),
             patch(
                 "software.ui.shell.main_window_parts.dialogs.QCoreApplication.instance",
-                return_value=object(),
+                return_value=_FakeQtApp(),
             ),
             patch(
                 "software.ui.shell.main_window_parts.dialogs.QTimer.singleShot",

@@ -1,19 +1,19 @@
 """应用程序设置页面"""
 
-import sys
-import subprocess
+from __future__ import annotations
+
 import logging
-from typing import Any, cast
+import subprocess
+import sys
+from typing import TYPE_CHECKING, Any, cast
 
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import QApplication, QVBoxLayout, QWidget
 from qfluentwidgets import (
     FluentIcon,
-    InfoBar,
-    InfoBarPosition,
     MessageBox,
-    PushSettingCard,
     PrimaryPushSettingCard,
+    PushSettingCard,
     ScrollArea,
     SettingCardGroup,
 )
@@ -30,18 +30,44 @@ from software.app.config import (
     get_bool_from_qsettings,
     get_int_from_qsettings,
 )
+from software.integrations.ai import reset_ai_settings
 from software.logging.action_logger import bind_logged_action, log_action
 from software.logging.log_utils import log_suppressed_exception
-from software.integrations.ai import reset_ai_settings
 from software.providers.survey_cache import clear_survey_parse_cache
+from software.ui.helpers.message_bar import show_message_bar
+from software.ui.pages.settings.definitions import (
+    APPEARANCE_SWITCHES,
+    BEHAVIOR_SWITCHES,
+    UPDATE_SWITCHES,
+    SwitchCardDefinition,
+)
 from software.ui.widgets.setting_cards import (
     ExpandComboSwitchSettingCard,
     SwitchSettingCard,
 )
 
+if TYPE_CHECKING:
+    from qfluentwidgets import ComboBox
+
 
 class SettingsPage(ScrollArea):
     """应用程序设置页面"""
+    view: QWidget
+    appearance_group: SettingCardGroup
+    behavior_group: SettingCardGroup
+    update_group: SettingCardGroup
+    tools_group: SettingCardGroup
+    navigation_text_card: SwitchSettingCard
+    topmost_card: SwitchSettingCard
+    ask_save_card: SwitchSettingCard
+    prevent_sleep_card: SwitchSettingCard
+    task_result_notification_card: SwitchSettingCard
+    auto_update_card: SwitchSettingCard
+    auto_save_logs_card: ExpandComboSwitchSettingCard
+    auto_save_logs_combo: "ComboBox"
+    restart_card: PushSettingCard
+    reset_ui_card: PrimaryPushSettingCard
+    clear_survey_cache_card: PushSettingCard
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -49,115 +75,36 @@ class SettingsPage(ScrollArea):
         self.setWidget(self.view)
         self.setWidgetResizable(True)
         self.enableTransparentBackground()
+        self._settings = app_settings()
+        self._defaults = self._build_defaults()
         self._build_ui()
+
+    def _build_defaults(self) -> dict[str, Any]:
+        return {
+            NAVIGATION_TEXT_VISIBLE_SETTING_KEY: True,
+            "window_topmost": False,
+            "ask_save_on_close": True,
+            "prevent_sleep_during_run": True,
+            TASK_RESULT_WINDOWS_NOTIFICATION_SETTING_KEY: True,
+            AUTO_SAVE_LOGS_SETTING_KEY: DEFAULT_AUTO_SAVE_LOGS,
+            AUTO_SAVE_LOG_RETENTION_COUNT_SETTING_KEY: DEFAULT_AUTO_SAVE_LOG_RETENTION_COUNT,
+            "auto_check_update": True,
+        }
 
     def _build_ui(self):
         layout = QVBoxLayout(self.view)
         layout.setContentsMargins(24, 24, 24, 24)
         layout.setSpacing(20)
 
-        settings = app_settings()
-
-        self.appearance_group = SettingCardGroup("界面外观", self.view)
-        self.navigation_text_card = SwitchSettingCard(
-            FluentIcon.MENU,
-            "显示选中导航名称",
-            "开启后左侧导航会像微软商店一样显示当前选中项的文字标签",
-            self.appearance_group,
-        )
-        self.navigation_text_card.setChecked(self._read_navigation_text_visible_setting())
-        self.topmost_card = SwitchSettingCard(
-            FluentIcon.PIN,
-            "窗口置顶",
-            "开启后程序窗口将始终保持在最上层",
-            self.appearance_group,
-        )
-        self.topmost_card.setChecked(
-            get_bool_from_qsettings(settings.value("window_topmost"), False)
-        )
-        self.appearance_group.addSettingCard(self.navigation_text_card)
-        self.appearance_group.addSettingCard(self.topmost_card)
+        self.appearance_group = self._build_switch_group("界面外观", APPEARANCE_SWITCHES)
         layout.addWidget(self.appearance_group)
 
-        self.behavior_group = SettingCardGroup("行为设置", self.view)
-        self.ask_save_card = SwitchSettingCard(
-            FluentIcon.SAVE,
-            "关闭前询问是否保存",
-            "关闭窗口时提示是否保存当前配置",
-            self.behavior_group,
-        )
-        self.ask_save_card.setChecked(
-            get_bool_from_qsettings(settings.value("ask_save_on_close"), True)
-        )
-        self.prevent_sleep_card = SwitchSettingCard(
-            FluentIcon.HISTORY,
-            "执行期间阻止自动休眠",
-            "任务运行时阻止电脑因为长时间无操作而自动休眠，任务结束后会自动恢复",
-            self.behavior_group,
-        )
-        self.prevent_sleep_card.setChecked(
-            get_bool_from_qsettings(settings.value("prevent_sleep_during_run"), True)
-        )
-        self.task_result_notification_card = SwitchSettingCard(
-            FluentIcon.INFO,
-            "后台任务完成/失败时通知",
-            "当程序不在前台时，任务完成或失败会弹出 Windows 通知",
-            self.behavior_group,
-        )
-        self.task_result_notification_card.setChecked(
-            get_bool_from_qsettings(
-                settings.value(TASK_RESULT_WINDOWS_NOTIFICATION_SETTING_KEY),
-                True,
-            )
-        )
-        self.auto_save_logs_card = ExpandComboSwitchSettingCard(
-            FluentIcon.DOCUMENT,
-            "自动保存日志",
-            "关闭程序后自动保留本次运行日志，并只留下最近几份历史记录",
-            "保留最近日志文件数：",
-            combo_min_width=140,
-            combo_suffix="份",
-            parent=self.behavior_group,
-        )
-        self.auto_save_logs_card.setChecked(
-            get_bool_from_qsettings(
-                settings.value(AUTO_SAVE_LOGS_SETTING_KEY),
-                DEFAULT_AUTO_SAVE_LOGS,
-            )
-        )
-        self.auto_save_logs_combo = self.auto_save_logs_card.comboBox
-        for count in AUTO_SAVE_LOG_RETENTION_OPTIONS:
-            self.auto_save_logs_combo.addItem(str(count), userData=int(count))
-        saved_retention = get_int_from_qsettings(
-            settings.value(AUTO_SAVE_LOG_RETENTION_COUNT_SETTING_KEY),
-            DEFAULT_AUTO_SAVE_LOG_RETENTION_COUNT,
-            minimum=1,
-            maximum=max(AUTO_SAVE_LOG_RETENTION_OPTIONS),
-        )
-        retention_index = self.auto_save_logs_combo.findData(saved_retention)
-        if retention_index < 0:
-            retention_index = self.auto_save_logs_combo.findData(
-                DEFAULT_AUTO_SAVE_LOG_RETENTION_COUNT
-            )
-        if retention_index >= 0:
-            self.auto_save_logs_combo.setCurrentIndex(retention_index)
-        self.behavior_group.addSettingCard(self.ask_save_card)
-        self.behavior_group.addSettingCard(self.prevent_sleep_card)
-        self.behavior_group.addSettingCard(self.task_result_notification_card)
+        self.behavior_group = self._build_switch_group("行为设置", BEHAVIOR_SWITCHES)
+        self._build_auto_save_logs_card()
         self.behavior_group.addSettingCard(self.auto_save_logs_card)
         layout.addWidget(self.behavior_group)
 
-        self.update_group = SettingCardGroup("软件更新", self.view)
-        self.auto_update_card = SwitchSettingCard(
-            FluentIcon.UPDATE,
-            "在应用程序启动时检查更新",
-            "新版本将更加稳定并拥有更多功能（建议启用此选项）",
-            self.update_group,
-        )
-        self.auto_update_card.setChecked(
-            get_bool_from_qsettings(settings.value("auto_check_update"), True)
-        )
-        self.update_group.addSettingCard(self.auto_update_card)
+        self.update_group = self._build_switch_group("软件更新", UPDATE_SWITCHES)
         layout.addWidget(self.update_group)
 
         self.tools_group = SettingCardGroup("系统工具", self.view)
@@ -182,58 +129,80 @@ class SettingsPage(ScrollArea):
             "清空本地问卷解析缓存，下次解析时会重新抓取问卷结构",
             self.tools_group,
         )
-        self.tools_group.addSettingCard(self.restart_card)
-        self.tools_group.addSettingCard(self.reset_ui_card)
-        self.tools_group.addSettingCard(self.clear_survey_cache_card)
+        for card in (
+            self.restart_card,
+            self.reset_ui_card,
+            self.clear_survey_cache_card,
+        ):
+            self.tools_group.addSettingCard(card)
         layout.addWidget(self.tools_group)
-
         layout.addStretch(1)
 
-        bind_logged_action(
-            self.navigation_text_card.switchButton.checkedChanged,
-            self._on_navigation_text_toggled,
-            scope="CONFIG",
-            event="toggle_navigation_text_visible",
-            target="navigation_text_switch",
-            page="settings",
-            payload_factory=lambda checked: {"enabled": bool(checked)},
+        self._bind_switch_actions(APPEARANCE_SWITCHES + BEHAVIOR_SWITCHES + UPDATE_SWITCHES)
+        self._bind_static_actions()
+
+    def _build_switch_group(
+        self,
+        title: str,
+        definitions: tuple[SwitchCardDefinition, ...],
+    ) -> SettingCardGroup:
+        group = SettingCardGroup(title, self.view)
+        for definition in definitions:
+            card = SwitchSettingCard(
+                definition.icon,
+                definition.title,
+                definition.content,
+                group,
+            )
+            card.setChecked(self._read_bool_setting(definition.setting_key, definition.default))
+            setattr(self, definition.attr_name, card)
+            group.addSettingCard(card)
+        return group
+
+    def _build_auto_save_logs_card(self) -> None:
+        self.auto_save_logs_card = ExpandComboSwitchSettingCard(
+            FluentIcon.DOCUMENT,
+            "自动保存日志",
+            "关闭程序后自动保留本次运行日志，并只留下最近几份历史记录",
+            "保留最近日志文件数：",
+            combo_min_width=140,
+            combo_suffix="份",
+            parent=self.behavior_group,
         )
-        bind_logged_action(
-            self.topmost_card.switchButton.checkedChanged,
-            self._on_topmost_toggled,
-            scope="CONFIG",
-            event="toggle_window_topmost",
-            target="topmost_switch",
-            page="settings",
-            payload_factory=lambda checked: {"enabled": bool(checked)},
+        self.auto_save_logs_card.setChecked(
+            self._read_bool_setting(
+                AUTO_SAVE_LOGS_SETTING_KEY,
+                DEFAULT_AUTO_SAVE_LOGS,
+            )
         )
-        bind_logged_action(
-            self.ask_save_card.switchButton.checkedChanged,
-            self._on_ask_save_on_close_toggled,
-            scope="CONFIG",
-            event="toggle_ask_save_on_close",
-            target="ask_save_switch",
-            page="settings",
-            payload_factory=lambda checked: {"enabled": bool(checked)},
+        self.auto_save_logs_combo = self.auto_save_logs_card.comboBox
+        for count in AUTO_SAVE_LOG_RETENTION_OPTIONS:
+            self.auto_save_logs_combo.addItem(str(count), userData=int(count))
+        keep_count = get_int_from_qsettings(
+            self._settings.value(AUTO_SAVE_LOG_RETENTION_COUNT_SETTING_KEY),
+            DEFAULT_AUTO_SAVE_LOG_RETENTION_COUNT,
+            minimum=1,
+            maximum=max(AUTO_SAVE_LOG_RETENTION_OPTIONS),
         )
-        bind_logged_action(
-            self.prevent_sleep_card.switchButton.checkedChanged,
-            self._on_prevent_sleep_toggled,
-            scope="CONFIG",
-            event="toggle_prevent_sleep_during_run",
-            target="prevent_sleep_switch",
-            page="settings",
-            payload_factory=lambda checked: {"enabled": bool(checked)},
-        )
-        bind_logged_action(
-            self.task_result_notification_card.switchButton.checkedChanged,
-            self._on_task_result_notification_toggled,
-            scope="CONFIG",
-            event="toggle_task_result_windows_notification",
-            target="task_result_notification_switch",
-            page="settings",
-            payload_factory=lambda checked: {"enabled": bool(checked)},
-        )
+        self._set_auto_save_retention_index(keep_count)
+        self.auto_save_logs_card.setContentEnabled(self.auto_save_logs_card.isChecked())
+
+    def _bind_switch_actions(
+        self,
+        definitions: tuple[SwitchCardDefinition, ...],
+    ) -> None:
+        for definition in definitions:
+            card = cast(SwitchSettingCard, getattr(self, definition.attr_name))
+            bind_logged_action(
+                card.switchButton.checkedChanged,
+                getattr(self, definition.handler_name),
+                scope="CONFIG",
+                event=definition.event,
+                target=definition.target,
+                page="settings",
+                payload_factory=lambda checked: {"enabled": bool(checked)},
+            )
+
         bind_logged_action(
             self.auto_save_logs_card.switchButton.checkedChanged,
             self._on_auto_save_logs_toggled,
@@ -250,9 +219,13 @@ class SettingsPage(ScrollArea):
             event="change_auto_save_log_retention",
             target="auto_save_log_retention_combo",
             page="settings",
-            payload_factory=lambda _index: {"keep_count": self.auto_save_logs_combo.currentData()},
+            payload_factory=lambda _index: {
+                "keep_count": self.auto_save_logs_combo.currentData()
+            },
             forward_signal_args=False,
         )
+
+    def _bind_static_actions(self) -> None:
         bind_logged_action(
             self.restart_card.clicked,
             self._restart_program,
@@ -280,134 +253,142 @@ class SettingsPage(ScrollArea):
             page="settings",
             forward_signal_args=False,
         )
-        bind_logged_action(
-            self.auto_update_card.switchButton.checkedChanged,
-            self._on_auto_update_toggled,
-            scope="CONFIG",
-            event="toggle_auto_update",
-            target="auto_update_switch",
-            page="settings",
-            payload_factory=lambda checked: {"enabled": bool(checked)},
+
+    def _window_parent(self):
+        return self.window() or self
+
+    def _show_bar(self, message: str, level: str, duration: int) -> None:
+        show_message_bar(
+            parent=self._window_parent(),
+            title="",
+            message=message,
+            level=level,
+            duration=duration,
         )
+
+    def _read_bool_setting(self, key: str, default: bool) -> bool:
+        return get_bool_from_qsettings(self._settings.value(key), default)
 
     def _set_switch_state(self, card, checked: bool):
-        btn = getattr(card, "switchButton", None)
-        if btn is None:
+        button = getattr(card, "switchButton", None)
+        if button is None:
             return
-        btn.blockSignals(True)
-        card.setChecked(checked)
-        btn.blockSignals(False)
+        button.blockSignals(True)
+        card.setChecked(bool(checked))
+        button.blockSignals(False)
+
+    def _set_auto_save_retention_index(self, keep_count: int) -> None:
+        index = self.auto_save_logs_combo.findData(int(keep_count))
+        if index < 0:
+            index = self.auto_save_logs_combo.findData(DEFAULT_AUTO_SAVE_LOG_RETENTION_COUNT)
+        if index >= 0:
+            self.auto_save_logs_combo.blockSignals(True)
+            self.auto_save_logs_combo.setCurrentIndex(index)
+            self.auto_save_logs_combo.blockSignals(False)
+
+    def _persist_bool_setting(
+        self,
+        *,
+        key: str,
+        checked: bool,
+        event: str,
+        target: str,
+        persist: bool = True,
+    ) -> None:
+        if persist:
+            self._settings.setValue(key, checked)
+        log_action(
+            "CONFIG",
+            event,
+            target,
+            "settings",
+            result="changed",
+            payload={"enabled": bool(checked), "persist": persist},
+        )
 
     def _read_navigation_text_visible_setting(self) -> bool:
-        settings = app_settings()
-        value = settings.value(NAVIGATION_TEXT_VISIBLE_SETTING_KEY)
-        return get_bool_from_qsettings(value, True)
+        return self._read_bool_setting(NAVIGATION_TEXT_VISIBLE_SETTING_KEY, True)
 
     def _apply_navigation_text_state(self, checked: bool, persist: bool = True):
-        settings = app_settings()
-        if persist:
-            settings.setValue(NAVIGATION_TEXT_VISIBLE_SETTING_KEY, checked)
-        log_action(
-            "CONFIG",
-            "toggle_navigation_text_visible",
-            "navigation_text_switch",
-            "settings",
-            result="changed",
-            payload={"enabled": bool(checked), "persist": persist},
+        self._persist_bool_setting(
+            key=NAVIGATION_TEXT_VISIBLE_SETTING_KEY,
+            checked=checked,
+            event="toggle_navigation_text_visible",
+            target="navigation_text_switch",
+            persist=persist,
         )
-        win = self.window()
-        nav = getattr(win, "navigationInterface", None)
-        if nav is not None:
-            try:
-                if hasattr(nav, "setSelectedTextVisible"):
-                    nav.setSelectedTextVisible(bool(checked))
-            except Exception as exc:
-                context = "_apply_navigation_text_state: nav.setSelectedTextVisible(bool(checked))"
-                log_suppressed_exception(
-                    context,
-                    exc,
-                    level=logging.WARNING,
-                )
+        nav = getattr(self.window(), "navigationInterface", None)
+        if nav is None:
+            return
+        try:
+            if hasattr(nav, "setSelectedTextVisible"):
+                nav.setSelectedTextVisible(bool(checked))
+        except Exception as exc:
+            log_suppressed_exception(
+                "_apply_navigation_text_state: nav.setSelectedTextVisible(bool(checked))",
+                exc,
+                level=logging.WARNING,
+            )
 
     def _apply_topmost_state(self, checked: bool, persist: bool = True):
-        settings = app_settings()
-        if persist:
-            settings.setValue("window_topmost", checked)
-        log_action(
-            "CONFIG",
-            "toggle_window_topmost",
-            "topmost_switch",
-            "settings",
-            result="changed",
-            payload={"enabled": bool(checked), "persist": persist},
+        self._persist_bool_setting(
+            key="window_topmost",
+            checked=checked,
+            event="toggle_window_topmost",
+            target="topmost_switch",
+            persist=persist,
         )
         win = self.window()
-        if win:
-            topmost_handler = getattr(win, "apply_topmost_state", None)
-            if callable(topmost_handler):
-                cast(Any, topmost_handler)(checked, show=True)
-            else:
-                win.setWindowFlag(Qt.WindowType.WindowStaysOnTopHint, checked)
-                win.show()
+        if win is None:
+            return
+        handler = getattr(win, "apply_topmost_state", None)
+        if callable(handler):
+            cast(Any, handler)(checked, show=True)
+            return
+        win.setWindowFlag(Qt.WindowType.WindowStaysOnTopHint, checked)
+        win.show()
 
     def _apply_ask_save_state(self, checked: bool, persist: bool = True):
-        settings = app_settings()
-        if persist:
-            settings.setValue("ask_save_on_close", checked)
-        log_action(
-            "CONFIG",
-            "toggle_ask_save_on_close",
-            "ask_save_switch",
-            "settings",
-            result="changed",
-            payload={"enabled": bool(checked), "persist": persist},
+        self._persist_bool_setting(
+            key="ask_save_on_close",
+            checked=checked,
+            event="toggle_ask_save_on_close",
+            target="ask_save_switch",
+            persist=persist,
         )
 
     def _apply_prevent_sleep_state(self, checked: bool, persist: bool = True):
-        settings = app_settings()
-        if persist:
-            settings.setValue("prevent_sleep_during_run", checked)
-        log_action(
-            "CONFIG",
-            "toggle_prevent_sleep_during_run",
-            "prevent_sleep_switch",
-            "settings",
-            result="changed",
-            payload={"enabled": bool(checked), "persist": persist},
+        self._persist_bool_setting(
+            key="prevent_sleep_during_run",
+            checked=checked,
+            event="toggle_prevent_sleep_during_run",
+            target="prevent_sleep_switch",
+            persist=persist,
         )
 
     def _apply_task_result_notification_state(self, checked: bool, persist: bool = True):
-        settings = app_settings()
-        if persist:
-            settings.setValue(TASK_RESULT_WINDOWS_NOTIFICATION_SETTING_KEY, checked)
-        log_action(
-            "CONFIG",
-            "toggle_task_result_windows_notification",
-            "task_result_notification_switch",
-            "settings",
-            result="changed",
-            payload={"enabled": bool(checked), "persist": persist},
+        self._persist_bool_setting(
+            key=TASK_RESULT_WINDOWS_NOTIFICATION_SETTING_KEY,
+            checked=checked,
+            event="toggle_task_result_windows_notification",
+            target="task_result_notification_switch",
+            persist=persist,
         )
 
     def _apply_auto_save_logs_state(self, checked: bool, persist: bool = True):
-        settings = app_settings()
-        if persist:
-            settings.setValue(AUTO_SAVE_LOGS_SETTING_KEY, checked)
-        self.auto_save_logs_card.setContentEnabled(bool(checked))
-        log_action(
-            "CONFIG",
-            "toggle_auto_save_logs",
-            "auto_save_logs_switch",
-            "settings",
-            result="changed",
-            payload={"enabled": bool(checked), "persist": persist},
+        self._persist_bool_setting(
+            key=AUTO_SAVE_LOGS_SETTING_KEY,
+            checked=checked,
+            event="toggle_auto_save_logs",
+            target="auto_save_logs_switch",
+            persist=persist,
         )
+        self.auto_save_logs_card.setContentEnabled(bool(checked))
 
     def _apply_auto_save_log_retention_count(self, keep_count: int, persist: bool = True):
         normalized = int(keep_count)
-        settings = app_settings()
         if persist:
-            settings.setValue(AUTO_SAVE_LOG_RETENTION_COUNT_SETTING_KEY, normalized)
+            self._settings.setValue(AUTO_SAVE_LOG_RETENTION_COUNT_SETTING_KEY, normalized)
         log_action(
             "CONFIG",
             "change_auto_save_log_retention",
@@ -418,78 +399,16 @@ class SettingsPage(ScrollArea):
         )
 
     def _apply_auto_update_state(self, checked: bool, persist: bool = True):
-        settings = app_settings()
-        if persist:
-            settings.setValue("auto_check_update", checked)
-        log_action(
-            "CONFIG",
-            "toggle_auto_update",
-            "auto_update_switch",
-            "settings",
-            result="changed",
-            payload={"enabled": bool(checked), "persist": persist},
+        self._persist_bool_setting(
+            key="auto_check_update",
+            checked=checked,
+            event="toggle_auto_update",
+            target="auto_update_switch",
+            persist=persist,
         )
 
     def _on_navigation_text_toggled(self, checked: bool):
         self._apply_navigation_text_state(checked)
-
-    def _restart_program(self):
-        box = MessageBox(
-            "重启程序",
-            "确定要重新启动程序吗？\n未保存的配置将会丢失。",
-            self.window() or self,
-        )
-        box.yesButton.setText("确定")
-        box.cancelButton.setText("取消")
-        if box.exec():
-            log_action(
-                "UI",
-                "restart_program",
-                "restart_card",
-                "settings",
-                result="confirmed",
-            )
-            try:
-                win = self.window()
-                if hasattr(win, "_skip_save_on_close"):
-                    setattr(win, "_skip_save_on_close", True)
-                subprocess.Popen([sys.executable] + sys.argv)
-                log_action(
-                    "UI",
-                    "restart_program",
-                    "restart_card",
-                    "settings",
-                    result="started",
-                )
-                QApplication.quit()
-            except Exception as exc:
-                log_action(
-                    "UI",
-                    "restart_program",
-                    "restart_card",
-                    "settings",
-                    result="failed",
-                    level=logging.ERROR,
-                    detail=exc,
-                )
-                InfoBar.error(
-                    "",
-                    f"重启失败：{exc}",
-                    parent=self.window(),
-                    position=InfoBarPosition.TOP,
-                    duration=3000,
-                )
-        else:
-            log_action(
-                "UI",
-                "restart_program",
-                "restart_card",
-                "settings",
-                result="cancelled",
-            )
-
-    def _on_auto_update_toggled(self, checked: bool):
-        self._apply_auto_update_state(checked)
 
     def _on_topmost_toggled(self, checked: bool):
         self._apply_topmost_state(checked)
@@ -507,19 +426,97 @@ class SettingsPage(ScrollArea):
         self._apply_auto_save_logs_state(checked)
 
     def _on_auto_save_log_retention_changed(self):
-        idx = self.auto_save_logs_combo.currentIndex()
-        keep_count = DEFAULT_AUTO_SAVE_LOG_RETENTION_COUNT
-        if idx >= 0:
-            keep_count_data = self.auto_save_logs_combo.itemData(idx)
-            if keep_count_data is not None:
-                keep_count = int(cast(Any, keep_count_data))
-        self._apply_auto_save_log_retention_count(keep_count)
+        keep_count = self.auto_save_logs_combo.currentData()
+        if keep_count is None:
+            keep_count = DEFAULT_AUTO_SAVE_LOG_RETENTION_COUNT
+        self._apply_auto_save_log_retention_count(int(keep_count))
+
+    def _on_auto_update_toggled(self, checked: bool):
+        self._apply_auto_update_state(checked)
+
+    def _restart_program(self):
+        box = MessageBox(
+            "重启程序",
+            "确定要重新启动程序吗？\n未保存的配置将会丢失。",
+            self._window_parent(),
+        )
+        box.yesButton.setText("确定")
+        box.cancelButton.setText("取消")
+        if not box.exec():
+            log_action("UI", "restart_program", "restart_card", "settings", result="cancelled")
+            return
+
+        log_action("UI", "restart_program", "restart_card", "settings", result="confirmed")
+        try:
+            win = self.window()
+            if hasattr(win, "_skip_save_on_close"):
+                setattr(win, "_skip_save_on_close", True)
+            subprocess.Popen([sys.executable, *sys.argv])
+            log_action("UI", "restart_program", "restart_card", "settings", result="started")
+            QApplication.quit()
+        except Exception as exc:
+            log_action(
+                "UI",
+                "restart_program",
+                "restart_card",
+                "settings",
+                result="failed",
+                level=logging.ERROR,
+                detail=exc,
+            )
+            self._show_bar(f"重启失败：{exc}", "error", 3000)
+
+    def _reset_defined_settings(self) -> None:
+        for key in self._defaults:
+            self._settings.remove(key)
+        reset_ai_settings()
+
+        self._set_switch_state(self.navigation_text_card, self._defaults[NAVIGATION_TEXT_VISIBLE_SETTING_KEY])
+        self._set_switch_state(self.topmost_card, self._defaults["window_topmost"])
+        self._set_switch_state(self.ask_save_card, self._defaults["ask_save_on_close"])
+        self._set_switch_state(
+            self.prevent_sleep_card,
+            self._defaults["prevent_sleep_during_run"],
+        )
+        self._set_switch_state(
+            self.task_result_notification_card,
+            self._defaults[TASK_RESULT_WINDOWS_NOTIFICATION_SETTING_KEY],
+        )
+        self._set_switch_state(self.auto_save_logs_card, self._defaults[AUTO_SAVE_LOGS_SETTING_KEY])
+        self._set_auto_save_retention_index(
+            self._defaults[AUTO_SAVE_LOG_RETENTION_COUNT_SETTING_KEY]
+        )
+        self._set_switch_state(self.auto_update_card, self._defaults["auto_check_update"])
+
+        self._apply_navigation_text_state(
+            self._defaults[NAVIGATION_TEXT_VISIBLE_SETTING_KEY],
+            persist=False,
+        )
+        self._apply_topmost_state(self._defaults["window_topmost"], persist=False)
+        self._apply_ask_save_state(self._defaults["ask_save_on_close"], persist=False)
+        self._apply_prevent_sleep_state(
+            self._defaults["prevent_sleep_during_run"],
+            persist=False,
+        )
+        self._apply_task_result_notification_state(
+            self._defaults[TASK_RESULT_WINDOWS_NOTIFICATION_SETTING_KEY],
+            persist=False,
+        )
+        self._apply_auto_save_logs_state(
+            self._defaults[AUTO_SAVE_LOGS_SETTING_KEY],
+            persist=False,
+        )
+        self._apply_auto_save_log_retention_count(
+            self._defaults[AUTO_SAVE_LOG_RETENTION_COUNT_SETTING_KEY],
+            persist=False,
+        )
+        self._apply_auto_update_state(self._defaults["auto_check_update"], persist=False)
 
     def _on_reset_ui_settings(self):
         box = MessageBox(
             "恢复默认设置",
             "确定要恢复默认设置吗？\n这将还原所有设置项到初始状态。",
-            self.window() or self,
+            self._window_parent(),
         )
         box.yesButton.setText("恢复")
         box.cancelButton.setText("取消")
@@ -532,6 +529,7 @@ class SettingsPage(ScrollArea):
                 result="cancelled",
             )
             return
+
         log_action(
             "CONFIG",
             "reset_ui_settings",
@@ -539,74 +537,8 @@ class SettingsPage(ScrollArea):
             "settings",
             result="confirmed",
         )
-
-        settings = app_settings()
-        for key in (
-            NAVIGATION_TEXT_VISIBLE_SETTING_KEY,
-            "window_topmost",
-            "ask_save_on_close",
-            "prevent_sleep_during_run",
-            TASK_RESULT_WINDOWS_NOTIFICATION_SETTING_KEY,
-            AUTO_SAVE_LOGS_SETTING_KEY,
-            AUTO_SAVE_LOG_RETENTION_COUNT_SETTING_KEY,
-            "auto_check_update",
-        ):
-            settings.remove(key)
-        reset_ai_settings()
-
-        defaults = {
-            NAVIGATION_TEXT_VISIBLE_SETTING_KEY: True,
-            "window_topmost": False,
-            "ask_save_on_close": True,
-            "prevent_sleep_during_run": True,
-            TASK_RESULT_WINDOWS_NOTIFICATION_SETTING_KEY: True,
-            AUTO_SAVE_LOGS_SETTING_KEY: DEFAULT_AUTO_SAVE_LOGS,
-            AUTO_SAVE_LOG_RETENTION_COUNT_SETTING_KEY: (DEFAULT_AUTO_SAVE_LOG_RETENTION_COUNT),
-            "auto_check_update": True,
-        }
-        self._set_switch_state(
-            self.navigation_text_card,
-            defaults[NAVIGATION_TEXT_VISIBLE_SETTING_KEY],
-        )
-        self._set_switch_state(self.topmost_card, defaults["window_topmost"])
-        self._set_switch_state(self.ask_save_card, defaults["ask_save_on_close"])
-        self._set_switch_state(self.prevent_sleep_card, defaults["prevent_sleep_during_run"])
-        self._set_switch_state(
-            self.task_result_notification_card,
-            defaults[TASK_RESULT_WINDOWS_NOTIFICATION_SETTING_KEY],
-        )
-        self._set_switch_state(self.auto_save_logs_card, defaults[AUTO_SAVE_LOGS_SETTING_KEY])
-        retention_index = self.auto_save_logs_combo.findData(
-            defaults[AUTO_SAVE_LOG_RETENTION_COUNT_SETTING_KEY]
-        )
-        if retention_index >= 0:
-            self.auto_save_logs_combo.blockSignals(True)
-            self.auto_save_logs_combo.setCurrentIndex(retention_index)
-            self.auto_save_logs_combo.blockSignals(False)
-        self._set_switch_state(self.auto_update_card, defaults["auto_check_update"])
-        self._apply_navigation_text_state(
-            defaults[NAVIGATION_TEXT_VISIBLE_SETTING_KEY], persist=False
-        )
-        self._apply_topmost_state(defaults["window_topmost"], persist=False)
-        self._apply_ask_save_state(defaults["ask_save_on_close"], persist=False)
-        self._apply_prevent_sleep_state(defaults["prevent_sleep_during_run"], persist=False)
-        self._apply_task_result_notification_state(
-            defaults[TASK_RESULT_WINDOWS_NOTIFICATION_SETTING_KEY],
-            persist=False,
-        )
-        self._apply_auto_save_logs_state(defaults[AUTO_SAVE_LOGS_SETTING_KEY], persist=False)
-        self._apply_auto_save_log_retention_count(
-            defaults[AUTO_SAVE_LOG_RETENTION_COUNT_SETTING_KEY], persist=False
-        )
-        self._apply_auto_update_state(defaults["auto_check_update"], persist=False)
-        InfoBar.success(
-            "",
-            "已恢复默认设置",
-            parent=self.window(),
-            position=InfoBarPosition.TOP,
-            duration=2000,
-        )
-
+        self._reset_defined_settings()
+        self._show_bar("已恢复默认设置", "success", 2000)
         log_action(
             "CONFIG",
             "reset_ui_settings",
@@ -619,7 +551,7 @@ class SettingsPage(ScrollArea):
         box = MessageBox(
             "删除问卷解析缓存",
             "确定要删除本地问卷解析缓存吗？\n删除后下次解析会重新请求问卷数据。",
-            self.window() or self,
+            self._window_parent(),
         )
         box.yesButton.setText("删除")
         box.cancelButton.setText("取消")
@@ -657,27 +589,15 @@ class SettingsPage(ScrollArea):
                 exc,
                 level=logging.ERROR,
             )
-            InfoBar.error(
-                "",
-                f"删除问卷解析缓存失败：{exc}",
-                parent=self.window(),
-                position=InfoBarPosition.TOP,
-                duration=3000,
-            )
+            self._show_bar(f"删除问卷解析缓存失败：{exc}", "error", 3000)
             return
 
-        detail = (
+        message = (
             "没有可删除的问卷解析缓存"
             if removed_count <= 0
             else f"已删除 {removed_count} 项问卷解析缓存"
         )
-        InfoBar.success(
-            "",
-            detail,
-            parent=self.window(),
-            position=InfoBarPosition.TOP,
-            duration=2500,
-        )
+        self._show_bar(message, "success", 2500)
         log_action(
             "CONFIG",
             "clear_survey_parse_cache",

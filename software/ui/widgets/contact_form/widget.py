@@ -1,67 +1,31 @@
 """联系开发者表单组件，可嵌入页面或对话框。"""
 
-import json
 import logging
 import os
-import re
 import tempfile
 import threading
 from datetime import datetime
-from decimal import Decimal, InvalidOperation
+from decimal import Decimal
 from typing import Any, Callable, Optional, cast
 
-from PySide6.QtCore import QEvent, QObject, QTimer, Qt, QUrl, Signal, Slot
+from PySide6.QtCore import QEvent, QObject, QTimer, Qt, Signal, Slot
 from PySide6.QtGui import (
-    QDoubleValidator,
-    QGuiApplication,
-    QIntValidator,
     QKeyEvent,
     QKeySequence,
 )
-from PySide6.QtNetwork import (
-    QNetworkAccessManager,
-    QNetworkReply,
-    QNetworkRequest,
-)
-from PySide6.QtWidgets import (
-    QFileDialog,
-    QButtonGroup,
-    QHBoxLayout,
-    QLabel,
-    QSizePolicy,
-    QVBoxLayout,
-    QWidget,
-)
+from PySide6.QtWidgets import QWidget
 from qfluentwidgets import (
-    Action,
-    BodyLabel,
-    CheckBox,
-    ComboBox,
-    EditableComboBox,
     FluentIcon,
-    IconWidget,
-    IndeterminateProgressRing,
     InfoBar,
     InfoBarPosition,
-    LineEdit,
     MessageBox,
-    PlainTextEdit,
-    PrimaryPushButton,
-    PushButton,
-    RadioButton,
-    RoundMenu,
 )
 
 from software.app.config import (
     CONTACT_API_URL,
-    DEFAULT_HTTP_HEADERS,
     EMAIL_VERIFY_ENDPOINT,
-    PROXY_STATUS_TIMEOUT_SECONDS,
 )
-from software.app.user_paths import (
-    get_fatal_crash_log_path,
-    get_user_local_data_root,
-)
+from software.app.user_paths import get_fatal_crash_log_path, get_user_local_data_root
 from software.app.version import __VERSION__
 from software.io.config import RuntimeConfig, save_config
 from software.logging.log_utils import (
@@ -70,340 +34,110 @@ from software.logging.log_utils import (
     log_suppressed_exception,
 )
 from software.ui.helpers.contact_api import (
-    format_quota_value,
     get_session_snapshot,
     post as http_post,
 )
-from software.ui.helpers.fluent_tooltip import install_tooltip_filters
 from software.ui.helpers.image_attachments import ImageAttachmentManager
 from software.ui.helpers.qfluent_compat import (
     set_indeterminate_progress_ring_active,
 )
 
-from .constants import (
-    DONATION_AMOUNT_BLOCK_MESSAGE,
-    DONATION_AMOUNT_OPTIONS,
-    DONATION_AMOUNT_RULES,
-    MAX_REQUEST_QUOTA,
-    PAYMENT_METHOD_OPTIONS,
-    REQUEST_MESSAGE_TYPE,
-    REQUEST_QUOTA_STEP,
+from .attachments import (
+    build_bug_report_auto_files_payload,
+    cleanup_pending_temp_files,
+    fatal_crash_log_payload,
+    read_file_bytes,
+    remove_temp_file,
+    renumber_files_payload,
 )
-
-
-class PasteOnlyLineEdit(LineEdit):
-    """只显示 Fluent 风格“复制 / 粘贴 / 全选”菜单的 LineEdit。"""
-
-    def __init__(self, parent=None, on_paste: Optional[Callable[[QWidget], bool]] = None):
-        super().__init__(parent)
-        self._on_paste = on_paste
-
-    def contextMenuEvent(self, e):
-        menu = RoundMenu(parent=self)
-        copy_action = Action(FluentIcon.COPY, "复制", parent=menu)
-        copy_action.setEnabled(self.hasSelectedText())
-        copy_action.triggered.connect(self.copy)
-        paste_action = Action(FluentIcon.PASTE, "粘贴", parent=menu)
-
-        def _do_paste():
-            if self._on_paste and self._on_paste(self):
-                return
-            self.paste()
-
-        menu.addAction(copy_action)
-        paste_action.triggered.connect(_do_paste)
-        menu.addAction(paste_action)
-        menu.exec(e.globalPos())
-        e.accept()
-
-
-class PasteOnlyPlainTextEdit(PlainTextEdit):
-    """只显示 Fluent 风格“复制 / 粘贴 / 全选”菜单的 PlainTextEdit。"""
-
-    def __init__(self, parent=None, on_paste: Optional[Callable[[QWidget], bool]] = None):
-        super().__init__(parent)
-        self._on_paste = on_paste
-
-    def contextMenuEvent(self, e):
-        menu = RoundMenu(parent=self)
-        copy_action = Action(FluentIcon.COPY, "复制", parent=menu)
-        copy_action.setEnabled(self.textCursor().hasSelection())
-        copy_action.triggered.connect(self.copy)
-        paste_action = Action(FluentIcon.PASTE, "粘贴", parent=menu)
-
-        def _do_paste():
-            if self._on_paste and self._on_paste(self):
-                return
-            self.paste()
-
-        menu.addAction(copy_action)
-        paste_action.triggered.connect(_do_paste)
-        menu.addAction(paste_action)
-        menu.exec(e.globalPos())
-        e.accept()
-
-
-def build_contact_message(
-    *,
-    version_str: str,
-    message_type: str,
-    issue_title: str,
-    email: str,
-    donated: bool,
-    random_ip_user_id: int,
-    message: str,
-    request_payment_method: str,
-    request_amount_text: str,
-    request_quota_text: str,
-    request_urgency_text: str,
-) -> str:
-    lines = [f"来源：SurveyController v{version_str}", f"类型：{message_type}"]
-    if email:
-        lines.append(f"联系邮箱： {email}")
-    if issue_title and message_type == "报错反馈":
-        lines.append(f"反馈标题： {issue_title}")
-    if message_type == REQUEST_MESSAGE_TYPE:
-        lines.append(f"已支付：{'是' if donated else '否'}")
-    if random_ip_user_id > 0:
-        lines.append(f"随机IP用户ID：{random_ip_user_id}")
-    if message_type == REQUEST_MESSAGE_TYPE:
-        lines.extend(
-            [
-                f"支付方式：{request_payment_method}",
-                f"支付金额：￥{request_amount_text}",
-                f"申请额度：{request_quota_text}",
-                f"紧急程度：{request_urgency_text or '中'}",
-                "",
-                f"\n补充说明：{message or '未填写'}",
-            ]
-        )
-    else:
-        lines.extend(["", f"消息：{message}"])
-    return "\n".join(lines)
-
-
-def build_contact_request_fields(
-    *,
-    message: str,
-    message_type: str,
-    issue_title: str,
-    timestamp: str,
-    random_ip_user_id: int,
-    files_payload: list[tuple[str, tuple[str, bytes, str]]],
-) -> list[tuple[str, tuple[None, str] | tuple[str, bytes, str]]]:
-    fields: list[tuple[str, tuple[None, str] | tuple[str, bytes, str]]] = [
-        ("message", (None, message)),
-        ("messageType", (None, message_type)),
-        ("timestamp", (None, timestamp)),
-    ]
-    if issue_title:
-        fields.append(("issueTitle", (None, issue_title)))
-    if random_ip_user_id > 0:
-        fields.append(("userId", (None, str(random_ip_user_id))))
-    fields.extend(files_payload)
-    return fields
-
-
-class StatusPollingMixin:
-    """使用 Qt 异步网络请求轮询在线状态。"""
-
-    _status_endpoint: str
-    _status_formatter: Optional[Callable]
-    _status_timer: Optional[QTimer]
-    _polling_interval: int
-    _status_fetch_in_progress: bool
-    _status_session_id: int
-    _status_manager: Optional[QNetworkAccessManager]
-    _status_reply: Optional[QNetworkReply]
-
-    def _init_status_polling(
-        self,
-        status_endpoint: str = "",
-        status_formatter: Optional[Callable] = None,
-        interval_ms: int = 5000,
-    ):
-        self._status_endpoint = (status_endpoint or "").strip()
-        self._status_formatter = status_formatter
-        self._status_timer = None
-        self._polling_interval = interval_ms
-        self._status_fetch_in_progress = False
-        self._status_session_id = 0
-        self._status_manager = None
-        self._status_reply = None
-
-        status_signal: Any = getattr(self, "_statusLoaded", None)
-        if status_signal is not None:
-            status_signal.connect(self._on_status_loaded)
-
-    def _ensure_status_manager(self) -> QNetworkAccessManager:
-        if self._status_manager is None:
-            self._status_manager = QNetworkAccessManager(self)  # type: ignore[arg-type]
-        return self._status_manager
-
-    def _ensure_status_timer(self) -> QTimer:
-        if self._status_timer is None:
-            self._status_timer = QTimer(self)  # type: ignore[arg-type]
-            self._status_timer.setInterval(self._polling_interval)
-            self._status_timer.timeout.connect(self._fetch_status_once)
-        return self._status_timer
-
-    def _start_status_polling(self):
-        if not self._status_endpoint:
-            self._emit_status_loaded("未知：状态接口未配置", "#666666")
-            return
-
-        self._status_session_id += 1
-        self._status_fetch_in_progress = False
-        self._abort_status_reply()
-        self._fetch_status_once()
-        self._ensure_status_timer().start()
-
-    def _fetch_status_once(self):
-        if not self._status_endpoint or self._status_fetch_in_progress:
-            return
-        if self._status_reply is not None and self._status_reply.isRunning():
-            return
-
-        request = QNetworkRequest(QUrl(self._status_endpoint))
-        for key, value in DEFAULT_HTTP_HEADERS.items():
-            request.setRawHeader(str(key).encode("utf-8"), str(value).encode("utf-8"))
-        try:
-            request.setTransferTimeout(int(PROXY_STATUS_TIMEOUT_SECONDS * 1000))
-        except AttributeError:
-            pass
-
-        self._status_fetch_in_progress = True
-        session_id = self._status_session_id
-        reply = self._ensure_status_manager().get(request)
-        reply.setProperty("_status_session_id", int(session_id))
-        self._status_reply = reply
-        reply.finished.connect(self._on_status_reply_finished)
-
-    def _on_status_reply_finished(self):
-        sender_callable = getattr(self, "sender", None)
-        reply = sender_callable() if callable(sender_callable) else None
-        if not isinstance(reply, QNetworkReply):
-            return
-        session_id = reply.property("_status_session_id")
-        try:
-            current_session_id = int(session_id)
-        except (TypeError, ValueError):
-            current_session_id = self._status_session_id
-        self._handle_status_reply_finished(current_session_id, reply)
-
-    def _handle_status_reply_finished(self, session_id: int, reply: QNetworkReply):
-        is_current_reply = self._status_reply is reply
-        if is_current_reply:
-            self._status_reply = None
-            self._status_fetch_in_progress = False
-
-        text, color = self._parse_status_reply(reply)
-        self._release_status_reply(reply)
-
-        if session_id != self._status_session_id:
-            return
-        self._emit_status_loaded(text, color)
-
-    def _parse_status_reply(self, reply: QNetworkReply) -> tuple[str, str]:
-        if reply.error() != QNetworkReply.NetworkError.NoError:
-            return "未知：状态获取失败", "#666666"
-
-        status_code = reply.attribute(QNetworkRequest.Attribute.HttpStatusCodeAttribute)
-        try:
-            parsed_status_code = int(status_code) if status_code is not None else 0
-        except (TypeError, ValueError):
-            parsed_status_code = 0
-        if parsed_status_code >= 400:
-            return "未知：状态获取失败", "#666666"
-
-        raw_bytes = bytes(reply.readAll().data())
-        if not raw_bytes:
-            return "未知：状态未知", "#666666"
-
-        try:
-            payload = json.loads(raw_bytes.decode("utf-8", errors="replace"))
-        except Exception:
-            return "未知：状态未知", "#666666"
-
-        return self._format_status_payload(payload)
-
-    def _format_status_payload(self, payload: Any) -> tuple[str, str]:
-        if callable(self._status_formatter):
-            try:
-                result = self._status_formatter(payload)
-                if isinstance(result, tuple) and len(result) >= 2:
-                    return str(result[0]), str(result[1])
-            except Exception:
-                pass
-
-        if isinstance(payload, dict):
-            online = payload.get("online", None)
-            message = str(payload.get("message") or "").strip()
-            if not message:
-                if online is True:
-                    message = "系统正常运行中"
-                elif online is False:
-                    message = "系统当前不在线"
-                else:
-                    message = "状态未知"
-            if online is True:
-                return f"在线：{message}", "#228B22"
-            if online is False:
-                return f"离线：{message}", "#cc0000"
-            return f"未知：{message}", "#666666"
-
-        return "未知：状态未知", "#666666"
-
-    def _release_status_reply(self, reply: QNetworkReply):
-        try:
-            reply.finished.disconnect()
-        except Exception:
-            pass
-        try:
-            reply.deleteLater()
-        except Exception:
-            pass
-
-    def _abort_status_reply(self):
-        reply = self._status_reply
-        self._status_reply = None
-        if reply is None:
-            return
-
-        try:
-            reply.finished.disconnect()
-        except Exception:
-            pass
-        try:
-            reply.abort()
-        except Exception:
-            pass
-        try:
-            reply.deleteLater()
-        except Exception:
-            pass
-
-    def _stop_status_polling(self):
-        if self._status_timer is not None:
-            self._status_timer.stop()
-
-        self._status_session_id += 1
-        self._status_fetch_in_progress = False
-        self._abort_status_reply()
-
-    def _emit_status_loaded(self, text: str, color: str):
-        status_signal: Any = getattr(self, "_statusLoaded", None)
-        if status_signal is not None:
-            status_signal.emit(text, color)
-            return
-        self._on_status_loaded(text, color)
-
-    def _on_status_loaded(self, text: str, color: str):
-        raise NotImplementedError("子类必须实现 _on_status_loaded 方法")
+from .message_builder import build_contact_message, build_contact_request_fields
+from .rules import (
+    clamp_quantity_text,
+    get_allowed_amount_options,
+    get_minimum_allowed_amount,
+    is_amount_allowed,
+    normalize_quantity_text,
+    parse_amount_value,
+    parse_quantity_value,
+)
+from .send_workflow import (
+    QuotaRequestValidationInputs,
+    compute_send_timeout_fallback_ms,
+    validate_email,
+    validate_quota_request,
+)
+from .status_polling import StatusPollingMixin
+from .ui_behavior import (
+    attachments_enabled,
+    choose_files,
+    clear_attachments,
+    handle_clipboard_image,
+    on_context_paste,
+    on_type_changed,
+    remove_attachment,
+    render_attachments_ui,
+    sync_message_type_lock_state,
+    update_send_button_state,
+)
+from .ui_builder import build_contact_form_ui
+from .constants import (
+    MAX_REQUEST_QUOTA,
+    REQUEST_MESSAGE_TYPE,
+)
 
 
 class ContactForm(StatusPollingMixin, QWidget):
     """联系开发者表单，负责消息发送、状态轮询和附件处理。"""
+
+    type_label_static: Any
+    type_combo: Any
+    type_locked_label: Any
+    base_options: Any
+    email_label: Any
+    email_edit: Any
+    verify_code_edit: Any
+    send_verify_btn: Any
+    verify_send_spinner: Any
+    issue_title_label: Any
+    issue_title_edit: Any
+    amount_row: Any
+    amount_label: Any
+    amount_edit: Any
+    quantity_label: Any
+    quantity_edit: Any
+    urgency_label: Any
+    urgency_combo: Any
+    amount_rule_hint: Any
+    amount_rule_hint_icon: Any
+    amount_rule_hint_text: Any
+    message_label: Any
+    message_edit: Any
+    random_ip_user_id_label: Any
+    attachments_section: Any
+    attach_title: Any
+    attach_add_btn: Any
+    attach_clear_btn: Any
+    attach_list_layout: Any
+    attach_list_container: Any
+    attach_placeholder: Any
+    auto_attach_section: Any
+    auto_attach_title: Any
+    auto_attach_config_checkbox: Any
+    auto_attach_log_checkbox: Any
+    request_payment_section: Any
+    payment_method_label: Any
+    payment_method_group: Any
+    payment_method_wechat_radio: Any
+    payment_method_alipay_radio: Any
+    request_payment_confirm_section: Any
+    donated_cb: Any
+    open_donate_btn: Any
+    status_spinner: Any
+    status_icon: Any
+    online_label: Any
+    cancel_btn: Any
+    send_btn: Any
+    send_spinner: Any
 
     _statusLoaded = Signal(str, str)  # text, color
     _sendFinished = Signal(bool, str)  # success, message
@@ -459,350 +193,11 @@ class ContactForm(StatusPollingMixin, QWidget):
         self._auto_attach_config_default = True
         self._auto_attach_log_default = True
 
-        wrapper = QVBoxLayout(self)
-        wrapper.setContentsMargins(0, 0, 0, 0)
-        wrapper.setSpacing(16)
-
-        # 顶部表单区
-        form_layout = QVBoxLayout()
-        form_layout.setSpacing(12)
-        form_layout.setContentsMargins(0, 0, 0, 0)
-
-        LABEL_WIDTH = 75
-        COMPACT_FIELD_WIDTH = 320
-
-        # 1. 消息类型
-        type_row = QHBoxLayout()
-        self.type_label_static = BodyLabel("消息类型：", self)
-        self.type_label_static.setFixedWidth(LABEL_WIDTH)
-        self.type_combo = ComboBox(self)
-        self.type_locked_label = BodyLabel("", self)
-        self.type_locked_label.setFixedWidth(COMPACT_FIELD_WIDTH)
-        self.base_options = [
-            "报错反馈",
-            REQUEST_MESSAGE_TYPE,
-            "新功能建议",
-            "纯聊天",
-        ]
-        for item in self.base_options:
-            self.type_combo.addItem(item, item)
-        self.type_combo.setFixedWidth(COMPACT_FIELD_WIDTH)
-        type_row.addWidget(self.type_label_static)
-        type_row.addWidget(self.type_combo)
-        type_row.addWidget(self.type_locked_label)
-        type_row.addStretch(1)
-        form_layout.addLayout(type_row)
-
-        # 2. 邮箱 + 验证码（同一行）
-        email_row = QHBoxLayout()
-        self.email_label = BodyLabel("联系邮箱：", self)
-        self.email_label.setFixedWidth(LABEL_WIDTH)
-        self.email_edit = PasteOnlyLineEdit(self)
-        self.email_edit.setPlaceholderText("name@example.com")
-        email_row.addWidget(self.email_label)
-        email_row.addWidget(self.email_edit)
-
-        self.verify_code_edit = LineEdit(self)
-        self.verify_code_edit.setPlaceholderText("6位验证码")
-        self.verify_code_edit.setMaxLength(6)
-        self.verify_code_edit.setValidator(QIntValidator(0, 999999, self))
-        self.verify_code_edit.setMaximumWidth(120)
-
-        self.send_verify_btn = PushButton("发送验证码", self)
-        self.verify_send_spinner = IndeterminateProgressRing(self, start=False)
-        self.verify_send_spinner.setFixedSize(16, 16)
-        self.verify_send_spinner.setStrokeWidth(2)
-        self.verify_send_spinner.hide()
-
-        email_row.addSpacing(4)
-        email_row.addWidget(self.send_verify_btn)
-        email_row.addWidget(self.verify_send_spinner)
-        email_row.addWidget(self.verify_code_edit)
-        form_layout.addLayout(email_row)
-
-        self.verify_code_edit.hide()
-        self.send_verify_btn.hide()
-        self.verify_send_spinner.hide()
-
-        title_row = QHBoxLayout()
-        title_row.setSpacing(6)
-        self.issue_title_label = BodyLabel("反馈标题：", self)
-        self.issue_title_label.setFixedWidth(LABEL_WIDTH)
-        self.issue_title_edit = LineEdit(self)
-        self.issue_title_edit.setPlaceholderText("可选")
-        self.issue_title_edit.setClearButtonEnabled(True)
-        self.issue_title_edit.setMaxLength(60)
-        self.issue_title_edit.setFixedWidth(COMPACT_FIELD_WIDTH)
-        title_row.addWidget(self.issue_title_label)
-        title_row.addWidget(self.issue_title_edit)
-        title_row.addStretch(1)
-        form_layout.addLayout(title_row)
-
-        self.issue_title_label.hide()
-        self.issue_title_edit.hide()
-
-        # 4. 额度申请参数
-        self.amount_row = QHBoxLayout()
-        self.amount_label = BodyLabel("支付金额：￥", self)
-        self.amount_edit = EditableComboBox(self)
-        self.amount_edit.setPlaceholderText("必填")
-        self.amount_edit.setMaximumWidth(100)
-        validator = QDoubleValidator(0.01, 9999.99, 2, self)
-        validator.setNotation(QDoubleValidator.Notation.StandardNotation)
-        for amount in DONATION_AMOUNT_OPTIONS:
-            self.amount_edit.addItem(amount)
-        self.amount_edit.setText("11.45")
-        self.amount_edit.setValidator(validator)
-        self.amount_edit.currentTextChanged.connect(self._on_amount_changed)
-        self.amount_edit.editingFinished.connect(self._on_amount_editing_finished)
-        self.amount_edit.installEventFilter(self)
-
-        self.quantity_label = BodyLabel("需求额度：", self)
-        self.quantity_edit = LineEdit(self)
-        self.quantity_edit.setPlaceholderText("按需填写")
-        self.quantity_edit.setMaximumWidth(90)
-        self.quantity_edit.setMaxLength(len(str(MAX_REQUEST_QUOTA)) + 2)
-        quantity_validator = QDoubleValidator(0.0, float(MAX_REQUEST_QUOTA), 1, self)
-        quantity_validator.setNotation(QDoubleValidator.Notation.StandardNotation)
-        self.quantity_edit.setValidator(quantity_validator)
-        self.quantity_edit.textChanged.connect(self._on_quantity_changed)
-        self.quantity_edit.editingFinished.connect(self._on_quantity_editing_finished)
-
-        self.urgency_label = BodyLabel("问卷紧急程度：", self)
-        self.urgency_combo = ComboBox(self)
-        self.urgency_combo.setMaximumWidth(140)
-        for urgency in [
-            "低",
-            "中（本月内）",
-            "高（本周内）",
-            "紧急（两天内）",
-        ]:
-            self.urgency_combo.addItem(urgency, urgency)
-        urgency_default_index = self.urgency_combo.findText("中（本月内）")
-        if urgency_default_index >= 0:
-            self.urgency_combo.setCurrentIndex(urgency_default_index)
-        self.urgency_combo.currentIndexChanged.connect(lambda _: self._on_urgency_changed())
-
-        self.amount_row.addWidget(self.quantity_label)
-        self.amount_row.addWidget(self.quantity_edit)
-        self.amount_row.addSpacing(16)
-        self.amount_row.addWidget(self.amount_label)
-        self.amount_row.addWidget(self.amount_edit)
-        self.amount_row.addSpacing(16)
-        self.amount_row.addWidget(self.urgency_label)
-        self.amount_row.addWidget(self.urgency_combo)
-        self.amount_row.addStretch(1)
-        form_layout.addLayout(self.amount_row)
-
-        self.amount_rule_hint = QWidget(self)
-        self.amount_rule_hint.setObjectName("amountRuleHint")
-        self.amount_rule_hint.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
-        self.amount_rule_hint.setStyleSheet(
-            "#amountRuleHint {"
-            "background-color: #FFF4CE;"
-            "border: 1px solid #F2D58A;"
-            "border-radius: 8px;"
-            "}"
+        build_contact_form_ui(
+            self,
+            default_type=default_type,
+            show_cancel_button=show_cancel_button,
         )
-        amount_rule_hint_layout = QHBoxLayout(self.amount_rule_hint)
-        amount_rule_hint_layout.setContentsMargins(12, 8, 12, 8)
-        amount_rule_hint_layout.setSpacing(8)
-        self.amount_rule_hint_icon = IconWidget(FluentIcon.INFO, self.amount_rule_hint)
-        self.amount_rule_hint_icon.setIcon(FluentIcon.INFO)
-        self.amount_rule_hint_icon.setStyleSheet("color: #B57A00;")
-        self.amount_rule_hint_text = BodyLabel(DONATION_AMOUNT_BLOCK_MESSAGE, self.amount_rule_hint)
-        self.amount_rule_hint_text.setStyleSheet("color: #7A5200;")
-        amount_rule_hint_layout.addWidget(self.amount_rule_hint_icon)
-        amount_rule_hint_layout.addWidget(self.amount_rule_hint_text, 1)
-        form_layout.addWidget(self.amount_rule_hint)
-
-        self.amount_label.hide()
-        self.amount_edit.hide()
-        self.quantity_label.hide()
-        self.quantity_edit.hide()
-        self.urgency_label.hide()
-        self.urgency_combo.hide()
-        self.amount_rule_hint.hide()
-
-        # 第二部分：消息内容
-        msg_layout = QVBoxLayout()
-        msg_layout.setSpacing(6)
-        msg_label_row = QHBoxLayout()
-        self.message_label = BodyLabel("消息内容：", self)
-        msg_label_row.addWidget(self.message_label)
-        msg_label_row.addStretch(1)
-
-        self.message_edit = PasteOnlyPlainTextEdit(self, self._on_context_paste)
-        self.message_edit.setPlaceholderText("请详细描述您的问题、需求或留言…")
-        self.message_edit.setMinimumHeight(140)
-        self.message_edit.installEventFilter(self)
-        self.random_ip_user_id_label = BodyLabel("", self)
-        self.random_ip_user_id_label.setWordWrap(True)
-        self.random_ip_user_id_label.setStyleSheet("color: #666; font-size: 12px;")
-        self.random_ip_user_id_label.hide()
-
-        msg_layout.addLayout(msg_label_row)
-        msg_layout.addWidget(self.message_edit, 1)
-        msg_layout.addWidget(self.random_ip_user_id_label)
-
-        # 第三部分：图片附件
-        self.attachments_section = QWidget(self)
-        attachments_box = QVBoxLayout(self.attachments_section)
-        attachments_box.setContentsMargins(0, 0, 0, 0)
-        attachments_box.setSpacing(6)
-
-        attach_toolbar = QHBoxLayout()
-        self.attach_title = BodyLabel(
-            "图片附件 (最多3张，支持Ctrl+V粘贴，单张≤10MB):",
-            self.attachments_section,
-        )
-
-        self.attach_add_btn = PushButton(FluentIcon.ADD, "添加图片", self.attachments_section)
-        self.attach_clear_btn = PushButton(FluentIcon.DELETE, "清空附件", self.attachments_section)
-
-        attach_toolbar.addWidget(self.attach_title)
-        attach_toolbar.addStretch(1)
-        attach_toolbar.addWidget(self.attach_add_btn)
-        attach_toolbar.addWidget(self.attach_clear_btn)
-
-        attachments_box.addLayout(attach_toolbar)
-
-        self.attach_list_layout = QHBoxLayout()
-        self.attach_list_layout.setSpacing(12)
-        self.attach_list_layout.setAlignment(Qt.AlignmentFlag.AlignLeft)
-
-        self.attach_list_container = QWidget(self.attachments_section)
-        self.attach_list_container.setLayout(self.attach_list_layout)
-
-        self.attach_placeholder = BodyLabel("暂无附件", self.attachments_section)
-        self.attach_placeholder.setStyleSheet("color: #888; padding: 6px;")
-
-        attachments_box.addWidget(self.attach_list_container)
-        attachments_box.addWidget(self.attach_placeholder)
-
-        self.auto_attach_section = QWidget(self)
-        auto_attach_layout = QHBoxLayout(self.auto_attach_section)
-        auto_attach_layout.setContentsMargins(0, 0, 0, 0)
-        auto_attach_layout.setSpacing(12)
-        self.auto_attach_title = BodyLabel("附加排障文件：", self.auto_attach_section)
-        self.auto_attach_config_checkbox = CheckBox("上传当前运行配置", self.auto_attach_section)
-        self.auto_attach_log_checkbox = CheckBox("上传当前日志", self.auto_attach_section)
-        self.auto_attach_config_checkbox.setChecked(self._auto_attach_config_default)
-        self.auto_attach_log_checkbox.setChecked(self._auto_attach_log_default)
-        auto_attach_layout.addWidget(self.auto_attach_title)
-        auto_attach_layout.addWidget(self.auto_attach_config_checkbox)
-        auto_attach_layout.addWidget(self.auto_attach_log_checkbox)
-        auto_attach_layout.addStretch(1)
-        self.auto_attach_section.hide()
-
-        self.request_payment_section = QWidget(self)
-        payment_layout = QVBoxLayout(self.request_payment_section)
-        payment_layout.setContentsMargins(0, 0, 0, 0)
-        payment_layout.setSpacing(6)
-
-        payment_row = QHBoxLayout()
-        payment_row.setSpacing(12)
-        self.payment_method_label = BodyLabel("选择的支付方式：", self.request_payment_section)
-        self.payment_method_group = QButtonGroup(self.request_payment_section)
-        self.payment_method_group.setExclusive(True)
-        self.payment_method_wechat_radio = RadioButton(
-            PAYMENT_METHOD_OPTIONS[0], self.request_payment_section
-        )
-        self.payment_method_alipay_radio = RadioButton(
-            PAYMENT_METHOD_OPTIONS[1], self.request_payment_section
-        )
-        self.payment_method_group.addButton(self.payment_method_wechat_radio, 1)
-        self.payment_method_group.addButton(self.payment_method_alipay_radio, 2)
-        payment_row.addWidget(self.payment_method_label)
-        payment_row.addWidget(self.payment_method_wechat_radio)
-        payment_row.addWidget(self.payment_method_alipay_radio)
-        payment_row.addStretch(1)
-        payment_layout.addLayout(payment_row)
-
-        self.request_payment_section.hide()
-
-        # 组装表单、消息、附件
-        wrapper.addLayout(form_layout)
-        wrapper.addLayout(msg_layout, 1)  # 给消息框最大的 stretch
-        wrapper.addWidget(self.auto_attach_section)
-        wrapper.addWidget(self.attachments_section)
-        wrapper.addWidget(self.request_payment_section)
-
-        self.request_payment_confirm_section = QWidget(self)
-        donated_row = QHBoxLayout(self.request_payment_confirm_section)
-        donated_row.setContentsMargins(0, 0, 0, 0)
-        donated_row.setSpacing(8)
-        self.donated_cb = CheckBox(
-            "我已完成支付，且确认随机ip可用",
-            self.request_payment_confirm_section,
-        )
-        self.open_donate_btn = PushButton(
-            FluentIcon.HEART, "去支付", self.request_payment_confirm_section
-        )
-        self.open_donate_btn.setToolTip("打开支付页面")
-        donated_row.addStretch(1)
-        donated_row.addWidget(self.open_donate_btn)
-        donated_row.addWidget(self.donated_cb)
-        self.request_payment_confirm_section.hide()
-        wrapper.addWidget(self.request_payment_confirm_section)
-
-        # 第四部分：底部状态与按钮
-        bottom_layout = QHBoxLayout()
-        bottom_layout.setContentsMargins(0, 8, 0, 0)
-
-        status_row = QHBoxLayout()
-        status_row.setSpacing(8)
-        self.status_spinner = IndeterminateProgressRing(self, start=False)
-        self.status_spinner.setFixedSize(16, 16)
-        self.status_spinner.setStrokeWidth(2)
-        self.status_icon = IconWidget(FluentIcon.INFO, self)
-        self.status_icon.setFixedSize(16, 16)
-        self.status_icon.hide()
-        self.online_label = BodyLabel("作者当前在线状态：查询中...", self)
-        self.online_label.setStyleSheet("color:#BA8303;")
-        status_row.addWidget(self.status_spinner)
-        status_row.addWidget(self.status_icon)
-        status_row.addWidget(self.online_label)
-
-        btn_row = QHBoxLayout()
-        btn_row.setSpacing(10)
-        self.cancel_btn: Optional[PushButton] = None
-        if show_cancel_button:
-            self.cancel_btn = PushButton("取消", self)
-            btn_row.addWidget(self.cancel_btn)
-        self.send_btn = PrimaryPushButton("发送", self)
-        self.send_spinner = IndeterminateProgressRing(self, start=False)
-        self.send_spinner.setFixedSize(20, 20)
-        self.send_spinner.setStrokeWidth(3)
-        self.send_spinner.hide()
-        btn_row.addWidget(self.send_spinner)
-        btn_row.addWidget(self.send_btn)
-
-        bottom_layout.addLayout(status_row)
-        bottom_layout.addStretch(1)
-        bottom_layout.addLayout(btn_row)
-        wrapper.addLayout(bottom_layout)
-
-        self.type_combo.currentIndexChanged.connect(lambda _: self._on_type_changed())
-        self.donated_cb.installEventFilter(self)
-        self.donated_cb.toggled.connect(lambda _: self._update_send_button_state())
-        self.open_donate_btn.clicked.connect(self._open_donate_page)
-        install_tooltip_filters((self.open_donate_btn, self.donated_cb, self.send_btn))
-        QTimer.singleShot(0, self._on_type_changed)
-        if default_type:
-            idx = self.type_combo.findText(default_type)
-            if idx >= 0:
-                self.type_combo.setCurrentIndex(idx)
-        self._sync_message_type_lock_state()
-
-        self.send_btn.clicked.connect(self._on_send_clicked)
-        self.send_verify_btn.clicked.connect(self._on_send_verify_clicked)
-        self.attach_add_btn.clicked.connect(self._on_choose_files)
-        self.attach_clear_btn.clicked.connect(self._on_clear_attachments)
-        self.payment_method_group.buttonToggled.connect(lambda *_: self._update_send_button_state())
-        if self.cancel_btn is not None:
-            self.cancel_btn.clicked.connect(self.cancelRequested.emit)
-        self.refresh_random_ip_user_id_hint()
 
     def eventFilter(self, watched, event):
         message_edit = getattr(self, "message_edit", None)
@@ -978,70 +373,10 @@ class ContactForm(StatusPollingMixin, QWidget):
         self._set_status_loading(False)
 
     def _on_type_changed(self):
-        current_type = self.type_combo.currentText()
-        self._sync_message_type_lock_state()
-        is_bug_report = self._is_bug_report_type(current_type)
-
-        # 控制额度申请参数显示/隐藏
-        if current_type == REQUEST_MESSAGE_TYPE:
-            self.attachments_section.hide()
-            self.auto_attach_section.hide()
-            self.issue_title_label.hide()
-            self.issue_title_edit.hide()
-            self.issue_title_edit.clear()
-            self.request_payment_section.show()
-            self.request_payment_confirm_section.show()
-            self.amount_label.show()
-            self.amount_edit.show()
-            self.quantity_label.show()
-            self.quantity_edit.show()
-            self.urgency_label.show()
-            self.urgency_combo.show()
-            self.verify_code_edit.show()
-            self.send_verify_btn.show()
-            self.email_edit.setPlaceholderText("name@example.com")
-            self.message_label.setText("补充说明（选填）：")
-            self.message_edit.setPlaceholderText(
-                "请简单说明你的问卷紧急情况或使用场景...\n以及...是大学生吗（？"
-            )
-        else:
-            self.attachments_section.show()
-            self.auto_attach_section.setVisible(is_bug_report)
-            self.issue_title_label.setVisible(is_bug_report)
-            self.issue_title_edit.setVisible(is_bug_report)
-            if not is_bug_report:
-                self.issue_title_edit.clear()
-            self.request_payment_section.hide()
-            self.request_payment_confirm_section.hide()
-            self.amount_label.hide()
-            self.amount_edit.hide()
-            self.quantity_label.hide()
-            self.quantity_edit.hide()
-            self.urgency_label.hide()
-            self.urgency_combo.hide()
-            self.verify_code_edit.hide()
-            self.send_verify_btn.hide()
-            self.verify_send_spinner.hide()
-            self.verify_code_edit.clear()
-            self._verify_code_requested = False
-            self._verify_code_requested_email = ""
-            self._verify_code_sending = False
-            self._stop_cooldown()
-            self.email_edit.setPlaceholderText("name@example.com")
-            self.message_label.setText("消息内容：")
-            self.message_edit.setPlaceholderText("请详细描述您的问题、需求或留言…")
-            self._close_amount_rule_infobar()
-        self._refresh_amount_options()
-        self._sync_amount_rule_warning()
-        self._sync_donation_check_state()
-        self._update_send_button_state()
+        on_type_changed(self)
 
     def _sync_message_type_lock_state(self) -> None:
-        current_type = self.type_combo.currentText() or ""
-        self.type_locked_label.setText(current_type)
-        self.type_combo.setVisible(not self._lock_message_type)
-        self.type_combo.setEnabled(not self._lock_message_type)
-        self.type_locked_label.setVisible(self._lock_message_type)
+        sync_message_type_lock_state(self)
 
     def _is_bug_report_type(self, message_type: Optional[str]) -> bool:
         return (message_type or "").strip() == "报错反馈"
@@ -1051,174 +386,40 @@ class ContactForm(StatusPollingMixin, QWidget):
         self.auto_attach_log_checkbox.setChecked(self._auto_attach_log_default)
 
     def _update_send_button_state(self) -> None:
-        if not hasattr(self, "send_btn"):
-            return
-        if self.send_spinner.isVisible():
-            self.send_btn.setEnabled(False)
-            self.send_btn.setToolTip("")
-            return
-
-        current_type = self.type_combo.currentText() or ""
-        require_donation_check = current_type == REQUEST_MESSAGE_TYPE
-        block_reason = self._get_donation_check_block_reason()
-        can_send = (not require_donation_check) or (
-            self.donated_cb.isChecked() and not block_reason
-        )
-        self.send_btn.setEnabled(can_send)
-        if require_donation_check and block_reason:
-            self.donated_cb.setToolTip(block_reason)
-        else:
-            self.donated_cb.setToolTip("")
-        if require_donation_check and not can_send:
-            if block_reason:
-                self.send_btn.setToolTip(block_reason)
-            else:
-                self.send_btn.setToolTip("请先勾选“我已完成支付，且确认随机ip可用”后再发送申请")
-        else:
-            self.send_btn.setToolTip("")
+        update_send_button_state(self)
 
     def _on_context_paste(self, target: QWidget) -> bool:
-        if target is self.message_edit and self._handle_clipboard_image():
-            return True
-        return False
+        return on_context_paste(self, target)
 
     def _attachments_enabled(self) -> bool:
-        return (self.type_combo.currentText() or "") != REQUEST_MESSAGE_TYPE
+        return attachments_enabled(self)
 
     def _render_attachments_ui(self):
-        parent_widget = cast(QWidget, self)
-        while self.attach_list_layout.count():
-            item = self.attach_list_layout.takeAt(0)
-            if item is None:
-                continue
-            widget = item.widget()
-            if widget:
-                widget.deleteLater()
-
-        if not self._attachments.attachments:
-            self.attach_list_container.setVisible(False)
-            self.attach_placeholder.setVisible(True)
-            self.attach_clear_btn.setEnabled(False)
-            return
-
-        self.attach_list_container.setVisible(True)
-        self.attach_placeholder.setVisible(False)
-        self.attach_clear_btn.setEnabled(True)
-
-        for idx, att in enumerate(self._attachments.attachments):
-            card_widget = QWidget(parent_widget)
-            card_layout = QVBoxLayout(card_widget)
-            card_layout.setContentsMargins(0, 0, 0, 0)
-            card_layout.setSpacing(6)
-
-            thumb_label = QLabel(parent_widget)
-            thumb_label.setFixedSize(96, 96)
-            thumb_label.setScaledContents(True)
-            thumb_label.setStyleSheet("border: 1px solid #E0E0E0; border-radius: 4px;")
-            if att.pixmap and not att.pixmap.isNull():
-                thumb_label.setPixmap(att.pixmap)
-            card_layout.addWidget(thumb_label)
-
-            size_label = BodyLabel(f"{round(len(att.data) / 1024, 1)} KB", parent_widget)
-            size_label.setStyleSheet("color: #666; font-size: 11px;")
-            size_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-            card_layout.addWidget(size_label)
-
-            remove_btn = PushButton("移除", parent_widget)
-            remove_btn.setFixedWidth(96)
-            remove_btn.clicked.connect(lambda _=False, i=idx: self._remove_attachment(i))
-            card_layout.addWidget(remove_btn)
-
-            self.attach_list_layout.addWidget(card_widget)
-        self.attach_list_layout.addStretch(1)
+        render_attachments_ui(self)
 
     def _remove_attachment(self, index: int):
-        self._attachments.remove_at(index)
-        self._render_attachments_ui()
+        remove_attachment(self, index)
 
     def _on_clear_attachments(self):
-        self._attachments.clear()
-        self._render_attachments_ui()
+        clear_attachments(self)
 
     def _handle_clipboard_image(self) -> bool:
-        if not self._attachments_enabled():
-            return False
-        clipboard = QGuiApplication.clipboard()
-        mime = clipboard.mimeData()
-        if mime is None or not mime.hasImage():
-            return False
-
-        image = clipboard.image()
-        ok, msg = self._attachments.add_qimage(image, "clipboard.png")
-        if ok:
-            self._render_attachments_ui()
-        else:
-            InfoBar.error(
-                "",
-                msg,
-                parent=self,
-                position=InfoBarPosition.TOP,
-                duration=2500,
-            )
-        return True
+        return handle_clipboard_image(self)
 
     def _on_choose_files(self):
-        if not self._attachments_enabled():
-            return
-        parent_widget = cast(QWidget, self)
-        paths, _ = QFileDialog.getOpenFileNames(
-            parent_widget,
-            "选择图片",
-            "",
-            "图片文件 (*.png *.jpg *.jpeg *.bmp *.gif *.webp);;所有文件 (*.*)",
-        )
-        if not paths:
-            return
-        for path in paths:
-            ok, msg = self._attachments.add_file_path(path)
-            if not ok:
-                InfoBar.error(
-                    "",
-                    msg,
-                    parent=self,
-                    position=InfoBarPosition.TOP,
-                    duration=2500,
-                )
-                break
-        self._render_attachments_ui()
+        choose_files(self)
 
     def _parse_quantity_value(self, text: Optional[str] = None) -> Optional[Decimal]:
-        raw_text = (self.quantity_edit.text() if text is None else text) or ""
-        raw_text = raw_text.strip()
-        if not raw_text:
-            return None
-        try:
-            value = Decimal(raw_text)
-        except (InvalidOperation, ValueError):
-            return None
-        if value < 0:
-            return None
-        scaled = value / REQUEST_QUOTA_STEP
-        if scaled != scaled.to_integral_value():
-            return None
-        return value
+        return parse_quantity_value(self.quantity_edit.text() if text is None else text)
 
     def _normalize_quantity_text(self, text: str) -> str:
-        quantity = self._parse_quantity_value(text)
-        if quantity is None:
-            return (text or "").strip()
-        return format_quota_value(quantity)
+        return normalize_quantity_text(text)
 
     def _normalize_quantity_if_needed(self) -> None:
         raw_text = (self.quantity_edit.text() or "").strip()
         if not raw_text:
             return
-        quantity = self._parse_quantity_value(raw_text)
-        if quantity is None:
-            return
-        normalized_text = self._normalize_quantity_text(raw_text)
-        if quantity > Decimal(str(MAX_REQUEST_QUOTA)):
-            normalized_text = self._last_valid_quantity_text
+        normalized_text = clamp_quantity_text(raw_text, self._last_valid_quantity_text)
         if normalized_text == raw_text:
             return
         self.quantity_edit.blockSignals(True)
@@ -1228,17 +429,7 @@ class ContactForm(StatusPollingMixin, QWidget):
             self.quantity_edit.blockSignals(False)
 
     def _parse_amount_value(self, text: Optional[str] = None) -> Optional[Decimal]:
-        raw_text = (self.amount_edit.currentText() if text is None else text) or ""
-        raw_text = raw_text.strip()
-        if not raw_text:
-            return None
-        try:
-            value = Decimal(raw_text)
-        except (InvalidOperation, ValueError):
-            return None
-        if value <= 0:
-            return None
-        return value
+        return parse_amount_value(self.amount_edit.currentText() if text is None else text)
 
     def _get_donation_check_block_reason(self) -> str:
         current_type = self.type_combo.currentText() or ""
@@ -1357,31 +548,14 @@ class ContactForm(StatusPollingMixin, QWidget):
             )
 
     def _get_minimum_allowed_amount(self, quantity: Decimal) -> Optional[Decimal]:
-        for min_quantity, min_amount in DONATION_AMOUNT_RULES:
-            if quantity >= min_quantity:
-                return min_amount
-        return self._parse_amount_value(DONATION_AMOUNT_OPTIONS[0])
+        return get_minimum_allowed_amount(quantity)
 
     def _get_allowed_amount_options(self, quantity: Decimal) -> list[str]:
-        minimum_allowed_amount = self._get_minimum_allowed_amount(quantity)
-        if minimum_allowed_amount is None:
-            return DONATION_AMOUNT_OPTIONS[:]
-        return [
-            amount
-            for amount in DONATION_AMOUNT_OPTIONS
-            if (self._parse_amount_value(amount) or Decimal("0")) >= minimum_allowed_amount
-        ]
+        return get_allowed_amount_options(quantity)
 
     def _is_amount_allowed(self, amount_text: str, quantity_text: Optional[str] = None) -> bool:
-        amount_value = self._parse_amount_value(amount_text)
-        if amount_value is None:
-            return True
-
-        quantity = self._parse_quantity_value(quantity_text) or Decimal("0")
-        minimum_allowed_amount = self._get_minimum_allowed_amount(quantity)
-        if minimum_allowed_amount is None:
-            return True
-        return amount_value >= minimum_allowed_amount
+        current_quantity_text = self.quantity_edit.text() if quantity_text is None else quantity_text
+        return is_amount_allowed(amount_text, current_quantity_text)
 
     def _refresh_amount_options(self) -> None:
         current_text = (self.amount_edit.currentText() or "").strip()
@@ -1425,32 +599,29 @@ class ContactForm(StatusPollingMixin, QWidget):
         self._show_amount_rule_infobar()
 
     def _cleanup_pending_temp_files(self) -> None:
-        for path in list(getattr(self, "_pending_temp_attachment_paths", [])):
-            try:
-                if path and os.path.exists(path):
-                    os.remove(path)
-            except Exception as exc:
-                log_suppressed_exception(
-                    f"_cleanup_pending_temp_files: {path}",
-                    exc,
-                    level=logging.WARNING,
-                )
-        self._pending_temp_attachment_paths = []
+        self._pending_temp_attachment_paths = cleanup_pending_temp_files(
+            list(getattr(self, "_pending_temp_attachment_paths", [])),
+            on_error=lambda path, exc: log_suppressed_exception(
+                f"_cleanup_pending_temp_files: {path}",
+                exc,
+                level=logging.WARNING,
+            ),
+        )
 
     @staticmethod
     def _read_file_bytes(path: str) -> bytes:
-        with open(path, "rb") as file:
-            return file.read()
+        return read_file_bytes(path)
 
     @staticmethod
     def _remove_temp_file(path: str) -> None:
-        if not path:
-            return
-        try:
-            if os.path.exists(path):
-                os.remove(path)
-        except Exception as exc:
-            log_suppressed_exception(f"_remove_temp_file: {path}", exc, level=logging.WARNING)
+        remove_temp_file(
+            path,
+            on_error=lambda current_path, exc: log_suppressed_exception(
+                f"_remove_temp_file: {current_path}",
+                exc,
+                level=logging.WARNING,
+            ),
+        )
 
     def _export_bug_report_config_snapshot(
         self,
@@ -1498,53 +669,27 @@ class ContactForm(StatusPollingMixin, QWidget):
 
     @staticmethod
     def _fatal_crash_log_payload() -> Optional[tuple[str, tuple[str, bytes, str]]]:
-        path = get_fatal_crash_log_path()
-        if not os.path.exists(path) or os.path.getsize(path) <= 0:
-            return None
-        with open(path, "rb") as file:
-            data = file.read()
-        return "fatal_crash.log", ("fatal_crash.log", data, "text/plain")
+        return fatal_crash_log_payload(get_fatal_crash_log_path())
 
     @staticmethod
     def _renumber_files_payload(
         items: list[tuple[str, tuple[str, bytes, str]]],
     ) -> list[tuple[str, tuple[str, bytes, str]]]:
-        payload: list[tuple[str, tuple[str, bytes, str]]] = []
-        for index, (_, file_tuple) in enumerate(items, start=1):
-            payload.append((f"file{index}", file_tuple))
-        return payload
+        return renumber_files_payload(items)
 
     def _build_bug_report_auto_files_payload(
         self,
     ) -> tuple[list[tuple[str, tuple[str, bytes, str]]], list[str]]:
-        auto_files: list[tuple[str, tuple[str, bytes, str]]] = []
-        config_status = "已附带" if self.auto_attach_config_checkbox.isChecked() else "未附带"
-        log_status = "已附带" if self.auto_attach_log_checkbox.isChecked() else "未附带"
-        summary_lines = [
-            f"当前运行配置快照：{config_status}",
-            f"当前日志快照：{log_status}",
-        ]
-
-        if self.auto_attach_config_checkbox.isChecked():
-            auto_files.append(self._export_bug_report_config_snapshot())
-
-        if self.auto_attach_log_checkbox.isChecked():
-            auto_files.append(self._export_bug_report_log_snapshot())
-            fatal_payload = self._fatal_crash_log_payload()
-            if fatal_payload is not None:
-                auto_files.append(fatal_payload)
-                summary_lines.append("fatal_crash.log：已附带")
-            else:
-                summary_lines.append("fatal_crash.log：未发现")
-        else:
-            summary_lines.append("fatal_crash.log：未附带")
-
-        return auto_files, summary_lines
+        return build_bug_report_auto_files_payload(
+            auto_attach_config=self.auto_attach_config_checkbox.isChecked(),
+            auto_attach_log=self.auto_attach_log_checkbox.isChecked(),
+            export_config_snapshot=self._export_bug_report_config_snapshot,
+            export_log_snapshot=self._export_bug_report_log_snapshot,
+            get_fatal_payload=self._fatal_crash_log_payload,
+        )
 
     def _validate_email(self, email: str) -> bool:
-        if not email:
-            return True
-        return re.match(r"^[^@\s]+@[^@\s]+\.[^@\s]+$", email) is not None
+        return validate_email(email)
 
     def _on_send_clicked(self):
         self._cleanup_pending_temp_files()
@@ -1570,98 +715,31 @@ class ContactForm(StatusPollingMixin, QWidget):
             verify_code = (self.verify_code_edit.text() or "").strip()
             request_payment_method = self._selected_payment_method()
             request_amount_text = amount_text
-            request_quota_text = self._normalize_quantity_text(quantity_text)
             request_urgency_text = (self.urgency_combo.currentText() or "").strip()
-            if not request_payment_method:
-                InfoBar.warning(
-                    "",
+            quota_validation = validate_quota_request(
+                QuotaRequestValidationInputs(
+                    email=email,
+                    amount_text=amount_text,
+                    quantity_text=quantity_text,
+                    verify_code=verify_code,
+                    payment_method=request_payment_method,
+                    donated=self.donated_cb.isChecked(),
+                    verify_code_requested=self._verify_code_requested,
+                    verify_code_requested_email=self._verify_code_requested_email,
+                )
+            )
+            request_quota_text = quota_validation.normalized_quota_text
+            if quota_validation.error_message:
+                if quota_validation.amount_rule_blocked:
+                    self._show_amount_rule_infobar()
+                if quota_validation.error_message in {
                     "请选择你刚刚使用的支付方式",
-                    parent=self,
-                    position=InfoBarPosition.TOP,
-                    duration=2000,
-                )
-                self._update_send_button_state()
-                return
-            if not amount_text:
-                InfoBar.warning(
-                    "",
-                    "请输入支付金额",
-                    parent=self,
-                    position=InfoBarPosition.TOP,
-                    duration=2000,
-                )
-                return
-            if not self.donated_cb.isChecked():
-                InfoBar.warning(
-                    "",
                     "请先勾选“我已完成支付”后再发送申请",
-                    parent=self,
-                    position=InfoBarPosition.TOP,
-                    duration=2000,
-                )
-                self._update_send_button_state()
-                return
-            if not quantity_text:
+                }:
+                    self._update_send_button_state()
                 InfoBar.warning(
                     "",
-                    "请输入申请额度",
-                    parent=self,
-                    position=InfoBarPosition.TOP,
-                    duration=2000,
-                )
-                return
-            quantity_value = self._parse_quantity_value(quantity_text)
-            if quantity_value is None:
-                InfoBar.warning(
-                    "",
-                    "申请额度必须 >= 0，且只能填 0.5 的倍数",
-                    parent=self,
-                    position=InfoBarPosition.TOP,
-                    duration=2200,
-                )
-                return
-            if quantity_value > Decimal(str(MAX_REQUEST_QUOTA)):
-                quota_text = format_quota_value(MAX_REQUEST_QUOTA)
-                InfoBar.warning(
-                    "",
-                    f"申请额度不能超过 {quota_text}",
-                    parent=self,
-                    position=InfoBarPosition.TOP,
-                    duration=2000,
-                )
-                return
-            if amount_text and not self._is_amount_allowed(amount_text, quantity_text):
-                self._show_amount_rule_infobar()
-                InfoBar.warning(
-                    "",
-                    DONATION_AMOUNT_BLOCK_MESSAGE,
-                    parent=self,
-                    position=InfoBarPosition.TOP,
-                    duration=2200,
-                )
-                return
-            if not self._verify_code_requested:
-                InfoBar.warning(
-                    "",
-                    "请先点击发送验证码",
-                    parent=self,
-                    position=InfoBarPosition.TOP,
-                    duration=2000,
-                )
-                return
-            if email != self._verify_code_requested_email:
-                InfoBar.warning(
-                    "",
-                    "邮箱已变更，请重新发送验证码",
-                    parent=self,
-                    position=InfoBarPosition.TOP,
-                    duration=2200,
-                )
-                return
-            if verify_code != "114514":
-                InfoBar.warning(
-                    "",
-                    "验证码错误，请重试",
+                    quota_validation.error_message,
                     parent=self,
                     position=InfoBarPosition.TOP,
                     duration=2200,
@@ -1857,14 +935,11 @@ class ContactForm(StatusPollingMixin, QWidget):
         self._emit_send_finished_if_current(generation, False, "发送超时，请稍后重试")
 
     def _compute_send_timeout_fallback_ms(self, read_timeout_seconds: int) -> int:
-        # `http_post(timeout=(connect, read))` 在底层会把 write 超时也设成 read。
-        # 这里按 connect + write + read，再留一点余量，避免前端先于真实请求误报超时。
-        total_seconds = (
-            self._SEND_CONNECT_TIMEOUT_SECONDS
-            + read_timeout_seconds
-            + read_timeout_seconds
+        return compute_send_timeout_fallback_ms(
+            connect_timeout_seconds=self._SEND_CONNECT_TIMEOUT_SECONDS,
+            read_timeout_seconds=read_timeout_seconds,
+            grace_ms=self._SEND_TIMEOUT_GRACE_MS,
         )
-        return int(total_seconds * 1000 + self._SEND_TIMEOUT_GRACE_MS)
 
     def _clear_email_selection(self):
         try:

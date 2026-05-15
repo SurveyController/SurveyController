@@ -7,46 +7,33 @@ import logging
 import os
 from typing import TYPE_CHECKING, Any, Callable, List, Optional, Sequence
 
-from PySide6.QtCore import QEvent, Qt, Signal
-from PySide6.QtGui import QColor, QDragEnterEvent, QDropEvent
+from PySide6.QtCore import QEvent, Signal
+from PySide6.QtGui import QDragEnterEvent, QDropEvent
 from PySide6.QtWidgets import (
     QApplication,
     QFileDialog,
-    QHBoxLayout,
+    QToolButton,
     QTableWidgetItem,
-    QVBoxLayout,
     QWidget,
 )
 from qfluentwidgets import (
-    BodyLabel,
     CaptionLabel,
-    FluentIcon,
-    InfoBadge,
     InfoBar,
     InfoBarPosition,
-    IndeterminateProgressBar,
     IndeterminateProgressRing,
     LineEdit,
-    ProgressBar,
-    PrimaryPushButton,
     PushButton,
-    ScrollArea,
+    PrimaryPushButton,
+    ProgressBar,
     StrongBodyLabel,
-    SubtitleLabel,
     TableWidget,
-    SimpleCardWidget,
-    IconWidget,
 )
 
-from software.app.config import HEADLESS_MAX_THREADS
 from software.core.reverse_fill.schema import (
     REVERSE_FILL_FORMAT_AUTO,
     REVERSE_FILL_FORMAT_WJX_SCORE,
     REVERSE_FILL_FORMAT_WJX_SEQUENCE,
     REVERSE_FILL_FORMAT_WJX_TEXT,
-    REVERSE_FILL_STATUS_BLOCKED,
-    REVERSE_FILL_STATUS_FALLBACK,
-    REVERSE_FILL_STATUS_REVERSE,
     ReverseFillSpec,
     reverse_fill_format_label,
 )
@@ -69,18 +56,28 @@ from software.providers.contracts import (
     SurveyQuestionMeta,
     ensure_survey_question_metas,
 )
-from software.ui.helpers.fluent_tooltip import install_tooltip_filter
+from software.ui.helpers.message_bar import replace_message_bar, show_message_bar
+from software.ui.pages.workbench.reverse_fill.logic import (
+    actionable_issue_question_nums,
+    build_plan_rows,
+    is_supported_excel_path,
+    iter_supported_drop_paths,
+)
+from software.ui.pages.workbench.reverse_fill.ui_builder import build_reverse_fill_page_ui
 from software.ui.pages.workbench.shared.clipboard import SurveyClipboardMixin
-from software.ui.pages.workbench.shared.random_ip_toggle_row import (
-    RandomIpToggleRow,
-)
-from software.ui.pages.workbench.shared.survey_entry_card import (
-    SurveyEntryCard,
-)
-from software.ui.widgets.no_wheel import NoWheelSpinBox
 
 if TYPE_CHECKING:
     from software.ui.controller.run_controller import RunController
+    from software.ui.pages.workbench.shared.random_ip_toggle_row import RandomIpToggleRow
+    from software.ui.pages.workbench.shared.survey_entry_card import SurveyEntryCard
+    from software.ui.widgets.no_wheel import NoWheelSpinBox
+    from qfluentwidgets import (
+        IndeterminateProgressBar,
+        InfoBadge,
+        ScrollArea,
+        SimpleCardWidget,
+        TogglePushButton,
+    )
 
 
 _FORMAT_CHOICES = [
@@ -90,47 +87,37 @@ _FORMAT_CHOICES = [
     (REVERSE_FILL_FORMAT_WJX_TEXT, "问卷星按文本"),
 ]
 
-_STATUS_LABELS = {
-    REVERSE_FILL_STATUS_REVERSE: "🟢 正常",
-    REVERSE_FILL_STATUS_FALLBACK: "🟡 需要处理",
-    REVERSE_FILL_STATUS_BLOCKED: "🔴 不支持",
-}
-
-_QUESTION_TYPE_LABELS = {
-    "single": "单选题",
-    "multiple": "多选题",
-    "dropdown": "下拉选择题",
-    "scale": "量表题",
-    "score": "评价题",
-    "text": "填空题",
-    "multi_text": "多项填空题",
-    "matrix": "矩阵题",
-    "order": "排序题",
-}
-
-_NON_ACTIONABLE_ISSUE_CATEGORIES = {"auto_handled"}
-
-
-def _status_label_for_plan(plan: Any) -> str:
-    status = str(getattr(plan, "status", "") or "")
-    if status == REVERSE_FILL_STATUS_FALLBACK and bool(getattr(plan, "fallback_resolved", False)):
-        return "🟢 已处理"
-    if status == REVERSE_FILL_STATUS_FALLBACK and bool(getattr(plan, "fallback_ready", False)):
-        return "🟡 可回退"
-    return _STATUS_LABELS.get(status, status)
-
-
-def _question_type_label(value: Any) -> str:
-    normalized = str(value or "").strip().lower()
-    if not normalized:
-        return ""
-    return _QUESTION_TYPE_LABELS.get(normalized, str(value or "").strip())
-
 
 class ReverseFillPage(SurveyClipboardMixin, QWidget):
     """独立的反填数据源页。"""
 
     surveyUrlChanged = Signal(str)
+    scroll_area: "ScrollArea"
+    view: QWidget
+    link_card: "SurveyEntryCard"
+    file_panel: "SimpleCardWidget"
+    table_panel: "SimpleCardWidget"
+    preview_badge: "InfoBadge"
+    qr_btn: QToolButton
+    url_edit: LineEdit
+    file_edit: LineEdit
+    browse_btn: "PushButton"
+    open_wizard_btn: PrimaryPushButton
+    reverse_fill_threads_spin: "NoWheelSpinBox"
+    random_ip_row: "RandomIpToggleRow"
+    random_ip_cb: "TogglePushButton"
+    random_ip_loading_ring: IndeterminateProgressRing
+    random_ip_loading_label: CaptionLabel
+    detected_format_label: StrongBodyLabel | CaptionLabel
+    state_hint_label: CaptionLabel
+    mapping_table: TableWidget
+    status_label: StrongBodyLabel
+    progress_bar: ProgressBar
+    progress_indeterminate_bar: "IndeterminateProgressBar"
+    progress_pct: StrongBodyLabel
+    start_btn: PrimaryPushButton
+    resume_btn: PrimaryPushButton
+    stop_btn: "PushButton"
 
     def __init__(self, controller: "RunController", parent=None):
         super().__init__(parent)
@@ -159,234 +146,10 @@ class ReverseFillPage(SurveyClipboardMixin, QWidget):
 
         self.setObjectName("reverseFillPage")
 
-        self._build_ui()
+        build_reverse_fill_page_ui(self)
         self._bind_events()
         self._refresh_preview()
         self._sync_start_button_state()
-
-    def _build_title_area(self, layout: QVBoxLayout) -> None:
-        title_row = QWidget(self.view)
-        title_row_layout = QHBoxLayout(title_row)
-        title_row_layout.setContentsMargins(0, 0, 0, 0)
-        title_row_layout.setSpacing(10)
-
-        title_label = SubtitleLabel("Excel 反填", title_row)
-        title_row_layout.addWidget(title_label)
-
-        self.preview_badge = InfoBadge.custom(
-            "预览",
-            QColor("#fbbf24"),
-            QColor("#f59e0b"),
-            parent=title_row,
-        )
-        title_row_layout.addWidget(self.preview_badge)
-        title_row_layout.addStretch(1)
-
-        layout.addWidget(title_row)
-        layout.addSpacing(4)
-
-    def _build_survey_entry_card(self, layout: QVBoxLayout) -> None:
-        survey_entry = SurveyEntryCard(
-            self.view,
-            event_filter_owner=self,
-            show_parse_button=False,
-        )
-        self.link_card = survey_entry
-        self.qr_btn = survey_entry.qr_btn
-        self.url_edit = survey_entry.url_edit
-        self._link_entry_widgets = survey_entry.entry_widgets()
-        layout.addWidget(self.link_card)
-
-    def _build_file_picker(self, layout: QVBoxLayout) -> None:
-        self.file_panel = SimpleCardWidget(self.view)
-        self.file_panel.setAcceptDrops(True)
-        file_layout = QVBoxLayout(self.file_panel)
-        file_layout.setContentsMargins(20, 18, 20, 20)
-        file_layout.setSpacing(14)
-
-        header_row = QHBoxLayout()
-        header_icon = IconWidget(FluentIcon.DOCUMENT, self.file_panel)
-        header_icon.setFixedSize(20, 20)
-        header_title = StrongBodyLabel("Excel 数据源指定", self.file_panel)
-        header_row.addWidget(header_icon)
-        header_row.addWidget(header_title)
-        header_row.addStretch(1)
-        file_layout.addLayout(header_row)
-
-        desc_label = CaptionLabel("在此处导入/拖入用于反填的 .xlsx 文件。", self.file_panel)
-        desc_label.setContentsMargins(0, 0, 0, 4)
-        file_layout.addWidget(desc_label)
-
-        input_row = QHBoxLayout()
-        input_row.setSpacing(12)
-        self.file_edit = LineEdit(self.file_panel)
-        self.file_edit.setPlaceholderText("assets/reverse_fill_example.xlsx")
-        self.file_edit.setReadOnly(True)
-        self.file_edit.setClearButtonEnabled(False)
-        self.browse_btn = PushButton(FluentIcon.FOLDER_ADD, "选择文件", self.file_panel)
-        input_row.addWidget(self.file_edit, 1)
-        input_row.addWidget(self.browse_btn)
-        file_layout.addLayout(input_row)
-
-        info_row = QHBoxLayout()
-        info_row.setSpacing(24)
-        self.detected_format_label = BodyLabel("检测结果：等待校验事件", self.file_panel)
-        self.state_hint_label = CaptionLabel("暂无有效数据装载", self.file_panel)
-        info_row.addWidget(self.detected_format_label)
-        info_row.addWidget(self.state_hint_label)
-        info_row.addStretch(1)
-        file_layout.addLayout(info_row)
-
-        concurrency_row = QHBoxLayout()
-        concurrency_row.setSpacing(12)
-        self.reverse_fill_threads_spin = NoWheelSpinBox(self.file_panel)
-        self.reverse_fill_threads_spin.setRange(1, HEADLESS_MAX_THREADS)
-        self.reverse_fill_threads_spin.setValue(self._reverse_fill_threads_value)
-        self.reverse_fill_threads_spin.setFixedWidth(160)
-        self.reverse_fill_threads_spin.setFixedHeight(36)
-        self.random_ip_row = RandomIpToggleRow(
-            CaptionLabel,
-            self.file_panel,
-            leading_label_text="反填并发数",
-            stretch_tail=False,
-        )
-        self.random_ip_cb = self.random_ip_row.toggle_button
-        self.random_ip_loading_ring = self.random_ip_row.loading_ring
-        self.random_ip_loading_label = self.random_ip_row.loading_label
-        if self.random_ip_row.leading_label is not None:
-            self.random_ip_row.leading_label.setParent(self.file_panel)
-            concurrency_row.addWidget(self.random_ip_row.leading_label)
-        concurrency_row.addWidget(self.reverse_fill_threads_spin)
-        concurrency_row.addStretch(1)
-        concurrency_row.addWidget(self.random_ip_row)
-        file_layout.addLayout(concurrency_row)
-
-        self._file_drop_widgets = (
-            self.file_panel,
-            header_icon,
-            header_title,
-            desc_label,
-            self.file_edit,
-        )
-        for widget in self._file_drop_widgets:
-            try:
-                widget.setAcceptDrops(True)
-            except Exception:
-                pass
-            widget.installEventFilter(self)
-
-        layout.addWidget(self.file_panel)
-
-    def _build_details_tables(self, layout: QVBoxLayout) -> None:
-        self.table_panel = SimpleCardWidget(self.view)
-        table_layout = QVBoxLayout(self.table_panel)
-        table_layout.setContentsMargins(0, 0, 0, 0)
-        table_layout.setSpacing(0)
-
-        header_widget = QWidget(self.table_panel)
-        header_layout = QHBoxLayout(header_widget)
-        header_layout.setContentsMargins(24, 16, 24, 12)
-        header_layout.addStretch(1)
-
-        self.open_wizard_btn = PrimaryPushButton(FluentIcon.EDIT, "处理异常题目", header_widget)
-        self.open_wizard_btn.hide()
-        header_layout.addWidget(self.open_wizard_btn)
-
-        table_layout.addWidget(header_widget)
-
-        table_wrapper = QWidget(self.table_panel)
-        table_vbox = QVBoxLayout(table_wrapper)
-        table_vbox.setContentsMargins(24, 0, 24, 24)
-
-        self.mapping_table = TableWidget(table_wrapper)
-        self.mapping_table.setColumnCount(6)
-        self.mapping_table.setHorizontalHeaderLabels(
-            ["题号", "题型", "状态", "关联列", "异常说明", "处理建议"]
-        )
-        self.mapping_table.verticalHeader().setVisible(False)
-        self.mapping_table.setSelectionBehavior(TableWidget.SelectionBehavior.SelectRows)
-        self.mapping_table.setEditTriggers(TableWidget.EditTrigger.NoEditTriggers)
-        self.mapping_table.setAlternatingRowColors(True)
-        self.mapping_table.setMinimumHeight(420)
-        m_header = self.mapping_table.horizontalHeader()
-        m_header.setSectionResizeMode(0, m_header.ResizeMode.ResizeToContents)
-        m_header.setSectionResizeMode(1, m_header.ResizeMode.ResizeToContents)
-        m_header.setSectionResizeMode(2, m_header.ResizeMode.ResizeToContents)
-        m_header.setSectionResizeMode(3, m_header.ResizeMode.Stretch)
-        m_header.setSectionResizeMode(4, m_header.ResizeMode.Stretch)
-        m_header.setSectionResizeMode(5, m_header.ResizeMode.Stretch)
-        table_vbox.addWidget(self.mapping_table)
-
-        table_layout.addWidget(table_wrapper)
-        layout.addWidget(self.table_panel)
-
-    def _build_ui(self) -> None:
-        self.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, False)
-        outer = QVBoxLayout(self)
-        outer.setContentsMargins(12, 10, 12, 10)
-        outer.setSpacing(10)
-
-        self.scroll_area = ScrollArea(self)
-        self.scroll_area.setWidgetResizable(True)
-        self.scroll_area.enableTransparentBackground()
-        self.scroll_area.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, False)
-        self.view = QWidget(self.scroll_area)
-        self.view.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, False)
-        self.view.setStyleSheet("background: transparent;")
-        self.scroll_area.setWidget(self.view)
-        viewport = self.scroll_area.viewport()
-        if viewport is not None:
-            viewport.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, False)
-            viewport.setStyleSheet("background: transparent;")
-
-        layout = QVBoxLayout(self.view)
-        layout.setContentsMargins(32, 32, 32, 32)
-        layout.setSpacing(24)
-
-        self._build_title_area(layout)
-        self._build_survey_entry_card(layout)
-        self._build_file_picker(layout)
-        self._build_details_tables(layout)
-        layout.addStretch(1)
-        outer.addWidget(self.scroll_area, 1)
-        self._build_bottom_status_card(outer)
-
-    def _build_bottom_status_card(self, outer_layout: QVBoxLayout) -> None:
-        bottom = SimpleCardWidget(self)
-        bottom_layout = QVBoxLayout(bottom)
-        bottom_layout.setContentsMargins(12, 10, 12, 10)
-        bottom_layout.setSpacing(8)
-
-        top_row = QHBoxLayout()
-        top_row.setSpacing(10)
-        self.status_label = StrongBodyLabel("等待配置...", bottom)
-        self.progress_bar = ProgressBar(bottom)
-        self.progress_bar.setRange(0, 100)
-        self.progress_bar.setValue(0)
-        self.progress_indeterminate_bar = IndeterminateProgressBar(start=True, parent=bottom)
-        self.progress_indeterminate_bar.hide()
-        self.progress_pct = StrongBodyLabel("0%", bottom)
-        self.progress_pct.setMinimumWidth(50)
-        self.progress_pct.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self.progress_pct.setStyleSheet("font-size: 13px; font-weight: bold;")
-        self.start_btn = PrimaryPushButton("开始执行", bottom)
-        self.resume_btn = PrimaryPushButton("继续", bottom)
-        self.resume_btn.setEnabled(False)
-        self.resume_btn.hide()
-        self.stop_btn = PushButton("停止", bottom)
-        self.stop_btn.setEnabled(False)
-        self.start_btn.setToolTip("请先完成问卷解析、题目配置，并导入 Excel 数据源")
-        install_tooltip_filter(self.start_btn)
-
-        top_row.addWidget(self.status_label)
-        top_row.addWidget(self.progress_bar, 1)
-        top_row.addWidget(self.progress_indeterminate_bar, 1)
-        top_row.addWidget(self.progress_pct)
-        top_row.addWidget(self.start_btn)
-        top_row.addWidget(self.resume_btn)
-        top_row.addWidget(self.stop_btn)
-        bottom_layout.addLayout(top_row)
-        outer_layout.addWidget(bottom)
 
     def _bind_events(self) -> None:
         self.qr_btn.clicked.connect(self._on_qr_clicked)
@@ -495,52 +258,24 @@ class ReverseFillPage(SurveyClipboardMixin, QWidget):
         duration: int = 2400,
         show_progress: bool = False,
     ) -> Optional[InfoBar]:
-        if self._progress_infobar:
-            try:
-                self._progress_infobar.close()
-            except Exception as exc:
-                log_suppressed_exception(
-                    "_toast: self._progress_infobar.close()",
-                    exc,
-                    level=logging.WARNING,
-                )
-            self._progress_infobar = None
+        try:
+            replace_message_bar(self._progress_infobar)
+        except Exception as exc:
+            log_suppressed_exception(
+                "_toast: replace_message_bar(self._progress_infobar)",
+                exc,
+                level=logging.WARNING,
+            )
+        self._progress_infobar = None
 
-        parent = self.window() or self
-        kind = str(level or "warning").lower()
-
-        if kind == "error":
-            infobar = InfoBar.error(
-                "反填页提示",
-                message,
-                parent=parent,
-                position=InfoBarPosition.TOP,
-                duration=duration,
-            )
-        elif kind == "success":
-            infobar = InfoBar.success(
-                "反填页提示",
-                message,
-                parent=parent,
-                position=InfoBarPosition.TOP,
-                duration=duration,
-            )
-        elif kind == "info":
-            infobar = InfoBar.info(
-                "反填页提示",
-                message,
-                parent=parent,
-                position=InfoBarPosition.TOP,
-                duration=duration,
-            )
-        else:
-            infobar = InfoBar.warning(
-                "反填页提示",
-                message,
-                parent=parent,
-                position=InfoBarPosition.TOP,
-                duration=duration,
-            )
+        infobar = show_message_bar(
+            parent=self.window() or self,
+            title="反填页提示",
+            message=message,
+            level=level,
+            position=InfoBarPosition.TOP,
+            duration=duration,
+        )
 
         if show_progress:
             spinner = IndeterminateProgressRing()
@@ -758,9 +493,8 @@ class ReverseFillPage(SurveyClipboardMixin, QWidget):
         return True
 
     def _browse_excel_file(self) -> None:
-        start_dir = (
-            os.path.dirname(self.file_edit.text().strip()) if self.file_edit.text().strip() else ""
-        )
+        source_path = self.file_edit.text().strip()
+        start_dir = os.path.dirname(source_path) if source_path else ""
         path, _ = QFileDialog.getOpenFileName(
             self,
             "选择源数据 Excel 文件",
@@ -779,33 +513,21 @@ class ReverseFillPage(SurveyClipboardMixin, QWidget):
         mime_data = event.mimeData()
         if not mime_data or not mime_data.hasUrls():
             return False
-        for url in mime_data.urls():
-            file_path = str(url.toLocalFile() or "").strip()
-            if self._is_supported_excel_path(file_path):
-                return True
-        return False
+        return bool(iter_supported_drop_paths(mime_data.urls()))
 
     def _extract_excel_path_from_drop(self, event: QDropEvent) -> str:
         mime_data = event.mimeData()
         if not mime_data or not mime_data.hasUrls():
             return ""
-        for url in mime_data.urls():
-            file_path = str(url.toLocalFile() or "").strip()
-            if self._is_supported_excel_path(file_path):
-                return file_path
+        paths = iter_supported_drop_paths(mime_data.urls())
+        if paths:
+            return paths[0]
         self._toast("这里只支持拖入 .xlsx 表格文件", "warning", duration=2600)
         return ""
 
-    @staticmethod
-    def _is_supported_excel_path(file_path: str) -> bool:
-        normalized = str(file_path or "").strip()
-        return (
-            bool(normalized) and os.path.isfile(normalized) and normalized.lower().endswith(".xlsx")
-        )
-
     def _apply_excel_source_path(self, file_path: str) -> None:
         normalized = str(file_path or "").strip()
-        if not self._is_supported_excel_path(normalized):
+        if not is_supported_excel_path(normalized):
             self._toast("请选择 .xlsx 表格文件", "warning", duration=2600)
             return
         self.file_edit.setText(normalized)
@@ -924,57 +646,11 @@ class ReverseFillPage(SurveyClipboardMixin, QWidget):
         self.open_wizard_btn.hide()
 
     def _populate_plan_table(self, spec: ReverseFillSpec) -> None:
-        issues_by_question: dict[int, list[Any]] = {}
-        for issue in list(spec.issues or []):
-            key = int(issue.question_num or 0)
-            issues_by_question.setdefault(key, []).append(issue)
-
-        plans = list(spec.question_plans or [])
-        global_issues = list(issues_by_question.get(0, []))
-        self.mapping_table.setRowCount(len(plans) + len(global_issues))
-        for row, plan in enumerate(plans):
-            question_num = int(plan.question_num or 0)
-            issues = issues_by_question.get(question_num, [])
-            detail_parts = (
-                [str(plan.detail or "").strip()] if str(plan.detail or "").strip() else []
-            )
-            suggestion_parts: list[str] = []
-            for issue in issues:
-                reason = str(issue.reason or "").strip()
-                if reason and reason not in detail_parts:
-                    detail_parts.append(reason)
-                suggestion = str(issue.suggestion or "").strip()
-                if suggestion and suggestion not in suggestion_parts:
-                    suggestion_parts.append(suggestion)
-            if not issues and str(plan.status or "") == REVERSE_FILL_STATUS_REVERSE:
-                suggestion_parts.append("无需处理")
-
-            self._set_table_text(self.mapping_table, row, 0, str(int(plan.question_num or 0)))
-            self._set_table_text(
-                self.mapping_table,
-                row,
-                1,
-                _question_type_label(plan.question_type),
-            )
-            self._set_table_text(self.mapping_table, row, 2, _status_label_for_plan(plan))
-            self._set_table_text(
-                self.mapping_table,
-                row,
-                3,
-                " / ".join(list(plan.column_headers or [])),
-            )
-            self._set_table_text(self.mapping_table, row, 4, "\n".join(detail_parts) or "无")
-            self._set_table_text(self.mapping_table, row, 5, "\n".join(suggestion_parts) or "无")
-
-        base_row = len(plans)
-        for offset, issue in enumerate(global_issues):
-            row = base_row + offset
-            self._set_table_text(self.mapping_table, row, 0, "全局")
-            self._set_table_text(self.mapping_table, row, 1, str(issue.category or "全局"))
-            self._set_table_text(self.mapping_table, row, 2, "🔴 不支持")
-            self._set_table_text(self.mapping_table, row, 3, "无")
-            self._set_table_text(self.mapping_table, row, 4, str(issue.reason or ""))
-            self._set_table_text(self.mapping_table, row, 5, str(issue.suggestion or ""))
+        rows = build_plan_rows(spec)
+        self.mapping_table.setRowCount(len(rows))
+        for row_index, row_values in enumerate(rows):
+            for column_index, value in enumerate(row_values):
+                self._set_table_text(self.mapping_table, row_index, column_index, value)
 
     def _refresh_preview(self) -> None:
         self._last_spec = None
@@ -1034,20 +710,6 @@ class ReverseFillPage(SurveyClipboardMixin, QWidget):
         )
         self.state_hint_label.setText("")
 
-        actionable_issues = [
-            item
-            for item in list(spec.issues or [])
-            if str(getattr(item, "category", "") or "").strip()
-            not in _NON_ACTIONABLE_ISSUE_CATEGORIES
-        ]
-        issue_question_nums = sorted(
-            {
-                int(item.question_num or 0)
-                for item in actionable_issues
-                if int(item.question_num or 0) > 0
-            }
-        )
-        self._issue_question_nums = issue_question_nums
-        issue_cnt = len(actionable_issues)
-        self.open_wizard_btn.setVisible(issue_cnt > 0)
+        self._issue_question_nums = actionable_issue_question_nums(spec)
+        self.open_wizard_btn.setVisible(bool(self._issue_question_nums))
         self._populate_plan_table(spec)

@@ -129,6 +129,11 @@ class _FakeAnimationGroup:
         self.started += 1
 
 
+class _FakeQtApp:
+    def processEvents(self) -> None:
+        return
+
+
 class _FakeParent:
     def __init__(self) -> None:
         self.filters: list[Any] = []
@@ -334,7 +339,11 @@ class UiHelperAndParsingTests:
         monkeypatch.setattr(ui_dispatcher_module.QCoreApplication, "instance", lambda: None)
         dispatcher.dispatch_async(lambda: calls.append("no-app"))
 
-        monkeypatch.setattr(ui_dispatcher_module.QCoreApplication, "instance", lambda: object())
+        monkeypatch.setattr(
+            ui_dispatcher_module.QCoreApplication,
+            "instance",
+            lambda: _FakeQtApp(),
+        )
         monkeypatch.setattr(ui_dispatcher_module.threading, "current_thread", threading.main_thread)
         dispatcher.dispatch_async(lambda: calls.append("main-thread"))
 

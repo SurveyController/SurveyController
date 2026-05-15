@@ -8,10 +8,24 @@ from typing import Any
 import pytest
 
 import software.ui.widgets.contact_form.widget as contact_widget
+from software.ui.widgets.contact_form.attachments import (
+    build_bug_report_auto_files_payload,
+    cleanup_pending_temp_files,
+    fatal_crash_log_payload,
+    read_file_bytes,
+    remove_temp_file,
+    renumber_files_payload,
+)
 from software.ui.widgets.contact_form.constants import (
     DONATION_AMOUNT_BLOCK_MESSAGE,
     MAX_REQUEST_QUOTA,
     REQUEST_MESSAGE_TYPE,
+)
+from software.ui.widgets.contact_form.send_workflow import (
+    QuotaRequestValidationInputs,
+    compute_send_timeout_fallback_ms,
+    validate_email,
+    validate_quota_request,
 )
 
 
@@ -308,6 +322,93 @@ class _FakeContactForm:
 
 
 class ContactFormRuleTests:
+    def test_send_workflow_helpers(self) -> None:
+        assert compute_send_timeout_fallback_ms(
+            connect_timeout_seconds=5,
+            read_timeout_seconds=10,
+            grace_ms=1500,
+        ) == 26500
+        assert validate_email("") is True
+        assert validate_email("user@example.com") is True
+        assert validate_email("bad@@mail") is False
+
+        result = validate_quota_request(
+            QuotaRequestValidationInputs(
+                email="user@example.com",
+                amount_text="20.26",
+                quantity_text="2000",
+                verify_code="114514",
+                payment_method="微信",
+                donated=True,
+                verify_code_requested=True,
+                verify_code_requested_email="user@example.com",
+            )
+        )
+        assert result.error_message is None
+        assert result.normalized_quota_text == "2000"
+
+        blocked = validate_quota_request(
+            QuotaRequestValidationInputs(
+                email="user@example.com",
+                amount_text="8.88",
+                quantity_text="2000",
+                verify_code="114514",
+                payment_method="微信",
+                donated=True,
+                verify_code_requested=True,
+                verify_code_requested_email="user@example.com",
+            )
+        )
+        assert blocked.error_message == DONATION_AMOUNT_BLOCK_MESSAGE
+        assert blocked.amount_rule_blocked is True
+
+    def test_attachment_helpers_module(self, tmp_path: Path) -> None:
+        removed_errors: list[tuple[str, Exception]] = []
+        file_path = tmp_path / "a.txt"
+        file_path.write_bytes(b"abc")
+        assert read_file_bytes(str(file_path)) == b"abc"
+        remove_temp_file(
+            str(file_path),
+            on_error=lambda path, exc: removed_errors.append((path, exc)),
+        )
+        assert not file_path.exists()
+        assert removed_errors == []
+
+        temp_path = tmp_path / "temp.txt"
+        temp_path.write_text("x", encoding="utf-8")
+        remaining = cleanup_pending_temp_files(
+            [str(temp_path)],
+            on_error=lambda path, exc: removed_errors.append((path, exc)),
+        )
+        assert remaining == []
+        assert not temp_path.exists()
+
+        fatal = tmp_path / "fatal_crash.log"
+        fatal.write_text("boom", encoding="utf-8")
+        assert fatal_crash_log_payload(str(fatal)) == (
+            "fatal_crash.log",
+            ("fatal_crash.log", b"boom", "text/plain"),
+        )
+        assert renumber_files_payload(
+            [
+                ("配置快照", ("cfg.json", b"{}", "application/json")),
+                ("日志快照", ("log.txt", b"log", "text/plain")),
+            ]
+        ) == [
+            ("file1", ("cfg.json", b"{}", "application/json")),
+            ("file2", ("log.txt", b"log", "text/plain")),
+        ]
+
+        payload, summary = build_bug_report_auto_files_payload(
+            auto_attach_config=True,
+            auto_attach_log=True,
+            export_config_snapshot=lambda: ("配置快照", ("cfg.json", b"{}", "application/json")),
+            export_log_snapshot=lambda: ("日志快照", ("log.txt", b"log", "text/plain")),
+            get_fatal_payload=lambda: ("fatal_crash.log", ("fatal_crash.log", b"x", "text/plain")),
+        )
+        assert [item[0] for item in payload] == ["配置快照", "日志快照", "fatal_crash.log"]
+        assert "fatal_crash.log：已附带" in summary
+
     def test_quantity_and_amount_parsing_rules(self) -> None:
         form = _FakeContactForm()
 
@@ -491,7 +592,6 @@ class ContactFormRuleTests:
         monkeypatch.setattr(contact_widget, "build_contact_message", lambda **kwargs: "payload")
         monkeypatch.setattr(contact_widget, "build_contact_request_fields", lambda **kwargs: [("message", (None, "payload"))])
         monkeypatch.setattr(contact_widget, "http_post", lambda *args, **kwargs: SimpleNamespace(status_code=200))
-        monkeypatch.setattr(contact_widget, "format_quota_value", lambda value: str(value))
 
         parent = SimpleNamespace(parentWidget=lambda: None, controller=True)
         form.parent_widget = parent

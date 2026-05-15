@@ -24,6 +24,7 @@ dev = [
     "pytest",
     "pytest-asyncio",
     "pytest-cov",
+    "pytest-qt>=4.5.0",
     "ruff",
 ]
 build = [

@@ -1,7 +1,7 @@
 """通用 SettingCard 组件 - 可跨页面复用的设置卡片"""
 
 from PySide6.QtCore import Qt
-from PySide6.QtWidgets import QHBoxLayout, QVBoxLayout, QWidget
+from PySide6.QtWidgets import QGraphicsOpacityEffect, QHBoxLayout, QVBoxLayout, QWidget
 from qfluentwidgets import (
     BodyLabel,
     ComboBox,
@@ -13,6 +13,21 @@ from qfluentwidgets import (
 
 from software.ui.widgets.no_wheel import NoWheelSpinBox
 from software.ui.widgets.value_slider import ValueSlider
+
+
+def set_widget_enabled_with_opacity(
+    widget: QWidget,
+    enabled: bool,
+    *,
+    disabled_opacity: float = 0.4,
+) -> None:
+    """统一处理控件禁用态透明度。"""
+    widget.setEnabled(bool(enabled))
+    effect = widget.graphicsEffect()
+    if effect is None:
+        effect = QGraphicsOpacityEffect(widget)
+        widget.setGraphicsEffect(effect)
+    effect.setOpacity(1.0 if enabled else float(disabled_opacity))  # type: ignore[union-attr]
 
 
 class SpinBoxSettingCard(SettingCard):
@@ -179,11 +194,4 @@ class ExpandComboSwitchSettingCard(ExpandGroupSettingCard):
         self._sync_group_enabled(bool(enabled))
 
     def _sync_group_enabled(self, enabled: bool) -> None:
-        from PySide6.QtWidgets import QGraphicsOpacityEffect
-
-        self._groupContainer.setEnabled(bool(enabled))
-        effect = self._groupContainer.graphicsEffect()
-        if effect is None:
-            effect = QGraphicsOpacityEffect(self._groupContainer)
-            self._groupContainer.setGraphicsEffect(effect)
-        effect.setOpacity(1.0 if enabled else 0.4)  # type: ignore[union-attr]
+        set_widget_enabled_with_opacity(self._groupContainer, bool(enabled))

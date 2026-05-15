@@ -1,47 +1,43 @@
 """运行参数设置页面"""
 
-import logging
-from software.logging.action_logger import bind_logged_action, log_action
-from software.logging.log_utils import log_suppressed_exception
+from __future__ import annotations
 
+import logging
+from typing import TYPE_CHECKING
 
 from PySide6.QtCore import QPoint, QTimer
-from PySide6.QtWidgets import QHBoxLayout, QVBoxLayout, QWidget
-from qfluentwidgets import (
-    BodyLabel,
-    FluentIcon,
-    InfoBar,
-    InfoBarPosition,
-    PopupTeachingTip,
-    ScrollArea,
-    SettingCardGroup,
-    TeachingTipTailPosition,
-)
+from PySide6.QtWidgets import QWidget
+from qfluentwidgets import FluentIcon, InfoBar, InfoBarPosition, PopupTeachingTip, ScrollArea, TeachingTipTailPosition
 
 from software.app.config import HEADLESS_MAX_THREADS, NON_HEADLESS_MAX_THREADS
-from software.ui.controller.run_controller import RunController
-from software.ui.pages.workbench.runtime_panel.ai import RuntimeAISection
-from software.ui.pages.workbench.runtime_panel.cards import (
-    RandomIPSettingCard,
-    RandomUASettingCard,
-    ReliabilitySettingCard,
-    TimeRangeSettingCard,
-    TimedModeSettingCard,
-)
-from software.ui.widgets.setting_cards import (
-    SliderSettingCard,
-    SpinBoxSettingCard,
-    SwitchSettingCard,
-)
 from software.io.config import RuntimeConfig
+from software.logging.action_logger import bind_logged_action, log_action
+from software.logging.log_utils import log_suppressed_exception
+from software.ui.controller.run_controller import RunController
 from software.ui.helpers.proxy_access import (
     apply_proxy_source_settings,
     get_proxy_minute_by_answer_seconds,
 )
+from software.ui.pages.workbench.runtime_panel.cards import TimeRangeSettingCard
+from software.ui.pages.workbench.runtime_panel.ui_builder import build_runtime_page_ui
 
 _PROXY_SOURCE_DEFAULT = "default"
 _PROXY_SOURCE_BENEFIT = "benefit"
 _PROXY_SOURCE_CUSTOM = "custom"
+
+if TYPE_CHECKING:
+    from software.ui.pages.workbench.runtime_panel.ai import RuntimeAISection
+    from software.ui.pages.workbench.runtime_panel.cards import (
+        RandomUASettingCard,
+        ReliabilitySettingCard,
+        TimedModeSettingCard,
+    )
+    from software.ui.pages.workbench.runtime_panel.random_ip_card import RandomIPSettingCard
+    from software.ui.widgets.setting_cards import (
+        SliderSettingCard,
+        SpinBoxSettingCard,
+        SwitchSettingCard,
+    )
 
 
 class RuntimePage(ScrollArea):
@@ -51,6 +47,18 @@ class RuntimePage(ScrollArea):
     NON_HEADLESS_MAX_THREADS = NON_HEADLESS_MAX_THREADS
     HEADLESS_MAX_THREADS = HEADLESS_MAX_THREADS
     SUBMIT_INTERVAL_MAX_SECONDS = 300
+    view: QWidget
+    target_card: "SpinBoxSettingCard"
+    thread_card: "SliderSettingCard"
+    random_ip_card: "RandomIPSettingCard"
+    random_ua_card: "RandomUASettingCard"
+    reliability_card: "ReliabilitySettingCard"
+    headless_card: "SwitchSettingCard"
+    interval_card: TimeRangeSettingCard
+    answer_card: TimeRangeSettingCard
+    timed_card: "TimedModeSettingCard"
+    ai_section: "RuntimeAISection"
+
     def __init__(self, controller: RunController, parent=None):
         super().__init__(parent)
         self.controller = controller
@@ -61,7 +69,7 @@ class RuntimePage(ScrollArea):
         self.setWidgetResizable(True)
         self.enableTransparentBackground()
         self.view.setObjectName("settings_view")
-        self._build_ui()
+        build_runtime_page_ui(self)
         self._bind_events()
         self.controller.runtimeUiStateChanged.connect(self._apply_runtime_ui_state)
         self.controller.runStateChanged.connect(self.on_run_state_changed)
@@ -80,113 +88,6 @@ class RuntimePage(ScrollArea):
             answer_duration=self._card_value_as_range(self.answer_card),
         )
         self.on_run_state_changed(bool(getattr(self.controller, "running", False)))
-
-    def _build_ui(self):
-        layout = QVBoxLayout(self.view)
-        layout.setContentsMargins(24, 24, 24, 24)
-        layout.setSpacing(20)
-
-        # ========== 特性开关组 ==========
-        feature_group = SettingCardGroup("特性开关", self.view)
-
-        self.random_ip_card = RandomIPSettingCard(parent=feature_group)
-        self.random_ua_card = RandomUASettingCard(parent=feature_group)
-
-        feature_group.addSettingCard(self.random_ip_card)
-        feature_group.addSettingCard(self.random_ua_card)
-        layout.addWidget(feature_group)
-
-        # ========== 作答设置组 ==========
-        run_group = SettingCardGroup("作答设置", self.view)
-
-        self.target_card = SpinBoxSettingCard(
-            FluentIcon.DOCUMENT,
-            "目标份数",
-            "设置要提交的问卷数量",
-            min_val=1,
-            max_val=9999,
-            default=10,
-            parent=run_group,
-        )
-        self.thread_card = SliderSettingCard(
-            FluentIcon.APPLICATION,
-            "并发会话",
-            "控制同时运行的独立问卷会话数量，程序会自动复用更少的浏览器底座",
-            min_val=self.MIN_THREADS,
-            max_val=self.NON_HEADLESS_MAX_THREADS,
-            default=2,
-            parent=run_group,
-        )
-        spin_width = self.target_card.suggestSpinBoxWidthForDigits(4)
-        self.target_card.setSpinBoxWidth(spin_width)
-
-        self.reliability_card = ReliabilitySettingCard(parent=run_group)
-        self.reliability_card.setChecked(True)
-        self.reliability_card.set_alpha(0.85)
-
-        self.headless_card = SwitchSettingCard(
-            FluentIcon.SPEED_HIGH,
-            "无头模式",
-            "开启后浏览器在后台运行，不显示窗口，可提高并发性能",
-            parent=run_group,
-        )
-        self.headless_card.setChecked(True)
-
-        run_group.addSettingCard(self.target_card)
-        run_group.addSettingCard(self.thread_card)
-        run_group.addSettingCard(self.reliability_card)
-        run_group.addSettingCard(self.headless_card)
-        layout.addWidget(run_group)
-
-        # ========== 时间控制组 ==========
-        time_group = SettingCardGroup("时间控制", self.view)
-        # 在标题后添加小字提示（保持原标题字号）
-        time_hint = BodyLabel("（其实官方并不会因为你提交过快就封你号）", time_group)
-        time_hint.setStyleSheet("color: green; font-size: 12px;")
-        # 创建水平布局放置标题和提示
-        title_container = QWidget(time_group)
-        title_h_layout = QHBoxLayout(title_container)
-        title_h_layout.setContentsMargins(0, 0, 0, 0)
-        title_h_layout.setSpacing(8)
-        # 移动标题到新容器
-        time_group.titleLabel.setParent(title_container)
-        title_h_layout.addWidget(time_group.titleLabel)
-        title_h_layout.addWidget(time_hint)
-        title_h_layout.addStretch()
-        # 替换原标题位置
-        time_group.vBoxLayout.insertWidget(0, title_container)
-
-        self.interval_card = TimeRangeSettingCard(
-            FluentIcon.HISTORY,
-            "提交间隔",
-            (f"两次提交之间的等待时间（0-{self.SUBMIT_INTERVAL_MAX_SECONDS} 秒）"),
-            max_seconds=self.SUBMIT_INTERVAL_MAX_SECONDS,
-            parent=time_group,
-        )
-        self.answer_card = TimeRangeSettingCard(
-            FluentIcon.STOP_WATCH,
-            "作答时长",
-            "设置单份作答耗时（大于等于 0 秒），按20%比例随机上下抖动",
-            max_seconds=None,
-            parent=time_group,
-        )
-        self.timed_card = TimedModeSettingCard(
-            FluentIcon.RINGER,
-            "定时模式",
-            "启用后忽略时间设置，在开放后立即提交",
-            parent=time_group,
-        )
-
-        time_group.addSettingCard(self.interval_card)
-        time_group.addSettingCard(self.answer_card)
-        time_group.addSettingCard(self.timed_card)
-        layout.addWidget(time_group)
-
-        # ========== AI 填空助手组 ==========
-        self.ai_section = RuntimeAISection(self.view, self)
-        self.ai_section.bind_to_layout(layout)
-
-        layout.addStretch(1)
 
     def _bind_events(self):
         self.target_card.spinBox.valueChanged.connect(
