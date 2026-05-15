@@ -98,7 +98,10 @@ async def prepare_answer_duration_before_submit(
 
     if not has_configured_answer_duration(answer_duration_range_seconds):
         return False
-    target_seconds = sample_answer_duration_seconds(answer_duration_range_seconds)
+    target_seconds = sample_answer_duration_seconds(
+        answer_duration_range_seconds,
+        survey_provider="wjx",
+    )
     if target_seconds <= 0:
         return False
     if await try_apply_submit_starttime(driver, target_seconds):

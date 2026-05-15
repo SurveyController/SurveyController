@@ -105,7 +105,7 @@ class RuntimePreparationTests:
         assert artifacts.execution_config_template.questions_metadata[1].title == 'Q1'
         assert artifacts.execution_config_template.answer_rules == [{'num': 1, 'equals': [1]}]
         assert artifacts.execution_config_template.proxy_ip_pool == []
-        sync_proxy_duration.assert_called_once_with((12, 20))
+        sync_proxy_duration.assert_called_once_with((12, 20), survey_provider='qq')
 
     def test_prepare_execution_artifacts_uses_fallback_title_when_config_title_blank(self) -> None:
         config = self._build_config()

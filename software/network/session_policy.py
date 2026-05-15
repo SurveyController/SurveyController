@@ -37,7 +37,12 @@ def _record_bad_proxy_and_maybe_pause(
 
 
 def _required_proxy_ttl_seconds(ctx: ExecutionState) -> int:
-    return int(get_proxy_required_ttl_seconds(getattr(ctx.config, "answer_duration_range_seconds", (0, 0))))
+    return int(
+        get_proxy_required_ttl_seconds(
+            getattr(ctx.config, "answer_duration_range_seconds", (0, 0)),
+            survey_provider=getattr(ctx.config, "survey_provider", ""),
+        )
+    )
 
 
 def _mark_proxy_temporarily_bad(

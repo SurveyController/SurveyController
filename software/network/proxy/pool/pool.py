@@ -16,9 +16,11 @@ from software.app.config import (
 from software.logging.log_utils import log_suppressed_exception
 from software.network.proxy.policy.source import (
     _to_non_negative_int,
+    get_proxy_minute_by_answer_seconds,
     get_proxy_source,
     is_official_proxy_source,
 )
+from software.providers.common import SURVEY_PROVIDER_WJX
 
 
 # ==================== 地址规范化 ====================
@@ -132,13 +134,27 @@ def _coerce_proxy_lease(item: Any, *, source: str = "") -> Optional[ProxyLease]:
 
 # ==================== TTL 检查 ====================
 
-def get_proxy_required_ttl_seconds(answer_duration_range_seconds: Optional[Tuple[int, int]]) -> int:
+def get_proxy_required_ttl_seconds(
+    answer_duration_range_seconds: Optional[Tuple[int, int]],
+    *,
+    survey_provider: Optional[str] = None,
+) -> int:
     max_seconds = 0
     if isinstance(answer_duration_range_seconds, (list, tuple)):
         if len(answer_duration_range_seconds) >= 2:
             max_seconds = _to_non_negative_int(answer_duration_range_seconds[1], 0)
         elif len(answer_duration_range_seconds) >= 1:
             max_seconds = _to_non_negative_int(answer_duration_range_seconds[0], 0)
+    normalized_provider = str(survey_provider or "").strip().lower()
+    if normalized_provider == SURVEY_PROVIDER_WJX:
+        return 60
+    if normalized_provider:
+        minute = get_proxy_minute_by_answer_seconds(
+            max_seconds,
+            survey_provider=normalized_provider,
+        )
+        if minute > 0:
+            return int(minute) * 60
     return max(0, int(max_seconds)) + PROXY_TTL_GRACE_SECONDS
 
 

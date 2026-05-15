@@ -266,7 +266,11 @@ async def brush_qq(
                     ctx.update_thread_status(thread_name, "等待时长中", running=True)
                 except Exception:
                     logging.info("更新线程状态失败：等待时长中", exc_info=True)
-            if await simulate_answer_duration_delay(active_stop, runtime_config.answer_duration_range_seconds):
+            if await simulate_answer_duration_delay(
+                active_stop,
+                runtime_config.answer_duration_range_seconds,
+                survey_provider=getattr(runtime_config, "survey_provider", ""),
+            ):
                 try:
                     ctx.update_thread_status(thread_name, "已中断", running=False)
                 except Exception:

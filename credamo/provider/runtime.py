@@ -390,7 +390,11 @@ async def brush_credamo(
             state.update_thread_status(thread_name, "等待时长中", running=True)
         except Exception:
             logging.info("更新 Credamo 线程状态失败：等待时长中", exc_info=True)
-    if await simulate_answer_duration_delay(active_stop, config.answer_duration_range_seconds):
+    if await simulate_answer_duration_delay(
+        active_stop,
+        config.answer_duration_range_seconds,
+        survey_provider=getattr(config, "survey_provider", ""),
+    ):
         return False
     try:
         state.update_thread_status(thread_name, "提交中", running=True)

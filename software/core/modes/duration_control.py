@@ -6,6 +6,8 @@ import random
 from typing import Any, Optional, Tuple
 
 from software.core.engine.async_wait import sleep_or_stop
+from software.network.proxy.policy.source import get_proxy_minute_by_answer_seconds
+from software.providers.common import SURVEY_PROVIDER_WJX
 from software.logging.log_utils import log_suppressed_exception
 
 _COMPLETION_MARKERS = (
@@ -32,6 +34,8 @@ def has_configured_answer_duration(answer_duration_range_seconds: Tuple[int, int
 
 def sample_answer_duration_seconds(
     answer_duration_range_seconds: Tuple[int, int] = (0, 0),
+    *,
+    survey_provider: Optional[str] = None,
 ) -> float:
     """按现有配置规则采样一次作答时长秒数。"""
 
@@ -51,7 +55,17 @@ def sample_answer_duration_seconds(
         min_delay = max(0, base - jitter)
         max_delay = base + jitter
 
+    normalized_provider = str(survey_provider or "").strip().lower()
     safe_upper = max_delay
+    if normalized_provider and normalized_provider != SURVEY_PROVIDER_WJX:
+        proxy_ref_seconds = max(0, int(max(raw_min, raw_max)))
+        ip_minute = get_proxy_minute_by_answer_seconds(
+            proxy_ref_seconds,
+            survey_provider=normalized_provider,
+        )
+        if ip_minute > 0:
+            ip_limit_seconds = int(ip_minute) * 60
+            safe_upper = min(max_delay, max(min_delay, ip_limit_seconds - 1))
 
     center = (min_delay + safe_upper) / 2.0
     std_dev = (safe_upper - min_delay) / 6.0 if safe_upper > min_delay else 0.0
@@ -86,10 +100,15 @@ async def wait_answer_duration_seconds(
 async def simulate_answer_duration_delay(
     stop_signal: Optional[Any] = None,
     answer_duration_range_seconds: Tuple[int, int] = (0, 0),
+    *,
+    survey_provider: Optional[str] = None,
 ) -> bool:
     """在提交前模拟答题时长等待；返回 True 表示等待中被中断。"""
 
-    wait_seconds = sample_answer_duration_seconds(answer_duration_range_seconds)
+    wait_seconds = sample_answer_duration_seconds(
+        answer_duration_range_seconds,
+        survey_provider=survey_provider,
+    )
     return await wait_answer_duration_seconds(stop_signal, wait_seconds)
 
 

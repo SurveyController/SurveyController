@@ -1,6 +1,11 @@
 from __future__ import annotations
 
 import software.network.proxy.policy.source as proxy_source
+from software.providers.common import (
+    SURVEY_PROVIDER_CREDAMO,
+    SURVEY_PROVIDER_QQ,
+    SURVEY_PROVIDER_WJX,
+)
 
 
 class ProxyPolicySourceTests:
@@ -32,14 +37,24 @@ class ProxyPolicySourceTests:
     def test_answer_duration_mapping_and_quota_cost(self) -> None:
         assert proxy_source.get_proxy_required_seconds_by_answer_seconds(100) == 100 + proxy_source.PROXY_TTL_GRACE_SECONDS
         assert proxy_source.get_proxy_minute_by_answer_seconds(10) == 1
-        assert proxy_source.get_proxy_minute_by_answer_seconds(70) == 1
-        assert proxy_source.get_proxy_minute_by_answer_seconds(250) == 1
+        assert proxy_source.get_proxy_minute_by_answer_seconds(70, survey_provider=SURVEY_PROVIDER_QQ) == 3
+        assert proxy_source.get_proxy_minute_by_answer_seconds(250, survey_provider=SURVEY_PROVIDER_CREDAMO) == 5
+        assert proxy_source.get_proxy_minute_by_answer_seconds(250, survey_provider=SURVEY_PROVIDER_WJX) == 1
         assert proxy_source.get_quota_cost_by_minute(999) == int(proxy_source.PROXY_QUOTA_COST_MAP.get(1, 1))
 
     def test_set_proxy_occupy_minute_by_answer_duration_uses_max_seconds(self) -> None:
         original = proxy_source.get_proxy_occupy_minute()
         try:
-            minute = proxy_source.set_proxy_occupy_minute_by_answer_duration((30, 280))
+            minute = proxy_source.set_proxy_occupy_minute_by_answer_duration(
+                (30, 280),
+                survey_provider=SURVEY_PROVIDER_QQ,
+            )
+            assert minute == 5
+            assert proxy_source.get_proxy_occupy_minute() == 5
+            minute = proxy_source.set_proxy_occupy_minute_by_answer_duration(
+                (30, 280),
+                survey_provider=SURVEY_PROVIDER_WJX,
+            )
             assert minute == 1
             assert proxy_source.get_proxy_occupy_minute() == 1
         finally:

@@ -413,7 +413,10 @@ class ContactForm(StatusPollingMixin, QWidget):
     quotaRequestSucceeded = Signal()
     cancelRequested = Signal()
 
-    _SEND_TIMEOUT_FALLBACK_MS = 12_000
+    _SEND_TIMEOUT_GRACE_MS = 2_000
+    _SEND_CONNECT_TIMEOUT_SECONDS = 10
+    _SEND_READ_TIMEOUT_SECONDS = 10
+    _SEND_READ_TIMEOUT_WITH_FILES_SECONDS = 20
 
     def __init__(
         self,
@@ -1786,12 +1789,6 @@ class ContactForm(StatusPollingMixin, QWidget):
         with self._send_state_lock:
             self._send_generation += 1
             send_generation = self._send_generation
-        QTimer.singleShot(
-            self._SEND_TIMEOUT_FALLBACK_MS,
-            cast(QWidget, self),
-            lambda generation=send_generation: self._finish_stuck_send_if_needed(generation),
-        )
-
         def _send():
             try:
                 multipart_fields = build_contact_request_fields(
@@ -1802,11 +1799,15 @@ class ContactForm(StatusPollingMixin, QWidget):
                     random_ip_user_id=self._random_ip_user_id,
                     files_payload=files_payload,
                 )
-                timeout = 20 if files_payload else 10
+                read_timeout_seconds = (
+                    self._SEND_READ_TIMEOUT_WITH_FILES_SECONDS
+                    if files_payload
+                    else self._SEND_READ_TIMEOUT_SECONDS
+                )
                 resp = http_post(
                     CONTACT_API_URL,
                     files=multipart_fields,
-                    timeout=(10, timeout),
+                    timeout=(self._SEND_CONNECT_TIMEOUT_SECONDS, read_timeout_seconds),
                 )
                 if resp.status_code == 200:
                     self._emit_send_finished_if_current(send_generation, True, "")
@@ -1822,6 +1823,17 @@ class ContactForm(StatusPollingMixin, QWidget):
                     False,
                     f"发送失败：{exc}",
                 )
+
+        send_timeout_fallback_ms = self._compute_send_timeout_fallback_ms(
+            self._SEND_READ_TIMEOUT_WITH_FILES_SECONDS
+            if files_payload
+            else self._SEND_READ_TIMEOUT_SECONDS
+        )
+        QTimer.singleShot(
+            send_timeout_fallback_ms,
+            cast(QWidget, self),
+            lambda generation=send_generation: self._finish_stuck_send_if_needed(generation),
+        )
 
         threading.Thread(target=_send, daemon=True).start()
 
@@ -1843,6 +1855,16 @@ class ContactForm(StatusPollingMixin, QWidget):
 
     def _finish_stuck_send_if_needed(self, generation: int) -> None:
         self._emit_send_finished_if_current(generation, False, "发送超时，请稍后重试")
+
+    def _compute_send_timeout_fallback_ms(self, read_timeout_seconds: int) -> int:
+        # `http_post(timeout=(connect, read))` 在底层会把 write 超时也设成 read。
+        # 这里按 connect + write + read，再留一点余量，避免前端先于真实请求误报超时。
+        total_seconds = (
+            self._SEND_CONNECT_TIMEOUT_SECONDS
+            + read_timeout_seconds
+            + read_timeout_seconds
+        )
+        return int(total_seconds * 1000 + self._SEND_TIMEOUT_GRACE_MS)
 
     def _clear_email_selection(self):
         try:

@@ -247,7 +247,10 @@ def prepare_execution_artifacts(
         ) from exc
 
     try:
-        set_proxy_occupy_minute_by_answer_duration(_resolve_proxy_answer_duration(config))
+        set_proxy_occupy_minute_by_answer_duration(
+            _resolve_proxy_answer_duration(config),
+            survey_provider=survey_provider,
+        )
     except Exception:
         logging.debug("同步随机IP占用时长失败", exc_info=True)
 
