@@ -7,7 +7,12 @@ from urllib.parse import urlsplit
 from dataclasses import replace
 from typing import Any, Dict, List, Optional
 
-from software.app.config import AUTH_BONUS_CLAIM_ENDPOINT, AUTH_TRIAL_ENDPOINT, IP_EXTRACT_ENDPOINT
+from software.app.config import (
+    AUTH_BONUS_CLAIM_ENDPOINT,
+    AUTH_TRIAL_ENDPOINT,
+    CARD_REDEEM_ENDPOINT,
+    IP_EXTRACT_ENDPOINT,
+)
 from software.app.settings_store import app_settings
 from software.logging.log_utils import log_suppressed_exception
 from software.system.device_fingerprint import build_stable_device_id
@@ -564,6 +569,39 @@ async def claim_easter_egg_bonus_async() -> Dict[str, Any]:
         "used_quota": session.used_quota,
         "remaining_quota": session.remaining_quota,
         "total_quota": session.total_quota,
+    }
+
+
+async def redeem_card_async(card_code: str) -> Dict[str, Any]:
+    session = _require_authenticated_session()
+    normalized_card_code = str(card_code or "").strip()
+    response = await _apost_json(
+        CARD_REDEEM_ENDPOINT,
+        json_body={
+            "user_id": int(session.user_id),
+            "card_code": normalized_card_code,
+        },
+    )
+    if int(getattr(response, "status_code", 0) or 0) != 200:
+        raise _extract_error_payload(response)
+    try:
+        data = response.json()
+    except Exception as exc:
+        raise RandomIPAuthError(f"invalid_response:{exc}") from exc
+    if not isinstance(data, dict):
+        raise RandomIPAuthError("invalid_response")
+
+    updated_session = _apply_quota_payload(data, log_context="随机IP额度卡密兑换响应")
+    redeemed = bool(data.get("redeemed"))
+    card_quota = _to_non_negative_quota(data.get("card_quota"), 0.0)
+    detail = str(data.get("detail") or "").strip()
+    return {
+        "redeemed": redeemed,
+        "card_quota": card_quota,
+        "detail": detail,
+        "used_quota": updated_session.used_quota,
+        "remaining_quota": updated_session.remaining_quota,
+        "total_quota": updated_session.total_quota,
     }
 
 def load_session_for_startup() -> None:

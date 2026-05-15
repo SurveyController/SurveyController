@@ -65,6 +65,7 @@ from software.ui.pages.workbench.shared.survey_entry_card import (
     SurveyEntryCard,
 )
 from software.ui.helpers.fluent_tooltip import install_tooltip_filter
+from software.ui.dialogs.quota_redeem import load_shop_icon
 from software.ui.widgets.config_drawer import ConfigDrawer
 from software.ui.widgets.full_width_infobar import FullWidthInfoBar
 from software.ui.widgets.no_wheel import NoWheelSpinBox
@@ -166,10 +167,10 @@ class DashboardPage(
         self._ip_low_infobar.hide()
         self._ip_low_infobar.closeButton.clicked.connect(self._on_ip_low_infobar_closed)
         self._ip_low_contact_link = HyperlinkButton(
-            FluentIcon.LINK, "", "前往申请", self._ip_low_infobar
+            FluentIcon.LINK, "", "前往兑换", self._ip_low_infobar
         )
         self._ip_low_contact_link.clicked.connect(
-            lambda: self._open_contact_dialog(default_type="额度申请", lock_message_type=True)
+            lambda: self._open_quota_redeem_dialog()
         )
         self._ip_low_infobar.addWidget(self._ip_low_contact_link)
         layout.addWidget(self._ip_low_infobar)
@@ -258,7 +259,7 @@ class DashboardPage(
         quota_layout.setContentsMargins(18, 14, 18, 14)
         quota_layout.setSpacing(8)
         quota_layout.setAlignment(Qt.AlignmentFlag.AlignTop)
-        quota_title_label = BodyLabel("随机IP额度", self.random_ip_quota_card)
+        quota_title_label = BodyLabel("剩余随机IP额度", self.random_ip_quota_card)
         quota_layout.addWidget(quota_title_label, 0, Qt.AlignmentFlag.AlignHCenter)
 
         self.random_ip_status_row = QWidget(self.random_ip_quota_card)
@@ -286,8 +287,10 @@ class DashboardPage(
         self.random_ip_usage_ring.setStrokeWidth(8)
         quota_layout.addWidget(self.random_ip_usage_ring, 0, Qt.AlignmentFlag.AlignHCenter)
 
-        self.card_btn = PushButton("申请额度", self.random_ip_quota_card)
-        self.card_btn.setIcon(FluentIcon.FINGERPRINT)
+        self.card_btn = PushButton("额度兑换", self.random_ip_quota_card)
+        shop_icon = load_shop_icon()
+        if shop_icon is not None:
+            self.card_btn.setIcon(shop_icon)
         install_tooltip_filter(self.card_btn)
         quota_layout.addWidget(self.card_btn, 0, Qt.AlignmentFlag.AlignHCenter)
 

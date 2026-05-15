@@ -34,6 +34,7 @@ from software.ui.pages.workbench.session import (
 )
 
 from software.ui.dialogs.contact import ContactDialog
+from software.ui.dialogs.quota_redeem import QuotaRedeemDialog
 
 from software.ui.controller.run_controller import RunController
 from software.ui.shell.main_window_parts.dialogs import MainWindowDialogsMixin
@@ -103,6 +104,8 @@ class MainWindow(
         self._async_dialog_refs = []
         self._contact_dialog = None
         self._contact_dialog_active = False
+        self._quota_redeem_dialog = None
+        self._quota_redeem_dialog_active = False
         self._startup_update_check_timer = None
         self._startup_update_check_completed = False
         self._startup_update_check_suspended = False
@@ -661,7 +664,49 @@ class MainWindow(
             self.show_task_result_windows_notification("任务失败", text)
 
     def _open_quota_request_form(self) -> bool:
-        return self._open_contact_dialog(default_type="额度申请", lock_message_type=True)
+        return self._open_quota_redeem_dialog()
+
+    def _open_quota_redeem_dialog(self) -> bool:
+        dialog = getattr(self, "_quota_redeem_dialog", None)
+        if dialog is not None and isValid(dialog):
+            try:
+                dialog.raise_()
+                dialog.activateWindow()
+            except Exception:
+                logging.info("额度兑换窗口前置失败", exc_info=True)
+            return False
+
+        dlg = QuotaRedeemDialog(self)
+        self._quota_redeem_dialog = dlg
+        self._quota_redeem_dialog_active = True
+        dlg.finished.connect(self._on_quota_redeem_dialog_finished_event)
+        dlg.destroyed.connect(self._on_quota_redeem_dialog_destroyed_event)
+        accepted = dlg.exec() == QDialog.DialogCode.Accepted
+        if accepted:
+            self.controller.refresh_random_ip_counter()
+        return accepted
+
+    def _on_quota_redeem_dialog_finished(self, dialog: QDialog) -> None:
+        self._on_quota_redeem_dialog_destroyed(dialog)
+
+    @Slot(int)
+    def _on_quota_redeem_dialog_finished_event(self, _result: int) -> None:
+        dialog = self.sender()
+        if not isinstance(dialog, QDialog):
+            return
+        self._on_quota_redeem_dialog_finished(dialog)
+
+    def _on_quota_redeem_dialog_destroyed(self, dialog: QDialog) -> None:
+        current_dialog = getattr(self, "_quota_redeem_dialog", None)
+        if current_dialog is dialog:
+            self._quota_redeem_dialog = None
+            self._quota_redeem_dialog_active = False
+
+    @Slot()
+    def _on_quota_redeem_dialog_destroyed_event(self, *_args) -> None:
+        dialog = getattr(self, "_quota_redeem_dialog", None)
+        if isinstance(dialog, QDialog):
+            self._on_quota_redeem_dialog_destroyed(dialog)
 
     def _sync_reverse_fill_context(self) -> None:
         try:

@@ -28,6 +28,7 @@ from software.network.proxy.session import (
     has_authenticated_session,
     has_unknown_local_quota,
     is_quota_exhausted,
+    redeem_card_async,
 )
 
 __all__ = [
@@ -51,5 +52,6 @@ __all__ = [
     "load_area_codes",
     "load_benefit_supported_areas",
     "load_supported_area_codes",
+    "redeem_card_async",
     "test_custom_proxy_api",
 ]

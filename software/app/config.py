@@ -146,6 +146,7 @@ def get_proxy_auth() -> str:
 _DEFAULT_CONTACT_API = "https://bot.hungrym0.top"
 _DEFAULT_AUTH_TRIAL = "https://api-wjx.hungrym0.top/api/auth/trial"
 _DEFAULT_AUTH_BONUS_CLAIM = "https://api-wjx.hungrym0.top/api/bonus"
+_DEFAULT_CARD_REDEEM_ENDPOINT = "https://api-wjx.hungrym0.top/api/cards/redeem"
 _DEFAULT_IP_EXTRACT_ENDPOINT = "https://api-wjx.hungrym0.top/api/ip/extract"
 _DEFAULT_AI_FREE_ENDPOINT = "https://api-wjx.hungrym0.top/api/ai/free"
 _DEFAULT_STATUS_ENDPOINT = "https://api-wjx.hungrym0.top/api/status"
@@ -250,6 +251,7 @@ PROXY_POOL_QUALITY = "quality"
 CONTACT_API_URL = _resolve_env_value("CONTACT_API_URL", _DEFAULT_CONTACT_API)
 AUTH_TRIAL_ENDPOINT = _resolve_env_value("AUTH_TRIAL_ENDPOINT", _DEFAULT_AUTH_TRIAL)
 AUTH_BONUS_CLAIM_ENDPOINT = _resolve_env_value("AUTH_BONUS_CLAIM_ENDPOINT", _DEFAULT_AUTH_BONUS_CLAIM)
+CARD_REDEEM_ENDPOINT = _resolve_env_value("CARD_REDEEM_ENDPOINT", _DEFAULT_CARD_REDEEM_ENDPOINT)
 IP_EXTRACT_ENDPOINT = _resolve_env_value("IP_EXTRACT_ENDPOINT", _DEFAULT_IP_EXTRACT_ENDPOINT)
 AI_FREE_ENDPOINT = _resolve_env_value("AI_FREE_ENDPOINT", _DEFAULT_AI_FREE_ENDPOINT)
 STATUS_ENDPOINT = _resolve_env_value("STATUS_ENDPOINT", _DEFAULT_STATUS_ENDPOINT)

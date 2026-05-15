@@ -42,7 +42,11 @@ class WjxStarttimeTests:
             return False
 
         monkeypatch.setattr(starttime, "try_apply_submit_starttime", _fake_try_apply)
-        monkeypatch.setattr(starttime, "sample_answer_duration_seconds", lambda _range: 42.5)
+        monkeypatch.setattr(
+            starttime,
+            "sample_answer_duration_seconds",
+            lambda _range, survey_provider=None: 42.5,
+        )
         monkeypatch.setattr(starttime, "wait_answer_duration_seconds", _fake_wait)
 
         interrupted = await starttime.prepare_answer_duration_before_submit(
@@ -63,7 +67,11 @@ class WjxStarttimeTests:
             return True
 
         monkeypatch.setattr(starttime, "try_apply_submit_starttime", _fake_try_apply)
-        monkeypatch.setattr(starttime, "sample_answer_duration_seconds", lambda _range: 15.0)
+        monkeypatch.setattr(
+            starttime,
+            "sample_answer_duration_seconds",
+            lambda _range, survey_provider=None: 15.0,
+        )
         monkeypatch.setattr(starttime, "wait_answer_duration_seconds", _fake_wait)
 
         interrupted = await starttime.prepare_answer_duration_before_submit(

@@ -30,6 +30,7 @@ class MainWindowLifecycleMixin:
         _async_dialog_refs: Any
         _boot_splash: Any
         _contact_dialog: Any
+        _quota_redeem_dialog: Any
         _log_page: Any
         _random_ip_quota_auto_sync_timer: Any
         _skip_save_on_close: bool
@@ -89,6 +90,13 @@ class MainWindowLifecycleMixin:
                 dialog.close()
         except Exception as exc:
             log_suppressed_exception("closeEvent: self._contact_dialog.close()", exc)
+
+        try:
+            dialog = getattr(self, "_quota_redeem_dialog", None)
+            if dialog is not None:
+                dialog.close()
+        except Exception as exc:
+            log_suppressed_exception("closeEvent: self._quota_redeem_dialog.close()", exc)
 
         try:
             for dialog in list(getattr(self, "_async_dialog_refs", []) or []):

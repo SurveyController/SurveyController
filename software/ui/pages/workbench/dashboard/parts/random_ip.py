@@ -7,11 +7,12 @@ import threading
 from typing import TYPE_CHECKING, Any, Optional, cast
 from PySide6.QtGui import QColor
 from PySide6.QtWidgets import QDialog
-from qfluentwidgets import FluentIcon, themeColor
+from qfluentwidgets import themeColor
 
 import software.network.http as http_client
 
 from software.ui.dialogs.contact import ContactDialog
+from software.ui.dialogs.quota_redeem import QuotaRedeemDialog, load_shop_icon
 from software.app.config import DEFAULT_HTTP_HEADERS, IP_EXTRACT_ENDPOINT, STATUS_ENDPOINT
 from software.logging.log_utils import log_suppressed_exception
 from software.ui.controller.run_controller_parts.runtime_constants import (
@@ -222,6 +223,10 @@ class DashboardRandomIPMixin:
         unknown_local_quota = has_unknown_local_quota(snapshot)
         used = max(0.0, float(count or 0.0))
         total = max(0.0, float(limit or 0.0))
+        remaining_snapshot = max(0.0, float(snapshot.get("remaining_quota") or 0.0))
+        remaining = min(total, remaining_snapshot) if total > 0 else remaining_snapshot
+        if total > 0 and remaining_snapshot <= 0:
+            remaining = max(0.0, total - used)
         quota_exhausted = is_quota_exhausted(
             {
                 "authenticated": authenticated,
@@ -231,13 +236,15 @@ class DashboardRandomIPMixin:
             }
         )
         self.card_btn.setEnabled(True)
-        self.card_btn.setText("申请额度")
-        self.card_btn.setIcon(FluentIcon.FINGERPRINT)
+        self.card_btn.setText("额度兑换")
+        shop_icon = load_shop_icon()
+        if shop_icon is not None:
+            self.card_btn.setIcon(shop_icon)
         if authenticated:
-            self.card_btn.setToolTip("提交额度申请后，开发者会人工补充随机IP额度")
+            self.card_btn.setToolTip("输入额度卡密后，系统会把额度直接充到当前随机IP账号")
         else:
             self.card_btn.setToolTip(
-                "勾选随机IP会自动尝试领取试用；试用不可用时可在这里提交额度申请"
+                "先勾选随机IP领取试用账号，之后才能在这里兑换额度卡密"
             )
 
         if custom_api:
@@ -264,8 +271,8 @@ class DashboardRandomIPMixin:
             self._update_ip_low_infobar(count, limit, custom_api)
             self._update_ip_cost_infobar(custom_api)
             return
-        quota_text = f"{format_quota_value(used)}/{format_quota_value(total)}"
-        percent = 0 if total <= 0 else max(0, min(int(round((used / total) * 100)), 100))
+        quota_text = f"{format_quota_value(remaining)}/{format_quota_value(total)}"
+        percent = 0 if total <= 0 else max(0, min(int(round((remaining / total) * 100)), 100))
         self._sync_random_ip_usage_ring(
             mode="error" if quota_exhausted else "normal",
             percent=percent,
@@ -300,10 +307,10 @@ class DashboardRandomIPMixin:
     def _apply_random_ip_usage_ring_color(self, percent: int) -> None:
         try:
             value = max(0, min(int(percent), 100))
-            if value >= 95:
+            if value <= 5:
                 self.random_ip_usage_ring.setCustomBarColor(QColor("#C42B1C"), QColor("#FF99A4"))
                 return
-            if value >= 80:
+            if value <= 20:
                 self.random_ip_usage_ring.setCustomBarColor(QColor("#C77900"), QColor("#FFB347"))
                 return
             accent = themeColor()
@@ -415,12 +422,27 @@ class DashboardRandomIPMixin:
             return False
         return dlg.exec() == QDialog.DialogCode.Accepted
 
+    def _open_quota_redeem_dialog(self):
+        """打开额度兑换对话框。"""
+        win = self.window()
+        if hasattr(win, "_open_quota_redeem_dialog"):
+            try:
+                return win._open_quota_redeem_dialog()  # type: ignore[union-attr]
+            except Exception as exc:
+                log_suppressed_exception(
+                    "_open_quota_redeem_dialog passthrough",
+                    exc,
+                    level=logging.WARNING,
+                )
+        dlg = QuotaRedeemDialog(self)
+        return dlg.exec() == QDialog.DialogCode.Accepted
+
     def _clear_dashboard_contact_dialog_ref(self, *_args) -> None:
         self._contact_dialog = None
 
     def _on_request_quota_clicked(self):
-        """用户主动打开额度申请表单。"""
-        if self._open_contact_dialog(default_type="额度申请", lock_message_type=True):
+        """用户主动打开额度兑换弹窗。"""
+        if self._open_quota_redeem_dialog():
             self.controller.refresh_random_ip_counter()
 
     def _on_ip_low_infobar_closed(self):

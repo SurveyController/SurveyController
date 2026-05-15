@@ -15,6 +15,7 @@ from software.network.proxy.session.auth import (
     has_unknown_local_quota,
     is_quota_exhausted,
     load_session_for_startup,
+    redeem_card_async,
     sync_quota_snapshot_from_server_async,
 )
 
@@ -33,5 +34,6 @@ __all__ = [
     "has_unknown_local_quota",
     "is_quota_exhausted",
     "load_session_for_startup",
+    "redeem_card_async",
     "sync_quota_snapshot_from_server_async",
 ]

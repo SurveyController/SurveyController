@@ -279,3 +279,42 @@ class RandomIPSessionAuthTests:
         assert result["bonus_quota"] == 5.0
         assert result["remaining_quota"] == 6.0
         assert auth._session.total_quota == 7.0
+
+    def test_redeem_card_updates_quota_snapshot(self, patch_attrs) -> None:
+        _reset_auth_state(
+            RandomIPSession(
+                device_id="device-7",
+                user_id=55,
+                remaining_quota=1,
+                total_quota=2,
+                used_quota=1,
+                quota_known=True,
+            )
+        )
+        settings = _Settings()
+
+        async def fake_redeem_post(_url: str, *, json_body: dict[str, object]):
+            assert json_body == {"user_id": 55, "card_code": "abc123"}
+            return _Response(
+                {
+                    "redeemed": True,
+                    "card_quota": 400,
+                    "remaining_quota": 401,
+                    "total_quota": 402,
+                    "used_quota": 1,
+                    "detail": "redeem_card_redeemed",
+                }
+            )
+
+        patch_attrs(
+            (auth, "_get_settings", lambda: settings),
+            (auth, "set_secret", lambda *_args, **_kwargs: None),
+            (auth, "_apost_json", fake_redeem_post),
+        )
+
+        result = asyncio.run(auth.redeem_card_async("abc123"))
+
+        assert result["redeemed"] is True
+        assert result["card_quota"] == 400.0
+        assert result["remaining_quota"] == 401.0
+        assert auth._session.total_quota == 402.0
