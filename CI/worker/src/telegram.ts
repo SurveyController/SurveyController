@@ -1,10 +1,15 @@
-import { jsonResponse } from "./response.js";
-import { TELEGRAM_FETCH_TIMEOUT_MS } from "./constants.js";
+import { jsonResponse } from "./response";
+import { TELEGRAM_FETCH_TIMEOUT_MS } from "./constants";
+import type { Env, TelegramCallbackQuery, TelegramUser } from "./types";
 
-async function sendTelegramRequest(apiBase, endpoint, init) {
+type ReplyMarkup = Record<string, unknown>;
+type TelegramChatId = string | number;
+
+async function sendTelegramRequest<T>(apiBase: string, endpoint: string, init: RequestInit): Promise<T> {
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort("telegram_timeout"), TELEGRAM_FETCH_TIMEOUT_MS);
-  let response;
+  let response: Response;
+
   try {
     response = await fetch(`${apiBase}/${endpoint}`, {
       ...init,
@@ -18,23 +23,34 @@ async function sendTelegramRequest(apiBase, endpoint, init) {
   } finally {
     clearTimeout(timeoutId);
   }
-  let payload = null;
 
+  let payload: unknown = null;
   try {
     payload = await response.json();
   } catch {
     payload = null;
   }
 
-  if (!response.ok || !payload?.ok) {
-    const description = payload?.description || `telegram_request_failed_${response.status}`;
+  const record = payload && typeof payload === "object" ? (payload as Record<string, unknown>) : {};
+  const ok = record.ok === true;
+
+  if (!response.ok || !ok) {
+    const description =
+      typeof record.description === "string" && record.description.trim()
+        ? record.description
+        : `telegram_request_failed_${response.status}`;
     throw new Error(description);
   }
 
-  return payload.result;
+  return record.result as T;
 }
 
-export async function sendMessage(apiBase, chatId, text, options = {}) {
+export async function sendMessage(
+  apiBase: string,
+  chatId: TelegramChatId,
+  text: string,
+  options: Record<string, unknown> = {},
+): Promise<unknown> {
   return sendTelegramRequest(apiBase, "sendMessage", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -46,10 +62,16 @@ export async function sendMessage(apiBase, chatId, text, options = {}) {
   });
 }
 
-async function sendSingleFile(apiBase, chatId, file, caption, options = {}) {
-  const isImage = file.type && file.type.startsWith("image/");
+async function sendSingleFile(
+  apiBase: string,
+  chatId: TelegramChatId,
+  file: File,
+  caption?: string,
+  options: { reply_markup?: ReplyMarkup } = {},
+): Promise<unknown> {
+  const isImage = file.type.startsWith("image/");
   const form = new FormData();
-  form.append("chat_id", chatId);
+  form.append("chat_id", String(chatId));
   form.append(isImage ? "photo" : "document", file, file.name || "upload");
   if (caption) {
     form.append("caption", caption);
@@ -64,30 +86,36 @@ async function sendSingleFile(apiBase, chatId, file, caption, options = {}) {
   });
 }
 
-export function splitFilesByType(fileList) {
-  const images = [];
-  const documents = [];
+export function splitFilesByType(fileList: File[]): { images: File[]; documents: File[] } {
+  const images: File[] = [];
+  const documents: File[] = [];
+
   for (const file of fileList) {
-    const isImage = file.type && file.type.startsWith("image/");
-    if (isImage) {
+    if (file.type.startsWith("image/")) {
       images.push(file);
     } else {
       documents.push(file);
     }
   }
+
   return { images, documents };
 }
 
-async function sendMediaGroup(apiBase, chatId, fileList, caption) {
+async function sendMediaGroup(
+  apiBase: string,
+  chatId: TelegramChatId,
+  fileList: File[],
+  caption?: string,
+): Promise<unknown> {
   const form = new FormData();
-  form.append("chat_id", chatId);
+  form.append("chat_id", String(chatId));
 
   const media = fileList.map((file, index) => {
     const name = `file${index + 1}`;
-    const isImage = file.type && file.type.startsWith("image/");
+    const isImage = file.type.startsWith("image/");
     form.append(name, file, file.name || name);
 
-    const item = {
+    const item: Record<string, unknown> = {
       type: isImage ? "photo" : "document",
       media: `attach://${name}`,
     };
@@ -106,9 +134,15 @@ async function sendMediaGroup(apiBase, chatId, fileList, caption) {
   });
 }
 
-export async function sendHomogeneousFiles(apiBase, chatId, fileList, caption, options = {}) {
+export async function sendHomogeneousFiles(
+  apiBase: string,
+  chatId: TelegramChatId,
+  fileList: File[],
+  caption?: string,
+  options: { reply_markup?: ReplyMarkup } = {},
+): Promise<unknown> {
   if (!fileList.length) {
-    return;
+    return null;
   }
   if (fileList.length === 1) {
     return sendSingleFile(apiBase, chatId, fileList[0], caption, options);
@@ -116,33 +150,30 @@ export async function sendHomogeneousFiles(apiBase, chatId, fileList, caption, o
   return sendMediaGroup(apiBase, chatId, fileList, caption);
 }
 
-function buildTaskCallbackData(userId) {
+function buildTaskCallbackData(userId: string): string {
   return `done:${userId}`;
 }
 
-export function buildTaskReplyMarkup(userId) {
+export function buildTaskReplyMarkup(userId: string): ReplyMarkup {
   return {
     inline_keyboard: [[{ text: "点击标记为已处理", callback_data: buildTaskCallbackData(userId) }]],
   };
 }
 
-export async function ensureTelegramWebhook(apiBase, webhookUrl) {
-  return sendTelegramRequest(apiBase, "setWebhook", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      url: webhookUrl,
-      allowed_updates: ["callback_query"],
-    }),
-  });
+export function verifyTelegramWebhookSecret(request: Request, env: Env): boolean {
+  const expected = typeof env.TELEGRAM_WEBHOOK_SECRET === "string" ? env.TELEGRAM_WEBHOOK_SECRET.trim() : "";
+  if (!expected) {
+    return true;
+  }
+  return request.headers.get("X-Telegram-Bot-Api-Secret-Token") === expected;
 }
 
-function escapeMarkdownV2(value) {
-  return String(value).replace(/([_*\[\]()~`>#+\-=|{}.!\\])/g, "\\$1");
+function escapeMarkdownV2(value: string): string {
+  return value.replace(/([_*\[\]()~`>#+\-=|{}.!\\])/g, "\\$1");
 }
 
-function parseTaskCallbackData(data) {
-  if (typeof data !== "string" || !data.startsWith("done:")) {
+function parseTaskCallbackData(data: string | undefined): { userId: string } | null {
+  if (!data || !data.startsWith("done:")) {
     return null;
   }
 
@@ -154,7 +185,7 @@ function parseTaskCallbackData(data) {
   return { userId };
 }
 
-async function answerCallbackQuery(apiBase, callbackQueryId, text) {
+async function answerCallbackQuery(apiBase: string, callbackQueryId: string, text: string): Promise<void> {
   await sendTelegramRequest(apiBase, "answerCallbackQuery", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -165,8 +196,8 @@ async function answerCallbackQuery(apiBase, callbackQueryId, text) {
   });
 }
 
-function getActorDisplayName(from) {
-  if (!from || typeof from !== "object") {
+function getActorDisplayName(from: TelegramUser | undefined): string {
+  if (!from) {
     return "未知用户";
   }
 
@@ -180,15 +211,15 @@ function getActorDisplayName(from) {
   return String(from.id || "未知用户");
 }
 
-export async function handleCallbackQuery(apiBase, callbackQuery) {
-  const parsed = parseTaskCallbackData(callbackQuery?.data);
+export async function handleCallbackQuery(apiBase: string, callbackQuery: TelegramCallbackQuery): Promise<Response> {
+  const parsed = parseTaskCallbackData(callbackQuery.data);
   if (!parsed) {
     return jsonResponse({ error: "unsupported_callback_query" }, 400);
   }
 
-  const callbackQueryId = callbackQuery?.id;
-  const chatId = callbackQuery?.message?.chat?.id;
-  const actorId = callbackQuery?.from?.id;
+  const callbackQueryId = callbackQuery.id;
+  const chatId = callbackQuery.message?.chat?.id;
+  const actorId = callbackQuery.from?.id;
   if (!callbackQueryId || chatId === undefined || actorId === undefined) {
     return jsonResponse({ error: "invalid_callback_query_payload" }, 400);
   }

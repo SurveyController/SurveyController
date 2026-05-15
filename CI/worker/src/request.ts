@@ -1,14 +1,32 @@
-import { extractUserIdFromMessage, normalizeMessageType } from "./message.js";
-import { jsonResponse } from "./response.js";
+import { extractUserIdFromMessage, normalizeMessageType } from "./message";
+import { jsonResponse } from "./response";
+import type { ContactPayload, TelegramUpdate, ValidationResult } from "./types";
 
-export async function parseIncomingRequest(request) {
+function readStringRecordValue(source: Record<string, unknown>, ...keys: string[]): string {
+  for (const key of keys) {
+    const value = source[key];
+    if (typeof value === "string") {
+      return value.trim();
+    }
+  }
+  return "";
+}
+
+function isRequestFile(value: unknown): value is File {
+  if (!value || typeof value !== "object") {
+    return false;
+  }
+  return typeof (value as File).arrayBuffer === "function" && typeof (value as File).name === "string";
+}
+
+export async function parseIncomingRequest(request: Request): Promise<ContactPayload> {
   const contentType = request.headers.get("Content-Type") || "";
   let message = "";
   let userId = "";
   let messageType = "";
   let issueTitle = "";
   let timestamp = "";
-  const files = [];
+  const files: File[] = [];
 
   if (contentType.includes("multipart/form-data") || contentType.includes("form-data")) {
     const form = await request.formData();
@@ -16,29 +34,34 @@ export async function parseIncomingRequest(request) {
     if (typeof maybeMessage === "string") {
       message = maybeMessage;
     }
+
     const maybeUserId = form.get("userId") ?? form.get("user_id");
     if (typeof maybeUserId === "string") {
       userId = maybeUserId.trim();
     }
+
     const maybeMessageType = form.get("messageType") ?? form.get("message_type");
     if (typeof maybeMessageType === "string") {
       messageType = maybeMessageType.trim();
     }
+
     const maybeIssueTitle = form.get("issueTitle") ?? form.get("issue_title");
     if (typeof maybeIssueTitle === "string") {
       issueTitle = maybeIssueTitle.trim();
     }
+
     const maybeTimestamp = form.get("timestamp");
     if (typeof maybeTimestamp === "string") {
       timestamp = maybeTimestamp.trim();
     }
+
     if (!userId) {
       userId = extractUserIdFromMessage(message);
     }
     messageType = normalizeMessageType(messageType, message);
 
     for (const [, value] of form.entries()) {
-      if (value instanceof File) {
+      if (isRequestFile(value)) {
         files.push(value);
       }
     }
@@ -48,31 +71,23 @@ export async function parseIncomingRequest(request) {
 
   if (contentType.includes("application/json")) {
     const body = await request.json();
-    if (typeof body?.message === "string") {
-      message = body.message;
+    if (body && typeof body === "object") {
+      const record = body as Record<string, unknown>;
+      const maybeMessage = record.message;
+      if (typeof maybeMessage === "string") {
+        message = maybeMessage;
+      }
+      userId = readStringRecordValue(record, "userId", "user_id");
+      messageType = readStringRecordValue(record, "messageType", "message_type");
+      issueTitle = readStringRecordValue(record, "issueTitle", "issue_title");
+      timestamp = readStringRecordValue(record, "timestamp");
     }
-    if (typeof body?.userId === "string") {
-      userId = body.userId.trim();
-    } else if (typeof body?.user_id === "string") {
-      userId = body.user_id.trim();
-    }
-    if (typeof body?.messageType === "string") {
-      messageType = body.messageType.trim();
-    } else if (typeof body?.message_type === "string") {
-      messageType = body.message_type.trim();
-    }
-    if (typeof body?.issueTitle === "string") {
-      issueTitle = body.issueTitle.trim();
-    } else if (typeof body?.issue_title === "string") {
-      issueTitle = body.issue_title.trim();
-    }
-    if (typeof body?.timestamp === "string") {
-      timestamp = body.timestamp.trim();
-    }
+
     if (!userId) {
       userId = extractUserIdFromMessage(message);
     }
     messageType = normalizeMessageType(messageType, message);
+
     return { message, files, userId, messageType, issueTitle, timestamp };
   }
 
@@ -85,7 +100,7 @@ export async function parseIncomingRequest(request) {
   return { message, files, userId, messageType, issueTitle, timestamp };
 }
 
-export function validatePayload(message, files) {
+export function validatePayload(message: string, files: File[]): ValidationResult {
   const maxFiles = 6;
   const maxFileSize = 10 * 1024 * 1024;
 
@@ -106,20 +121,20 @@ export function validatePayload(message, files) {
   return { ok: true };
 }
 
-export async function parseTelegramUpdate(request) {
+export async function parseTelegramUpdate(request: Request): Promise<TelegramUpdate | null> {
   const contentType = request.headers.get("Content-Type") || "";
   if (!contentType.includes("application/json")) {
     return null;
   }
 
   try {
-    const body = await request.clone().json();
-    if (body?.callback_query) {
-      return body;
+    const body = await request.json();
+    if (!body || typeof body !== "object") {
+      return null;
     }
+    const update = body as TelegramUpdate;
+    return update.callback_query ? update : null;
   } catch {
     return null;
   }
-
-  return null;
 }

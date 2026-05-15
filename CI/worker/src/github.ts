@@ -3,17 +3,18 @@ import {
   DEFAULT_GITHUB_REPO,
   GITHUB_API_VERSION,
   GITHUB_FETCH_TIMEOUT_MS,
-} from "./constants.js";
+} from "./constants";
 import {
   extractIssueMessageContent,
   extractIssueTitleFromMessage,
   extractVersionFromMessage,
   sanitizeIssueTitle,
-} from "./message.js";
+} from "./message";
+import type { ContactPayload, Env, GitHubIssueResult } from "./types";
 
 const DEFAULT_GITHUB_ISSUE_LABELS = ["bot"];
 
-async function fetchWithTimeout(url, init, timeoutMs = GITHUB_FETCH_TIMEOUT_MS) {
+async function fetchWithTimeout(url: string, init: RequestInit, timeoutMs = GITHUB_FETCH_TIMEOUT_MS): Promise<Response> {
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort("github_timeout"), timeoutMs);
   try {
@@ -31,8 +32,16 @@ async function fetchWithTimeout(url, init, timeoutMs = GITHUB_FETCH_TIMEOUT_MS) 
   }
 }
 
-function escapeHtml(value) {
-  return String(value)
+async function safeJson(response: Response): Promise<unknown> {
+  try {
+    return await response.json();
+  } catch {
+    return null;
+  }
+}
+
+function escapeHtml(value: string): string {
+  return value
     .replace(/&/g, "&amp;")
     .replace(/</g, "&lt;")
     .replace(/>/g, "&gt;")
@@ -40,17 +49,17 @@ function escapeHtml(value) {
     .replace(/'/g, "&#39;");
 }
 
-function isGitHubLogFile(file) {
-  const fileName = typeof file?.name === "string" ? file.name.toLowerCase() : "";
+function isGitHubLogFile(file: File): boolean {
+  const fileName = typeof file.name === "string" ? file.name.toLowerCase() : "";
   return fileName === "fatal_crash.log" || (fileName.startsWith("bug_report_log_") && fileName.endsWith(".txt"));
 }
 
-async function buildGitHubLogSections(files) {
-  if (!Array.isArray(files) || files.length === 0) {
+async function buildGitHubLogSections(files: File[]): Promise<string[]> {
+  if (files.length === 0) {
     return [];
   }
 
-  const sections = [];
+  const sections: string[] = [];
   for (const file of files) {
     if (!isGitHubLogFile(file)) {
       continue;
@@ -86,7 +95,7 @@ async function buildGitHubLogSections(files) {
   return sections;
 }
 
-function buildGitHubIssueTitle({ issueTitle, message }) {
+function buildGitHubIssueTitle({ issueTitle, message }: Pick<ContactPayload, "issueTitle" | "message">): string {
   const explicitTitle = sanitizeIssueTitle(issueTitle);
   if (explicitTitle) {
     return explicitTitle;
@@ -105,12 +114,12 @@ function buildGitHubIssueTitle({ issueTitle, message }) {
   return "报错反馈";
 }
 
-async function buildGitHubIssueBody({ message, files }) {
+async function buildGitHubIssueBody({ message, files }: Pick<ContactPayload, "message" | "files">): Promise<string> {
   const version = extractVersionFromMessage(message);
   const issueMessage = extractIssueMessageContent(message);
   const logSections = await buildGitHubLogSections(files);
 
-  const lines = [];
+  const lines: string[] = [];
   if (version) {
     lines.push(`版本号：SurveyController v${version}`);
   }
@@ -126,7 +135,7 @@ async function buildGitHubIssueBody({ message, files }) {
   return lines.join("\n");
 }
 
-function parseConfiguredIssueLabels(env) {
+function parseConfiguredIssueLabels(env: Env): string[] {
   const raw = typeof env.GITHUB_ISSUE_LABELS === "string" ? env.GITHUB_ISSUE_LABELS : "";
   const configuredLabels = raw
     .split(",")
@@ -136,11 +145,11 @@ function parseConfiguredIssueLabels(env) {
   return configuredLabels.length > 0 ? configuredLabels : DEFAULT_GITHUB_ISSUE_LABELS;
 }
 
-async function fetchExistingGitHubLabels({ owner, repo, token }) {
-  const response = await fetchWithTimeout(`https://api.github.com/repos/${owner}/${repo}/labels?per_page=100`, {
+async function fetchExistingGitHubLabels(args: { owner: string; repo: string; token: string }): Promise<Set<string>> {
+  const response = await fetchWithTimeout(`https://api.github.com/repos/${args.owner}/${args.repo}/labels?per_page=100`, {
     method: "GET",
     headers: {
-      Authorization: `Bearer ${token}`,
+      Authorization: `Bearer ${args.token}`,
       Accept: "application/vnd.github+json",
       "User-Agent": "SurveyController-Worker",
       "X-GitHub-Api-Version": GITHUB_API_VERSION,
@@ -151,26 +160,29 @@ async function fetchExistingGitHubLabels({ owner, repo, token }) {
     return new Set();
   }
 
-  let result = null;
-  try {
-    result = await response.json();
-  } catch {
-    result = null;
-  }
-
+  const result = await safeJson(response);
   if (!Array.isArray(result)) {
     return new Set();
   }
 
   return new Set(
     result
-      .map((label) => (typeof label?.name === "string" ? label.name.trim() : ""))
+      .map((label) => {
+        if (!label || typeof label !== "object") {
+          return "";
+        }
+        const name = (label as { name?: unknown }).name;
+        return typeof name === "string" ? name.trim() : "";
+      })
       .filter(Boolean),
   );
 }
 
-export async function createGitHubIssue(env, payload) {
-  const token = env.GITHUB_TOKEN;
+export async function createGitHubIssue(
+  env: Env,
+  payload: Pick<ContactPayload, "issueTitle" | "message" | "files">,
+): Promise<GitHubIssueResult | null> {
+  const token = typeof env.GITHUB_TOKEN === "string" ? env.GITHUB_TOKEN.trim() : "";
   if (!token) {
     return null;
   }
@@ -179,6 +191,7 @@ export async function createGitHubIssue(env, payload) {
   const repo = env.GITHUB_REPO || DEFAULT_GITHUB_REPO;
   const existingLabels = await fetchExistingGitHubLabels({ owner, repo, token });
   const labels = parseConfiguredIssueLabels(env).filter((label) => existingLabels.has(label));
+
   const response = await fetchWithTimeout(`https://api.github.com/repos/${owner}/${repo}/issues`, {
     method: "POST",
     headers: {
@@ -195,20 +208,19 @@ export async function createGitHubIssue(env, payload) {
     }),
   });
 
-  let result = null;
-  try {
-    result = await response.json();
-  } catch {
-    result = null;
-  }
+  const result = await safeJson(response);
+  const record = result && typeof result === "object" ? (result as Record<string, unknown>) : {};
 
   if (!response.ok) {
-    const message = result?.message || `github_issue_create_failed_${response.status}`;
+    const message =
+      typeof record.message === "string" && record.message.trim()
+        ? record.message
+        : `github_issue_create_failed_${response.status}`;
     throw new Error(message);
   }
 
   return {
-    number: result?.number || 0,
-    url: result?.html_url || "",
+    number: typeof record.number === "number" ? record.number : 0,
+    url: typeof record.html_url === "string" ? record.html_url : "",
   };
 }
