@@ -258,6 +258,133 @@ async def _question_signature(page: Any) -> tuple[tuple[str, str], ...]:
     return tuple(signature)
 
 
+async def _is_answerable_root(page: Any, root: BrowserElement) -> bool:
+    kind = await _question_kind_from_root(page, root)
+    if kind in {"single", "multiple", "dropdown", "scale", "order", "matrix", "text", "multi_text"}:
+        return True
+    try:
+        option_like_count = int(
+            await page.evaluate(
+                r"""
+                (el) => {
+                  const selectors = [
+                    '.choice-text',
+                    '.single-choice',
+                    '.multi-choice',
+                    '.pc-dropdown',
+                    '.el-select',
+                    '.scale',
+                    '.nps-item',
+                    '.el-rate__item',
+                    '.rank-order',
+                    'input[type="radio"]',
+                    'input[type="checkbox"]',
+                    '[role="radio"]',
+                    '[role="checkbox"]'
+                  ];
+                  return selectors.reduce((total, selector) => total + el.querySelectorAll(selector).length, 0);
+                }
+                """,
+                root,
+            )
+            or 0
+        )
+    except Exception:
+        option_like_count = 0
+    if option_like_count > 0:
+        return True
+    try:
+        text_input_count = len(await _text_inputs(root))
+    except Exception:
+        text_input_count = 0
+    return text_input_count > 0
+
+
+async def _question_answer_state(page: Any, root: BrowserElement, *, kind: str = "") -> Optional[bool]:
+    resolved_kind = str(kind or "").strip().lower()
+    if not resolved_kind:
+        resolved_kind = await _question_kind_from_root(page, root)
+    script = r"""
+([el, kind]) => {
+  const visible = (node, minWidth = 4, minHeight = 4) => {
+    if (!node) return false;
+    const style = window.getComputedStyle(node);
+    if (!style || style.display === 'none' || style.visibility === 'hidden') return false;
+    const rect = node.getBoundingClientRect();
+    return rect.width >= minWidth && rect.height >= minHeight;
+  };
+  const checkedCount = el.querySelectorAll(
+    "input[type='radio']:checked, input[type='checkbox']:checked, " +
+    "[role='radio'][aria-checked='true'], [role='checkbox'][aria-checked='true']"
+  ).length;
+  const textInputs = Array.from(
+    el.querySelectorAll(
+      "textarea, input:not([readonly])[type='text'], input:not([readonly])[type='search'], " +
+      "input:not([readonly])[type='number'], input:not([readonly])[type='tel'], " +
+      "input:not([readonly])[type='email'], input:not([readonly]):not([type])"
+    )
+  ).filter((node) => visible(node));
+  const filledTextInputs = textInputs.filter((node) => String(node.value || '').trim()).length;
+  const dropdownInputs = Array.from(
+    el.querySelectorAll(".pc-dropdown .el-input__inner, .el-select .el-input__inner, .el-input__inner")
+  ).filter((node) => visible(node));
+  const filledDropdownInputs = dropdownInputs.filter((node) => String(node.value || '').trim()).length;
+  const scaleSelectedCount = el.querySelectorAll(".scale .nps-item.selected, .nps-item.selected").length;
+  const hasVisibleError = (() => {
+    if (el.classList.contains('error')) return true;
+    const nodes = el.querySelectorAll('.question-error, .el-form-item__error');
+    return Array.from(nodes).some((node) => visible(node, 1, 1) && String(node.innerText || node.textContent || '').trim());
+  })();
+  if (hasVisibleError) return 'unanswered';
+  if (kind === 'scale') return scaleSelectedCount > 0 ? 'answered' : 'unanswered';
+  if (kind === 'single') return checkedCount > 0 ? 'answered' : 'unanswered';
+  if (kind === 'multiple') return checkedCount > 0 ? 'answered' : 'unanswered';
+  if (kind === 'dropdown') return filledDropdownInputs > 0 ? 'answered' : 'unanswered';
+  if (kind === 'text') return textInputs.length > 0 && filledTextInputs > 0 ? 'answered' : 'unanswered';
+  if (kind === 'multi_text') return textInputs.length > 0 && filledTextInputs === textInputs.length ? 'answered' : 'unanswered';
+  if (kind === 'matrix') {
+    const rows = Array.from(el.querySelectorAll('tbody tr, .matrix-row, .el-table__row')).filter((row) => visible(row));
+    const answerableRows = rows
+      .map((row) => {
+        const controls = row.querySelectorAll(
+          "input[type='radio'], [role='radio'], .el-radio, .el-radio__input"
+        );
+        return controls.length >= 2 ? row : null;
+      })
+      .filter(Boolean);
+    if (!answerableRows.length) return checkedCount > 0 ? 'answered' : 'unanswered';
+    const allRowsAnswered = answerableRows.every((row) => {
+      return row.querySelector(
+        "input[type='radio']:checked, [role='radio'][aria-checked='true'], .is-checked input[type='radio']"
+      );
+    });
+    return allRowsAnswered ? 'answered' : 'unanswered';
+  }
+  if (scaleSelectedCount > 0 || checkedCount > 0 || filledDropdownInputs > 0 || filledTextInputs > 0) {
+    return 'answered';
+  }
+  if (kind === 'order') return 'unknown';
+  return 'unknown';
+}
+"""
+    try:
+        state = str(await page.evaluate(script, [root, resolved_kind]) or "").strip().lower()
+    except Exception:
+        return None
+    if state == "answered":
+        return True
+    if state == "unanswered":
+        return False
+    return None
+
+
+async def _has_answerable_question_roots(page: Any, roots: list[BrowserElement]) -> bool:
+    for root in roots:
+        if await _is_answerable_root(page, root):
+            return True
+    return False
+
+
 async def _runtime_question_key(page: Any, root: BrowserElement, question_num: int) -> str:
     try:
         question_id = str(await root.get_attribute("id") or await root.get_attribute("data-id") or "").strip()
@@ -277,9 +404,15 @@ async def _unanswered_question_roots(
 ) -> list[tuple[BrowserElement, int, str]]:
     pending: list[tuple[BrowserElement, int, str]] = []
     for local_index, root in enumerate(roots, start=1):
+        if not await _is_answerable_root(page, root):
+            continue
+        question_kind = await _question_kind_from_root(page, root)
         question_num = await _question_number_from_root(page, root, fallback_start + local_index)
         key = await _runtime_question_key(page, root, question_num)
-        if key in answered_keys:
+        answer_state = await _question_answer_state(page, root, kind=question_kind)
+        if answer_state is True:
+            continue
+        if key in answered_keys and answer_state is not False:
             continue
         pending.append((root, question_num, key))
     return pending

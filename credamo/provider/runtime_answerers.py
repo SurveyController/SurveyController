@@ -378,7 +378,18 @@ async def _answer_scale(page: Any, root: Any, weights: Any) -> bool:
         return False
     probabilities = normalize_droplist_probs(weights, len(options))
     target_index = min(weighted_index(probabilities), len(options) - 1)
-    return await _click_element(page, options[target_index])
+    if not await _click_element(page, options[target_index]):
+        return False
+    try:
+        selected = await page.evaluate(
+            "el => !!el.querySelector('.scale .nps-item.selected, .nps-item.selected')",
+            root,
+        )
+    except Exception:
+        selected = None
+    if selected is None:
+        return True
+    return bool(selected)
 
 
 async def _matrix_rows(root: Any) -> list[tuple[Any, list[Any]]]:

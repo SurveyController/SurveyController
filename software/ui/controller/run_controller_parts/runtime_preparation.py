@@ -23,6 +23,7 @@ from software.network.proxy import set_proxy_occupy_minute_by_answer_duration
 from software.providers.common import (
     SURVEY_PROVIDER_WJX,
     detect_survey_provider,
+    make_provider_question_key,
     normalize_survey_provider,
 )
 from software.providers.contracts import SurveyQuestionMeta
@@ -128,6 +129,21 @@ def _build_questions_metadata(
     return metadata
 
 
+def _build_provider_question_metadata(
+    questions_info: List[SurveyQuestionMeta],
+) -> dict[str, SurveyQuestionMeta]:
+    metadata: dict[str, SurveyQuestionMeta] = {}
+    for item in questions_info:
+        provider_key = make_provider_question_key(
+            getattr(item, "provider", None),
+            getattr(item, "provider_page_id", None),
+            getattr(item, "provider_question_id", None),
+        )
+        if provider_key and provider_key not in metadata:
+            metadata[provider_key] = item
+    return metadata
+
+
 def _build_execution_config_template(
     config: RuntimeConfig,
     *,
@@ -198,6 +214,7 @@ def _build_execution_config_template(
         psycho_target_alpha=psycho_target_alpha,
     )
     execution_config.questions_metadata = _build_questions_metadata(questions_info)
+    execution_config.provider_question_metadata_map = _build_provider_question_metadata(questions_info)
     return execution_config
 
 

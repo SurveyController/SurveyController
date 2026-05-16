@@ -47,8 +47,15 @@ _MAX_DYNAMIC_REVEAL_ROUNDS = 20
 _PARSE_POLL_SECONDS = 0.2
 _PARSE_PAGE_WAIT_SECONDS = 8.0
 _DYNAMIC_REVEAL_WAIT_SECONDS = 2.0
+_INITIAL_PARSE_RECOVERY_RETRIES = 2
+_INITIAL_QUESTION_WAIT_SECONDS = 12.0
 _NEXT_BUTTON_MARKERS = ("下一页", "next", "继续")
 _SUBMIT_BUTTON_MARKERS = ("提交", "完成", "交卷", "submit", "finish", "done")
+_QUESTION_ROOT_SELECTORS = (
+    ".answer-page .question",
+    ".question",
+    "[class*='question']",
+)
 _MATRIX_HEADER_TEXT_SELECTORS = (
     "thead th",
     ".matrix-title",
@@ -115,7 +122,7 @@ async def _question_roots(page: Any) -> List[Any]:
     const rect = el.getBoundingClientRect();
     return rect.width >= minWidth && rect.height >= minHeight;
   };
-  return Array.from(document.querySelectorAll('.answer-page .question'))
+  return Array.from(document.querySelectorAll('.answer-page .question, .question, [class*="question"]'))
     .map((root, index) => ({ index, visible: visible(root) }))
     .filter((item) => item.visible)
     .map((item) => item.index);
@@ -126,7 +133,14 @@ async def _question_roots(page: Any) -> List[Any]:
     except Exception:
         visible_indexes = []
     try:
-        roots = list(await page.query_selector_all(".answer-page .question") or [])
+        roots = []
+        for selector in _QUESTION_ROOT_SELECTORS:
+            try:
+                roots = list(await page.query_selector_all(selector) or [])
+            except Exception:
+                roots = []
+            if roots:
+                break
     except Exception:
         roots = []
     resolved: List[Any] = []
@@ -145,38 +159,58 @@ async def _retry_initial_question_load_if_needed(page: Any) -> List[Any]:
     if roots:
         return roots
 
-    title, body_text = await _page_loading_snapshot(page)
-    if not _looks_like_loading_shell(title, body_text):
-        logging.info("Credamo 解析入口等待题目后仍未发现可见题目节点")
-        return roots
-
     try:
         current_url = str(page.url or "").strip()
     except Exception:
         current_url = ""
     reload_target = current_url or None
-    logging.warning(
-        "Credamo 解析入口命中载入壳页，准备刷新重试：title=%s body=%s url=%s",
-        title or "<empty>",
-        (body_text[:80] or "<empty>"),
-        reload_target or "<empty>",
-    )
-    try:
-        if reload_target:
-            await page.goto(reload_target, wait_until="domcontentloaded", timeout=45000)
-        else:
-            await page.reload(wait_until="domcontentloaded", timeout=45000)
-        try:
-            await page.wait_for_load_state("networkidle", timeout=8000)
-        except Exception:
-            pass
-    except Exception:
-        logging.info("Credamo 解析入口刷新重试失败", exc_info=True)
+    deadline = time.monotonic() + _INITIAL_QUESTION_WAIT_SECONDS
+    reload_attempted = False
 
-    roots = await _question_roots(page)
+    while time.monotonic() < deadline:
+        if roots:
+            return roots
+        title, body_text = await _page_loading_snapshot(page)
+        loading_shell = _looks_like_loading_shell(title, body_text)
+        if loading_shell and not reload_attempted:
+            logging.warning(
+                "Credamo 解析入口命中载入壳页，准备刷新重试：title=%s body=%s url=%s",
+                title or "<empty>",
+                (body_text[:80] or "<empty>"),
+                reload_target or "<empty>",
+            )
+            try:
+                if reload_target:
+                    await page.goto(reload_target, wait_until="domcontentloaded", timeout=45000)
+                else:
+                    await page.reload(wait_until="domcontentloaded", timeout=45000)
+                try:
+                    await page.wait_for_load_state("domcontentloaded", timeout=8000)
+                except Exception:
+                    pass
+                reload_attempted = True
+            except Exception:
+                logging.info("Credamo 解析入口刷新重试失败", exc_info=True)
+        elif not loading_shell:
+            logging.info("Credamo 解析入口等待题目后仍未发现可见题目节点")
+        await page.wait_for_timeout(int(_PARSE_POLL_SECONDS * 1000))
+        roots = await _question_roots(page)
+
     if not roots:
-        logging.info("Credamo 解析入口刷新重试后仍未发现可见题目节点")
+        logging.info("Credamo 解析入口等待题目超时后仍未发现可见题目节点")
     return roots
+
+
+async def _recover_initial_parse_questions(page: Any) -> List[Dict[str, Any]]:
+    for attempt in range(1, _INITIAL_PARSE_RECOVERY_RETRIES + 1):
+        await _retry_initial_question_load_if_needed(page)
+        await page.wait_for_timeout(int(_PARSE_POLL_SECONDS * 1000))
+        current_questions = await _extract_questions_from_current_page(page, page_number=1)
+        if current_questions:
+            logging.info("Credamo 解析入口恢复成功：attempt=%s questions=%s", attempt, len(current_questions))
+            return current_questions
+        logging.warning("Credamo 解析入口首屏仍为空，继续重试：attempt=%s", attempt)
+    return []
 
 
 def _normalize_text(value: Any) -> str:
@@ -554,6 +588,13 @@ def _normalize_question(raw: Dict[str, Any], fallback_num: int) -> Dict[str, Any
     row_texts = [_normalize_text(text) for text in raw.get("row_texts") or []]
     row_texts = [text for text in row_texts if text]
     type_code = _infer_type_code({**raw, "options": len(option_texts), "text_inputs": text_inputs})
+    is_description = not (
+        option_texts
+        or text_inputs > 0
+        or question_kind in {"single", "multiple", "dropdown", "scale", "order", "matrix", "text", "multi_text"}
+    )
+    if is_description:
+        type_code = "0"
     forced_option_index, forced_option_text = _extract_force_select_option(
         raw_title or title,
         option_texts,
@@ -607,6 +648,7 @@ def _normalize_question(raw: Dict[str, Any], fallback_num: int) -> Dict[str, Any
         "required": bool(raw.get("required")),
         "text_inputs": text_inputs,
         "text_input_labels": [],
+        "is_description": is_description,
         "is_text_like": question_kind in {"text", "multi_text"} or (text_inputs > 0 and not option_texts),
         "is_multi_text": question_kind == "multi_text" or text_inputs > 1,
         "is_rating": False,
@@ -620,6 +662,28 @@ def _normalize_question(raw: Dict[str, Any], fallback_num: int) -> Dict[str, Any
     if normalized["type_code"] == "5":
         normalized["rating_max"] = max(len(option_texts), 1)
     return normalized
+
+
+def _is_answerable_question(question: Dict[str, Any]) -> bool:
+    try:
+        option_count = int(question.get("options") or 0)
+    except Exception:
+        option_count = 0
+    try:
+        text_inputs = int(question.get("text_inputs") or 0)
+    except Exception:
+        text_inputs = 0
+    type_code = str(question.get("type_code") or "").strip()
+    question_kind = str(question.get("question_kind") or "").strip().lower()
+    if option_count > 0 or text_inputs > 0:
+        return True
+    if type_code in {"3", "4", "5", "6", "7", "11"}:
+        return True
+    return question_kind in {"single", "multiple", "dropdown", "scale", "order", "matrix"}
+
+
+def _page_has_answerable_questions(questions: List[Dict[str, Any]]) -> bool:
+    return any(_is_answerable_question(question) for question in questions)
 
 
 async def _extract_questions_from_current_page(page: Any, *, page_number: int) -> List[Dict[str, Any]]:
@@ -988,6 +1052,8 @@ async def _prime_page_for_next(
     primed = primed_keys if primed_keys is not None else set()
     primed_count = 0
     for question, root in zip(questions, roots):
+        if not _is_answerable_question(question):
+            continue
         key = _question_dedupe_key(question)
         if key in primed:
             continue
@@ -1104,6 +1170,26 @@ async def parse_credamo_survey(url: str) -> Tuple[List[Dict[str, Any]], str]:
         for page_number in range(1, _MAX_PARSE_PAGES + 1):
             current_questions, discovered_questions = await _collect_current_page_until_stable(page, page_number=page_number)
             if not current_questions:
+                if page_number == 1 and not questions:
+                    recovered_questions = await _recover_initial_parse_questions(page)
+                    if recovered_questions:
+                        current_questions = list(recovered_questions)
+                        discovered_questions = list(recovered_questions)
+                if not current_questions and not questions:
+                    raise CredamoParseError("没有识别到 Credamo 题目，请确认链接已开放且无需登录")
+                if not current_questions:
+                    break
+
+            if not _page_has_answerable_questions(current_questions):
+                navigation_action = await _detect_navigation_action(page)
+                if navigation_action == "next":
+                    previous_signature = _extract_page_signature(current_questions)
+                    if await _click_navigation(page, "next") and await _wait_for_page_change(
+                        page,
+                        previous_signature,
+                        page_number=page_number + 1,
+                    ):
+                        continue
                 if not questions:
                     raise CredamoParseError("没有识别到 Credamo 题目，请确认链接已开放且无需登录")
                 break

@@ -4,10 +4,11 @@
 .codex/
 .playwright-mcp/
 .ruff_cache/
-desktop.ini
 .venv/
+/output/
 .coverage
 coverage.xml
+desktop.ini
 AGENTS.md
 CLAUDE.md
 

@@ -118,6 +118,19 @@ def ensure_questions_provider_fields(
     return normalized_items
 
 
+def make_provider_question_key(
+    provider: Any,
+    provider_page_id: Any,
+    provider_question_id: Any,
+) -> str:
+    normalized_provider = normalize_survey_provider(provider, default=SURVEY_PROVIDER_WJX)
+    page_id = str(provider_page_id or "").strip()
+    question_id = str(provider_question_id or "").strip()
+    if not page_id or not question_id:
+        return ""
+    return f"{normalized_provider}:{page_id}:{question_id}"
+
+
 __all__ = [
     "SURVEY_PROVIDER_WJX",
     "SURVEY_PROVIDER_QQ",
@@ -132,4 +145,5 @@ __all__ = [
     "is_supported_survey_url",
     "ensure_question_provider_fields",
     "ensure_questions_provider_fields",
+    "make_provider_question_key",
 ]

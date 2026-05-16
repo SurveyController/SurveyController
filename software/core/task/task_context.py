@@ -44,10 +44,12 @@ class ExecutionConfig:
     reverse_fill_spec: Optional[ReverseFillSpec] = None
 
     question_config_index_map: Dict[int, Tuple[str, int]] = field(default_factory=dict)
+    provider_question_config_index_map: Dict[str, Tuple[str, int]] = field(default_factory=dict)
     question_dimension_map: Dict[int, Optional[str]] = field(default_factory=dict)
     question_strict_ratio_map: Dict[int, bool] = field(default_factory=dict)
     question_psycho_bias_map: Dict[int, Any] = field(default_factory=dict)
     questions_metadata: Dict[int, SurveyQuestionMeta] = field(default_factory=dict)
+    provider_question_metadata_map: Dict[str, SurveyQuestionMeta] = field(default_factory=dict)
     joint_psychometric_answer_plan: Optional[Any] = None
 
     psycho_target_alpha: float = 0.85

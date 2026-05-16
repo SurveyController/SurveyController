@@ -77,10 +77,24 @@ class CredamoRuntimeTests:
         roots_page1 = [self._FakeQuestionRoot(1), self._FakeQuestionRoot(2)]
         roots_page2 = [self._FakeQuestionRoot(3)]
         calls: list[object] = []
+        pending_iter = iter(
+            [
+                [(roots_page1[0], 1, "k1"), (roots_page1[1], 2, "k2")],
+                [],
+                [(roots_page2[0], 3, "k3")],
+                [],
+            ]
+        )
+
+        async def _pending(*_args, **_kwargs):
+            return next(pending_iter)
+
         patch_attrs(
             (runtime, "_page", _async_return(page)),
             (runtime, "_wait_for_question_roots", _async_return(roots_page1)),
+            (runtime, "_has_answerable_question_roots", _async_return(True)),
             (runtime, "_wait_for_dynamic_question_roots", _async_return(roots_page2)),
+            (runtime, "_unanswered_question_roots", _pending),
             (runtime, "_question_number_from_root", lambda _page, root, _fallback: _async_return(root.question_num)()),
             (runtime, "_root_text", _async_return("Q")),
             (runtime, "_navigation_action", _async_return("next")),
@@ -108,6 +122,7 @@ class CredamoRuntimeTests:
         patch_attrs(
             (runtime, "_navigation_action", _navigation),
             (runtime, "_wait_for_question_roots", _roots),
+            (runtime, "_has_answerable_question_roots", _async_return(True)),
             (runtime, "_wait_for_dynamic_question_roots", _async_return([])),
         )
 
@@ -170,6 +185,7 @@ class CredamoRuntimeTests:
         patch_attrs(
             (runtime, "_page", _async_return(page)),
             (runtime, "_wait_for_question_roots", _wait_roots),
+            (runtime, "_has_answerable_question_roots", _async_return(True)),
             (runtime, "_unanswered_question_roots", _pending),
             (runtime, "_wait_for_dynamic_question_roots", _async_return([])),
             (runtime, "_navigation_action", _navigation),
@@ -219,6 +235,78 @@ class CredamoRuntimeTests:
         assert await runtime._answer_order(page, root)
 
     @pytest.mark.asyncio
+    async def test_answer_root_by_meta_prefers_provider_question_mapping(self, restore_credamo_runtime_patchpoints, patch_attrs) -> None:
+        _ = restore_credamo_runtime_patchpoints
+
+        class _FakeRoot:
+            async def get_attribute(self, name: str):
+                if name == "data-id":
+                    return "question-1"
+                return None
+
+        class _FakePage:
+            async def evaluate(self, _script, _root):
+                return "4"
+
+        calls: list[object] = []
+        config = SimpleNamespace(
+            question_config_index_map={2: ("scale", 1)},
+            provider_question_config_index_map={"credamo:4:question-1": ("scale", 0)},
+            provider_question_metadata_map={"credamo:4:question-1": SimpleNamespace(num=2, rows=1)},
+            questions_metadata={2: SimpleNamespace(num=2, rows=1)},
+            scale_prob=[[100.0, 0.0, 0.0], [0.0, 0.0, 100.0]],
+            matrix_prob=[],
+            multiple_prob=[],
+            texts=[],
+            single_prob=[],
+            droplist_prob=[],
+        )
+        patch_attrs(
+            (runtime, "_answer_scale", _async_append(calls, "scale", result=True)),
+        )
+
+        result = await runtime._answer_root_by_meta(_FakePage(), _FakeRoot(), 2, config)
+
+        assert result
+        assert calls == ["scale"]
+
+    @pytest.mark.asyncio
+    async def test_answer_root_by_meta_uses_fallback_page_id_when_dom_page_id_missing(self, restore_credamo_runtime_patchpoints, patch_attrs) -> None:
+        _ = restore_credamo_runtime_patchpoints
+
+        class _FakeRoot:
+            async def get_attribute(self, name: str):
+                if name == "data-id":
+                    return "question-1"
+                return None
+
+        class _FakePage:
+            async def evaluate(self, _script, _root):
+                return ""
+
+        calls: list[object] = []
+        config = SimpleNamespace(
+            question_config_index_map={2: ("scale", 1)},
+            provider_question_config_index_map={"credamo:6:question-1": ("single", 0)},
+            provider_question_metadata_map={"credamo:6:question-1": SimpleNamespace(num=2, rows=1)},
+            questions_metadata={2: SimpleNamespace(num=2, rows=1)},
+            scale_prob=[[100.0, 0.0, 0.0], [0.0, 0.0, 100.0]],
+            matrix_prob=[],
+            multiple_prob=[],
+            texts=[],
+            single_prob=[[100.0, 0.0]],
+            droplist_prob=[],
+        )
+        patch_attrs(
+            (runtime, "_answer_single_like", _async_append(calls, "single", result=True)),
+        )
+
+        result = await runtime._answer_root_by_meta(_FakePage(), _FakeRoot(), 2, config, fallback_page_id=6)
+
+        assert result
+        assert calls == ["single"]
+
+    @pytest.mark.asyncio
     async def test_brush_credamo_handles_missing_roots_abort_unknown_type_and_submit_failures(self, restore_credamo_runtime_patchpoints, patch_attrs) -> None:
         _ = restore_credamo_runtime_patchpoints
         stop_signal = threading.Event()
@@ -264,6 +352,7 @@ class CredamoRuntimeTests:
         patch_attrs(
             (runtime, "_page", _async_return(page)),
             (runtime, "_wait_for_question_roots", _async_return([root])),
+            (runtime, "_has_answerable_question_roots", _async_return(True)),
             (runtime, "_unanswered_question_roots", lambda *_args, **_kwargs: _async_return(next(pending_iter))()),
             (runtime, "_wait_for_dynamic_question_roots", _async_return([])),
             (runtime, "_navigation_action", _async_return("submit")),
@@ -285,6 +374,7 @@ class CredamoRuntimeTests:
         patch_attrs(
             (runtime, "_page", _async_return(page)),
             (runtime, "_wait_for_question_roots", _async_return([root])),
+            (runtime, "_has_answerable_question_roots", _async_return(True)),
             (runtime, "_unanswered_question_roots", lambda *_args, **_kwargs: _async_return(next(pending_iter2))()),
             (runtime, "_wait_for_dynamic_question_roots", _async_return([])),
             (runtime, "_navigation_action", _async_return("submit")),
@@ -294,3 +384,109 @@ class CredamoRuntimeTests:
         )
         with pytest.raises(RuntimeError, match="提交按钮未找到"):
             await runtime.brush_credamo(object(), config_submit_fail, state, stop_signal=stop_signal, thread_name="Worker-3")
+
+    @pytest.mark.asyncio
+    async def test_brush_credamo_skips_intro_page_without_answerable_questions(self, restore_credamo_runtime_patchpoints, patch_attrs) -> None:
+        _ = restore_credamo_runtime_patchpoints
+        stop_signal = threading.Event()
+        state = SimpleNamespace(
+            stop_event=stop_signal,
+            update_thread_step=lambda *args, **kwargs: None,
+            update_thread_status=lambda *args, **kwargs: None,
+        )
+        config = SimpleNamespace(
+            question_config_index_map={2: ("single", 0)},
+            single_prob=[-1],
+            droplist_prob=[],
+            scale_prob=[],
+            multiple_prob=[],
+            texts=[],
+            answer_duration_range_seconds=[0, 0],
+        )
+        intro_root = self._FakeQuestionRoot(1)
+        question_root = self._FakeQuestionRoot(2)
+        page = object()
+        calls: list[str] = []
+        roots_iter = iter([[intro_root], [question_root]])
+        pending_iter = iter([[(question_root, 2, "k2")], []])
+        nav_iter = iter(["next", "submit"])
+
+        async def _wait_roots(*_args, **_kwargs):
+            return next(roots_iter)
+
+        async def _pending(*_args, **_kwargs):
+            return next(pending_iter)
+
+        async def _nav(*_args, **_kwargs):
+            return next(nav_iter)
+
+        async def _has_answerable(_page, roots):
+            return roots == [question_root]
+
+        patch_attrs(
+            (runtime, "_page", _async_return(page)),
+            (runtime, "_wait_for_question_roots", _wait_roots),
+            (runtime, "_has_answerable_question_roots", _has_answerable),
+            (runtime, "_question_signature", _async_return((("intro", "说明页"),))),
+            (runtime, "_click_navigation", _async_append(calls, "next", result=True)),
+            (runtime, "_wait_for_page_change", _async_return(True)),
+            (runtime, "_unanswered_question_roots", _pending),
+            (runtime, "_wait_for_dynamic_question_roots", _async_return([])),
+            (runtime, "_navigation_action", _nav),
+            (runtime, "_answer_single_like", _async_append(calls, "single", result=True)),
+            (runtime, "_click_submit", _async_append(calls, "submit", result=True)),
+            (runtime, "simulate_answer_duration_delay", _async_return(False)),
+        )
+
+        result = await runtime.brush_credamo(object(), config, state, stop_signal=stop_signal, thread_name="Worker-1")
+        assert result
+        assert calls == ["next", "single", "submit"]
+
+    @pytest.mark.asyncio
+    async def test_brush_credamo_retries_question_when_answer_not_confirmed(self, restore_credamo_runtime_patchpoints, patch_attrs) -> None:
+        _ = restore_credamo_runtime_patchpoints
+        stop_signal = threading.Event()
+        state = SimpleNamespace(
+            stop_event=stop_signal,
+            update_thread_step=lambda *args, **kwargs: None,
+            update_thread_status=lambda *args, **kwargs: None,
+        )
+        root = self._FakeQuestionRoot(9)
+        calls: list[str] = []
+        config = SimpleNamespace(
+            question_config_index_map={9: ("scale", 0)},
+            scale_prob=[[100.0, 0.0, 0.0]],
+            single_prob=[],
+            droplist_prob=[],
+            multiple_prob=[],
+            texts=[],
+            answer_duration_range_seconds=[0, 0],
+        )
+
+        async def _pending(_page, _roots, answered_keys, **_kwargs):
+            if "k9" in answered_keys:
+                return []
+            return [(root, 9, "k9")]
+
+        scale_attempts = iter([False, True])
+
+        async def _answer_scale(*_args, **_kwargs):
+            calls.append("scale")
+            return next(scale_attempts)
+
+        patch_attrs(
+            (runtime, "_page", _async_return(object())),
+            (runtime, "_wait_for_question_roots", _async_return([root])),
+            (runtime, "_has_answerable_question_roots", _async_return(True)),
+            (runtime, "_unanswered_question_roots", _pending),
+            (runtime, "_wait_for_dynamic_question_roots", _async_return([])),
+            (runtime, "_navigation_action", _async_return("submit")),
+            (runtime, "_answer_scale", _answer_scale),
+            (runtime, "_click_submit", _async_append(calls, "submit", result=True)),
+            (runtime, "simulate_answer_duration_delay", _async_return(False)),
+        )
+
+        result = await runtime.brush_credamo(object(), config, state, stop_signal=stop_signal, thread_name="Worker-1")
+
+        assert result
+        assert calls == ["scale", "scale", "submit"]

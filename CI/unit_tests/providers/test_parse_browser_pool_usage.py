@@ -103,13 +103,25 @@ class ParseBrowserPoolUsageTests:
     @pytest.mark.asyncio
     async def test_credamo_parser_uses_parse_browser_pool(self) -> None:
         used_pool = {"value": False}
+        normalized_question = {
+            "num": 1,
+            "title": "Q1",
+            "type_code": "3",
+            "question_kind": "single",
+            "provider_type": "single",
+            "option_texts": ["A"],
+            "options": 1,
+            "text_inputs": 0,
+            "page": 1,
+            "question_id": "q1",
+        }
 
         @asynccontextmanager
         async def fake_pool():
             used_pool["value"] = True
             yield _FakeDriver(title="Credamo 标题")
 
-        with patch("credamo.provider.parser.acquire_parse_browser_session", fake_pool), patch("credamo.provider.parser._retry_initial_question_load_if_needed", return_value=[object()]), patch("credamo.provider.parser._collect_current_page_until_stable", return_value=([{"question_num": "Q1"}], [{"question_num": "Q1", "title": "Q1", "question_kind": "single", "provider_type": "single", "option_texts": ["A"], "text_inputs": 0, "page": 1, "question_id": "q1"}])), patch("credamo.provider.parser._detect_navigation_action", return_value="submit"):
+        with patch("credamo.provider.parser.acquire_parse_browser_session", fake_pool), patch("credamo.provider.parser._retry_initial_question_load_if_needed", return_value=[object()]), patch("credamo.provider.parser._collect_current_page_until_stable", return_value=([normalized_question], [normalized_question])), patch("credamo.provider.parser._detect_navigation_action", return_value="submit"):
             info, title = await credamo_parser.parse_credamo_survey("https://www.credamo.com/answer.html#/s/demo")
         assert used_pool["value"]
         assert title == "Credamo 标题"

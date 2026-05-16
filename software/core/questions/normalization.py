@@ -35,6 +35,7 @@ from software.core.questions.utils import (
     serialize_random_int_range,
     try_parse_random_int_range,
 )
+from software.providers.common import make_provider_question_key
 
 if TYPE_CHECKING:
     from software.core.task import ExecutionConfig
@@ -109,9 +110,19 @@ def configure_probabilities(
     target.droplist_option_fill_texts = []
     target.multiple_option_fill_texts = []
     target.question_config_index_map = {}
+    target.provider_question_config_index_map = {}
     target.question_dimension_map = {}
     target.question_strict_ratio_map = {}
     target.question_psycho_bias_map = {}
+
+    def _remember_provider_mapping(entry: QuestionEntry, mapped_value: Tuple[str, int]) -> None:
+        provider_key = make_provider_question_key(
+            getattr(entry, "survey_provider", None),
+            getattr(entry, "provider_page_id", None),
+            getattr(entry, "provider_question_id", None),
+        )
+        if provider_key:
+            target.provider_question_config_index_map[provider_key] = mapped_value
 
     idx_single = idx_dropdown = idx_multiple = idx_matrix = idx_scale = idx_slider = idx_text = 0
     reliability_candidates: List[Tuple[int, bool, str]] = []
@@ -136,14 +147,18 @@ def configure_probabilities(
 
         if entry.question_type == "single":
             _raise_if_all_zero_single_like(probs, question_num, "single")
-            target.question_config_index_map[question_num] = ("single", idx_single)
+            mapped_value = ("single", idx_single)
+            target.question_config_index_map[question_num] = mapped_value
+            _remember_provider_mapping(entry, mapped_value)
             idx_single += 1
             target.single_prob.append(_normalize_single_like_prob_config(probs, entry.option_count))
             target.single_option_fill_texts.append(_normalize_option_fill_texts(entry.option_fill_texts, entry.option_count))
             target.single_attached_option_selects.append(copy.deepcopy(getattr(entry, "attached_option_selects", []) or []))
         elif entry.question_type == "dropdown":
             _raise_if_all_zero_single_like(probs, question_num, "dropdown")
-            target.question_config_index_map[question_num] = ("dropdown", idx_dropdown)
+            mapped_value = ("dropdown", idx_dropdown)
+            target.question_config_index_map[question_num] = mapped_value
+            _remember_provider_mapping(entry, mapped_value)
             target.question_dimension_map[question_num] = _resolve_runtime_dimension(
                 entry,
                 reliability_mode_enabled=reliability_mode_enabled,
@@ -155,7 +170,9 @@ def configure_probabilities(
             target.droplist_prob.append(_normalize_single_like_prob_config(probs, entry.option_count))
             target.droplist_option_fill_texts.append(_normalize_option_fill_texts(entry.option_fill_texts, entry.option_count))
         elif entry.question_type == "multiple":
-            target.question_config_index_map[question_num] = ("multiple", idx_multiple)
+            mapped_value = ("multiple", idx_multiple)
+            target.question_config_index_map[question_num] = mapped_value
+            _remember_provider_mapping(entry, mapped_value)
             idx_multiple += 1
             if not isinstance(probs, list):
                 raise ValueError("多选题必须提供概率列表，数值范围0-100")
@@ -164,7 +181,9 @@ def configure_probabilities(
         elif entry.question_type == "matrix":
             _raise_if_all_zero_matrix(probs, question_num)
             rows = max(1, entry.rows)
-            target.question_config_index_map[question_num] = ("matrix", idx_matrix)
+            mapped_value = ("matrix", idx_matrix)
+            target.question_config_index_map[question_num] = mapped_value
+            _remember_provider_mapping(entry, mapped_value)
             target.question_dimension_map[question_num] = _resolve_runtime_dimension(
                 entry,
                 reliability_mode_enabled=reliability_mode_enabled,
@@ -222,7 +241,9 @@ def configure_probabilities(
                     target.matrix_prob.append(-1)
         elif entry.question_type in ("scale", "score"):
             _raise_if_all_zero_single_like(probs, question_num, entry.question_type)
-            target.question_config_index_map[question_num] = (entry.question_type, idx_scale)
+            mapped_value = (entry.question_type, idx_scale)
+            target.question_config_index_map[question_num] = mapped_value
+            _remember_provider_mapping(entry, mapped_value)
             target.question_dimension_map[question_num] = _resolve_runtime_dimension(
                 entry,
                 reliability_mode_enabled=reliability_mode_enabled,
@@ -233,7 +254,9 @@ def configure_probabilities(
             idx_scale += 1
             target.scale_prob.append(_normalize_single_like_prob_config(probs, entry.option_count))
         elif entry.question_type == "slider":
-            target.question_config_index_map[question_num] = ("slider", idx_slider)
+            mapped_value = ("slider", idx_slider)
+            target.question_config_index_map[question_num] = mapped_value
+            _remember_provider_mapping(entry, mapped_value)
             idx_slider += 1
             mode = str(getattr(entry, "distribution_mode", "") or "").strip().lower()
             if mode == "random":
@@ -256,13 +279,19 @@ def configure_probabilities(
                         target_value = None
             target.slider_targets.append(50.0 if target_value is None else target_value)
         elif entry.question_type == "order":
-            target.question_config_index_map[question_num] = ("order", -1)
+            mapped_value = ("order", -1)
+            target.question_config_index_map[question_num] = mapped_value
+            _remember_provider_mapping(entry, mapped_value)
         elif entry.question_type in ("text", "multi_text"):
             if not getattr(entry, "is_location", False):
-                target.question_config_index_map[question_num] = ("text", idx_text)
+                mapped_value = ("text", idx_text)
+                target.question_config_index_map[question_num] = mapped_value
+                _remember_provider_mapping(entry, mapped_value)
                 idx_text += 1
             else:
-                target.question_config_index_map[question_num] = ("location", -1)
+                mapped_value = ("location", -1)
+                target.question_config_index_map[question_num] = mapped_value
+                _remember_provider_mapping(entry, mapped_value)
             text_random_mode = str(getattr(entry, "text_random_mode", _TEXT_RANDOM_NONE) or _TEXT_RANDOM_NONE).strip().lower()
             normalized_values = [str(item).strip() for item in (entry.texts or []) if str(item).strip()]
             normalized_blank_ai_flags: List[bool] = []

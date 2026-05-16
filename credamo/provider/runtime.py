@@ -12,6 +12,7 @@ from software.core.modes.duration_control import has_configured_answer_duration,
 from software.core.questions.utils import normalize_droplist_probs, weighted_index
 from software.core.task import ExecutionConfig, ExecutionState
 from software.network.browser.runtime_async import BrowserDriver
+from software.providers.common import make_provider_question_key
 from credamo.provider.runtime_state import get_credamo_runtime_state
 
 from . import runtime_answerers as _runtime_answerers
@@ -38,6 +39,7 @@ _collect_question_root_snapshot = _runtime_dom._collect_question_root_snapshot
 _element_text = _runtime_dom._element_text
 _input_value = _runtime_dom._input_value
 _is_checked = _runtime_dom._is_checked
+_has_answerable_question_roots = _runtime_dom._has_answerable_question_roots
 _locator_is_visible = _runtime_dom._locator_is_visible
 _looks_like_loading_shell = _runtime_dom._looks_like_loading_shell
 _navigation_action = _runtime_dom._navigation_action
@@ -47,12 +49,84 @@ _page = _runtime_dom._page
 _page_loading_snapshot = _runtime_dom._page_loading_snapshot
 _question_kind_from_root = _runtime_dom._question_kind_from_root
 _question_number_from_root = _runtime_dom._question_number_from_root
+_question_answer_state = _runtime_dom._question_answer_state
 _question_roots = _runtime_dom._question_roots
 _question_signature = _runtime_dom._question_signature
 _question_title_text = _runtime_dom._question_title_text
 _root_text = _runtime_dom._root_text
 _text_inputs = _runtime_dom._text_inputs
 _resolve_forced_choice_index = _runtime_answerers._resolve_forced_choice_index
+
+
+async def _provider_page_id_from_root(page: Any, root: Any, fallback_page_id: Any = None) -> str:
+    provider_page_id = ""
+    try:
+        provider_page_id = str(
+            await page.evaluate(
+                """
+                (el) => {
+                  const current = el.closest('.answer-page');
+                  const pageNode = current || document.querySelector('.answer-page');
+                  const candidates = [
+                    pageNode?.getAttribute('data-page'),
+                    pageNode?.getAttribute('data-page-id'),
+                    pageNode?.getAttribute('page'),
+                    document.querySelector('.answer-page')?.getAttribute('data-page'),
+                  ];
+                  for (const value of candidates) {
+                    const text = String(value || '').trim();
+                    if (text) return text;
+                  }
+                  return '';
+                }
+                """,
+                root,
+            )
+            or ""
+        ).strip()
+    except Exception:
+        provider_page_id = ""
+    normalized_page_id = provider_page_id if provider_page_id.isdigit() else ""
+    if normalized_page_id:
+        return normalized_page_id
+    try:
+        resolved_fallback_page_id = int(fallback_page_id or 0)
+    except Exception:
+        resolved_fallback_page_id = 0
+    return str(resolved_fallback_page_id) if resolved_fallback_page_id > 0 else ""
+
+
+async def _provider_question_key_from_root(page: Any, root: Any, fallback_page_id: Any = None) -> str:
+    provider_page_id = await _provider_page_id_from_root(page, root, fallback_page_id=fallback_page_id)
+    try:
+        provider_question_id = str(await root.get_attribute("data-id") or await root.get_attribute("id") or "").strip()
+    except Exception:
+        provider_question_id = ""
+    return make_provider_question_key("credamo", provider_page_id, provider_question_id)
+
+
+async def _resolve_config_binding(
+    page: Any,
+    root: Any,
+    question_num: int,
+    config: ExecutionConfig,
+    *,
+    fallback_page_id: Any = None,
+) -> tuple[int, Optional[tuple[str, int]], Any]:
+    provider_key = await _provider_question_key_from_root(page, root, fallback_page_id=fallback_page_id)
+    provider_map = getattr(config, "provider_question_config_index_map", {}) or {}
+    if provider_key:
+        config_entry = provider_map.get(provider_key)
+        if config_entry is not None:
+            question_meta = (getattr(config, "provider_question_metadata_map", {}) or {}).get(provider_key)
+            try:
+                resolved_num = int(getattr(question_meta, "num", question_num) or question_num)
+            except Exception:
+                resolved_num = question_num
+            return resolved_num, config_entry, question_meta
+    config_entry = config.question_config_index_map.get(question_num)
+    question_meta = config.questions_metadata.get(question_num) if hasattr(config, "questions_metadata") else None
+    return question_num, config_entry, question_meta
 
 
 def _sync_runtime_dom_patch_points() -> None:
@@ -64,6 +138,7 @@ def _sync_runtime_dom_patch_points() -> None:
     _runtime_dom._looks_like_loading_shell = _looks_like_loading_shell
     _runtime_dom._navigation_action = _navigation_action
     _runtime_dom._page_loading_snapshot = _page_loading_snapshot
+    _runtime_dom._question_answer_state = _question_answer_state
     _runtime_dom._question_number_from_root = _question_number_from_root
     _runtime_dom._question_roots = _question_roots
     _runtime_dom._question_signature = _question_signature
@@ -171,35 +246,61 @@ async def _answer_root_by_meta(
     root: Any,
     question_num: int,
     config: ExecutionConfig,
+    *,
+    fallback_page_id: Any = None,
 ) -> bool:
-    config_entry = config.question_config_index_map.get(question_num)
+    return await _attempt_answer_current_root(
+        page,
+        root,
+        question_num,
+        config,
+        fallback_page_id=fallback_page_id,
+    )
+
+
+async def _attempt_answer_current_root(
+    page: Any,
+    root: Any,
+    question_num: int,
+    config: ExecutionConfig,
+    *,
+    fallback_page_id: Any = None,
+) -> bool:
+    resolved_question_num, config_entry, question_meta = await _resolve_config_binding(
+        page,
+        root,
+        question_num,
+        config,
+        fallback_page_id=fallback_page_id,
+    )
     if config_entry is None:
-        logging.info("Credamo 第%s题缺少配置映射，无法补答。", question_num)
+        fallback_kind = await _question_kind_from_root(page, root)
+        logging.info("Credamo 第%s题未匹配到配置，页面题型=%s，题面=%s", resolved_question_num, fallback_kind, await _root_text(page, root))
         return False
+
     entry_type, config_index = config_entry
+    action_attempted = False
     if entry_type == "single":
         weights = config.single_prob[config_index] if config_index < len(config.single_prob) else -1
-        return bool(await _answer_single_like(page, root, weights, 0))
-    if entry_type in {"scale", "score"}:
+        action_attempted = bool(await _answer_single_like(page, root, weights, 0))
+    elif entry_type in {"scale", "score"}:
         weights = config.scale_prob[config_index] if config_index < len(config.scale_prob) else -1
-        return bool(await _answer_scale(page, root, weights))
-    if entry_type == "matrix":
-        question_meta = config.questions_metadata.get(question_num) if hasattr(config, "questions_metadata") else None
+        action_attempted = bool(await _answer_scale(page, root, weights))
+    elif entry_type == "matrix":
         row_count = max(1, int(getattr(question_meta, "rows", 1) or 1))
         row_weights = []
         for row_offset in range(row_count):
             matrix_index = config_index + row_offset
             row_weights.append(config.matrix_prob[matrix_index] if matrix_index < len(config.matrix_prob) else -1)
-        return bool(await _answer_matrix(page, root, row_weights, config_index))
-    if entry_type == "dropdown":
+        action_attempted = bool(await _answer_matrix(page, root, row_weights, config_index))
+    elif entry_type == "dropdown":
         weights = config.droplist_prob[config_index] if config_index < len(config.droplist_prob) else -1
-        return bool(await _answer_dropdown(page, root, weights))
-    if entry_type == "multiple":
+        action_attempted = bool(await _answer_dropdown(page, root, weights))
+    elif entry_type == "multiple":
         weights = config.multiple_prob[config_index] if config_index < len(config.multiple_prob) else []
-        question_meta = config.questions_metadata.get(question_num)
         min_limit = getattr(question_meta, "multi_min_limit", None) if question_meta is not None else None
         max_limit = getattr(question_meta, "multi_max_limit", None) if question_meta is not None else None
-        return bool(
+        action_attempted = bool(
             await _answer_multiple(
                 page,
                 root,
@@ -208,13 +309,22 @@ async def _answer_root_by_meta(
                 max_limit=max_limit,
             )
         )
-    if entry_type == "order":
-        return bool(await _answer_order(page, root))
-    if entry_type in {"text", "multi_text"}:
+    elif entry_type == "order":
+        action_attempted = bool(await _answer_order(page, root))
+    elif entry_type in {"text", "multi_text"}:
         text_config = config.texts[config_index] if config_index < len(config.texts) else [DEFAULT_FILL_TEXT]
-        return bool(await _answer_text(root, text_config))
-    logging.info("Credamo 第%s题暂未接入补答题型：%s", question_num, entry_type)
-    return False
+        action_attempted = bool(await _answer_text(root, text_config))
+    else:
+        logging.info("Credamo 第%s题暂未接入题型：%s", resolved_question_num, entry_type)
+        return False
+
+    answer_state = await _question_answer_state(page, root, kind=entry_type)
+    if answer_state is False:
+        logging.warning("Credamo 第%s题点击后仍未答上，题型=%s", resolved_question_num, entry_type)
+        return False
+    if answer_state is True:
+        return True
+    return action_attempted
 
 
 async def refill_required_questions_on_current_page(
@@ -237,6 +347,8 @@ async def refill_required_questions_on_current_page(
         return 0
 
     page = await _page(driver)
+    runtime_state = get_credamo_runtime_state(driver)
+    fallback_page_id = getattr(runtime_state, "page_index", 0)
     roots = await _question_roots(page)
     if not roots:
         return 0
@@ -251,12 +363,25 @@ async def refill_required_questions_on_current_page(
         root = root_by_number.get(question_num)
         if root is None:
             continue
+        resolved_question_num, _config_entry, _question_meta = await _resolve_config_binding(
+            page,
+            root,
+            question_num,
+            config,
+            fallback_page_id=fallback_page_id,
+        )
         if state is not None:
             try:
-                state.update_thread_status(thread_name or "Worker-?", f"补答第{question_num}题", running=True)
+                state.update_thread_status(thread_name or "Worker-?", f"补答第{resolved_question_num}题", running=True)
             except Exception:
-                logging.info("更新 Credamo 线程状态失败：补答第%s题", question_num, exc_info=True)
-        if await _answer_root_by_meta(page, root, question_num, config):
+                logging.info("更新 Credamo 线程状态失败：补答第%s题", resolved_question_num, exc_info=True)
+        if await _attempt_answer_current_root(
+            page,
+            root,
+            question_num,
+            config,
+            fallback_page_id=fallback_page_id,
+        ):
             filled_count += 1
     return filled_count
 
@@ -288,6 +413,21 @@ async def brush_credamo(
         roots = await _wait_for_question_roots(page, active_stop)
         if not roots:
             raise RuntimeError("Credamo 当前页未识别到题目")
+        if not await _has_answerable_question_roots(page, roots):
+            navigation_action = await _navigation_action(page)
+            if navigation_action == "next":
+                previous_signature = await _question_signature(page)
+                runtime_state.last_page_signature = previous_signature
+                try:
+                    state.update_thread_status(thread_name, "跳过说明页", running=True)
+                except Exception:
+                    logging.info("更新 Credamo 线程状态失败：跳过说明页", exc_info=True)
+                if not await _click_navigation(page, "next"):
+                    raise RuntimeError("Credamo 说明页下一页按钮未找到")
+                if not await _wait_for_page_change(page, previous_signature, active_stop):
+                    raise RuntimeError("Credamo 点击说明页下一页后页面没有变化")
+                continue
+            raise RuntimeError("Credamo 当前页未识别到可作答题目")
 
         answered_keys: set[str] = set()
         runtime_state.answered_question_keys = []
@@ -305,16 +445,17 @@ async def brush_credamo(
                         pass
                     return False
 
-                answered_keys.add(question_key)
-                runtime_state.answered_question_keys = list(answered_keys)
-                config_entry = config.question_config_index_map.get(question_num)
+                resolved_question_num, config_entry, _question_meta = await _resolve_config_binding(
+                    page,
+                    root,
+                    question_num,
+                    config,
+                    fallback_page_id=page_index,
+                )
                 if config_entry is None:
-                    fallback_kind = await _question_kind_from_root(page, root)
-                    logging.info("Credamo 第%s题未匹配到配置，页面题型=%s，题面=%s", question_num, fallback_kind, await _root_text(page, root))
                     answered_steps = min(total_steps, answered_steps + 1)
                     continue
 
-                entry_type, config_index = config_entry
                 try:
                     state.update_thread_step(
                         thread_name,
@@ -326,43 +467,17 @@ async def brush_credamo(
                 except Exception:
                     logging.info("更新 Credamo 线程进度失败", exc_info=True)
 
-                if entry_type == "single":
-                    weights = config.single_prob[config_index] if config_index < len(config.single_prob) else -1
-                    await _answer_single_like(page, root, weights, 0)
-                elif entry_type in {"scale", "score"}:
-                    weights = config.scale_prob[config_index] if config_index < len(config.scale_prob) else -1
-                    await _answer_scale(page, root, weights)
-                elif entry_type == "matrix":
-                    question_meta = config.questions_metadata.get(question_num) if hasattr(config, "questions_metadata") else None
-                    row_count = max(1, int(getattr(question_meta, "rows", 1) or 1))
-                    row_weights = []
-                    for row_offset in range(row_count):
-                        matrix_index = config_index + row_offset
-                        row_weights.append(config.matrix_prob[matrix_index] if matrix_index < len(config.matrix_prob) else -1)
-                    await _answer_matrix(page, root, row_weights, config_index)
-                elif entry_type == "dropdown":
-                    weights = config.droplist_prob[config_index] if config_index < len(config.droplist_prob) else -1
-                    await _answer_dropdown(page, root, weights)
-                elif entry_type == "multiple":
-                    weights = config.multiple_prob[config_index] if config_index < len(config.multiple_prob) else []
-                    question_meta = config.questions_metadata.get(question_num)
-                    min_limit = getattr(question_meta, "multi_min_limit", None) if question_meta is not None else None
-                    max_limit = getattr(question_meta, "multi_max_limit", None) if question_meta is not None else None
-                    await _answer_multiple(
-                        page,
-                        root,
-                        weights,
-                        min_limit=min_limit,
-                        max_limit=max_limit,
-                    )
-                elif entry_type == "order":
-                    await _answer_order(page, root)
-                elif entry_type in {"text", "multi_text"}:
-                    text_config = config.texts[config_index] if config_index < len(config.texts) else [DEFAULT_FILL_TEXT]
-                    await _answer_text(root, text_config)
-                else:
-                    logging.info("Credamo 第%s题暂未接入题型：%s", question_num, entry_type)
-                answered_steps = min(total_steps, answered_steps + 1)
+                answered = await _attempt_answer_current_root(
+                    page,
+                    root,
+                    question_num,
+                    config,
+                    fallback_page_id=page_index,
+                )
+                if answered:
+                    answered_keys.add(question_key)
+                    runtime_state.answered_question_keys = list(answered_keys)
+                    answered_steps = min(total_steps, answered_steps + 1)
                 await sleep_or_stop(None, random.uniform(0.03, 0.08))
 
             roots = await _wait_for_dynamic_question_roots(

@@ -89,16 +89,18 @@ powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 | ie
 
 如果你需要查看支持 macOS 系统的源码，请切换到 [mac 分支](https://github.com/SurveyController/SurveyController/tree/mac)。
 
-**该分支由社区维护，不受长期支持。**
+**分支由社区维护，不受长期支持**
+
+> 顺带一提：我们**不会**打算为了某些用户的特殊需求而转向 Android/iOS 平台的开发
 
 ---
 
 ## 交流群
 
 如有疑问或需要技术支持，可加入QQ群：
+346131215
 
 <img width="256" alt="qq" src="assets/community_qr.jpg" />
-
 ---
 
 ## 参与贡献

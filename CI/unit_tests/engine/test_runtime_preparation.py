@@ -103,6 +103,9 @@ class RuntimePreparationTests:
         assert artifacts.execution_config_template.question_config_index_map == {1: ('single', 0)}
         assert artifacts.execution_config_template.questions_metadata[1].provider == 'qq'
         assert artifacts.execution_config_template.questions_metadata[1].title == 'Q1'
+        assert artifacts.execution_config_template.provider_question_metadata_map == {
+            'qq:p1:q1': artifacts.execution_config_template.questions_metadata[1]
+        }
         assert artifacts.execution_config_template.answer_rules == [{'num': 1, 'equals': [1]}]
         assert artifacts.execution_config_template.proxy_ip_pool == []
         sync_proxy_duration.assert_called_once_with((12, 20), survey_provider='qq')
