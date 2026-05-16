@@ -7,13 +7,11 @@ import threading
 import time
 from typing import TYPE_CHECKING, Any, Optional, cast
 from PySide6.QtGui import QColor
-from PySide6.QtWidgets import QDialog
 from qfluentwidgets import themeColor
 
 import software.network.http as http_client
 
-from software.ui.dialogs.contact import ContactDialog
-from software.ui.dialogs.quota_redeem import QuotaRedeemDialog, load_shop_icon
+from software.ui.dialogs.quota_redeem import load_shop_icon
 from software.app.config import DEFAULT_HTTP_HEADERS, IP_EXTRACT_ENDPOINT, STATUS_ENDPOINT
 from software.logging.log_utils import log_suppressed_exception
 from software.ui.controller.run_controller_parts.runtime_constants import (
@@ -412,7 +410,7 @@ class DashboardRandomIPMixin:
         self._sync_random_ip_toggle_presentation(fallback_enabled)
 
     def _open_contact_dialog(self, default_type: str = "报错反馈", lock_message_type: bool = False):
-        """打开联系对话框"""
+        """转交主窗口打开联系对话框。"""
         win = self.window()
         if hasattr(win, "_open_contact_dialog"):
             try:
@@ -423,23 +421,10 @@ class DashboardRandomIPMixin:
                     exc,
                     level=logging.WARNING,
                 )
-        dlg = ContactDialog(
-            self,
-            default_type=default_type,
-            lock_message_type=lock_message_type,
-            status_endpoint=STATUS_ENDPOINT,
-            status_formatter=format_status_payload,
-        )
-        if str(default_type or "").strip() == "报错反馈":
-            self._contact_dialog = dlg
-            dlg.finished.connect(self._clear_dashboard_contact_dialog_ref)
-            dlg.destroyed.connect(self._clear_dashboard_contact_dialog_ref)
-            dlg.open()
-            return False
-        return dlg.exec() == QDialog.DialogCode.Accepted
+        raise RuntimeError("主窗口不支持联系开发者弹窗")
 
-    def _open_quota_redeem_dialog(self):
-        """打开额度兑换对话框。"""
+    def _open_quota_redeem_dialog(self) -> bool:
+        """转交主窗口打开额度兑换对话框。"""
         win = self.window()
         if hasattr(win, "_open_quota_redeem_dialog"):
             try:
@@ -450,16 +435,11 @@ class DashboardRandomIPMixin:
                     exc,
                     level=logging.WARNING,
                 )
-        dlg = QuotaRedeemDialog(self)
-        return dlg.exec() == QDialog.DialogCode.Accepted
-
-    def _clear_dashboard_contact_dialog_ref(self, *_args) -> None:
-        self._contact_dialog = None
+        raise RuntimeError("主窗口不支持额度兑换弹窗")
 
     def _on_request_quota_clicked(self):
         """用户主动打开额度兑换弹窗。"""
-        if self._open_quota_redeem_dialog():
-            self.controller.refresh_random_ip_counter()
+        self._open_quota_redeem_dialog()
 
     def _on_ip_low_infobar_closed(self):
         self._ip_low_infobar_dismissed = True

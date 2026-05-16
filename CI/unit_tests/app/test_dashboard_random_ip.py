@@ -5,8 +5,6 @@ import threading
 from types import SimpleNamespace
 
 from PySide6.QtGui import QColor
-from PySide6.QtWidgets import QDialog
-
 import software.ui.pages.workbench.dashboard.parts.random_ip as dashboard_random_ip
 from software.ui.pages.workbench.dashboard.parts.random_ip import DashboardRandomIPMixin
 
@@ -380,32 +378,21 @@ class DashboardRandomIPTests:
         assert dashboard.random_ip_cb.isChecked() is True
         assert dashboard.sync_calls[-1] is True
 
-        class _ContactDialog:
-            def __init__(self, *_args, **_kwargs) -> None:
-                self.finished = SimpleNamespace(connect=lambda cb: setattr(self, "finished_cb", cb))
-                self.destroyed = SimpleNamespace(connect=lambda cb: setattr(self, "destroyed_cb", cb))
-                self.opened = 0
-
-            def open(self) -> None:
-                self.opened += 1
-
-            def exec(self) -> int:
-                return int(QDialog.DialogCode.Accepted)
-
-        class _QuotaDialog:
-            def __init__(self, *_args, **_kwargs) -> None:
-                return
-
-            def exec(self) -> int:
-                return int(QDialog.DialogCode.Accepted)
-
-        monkeypatch.setattr(dashboard_random_ip, "ContactDialog", _ContactDialog)
-        monkeypatch.setattr(dashboard_random_ip, "QuotaRedeemDialog", _QuotaDialog)
-        assert dashboard._open_contact_dialog("报错反馈") is False
-        assert dashboard._open_contact_dialog("额度申请", lock_message_type=True) is True
+        dashboard._window = SimpleNamespace(
+            _open_contact_dialog=lambda default_type, lock_message_type: (
+                default_type,
+                lock_message_type,
+            ),
+            _open_quota_redeem_dialog=lambda: True,
+        )
+        assert dashboard._open_contact_dialog("报错反馈") == ("报错反馈", False)
+        assert dashboard._open_contact_dialog("额度申请", lock_message_type=True) == (
+            "额度申请",
+            True,
+        )
         assert dashboard._open_quota_redeem_dialog() is True
         dashboard._on_request_quota_clicked()
-        assert ("refresh_counter",) in dashboard.sync_calls
+        assert ("refresh_counter",) not in dashboard.sync_calls
 
         monkeypatch.setattr(dashboard_random_ip, "has_authenticated_session", lambda: True)
         DashboardRandomIPMixin._update_ip_low_infobar(dashboard, 9, 10, False)
@@ -414,3 +401,20 @@ class DashboardRandomIPTests:
         assert dashboard._ip_low_infobar_dismissed is True
         DashboardRandomIPMixin._on_ip_balance_checked(dashboard, 99)
         assert dashboard._ip_low_infobar.hidden >= 1
+
+    def test_open_dialog_methods_require_main_window_handlers(self) -> None:
+        dashboard = _FakeDashboard()
+
+        try:
+            dashboard._open_contact_dialog()
+        except RuntimeError as exc:
+            assert "主窗口不支持联系开发者弹窗" in str(exc)
+        else:
+            raise AssertionError("expected RuntimeError")
+
+        try:
+            dashboard._open_quota_redeem_dialog()
+        except RuntimeError as exc:
+            assert "主窗口不支持额度兑换弹窗" in str(exc)
+        else:
+            raise AssertionError("expected RuntimeError")

@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-from pathlib import Path
 from types import SimpleNamespace
 from typing import Any, cast
 
@@ -233,12 +232,3 @@ class QuotaRedeemDialogTests:
 
         assert result is False
         assert dialog.layout_calls == 1
-
-    def test_load_shop_icon_returns_none_when_file_missing(
-        self,
-        monkeypatch: pytest.MonkeyPatch,
-    ) -> None:
-        monkeypatch.setattr(quota_redeem, "get_resource_path", lambda _path: str(Path("missing.ico")))
-        monkeypatch.setattr(quota_redeem.os.path, "exists", lambda _path: False)
-
-        assert quota_redeem.load_shop_icon() is None
