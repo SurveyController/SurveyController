@@ -9,7 +9,6 @@ from PySide6.QtWidgets import (
     QWidget,
     QVBoxLayout,
     QHBoxLayout,
-    QLabel,
     QBoxLayout,
 )
 from qfluentwidgets import (
@@ -19,6 +18,7 @@ from qfluentwidgets import (
     CaptionLabel,
     CardWidget,
     StrongBodyLabel,
+    ImageLabel,
 )
 from software.app.runtime_paths import get_resource_path
 
@@ -116,7 +116,7 @@ class DonatePage(ScrollArea):
             title_label.setStyleSheet(f"color: {brand_color}; font-weight: bold;")
         card_layout.addWidget(title_label, 0, Qt.AlignmentFlag.AlignHCenter)
 
-        qr_label = QLabel(content_widget)
+        qr_label = ImageLabel(content_widget)
         qr_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         qr_label.setStyleSheet(
             "border: 1px solid rgba(128,128,128,0.15); border-radius: 8px; padding: 4px;"

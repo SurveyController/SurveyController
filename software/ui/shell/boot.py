@@ -8,8 +8,14 @@ import os
 
 from PySide6.QtCore import Qt, QTimer, QSize, QThread
 from PySide6.QtGui import QIcon
-from PySide6.QtWidgets import QLabel, QWidget
-from qfluentwidgets import IndeterminateProgressBar, SplashScreen, isDarkTheme
+from PySide6.QtWidgets import QWidget
+from qfluentwidgets import (
+    CaptionLabel,
+    IndeterminateProgressBar,
+    SplashScreen,
+    TitleLabel,
+    isDarkTheme,
+)
 
 from software.app.runtime_paths import get_resource_path
 from software.app.version import __VERSION__
@@ -36,11 +42,13 @@ class BootSplash:
         self._badge_bg = "rgba(255, 255, 255, 0.1)" if is_dark else "rgba(0, 0, 0, 0.08)"
 
         # 添加应用名称标签
-        self.title_label = QLabel("SurveyController", self.splash_screen)
+        self.title_label = TitleLabel(self.splash_screen)
+        self.title_label.setText("SurveyController")
         self.title_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
 
         # 添加版本号徽章标签
-        self.version_label = QLabel(f"v{__VERSION__}", self.splash_screen)
+        self.version_label = CaptionLabel(self.splash_screen)
+        self.version_label.setText(f"v{__VERSION__}")
         self.version_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
 
         # 添加不确定进度条
@@ -76,26 +84,26 @@ class BootSplash:
         pad_vertical = max(4, int(4 * self._scale))
         pad_horizontal = max(12, int(14 * self._scale))
 
-        self.title_label.setStyleSheet(f"""
-            QLabel {{
-                color: {self._title_color};
-                font-size: {title_font_size}px;
-                font-weight: bold;
-                font-family: 'Microsoft YaHei UI';
-            }}
-        """)
+        self.title_label.setStyleSheet(
+            f"""
+            color: {self._title_color};
+            font-size: {title_font_size}px;
+            font-weight: bold;
+            font-family: 'Microsoft YaHei UI';
+            """
+        )
         self.title_label.adjustSize()
 
-        self.version_label.setStyleSheet(f"""
-            QLabel {{
-                color: {self._version_color};
-                font-size: {version_font_size}px;
-                font-family: 'Microsoft YaHei UI';
-                background-color: {self._badge_bg};
-                border-radius: {badge_radius}px;
-                padding: {pad_vertical}px {pad_horizontal}px;
-            }}
-        """)
+        self.version_label.setStyleSheet(
+            f"""
+            color: {self._version_color};
+            font-size: {version_font_size}px;
+            font-family: 'Microsoft YaHei UI';
+            background-color: {self._badge_bg};
+            border-radius: {badge_radius}px;
+            padding: {pad_vertical}px {pad_horizontal}px;
+            """
+        )
         self.version_label.adjustSize()
 
     def update_layout(self, width: int, height: int):

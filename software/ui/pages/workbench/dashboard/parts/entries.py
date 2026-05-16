@@ -316,14 +316,17 @@ class DashboardEntriesMixin:
             parent=self,
             reliability_mode_enabled=reliability_mode_enabled,
         )
-        if dlg.exec() == QDialog.DialogCode.Accepted:
-            try:
+        accepted = dlg.exec() == QDialog.DialogCode.Accepted
+        try:
+            if accepted:
                 self._apply_wizard_results(entries, dlg)
-            except ValueError as exc:
-                self._toast(f"配置应用失败：{exc}", "error")
-                return False
-            return True
-        return False
+                return True
+            return False
+        except ValueError as exc:
+            self._toast(f"配置应用失败：{exc}", "error")
+            return False
+        finally:
+            dlg.deleteLater()
 
     def _delete_selected_entries(self):
         selected_rows = self._checked_rows()

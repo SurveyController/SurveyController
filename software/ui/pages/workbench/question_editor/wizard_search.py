@@ -18,11 +18,11 @@ from PySide6.QtWidgets import (
     QAbstractItemView,
     QListWidgetItem,
     QStyle,
-    QStyledItemDelegate,
     QStyleOptionViewItem,
     QWidget,
 )
 from qfluentwidgets import ListWidget, SearchLineEdit, isDarkTheme
+from qfluentwidgets.components.widgets.list_view import ListItemDelegate
 
 from software.providers.contracts import SurveyQuestionMeta
 
@@ -47,8 +47,11 @@ _SEARCH_RESULT_TITLE_ROLE = _SEARCH_RESULT_INDEX_ROLE + 1
 _SEARCH_RESULT_DETAIL_ROLE = _SEARCH_RESULT_INDEX_ROLE + 2
 
 
-class QuestionSearchCompleterDelegate(QStyledItemDelegate):
+class QuestionSearchCompleterDelegate(ListItemDelegate):
     """搜索建议下拉项：展示题号/题干，并高亮命中的关键词。"""
+
+    def __init__(self, parent: QAbstractItemView) -> None:
+        super().__init__(parent)
 
     def _build_document(
         self,

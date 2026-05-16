@@ -3,9 +3,9 @@
 from typing import Any, cast
 
 from PySide6.QtGui import QGuiApplication
-from PySide6.QtWidgets import QFileDialog, QLabel, QVBoxLayout, QWidget
+from PySide6.QtWidgets import QFileDialog, QVBoxLayout, QWidget
 from PySide6.QtCore import Qt
-from qfluentwidgets import BodyLabel, InfoBar, InfoBarPosition, PushButton
+from qfluentwidgets import BodyLabel, ImageLabel, InfoBar, InfoBarPosition, PushButton
 
 from .constants import REQUEST_MESSAGE_TYPE
 
@@ -141,12 +141,17 @@ def render_attachments_ui(form: Any) -> None:
         card_layout.setContentsMargins(0, 0, 0, 0)
         card_layout.setSpacing(6)
 
-        thumb_label = QLabel(parent_widget)
+        thumb_label = ImageLabel(parent_widget)
         thumb_label.setFixedSize(96, 96)
-        thumb_label.setScaledContents(True)
         thumb_label.setStyleSheet("border: 1px solid #E0E0E0; border-radius: 4px;")
         if att.pixmap and not att.pixmap.isNull():
-            thumb_label.setPixmap(att.pixmap)
+            thumb_label.setPixmap(
+                att.pixmap.scaled(
+                    thumb_label.size(),
+                    Qt.AspectRatioMode.KeepAspectRatio,
+                    Qt.TransformationMode.SmoothTransformation,
+                )
+            )
         card_layout.addWidget(thumb_label)
 
         size_label = BodyLabel(f"{round(len(att.data) / 1024, 1)} KB", parent_widget)

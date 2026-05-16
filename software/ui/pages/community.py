@@ -9,7 +9,6 @@ from PySide6.QtWidgets import (
     QWidget,
     QVBoxLayout,
     QHBoxLayout,
-    QLabel,
     QSizePolicy,
 )
 from qfluentwidgets import (
@@ -21,6 +20,8 @@ from qfluentwidgets import (
     PushButton,
     FluentIcon,
     StrongBodyLabel,
+    IconWidget,
+    ImageLabel,
 )
 
 from software.app.config import STATUS_ENDPOINT
@@ -125,8 +126,8 @@ class CommunityPage(ScrollArea):
         title_layout.setContentsMargins(0, 0, 0, 0)
 
         if icon:
-            icon_label = QLabel(card)
-            icon_label.setPixmap(icon.icon(QPixmap()).pixmap(24, 24))
+            icon_label = IconWidget(icon, card)
+            icon_label.setFixedSize(24, 24)
             title_layout.addWidget(icon_label)
 
         title_label = StrongBodyLabel(title, card)
@@ -193,7 +194,7 @@ class CommunityPage(ScrollArea):
         content_row.addLayout(text_layout, 1)
 
         # 二维码展示
-        self.qq_qr_label = QLabel(card)
+        self.qq_qr_label = ImageLabel(card)
         self.qq_qr_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.qq_qr_label.setFixedSize(144, 144)
         self._load_qr_image()

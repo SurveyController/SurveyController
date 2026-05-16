@@ -167,12 +167,12 @@ class DashboardRandomIPMixin:
         if 200 <= status_code < 300:
             return {
                 "level": "success",
-                "text": f"{elapsed_ms} ms",
+                "text": f"服务正常 {elapsed_ms} ms",
                 "tooltip": f"随机IP提取接口返回 HTTP {status_code}，耗时 {elapsed_ms} ms。",
             }
         return {
             "level": "error",
-            "text": f"HTTP {status_code or 0}",
+            "text": f"异常 {status_code or 0}",
             "tooltip": f"随机IP提取接口返回 HTTP {status_code or 0}，耗时 {elapsed_ms} ms。",
         }
 
