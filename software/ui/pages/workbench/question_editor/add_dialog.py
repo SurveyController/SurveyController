@@ -6,7 +6,6 @@ from PySide6.QtWidgets import (
     QWidget,
     QVBoxLayout,
     QHBoxLayout,
-    QDialog,
 )
 from qfluentwidgets import (
     ScrollArea,
@@ -17,6 +16,7 @@ from qfluentwidgets import (
     PrimaryPushButton,
     ComboBox,
     LineEdit,
+    MessageBoxBase,
 )
 
 from software.ui.widgets.no_wheel import NoWheelSpinBox
@@ -28,13 +28,17 @@ from .utils import _apply_label_color
 from .add_preview import AddPreviewMixin
 
 
-class QuestionAddDialog(AddPreviewMixin, QDialog):
+class QuestionAddDialog(AddPreviewMixin, MessageBoxBase):
     """新增题目弹窗：基础信息 + 题目配置预览。"""
 
     def __init__(self, entries: List[QuestionEntry], parent=None):
         super().__init__(parent)
         self.setWindowTitle("新增题目")
         self.resize(760, 680)
+        self.widget.setMinimumSize(760, 680)
+        self.yesButton.hide()
+        self.cancelButton.hide()
+        self.buttonLayout.insertStretch(0, 1)
         self._entry_index = len(entries) + 1
         self._result_entry: Optional[QuestionEntry] = None
         self._text_answers: List[str] = [DEFAULT_FILL_TEXT]
@@ -45,7 +49,7 @@ class QuestionAddDialog(AddPreviewMixin, QDialog):
         self._option_backup: Optional[int] = None
         self._matrix_strategy = ""
 
-        layout = QVBoxLayout(self)
+        layout = self.viewLayout
         layout.setContentsMargins(20, 18, 20, 18)
         layout.setSpacing(12)
 

@@ -4,12 +4,12 @@ from typing import cast
 
 from PySide6.QtCore import Qt, QTimer
 from PySide6.QtCore import QObject
-from PySide6.QtWidgets import QDialog, QVBoxLayout
+from qfluentwidgets import MessageBoxBase
 
 from software.ui.widgets.contact_form.widget import ContactForm
 
 
-class ContactDialog(QDialog):
+class ContactDialog(MessageBoxBase):
     """联系开发者（Qt 版本）。包装 ContactForm，保留原有对话框入口。"""
 
     def __init__(
@@ -24,14 +24,17 @@ class ContactDialog(QDialog):
         self.setAttribute(Qt.WidgetAttribute.WA_QuitOnClose, False)
         self.setWindowTitle("联系开发者")
         self.resize(720, 520)
+        self.widget.setMinimumSize(720, 520)
+        self.yesButton.hide()
+        self.cancelButton.hide()
+        self.buttonLayout.insertStretch(0, 1)
         self._status_poll_timer = QTimer(cast(QObject, self))
         self._status_poll_timer.setSingleShot(True)
         self._status_poll_timer.setInterval(700)
         self._status_poll_timer.timeout.connect(self._start_status_polling_if_ready)
 
-        layout = QVBoxLayout(self)
-        layout.setContentsMargins(18, 18, 18, 18)
-        layout.setSpacing(12)
+        self.viewLayout.setContentsMargins(18, 18, 18, 18)
+        self.viewLayout.setSpacing(12)
 
         self.form = ContactForm(
             self,
@@ -44,7 +47,7 @@ class ContactDialog(QDialog):
             auto_clear_on_success=False,
             manage_polling=False,
         )
-        layout.addWidget(self.form)
+        self.viewLayout.addWidget(self.form)
 
         self.form.sendSucceeded.connect(self._on_send_succeeded)
         self.form.cancelRequested.connect(self.reject)

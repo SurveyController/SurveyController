@@ -1,10 +1,9 @@
 """禁用鼠标滚轮的组件。"""
 
-from PySide6.QtWidgets import QSlider
-from qfluentwidgets import SpinBox
+from qfluentwidgets import Slider, SpinBox
 
 
-class NoWheelSlider(QSlider):
+class NoWheelSlider(Slider):
     """禁用鼠标滚轮的滑块"""
 
     def wheelEvent(self, event):  # type: ignore[override]

@@ -218,14 +218,22 @@ class HttpClientTests:
 
     def test_prewarm_marks_prepared_and_closes_temp_client(self, monkeypatch) -> None:
         fake_client = _FakeClient()
+        captured_kwargs: list[dict[str, object]] = []
         monkeypatch.setattr(http_client, "_PREWARMED", False)
-        monkeypatch.setattr(http_client.httpx, "Client", lambda **kwargs: fake_client)
+        monkeypatch.setattr(
+            http_client.httpx,
+            "Client",
+            lambda **kwargs: captured_kwargs.append(kwargs) or fake_client,
+        )
 
         http_client.prewarm()
         http_client.prewarm()
 
         assert http_client._PREWARMED is True
         assert fake_client.close_calls == 1
+        assert len(captured_kwargs) == 1
+        assert captured_kwargs[0]["verify"] is False
+        assert captured_kwargs[0]["trust_env"] is False
 
     @pytest.mark.asyncio
     async def test_async_stream_response_aiter_content_closes_once(self) -> None:

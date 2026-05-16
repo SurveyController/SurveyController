@@ -291,9 +291,9 @@ class AsyncSlotRunner:
         if session is _JOINT_PRE_ANSWER_TIMEOUT:
             return None
         driver = session.driver
-        setattr(driver, "_thread_name", self.slot_label)
-        setattr(driver, "_session_state", self.state)
-        setattr(driver, "_session_proxy_address", proxy_address)
+        driver.thread_name = self.slot_label
+        driver.session_state = self.state
+        driver.session_proxy_address = proxy_address or ""
         return session
 
     async def _close_session(self, session: Optional[AsyncBrowserSession]) -> None:

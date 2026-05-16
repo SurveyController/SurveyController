@@ -21,6 +21,16 @@ class _FakeCleanupTarget:
         if callable(self.on_quit):
             self.on_quit()
 
+
+class _FakeManagedDriver(_FakeCleanupTarget):
+    def __init__(self, name: str, events: list[str]) -> None:
+        super().__init__(name, events)
+        self.aclose_calls = 0
+
+    async def aclose(self) -> None:
+        self.aclose_calls += 1
+        self.events.append(f"{self.name}:aclose")
+
 class EngineGuiAdapterCleanupTests:
 
     def _build_adapter(self) -> EngineGuiAdapter:
@@ -60,3 +70,14 @@ class EngineGuiAdapterCleanupTests:
         adapter.handle_random_ip_submission("stop")
 
         assert events == [("refresh",), ("toggle", True), ("submit", "stop")]
+
+    def test_cleanup_browsers_prefers_async_close_when_available(self) -> None:
+        adapter = self._build_adapter()
+        events: list[str] = []
+        driver = _FakeManagedDriver("driver", events)
+
+        adapter.register_cleanup_target(driver)
+        adapter.cleanup_browsers()
+
+        assert events == ["driver:aclose"]
+        assert driver.aclose_calls == 1

@@ -17,9 +17,9 @@ class _FakeDriver:
         self.browser_pid: int | None = None
         self.browser_pids: set[int] = set()
         self._current_url = current_url
-        self._session_proxy_address = ""
-        self._submit_proxy_address = ""
-        self._thread_name = ""
+        self.session_proxy_address = ""
+        self.submit_proxy_address = ""
+        self.thread_name = ""
 
     async def current_url(self) -> str:
         return self._current_url
@@ -58,8 +58,8 @@ class SubmissionServiceTests:
         service = SubmissionService(config, state, stop_policy)
         stop_signal = make_mock_event()
         driver = _FakeDriver()
-        driver._session_proxy_address = "http://1.1.1.1:8000"
-        driver._thread_name = "Worker-1"
+        driver.session_proxy_address = "http://1.1.1.1:8000"
+        driver.thread_name = "Worker-1"
 
         with (
             patch.object(service, "_detect_completion_once", new=AsyncMock(return_value=True)) as detect_mock,

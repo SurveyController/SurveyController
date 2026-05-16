@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import errno
 
 import pytest
@@ -132,3 +133,37 @@ class BrowserStartupTests:
 
         with pytest.raises(RuntimeError, match="boom"):
             await browser_startup._start_playwright_async_runtime()
+
+    @pytest.mark.asyncio
+    async def test_start_playwright_async_runtime_serializes_concurrent_starts(self, patch_attrs) -> None:
+        gate = asyncio.Event()
+        active_calls = 0
+        max_active_calls = 0
+        started = 0
+
+        class _FakeAsyncPlaywright:
+            def __call__(self):
+                return self
+
+            async def start(self):
+                nonlocal active_calls, max_active_calls, started
+                started += 1
+                active_calls += 1
+                max_active_calls = max(max_active_calls, active_calls)
+                await gate.wait()
+                active_calls -= 1
+                return f"pw-{started}"
+
+        patch_attrs(
+            (browser_startup, "_load_playwright_async", lambda: (_FakeAsyncPlaywright(), object())),
+        )
+
+        first = asyncio.create_task(browser_startup._start_playwright_async_runtime())
+        await asyncio.sleep(0.01)
+        second = asyncio.create_task(browser_startup._start_playwright_async_runtime())
+        await asyncio.sleep(0.01)
+        assert max_active_calls == 1
+
+        gate.set()
+        results = await asyncio.gather(first, second)
+        assert results == ["pw-1", "pw-2"]

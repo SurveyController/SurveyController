@@ -16,6 +16,8 @@ class _FakeSettings:
     def __init__(self) -> None:
         self.data: dict[str, object] = {}
         self.removed: list[str] = []
+        self.cleared = False
+        self.synced = False
 
     def value(self, key: str):
         return self.data.get(key)
@@ -26,6 +28,13 @@ class _FakeSettings:
     def remove(self, key: str) -> None:
         self.removed.append(key)
         self.data.pop(key, None)
+
+    def clear(self) -> None:
+        self.cleared = True
+        self.data.clear()
+
+    def sync(self) -> None:
+        self.synced = True
 
 
 class _FakeNavigation:
@@ -84,9 +93,10 @@ def test_settings_page_reset_restores_defaults(qtbot, monkeypatch) -> None:
     qtbot.waitUntil(lambda: page.auto_update_card.isChecked() is True)
 
     page._on_reset_ui_settings = lambda: None
-    page._reset_defined_settings()
+    page._reset_all_settings()
 
-    assert fake_settings.removed
+    assert fake_settings.cleared is True
+    assert fake_settings.synced is True
     assert page.auto_save_logs_card.isChecked() is page._defaults[AUTO_SAVE_LOGS_SETTING_KEY]
     assert page.navigation_text_card.isChecked() is page._defaults[NAVIGATION_TEXT_VISIBLE_SETTING_KEY]
     assert page.task_result_notification_card.isChecked() is page._defaults[TASK_RESULT_WINDOWS_NOTIFICATION_SETTING_KEY]

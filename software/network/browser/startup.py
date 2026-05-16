@@ -7,6 +7,7 @@ import gc
 import logging
 import asyncio
 import threading
+from contextlib import asynccontextmanager
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, List, Optional
 
@@ -53,6 +54,15 @@ def _load_playwright_async():
     from playwright.async_api import async_playwright
 
     return async_playwright, object()
+
+
+@asynccontextmanager
+async def _playwright_start_guard():
+    await asyncio.to_thread(_PW_START_LOCK.acquire)
+    try:
+        yield
+    finally:
+        _PW_START_LOCK.release()
 
 
 def _format_exception_chain(exc: BaseException) -> str:
@@ -142,25 +152,25 @@ async def _start_playwright_async_runtime() -> AsyncPlaywright:
     async_playwright, _ = _load_playwright_async()
     last_exc: Optional[Exception] = None
     max_attempts = max(1, len(_PLAYWRIGHT_START_RETRY_DELAYS) + 1)
+    async with _playwright_start_guard():
+        for attempt in range(1, max_attempts + 1):
+            try:
+                return await async_playwright().start()
+            except Exception as exc:
+                last_exc = exc
+                if not is_playwright_startup_environment_error(exc) or attempt >= max_attempts:
+                    raise
 
-    for attempt in range(1, max_attempts + 1):
-        try:
-            return await async_playwright().start()
-        except Exception as exc:
-            last_exc = exc
-            if not is_playwright_startup_environment_error(exc) or attempt >= max_attempts:
-                raise
-
-            wait_seconds = _PLAYWRIGHT_START_RETRY_DELAYS[attempt - 1]
-            logging.warning(
-                "[Action Log] 异步 Playwright 底座启动第 %s/%s 次失败，%.2f 秒后重试：%s",
-                attempt,
-                max_attempts,
-                wait_seconds,
-                describe_playwright_startup_error(exc),
-            )
-            gc.collect()
-            await asyncio.sleep(wait_seconds)
+                wait_seconds = _PLAYWRIGHT_START_RETRY_DELAYS[attempt - 1]
+                logging.warning(
+                    "[Action Log] 异步 Playwright 底座启动第 %s/%s 次失败，%.2f 秒后重试：%s",
+                    attempt,
+                    max_attempts,
+                    wait_seconds,
+                    describe_playwright_startup_error(exc),
+                )
+                gc.collect()
+                await asyncio.sleep(wait_seconds)
 
     if last_exc is not None:
         raise last_exc

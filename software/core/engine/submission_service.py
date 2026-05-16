@@ -62,20 +62,22 @@ class SubmissionService:
         return self._survey_provider_key() == "wjx"
 
     def _mark_successful_submit_proxies(self, driver: BrowserDriver) -> None:
-        for attr_name in ("_session_proxy_address", "_submit_proxy_address"):
-            proxy_address = str(getattr(driver, attr_name, "") or "").strip()
+        for proxy_address in (
+            str(getattr(driver, "session_proxy_address", "") or "").strip(),
+            str(getattr(driver, "submit_proxy_address", "") or "").strip(),
+        ):
             if not proxy_address:
                 continue
             try:
                 self.state.mark_successful_proxy_address(proxy_address)
             except Exception as exc:
                 log_suppressed_exception(
-                    f"SubmissionService._mark_successful_submit_proxies {attr_name}",
+                    "SubmissionService._mark_successful_submit_proxies",
                     exc,
                     level=logging.WARNING,
                 )
         try:
-            thread_name = str(getattr(driver, "_thread_name", "") or "").strip()
+            thread_name = str(getattr(driver, "thread_name", "") or "").strip()
             if thread_name:
                 self.state.release_proxy_in_use(thread_name)
         except Exception as exc:

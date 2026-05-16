@@ -121,9 +121,19 @@ class AsyncBrowserOwnerLargeTests:
     @pytest.mark.asyncio
     async def test_async_browser_session_close_delegates_to_driver(self) -> None:
         calls: list[str] = []
-        driver = SimpleNamespace(aclose=lambda: asyncio.sleep(0, result=calls.append("closed")))
+        cleanup_calls = [0]
+
+        def _mark_cleanup_done() -> bool:
+            cleanup_calls[0] += 1
+            return cleanup_calls[0] == 1
+
+        driver = SimpleNamespace(
+            aclose=lambda: asyncio.sleep(0, result=calls.append("closed")),
+            mark_cleanup_done=_mark_cleanup_done,
+        )
         session = AsyncBrowserSession(driver=driver, owner_id=1, browser_name="edge")
 
+        await session.close()
         await session.close()
 
         assert calls == ["closed"]
@@ -243,8 +253,9 @@ class AsyncBrowserOwnerLargeTests:
         assert browser.new_context_calls == [{"proxy_address": "http://1.1.1.1:80", "user_agent": "UA"}]
         assert context.route_calls[0][0] == "**/*"
         assert owner.active_contexts == 1
-        assert captured["browser_pid"] == 4321
+        assert "browser_pid" not in captured
         assert "browser_close_callback" not in captured
+        assert "browser_pids" not in captured
 
         captured["release_callback"]()
         assert owner.active_contexts == 0
@@ -323,7 +334,7 @@ class AsyncBrowserOwnerPoolLargeTests:
         noisy_route.fail_fallback = True
         noisy_request = SimpleNamespace(resource_type="script", url="https://example.com/app.js")
         await async_owner_pool._route_runtime_resource(noisy_route, noisy_request)
-        assert noisy_route.actions == ["fallback", "fallback"]
+        assert noisy_route.actions == ["fallback"]
 
     @pytest.mark.asyncio
     async def test_owner_pool_open_session_closed_and_non_disconnect_paths(self, monkeypatch) -> None:
@@ -413,6 +424,51 @@ class AsyncBrowserOwnerPoolLargeTests:
             await asyncio.wait_for(pool.open_session(proxy_address=None, user_agent=None), timeout=2.0)
         await stopper
         assert wait_calls == [first_owner.owner_id, second_owner.owner_id]
+
+    @pytest.mark.asyncio
+    async def test_owner_pool_waits_for_first_available_owner_only(self, monkeypatch) -> None:
+        pool = AsyncBrowserOwnerPool(
+            config=BrowserPoolConfig(owner_count=2, contexts_per_owner=1, logical_concurrency=2),
+            headless=True,
+        )
+        first_owner, second_owner = pool.owners
+        release_first = asyncio.Event()
+        release_second = asyncio.Event()
+        attempts: list[tuple[int, bool]] = []
+
+        async def _busy_open_session(**kwargs):
+            owner = first_owner if len(attempts) % 2 == 0 else second_owner
+            attempts.append((owner.owner_id, kwargs["wait"]))
+            if len(attempts) <= 2:
+                raise _OwnerBusyError("busy")
+            return AsyncBrowserSession(
+                driver=SimpleNamespace(aclose=lambda: asyncio.sleep(0)),
+                owner_id=first_owner.owner_id,
+                browser_name="edge",
+            )
+
+        async def _wait_first() -> None:
+            await release_first.wait()
+
+        async def _wait_second() -> None:
+            await release_second.wait()
+
+        monkeypatch.setattr(first_owner, "open_session", _busy_open_session)
+        monkeypatch.setattr(second_owner, "open_session", _busy_open_session)
+        monkeypatch.setattr(first_owner, "wait_until_available", _wait_first)
+        monkeypatch.setattr(second_owner, "wait_until_available", _wait_second)
+
+        task = asyncio.create_task(pool.open_session(proxy_address=None, user_agent=None))
+        await asyncio.sleep(0.01)
+        release_first.set()
+        session = await asyncio.wait_for(task, timeout=1.0)
+
+        assert session.owner_id == first_owner.owner_id
+        assert attempts == [
+            (first_owner.owner_id, False),
+            (second_owner.owner_id, False),
+            (first_owner.owner_id, False),
+        ]
 
     @pytest.mark.asyncio
     async def test_owner_pool_open_session_uses_next_idle_owner_before_waiting(self, monkeypatch) -> None:

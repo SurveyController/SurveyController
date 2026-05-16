@@ -208,10 +208,12 @@ class PlaywrightAsyncDriver:
         page: Any,
         browser_name: str,
         browser_pid: Optional[int] = None,
+        browser_close_callback: Optional[Any] = None,
         release_callback: Optional[Any] = None,
     ) -> None:
         self._context = context
         self._page = page
+        self._browser_close_callback = browser_close_callback
         self._release_callback = release_callback
         self.browser_name = str(browser_name or "")
         self.session_id = f"apw-{int(time.time() * 1000)}"
@@ -219,6 +221,10 @@ class PlaywrightAsyncDriver:
         self.browser_pids: Set[int] = {self.browser_pid} if self.browser_pid else set()
         self._cleanup_done = False
         self._cleanup_lock = threading.Lock()
+        self.thread_name = ""
+        self.session_state: Any = None
+        self.session_proxy_address = ""
+        self.submit_proxy_address = ""
 
     async def find_element(self, by: str, value: str) -> PlaywrightAsyncElement:
         selector = _build_selector(by, value)
@@ -245,11 +251,7 @@ class PlaywrightAsyncDriver:
             "  return fn.apply(null, Array.isArray(args) ? args : []);"
             "}"
         )
-        try:
-            return await self._page.evaluate(wrapper, processed_args)
-        except Exception as exc:
-            logging.info("execute_script failed: %s", exc)
-            return None
+        return await self._page.evaluate(wrapper, processed_args)
 
     async def get(self, url: str, timeout: int = 20000, wait_until: str = "domcontentloaded") -> None:
         try:
@@ -353,6 +355,12 @@ class PlaywrightAsyncDriver:
 
     def quit(self) -> None:
         self.mark_cleanup_done()
+        if callable(self._browser_close_callback):
+            try:
+                self._browser_close_callback()
+                return
+            except Exception as exc:
+                log_suppressed_exception("PlaywrightAsyncDriver.quit browser_close_callback", exc, level=logging.WARNING)
         self._force_terminate_browser_process_tree()
 
 

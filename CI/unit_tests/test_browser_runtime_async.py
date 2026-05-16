@@ -70,6 +70,7 @@ class _Page:
         self.query_selector_result: Any = None
         self.query_selector_all_result: list[Any] = []
         self.evaluate_calls: list[tuple[str, Any]] = []
+        self.evaluate_error: Exception | None = None
         self.goto_error: Exception | None = None
         self.url = "https://example.com"
         self.content_value = "<html></html>"
@@ -88,6 +89,8 @@ class _Page:
 
     async def evaluate(self, wrapper: str, args: Any) -> Any:
         self.evaluate_calls.append((wrapper, args))
+        if self.evaluate_error is not None:
+            raise self.evaluate_error
         return {"ok": True}
 
     def set_default_navigation_timeout(self, timeout: int) -> None:
@@ -174,12 +177,17 @@ class BrowserRuntimeAsyncTests:
             page=page,
             browser_name="edge",
             browser_pid=123,
+            browser_close_callback=lambda: released.append("browser-close"),
             release_callback=lambda: released.append("released"),
         )
 
         assert await driver.find_element("css", ".x")
         assert len(await driver.find_elements("css", ".x")) == 1
         assert await driver.execute_script("return 1;", PlaywrightAsyncElement(handle, page)) == {"ok": True}
+        page.evaluate_error = RuntimeError("script boom")
+        with pytest.raises(RuntimeError, match="script boom"):
+            await driver.execute_script("return 2;")
+        page.evaluate_error = None
         await driver.get("https://example.com", timeout=1234)
         assert await driver.current_url() == "https://example.com"
         assert await driver.page() is page
@@ -208,12 +216,10 @@ class BrowserRuntimeAsyncTests:
         assert not driver.mark_cleanup_done()
         driver._cleanup_done = False
         driver.quit()
-        assert runs == [["taskkill", "/PID", "123", "/T", "/F"]]
+        assert runs == []
 
         driver._cleanup_done = False
         assert driver.mark_cleanup_done() is True
         driver.quit()
-        assert runs == [
-            ["taskkill", "/PID", "123", "/T", "/F"],
-            ["taskkill", "/PID", "123", "/T", "/F"],
-        ]
+        assert runs == []
+        assert released[-1] == "browser-close"

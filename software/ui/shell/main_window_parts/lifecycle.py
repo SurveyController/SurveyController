@@ -159,9 +159,10 @@ class MainWindowLifecycleMixin:
         box = MessageBox("保存配置", "是否保存当前配置？", parent_widget)
         box.yesButton.setText("保存")
         box.cancelButton.setText("取消")
-        no_btn = PushButton("不保存", parent_widget)
+        no_btn = PushButton("不保存", box.buttonGroup)
         box.buttonLayout.insertWidget(1, no_btn)
         no_btn.clicked.connect(lambda: box.done(2))
+        box.widget.raise_()
         reply = box.exec()
 
         if reply == 0 or not reply:

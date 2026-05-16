@@ -37,6 +37,9 @@ class AsyncBrowserSession:
     browser_name: str
 
     async def close(self) -> None:
+        mark_cleanup_done = getattr(self.driver, "mark_cleanup_done", None)
+        if callable(mark_cleanup_done) and not mark_cleanup_done():
+            return
         await self.driver.aclose()
 
 
@@ -209,7 +212,7 @@ class AsyncBrowserOwner:
         await self._acquire_slot(wait=wait)
         context = None
         try:
-            browser, browser_name, _playwright_instance, browser_pid = await self._ensure_browser()
+            browser, browser_name, _playwright_instance, _browser_pid = await self._ensure_browser()
             context_args = _build_context_args(
                 headless=self._headless,
                 proxy_address=proxy_address,
@@ -225,7 +228,6 @@ class AsyncBrowserOwner:
                 context=context,
                 page=page,
                 browser_name=browser_name,
-                browser_pid=browser_pid,
                 release_callback=self._release_slot,
             )
             return AsyncBrowserSession(driver=driver, owner_id=self.owner_id, browser_name=browser_name)
@@ -259,7 +261,11 @@ class AsyncBrowserOwner:
 
 
 async def _route_runtime_resource(route: Any, request: Any) -> None:
+    action_taken = False
+
     async def _pass_through() -> None:
+        nonlocal action_taken
+        action_taken = True
         fallback = getattr(route, "fallback", None)
         if callable(fallback):
             result = fallback()
@@ -277,17 +283,22 @@ async def _route_runtime_resource(route: Any, request: Any) -> None:
             await _pass_through()
             return
         if resource_type in {"image", "font", "media"}:
+            action_taken = True
             await route.abort()
             return
         if any(marker in url for marker in ("google-analytics", "doubleclick", "hm.baidu.com", "cnzz.com")):
+            action_taken = True
             await route.abort()
             return
         await _pass_through()
-    except Exception:
+    except Exception as exc:
+        log_suppressed_exception("AsyncBrowserOwner._route_runtime_resource", exc, level=logging.WARNING)
+        if action_taken:
+            return
         try:
             await _pass_through()
-        except Exception:
-            pass
+        except Exception as fallback_exc:
+            log_suppressed_exception("AsyncBrowserOwner._route_runtime_resource fallback", fallback_exc, level=logging.WARNING)
 
 
 class AsyncBrowserOwnerPool:
@@ -324,6 +335,22 @@ class AsyncBrowserOwnerPool:
     def _owner_sort_key(owner: AsyncBrowserOwner) -> tuple[int, int]:
         return (owner.active_contexts, owner.owner_id)
 
+    async def _wait_for_any_owner_available(self, owners: list[AsyncBrowserOwner]) -> None:
+        waiters = [asyncio.create_task(owner.wait_until_available()) for owner in owners]
+        try:
+            done, pending = await asyncio.wait(waiters, return_when=asyncio.FIRST_COMPLETED)
+            for task in pending:
+                task.cancel()
+            if pending:
+                await asyncio.gather(*pending, return_exceptions=True)
+            if done:
+                await asyncio.gather(*done, return_exceptions=True)
+        finally:
+            for task in waiters:
+                if not task.done():
+                    task.cancel()
+            await asyncio.gather(*waiters, return_exceptions=True)
+
     async def open_session(self, *, proxy_address: Optional[str], user_agent: Optional[str]) -> AsyncBrowserSession:
         if self._closed:
             raise RuntimeError("AsyncBrowserOwnerPool 已关闭")
@@ -349,7 +376,7 @@ class AsyncBrowserOwnerPool:
                         continue
                     raise
             if busy_seen:
-                await asyncio.gather(*(owner.wait_until_available() for owner in owners))
+                await self._wait_for_any_owner_available(owners)
                 if self._closed:
                     raise RuntimeError("AsyncBrowserOwnerPool 已关闭")
                 continue

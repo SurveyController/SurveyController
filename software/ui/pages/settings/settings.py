@@ -463,9 +463,9 @@ class SettingsPage(ScrollArea):
             )
             self._show_bar(f"重启失败：{exc}", "error", 3000)
 
-    def _reset_defined_settings(self) -> None:
-        for key in self._defaults:
-            self._settings.remove(key)
+    def _reset_all_settings(self) -> None:
+        self._settings.clear()
+        self._settings.sync()
         reset_ai_settings()
 
         self._set_switch_state(self.navigation_text_card, self._defaults[NAVIGATION_TEXT_VISIBLE_SETTING_KEY])
@@ -534,7 +534,7 @@ class SettingsPage(ScrollArea):
             "settings",
             result="confirmed",
         )
-        self._reset_defined_settings()
+        self._reset_all_settings()
         self._show_bar("已恢复默认设置", "success", 2000)
         log_action(
             "CONFIG",

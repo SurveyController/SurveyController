@@ -548,50 +548,52 @@ class WizardNavigationMixin:
 
     def eventFilter(self, arg__1, arg__2):
         watched, event = arg__1, arg__2
+        search_edit = getattr(self, "_search_edit", None)
+        search_popup = getattr(self, "_search_popup", None)
         if (
-            watched is self._search_edit
+            watched is search_edit
             and event is not None
             and event.type() == QEvent.Type.KeyPress
         ):
-            if self._search_popup is not None and self._search_popup.isVisible():
+            if search_popup is not None and search_popup.isVisible():
                 key = event.key()
                 if key == Qt.Key.Key_Down:
                     next_row = min(
-                        self._search_popup.count() - 1,
-                        max(0, self._search_popup.currentRow() + 1),
+                        search_popup.count() - 1,
+                        max(0, search_popup.currentRow() + 1),
                     )
-                    self._search_popup.setCurrentRow(next_row)
+                    search_popup.setCurrentRow(next_row)
                     return True
                 if key == Qt.Key.Key_Up:
-                    next_row = max(0, self._search_popup.currentRow() - 1)
-                    self._search_popup.setCurrentRow(next_row)
+                    next_row = max(0, search_popup.currentRow() - 1)
+                    search_popup.setCurrentRow(next_row)
                     return True
                 if key == Qt.Key.Key_Escape:
                     self._hide_search_popup()
                     return True
         if (
-            watched is self._search_edit
+            watched is search_edit
             and event is not None
             and event.type() == QEvent.Type.FocusOut
         ):
             QTimer.singleShot(0, self._hide_search_popup)
         if (
-            watched is self._search_popup
+            watched is search_popup
             and event is not None
             and event.type() == QEvent.Type.KeyPress
         ):
             key = event.key()
             if key in (Qt.Key.Key_Return, Qt.Key.Key_Enter):
                 current_item = (
-                    self._search_popup.currentItem() if self._search_popup is not None else None
+                    search_popup.currentItem() if search_popup is not None else None
                 )
                 if current_item is not None:
                     self._activate_search_popup_item(current_item)
                     return True
             if key == Qt.Key.Key_Escape:
                 self._hide_search_popup()
-                if self._search_edit is not None:
-                    self._search_edit.setFocus()
+                if search_edit is not None:
+                    search_edit.setFocus()
                 return True
         if event is not None and event.type() in (
             QEvent.Type.MouseButtonPress,

@@ -16,14 +16,13 @@ from PySide6.QtGui import QColor, QPainter, QTextDocument
 from PySide6.QtWidgets import (
     QApplication,
     QAbstractItemView,
-    QListWidget,
     QListWidgetItem,
     QStyle,
     QStyledItemDelegate,
     QStyleOptionViewItem,
     QWidget,
 )
-from qfluentwidgets import SearchLineEdit, isDarkTheme
+from qfluentwidgets import ListWidget, SearchLineEdit, isDarkTheme
 
 from software.providers.contracts import SurveyQuestionMeta
 
@@ -250,7 +249,7 @@ class WizardSearchMixin:
         _apply_label_color(self._search_status_label, light, dark)
 
     def _configure_search_popup(self, search_edit: SearchLineEdit) -> None:
-        popup = QListWidget(cast(QWidget, self))
+        popup = ListWidget(cast(QWidget, self))
         popup.setWindowFlag(Qt.WindowType.ToolTip, True)
         popup.setWindowFlag(Qt.WindowType.FramelessWindowHint, True)
         popup.setAttribute(Qt.WidgetAttribute.WA_ShowWithoutActivating, True)

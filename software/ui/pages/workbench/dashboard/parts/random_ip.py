@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 import threading
+import time
 from typing import TYPE_CHECKING, Any, Optional, cast
 from PySide6.QtGui import QColor
 from PySide6.QtWidgets import QDialog
@@ -18,6 +19,7 @@ from software.logging.log_utils import log_suppressed_exception
 from software.ui.controller.run_controller_parts.runtime_constants import (
     STARTUP_STATUS_TIMEOUT_SECONDS,
 )
+from software.ui.helpers.qfluent_compat import set_indeterminate_progress_ring_active
 from software.ui.helpers.proxy_access import (
     PROXY_SOURCE_BENEFIT,
     format_quota_value,
@@ -73,6 +75,7 @@ class DashboardRandomIPMixin:
         _ipBalanceChecked: Any  # 同上
         _randomIpHeartbeatUpdated: Any
         random_ip_status_dot: Any
+        random_ip_status_spinner: Any
         random_ip_status_label: BodyLabel
         random_ip_status_row: Any
         random_ip_status_timer: Any
@@ -98,13 +101,7 @@ class DashboardRandomIPMixin:
             )
             return
 
-        self._apply_random_ip_heartbeat_status(
-            {
-                "level": "warning",
-                "text": "服务状态检查中",
-                "tooltip": "正在获取随机IP提取服务状态。",
-            }
-        )
+        self._apply_random_ip_heartbeat_loading()
         self.random_ip_status_timer = QTimer(cast(Any, self))
         self.random_ip_status_timer.setInterval(60_000)
         self.random_ip_status_timer.timeout.connect(self.refresh_random_ip_heartbeat_async)
@@ -120,6 +117,7 @@ class DashboardRandomIPMixin:
             if bool(getattr(self, "_random_ip_status_fetching", False)):
                 return
             self._random_ip_status_fetching = True
+        self._apply_random_ip_heartbeat_loading()
 
         threading.Thread(
             target=self._run_random_ip_heartbeat_fetch,
@@ -135,8 +133,8 @@ class DashboardRandomIPMixin:
             logging.warning("随机IP服务状态检查失败，已按未知状态处理：%s", exc)
             payload = {
                 "level": "warning",
-                "text": "服务状态未知",
-                "tooltip": f"随机IP服务状态暂时获取失败：{exc}",
+                "text": "HTTP 0",
+                "tooltip": f"随机IP提取接口请求失败：{exc}",
             }
         finally:
             with self._random_ip_status_fetch_lock:
@@ -157,30 +155,31 @@ class DashboardRandomIPMixin:
             "X-Health-Token": "status-rzib9lqpuk3httr4",
             "Content-Type": "application/json",
         }
+        started = time.perf_counter()
         response = http_client.post(
             IP_EXTRACT_ENDPOINT,
             json={},
             timeout=STARTUP_STATUS_TIMEOUT_SECONDS,
             headers=headers,
-            proxies={},
         )
+        elapsed_ms = max(1, int(round((time.perf_counter() - started) * 1000)))
         status_code = int(getattr(response, "status_code", 0) or 0)
         if 200 <= status_code < 300:
             return {
                 "level": "success",
-                "text": "服务可用",
-                "tooltip": f"随机IP提取接口返回 HTTP {status_code}。",
+                "text": f"{elapsed_ms} ms",
+                "tooltip": f"随机IP提取接口返回 HTTP {status_code}，耗时 {elapsed_ms} ms。",
             }
         return {
             "level": "error",
-            "text": "服务异常",
-            "tooltip": f"随机IP提取接口返回 HTTP {status_code}。",
+            "text": f"HTTP {status_code or 0}",
+            "tooltip": f"随机IP提取接口返回 HTTP {status_code or 0}，耗时 {elapsed_ms} ms。",
         }
 
     def _apply_random_ip_heartbeat_status(self, payload: Any) -> None:
         data = payload if isinstance(payload, dict) else {}
         level = str(data.get("level") or "warning").strip().lower()
-        text = str(data.get("text") or "服务状态未知").strip()
+        text = str(data.get("text") or "--").strip()
         tooltip = str(data.get("tooltip") or text).strip()
         color_map = {
             "success": "#0F9D58",
@@ -190,14 +189,31 @@ class DashboardRandomIPMixin:
         color = color_map.get(level, "#C77900")
         dot_style = f"background-color: {color}; border-radius: 5px;"
         try:
+            set_indeterminate_progress_ring_active(self.random_ip_status_spinner, False)
+            self.random_ip_status_spinner.hide()
             self.random_ip_status_dot.setStyleSheet(dot_style)
+            self.random_ip_status_dot.show()
             self.random_ip_status_label.setText(text)
+            self.random_ip_status_label.show()
             self.random_ip_status_dot.setToolTip(tooltip)
             self.random_ip_status_label.setToolTip(tooltip)
             self.random_ip_status_row.setToolTip(tooltip)
         except Exception as exc:
             log_suppressed_exception(
                 "_apply_random_ip_heartbeat_status", exc, level=logging.WARNING
+            )
+
+    def _apply_random_ip_heartbeat_loading(self) -> None:
+        try:
+            self.random_ip_status_dot.hide()
+            self.random_ip_status_label.hide()
+            self.random_ip_status_label.setToolTip("")
+            self.random_ip_status_row.setToolTip("")
+            self.random_ip_status_spinner.show()
+            set_indeterminate_progress_ring_active(self.random_ip_status_spinner, True)
+        except Exception as exc:
+            log_suppressed_exception(
+                "_apply_random_ip_heartbeat_loading", exc, level=logging.WARNING
             )
 
     def _sync_random_ip_toggle_presentation(self, enabled: bool) -> None:

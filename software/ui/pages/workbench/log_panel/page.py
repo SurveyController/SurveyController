@@ -8,7 +8,6 @@ from PySide6.QtWidgets import (
     QWidget,
     QVBoxLayout,
     QHBoxLayout,
-    QPlainTextEdit,
     QFileDialog,
     QSizePolicy,
 )
@@ -23,6 +22,7 @@ from qfluentwidgets import (
     FluentIcon as FIF,
     isDarkTheme,
     qconfig,
+    PlainTextEdit,
 )
 from software.logging.log_utils import (
     LOG_BUFFER_HANDLER,
@@ -121,7 +121,7 @@ class LogPage(QWidget):
         layout.addLayout(toolbar)
 
         # 日志显示区域
-        self.log_view = QPlainTextEdit(self)
+        self.log_view = PlainTextEdit(self)
         self.log_view.setReadOnly(True)
         self.log_view.setTextInteractionFlags(
             Qt.TextInteractionFlag.TextSelectableByMouse
@@ -334,7 +334,7 @@ class LogPage(QWidget):
         """根据主题应用样式"""
         if isDarkTheme():
             self.log_view.setStyleSheet("""
-                QPlainTextEdit {
+                PlainTextEdit {
                     background-color: #1a1a1a;
                     color: #d1d5db;
                     border: 1px solid #333;
@@ -345,7 +345,7 @@ class LogPage(QWidget):
             """)
         else:
             self.log_view.setStyleSheet("""
-                QPlainTextEdit {
+                PlainTextEdit {
                     background-color: #f8f9fa;
                     color: #1f2937;
                     border: 1px solid #e0e0e0;

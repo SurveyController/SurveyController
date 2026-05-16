@@ -366,8 +366,13 @@ def prewarm() -> None:
             return
         temp_client: httpx.Client | None = None
         try:
-            # 这里只做传输层与 SSL 上下文初始化，不发送真实请求。
-            temp_client = httpx.Client(timeout=None, limits=_CLIENT_LIMITS)
+            # 这里只预热客户端构造链，不读取环境代理或证书文件，避免启动阶段卡在系统 SSL 初始化。
+            temp_client = httpx.Client(
+                timeout=None,
+                limits=_CLIENT_LIMITS,
+                verify=False,
+                trust_env=False,
+            )
             _PREWARMED = True
         except Exception as exc:
             log_suppressed_exception("http_client.prewarm httpx.Client()", exc, level=logging.WARNING)

@@ -67,6 +67,7 @@ from software.ui.pages.workbench.shared.survey_entry_card import (
 from software.ui.helpers.fluent_tooltip import install_tooltip_filter
 from software.ui.dialogs.quota_redeem import load_shop_icon
 from software.ui.widgets.config_drawer import ConfigDrawer
+from software.ui.widgets.clickable_card import ClickableElevatedCardWidget
 from software.ui.widgets.full_width_infobar import FullWidthInfoBar
 from software.ui.widgets.no_wheel import NoWheelSpinBox
 from software.ui.widgets.value_slider import ValueSlider
@@ -253,7 +254,7 @@ class DashboardPage(
         content_row.addLayout(left_column, 1)
         content_row.setAlignment(Qt.AlignmentFlag.AlignTop)
 
-        self.random_ip_quota_card = ElevatedCardWidget(exec_card)
+        self.random_ip_quota_card = ClickableElevatedCardWidget(exec_card)
         self.random_ip_quota_card.setMinimumWidth(248)
         quota_layout = QVBoxLayout(self.random_ip_quota_card)
         quota_layout.setContentsMargins(18, 14, 18, 14)
@@ -266,10 +267,20 @@ class DashboardPage(
         random_ip_status_layout = QHBoxLayout(self.random_ip_status_row)
         random_ip_status_layout.setContentsMargins(0, 0, 0, 0)
         random_ip_status_layout.setSpacing(6)
+        self.random_ip_status_spinner = IndeterminateProgressRing(
+            self.random_ip_status_row,
+            start=False,
+        )
+        self.random_ip_status_spinner.setFixedSize(14, 14)
+        self.random_ip_status_spinner.setStrokeWidth(2)
+        self.random_ip_status_spinner.hide()
         self.random_ip_status_dot = QWidget(self.random_ip_status_row)
         self.random_ip_status_dot.setFixedSize(10, 10)
-        self.random_ip_status_label = BodyLabel("服务状态检查中", self.random_ip_status_row)
+        self.random_ip_status_label = BodyLabel("", self.random_ip_status_row)
         self.random_ip_status_label.setStyleSheet("color: #6b6b6b; font-size: 12px;")
+        random_ip_status_layout.addWidget(
+            self.random_ip_status_spinner, 0, Qt.AlignmentFlag.AlignVCenter
+        )
         random_ip_status_layout.addWidget(
             self.random_ip_status_dot, 0, Qt.AlignmentFlag.AlignVCenter
         )
@@ -293,6 +304,7 @@ class DashboardPage(
             self.card_btn.setIcon(shop_icon)
         install_tooltip_filter(self.card_btn)
         quota_layout.addWidget(self.card_btn, 0, Qt.AlignmentFlag.AlignHCenter)
+        self.random_ip_quota_card.set_ignored_click_widgets([self.card_btn])
 
         content_row.addWidget(self.random_ip_quota_card, 0, Qt.AlignmentFlag.AlignTop)
         exec_layout.addLayout(content_row)
@@ -487,6 +499,7 @@ class DashboardPage(
             page="dashboard",
             forward_signal_args=False,
         )
+        self.random_ip_quota_card.backgroundClicked.connect(self.refresh_random_ip_heartbeat_async)
         bind_logged_action(
             self.runtime_settings_hint_card.openRequested,
             self._go_to_runtime_page,

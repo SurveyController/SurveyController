@@ -291,9 +291,9 @@ class AsyncRuntimeLoopLargeTests:
         opened = await runner._open_session()
         assert opened is session
         assert browser_pool.ensure_ready_calls == 0
-        assert session.driver._thread_name == "Slot-1"
-        assert session.driver._session_state is state
-        assert session.driver._session_proxy_address == "http://1.1.1.1:80"
+        assert session.driver.thread_name == "Slot-1"
+        assert session.driver.session_state is state
+        assert session.driver.session_proxy_address == "http://1.1.1.1:80"
 
     @pytest.mark.asyncio
     async def test_close_session_releases_proxy_and_resets_address(self) -> None:

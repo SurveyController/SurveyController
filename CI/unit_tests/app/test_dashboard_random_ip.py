@@ -82,12 +82,31 @@ class _FakeDot:
     def __init__(self) -> None:
         self.style = ""
         self.tooltip = ""
+        self.visible = True
 
     def setStyleSheet(self, style: str) -> None:
         self.style = str(style)
 
     def setToolTip(self, tooltip: str) -> None:
         self.tooltip = str(tooltip)
+
+    def show(self) -> None:
+        self.visible = True
+
+    def hide(self) -> None:
+        self.visible = False
+
+
+class _FakeSpinner:
+    def __init__(self) -> None:
+        self.visible = False
+        self.active = False
+
+    def show(self) -> None:
+        self.visible = True
+
+    def hide(self) -> None:
+        self.visible = False
 
 
 class _FakeLabel:
@@ -104,6 +123,12 @@ class _FakeLabel:
 
     def setVisible(self, visible: bool) -> None:
         self.visible = bool(visible)
+
+    def show(self) -> None:
+        self.visible = True
+
+    def hide(self) -> None:
+        self.visible = False
 
 
 class _FakeInfoBar:
@@ -166,6 +191,7 @@ class _FakeDashboard(DashboardRandomIPMixin):
         self.random_ip_usage_ring = _FakeRing()
         self.random_ip_cb = _FakeToggle()
         self.random_ip_row = _FakeRow()
+        self.random_ip_status_spinner = _FakeSpinner()
         self.random_ip_status_dot = _FakeDot()
         self.random_ip_status_label = _FakeLabel()
         self.random_ip_status_row = _FakeLabel()
@@ -237,6 +263,11 @@ class DashboardRandomIPTests:
     def test_status_heartbeat_fetch_and_apply(self, monkeypatch) -> None:
         dashboard = _FakeDashboard()
         monkeypatch.setattr(
+            dashboard_random_ip,
+            "set_indeterminate_progress_ring_active",
+            lambda ring, active: setattr(ring, "active", bool(active)),
+        )
+        monkeypatch.setattr(
             dashboard_random_ip.http_client,
             "post",
             lambda *args, **kwargs: SimpleNamespace(status_code=204),
@@ -247,6 +278,7 @@ class DashboardRandomIPTests:
         dashboard._apply_random_ip_heartbeat_status(
             {"level": "error", "text": "挂了", "tooltip": "HTTP 500"}
         )
+        assert dashboard.random_ip_status_spinner.visible is False
         assert "#C42B1C" in dashboard.random_ip_status_dot.style
         assert dashboard.random_ip_status_label.text == "挂了"
         assert dashboard.random_ip_status_row.tooltip == "HTTP 500"
@@ -257,15 +289,22 @@ class DashboardRandomIPTests:
             lambda *args, **kwargs: (_ for _ in ()).throw(RuntimeError("boom")),
         )
         dashboard._run_random_ip_heartbeat_fetch()
-        assert dashboard._randomIpHeartbeatUpdated.calls[-1][0]["text"] == "服务状态未知"
+        assert dashboard._randomIpHeartbeatUpdated.calls[-1][0]["text"] == "HTTP 0"
 
     def test_init_random_ip_status_refresh_and_async_guard(self, monkeypatch) -> None:
         dashboard = _FakeDashboard()
+        monkeypatch.setattr(
+            dashboard_random_ip,
+            "set_indeterminate_progress_ring_active",
+            lambda ring, active: setattr(ring, "active", bool(active)),
+        )
         monkeypatch.setattr("PySide6.QtCore.QTimer", _FakeTimer)
         refresh_calls = []
         dashboard.refresh_random_ip_heartbeat_async = lambda: refresh_calls.append("refresh")
         dashboard._init_random_ip_status_refresh()
-        assert dashboard.random_ip_status_label.text == "服务状态检查中"
+        assert dashboard.random_ip_status_spinner.visible is True
+        assert dashboard.random_ip_status_spinner.active is True
+        assert dashboard.random_ip_status_label.visible is False
         assert dashboard.random_ip_status_timer.interval == 60000
         assert dashboard.random_ip_status_timer.started == 1
         assert refresh_calls == ["refresh"]

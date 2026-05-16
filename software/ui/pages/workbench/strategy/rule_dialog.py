@@ -8,7 +8,6 @@ from typing import Any, Dict, List, Optional
 
 from PySide6.QtWidgets import (
     QButtonGroup,
-    QDialog,
     QHBoxLayout,
     QVBoxLayout,
     QWidget,
@@ -25,6 +24,7 @@ from qfluentwidgets import (
     RadioButton,
     ScrollArea,
     SubtitleLabel,
+    MessageBoxBase,
 )
 
 from software.core.questions.consistency import normalize_rule_dict
@@ -116,7 +116,7 @@ def clear_layout(layout: QVBoxLayout) -> None:
                     nested_widget.deleteLater()
 
 
-class ConditionRuleDialog(QDialog):
+class ConditionRuleDialog(MessageBoxBase):
     """新增/编辑条件规则弹窗。"""
 
     def __init__(
@@ -128,6 +128,10 @@ class ConditionRuleDialog(QDialog):
         super().__init__(parent)
         self.setWindowTitle("添加条件规则" if not rule_data else "编辑条件规则")
         self.resize(860, 760)
+        self.widget.setMinimumSize(860, 760)
+        self.yesButton.hide()
+        self.cancelButton.hide()
+        self.buttonLayout.insertStretch(0, 1)
         self._rule_data = copy.deepcopy(rule_data) if rule_data else None
         self._result_rule: Optional[Dict[str, Any]] = None
         self._questions_info = ensure_survey_question_metas(questions_info or [])
@@ -151,7 +155,7 @@ class ConditionRuleDialog(QDialog):
             self._question_map[q_num] = item
 
     def _build_ui(self) -> None:
-        root = QVBoxLayout(self)
+        root = self.viewLayout
         root.setContentsMargins(20, 16, 20, 16)
         root.setSpacing(12)
 

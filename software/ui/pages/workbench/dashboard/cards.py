@@ -58,8 +58,8 @@ class DashboardActionCard(CardWidget):
         layout.addLayout(text_layout, 1)
 
         self.open_button = PushButton(button_text, self)
-        self.open_button.setFixedSize(76, 30)
-        self.open_button.setStyleSheet("font-size: 12px;")
+        self.open_button.setMinimumWidth(76)
+        self.open_button.setFixedHeight(32)
         self.open_button.clicked.connect(self.openRequested.emit)
         layout.addWidget(self.open_button, 0, Qt.AlignmentFlag.AlignVCenter)
 

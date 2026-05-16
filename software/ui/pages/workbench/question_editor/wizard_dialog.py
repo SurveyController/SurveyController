@@ -7,12 +7,12 @@ from PySide6.QtCore import QPropertyAnimation, QTimer, Qt, QSize
 from PySide6.QtGui import QGuiApplication, QShowEvent
 from PySide6.QtWidgets import (
     QButtonGroup,
-    QDialog,
     QHBoxLayout,
     QListWidget,
     QVBoxLayout,
     QWidget,
 )
+from qframelesswindow import FramelessDialog
 from qfluentwidgets import (
     BodyLabel,
     CardWidget,
@@ -61,7 +61,7 @@ class QuestionWizardDialog(
     WizardNavigationMixin,
     WizardCardsMixin,
     WizardSectionsMixin,
-    QDialog,
+    FramelessDialog,
 ):
     """配置向导：用滑块快速设置权重/概率，编辑填空题答案。"""
 
@@ -76,7 +76,11 @@ class QuestionWizardDialog(
         parent=None,
         reliability_mode_enabled: bool = True,
     ):
+        self._search_edit: Optional[SearchLineEdit] = None
+        self._search_status_label: Optional[BodyLabel] = None
+        self._search_popup: Optional[QListWidget] = None
         super().__init__(parent)
+        self.setResizeEnabled(True)
         window_title = "配置向导"
         if survey_title:
             window_title = f"{window_title} - {_shorten_text(survey_title, 36)}"
@@ -126,9 +130,6 @@ class QuestionWizardDialog(
         self._navigation_lane_width = 26
         self._scroll_animation: Optional[QPropertyAnimation] = None
         self._is_animating_scroll = False
-        self._search_edit: Optional[SearchLineEdit] = None
-        self._search_status_label: Optional[BodyLabel] = None
-        self._search_popup: Optional[QListWidget] = None
         self._screen_change_bound = False
 
         layout = QVBoxLayout(self)

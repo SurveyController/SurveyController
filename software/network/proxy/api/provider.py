@@ -77,7 +77,11 @@ class ProxyApiFatalError(RuntimeError):
 # ==================== 状态查询 ====================
 
 def get_status() -> Any:
-    response = http_client.get(STATUS_ENDPOINT, timeout=PROXY_STATUS_TIMEOUT_SECONDS, headers=DEFAULT_HTTP_HEADERS, proxies={})
+    response = http_client.get(
+        STATUS_ENDPOINT,
+        timeout=PROXY_STATUS_TIMEOUT_SECONDS,
+        headers=DEFAULT_HTTP_HEADERS,
+    )
     response.raise_for_status()
     return response.json()
 
@@ -281,7 +285,7 @@ def test_custom_proxy_api(url: str) -> tuple[bool, str, List[str]]:
     if not (url.lower().startswith("http://") or url.lower().startswith("https://")):
         return False, "API地址必须以 http:// 或 https:// 开头", []
     try:
-        resp = http_client.get(url, timeout=10, headers=DEFAULT_HTTP_HEADERS, proxies={})
+        resp = http_client.get(url, timeout=10, headers=DEFAULT_HTTP_HEADERS)
         resp.raise_for_status()
     except http_client.Timeout:
         return False, "请求超时，请检查网络或API地址", []
@@ -410,7 +414,6 @@ async def fetch_proxy_batch_async(
                 url,
                 timeout=10,
                 headers=DEFAULT_HTTP_HEADERS,
-                proxies={},
             )
             resp.raise_for_status()
 

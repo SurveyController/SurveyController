@@ -384,8 +384,6 @@ class WizardSectionsTextMixin:
         self.text_add_btn_map[idx] = add_btn
 
         # 填空项配置区域
-        from PySide6.QtWidgets import QRadioButton
-
         config_hint = BodyLabel("填空项配置：", card)
         config_hint.setStyleSheet("font-size: 12px; margin-top: 8px;")
         _apply_label_color(config_hint, "#666666", "#bfbfbf")
@@ -393,7 +391,7 @@ class WizardSectionsTextMixin:
 
         # 存储每个填空项的单选按钮组和AI复选框
         blank_radio_groups: List[QButtonGroup] = []
-        blank_mode_radios: List[Dict[str, QRadioButton]] = []
+        blank_mode_radios: List[Dict[str, RadioButton]] = []
         blank_ai_checkboxes: List[SwitchButton] = []
         blank_integer_range_edits: List[Tuple[LineEdit, LineEdit]] = []
 
@@ -428,11 +426,11 @@ class WizardSectionsTextMixin:
             radio_group = QButtonGroup(card)
             radio_group.setExclusive(True)
 
-            radio_list = QRadioButton("使用答案列表", card)
-            radio_name = QRadioButton("随机姓名", card)
-            radio_mobile = QRadioButton("随机手机号", card)
-            radio_id_card = QRadioButton("随机身份证号", card)
-            radio_integer = QRadioButton("随机整数", card)
+            radio_list = RadioButton("使用答案列表", card)
+            radio_name = RadioButton("随机姓名", card)
+            radio_mobile = RadioButton("随机手机号", card)
+            radio_id_card = RadioButton("随机身份证号", card)
+            radio_integer = RadioButton("随机整数", card)
             parsed_range = try_parse_random_int_range(saved_int_ranges[blank_idx])
             range_min, range_max = parsed_range if parsed_range is not None else (None, None)
             range_min_edit = self._create_integer_range_edit(card, range_min, "最小值")

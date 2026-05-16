@@ -111,7 +111,6 @@ def _post_json(url: str, *, json_body: Dict[str, Any]) -> Any:
             json=json_body,
             headers=_build_headers(),
             timeout=10,
-            proxies={},
         )
     except Exception as exc:
         logging.warning(
@@ -131,7 +130,6 @@ async def _apost_json(url: str, *, json_body: Dict[str, Any]) -> Any:
             json=json_body,
             headers=_build_headers(),
             timeout=10,
-            proxies={},
         )
     except Exception as exc:
         logging.warning(
