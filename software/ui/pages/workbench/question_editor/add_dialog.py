@@ -22,6 +22,7 @@ from qfluentwidgets import (
 from software.ui.widgets.no_wheel import NoWheelSpinBox
 from software.core.questions.config import QuestionEntry
 from software.app.config import DEFAULT_FILL_TEXT
+from software.ui.helpers.qfluent_compat import resolve_mask_dialog_parent
 
 from .constants import TYPE_CHOICES, STRATEGY_CHOICES
 from .utils import _apply_label_color
@@ -32,7 +33,11 @@ class QuestionAddDialog(AddPreviewMixin, MessageBoxBase):
     """新增题目弹窗：基础信息 + 题目配置预览。"""
 
     def __init__(self, entries: List[QuestionEntry], parent=None):
-        super().__init__(parent)
+        resolved_parent = resolve_mask_dialog_parent(parent)
+        super().__init__(resolved_parent)
+        self._fallback_parent = resolved_parent if resolved_parent is not parent else None
+        if self._fallback_parent is not None:
+            self.destroyed.connect(self._fallback_parent.deleteLater)
         self.setWindowTitle("新增题目")
         self.resize(760, 680)
         self.widget.setMinimumSize(760, 680)

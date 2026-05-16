@@ -10,7 +10,10 @@ from PySide6.QtCore import (
     QEvent,
     QParallelAnimationGroup,
     QPropertyAnimation,
+    Qt,
 )
+from PySide6.QtGui import QGuiApplication
+from PySide6.QtWidgets import QApplication, QWidget
 from shiboken6 import isValid
 
 
@@ -290,7 +293,42 @@ def set_indeterminate_progress_ring_active(ring: Any, active: bool) -> None:
             pass
 
 
+def resolve_mask_dialog_parent(parent: QWidget | None) -> QWidget:
+    """为 MessageBoxBase 提供可靠的父窗口，避免空父窗口直接崩。"""
+    if parent is not None and parent.width() > 0 and parent.height() > 0:
+        return parent
+
+    active_window = QApplication.activeWindow()
+    if (
+        isinstance(active_window, QWidget)
+        and active_window.isVisible()
+        and active_window.width() > 0
+        and active_window.height() > 0
+    ):
+        return active_window
+
+    for widget in reversed(QApplication.topLevelWidgets()):
+        if widget.isVisible() and widget.width() > 0 and widget.height() > 0:
+            return widget
+
+    fallback_parent = QWidget()
+    fallback_parent.setWindowFlag(Qt.WindowType.Tool, True)
+    fallback_parent.setWindowFlag(Qt.WindowType.FramelessWindowHint, True)
+    fallback_parent.setAttribute(Qt.WidgetAttribute.WA_ShowWithoutActivating, True)
+    fallback_parent.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground, True)
+    fallback_parent.setWindowOpacity(0.0)
+    screen = QGuiApplication.primaryScreen()
+    if screen is not None:
+        geometry = screen.availableGeometry()
+        fallback_parent.resize(max(1, geometry.width()), max(1, geometry.height()))
+    else:
+        fallback_parent.resize(1280, 800)
+    fallback_parent.show()
+    return fallback_parent
+
+
 __all__ = [
     "install_qfluentwidgets_animation_guards",
+    "resolve_mask_dialog_parent",
     "set_indeterminate_progress_ring_active",
 ]

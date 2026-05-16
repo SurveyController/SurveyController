@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from PySide6.QtCore import QPoint, Qt, Signal
+from PySide6.QtGui import QMouseEvent
 from PySide6.QtWidgets import QWidget
 from qfluentwidgets import ElevatedCardWidget
 
@@ -19,12 +20,12 @@ class ClickableElevatedCardWidget(ElevatedCardWidget):
     def set_ignored_click_widgets(self, widgets: list[QWidget]) -> None:
         self._ignored_click_widgets = [widget for widget in widgets if widget is not None]
 
-    def mousePressEvent(self, event) -> None:
-        if event.button() == Qt.MouseButton.LeftButton and self._is_background_click(event.position().toPoint()):
+    def mousePressEvent(self, e: QMouseEvent) -> None:
+        if e.button() == Qt.MouseButton.LeftButton and self._is_background_click(e.position().toPoint()):
             self.backgroundClicked.emit()
-            event.accept()
+            e.accept()
             return
-        super().mousePressEvent(event)
+        super().mousePressEvent(e)
 
     def _is_background_click(self, pos: QPoint) -> bool:
         target = self.childAt(pos)

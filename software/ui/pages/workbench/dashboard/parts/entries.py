@@ -7,6 +7,7 @@ from typing import TYPE_CHECKING, Any, Dict, List, Optional
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import QDialog, QTableWidgetItem, QTableWidget
 from qfluentwidgets import MessageBox
+from shiboken6 import isValid
 
 from software.core.questions.config import QuestionEntry
 from software.core.questions.utils import (
@@ -326,7 +327,11 @@ class DashboardEntriesMixin:
             self._toast(f"配置应用失败：{exc}", "error")
             return False
         finally:
-            dlg.deleteLater()
+            try:
+                if isValid(dlg):
+                    dlg.deleteLater()
+            except Exception:
+                pass
 
     def _delete_selected_entries(self):
         selected_rows = self._checked_rows()

@@ -16,6 +16,7 @@ from PySide6.QtGui import QColor, QPainter, QTextDocument
 from PySide6.QtWidgets import (
     QApplication,
     QAbstractItemView,
+    QListView,
     QListWidgetItem,
     QStyle,
     QStyleOptionViewItem,
@@ -23,6 +24,7 @@ from PySide6.QtWidgets import (
 )
 from qfluentwidgets import ListWidget, SearchLineEdit, isDarkTheme
 from qfluentwidgets.components.widgets.list_view import ListItemDelegate
+from shiboken6 import isValid
 
 from software.providers.contracts import SurveyQuestionMeta
 
@@ -51,7 +53,7 @@ class QuestionSearchCompleterDelegate(ListItemDelegate):
     """搜索建议下拉项：展示题号/题干，并高亮命中的关键词。"""
 
     def __init__(self, parent: QAbstractItemView) -> None:
-        super().__init__(parent)
+        super().__init__(cast(QListView, cast(Any, parent)))
 
     def _build_document(
         self,
@@ -89,7 +91,7 @@ class QuestionSearchCompleterDelegate(ListItemDelegate):
     ) -> None:
         option_view = cast(Any, option)
         option_copy = QStyleOptionViewItem(option)
-        self.initStyleOption(option_copy, index)
+        self.initStyleOption(option_copy, cast(QModelIndex, cast(Any, index)))
         option_copy_any = cast(Any, option_copy)
         option_copy_any.text = ""
 
@@ -251,11 +253,60 @@ class WizardSearchMixin:
         self._search_status_label.setText(text)
         _apply_label_color(self._search_status_label, light, dark)
 
+    @staticmethod
+    def _is_alive_widget(widget: Any) -> bool:
+        if widget is None:
+            return False
+        try:
+            return bool(isValid(widget))
+        except Exception:
+            return False
+
+    @staticmethod
+    def _apply_search_popup_style(popup: ListWidget) -> None:
+        if isDarkTheme():
+            background = "#2b2b2b"
+            border = "rgba(255, 255, 255, 0.14)"
+            hover = "rgba(255, 255, 255, 0.08)"
+        else:
+            background = "#ffffff"
+            border = "rgba(0, 0, 0, 0.14)"
+            hover = "rgba(0, 0, 0, 0.05)"
+
+        popup.setObjectName("questionSearchPopup")
+        popup.setStyleSheet(
+            f"""
+            ListWidget#questionSearchPopup {{
+                background: {background};
+                border: 1px solid {border};
+                border-radius: 8px;
+                padding: 6px;
+            }}
+            ListWidget#questionSearchPopup::item {{
+                border-radius: 6px;
+                padding: 0px;
+            }}
+            ListWidget#questionSearchPopup::item:hover {{
+                background: {hover};
+            }}
+            ListWidget#questionSearchPopup::item:selected {{
+                background: transparent;
+            }}
+            ListWidget#questionSearchPopup QScrollBar {{
+                background: transparent;
+            }}
+            """
+        )
+        viewport = popup.viewport()
+        if viewport is not None:
+            viewport.setStyleSheet(f"background: {background}; border: none;")
+
     def _configure_search_popup(self, search_edit: SearchLineEdit) -> None:
         popup = ListWidget(cast(QWidget, self))
         popup.setWindowFlag(Qt.WindowType.ToolTip, True)
         popup.setWindowFlag(Qt.WindowType.FramelessWindowHint, True)
         popup.setAttribute(Qt.WidgetAttribute.WA_ShowWithoutActivating, True)
+        popup.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
         popup.setFocusPolicy(Qt.FocusPolicy.NoFocus)
         popup.setMouseTracking(True)
         popup.setAlternatingRowColors(False)
@@ -266,6 +317,7 @@ class WizardSearchMixin:
         popup.setItemDelegate(QuestionSearchCompleterDelegate(popup))
         popup.itemClicked.connect(self._activate_search_popup_item)
         popup.itemActivated.connect(self._activate_search_popup_item)
+        self._apply_search_popup_style(popup)
         self._search_popup = popup
         search_edit.installEventFilter(cast(QObject, self))
         popup.installEventFilter(cast(QObject, self))
@@ -299,11 +351,17 @@ class WizardSearchMixin:
         return item
 
     def _hide_search_popup(self) -> None:
-        if self._search_popup is not None:
-            self._search_popup.hide()
+        popup = self._search_popup if self._is_alive_widget(self._search_popup) else None
+        if popup is None:
+            self._search_popup = None
+            return
+        popup.hide()
 
     def _refresh_search_popup(self, raw_keyword: str, matches: List[int]) -> None:
-        if self._search_popup is None or self._search_edit is None:
+        if not self._is_alive_widget(self._search_popup):
+            self._search_popup = None
+            return
+        if not self._is_alive_widget(self._search_edit):
             return
 
         popup = self._search_popup
@@ -321,7 +379,7 @@ class WizardSearchMixin:
             self._hide_search_popup()
             return
 
-        popup.setCurrentRow(0)
+        popup.setCurrentRow(-1)
         popup_width = max(520, self._search_edit.width())
         content_height = 0
         for row in range(popup.count()):
@@ -374,12 +432,13 @@ class WizardSearchMixin:
         self._jump_to_question_from_search(normalized_idx, matches, raw_keyword, match_cursor)
 
     def _handle_search_return_pressed(self) -> None:
-        if self._search_popup is not None and self._search_popup.isVisible():
-            current_item = self._search_popup.currentItem()
+        popup = self._search_popup if self._is_alive_widget(self._search_popup) else None
+        if popup is not None and popup.isVisible():
+            current_item = popup.currentItem()
             if current_item is not None:
                 self._activate_search_popup_item(current_item)
                 return
-        if self._search_edit is not None:
+        if self._is_alive_widget(self._search_edit):
             self._handle_question_search(self._search_edit.text())
             return
 
@@ -412,8 +471,10 @@ class WizardSearchMixin:
         self._search_match_indices = []
         self._last_search_keyword = ""
         self._last_search_match_cursor = -1
-        if self._search_popup is not None:
+        if self._is_alive_widget(self._search_popup):
             self._search_popup.clear()
+        else:
+            self._search_popup = None
         self._hide_search_popup()
         self._set_search_status("点下拉结果或回车即可跳转", "#666666", "#bfbfbf")
 

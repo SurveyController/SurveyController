@@ -4,8 +4,10 @@ from typing import cast
 
 from PySide6.QtCore import Qt, QTimer
 from PySide6.QtCore import QObject
+from PySide6.QtGui import QCloseEvent, QShowEvent
 from qfluentwidgets import MessageBoxBase
 
+from software.ui.helpers.qfluent_compat import resolve_mask_dialog_parent
 from software.ui.widgets.contact_form.widget import ContactForm
 
 
@@ -20,7 +22,11 @@ class ContactDialog(MessageBoxBase):
         status_endpoint: str = "",
         status_formatter=None,
     ):
-        super().__init__(parent)
+        resolved_parent = resolve_mask_dialog_parent(parent)
+        super().__init__(resolved_parent)
+        self._fallback_parent = resolved_parent if resolved_parent is not parent else None
+        if self._fallback_parent is not None:
+            self.destroyed.connect(self._fallback_parent.deleteLater)
         self.setAttribute(Qt.WidgetAttribute.WA_QuitOnClose, False)
         self.setWindowTitle("联系开发者")
         self.resize(720, 520)
@@ -52,8 +58,8 @@ class ContactDialog(MessageBoxBase):
         self.form.sendSucceeded.connect(self._on_send_succeeded)
         self.form.cancelRequested.connect(self.reject)
 
-    def showEvent(self, arg__1):
-        super().showEvent(arg__1)
+    def showEvent(self, e: QShowEvent) -> None:
+        super().showEvent(e)
         self._schedule_status_polling()
 
     def _schedule_status_polling(self) -> None:
@@ -73,22 +79,22 @@ class ContactDialog(MessageBoxBase):
         """发送成功后延迟关闭，让InfoBar有时间显示"""
         QTimer.singleShot(2800, self.accept)
 
-    def closeEvent(self, arg__1):
+    def closeEvent(self, e: QCloseEvent) -> None:
         if self.form.has_pending_async_work():
             self.form.show_pending_async_warning()
-            arg__1.ignore()
+            e.ignore()
             return
         self._stop_status_polling()
-        super().closeEvent(arg__1)
+        super().closeEvent(e)
 
-    def reject(self):
+    def reject(self) -> None:
         if self.form.has_pending_async_work():
             self.form.show_pending_async_warning()
             return
         self._stop_status_polling()
         super().reject()
 
-    def accept(self):
+    def accept(self) -> None:
         if self.form.has_pending_async_work():
             self.form.show_pending_async_warning()
             return

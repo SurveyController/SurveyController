@@ -550,23 +550,30 @@ class WizardNavigationMixin:
         watched, event = arg__1, arg__2
         search_edit = getattr(self, "_search_edit", None)
         search_popup = getattr(self, "_search_popup", None)
+        search_popup_any = cast(Any, search_popup)
+        is_alive_widget = getattr(self, "_is_alive_widget", None)
+        popup_alive = (
+            search_popup is not None
+            and callable(is_alive_widget)
+            and bool(is_alive_widget(search_popup))
+        )
         if (
             watched is search_edit
             and event is not None
             and event.type() == QEvent.Type.KeyPress
         ):
-            if search_popup is not None and search_popup.isVisible():
+            if popup_alive and search_popup_any.isVisible():
                 key = event.key()
                 if key == Qt.Key.Key_Down:
                     next_row = min(
-                        search_popup.count() - 1,
-                        max(0, search_popup.currentRow() + 1),
+                        search_popup_any.count() - 1,
+                        max(0, search_popup_any.currentRow() + 1),
                     )
-                    search_popup.setCurrentRow(next_row)
+                    search_popup_any.setCurrentRow(next_row)
                     return True
                 if key == Qt.Key.Key_Up:
-                    next_row = max(0, search_popup.currentRow() - 1)
-                    search_popup.setCurrentRow(next_row)
+                    next_row = max(0, search_popup_any.currentRow() - 1)
+                    search_popup_any.setCurrentRow(next_row)
                     return True
                 if key == Qt.Key.Key_Escape:
                     self._hide_search_popup()

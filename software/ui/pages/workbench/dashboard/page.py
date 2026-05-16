@@ -19,7 +19,6 @@ from qfluentwidgets import (
     ScrollArea,
     SubtitleLabel,
     BodyLabel,
-    ElevatedCardWidget,
     CardWidget,
     PushButton,
     TableWidget,
