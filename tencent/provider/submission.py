@@ -19,7 +19,12 @@ from software.core.questions.runtime_async import extract_text_from_runtime_elem
 from software.core.task import ExecutionState
 from software.network.browser import By, NoSuchElementException
 from software.network.browser.runtime_async import BrowserDriver
-from tencent.provider.runtime_flow import QQ_VALIDATION_MARKERS, qq_submission_requires_verification
+from tencent.provider.runtime_flow import (
+    QQ_COMPLETION_MARKERS,
+    QQ_VALIDATION_MARKERS,
+    qq_is_completion_page,
+    qq_submission_requires_verification,
+)
 from tencent.provider.runtime_state import peek_qq_runtime_state
 
 
@@ -281,12 +286,51 @@ async def submit(
 
 async def consume_submission_success_signal(driver: BrowserDriver) -> bool:
     _runtime_context_summary(driver)
-    return False
+    return bool(await qq_is_completion_page(driver))
 
 
 async def is_device_quota_limit_page(driver: BrowserDriver) -> bool:
     _runtime_context_summary(driver)
-    return False
+    script = r"""
+return (() => {
+    const normalize = (text) => String(text || '').replace(/\s+/g, '').toLowerCase();
+    const text = normalize(document.body?.innerText || '');
+    if (!text) return false;
+
+    const limitMarkers = [
+        '设备达到填写次数上限',
+        '设备已达到填写次数上限',
+        '本设备达到填写次数上限',
+        '本设备已达到填写次数上限',
+        '设备填写次数已达上限',
+        '本设备已填写',
+        '该设备已参与',
+        '该设备已填写',
+        '此设备已填写',
+        '达到设备填写上限',
+        '超过填写次数上限',
+    ];
+    if (!limitMarkers.some((marker) => text.includes(marker))) return false;
+
+    const completionMarkers = %s;
+    const looksLikeCompletion = completionMarkers.some((marker) => text.includes(normalize(marker)));
+    const visible = (el) => {
+        if (!el) return false;
+        const style = window.getComputedStyle(el);
+        if (!style) return false;
+        if (style.display === 'none' || style.visibility === 'hidden' || style.opacity === '0') return false;
+        const rect = el.getBoundingClientRect();
+        return rect.width > 0 && rect.height > 0;
+    };
+    const hasVisibleQuestion = Array.from(document.querySelectorAll('.question-list > section.question, section.question')).some(visible);
+    const hasVisibleAction = Array.from(document.querySelectorAll('.page-control button, .btn-next, .btn-submit, button[type="submit"]')).some(visible);
+    return looksLikeCompletion && !hasVisibleQuestion && !hasVisibleAction;
+})();
+    """ % repr(list(QQ_COMPLETION_MARKERS))
+    try:
+        return bool(await driver.execute_script(script))
+    except Exception:
+        return False
 
 
 async def attempt_submission_recovery(

@@ -55,10 +55,11 @@ class RuntimePreparationTests:
         config.question_entries[0].survey_provider = 'wjx'
         config.questions_info[0]['provider'] = 'wjx'
         html = "<html><body><div id='divWorkError'>此问卷处于停止状态，无法作答！</div></body></html>"
-        with patch('software.network.http.get', return_value=_FakeHttpResponse(html)), patch('software.ui.controller.run_controller_parts.runtime_preparation.validate_question_config', return_value=''):
+        with patch('software.network.http.get', return_value=_FakeHttpResponse(html)) as http_get, patch('software.ui.controller.run_controller_parts.runtime_preparation.validate_question_config', return_value=''):
             with pytest.raises(RuntimePreparationError) as cm:
                 prepare_execution_artifacts(config)
         assert cm.value.user_message == '问卷已停止，无法作答'
+        assert http_get.call_args.kwargs.get('proxies') == {}
 
     def test_prepare_execution_artifacts_blocks_enterprise_unavailable_wjx_before_runtime(self) -> None:
         config = self._build_config()

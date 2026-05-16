@@ -98,7 +98,31 @@ class TencentSubmissionTests:
         reads: list[str] = []
         patch_attrs(
             (submission, "peek_qq_runtime_state", lambda _driver: reads.append("peek") or None),
+            (submission, "qq_is_completion_page", _async_return(True)),
         )
+
+        async def _device_quota_script(_script: str, *_args):
+            return True
+
+        driver.execute_script = _device_quota_script
+
+        assert await submission.consume_submission_success_signal(driver)
+        assert await submission.is_device_quota_limit_page(driver)
+        assert reads == ["peek", "peek"]
+
+    @pytest.mark.asyncio
+    async def test_status_helpers_return_false_when_detection_fails(self, patch_attrs) -> None:
+        driver = _FakeDriver()
+        reads: list[str] = []
+        patch_attrs(
+            (submission, "peek_qq_runtime_state", lambda _driver: reads.append("peek") or None),
+            (submission, "qq_is_completion_page", _async_return(False)),
+        )
+
+        async def _device_quota_script(_script: str, *_args):
+            raise RuntimeError("js failed")
+
+        driver.execute_script = _device_quota_script
 
         assert not await submission.consume_submission_success_signal(driver)
         assert not await submission.is_device_quota_limit_page(driver)

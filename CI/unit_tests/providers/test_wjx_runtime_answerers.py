@@ -226,8 +226,8 @@ class WjxRuntimeAnswerersTests:
         monkeypatch.setattr(runtime_answerers.random, "shuffle", lambda values: values.reverse())
 
         assert await runtime_answerers._answer_wjx_score_like(object(), question, 0, ctx, psycho_plan=None, answer_type="scale")
-        next_index = await runtime_answerers._answer_wjx_matrix(object(), question, 0, ctx, psycho_plan=None)
-        assert next_index == 2
+        answered = await runtime_answerers._answer_wjx_matrix(object(), question, 0, ctx, psycho_plan=None)
+        assert answered is False
         assert await runtime_answerers._answer_wjx_slider(object(), question, 0, ctx)
         assert await runtime_answerers._answer_wjx_order(object(), question)
         assert pending[0] == (ctx, 10, 1, 3)
@@ -287,13 +287,13 @@ class WjxRuntimeAnswerersTests:
 
         async def _answer_matrix(*_args, **_kwargs):
             dispatch_record.append("matrix")
-            return 9
+            return True
 
         monkeypatch.setattr(runtime_answerers, "_prepare_question_interaction", _prepare_question_interaction)
         monkeypatch.setattr(runtime_answerers, "_answer_wjx_single", _answer_single)
         monkeypatch.setattr(runtime_answerers, "_answer_wjx_matrix", _answer_matrix)
 
-        assert await runtime_answerers.answer_question_by_meta(object(), _question(1), dispatch_ctx, psycho_plan=None) is None
-        assert await runtime_answerers.answer_question_by_meta(object(), _question(2), dispatch_ctx, psycho_plan=None) == 9
-        assert await runtime_answerers.answer_question_by_meta(object(), _question(99), _ctx(), psycho_plan=None) is None
+        assert await runtime_answerers.answer_question_by_meta(object(), _question(1), dispatch_ctx, psycho_plan=None) is True
+        assert await runtime_answerers.answer_question_by_meta(object(), _question(2), dispatch_ctx, psycho_plan=None) is True
+        assert await runtime_answerers.answer_question_by_meta(object(), _question(99), _ctx(), psycho_plan=None) is False
         assert dispatch_record == ["prepare", "single", "prepare", "matrix"]

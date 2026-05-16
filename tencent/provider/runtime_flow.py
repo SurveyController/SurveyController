@@ -84,13 +84,27 @@ async def qq_submission_validation_message(driver: BrowserDriver) -> str:
                     const rect = el.getBoundingClientRect();
                     return rect.width > 0 && rect.height > 0;
                 };
-                const selectors = ['.error', '.question-error', '.t-form__error', '.t-message', '[class*="error"]'];
+                const selectors = [
+                    '.error',
+                    '.question-error',
+                    '.t-form__error',
+                    '.t-message',
+                    '[class*="error"]',
+                    '.t-dialog',
+                    '.t-popup',
+                    '.captcha',
+                    '.verify',
+                    '[class*="captcha"]',
+                    '[class*="verify"]',
+                ];
                 const messages = [];
                 for (const sel of selectors) {
                     for (const node of document.querySelectorAll(sel)) {
                         if (!visible(node)) continue;
                         const text = (node.innerText || node.textContent || '').trim().replace(/\\s+/g, ' ');
-                        if (text) messages.push(text);
+                        if (text && markers.some((marker) => text.includes(marker))) {
+                            messages.push(text);
+                        }
                     }
                 }
                 const bodyText = (document.body?.innerText || '').replace(/\\s+/g, ' ');
@@ -101,7 +115,7 @@ async def qq_submission_validation_message(driver: BrowserDriver) -> str:
                 }
                 return Array.from(new Set(messages)).slice(0, 3).join(' | ');
             }""",
-            list(QQ_VALIDATION_MARKERS),
+            list(QQ_VERIFICATION_MARKERS),
         ) or ""
         return str(message or "").strip()
     except Exception:

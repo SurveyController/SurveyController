@@ -73,8 +73,7 @@ class TencentRuntimeTests:
             (runtime, "HEADLESS_PAGE_BUFFER_DELAY", 0.0),
             (runtime, "has_configured_answer_duration", lambda _value: False),
             (runtime, "simulate_answer_duration_delay", _async_return(False)),
-            (runtime, "_answer_qq_matrix_star", _async_append(calls, "star")),
-            (runtime, "_answer_qq_matrix", _async_append(calls, "plain")),
+            (runtime, "_answer_question_by_meta", _async_append(calls, "star", result=True)),
             (runtime, "submit", _async_append(calls, "submit")),
         )
 
@@ -189,6 +188,13 @@ class TencentRuntimeTests:
         assert ("提交中", True) in ctx.status_updates
 
     @pytest.mark.asyncio
+    async def test_answer_question_by_meta_returns_false_when_mapping_missing(self, make_runtime_state) -> None:
+        ctx = make_runtime_state({}, {})
+        question = _meta(9, provider_question_id="q9")
+
+        assert not await runtime._answer_question_by_meta(object(), question, ctx, psycho_plan=None)
+
+    @pytest.mark.asyncio
     async def test_brush_qq_prefers_page_snapshot_over_per_question_wait(self, make_runtime_state, patch_attrs) -> None:
         ctx = make_runtime_state(
             {
@@ -217,8 +223,7 @@ class TencentRuntimeTests:
             (runtime, "HEADLESS_PAGE_BUFFER_DELAY", 0.0),
             (runtime, "has_configured_answer_duration", lambda _value: False),
             (runtime, "simulate_answer_duration_delay", _async_return(False)),
-            (runtime, "_answer_qq_single", _async_append(calls, "single")),
-            (runtime, "_answer_qq_text", _async_append(calls, "text")),
+            (runtime, "_answer_question_by_meta", _async_append(calls, "answer", result=True)),
             (runtime, "submit", _async_append(calls, "submit")),
         )
 
@@ -233,7 +238,7 @@ class TencentRuntimeTests:
 
         assert result
         assert "fallback-wait" not in calls
-        assert calls == ["single", "text", "submit"]
+        assert calls == ["answer", "answer", "submit"]
 
     @pytest.mark.asyncio
     async def test_brush_qq_aborts_during_final_duration_wait_before_submit(self, make_runtime_state, patch_attrs) -> None:
@@ -248,7 +253,7 @@ class TencentRuntimeTests:
             (runtime, "HEADLESS_PAGE_BUFFER_DELAY", 0.0),
             (runtime, "has_configured_answer_duration", lambda _value: True),
             (runtime, "simulate_answer_duration_delay", _async_return(True)),
-            (runtime, "_answer_qq_single", _async_append(calls, "single")),
+            (runtime, "_answer_question_by_meta", _async_append(calls, "single", result=True)),
             (runtime, "submit", _async_append(calls, "submit")),
         )
 
@@ -288,7 +293,7 @@ class TencentRuntimeTests:
             (runtime, "HEADLESS_PAGE_BUFFER_DELAY", 0.0),
             (runtime, "has_configured_answer_duration", lambda _value: False),
             (runtime, "simulate_answer_duration_delay", _async_return(False)),
-            (runtime, "_answer_qq_single", _async_append(calls, "single")),
+            (runtime, "_answer_question_by_meta", _async_append(calls, "single", result=True)),
             (runtime, "submit", _async_append(calls, "submit")),
         )
 
@@ -316,6 +321,12 @@ class TencentRuntimeTests:
             {1: ("multiple", 0), 2: ("dropdown", 1), 3: ("score", 2), 4: ("matrix", 3)},
         )
         calls: list[str] = []
+
+        async def _answer_question_by_meta(_driver, question, _ctx, *, psycho_plan):
+            assert psycho_plan == "plan"
+            calls.append(str(question.provider_question_id))
+            return True
+
         patch_attrs(
             (runtime, "_supports_page_snapshot", _async_return(False)),
             (runtime, "_wait_for_question_visible", _async_return(True)),
@@ -325,10 +336,7 @@ class TencentRuntimeTests:
             (runtime, "HEADLESS_PAGE_BUFFER_DELAY", 0.0),
             (runtime, "has_configured_answer_duration", lambda _value: False),
             (runtime, "simulate_answer_duration_delay", _async_return(False)),
-            (runtime, "_answer_qq_multiple", _async_append(calls, "multiple")),
-            (runtime, "_answer_qq_dropdown", _async_append(calls, "dropdown")),
-            (runtime, "_answer_qq_score_like", _async_append(calls, "score")),
-            (runtime, "_answer_qq_matrix", _async_append(calls, "matrix")),
+            (runtime, "_answer_question_by_meta", _answer_question_by_meta),
             (runtime, "submit", _async_append(calls, "submit")),
         )
 
@@ -342,7 +350,7 @@ class TencentRuntimeTests:
         )
 
         assert result
-        assert calls == ["multiple", "dropdown", "score", "matrix", "submit"]
+        assert calls == ["q1", "q2", "q3", "q4", "submit"]
 
     @pytest.mark.asyncio
     async def test_brush_qq_aborts_before_question_and_on_page_delay_and_raises_when_next_missing(self, make_runtime_state, patch_attrs) -> None:
@@ -380,7 +388,7 @@ class TencentRuntimeTests:
             (runtime, "dismiss_resume_dialog_if_present", _async_return(None)),
             (runtime, "_is_headless_mode", lambda _ctx: True),
             (runtime, "HEADLESS_PAGE_BUFFER_DELAY", 0.1),
-            (runtime, "_answer_qq_single", _async_return(None)),
+            (runtime, "_answer_question_by_meta", _async_return(True)),
         )
         assert not await runtime.brush_qq(
             object(),
@@ -405,7 +413,7 @@ class TencentRuntimeTests:
             (runtime, "dismiss_resume_dialog_if_present", _async_return(None)),
             (runtime, "_is_headless_mode", lambda _ctx: True),
             (runtime, "HEADLESS_PAGE_BUFFER_DELAY", 0.0),
-            (runtime, "_answer_qq_single", _async_return(None)),
+            (runtime, "_answer_question_by_meta", _async_return(True)),
             (runtime, "_click_next_page_button", _async_return(False)),
         )
         with pytest.raises(Exception, match="下一页按钮未找到"):

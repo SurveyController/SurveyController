@@ -202,7 +202,7 @@ class CredamoRuntimeTests:
         assert calls == ["single", "scale", "submit"]
 
     @pytest.mark.asyncio
-    async def test_answer_root_by_meta_and_patchpoint_wrappers_delegate(self, restore_credamo_runtime_patchpoints, patch_attrs) -> None:
+    async def test_patchpoint_wrappers_delegate(self, restore_credamo_runtime_patchpoints, patch_attrs) -> None:
         _ = restore_credamo_runtime_patchpoints
         page = object()
         root = object()
@@ -211,7 +211,7 @@ class CredamoRuntimeTests:
             (runtime, "_DOM_UNANSWERED_QUESTION_ROOTS", _async_return(["r2"])),
             (runtime, "_DOM_WAIT_FOR_DYNAMIC_QUESTION_ROOTS", _async_return(["r3"])),
             (runtime, "_DOM_WAIT_FOR_PAGE_CHANGE", _async_return(True)),
-            (runtime, "_DOM_CLICK_SUBMIT", _async_return(True)),
+            (runtime, "_click_submit_once", _async_return(True)),
             (runtime, "_ANSWER_SINGLE_LIKE", _async_return(True)),
             (runtime, "_ANSWER_MULTIPLE", _async_return(True)),
             (runtime, "_ANSWER_TEXT", _async_return(True)),
@@ -235,7 +235,7 @@ class CredamoRuntimeTests:
         assert await runtime._answer_order(page, root)
 
     @pytest.mark.asyncio
-    async def test_answer_root_by_meta_prefers_provider_question_mapping(self, restore_credamo_runtime_patchpoints, patch_attrs) -> None:
+    async def test_attempt_answer_current_root_prefers_provider_question_mapping(self, restore_credamo_runtime_patchpoints, patch_attrs) -> None:
         _ = restore_credamo_runtime_patchpoints
 
         class _FakeRoot:
@@ -265,13 +265,13 @@ class CredamoRuntimeTests:
             (runtime, "_answer_scale", _async_append(calls, "scale", result=True)),
         )
 
-        result = await runtime._answer_root_by_meta(_FakePage(), _FakeRoot(), 2, config)
+        result = await runtime._attempt_answer_current_root(_FakePage(), _FakeRoot(), 2, config)
 
         assert result
         assert calls == ["scale"]
 
     @pytest.mark.asyncio
-    async def test_answer_root_by_meta_uses_fallback_page_id_when_dom_page_id_missing(self, restore_credamo_runtime_patchpoints, patch_attrs) -> None:
+    async def test_attempt_answer_current_root_uses_fallback_page_id_when_dom_page_id_missing(self, restore_credamo_runtime_patchpoints, patch_attrs) -> None:
         _ = restore_credamo_runtime_patchpoints
 
         class _FakeRoot:
@@ -301,7 +301,13 @@ class CredamoRuntimeTests:
             (runtime, "_answer_single_like", _async_append(calls, "single", result=True)),
         )
 
-        result = await runtime._answer_root_by_meta(_FakePage(), _FakeRoot(), 2, config, fallback_page_id=6)
+        result = await runtime._attempt_answer_current_root(
+            _FakePage(),
+            _FakeRoot(),
+            2,
+            config,
+            fallback_page_id=6,
+        )
 
         assert result
         assert calls == ["single"]

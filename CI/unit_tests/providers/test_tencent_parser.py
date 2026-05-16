@@ -102,16 +102,20 @@ class TencentParserTests:
     @pytest.mark.asyncio
     async def test_request_qq_api_raises_on_invalid_json_and_non_dict_payload(self, patch_attrs) -> None:
         bad_json_response = _FakeHttpResponse(json_payload=ValueError("bad json"), text="not login")
-        patch_attrs((qq_parser.http_client, "aget", AsyncMock(return_value=bad_json_response)))
+        bad_json_aget = AsyncMock(return_value=bad_json_response)
+        patch_attrs((qq_parser.http_client, "aget", bad_json_aget))
 
         with pytest.raises(RuntimeError, match="无法解析的响应：meta"):
             await qq_parser._request_qq_api("123", "meta", hash_value="hash", headers={})
+        assert bad_json_aget.await_args.kwargs.get("proxies") == {}
 
         non_dict_response = _FakeHttpResponse(json_payload=["bad"])
-        patch_attrs((qq_parser.http_client, "aget", AsyncMock(return_value=non_dict_response)))
+        non_dict_aget = AsyncMock(return_value=non_dict_response)
+        patch_attrs((qq_parser.http_client, "aget", non_dict_aget))
 
         with pytest.raises(RuntimeError, match="非对象响应：questions"):
             await qq_parser._request_qq_api("123", "questions", hash_value="hash", headers={})
+        assert non_dict_aget.await_args.kwargs.get("proxies") == {}
 
     @pytest.mark.asyncio
     async def test_ensure_api_ok_and_http_fetch_locale_fallback(self, patch_attrs) -> None:

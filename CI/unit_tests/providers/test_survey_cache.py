@@ -4,6 +4,7 @@ import os
 import tempfile
 import threading
 import time
+from unittest.mock import AsyncMock
 
 import pytest
 
@@ -376,3 +377,25 @@ class SurveyCacheTests:
             assert first.title == "旧标题"
             assert second.title == "新标题"
             assert len(parser_calls) == 2
+
+    @pytest.mark.asyncio
+    async def test_fetch_json_fingerprint_bypasses_environment_proxy(self, patch_attrs) -> None:
+        response = type("Resp", (), {"raise_for_status": lambda self: None, "json": lambda self: {"ok": True}})()
+        aget = AsyncMock(return_value=response)
+        patch_attrs((survey_cache.http_client, "aget", aget))
+
+        fingerprint = await survey_cache._fetch_json_fingerprint("https://wj.qq.com/api/demo", params={"a": 1}, headers={"x": "y"})
+
+        assert fingerprint
+        assert aget.await_args.kwargs.get("proxies") == {}
+
+    @pytest.mark.asyncio
+    async def test_html_fingerprint_bypasses_environment_proxy(self, patch_attrs) -> None:
+        response = type("Resp", (), {"text": "<html>ok</html>", "raise_for_status": lambda self: None})()
+        aget = AsyncMock(return_value=response)
+        patch_attrs((survey_cache.http_client, "aget", aget))
+
+        fingerprint = await survey_cache._html_fingerprint("https://www.wjx.cn/vm/demo.aspx")
+
+        assert fingerprint
+        assert aget.await_args.kwargs.get("proxies") == {}

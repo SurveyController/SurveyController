@@ -572,7 +572,7 @@ async def _answer_wjx_matrix(
     ctx: ExecutionState,
     *,
     psycho_plan: Optional[Any],
-) -> int:
+) -> bool:
     config = ctx.config
     current = int(question.num or 0)
     row_count = max(1, int(question.rows or 1))
@@ -582,6 +582,8 @@ async def _answer_wjx_matrix(
     if reverse_fill_answer is not None and reverse_fill_answer.kind == REVERSE_FILL_KIND_MATRIX:
         forced_indices = [int(item) for item in list(reverse_fill_answer.matrix_choice_indexes or []) if int(item) >= 0]
     strict_ratio_question = is_strict_ratio_question(ctx, current)
+    answered_any = False
+    answered_rows = 0
     next_index = config_index
     for row_index in range(row_count):
         if row_index < len(forced_indices):
@@ -633,8 +635,10 @@ async def _answer_wjx_matrix(
             if row_index >= len(forced_indices):
                 record_pending_distribution_choice(ctx, current, selected_index, option_count, row_index=row_index)
             record_answer(current, "matrix", selected_indices=[selected_index], row_index=row_index)
+            answered_any = True
+            answered_rows += 1
         next_index += 1
-    return next_index
+    return answered_any and answered_rows == row_count
 
 
 async def _answer_wjx_slider(
@@ -677,41 +681,51 @@ async def answer_question_by_meta(
     ctx: ExecutionState,
     *,
     psycho_plan: Optional[Any],
-) -> Optional[int]:
+) -> bool:
     config_entry = ctx.config.question_config_index_map.get(int(question.num or 0))
     if not config_entry:
         logging.warning("问卷星第%d题缺少配置映射，已跳过。", int(question.num or 0))
-        return None
+        return False
     entry_type, config_index = config_entry
     await _prepare_question_interaction(driver, int(question.num or 0))
     if entry_type == "single":
-        await _answer_wjx_single(driver, question, config_index, ctx)
-        return None
+        return bool(await _answer_wjx_single(driver, question, config_index, ctx))
     if entry_type == "multiple":
-        await _answer_wjx_multiple(driver, question, config_index, ctx)
-        return None
+        return bool(await _answer_wjx_multiple(driver, question, config_index, ctx))
     if entry_type == "dropdown":
-        await _answer_wjx_dropdown(driver, question, config_index, ctx, psycho_plan=psycho_plan)
-        return None
+        return bool(await _answer_wjx_dropdown(driver, question, config_index, ctx, psycho_plan=psycho_plan))
     if entry_type in {"text", "multi_text"}:
-        await _answer_wjx_text(driver, question, config_index, ctx)
-        return None
+        return bool(await _answer_wjx_text(driver, question, config_index, ctx))
     if entry_type == "matrix":
-        return await _answer_wjx_matrix(driver, question, config_index, ctx, psycho_plan=psycho_plan)
+        return bool(await _answer_wjx_matrix(driver, question, config_index, ctx, psycho_plan=psycho_plan))
     if entry_type == "scale":
-        await _answer_wjx_score_like(driver, question, config_index, ctx, psycho_plan=psycho_plan, answer_type="scale")
-        return None
+        return bool(
+            await _answer_wjx_score_like(
+                driver,
+                question,
+                config_index,
+                ctx,
+                psycho_plan=psycho_plan,
+                answer_type="scale",
+            )
+        )
     if entry_type == "score":
-        await _answer_wjx_score_like(driver, question, config_index, ctx, psycho_plan=psycho_plan, answer_type="score")
-        return None
+        return bool(
+            await _answer_wjx_score_like(
+                driver,
+                question,
+                config_index,
+                ctx,
+                psycho_plan=psycho_plan,
+                answer_type="score",
+            )
+        )
     if entry_type == "slider":
-        await _answer_wjx_slider(driver, question, config_index, ctx)
-        return None
+        return bool(await _answer_wjx_slider(driver, question, config_index, ctx))
     if entry_type == "order":
-        await _answer_wjx_order(driver, question)
-        return None
+        return bool(await _answer_wjx_order(driver, question))
     logging.warning("问卷星第%d题暂未接入运行时题型：%s", int(question.num or 0), entry_type)
-    return None
+    return False
 
 
 __all__ = ["answer_question_by_meta"]

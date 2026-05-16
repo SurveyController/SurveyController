@@ -78,13 +78,6 @@ def is_amount_allowed(amount_text: str, quantity_text: Optional[str] = None) -> 
     return amount_value >= minimum_allowed_amount
 
 
-def is_quantity_within_limit(text: Optional[str]) -> bool:
-    quantity = parse_quantity_value(text)
-    if quantity is None:
-        return False
-    return quantity <= Decimal(str(MAX_REQUEST_QUOTA))
-
-
 def clamp_quantity_text(text: str, fallback_text: str) -> str:
     quantity = parse_quantity_value(text)
     if quantity is None:

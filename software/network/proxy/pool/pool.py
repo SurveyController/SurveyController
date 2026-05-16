@@ -147,7 +147,8 @@ def get_proxy_required_ttl_seconds(
             max_seconds = _to_non_negative_int(answer_duration_range_seconds[0], 0)
     normalized_provider = str(survey_provider or "").strip().lower()
     if normalized_provider == SURVEY_PROVIDER_WJX:
-        return 60
+        # 问卷星可通过 starttime 回填作答时长，因此只要求代理在分配时尚未过期。
+        return 0
     if normalized_provider:
         minute = get_proxy_minute_by_answer_seconds(
             max_seconds,

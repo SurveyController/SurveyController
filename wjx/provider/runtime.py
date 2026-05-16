@@ -244,8 +244,14 @@ async def refill_required_questions_on_current_page(
             ctx.update_thread_status(thread_name or "Worker-?", f"补答第{question_num}题", running=True)
         except Exception:
             logging.info("更新线程状态失败：补答第%d题", question_num, exc_info=True)
-        await answer_question_by_meta(driver, question, ctx, psycho_plan=psycho_plan or runtime_state.psycho_plan)
-        filled_count += 1
+        answered = await answer_question_by_meta(
+            driver,
+            question,
+            ctx,
+            psycho_plan=psycho_plan or runtime_state.psycho_plan,
+        )
+        if answered:
+            filled_count += 1
     return filled_count
 
 

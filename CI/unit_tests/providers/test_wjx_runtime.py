@@ -71,7 +71,7 @@ class WjxRuntimeTests:
         async def _answer(_driver, question, _ctx, *, psycho_plan):
             assert psycho_plan == "plan"
             calls.append(int(question.num))
-            return None
+            return int(question.num) == 1
 
         monkeypatch.setattr(runtime, "answer_question_by_meta", _answer)
 

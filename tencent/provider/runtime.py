@@ -219,28 +219,7 @@ async def brush_qq(
                 except Exception:
                     logging.info("更新腾讯问卷线程步骤失败", exc_info=True)
 
-            config_entry = runtime_config.question_config_index_map.get(question_num)
-            if not config_entry:
-                logging.warning("腾讯问卷第%d题缺少配置映射，已跳过。", question_num)
-                continue
-            entry_type, config_index = config_entry
-            if entry_type == "single":
-                await _answer_qq_single(driver, question, config_index, ctx)
-            elif entry_type == "multiple":
-                await _answer_qq_multiple(driver, question, config_index, ctx)
-            elif entry_type == "dropdown":
-                await _answer_qq_dropdown(driver, question, config_index, ctx, psycho_plan=psycho_plan)
-            elif entry_type in {"text", "multi_text"}:
-                await _answer_qq_text(driver, question, config_index, ctx)
-            elif entry_type in {"scale", "score"}:
-                await _answer_qq_score_like(driver, question, config_index, ctx, psycho_plan=psycho_plan)
-            elif entry_type == "matrix":
-                if question.provider_type == "matrix_star":
-                    await _answer_qq_matrix_star(driver, question, config_index, ctx, psycho_plan=psycho_plan)
-                else:
-                    await _answer_qq_matrix(driver, question, config_index, ctx, psycho_plan=psycho_plan)
-            else:
-                logging.warning("腾讯问卷第%d题暂未接入运行时类型：%s", question_num, entry_type)
+            await _answer_question_by_meta(driver, question, ctx, psycho_plan=psycho_plan)
 
         await _human_scroll_after_question(driver)
         if _abort_requested():

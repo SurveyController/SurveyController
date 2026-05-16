@@ -306,9 +306,6 @@ class SettingsPage(ScrollArea):
             payload={"enabled": bool(checked), "persist": persist},
         )
 
-    def _read_navigation_text_visible_setting(self) -> bool:
-        return self._read_bool_setting(NAVIGATION_TEXT_VISIBLE_SETTING_KEY, True)
-
     def _apply_navigation_text_state(self, checked: bool, persist: bool = True):
         self._persist_bool_setting(
             key=NAVIGATION_TEXT_VISIBLE_SETTING_KEY,

@@ -194,6 +194,7 @@ class WjxParserTests:
     @pytest.mark.asyncio
     async def test_parse_wjx_survey_returns_http_parse_result_without_browser_fallback(self, patch_attrs) -> None:
         browser_used = {"value": False}
+        aget = AsyncMock(return_value=_FakeHttpResponse("<html><body>ok</body></html>"))
 
         @asynccontextmanager
         async def fake_pool():
@@ -201,7 +202,7 @@ class WjxParserTests:
             yield _FakeBrowserDriver("<html></html>")
 
         patch_attrs(
-            (wjx_parser.http_client, "aget", AsyncMock(return_value=_FakeHttpResponse("<html><body>ok</body></html>"))),
+            (wjx_parser.http_client, "aget", aget),
             (wjx_parser, "parse_survey_questions_from_html", lambda _html: [{"num": 1, "title": "Q1", "type_code": "3"}]),
             (wjx_parser, "extract_survey_title_from_html", lambda _html: "  标题  "),
             (wjx_parser, "acquire_parse_browser_session", fake_pool),
@@ -212,6 +213,7 @@ class WjxParserTests:
         assert info == [{"num": 1, "title": "Q1", "type_code": "3"}]
         assert title == "标题"
         assert not browser_used["value"]
+        assert aget.await_args.kwargs.get("proxies") == {}
 
     @pytest.mark.asyncio
     async def test_parse_wjx_survey_keeps_http_fast_path_even_when_static_page_has_hidden_questions(self, patch_attrs) -> None:

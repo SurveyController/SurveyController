@@ -4,12 +4,12 @@ from __future__ import annotations
 
 import logging
 import random
+import time
 from typing import Any, Optional
 
 from software.app.config import DEFAULT_FILL_TEXT
 from software.core.engine.async_wait import sleep_or_stop
 from software.core.modes.duration_control import has_configured_answer_duration, simulate_answer_duration_delay
-from software.core.questions.utils import normalize_droplist_probs, weighted_index
 from software.core.task import ExecutionConfig, ExecutionState
 from software.network.browser.runtime_async import BrowserDriver
 from software.providers.common import make_provider_question_key
@@ -56,6 +56,10 @@ _question_title_text = _runtime_dom._question_title_text
 _root_text = _runtime_dom._root_text
 _text_inputs = _runtime_dom._text_inputs
 _resolve_forced_choice_index = _runtime_answerers._resolve_forced_choice_index
+_DEFAULT_DOM_CLICK_SUBMIT = _runtime_dom._click_submit
+_DEFAULT_DOM_WAIT_FOR_DYNAMIC_QUESTION_ROOTS = _runtime_dom._wait_for_dynamic_question_roots
+_DEFAULT_DOM_WAIT_FOR_PAGE_CHANGE = _runtime_dom._wait_for_page_change
+_DEFAULT_DOM_WAIT_FOR_QUESTION_ROOTS = _runtime_dom._wait_for_question_roots
 
 
 async def _provider_page_id_from_root(page: Any, root: Any, fallback_page_id: Any = None) -> str:
@@ -130,71 +134,118 @@ async def _resolve_config_binding(
 
 
 def _sync_runtime_dom_patch_points() -> None:
-    """让 runtime.py 上的补丁同步到底层 DOM 模块。"""
-    _runtime_dom._abort_requested = _abort_requested
-    _runtime_dom._click_navigation = _click_navigation
-    _runtime_dom._click_submit_once = _click_submit_once
-    _runtime_dom._locator_is_visible = _locator_is_visible
-    _runtime_dom._looks_like_loading_shell = _looks_like_loading_shell
-    _runtime_dom._navigation_action = _navigation_action
-    _runtime_dom._page_loading_snapshot = _page_loading_snapshot
-    _runtime_dom._question_answer_state = _question_answer_state
-    _runtime_dom._question_number_from_root = _question_number_from_root
-    _runtime_dom._question_roots = _question_roots
-    _runtime_dom._question_signature = _question_signature
-    _runtime_dom._root_text = _root_text
+    """兼容旧测试入口；运行时不再回写底层模块全局状态。"""
+    return None
 
 
 def _sync_runtime_answerer_patch_points() -> None:
-    """让 runtime.py 上的补丁同步到底层题型作答模块。"""
-    _runtime_answerers._answer_dropdown = _ANSWER_DROPDOWN
-    _runtime_answerers._answer_matrix = _ANSWER_MATRIX
-    _runtime_answerers._answer_multiple = _ANSWER_MULTIPLE
-    _runtime_answerers._answer_order = _ANSWER_ORDER
-    _runtime_answerers._answer_scale = _ANSWER_SCALE
-    _runtime_answerers._answer_single_like = _ANSWER_SINGLE_LIKE
-    _runtime_answerers._answer_text = _ANSWER_TEXT
-    _runtime_answerers._click_element = _click_element
-    _runtime_answerers._element_text = _element_text
-    _runtime_answerers._input_value = _input_value
-    _runtime_answerers._is_checked = _is_checked
-    _runtime_answerers._option_click_targets = _option_click_targets
-    _runtime_answerers._option_inputs = _option_inputs
-    _runtime_answerers._question_title_text = _question_title_text
-    _runtime_answerers._resolve_forced_choice_index = _resolve_forced_choice_index
-    _runtime_answerers._root_text = _root_text
-    _runtime_answerers._text_inputs = _text_inputs
-    _runtime_answerers.normalize_droplist_probs = normalize_droplist_probs
-    _runtime_answerers.weighted_index = weighted_index
+    """兼容旧测试入口；运行时不再回写底层模块全局状态。"""
+    return None
 
 
 async def _wait_for_question_roots(page: Any, stop_signal: Any, **kwargs: Any):
-    _sync_runtime_dom_patch_points()
-    return await _DOM_WAIT_FOR_QUESTION_ROOTS(page, stop_signal, **kwargs)
+    if _DOM_WAIT_FOR_QUESTION_ROOTS is not _DEFAULT_DOM_WAIT_FOR_QUESTION_ROOTS:
+        return await _DOM_WAIT_FOR_QUESTION_ROOTS(page, stop_signal, **kwargs)
+    timeout_ms = int(kwargs.get("timeout_ms") or getattr(_runtime_dom, "_CREDAMO_DYNAMIC_WAIT_TIMEOUT_MS", 6000))
+    loading_shell_extra_timeout_ms = int(
+        kwargs.get("loading_shell_extra_timeout_ms")
+        or getattr(_runtime_dom, "_CREDAMO_LOADING_SHELL_EXTRA_WAIT_TIMEOUT_MS", 4000)
+    )
+    poll_seconds = float(getattr(_runtime_dom, "_CREDAMO_DYNAMIC_WAIT_POLL_SECONDS", 0.15))
+    deadline = time.monotonic() + max(0.0, timeout_ms / 1000)
+    last_roots: list[Any] = []
+    loading_shell_retry_used = False
+    while not _abort_requested(stop_signal):
+        try:
+            last_roots = await _question_roots(page)
+        except Exception:
+            logging.info("Credamo 等待题目加载时读取页面失败", exc_info=True)
+            last_roots = []
+        if last_roots:
+            return last_roots
+        if time.monotonic() >= deadline:
+            title, body_text = await _page_loading_snapshot(page)
+            if (
+                not loading_shell_retry_used
+                and loading_shell_extra_timeout_ms > 0
+                and _looks_like_loading_shell(title, body_text)
+            ):
+                loading_shell_retry_used = True
+                deadline = time.monotonic() + max(0.0, loading_shell_extra_timeout_ms / 1000)
+                logging.warning(
+                    "Credamo 页面仍在载入壳页，延长等待题目：title=%s body=%s",
+                    title or "<empty>",
+                    (body_text[:80] or "<empty>"),
+                )
+                continue
+            logging.warning(
+                "Credamo 等待题目超时：title=%s body=%s",
+                title or "<empty>",
+                (body_text[:120] or "<empty>"),
+            )
+            return last_roots
+        await sleep_or_stop(stop_signal, poll_seconds)
+    return last_roots
 
 
 async def _unanswered_question_roots(page: Any, roots: list[Any], answered_keys: set[str], **kwargs: Any):
-    _sync_runtime_dom_patch_points()
     return await _DOM_UNANSWERED_QUESTION_ROOTS(page, roots, answered_keys, **kwargs)
 
 
 async def _wait_for_dynamic_question_roots(page: Any, answered_keys: set[str], stop_signal: Any, **kwargs: Any):
-    _sync_runtime_dom_patch_points()
-    return await _DOM_WAIT_FOR_DYNAMIC_QUESTION_ROOTS(page, answered_keys, stop_signal, **kwargs)
+    if _DOM_WAIT_FOR_DYNAMIC_QUESTION_ROOTS is not _DEFAULT_DOM_WAIT_FOR_DYNAMIC_QUESTION_ROOTS:
+        return await _DOM_WAIT_FOR_DYNAMIC_QUESTION_ROOTS(page, answered_keys, stop_signal, **kwargs)
+    timeout_ms = int(kwargs.get("timeout_ms") or getattr(_runtime_dom, "_CREDAMO_DYNAMIC_REVEAL_TIMEOUT_MS", 800))
+    fallback_start = int(kwargs.get("fallback_start") or 0)
+    poll_seconds = float(getattr(_runtime_dom, "_CREDAMO_DYNAMIC_WAIT_POLL_SECONDS", 0.15))
+    deadline = time.monotonic() + max(0.0, timeout_ms / 1000)
+    latest_roots: list[Any] = []
+    while not _abort_requested(stop_signal):
+        try:
+            latest_roots = await _question_roots(page)
+        except Exception:
+            logging.info("Credamo 等待动态题目显示时读取页面失败", exc_info=True)
+            latest_roots = []
+        if await _unanswered_question_roots(page, latest_roots, answered_keys, fallback_start=fallback_start):
+            return latest_roots
+        if time.monotonic() >= deadline:
+            return latest_roots
+        await sleep_or_stop(stop_signal, poll_seconds)
+    return latest_roots
 
 
 async def _wait_for_page_change(page: Any, previous_signature: Any, stop_signal: Any, **kwargs: Any) -> bool:
-    _sync_runtime_dom_patch_points()
-    return await _DOM_WAIT_FOR_PAGE_CHANGE(page, previous_signature, stop_signal, **kwargs)
+    if _DOM_WAIT_FOR_PAGE_CHANGE is not _DEFAULT_DOM_WAIT_FOR_PAGE_CHANGE:
+        return await _DOM_WAIT_FOR_PAGE_CHANGE(page, previous_signature, stop_signal, **kwargs)
+    timeout_ms = int(kwargs.get("timeout_ms") or getattr(_runtime_dom, "_CREDAMO_PAGE_TRANSITION_TIMEOUT_MS", 5000))
+    poll_seconds = float(getattr(_runtime_dom, "_CREDAMO_DYNAMIC_WAIT_POLL_SECONDS", 0.15))
+    deadline = time.monotonic() + max(0.0, timeout_ms / 1000)
+    while not _abort_requested(stop_signal):
+        current_signature = await _question_signature(page)
+        if current_signature and current_signature != previous_signature:
+            return True
+        if time.monotonic() >= deadline:
+            return False
+        await sleep_or_stop(stop_signal, poll_seconds)
+    return False
 
 
 async def _click_submit(page: Any, stop_signal: Any = None, **kwargs: Any) -> bool:
-    _sync_runtime_dom_patch_points()
-    return await _DOM_CLICK_SUBMIT(page, stop_signal, **kwargs)
+    if _DOM_CLICK_SUBMIT is not _DEFAULT_DOM_CLICK_SUBMIT:
+        return await _DOM_CLICK_SUBMIT(page, stop_signal, **kwargs)
+    timeout_ms = int(kwargs.get("timeout_ms") or getattr(_runtime_dom, "_CREDAMO_DYNAMIC_WAIT_TIMEOUT_MS", 6000))
+    poll_seconds = float(getattr(_runtime_dom, "_CREDAMO_DYNAMIC_WAIT_POLL_SECONDS", 0.15))
+    deadline = time.monotonic() + max(0.0, timeout_ms / 1000)
+    while not _abort_requested(stop_signal):
+        if await _click_submit_once(page):
+            return True
+        if time.monotonic() >= deadline:
+            return False
+        await sleep_or_stop(stop_signal, poll_seconds)
+    return False
 
 
 async def _answer_single_like(page: Any, root: Any, weights: Any, option_count: int) -> bool:
-    _sync_runtime_answerer_patch_points()
     return await _ANSWER_SINGLE_LIKE(page, root, weights, option_count)
 
 
@@ -206,7 +257,6 @@ async def _answer_multiple(
     min_limit: Optional[int] = None,
     max_limit: Optional[int] = None,
 ) -> bool:
-    _sync_runtime_answerer_patch_points()
     return await _ANSWER_MULTIPLE(
         page,
         root,
@@ -217,45 +267,23 @@ async def _answer_multiple(
 
 
 async def _answer_text(root: Any, text_config: Any) -> bool:
-    _sync_runtime_answerer_patch_points()
     return await _ANSWER_TEXT(root, text_config)
 
 
 async def _answer_dropdown(page: Any, root: Any, weights: Any) -> bool:
-    _sync_runtime_answerer_patch_points()
     return await _ANSWER_DROPDOWN(page, root, weights)
 
 
 async def _answer_scale(page: Any, root: Any, weights: Any) -> bool:
-    _sync_runtime_answerer_patch_points()
     return await _ANSWER_SCALE(page, root, weights)
 
 
 async def _answer_matrix(page: Any, root: Any, weights: Any, start_index: int = 0) -> bool:
-    _sync_runtime_answerer_patch_points()
     return await _ANSWER_MATRIX(page, root, weights, start_index)
 
 
 async def _answer_order(page: Any, root: Any) -> bool:
-    _sync_runtime_answerer_patch_points()
     return await _ANSWER_ORDER(page, root)
-
-
-async def _answer_root_by_meta(
-    page: Any,
-    root: Any,
-    question_num: int,
-    config: ExecutionConfig,
-    *,
-    fallback_page_id: Any = None,
-) -> bool:
-    return await _attempt_answer_current_root(
-        page,
-        root,
-        question_num,
-        config,
-        fallback_page_id=fallback_page_id,
-    )
 
 
 async def _attempt_answer_current_root(
