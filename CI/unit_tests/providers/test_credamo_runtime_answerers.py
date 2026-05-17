@@ -323,6 +323,35 @@ class CredamoRuntimeAnswerersTests:
         assert await runtime_answerers._answer_dropdown(page, root, [0, 100])
 
     @pytest.mark.asyncio
+    async def test_answer_dropdown_accepts_same_selected_value_after_click(self, monkeypatch) -> None:
+        trigger = _FakeElement()
+        value_input = _FakeElement(value="选项 1")
+        visible_option = _FakeElement(text="选项 1")
+        page = _FakePage(visible_options=[visible_option], locator_items=[visible_option], input_element=value_input)
+        root = _FakeElement(selectors={".pc-dropdown .el-input": [trigger], ".el-input__inner": [value_input]})
+
+        async def _click_element(_page, _element):
+            return True
+
+        async def _input_value(_page, element):
+            return element.value
+
+        async def _element_text(_page, element):
+            return element.text
+
+        async def _resolve_none(*_args, **_kwargs):
+            return None
+
+        monkeypatch.setattr(runtime_answerers, "_click_element", _click_element)
+        monkeypatch.setattr(runtime_answerers, "_input_value", _input_value)
+        monkeypatch.setattr(runtime_answerers, "_element_text", _element_text)
+        monkeypatch.setattr(runtime_answerers, "normalize_droplist_probs", lambda weights, count: [1.0][:count])
+        monkeypatch.setattr(runtime_answerers, "weighted_index", lambda _probs: 0)
+        monkeypatch.setattr(runtime_answerers, "_resolve_forced_choice_index", _resolve_none)
+
+        assert await runtime_answerers._answer_dropdown(page, root, [100])
+
+    @pytest.mark.asyncio
     async def test_answer_scale_matrix_and_order_cover_success_and_empty_paths(self, monkeypatch) -> None:
         scale_option = _FakeElement()
         root_scale = _FakeElement(selectors={".scale .nps-item, .nps-item, .el-rate__item": [scale_option]})

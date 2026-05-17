@@ -159,25 +159,38 @@ class CredamoRuntimeTests:
         )
         calls: list[object] = []
         page = object()
-        roots_iter = iter([[root8], [root8, root9], [root11], [root5]])
-        pending_iter = iter(
-            [
-                [(root8, 8, "k8")],
-                [(root9, 9, "k9")],
-                [],
-                [(root11, 11, "k11")],
-                [],
-                [(root5, 5, "k5")],
-                [],
-            ]
-        )
-        navigation_iter = iter(["submit", "submit", "submit"])
+        root_groups = {
+            tuple([root8]): [(root8, 8, "k8")],
+            tuple([root8, root9]): [(root9, 9, "k9")],
+            tuple([root11]): [(root11, 11, "k11")],
+            tuple([root5]): [(root5, 5, "k5")],
+        }
+        page_signatures = iter(["page-1", "page-2", "page-3"])
+        navigation_iter = iter(["next", "next", "submit"])
 
         async def _wait_roots(*_args, **_kwargs):
-            return next(roots_iter)
+            if calls.count("next") == 0:
+                return [root8]
+            if calls.count("next") == 1:
+                return [root11]
+            return [root5]
 
-        async def _pending(*_args, **_kwargs):
-            return next(pending_iter)
+        async def _pending(_page, roots, answered_keys, **_kwargs):
+            root_tuple = tuple(roots)
+            if root_tuple == (root8,) and "k8" not in answered_keys:
+                return [(root8, 8, "k8")]
+            if root_tuple == (root8, root9) and "k9" not in answered_keys:
+                return [(root9, 9, "k9")]
+            if root_tuple == (root11,) and "k11" not in answered_keys:
+                return [(root11, 11, "k11")]
+            if root_tuple == (root5,) and "k5" not in answered_keys:
+                return [(root5, 5, "k5")]
+            return []
+
+        async def _revealed(_page, answered_keys, _stop_signal, **_kwargs):
+            if "k8" in answered_keys and "k9" not in answered_keys and calls.count("next") == 0:
+                return [root8, root9]
+            return []
 
         async def _navigation(*_args, **_kwargs):
             return next(navigation_iter)
@@ -187,8 +200,11 @@ class CredamoRuntimeTests:
             (runtime, "_wait_for_question_roots", _wait_roots),
             (runtime, "_has_answerable_question_roots", _async_return(True)),
             (runtime, "_unanswered_question_roots", _pending),
-            (runtime, "_wait_for_dynamic_question_roots", _async_return([])),
+            (runtime, "_wait_for_dynamic_question_roots", _revealed),
             (runtime, "_navigation_action", _navigation),
+            (runtime, "_question_signature", lambda *_args, **_kwargs: _async_return(next(page_signatures))()),
+            (runtime, "_click_navigation", _async_append(calls, "next", result=True)),
+            (runtime, "_wait_for_page_change", _async_return(True)),
             (runtime, "_click_submit", _async_append(calls, "submit", result=True)),
             (runtime, "_answer_single_like", _async_append(calls, "single", result=True)),
             (runtime, "_answer_scale", _async_append(calls, "scale", result=True)),
@@ -199,7 +215,54 @@ class CredamoRuntimeTests:
 
         result = await runtime.brush_credamo(object(), config, state, stop_signal=stop_signal, thread_name="Worker-1")
         assert result
-        assert calls == ["single", "scale", "submit"]
+        assert calls == ["single", "scale", "next", "matrix", "next", "multiple", "submit"]
+
+    @pytest.mark.asyncio
+    async def test_brush_credamo_missing_config_does_not_advance_progress(self, restore_credamo_runtime_patchpoints, patch_attrs) -> None:
+        _ = restore_credamo_runtime_patchpoints
+        stop_signal = threading.Event()
+        step_updates: list[int] = []
+        state = SimpleNamespace(
+            stop_event=stop_signal,
+            update_thread_step=lambda _thread, step, _total, **_kwargs: step_updates.append(step),
+            update_thread_status=lambda *args, **kwargs: None,
+        )
+        root1 = self._FakeQuestionRoot(1)
+        root2 = self._FakeQuestionRoot(2)
+        config = SimpleNamespace(
+            question_config_index_map={2: ("single", 0), 3: ("single", 1)},
+            single_prob=[-1, -1],
+            droplist_prob=[],
+            scale_prob=[],
+            multiple_prob=[],
+            texts=[],
+            answer_duration_range_seconds=[0, 0],
+        )
+
+        pending_iter = iter([
+            [(root1, 1, "k1"), (root2, 2, "k2")],
+            [],
+        ])
+
+        async def _pending(*_args, **_kwargs):
+            return next(pending_iter)
+
+        patch_attrs(
+            (runtime, "_page", _async_return(object())),
+            (runtime, "_wait_for_question_roots", _async_return([root1, root2])),
+            (runtime, "_has_answerable_question_roots", _async_return(True)),
+            (runtime, "_unanswered_question_roots", _pending),
+            (runtime, "_wait_for_dynamic_question_roots", _async_return([])),
+            (runtime, "_navigation_action", _async_return("submit")),
+            (runtime, "_answer_single_like", _async_return(True)),
+            (runtime, "_click_submit", _async_return(True)),
+            (runtime, "simulate_answer_duration_delay", _async_return(False)),
+        )
+
+        result = await runtime.brush_credamo(object(), config, state, stop_signal=stop_signal, thread_name="Worker-1")
+
+        assert result
+        assert step_updates[:2] == [0, 1]
 
     @pytest.mark.asyncio
     async def test_patchpoint_wrappers_delegate(self, restore_credamo_runtime_patchpoints, patch_attrs) -> None:

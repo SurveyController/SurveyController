@@ -298,7 +298,8 @@ async def _answer_dropdown(page: Any, root: Any, weights: Any) -> bool:
         value_input = None
     if trigger is None or value_input is None:
         return False
-    previous_value = await _input_value(page, value_input)
+    def _dropdown_value_selected(current_value: Any) -> bool:
+        return bool(str(current_value or "").strip())
     try:
         await trigger.scroll_into_view_if_needed(timeout=2000)
     except Exception:
@@ -346,13 +347,13 @@ async def _answer_dropdown(page: Any, root: Any, weights: Any) -> bool:
             if await _click_element(page, target):
                 await sleep_or_stop(None, 0.12)
                 current_value = await _input_value(page, value_input)
-                if current_value and current_value != previous_value:
+                if _dropdown_value_selected(current_value):
                     return True
         target = visible_options[min(target_index, len(visible_options) - 1)]
         if await _click_element(page, target):
             await sleep_or_stop(None, 0.12)
             current_value = await _input_value(page, value_input)
-            if current_value and current_value != previous_value:
+            if _dropdown_value_selected(current_value):
                 return True
 
     try:
@@ -365,7 +366,7 @@ async def _answer_dropdown(page: Any, root: Any, weights: Any) -> bool:
         await page.keyboard.press("Enter")
         await sleep_or_stop(None, 0.12)
         current_value = await _input_value(page, value_input)
-        if current_value and current_value != previous_value:
+        if _dropdown_value_selected(current_value):
             return True
     except Exception:
         pass
@@ -381,7 +382,7 @@ async def _answer_dropdown(page: Any, root: Any, weights: Any) -> bool:
         except Exception:
             return False
     current_value = await _input_value(page, value_input)
-    return bool(current_value and current_value != previous_value)
+    return _dropdown_value_selected(current_value)
 
 
 async def _answer_scale(page: Any, root: Any, weights: Any) -> bool:

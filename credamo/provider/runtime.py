@@ -509,7 +509,6 @@ async def brush_credamo(
                     fallback_page_id=page_index,
                 )
                 if config_entry is None:
-                    answered_steps = min(total_steps, answered_steps + 1)
                     continue
 
                 try:
