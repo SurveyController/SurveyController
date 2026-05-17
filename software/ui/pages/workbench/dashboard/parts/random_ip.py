@@ -12,7 +12,7 @@ from qfluentwidgets import themeColor
 import software.network.http as http_client
 
 from software.ui.dialogs.quota_redeem import load_shop_icon
-from software.app.config import DEFAULT_HTTP_HEADERS, IP_EXTRACT_ENDPOINT, STATUS_ENDPOINT
+from software.app.config import DEFAULT_HTTP_HEADERS, IP_EXTRACT_ENDPOINT
 from software.logging.log_utils import log_suppressed_exception
 from software.ui.controller.run_controller_parts.runtime_constants import (
     STARTUP_STATUS_TIMEOUT_SECONDS,
@@ -21,7 +21,6 @@ from software.ui.helpers.qfluent_compat import set_indeterminate_progress_ring_a
 from software.ui.helpers.proxy_access import (
     PROXY_SOURCE_BENEFIT,
     format_quota_value,
-    format_status_payload,
     get_random_ip_counter_snapshot_local,
     get_session_snapshot,
     has_authenticated_session,
