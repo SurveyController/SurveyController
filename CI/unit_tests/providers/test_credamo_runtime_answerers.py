@@ -6,6 +6,7 @@ import credamo.provider
 import pytest
 
 from credamo.provider import runtime_answerers
+from software.core.questions import runtime_async
 
 
 class _FakeElement:
@@ -258,9 +259,31 @@ class CredamoRuntimeAnswerersTests:
             return [good, bad]
         monkeypatch.setattr(runtime_answerers, "_text_inputs", _text_inputs)
 
-        assert await runtime_answerers._answer_text(root, ["甲", "乙"])
+        assert await runtime_answerers._answer_text(root, ["甲", "乙"], [1, 0])
         assert good.filled == ["甲"]
-        assert bad.typed == ["乙"]
+        assert bad.typed == ["甲"]
+
+    @pytest.mark.asyncio
+    async def test_answer_text_resolves_dynamic_tokens_and_random_answer_list(self, monkeypatch) -> None:
+        first = _FakeElement()
+        second = _FakeElement()
+        root = object()
+        async def _text_inputs(_root):
+            return [first, second]
+        monkeypatch.setattr(runtime_answerers, "_text_inputs", _text_inputs)
+        monkeypatch.setattr(runtime_async, "weighted_index", lambda _probs: 1)
+
+        assert await runtime_answerers._answer_text(
+            root,
+            ["甲||乙", "__RANDOM_INT__:3:9||__RANDOM_NAME__"],
+            [0, 1],
+            entry_type="multi_text",
+        )
+
+        assert first.filled[0].isdigit()
+        assert 3 <= int(first.filled[0]) <= 9
+        assert second.filled[0] != "__RANDOM_NAME__"
+        assert second.filled[0]
 
     @pytest.mark.asyncio
     async def test_answer_dropdown_uses_visible_option_then_keyboard_and_locator_fallback(self, monkeypatch) -> None:

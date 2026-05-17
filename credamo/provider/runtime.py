@@ -266,8 +266,23 @@ async def _answer_multiple(
     )
 
 
-async def _answer_text(root: Any, text_config: Any) -> bool:
-    return await _ANSWER_TEXT(root, text_config)
+async def _answer_text(
+    root: Any,
+    text_config: Any,
+    text_probabilities: Any = None,
+    *,
+    entry_type: str = "text",
+    blank_modes: Optional[list[Any]] = None,
+    blank_int_ranges: Optional[list[Any]] = None,
+) -> bool:
+    return await _ANSWER_TEXT(
+        root,
+        text_config,
+        text_probabilities,
+        entry_type=entry_type,
+        blank_modes=blank_modes,
+        blank_int_ranges=blank_int_ranges,
+    )
 
 
 async def _answer_dropdown(page: Any, root: Any, weights: Any) -> bool:
@@ -341,7 +356,20 @@ async def _attempt_answer_current_root(
         action_attempted = bool(await _answer_order(page, root))
     elif entry_type in {"text", "multi_text"}:
         text_config = config.texts[config_index] if config_index < len(config.texts) else [DEFAULT_FILL_TEXT]
-        action_attempted = bool(await _answer_text(root, text_config))
+        texts_prob = list(getattr(config, "texts_prob", []) or [])
+        text_probabilities = texts_prob[config_index] if config_index < len(texts_prob) else [1.0]
+        multi_text_blank_modes = list(getattr(config, "multi_text_blank_modes", []) or [])
+        multi_text_blank_ranges = list(getattr(config, "multi_text_blank_int_ranges", []) or [])
+        action_attempted = bool(
+            await _answer_text(
+                root,
+                text_config,
+                text_probabilities,
+                entry_type=entry_type,
+                blank_modes=multi_text_blank_modes[config_index] if config_index < len(multi_text_blank_modes) else [],
+                blank_int_ranges=multi_text_blank_ranges[config_index] if config_index < len(multi_text_blank_ranges) else [],
+            )
+        )
     else:
         logging.info("Credamo 第%s题暂未接入题型：%s", resolved_question_num, entry_type)
         return False

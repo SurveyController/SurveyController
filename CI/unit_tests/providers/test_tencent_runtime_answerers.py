@@ -5,6 +5,8 @@ from types import SimpleNamespace
 import pytest
 
 from tencent.provider import runtime_answerers
+from software.core.questions import runtime_async
+from software.core.questions.schema import _TEXT_RANDOM_INTEGER
 
 
 def _question(num: int, **overrides):
@@ -191,9 +193,9 @@ class TencentRuntimeAnswerersTests:
         ctx = _ctx(texts=[["静态配置", "__TOKEN__"]], texts_prob=[[1.0]], text_ai_flags=[False])
         question = _question(9, title="标题", description="说明")
         recorded: list[tuple[tuple[object, ...], dict[str, object]]] = []
-        monkeypatch.setattr(runtime_answerers, "normalize_probabilities", lambda probs: [1.0] * len(probs))
-        monkeypatch.setattr(runtime_answerers, "resolve_dynamic_text_token", lambda value: "动态值" if value == "__TOKEN__" else value)
-        monkeypatch.setattr(runtime_answerers, "weighted_index", lambda _probs: 0)
+        monkeypatch.setattr(runtime_async, "normalize_probabilities", lambda probs: [1.0] * len(probs))
+        monkeypatch.setattr(runtime_async, "resolve_dynamic_text_token", lambda value: "动态值" if value == "__TOKEN__" else value)
+        monkeypatch.setattr(runtime_async, "weighted_index", lambda _probs: 0)
         async def _fill_text(*_args, **_kwargs):
             return True
         monkeypatch.setattr(runtime_answerers, "_fill_text_question", _fill_text)
@@ -215,6 +217,38 @@ class TencentRuntimeAnswerersTests:
         monkeypatch.setattr(runtime_answerers, "agenerate_ai_answer", _ai_fail)
         with pytest.raises(runtime_answerers.AIRuntimeError, match="腾讯问卷第9题 AI 生成失败"):
             await runtime_answerers._answer_qq_text(object(), question, 0, ctx_ai)
+
+    @pytest.mark.asyncio
+    async def test_answer_qq_text_splits_multi_text_answer_group_and_random_blank(self, monkeypatch) -> None:
+        ctx = _ctx(
+            texts=[["甲||乙"]],
+            texts_prob=[[1.0]],
+            text_ai_flags=[False],
+            text_entry_types=["multi_text"],
+            multi_text_blank_modes=[["none", _TEXT_RANDOM_INTEGER]],
+            multi_text_blank_int_ranges=[[[], [3, 9]]],
+        )
+        question = _question(12, text_inputs=2)
+        filled: list[object] = []
+        recorded: list[tuple[tuple[object, ...], dict[str, object]]] = []
+        monkeypatch.setattr(runtime_async, "weighted_index", lambda _probs: 0)
+        monkeypatch.setattr(
+            runtime_async,
+            "resolve_dynamic_text_token",
+            lambda value: "5" if str(value).startswith("__RANDOM_INT__:") else str(value),
+        )
+
+        async def _fill_text(_driver, _question_id, value):
+            filled.append(value)
+            return True
+
+        monkeypatch.setattr(runtime_answerers, "_fill_text_question", _fill_text)
+        monkeypatch.setattr(runtime_answerers, "record_answer", lambda *args, **kwargs: recorded.append((args, kwargs)))
+
+        await runtime_answerers._answer_qq_text(object(), question, 0, ctx)
+
+        assert filled == [["甲", "5"]]
+        assert recorded == [((12, "text"), {"text_answer": "甲 | 5"})]
 
     @pytest.mark.asyncio
     async def test_answer_qq_matrix_and_star_cover_row_flow_and_return_next_index(self, monkeypatch) -> None:

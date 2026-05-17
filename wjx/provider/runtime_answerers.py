@@ -19,7 +19,10 @@ from software.core.questions.distribution import (
     record_pending_distribution_choice,
     resolve_distribution_probabilities,
 )
-from software.core.questions.runtime_async import resolve_runtime_option_fill_text_from_config
+from software.core.questions.runtime_async import (
+    resolve_runtime_option_fill_text_from_config,
+    resolve_runtime_text_values_from_config,
+)
 from software.core.questions.strict_ratio import (
     enforce_reference_rank_order,
     is_strict_ratio_question,
@@ -28,20 +31,8 @@ from software.core.questions.strict_ratio import (
 )
 from software.core.questions.tendency import get_tendency_index
 from software.core.questions.utils import (
-    build_random_int_token,
     normalize_droplist_probs,
-    normalize_probabilities,
-    resolve_dynamic_text_token,
     weighted_index,
-)
-from software.core.questions.schema import (
-    _TEXT_RANDOM_ID_CARD,
-    _TEXT_RANDOM_ID_CARD_TOKEN,
-    _TEXT_RANDOM_INTEGER,
-    _TEXT_RANDOM_MOBILE,
-    _TEXT_RANDOM_MOBILE_TOKEN,
-    _TEXT_RANDOM_NAME,
-    _TEXT_RANDOM_NAME_TOKEN,
 )
 from software.core.reverse_fill.runtime import resolve_current_reverse_fill_answer
 from software.core.reverse_fill.schema import (
@@ -266,15 +257,6 @@ async def _answer_wjx_text(
     elif reverse_fill_answer is not None and reverse_fill_answer.kind == REVERSE_FILL_KIND_TEXT:
         text_values = [str(reverse_fill_answer.text_value or "").strip() or DEFAULT_FILL_TEXT]
     else:
-        answer_candidates = config.texts[config_index] if config_index < len(config.texts) else [DEFAULT_FILL_TEXT]
-        probabilities = config.texts_prob[config_index] if config_index < len(config.texts_prob) else [1.0]
-        if not answer_candidates:
-            answer_candidates = [DEFAULT_FILL_TEXT]
-        if len(probabilities) != len(answer_candidates):
-            probabilities = normalize_probabilities([1.0] * len(answer_candidates))
-        resolved_candidates = [resolve_dynamic_text_token(candidate) for candidate in answer_candidates]
-        selected_index = weighted_index(probabilities)
-        selected_answer = str(resolved_candidates[selected_index] or DEFAULT_FILL_TEXT).strip() or DEFAULT_FILL_TEXT
         ai_enabled = bool(config.text_ai_flags[config_index]) if config_index < len(config.text_ai_flags) else False
         title = str(question.title or "").strip()
         description = str(question.description or "").strip()
@@ -291,34 +273,23 @@ async def _answer_wjx_text(
             else:
                 text_values = [str(generated or "").strip() or DEFAULT_FILL_TEXT]
         else:
-            text_values = [selected_answer]
+            text_entry_types = list(getattr(ctx.config, "text_entry_types", []) or [])
+            entry_type = str(text_entry_types[config_index] if config_index < len(text_entry_types) else "text")
+            multi_text_blank_modes = list(getattr(ctx.config, "multi_text_blank_modes", []) or [])
+            multi_text_blank_ranges = list(getattr(ctx.config, "multi_text_blank_int_ranges", []) or [])
+            text_values = resolve_runtime_text_values_from_config(
+                config.texts[config_index] if config_index < len(config.texts) else [DEFAULT_FILL_TEXT],
+                config.texts_prob[config_index] if config_index < len(config.texts_prob) else [1.0],
+                blank_count=blank_count,
+                entry_type=entry_type,
+                blank_modes=multi_text_blank_modes[config_index] if config_index < len(multi_text_blank_modes) else [],
+                blank_int_ranges=multi_text_blank_ranges[config_index] if config_index < len(multi_text_blank_ranges) else [],
+            )
 
     if not text_values:
         text_values = [DEFAULT_FILL_TEXT]
     if len(text_values) < blank_count:
         text_values.extend([text_values[-1]] * (blank_count - len(text_values)))
-    text_entry_types = list(getattr(ctx.config, "text_entry_types", []) or [])
-    if str(text_entry_types[config_index] if config_index < len(text_entry_types) else "") == "multi_text":
-        multi_text_blank_modes = list(getattr(ctx.config, "multi_text_blank_modes", []) or [])
-        multi_text_blank_ranges = list(getattr(ctx.config, "multi_text_blank_int_ranges", []) or [])
-        blank_modes = list(multi_text_blank_modes[config_index] if config_index < len(multi_text_blank_modes) else [])
-        blank_ranges = list(
-            multi_text_blank_ranges[config_index]
-            if config_index < len(multi_text_blank_ranges)
-            else []
-        )
-        for blank_index in range(blank_count):
-            mode = str(blank_modes[blank_index] if blank_index < len(blank_modes) else "").strip().lower()
-            if mode == _TEXT_RANDOM_NAME:
-                text_values[blank_index] = resolve_dynamic_text_token(_TEXT_RANDOM_NAME_TOKEN)
-            elif mode == _TEXT_RANDOM_MOBILE:
-                text_values[blank_index] = resolve_dynamic_text_token(_TEXT_RANDOM_MOBILE_TOKEN)
-            elif mode == _TEXT_RANDOM_ID_CARD:
-                text_values[blank_index] = resolve_dynamic_text_token(_TEXT_RANDOM_ID_CARD_TOKEN)
-            elif mode == _TEXT_RANDOM_INTEGER:
-                int_range = blank_ranges[blank_index] if blank_index < len(blank_ranges) else []
-                if isinstance(int_range, list) and len(int_range) >= 2:
-                    text_values[blank_index] = resolve_dynamic_text_token(build_random_int_token(int_range[0], int_range[1]))
 
     applied_values: list[str] = []
     for blank_index in range(blank_count):

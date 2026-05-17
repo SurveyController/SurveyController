@@ -8,8 +8,8 @@ from typing import Any, Optional
 
 from software.app.config import DEFAULT_FILL_TEXT
 from software.core.engine.async_wait import sleep_or_stop
+from software.core.questions.runtime_async import resolve_runtime_text_values_from_config
 from software.core.questions.utils import (
-    get_fill_text_from_config,
     normalize_droplist_probs,
     weighted_index,
 )
@@ -248,14 +248,29 @@ async def _answer_multiple(
     return clicked
 
 
-async def _answer_text(root: Any, text_config: Any) -> bool:
+async def _answer_text(
+    root: Any,
+    text_config: Any,
+    text_probabilities: Any = None,
+    *,
+    entry_type: str = "text",
+    blank_modes: Optional[list[Any]] = None,
+    blank_int_ranges: Optional[list[Any]] = None,
+) -> bool:
     inputs = await _text_inputs(root)
     if not inputs:
         return False
-    values = text_config if isinstance(text_config, list) and text_config else [DEFAULT_FILL_TEXT]
+    values = resolve_runtime_text_values_from_config(
+        text_config if isinstance(text_config, list) and text_config else [DEFAULT_FILL_TEXT],
+        text_probabilities if isinstance(text_probabilities, list) else None,
+        blank_count=len(inputs),
+        entry_type=entry_type,
+        blank_modes=blank_modes,
+        blank_int_ranges=blank_int_ranges,
+    )
     changed = False
     for index, input_element in enumerate(inputs):
-        value = get_fill_text_from_config(values, index) or DEFAULT_FILL_TEXT
+        value = values[index] if index < len(values) else values[-1]
         try:
             await input_element.fill(str(value), timeout=3000)
             changed = True

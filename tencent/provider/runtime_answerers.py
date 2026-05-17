@@ -11,13 +11,14 @@ from software.core.ai.runtime import AIRuntimeError, agenerate_ai_answer
 from software.core.persona.context import apply_persona_boost, record_answer
 from software.core.questions.consistency import apply_matrix_row_consistency, apply_single_like_consistency, get_multiple_rule_constraint
 from software.core.questions.distribution import record_pending_distribution_choice, resolve_distribution_probabilities
-from software.core.questions.runtime_async import resolve_runtime_option_fill_text_from_config
+from software.core.questions.runtime_async import (
+    resolve_runtime_option_fill_text_from_config,
+    resolve_runtime_text_values_from_config,
+)
 from software.core.questions.strict_ratio import enforce_reference_rank_order, is_strict_ratio_question, stochastic_round, weighted_sample_without_replacement
 from software.core.questions.tendency import get_tendency_index
 from software.core.questions.utils import (
     normalize_droplist_probs,
-    normalize_probabilities,
-    resolve_dynamic_text_token,
     weighted_index,
 )
 from software.core.task import ExecutionState
@@ -224,15 +225,19 @@ async def _answer_qq_text(
 ) -> None:
     config = ctx.config
     current = int(question.num or 0)
-    answer_candidates = config.texts[config_index] if config_index < len(config.texts) else [DEFAULT_FILL_TEXT]
-    probabilities = config.texts_prob[config_index] if config_index < len(config.texts_prob) else [1.0]
-    if not answer_candidates:
-        answer_candidates = [DEFAULT_FILL_TEXT]
-    if len(probabilities) != len(answer_candidates):
-        probabilities = normalize_probabilities([1.0] * len(answer_candidates))
-    resolved_candidates = [resolve_dynamic_text_token(candidate) for candidate in answer_candidates]
-    selected_index = weighted_index(probabilities)
-    selected_answer = str(resolved_candidates[selected_index] or DEFAULT_FILL_TEXT).strip() or DEFAULT_FILL_TEXT
+    blank_count = max(1, int(getattr(question, "text_inputs", 1) or 1))
+    text_entry_types = list(getattr(ctx.config, "text_entry_types", []) or [])
+    multi_text_blank_modes = list(getattr(ctx.config, "multi_text_blank_modes", []) or [])
+    multi_text_blank_ranges = list(getattr(ctx.config, "multi_text_blank_int_ranges", []) or [])
+    text_values = resolve_runtime_text_values_from_config(
+        config.texts[config_index] if config_index < len(config.texts) else [DEFAULT_FILL_TEXT],
+        config.texts_prob[config_index] if config_index < len(config.texts_prob) else [1.0],
+        blank_count=blank_count,
+        entry_type=str(text_entry_types[config_index] if config_index < len(text_entry_types) else "text"),
+        blank_modes=multi_text_blank_modes[config_index] if config_index < len(multi_text_blank_modes) else [],
+        blank_int_ranges=multi_text_blank_ranges[config_index] if config_index < len(multi_text_blank_ranges) else [],
+    )
+    selected_answer: str | list[str] = text_values if blank_count > 1 else (text_values[0] if text_values else DEFAULT_FILL_TEXT)
     ai_enabled = bool(config.text_ai_flags[config_index]) if config_index < len(config.text_ai_flags) else False
     title = str(question.title or "")
     description = str(question.description or "").strip()
@@ -245,13 +250,19 @@ async def _answer_qq_text(
         except AIRuntimeError as exc:
             raise AIRuntimeError(f"腾讯问卷第{current}题 AI 生成失败：{exc}") from exc
         if isinstance(generated, list):
-            selected_answer = str(generated[0]).strip() if generated else DEFAULT_FILL_TEXT
+            if blank_count > 1:
+                selected_answer = [str(item or "").strip() or DEFAULT_FILL_TEXT for item in list(generated or [])]
+            else:
+                selected_answer = str(generated[0]).strip() if generated else DEFAULT_FILL_TEXT
         else:
             selected_answer = str(generated or "").strip() or DEFAULT_FILL_TEXT
     if not await _fill_text_question(driver, str(question.provider_question_id or ""), selected_answer):
         logging.warning("腾讯问卷第%d题（文本）填写失败。", current)
         return
-    record_answer(current, "text", text_answer=selected_answer)
+    if isinstance(selected_answer, list):
+        record_answer(current, "text", text_answer=" | ".join(selected_answer))
+    else:
+        record_answer(current, "text", text_answer=selected_answer)
 
 async def _answer_qq_score_like(
     driver: BrowserDriver,

@@ -5,7 +5,8 @@ from types import SimpleNamespace
 import pytest
 
 from wjx.provider import runtime_answerers
-from software.core.questions.schema import _TEXT_RANDOM_MOBILE
+from software.core.questions import runtime_async
+from software.core.questions.schema import _TEXT_RANDOM_MOBILE, _TEXT_RANDOM_INTEGER
 
 
 def _question(num: int, **overrides):
@@ -133,9 +134,9 @@ class WjxRuntimeAnswerersTests:
         ctx = _ctx(texts=[["静态配置", "__TOKEN__"]], texts_prob=[[1.0]], text_ai_flags=[False])
         question = _question(9, title="标题", description="说明")
         recorded: list[tuple[tuple[object, ...], dict[str, object]]] = []
-        monkeypatch.setattr(runtime_answerers, "normalize_probabilities", lambda probs: [1.0] * len(probs))
-        monkeypatch.setattr(runtime_answerers, "resolve_dynamic_text_token", lambda value: "动态值" if value == "__TOKEN__" else value)
-        monkeypatch.setattr(runtime_answerers, "weighted_index", lambda _probs: 0)
+        monkeypatch.setattr(runtime_async, "normalize_probabilities", lambda probs: [1.0] * len(probs))
+        monkeypatch.setattr(runtime_async, "resolve_dynamic_text_token", lambda value: "动态值" if value == "__TOKEN__" else value)
+        monkeypatch.setattr(runtime_async, "weighted_index", lambda _probs: 0)
 
         async def _fill_text(*_args, **_kwargs):
             return True
@@ -166,18 +167,24 @@ class WjxRuntimeAnswerersTests:
     @pytest.mark.asyncio
     async def test_answer_wjx_text_applies_multi_text_blank_modes(self, monkeypatch) -> None:
         ctx = _ctx(
-            texts=[["默认文本"]],
+            texts=[["甲||乙", "丙||丁"]],
             texts_prob=[[1.0]],
             text_ai_flags=[False],
             text_entry_types=["multi_text"],
-            multi_text_blank_modes=[["none", _TEXT_RANDOM_MOBILE, "none"]],
-            multi_text_blank_int_ranges=[[]],
+            multi_text_blank_modes=[["none", _TEXT_RANDOM_MOBILE, _TEXT_RANDOM_INTEGER]],
+            multi_text_blank_int_ranges=[[[], [], [3, 9]]],
         )
         question = _question(9, text_inputs=3)
         fill_calls: list[tuple[object, ...]] = []
 
         monkeypatch.setattr(runtime_answerers, "weighted_index", lambda _probs: 0)
-        monkeypatch.setattr(runtime_answerers, "resolve_dynamic_text_token", lambda value: "13900001111" if value == "__RANDOM_MOBILE__" else str(value))
+        monkeypatch.setattr(
+            runtime_async,
+            "resolve_dynamic_text_token",
+            lambda value: "13900001111"
+            if value == "__RANDOM_MOBILE__"
+            else ("3" if str(value).startswith("__RANDOM_INT__:") else str(value)),
+        )
 
         async def _fill_text(*args, **kwargs):
             fill_calls.append((args, kwargs))
@@ -188,7 +195,7 @@ class WjxRuntimeAnswerersTests:
 
         await runtime_answerers._answer_wjx_text(object(), question, 0, ctx)
 
-        assert [call[0][2] for call in fill_calls] == ["默认文本", "13900001111", "默认文本"]
+        assert [call[0][2] for call in fill_calls] == ["甲", "13900001111", "3"]
 
     @pytest.mark.asyncio
     async def test_answer_wjx_score_matrix_slider_and_order_cover_main_paths(self, monkeypatch) -> None:

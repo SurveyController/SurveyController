@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 import asyncio
-from typing import Dict, List, Optional, Sequence
+from typing import Any, Dict, List, Optional, Sequence
 
 from software.core.engine.async_wait import sleep_or_stop
 from software.network.browser.runtime_async import BrowserDriver
@@ -153,11 +153,16 @@ async def _click_choice_input(driver: BrowserDriver, provider_question_id: str, 
         )
     )
 
-async def _fill_text_question(driver: BrowserDriver, provider_question_id: str, value: str) -> bool:
+async def _fill_text_question(driver: BrowserDriver, provider_question_id: str, value: Any) -> bool:
     if not provider_question_id:
         return False
     page = await _page(driver)
-    next_value = str(value or "")
+    values = (
+        [str(item or "") for item in value]
+        if isinstance(value, (list, tuple))
+        else [str(value or "")]
+    )
+    next_value = values[0] if values else ""
     base_selector = f'section.question[data-question-id="{provider_question_id}"]'
     candidate_selectors = (
         f"{base_selector} textarea",
@@ -179,6 +184,62 @@ async def _fill_text_question(driver: BrowserDriver, provider_question_id: str, 
         ),
         settle_ms=220,
     )
+    if len(values) > 1:
+        return bool(
+            await page.evaluate(
+                """({ questionId, rawValues }) => {
+                    const section = document.querySelector(`section.question[data-question-id="${questionId}"]`);
+                    if (!section) return false;
+                    const visible = (el) => {
+                        if (!el) return false;
+                        const style = window.getComputedStyle(el);
+                        if (!style) return false;
+                        if (style.display === 'none' || style.visibility === 'hidden' || style.opacity === '0') return false;
+                        const rect = el.getBoundingClientRect();
+                        return rect.width > 0 && rect.height > 0;
+                    };
+                    const isTextInput = (el) => {
+                        if (!el) return false;
+                        const tag = (el.tagName || '').toLowerCase();
+                        if (tag === 'textarea') return true;
+                        if (tag !== 'input') return false;
+                        const type = String(el.getAttribute('type') || '').toLowerCase();
+                        return !type || ['text', 'search', 'tel', 'number'].includes(type);
+                    };
+                    const inputs = Array.from(section.querySelectorAll('textarea, input')).filter((el) => visible(el) && isTextInput(el));
+                    if (!inputs.length) return false;
+                    const setValue = (target, nextValue) => {
+                        try { target.scrollIntoView({ block: 'center', inline: 'nearest' }); } catch (e) {}
+                        try { target.focus(); } catch (e) {}
+                        try {
+                            const proto = target.tagName === 'TEXTAREA' ? window.HTMLTextAreaElement?.prototype : window.HTMLInputElement?.prototype;
+                            const descriptor = proto ? Object.getOwnPropertyDescriptor(proto, 'value') : null;
+                            if (descriptor && descriptor.set) {
+                                descriptor.set.call(target, nextValue);
+                            } else {
+                                target.value = nextValue;
+                            }
+                        } catch (e) {
+                            try { target.value = nextValue; } catch (err) {}
+                        }
+                        try { target.setAttribute('value', nextValue); } catch (e) {}
+                        ['input', 'change', 'blur'].forEach((name) => {
+                            try { target.dispatchEvent(new Event(name, { bubbles: true })); } catch (e) {}
+                        });
+                    };
+                    const values = Array.isArray(rawValues) && rawValues.length ? rawValues : [''];
+                    inputs.forEach((target, index) => {
+                        const nextValue = String(index < values.length ? values[index] : values[values.length - 1] || '');
+                        setValue(target, nextValue);
+                    });
+                    return inputs.every((target, index) => {
+                        const expected = String(index < values.length ? values[index] : values[values.length - 1] || '');
+                        return String(target.value || '') === expected;
+                    });
+                }""",
+                {"questionId": provider_question_id, "rawValues": values},
+            )
+        )
     for selector in candidate_selectors:
         try:
             locator = page.locator(selector).first
