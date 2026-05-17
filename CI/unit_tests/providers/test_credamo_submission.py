@@ -6,6 +6,7 @@ from typing import Any
 import pytest
 
 from credamo.provider import submission
+from software.core.engine.runtime_actions import RuntimeActionResult
 from software.core.task import ExecutionConfig, ExecutionState
 
 
@@ -75,6 +76,81 @@ def _async_return(value=None):
 
 class CredamoSubmissionTests:
     @pytest.mark.asyncio
+    async def test_runtime_context_summary_formats_page_and_answer_counts(self, patch_attrs) -> None:
+        driver = _FakeDriver()
+        patch_attrs(
+            (
+                submission,
+                "peek_credamo_runtime_state",
+                lambda _driver: SimpleNamespace(page_index=2, answered_question_keys=["a", " ", "", "b"]),
+            ),
+        )
+        assert submission._runtime_context_summary(driver) == "page=2 answered=2"
+
+        patch_attrs((submission, "peek_credamo_runtime_state", lambda _driver: None))
+        assert submission._runtime_context_summary(driver) == ""
+
+    @pytest.mark.asyncio
+    async def test_body_and_feedback_text_return_empty_on_driver_error(self) -> None:
+        class _BrokenDriver(_FakeDriver):
+            async def execute_script(self, script: str, *args: Any):
+                del script, args
+                raise RuntimeError("boom")
+
+        driver = _BrokenDriver()
+        assert await submission._body_text(driver) == ""
+        assert await submission._visible_feedback_text(driver) == ""
+
+    def test_marker_helpers_cover_selection_completion_and_verification(self) -> None:
+        assert submission._looks_like_selection_validation("请至少选择 2 项后继续")
+        assert not submission._looks_like_selection_validation("")
+        assert submission._contains_completion_marker("感谢您的参与，已提交")
+        assert submission._contains_verification_marker("请完成滑块验证")
+
+    @pytest.mark.asyncio
+    async def test_extract_submission_recovery_hint_uses_dom_messages_and_pending_questions(self, patch_attrs) -> None:
+        driver = _FakeDriver()
+        payload = {
+            "questionNumbers": ["2", "2", "x"],
+            "messages": ["请填写必填项", "请至少选择2项", "普通提示"],
+        }
+        patch_attrs(
+            (submission, "_page", _async_return("page")),
+            (submission, "peek_credamo_runtime_state", lambda _driver: SimpleNamespace(answered_question_keys=["k1"])),
+            (submission, "_question_roots", _async_return(["root-1", "root-2"])),
+            (submission, "_unanswered_question_roots", _async_return([("root-2", 5, "k5")])),
+            (submission, "_question_number_from_root", _async_return(5)),
+        )
+        driver.execute_script = _async_return(payload)  # type: ignore[method-assign]
+
+        hint = await submission._extract_submission_recovery_hint(driver)
+
+        assert hint == submission.SubmissionRecoveryHint((2, 5), "请填写必填项 | 请至少选择2项")
+
+    @pytest.mark.asyncio
+    async def test_extract_submission_recovery_hint_returns_none_when_nothing_found(self, patch_attrs) -> None:
+        driver = _FakeDriver()
+        driver.execute_script = _async_return({"questionNumbers": [], "messages": []})  # type: ignore[method-assign]
+        patch_attrs(
+            (submission, "_page", _async_return(None)),
+            (submission, "peek_credamo_runtime_state", lambda _driver: None),
+        )
+        assert await submission._extract_submission_recovery_hint(driver) is None
+
+    @pytest.mark.asyncio
+    async def test_has_visible_action_controls_handles_true_and_error(self) -> None:
+        driver = _FakeDriver()
+        driver.execute_script = _async_return(True)  # type: ignore[method-assign]
+        assert await submission._has_visible_action_controls(driver)
+
+        class _BrokenDriver(_FakeDriver):
+            async def execute_script(self, script: str, *args: Any):
+                del script, args
+                raise RuntimeError("boom")
+
+        assert not await submission._has_visible_action_controls(_BrokenDriver())
+
+    @pytest.mark.asyncio
     async def test_submission_requires_verification_reads_runtime_state_when_feedback_hits(self, patch_attrs) -> None:
         driver = _FakeDriver(body_text="问卷正文")
         reads: list[str] = []
@@ -137,6 +213,38 @@ class CredamoSubmissionTests:
             (submission, "_has_visible_action_controls", _async_return(True)),
         )
         assert not await submission.is_completion_page(driver)
+
+    @pytest.mark.asyncio
+    async def test_is_completion_page_accepts_completion_url_and_feedback_marker(self, patch_attrs) -> None:
+        driver = _FakeDriver(current_url="https://example.com/success")
+        assert await submission.is_completion_page(driver)
+
+        driver2 = _FakeDriver(body_text="问卷正文")
+        patch_attrs((submission, "_visible_feedback_text", _async_return("答卷已经提交")))
+        assert await submission.is_completion_page(driver2)
+
+    @pytest.mark.asyncio
+    async def test_wait_for_submission_verification_covers_stop_and_final_check(self, patch_attrs) -> None:
+        driver = _FakeDriver()
+        stop_signal = SimpleNamespace(is_set=lambda: True)
+        assert not await submission.wait_for_submission_verification(driver, timeout=1, stop_signal=stop_signal)
+
+        checks = iter([False, False, True])
+        patch_attrs((submission, "submission_requires_verification", lambda *_args, **_kwargs: _async_return(next(checks))()))
+        assert await submission.wait_for_submission_verification(driver, timeout=1, stop_signal=None)
+
+    @pytest.mark.asyncio
+    async def test_handle_consume_and_device_quota_helpers(self, patch_attrs) -> None:
+        driver = _FakeDriver(body_text="设备次数已满")
+        patch_attrs((submission, "is_completion_page", _async_return(True)))
+
+        result = await submission.handle_submission_verification_detected(object(), object())
+        assert isinstance(result, RuntimeActionResult)
+        assert result.actions == ()
+        assert not result.should_stop
+
+        assert await submission.consume_submission_success_signal(driver)
+        assert await submission.is_device_quota_limit_page(driver)
 
     @pytest.mark.asyncio
     async def test_attempt_submission_recovery_refills_questions_and_resubmits_once(self, patch_attrs) -> None:
@@ -211,3 +319,55 @@ class CredamoSubmissionTests:
         assert recovered is False
         assert int(runtime_state.submission_recovery_attempts) == 0
         assert submit_mock == []
+
+    @pytest.mark.asyncio
+    async def test_attempt_submission_recovery_stops_for_stop_signal_verification_limit_and_missing_targets(self, patch_attrs) -> None:
+        driver = _FakeDriver()
+        state = ExecutionState(config=ExecutionConfig(survey_provider="credamo"))
+
+        stop_signal = SimpleNamespace(is_set=lambda: True)
+        assert not await submission.attempt_submission_recovery(driver, state, None, stop_signal, thread_name="Worker-1")
+
+        patch_attrs((submission, "submission_requires_verification", _async_return(True)))
+        assert not await submission.attempt_submission_recovery(driver, state, None, None, thread_name="Worker-1")
+
+        patch_attrs(
+            (submission, "submission_requires_verification", _async_return(False)),
+            (submission, "get_credamo_runtime_state", lambda _driver: SimpleNamespace(submission_recovery_attempts=1)),
+        )
+        assert not await submission.attempt_submission_recovery(driver, state, None, None, thread_name="Worker-1")
+
+        patch_attrs(
+            (submission, "get_credamo_runtime_state", lambda _driver: SimpleNamespace(submission_recovery_attempts=0)),
+            (submission, "_extract_submission_recovery_hint", _async_return(submission.SubmissionRecoveryHint((), "提示"))),
+        )
+        assert not await submission.attempt_submission_recovery(driver, state, None, None, thread_name="Worker-1")
+
+    @pytest.mark.asyncio
+    async def test_attempt_submission_recovery_handles_missing_page_or_submit_failure(self, patch_attrs) -> None:
+        driver = _FakeDriver()
+        state = ExecutionState(config=ExecutionConfig(survey_provider="credamo"))
+        runtime_state = SimpleNamespace(submission_recovery_attempts=0)
+        patch_attrs(
+            (submission, "submission_requires_verification", _async_return(False)),
+            (submission, "get_credamo_runtime_state", lambda _driver: runtime_state),
+            (
+                submission,
+                "_extract_submission_recovery_hint",
+                _async_return(submission.SubmissionRecoveryHint((3,), "当前页存在未作答题目")),
+            ),
+        )
+
+        from credamo.provider import runtime as credamo_runtime
+
+        with pytest.MonkeyPatch.context() as mp:
+            mp.setattr(credamo_runtime, "refill_required_questions_on_current_page", _async_return(1))
+            mp.setattr(credamo_runtime, "_click_submit", _async_return(False))
+            patch_attrs((submission, "_page", _async_return(None)))
+            assert not await submission.attempt_submission_recovery(driver, state, None, None, thread_name="Worker-1")
+            assert runtime_state.submission_recovery_attempts == 1
+
+            patch_attrs((submission, "_page", _async_return("page")))
+            runtime_state.submission_recovery_attempts = 0
+            assert not await submission.attempt_submission_recovery(driver, state, None, None, thread_name="Worker-1")
+            assert runtime_state.submission_recovery_attempts == 1

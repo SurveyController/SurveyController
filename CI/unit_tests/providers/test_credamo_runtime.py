@@ -559,3 +559,53 @@ class CredamoRuntimeTests:
 
         assert result
         assert calls == ["scale", "scale", "submit"]
+
+    @pytest.mark.asyncio
+    async def test_refill_required_questions_on_current_page_skips_invalid_and_updates_status(self, restore_credamo_runtime_patchpoints, patch_attrs) -> None:
+        _ = restore_credamo_runtime_patchpoints
+        status_updates: list[tuple[str, bool]] = []
+        state = SimpleNamespace(
+            update_thread_status=lambda _thread, status_text, *, running: status_updates.append((status_text, running)),
+        )
+        runtime_state = SimpleNamespace(page_index=6)
+        page = object()
+        root2 = self._FakeQuestionRoot(2)
+        root5 = self._FakeQuestionRoot(5)
+        config = SimpleNamespace()
+        patch_attrs(
+            (runtime, "_page", _async_return(page)),
+            (runtime, "get_credamo_runtime_state", lambda _driver: runtime_state),
+            (runtime, "_question_roots", _async_return([root2, root5])),
+            (runtime, "_question_number_from_root", lambda _page, root, _fallback: _async_return(root.question_num)()),
+            (runtime, "_resolve_config_binding", _async_return((2, ("single", 0), None))),
+            (
+                runtime,
+                "_attempt_answer_current_root",
+                lambda _page, root, _question_num, _config, fallback_page_id=0: _async_return(root is root2 and fallback_page_id == 6)(),
+            ),
+        )
+
+        filled = await runtime.refill_required_questions_on_current_page(
+            object(),
+            config,
+            question_numbers=[0, "2", 2, "x", 7, 5],
+            thread_name="Worker-1",
+            state=state,
+        )
+
+        assert filled == 1
+        assert status_updates == [("补答第2题", True), ("补答第2题", True)]
+
+    @pytest.mark.asyncio
+    async def test_refill_required_questions_on_current_page_returns_zero_for_empty_cases(self, restore_credamo_runtime_patchpoints, patch_attrs) -> None:
+        _ = restore_credamo_runtime_patchpoints
+        config = SimpleNamespace()
+        patch_attrs(
+            (runtime, "_page", _async_return(object())),
+            (runtime, "get_credamo_runtime_state", lambda _driver: SimpleNamespace(page_index=1)),
+            (runtime, "_question_roots", _async_return([])),
+        )
+
+        assert await runtime.refill_required_questions_on_current_page(object(), config, question_numbers=[], thread_name="Worker") == 0
+        assert await runtime.refill_required_questions_on_current_page(object(), config, question_numbers=["bad"], thread_name="Worker") == 0
+        assert await runtime.refill_required_questions_on_current_page(object(), config, question_numbers=[1], thread_name="Worker") == 0
