@@ -10,6 +10,11 @@ class ReverseFillParserTests:
         ordered = resolve_ordered_columns(columns, ['外观', '功能'])
         assert [column.column_index for column in ordered] == [3, 4]
 
+    def test_resolve_ordered_columns_handles_em_dash_suffix(self) -> None:
+        columns = [ReverseFillColumn(column_index=3, header='1、品牌—外观', question_num=1, suffix='品牌—外观'), ReverseFillColumn(column_index=4, header='1、功能', question_num=1, suffix='功能')]
+        ordered = resolve_ordered_columns(columns, ['功能', '外观'])
+        assert [column.column_index for column in ordered] == [4, 3]
+
     def test_supports_reverse_fill_runtime_rejects_location_and_fillable_options(self) -> None:
         assert not supports_reverse_fill_runtime('text', {'is_location': True})
         assert not supports_reverse_fill_runtime('single', {'fillable_options': ['其他']})

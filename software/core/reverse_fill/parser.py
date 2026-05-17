@@ -67,9 +67,10 @@ def label_variants(value: Any) -> List[str]:
     _append(text)
     stripped = _LEADING_INDEX_RE.sub("", text).strip().strip("_")
     _append(stripped)
+    normalized_stripped = stripped.replace("—", "-").replace("–", "-").replace("－", "-")
     for separator in ("-", ":", "丨", "|", "/", "／"):
-        if separator in stripped:
-            _append(stripped.rsplit(separator, 1)[-1].strip().strip("_"))
+        if separator in normalized_stripped:
+            _append(normalized_stripped.rsplit(separator, 1)[-1].strip().strip("_"))
     return variants
 
 
