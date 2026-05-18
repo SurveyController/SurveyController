@@ -48,6 +48,7 @@ from .utils import (
 from .constants import _get_entry_type_label
 from .wizard_cards import WizardCardsMixin
 from .wizard_logic_tree import build_logic_tree_state
+from .wizard_search import WizardSearchMixin
 from .wizard_sections import (
     WizardSectionsMixin,
     _TEXT_RANDOM_ID_CARD_TOKEN,
@@ -71,6 +72,7 @@ _WIDGET_MAX_SIZE = 16777215
 
 
 class QuestionWizardDialog(
+    WizardSearchMixin,
     WizardCardsMixin,
     WizardSectionsMixin,
     QDialog,
@@ -126,7 +128,10 @@ class QuestionWizardDialog(
         self._entry_snapshots: List[QuestionEntry] = [copy.deepcopy(entry) for entry in entries]
         self._question_cards: Dict[int, QWidget] = {}
         self._visible_indices: List[int] = list(range(len(self.entries)))
+        self._question_search_cache: Dict[int, str] = {}
         self._search_match_indices: List[int] = []
+        self._last_search_keyword = ""
+        self._last_search_match_cursor = -1
         self._current_question_idx = self._visible_indices[0] if self._visible_indices else 0
         self._current_view_mode = (
             _VIEW_SEQUENTIAL if self._logic_tree_state.has_unknown_logic else _VIEW_LOGIC
@@ -136,6 +141,7 @@ class QuestionWizardDialog(
 
         self._search_edit: Optional[SearchLineEdit] = None
         self._search_status_label: Optional[BodyLabel] = None
+        self._search_popup: Optional[Any] = None
         self._tree_widget: Optional[TreeWidget] = None
         self._detail_scroll: Optional[ScrollArea] = None
         self._detail_host: Optional[QWidget] = None
@@ -171,6 +177,7 @@ class QuestionWizardDialog(
         search_edit.textChanged.connect(self._on_search_text_changed)
         search_edit.returnPressed.connect(self._handle_search_return_pressed)
         self._search_edit = search_edit
+        self._configure_search_popup(search_edit)
         top_row.addWidget(search_edit)
 
         top_row.addStretch(1)
@@ -254,7 +261,7 @@ class QuestionWizardDialog(
         btn_row.addWidget(ok_btn)
         layout.addLayout(btn_row)
 
-        self._set_search_status("输入关键词后回车跳转")
+        self._set_search_status("点下拉结果或回车即可跳转")
 
     def _clamp_splitter_sizes(self, *_args) -> None:
         splitter = self._content_splitter
@@ -388,17 +395,6 @@ class QuestionWizardDialog(
         )
         self.move(top_left)
 
-    def _set_search_status(
-        self,
-        text: str,
-        light: str = "#666666",
-        dark: str = "#bfbfbf",
-    ) -> None:
-        if self._search_status_label is None:
-            return
-        self._search_status_label.setText(text)
-        _apply_label_color(self._search_status_label, light, dark)
-
     def _visible_indices_for_mode(self) -> List[int]:
         return list(range(len(self.entries)))
 
@@ -425,6 +421,21 @@ class QuestionWizardDialog(
         row_layout.addWidget(title_label, 1)
         return row
 
+    def _build_tree_relation_widget(self, relation: Any, parent: QWidget) -> QWidget:
+        row = QWidget(parent)
+        row_layout = QHBoxLayout(row)
+        row_layout.setContentsMargins(0, 0, 0, 0)
+        row_layout.setSpacing(6)
+
+        if str(getattr(relation, "kind", "") or "").strip().lower() == "jump":
+            badge = self._make_badge("跳题", "#b45309", "#fbbf24", row)
+            row_layout.addWidget(badge, 0, Qt.AlignmentFlag.AlignLeft)
+
+        label = BodyLabel(_shorten_text(str(getattr(relation, "label", "") or ""), 24), row)
+        label.setStyleSheet("font-size: 12px;")
+        row_layout.addWidget(label, 1)
+        return row
+
     def _populate_tree(self) -> None:
         if self._tree_widget is None:
             return
@@ -449,7 +460,8 @@ class QuestionWizardDialog(
 
                 if self._current_view_mode == _VIEW_LOGIC and not self._logic_tree_state.has_unknown_logic:
                     for relation in self._logic_tree_state.relations.get(idx, []):
-                        relation_item = QTreeWidgetItem([relation.label])
+                        relation_item = QTreeWidgetItem([""])
+                        relation_item.setSizeHint(0, QSize(0, 30))
                         relation_item.setData(0, _TREE_INDEX_ROLE, idx)
                         relation_item.setData(
                             0,
@@ -457,6 +469,11 @@ class QuestionWizardDialog(
                             relation.target_index if relation.selectable else None,
                         )
                         item.addChild(relation_item)
+                        self._tree_widget.setItemWidget(
+                            relation_item,
+                            0,
+                            self._build_tree_relation_widget(relation, self._tree_widget),
+                        )
             page_item.setExpanded(True)
 
     def _show_empty_state(self) -> None:
@@ -583,61 +600,8 @@ class QuestionWizardDialog(
         if current_pos < len(self._visible_indices) - 1:
             self._select_question(self._visible_indices[current_pos + 1])
 
-    def _searchable_text(self, idx: int) -> str:
-        return str(self._logic_tree_state.search_text.get(idx) or "")
-
-    @staticmethod
-    def _normalize_search_text(text: str) -> str:
-        return " ".join(str(text or "").strip().lower().split())
-
-    def _match_indices(self, keyword: str) -> List[int]:
-        normalized = self._normalize_search_text(keyword)
-        if not normalized:
-            return []
-        return [
-            idx
-            for idx in self._visible_indices
-            if normalized in self._normalize_search_text(self._searchable_text(idx))
-        ]
-
-    def _on_search_text_changed(self, text: str) -> None:
-        raw_text = str(text or "").strip()
-        if not raw_text:
-            self._search_match_indices = []
-            self._set_search_status("输入关键词后回车跳转")
-            return
-        matches = self._match_indices(raw_text)
-        self._search_match_indices = matches
-        if matches:
-            self._set_search_status(f"匹配 {len(matches)} 题，回车定位下一项")
-        else:
-            self._set_search_status(f"未找到“{raw_text}”", "#c42b1c", "#ff99a4")
-
-    def _handle_search_return_pressed(self) -> None:
-        if self._search_edit is None:
-            return
-        self._handle_search(self._search_edit.text())
-
     def _handle_search(self, keyword: str) -> None:
-        raw_text = str(keyword or "").strip()
-        if not raw_text:
-            self._search_match_indices = []
-            self._set_search_status("输入关键词后回车跳转")
-            return
-        matches = self._match_indices(raw_text)
-        self._search_match_indices = matches
-        if not matches:
-            self._set_search_status(f"未找到“{raw_text}”", "#c42b1c", "#ff99a4")
-            return
-        if self._current_question_idx in matches:
-            current_pos = matches.index(self._current_question_idx)
-            target_idx = matches[(current_pos + 1) % len(matches)]
-        else:
-            target_idx = matches[0]
-        self._select_question(target_idx)
-        self._set_search_status(
-            f"匹配 {len(matches)} 题，当前定位到{self._format_question_label(target_idx)}"
-        )
+        self._handle_question_search(keyword)
 
     def reject(self) -> None:
         self._restore_entries()

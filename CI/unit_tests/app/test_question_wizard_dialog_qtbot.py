@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import time
 
-from qfluentwidgets import BodyLabel, InfoBadge, PushButton
+from qfluentwidgets import BodyLabel, InfoBadge, PushButton, ScrollArea
 from PySide6.QtWidgets import QTreeWidgetItem
 
 from software.app.config import DEFAULT_FILL_TEXT
@@ -127,7 +127,15 @@ def test_question_wizard_dialog_tree_uses_compact_question_label_and_type_badge(
     badges = [badge.text() for badge in row.findChildren(InfoBadge)]
     assert labels[0] == "1."
     assert badges == ["单选题"]
-    assert question_item.child(0).text(0) == "选中“A” -> 结束"
+
+    relation_item = question_item.child(0)
+    assert relation_item.text(0) == ""
+    relation_row = dlg._tree_widget.itemWidget(relation_item, 0)
+    assert relation_row is not None
+    relation_badges = [badge.text() for badge in relation_row.findChildren(InfoBadge)]
+    relation_labels = [label.text() for label in relation_row.findChildren(BodyLabel)]
+    assert relation_badges == ["跳题"]
+    assert relation_labels == ["选中“A” -> 结束"]
 
 
 def test_question_wizard_dialog_hides_logic_view_when_unknown(qtbot) -> None:
@@ -157,6 +165,35 @@ def test_question_wizard_dialog_hides_logic_view_when_unknown(qtbot) -> None:
 
     qtbot.waitUntil(lambda: dlg._tree_widget.topLevelItemCount() > 0)
     assert dlg._current_view_mode == "sequential"
+
+
+def test_question_wizard_dialog_search_shows_realtime_suggestions(qtbot) -> None:
+    info = [
+        SurveyQuestionMeta(
+            num=1,
+            title="第一题",
+            page=1,
+            option_texts=["苹果", "香蕉"],
+            logic_parse_status=LOGIC_PARSE_STATUS_COMPLETE,
+        ),
+        SurveyQuestionMeta(
+            num=2,
+            title="第二题",
+            page=1,
+            option_texts=["西瓜"],
+            logic_parse_status=LOGIC_PARSE_STATUS_COMPLETE,
+        ),
+    ]
+    dlg = QuestionWizardDialog(_build_entries(), info, "demo")
+    qtbot.addWidget(dlg)
+    dlg.show()
+
+    qtbot.waitUntil(lambda: dlg._search_edit is not None and dlg._search_edit.isVisible())
+    dlg._search_edit.setText("苹果")
+
+    qtbot.waitUntil(lambda: dlg._search_popup is not None and dlg._search_popup.isVisible())
+    assert dlg._search_popup.count() == 1
+    assert "第一题" in dlg._search_popup.item(0).text()
 
 
 def test_question_wizard_dialog_detail_keeps_visible_content_width(qtbot) -> None:
@@ -231,6 +268,49 @@ def test_question_wizard_dialog_multi_text_stays_inside_detail_width(qtbot) -> N
         timeout=2000,
     )
     assert card.maximumWidth() <= dlg._detail_scroll.viewport().width()
+
+
+def test_question_wizard_dialog_matrix_rows_use_outer_detail_scroll(qtbot) -> None:
+    entries = [
+        QuestionEntry(
+            question_type="matrix",
+            probabilities=[1],
+            texts=None,
+            rows=4,
+            option_count=4,
+            distribution_mode="custom",
+            custom_weights=[
+                [20, 10, 8, 80],
+                [1, 1, 1, 1],
+                [5, 10, 15, 20],
+                [30, 25, 20, 15],
+            ],
+            question_num=1,
+        )
+    ]
+    info = [
+        SurveyQuestionMeta(
+            num=1,
+            title="矩阵题",
+            page=1,
+            row_texts=["外观", "性能", "服务", "价格"],
+            option_texts=["1", "2", "3", "4"],
+            logic_parse_status=LOGIC_PARSE_STATUS_COMPLETE,
+        )
+    ]
+    dlg = QuestionWizardDialog(entries, info, "demo")
+    qtbot.addWidget(dlg)
+    dlg.show()
+
+    qtbot.waitUntil(lambda: bool(dlg._entry_card_widgets))
+    card = dlg._entry_card_widgets[0]
+    inner_scrolls = [
+        scroll
+        for scroll in card.findChildren(ScrollArea)
+        if scroll is not dlg._detail_scroll
+    ]
+    assert inner_scrolls == []
+    assert len(dlg.matrix_row_slider_map[0]) == 4
 
 
 def test_question_wizard_dialog_text_stays_inside_detail_width(qtbot) -> None:

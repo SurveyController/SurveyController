@@ -14,7 +14,6 @@ from qfluentwidgets import (
     BodyLabel,
     CardWidget,
     LineEdit,
-    ScrollArea,
     SegmentedWidget,
 )
 
@@ -107,19 +106,13 @@ class WizardSectionsMixin(
         saved_bias = getattr(entry, "psycho_bias", None)
         matrix_row_preset_segs = []
 
-        per_row_scroll = ScrollArea(card)
-        per_row_scroll.setWidgetResizable(True)
-        per_row_scroll.setMinimumHeight(120)
-        per_row_scroll.setMaximumHeight(280)
-        per_row_scroll.enableTransparentBackground()
         per_row_view = QWidget(card)
         per_row_view.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Maximum)
-        per_row_scroll.setWidget(per_row_view)
         per_row_layout = QVBoxLayout(per_row_view)
         per_row_layout.setContentsMargins(0, 0, 0, 0)
         per_row_layout.setSpacing(4)
         per_row_layout.setSizeConstraint(QVBoxLayout.SizeConstraint.SetMinimumSize)
-        card_layout.addWidget(per_row_scroll)
+        card_layout.addWidget(per_row_view)
 
         def build_slider_rows(
             parent_widget: QWidget,
@@ -311,20 +304,24 @@ class WizardSectionsMixin(
         self._has_content = True
         if option_texts:
             list_container = QWidget(card)
+            list_container.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Maximum)
             list_layout = QVBoxLayout(list_container)
             list_layout.setContentsMargins(0, 6, 0, 0)
             list_layout.setSpacing(4)
             for opt_idx, opt_text in enumerate(option_texts, 1):
-                row_widget = self._build_media_text_widget(
-                    card,
-                    idx=idx,
-                    scope="option",
-                    media_index=opt_idx - 1,
-                    text=f"{opt_idx}. {opt_text}",
-                    text_width=420,
-                    font_style="font-size: 12px;",
+                row_label = BodyLabel(
+                    f"{opt_idx}. {str(opt_text or '').strip() or f'选项{opt_idx}'}",
+                    list_container,
                 )
-                list_layout.addWidget(row_widget)
+                row_label.setWordWrap(True)
+                row_label.setAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignTop)
+                row_label.setSizePolicy(
+                    QSizePolicy.Policy.Expanding,
+                    QSizePolicy.Policy.Maximum,
+                )
+                row_label.setStyleSheet("font-size: 12px;")
+                _apply_label_color(row_label, "#444444", "#e0e0e0")
+                list_layout.addWidget(row_label)
             card_layout.addWidget(list_container)
 
 

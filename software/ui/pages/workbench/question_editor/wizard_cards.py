@@ -5,10 +5,11 @@ from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple, cast
 
 from PySide6.QtCore import QTimer, Qt
 from PySide6.QtGui import QColor
-from PySide6.QtWidgets import QSizePolicy, QFrame, QHBoxLayout, QVBoxLayout, QWidget
+from PySide6.QtWidgets import QSizePolicy, QHBoxLayout, QVBoxLayout, QWidget
 from qfluentwidgets import (
     BodyLabel,
     CardWidget,
+    HorizontalSeparator,
     InfoBadge,
     LineEdit,
     MessageBox,
@@ -457,11 +458,7 @@ class WizardCardsMixin:
         if title_media:
             card_layout.addWidget(QuestionMediaStrip("题干图片", title_media, fixed_size=72, parent=card))
 
-        separator = QFrame(card)
-        separator.setFrameShape(QFrame.Shape.HLine)
-        separator.setFrameShadow(QFrame.Shadow.Plain)
-        separator.setStyleSheet("color: rgba(128, 128, 128, 0.18);")
-        card_layout.addWidget(separator)
+        card_layout.addWidget(HorizontalSeparator(card))
 
         if entry.question_type in ("text", "multi_text"):
             self._build_text_section(idx, entry, card, card_layout)
@@ -487,12 +484,8 @@ class WizardCardsMixin:
             return
 
         stored_configs: List[Dict[str, Any]] = []
-        separator = QFrame(card)
-        separator.setFrameShape(QFrame.Shape.HLine)
-        separator.setFrameShadow(QFrame.Shadow.Plain)
-        separator.setStyleSheet(
-            "color: rgba(255, 255, 255, 0.16); margin-top: 4px; margin-bottom: 4px;"
-        )
+        separator = HorizontalSeparator(card)
+        separator.setContentsMargins(0, 4, 0, 4)
         card_layout.addWidget(separator)
 
         section_title = BodyLabel("嵌入式下拉", card)

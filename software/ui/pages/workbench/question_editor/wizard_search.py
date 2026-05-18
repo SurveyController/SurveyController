@@ -4,6 +4,7 @@ import html
 from typing import TYPE_CHECKING, Any, List, Tuple, cast
 
 from PySide6.QtCore import (
+    QEvent,
     QObject,
     QPoint,
     QRectF,
@@ -11,8 +12,9 @@ from PySide6.QtCore import (
     QModelIndex,
     QPersistentModelIndex,
     QSize,
+    QTimer,
 )
-from PySide6.QtGui import QColor, QPainter, QTextDocument
+from PySide6.QtGui import QColor, QKeyEvent, QPainter, QTextDocument
 from PySide6.QtWidgets import (
     QApplication,
     QAbstractItemView,
@@ -132,6 +134,7 @@ class WizardSearchMixin:
         _search_status_label: Any
         _search_popup: Any
         _search_edit: Any
+        _logic_tree_state: Any
 
         def _get_entry_info(self, idx: int) -> SurveyQuestionMeta: ...
         def _navigate_to_question(self, question_idx: int, animate: bool) -> None: ...
@@ -215,6 +218,14 @@ class WizardSearchMixin:
                         text = str(option or "").strip()
                         if text:
                             sections.append(("嵌入式下拉", text))
+        logic_state = getattr(self, "_logic_tree_state", None)
+        for attr, label in (("inbound_summary", "显示逻辑"), ("outbound_summary", "跳转逻辑")):
+            values = getattr(logic_state, attr, None)
+            if not isinstance(values, dict):
+                continue
+            text = str(values.get(idx) or "").strip()
+            if text:
+                sections.append((label, text))
         return sections
 
     def _build_question_search_text(self, idx: int) -> str:
@@ -321,6 +332,48 @@ class WizardSearchMixin:
         self._search_popup = popup
         search_edit.installEventFilter(cast(QObject, self))
         popup.installEventFilter(cast(QObject, self))
+
+    def eventFilter(self, watched: QObject, event: QEvent) -> bool:
+        search_edit = getattr(self, "_search_edit", None)
+        search_popup = getattr(self, "_search_popup", None)
+        popup_alive = search_popup is not None and self._is_alive_widget(search_popup)
+
+        if watched is search_edit and event.type() == QEvent.Type.KeyPress:
+            popup = search_popup if popup_alive else None
+            if popup is not None and popup.isVisible():
+                key = cast(QKeyEvent, event).key()
+                if key == Qt.Key.Key_Down:
+                    next_row = min(
+                        popup.count() - 1,
+                        max(0, popup.currentRow() + 1),
+                    )
+                    popup.setCurrentRow(next_row)
+                    return True
+                if key == Qt.Key.Key_Up:
+                    next_row = max(0, popup.currentRow() - 1)
+                    popup.setCurrentRow(next_row)
+                    return True
+                if key == Qt.Key.Key_Escape:
+                    self._hide_search_popup()
+                    return True
+
+        if watched is search_edit and event.type() == QEvent.Type.FocusOut:
+            QTimer.singleShot(0, self._hide_search_popup)
+
+        if watched is search_popup and event.type() == QEvent.Type.KeyPress:
+            key = cast(QKeyEvent, event).key()
+            if key in (Qt.Key.Key_Return, Qt.Key.Key_Enter):
+                current_item = search_popup.currentItem() if search_popup is not None else None
+                if current_item is not None:
+                    self._activate_search_popup_item(current_item)
+                    return True
+            if key == Qt.Key.Key_Escape:
+                self._hide_search_popup()
+                if search_edit is not None:
+                    search_edit.setFocus()
+                return True
+
+        return cast(Any, super()).eventFilter(watched, event)
 
     def _build_search_result_item(self, idx: int, keyword: str) -> QListWidgetItem:
         info = self._get_entry_info(idx)
