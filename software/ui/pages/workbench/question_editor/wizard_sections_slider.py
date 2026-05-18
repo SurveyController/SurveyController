@@ -167,6 +167,7 @@ class WizardSectionsSliderMixin:
             opt_layout = QVBoxLayout(opt_widget)
             opt_layout.setContentsMargins(0, 0, 0, 2)
             opt_layout.setSpacing(2)
+            opt_layout.setSizeConstraint(QVBoxLayout.SizeConstraint.SetMinimumSize)
 
             header_row = QHBoxLayout()
             header_row.setContentsMargins(0, 0, 0, 0)
@@ -243,7 +244,7 @@ class WizardSectionsSliderMixin:
                 )
                 _apply_label_color(percent_label, "#666666", "#bfbfbf")
 
-            slider.setMinimumWidth(80)
+            slider.setMinimumWidth(48)
             slider.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
             opt_layout.addLayout(header_row)
             control_row.addWidget(slider, 1)
@@ -418,6 +419,10 @@ class WizardSectionsSliderMixin:
         if entry.question_type in ("single", "dropdown", "scale", "score"):
             ratio_preview_label = BodyLabel("", card)
             ratio_preview_label.setWordWrap(True)
+            ratio_preview_label.setSizePolicy(
+                QSizePolicy.Policy.Expanding,
+                QSizePolicy.Policy.Maximum,
+            )
             ratio_preview_label.setStyleSheet("font-size: 12px;")
             _apply_label_color(ratio_preview_label, "#666666", "#bfbfbf")
             card_layout.addWidget(ratio_preview_label)

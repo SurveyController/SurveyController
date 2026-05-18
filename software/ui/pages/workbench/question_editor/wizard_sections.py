@@ -118,6 +118,7 @@ class WizardSectionsMixin(
         per_row_layout = QVBoxLayout(per_row_view)
         per_row_layout.setContentsMargins(0, 0, 0, 0)
         per_row_layout.setSpacing(4)
+        per_row_layout.setSizeConstraint(QVBoxLayout.SizeConstraint.SetMinimumSize)
         card_layout.addWidget(per_row_scroll)
 
         def build_slider_rows(
@@ -132,6 +133,7 @@ class WizardSectionsMixin(
                 opt_layout = QVBoxLayout(opt_widget)
                 opt_layout.setContentsMargins(0, 0, 0, 2)
                 opt_layout.setSpacing(2)
+                opt_layout.setSizeConstraint(QVBoxLayout.SizeConstraint.SetMinimumSize)
 
                 header_row = QHBoxLayout()
                 header_row.setContentsMargins(0, 0, 0, 0)
@@ -168,7 +170,7 @@ class WizardSectionsMixin(
                 value_input.setText(str(slider.value()))
                 _bind_slider_input(slider, value_input)
 
-                slider.setMinimumWidth(80)
+                slider.setMinimumWidth(48)
                 slider.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
                 opt_layout.addLayout(header_row)
                 control_row.addWidget(slider, 1)
@@ -191,6 +193,7 @@ class WizardSectionsMixin(
             row_card_layout = QVBoxLayout(row_card)
             row_card_layout.setContentsMargins(10, 6, 10, 4)
             row_card_layout.setSpacing(3)
+            row_card_layout.setSizeConstraint(QVBoxLayout.SizeConstraint.SetMinimumSize)
             row_label_text = row_texts[row_idx] if row_idx < len(row_texts) else ""
             if row_label_text:
                 row_label = BodyLabel(
@@ -228,6 +231,10 @@ class WizardSectionsMixin(
 
             row_preview_label = BodyLabel("", row_card)
             row_preview_label.setWordWrap(True)
+            row_preview_label.setSizePolicy(
+                QSizePolicy.Policy.Expanding,
+                QSizePolicy.Policy.Maximum,
+            )
             row_preview_label.setStyleSheet("font-size: 12px;")
             _apply_label_color(row_preview_label, "#666666", "#bfbfbf")
             row_card_layout.addWidget(row_preview_label)

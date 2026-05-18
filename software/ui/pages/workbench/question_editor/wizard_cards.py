@@ -416,6 +416,7 @@ class WizardCardsMixin:
         card_layout = QVBoxLayout(card)
         card_layout.setContentsMargins(14, 12, 14, 12)
         card_layout.setSpacing(6)
+        card_layout.setSizeConstraint(QVBoxLayout.SizeConstraint.SetMinimumSize)
 
         header_badges = self._build_header_badges(idx, entry, info_entry, card)
 
@@ -538,9 +539,11 @@ class WizardCardsMixin:
             sliders: List[NoWheelSlider] = []
             for opt_idx, select_text in enumerate(select_options):
                 row_widget = QWidget(card)
+                row_widget.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Maximum)
                 row_layout = QVBoxLayout(row_widget)
-                row_layout.setContentsMargins(0, 0, 0, 4)
-                row_layout.setSpacing(4)
+                row_layout.setContentsMargins(0, 0, 0, 2)
+                row_layout.setSpacing(2)
+                row_layout.setSizeConstraint(QVBoxLayout.SizeConstraint.SetMinimumSize)
 
                 header_row = QHBoxLayout()
                 header_row.setContentsMargins(0, 0, 0, 0)
@@ -579,7 +582,7 @@ class WizardCardsMixin:
 
                 _bind_slider_input(slider, value_input)
 
-                slider.setMinimumWidth(80)
+                slider.setMinimumWidth(48)
                 slider.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
                 row_layout.addLayout(header_row)
                 control_row.addWidget(slider, 1)
@@ -591,6 +594,10 @@ class WizardCardsMixin:
 
             ratio_preview_label = BodyLabel("", card)
             ratio_preview_label.setWordWrap(True)
+            ratio_preview_label.setSizePolicy(
+                QSizePolicy.Policy.Expanding,
+                QSizePolicy.Policy.Maximum,
+            )
             ratio_preview_label.setStyleSheet("font-size: 12px;")
             _apply_label_color(ratio_preview_label, "#666666", "#bfbfbf")
             card_layout.addWidget(ratio_preview_label)

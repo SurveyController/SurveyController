@@ -63,7 +63,7 @@ _TREE_INDEX_ROLE = int(Qt.ItemDataRole.UserRole) + 101
 _TREE_RELATION_TARGET_ROLE = _TREE_INDEX_ROLE + 1
 _LEFT_PANEL_MIN_WIDTH = 240
 _LEFT_PANEL_MAX_WIDTH = 520
-_RIGHT_PANEL_MIN_WIDTH = 520
+_RIGHT_PANEL_MIN_WIDTH = 420
 
 
 class QuestionWizardDialog(
@@ -120,7 +120,7 @@ class QuestionWizardDialog(
         self.option_fill_edit_map: Dict[int, Dict[int, LineEdit]] = {}
         self.option_fill_state_map: Dict[int, Dict[int, Dict[str, Any]]] = {}
         self._entry_snapshots: List[QuestionEntry] = [copy.deepcopy(entry) for entry in entries]
-        self._question_cards: Dict[int, CardWidget] = {}
+        self._question_cards: Dict[int, QWidget] = {}
         self._visible_indices: List[int] = list(range(len(self.entries)))
         self._search_match_indices: List[int] = []
         self._current_question_idx = self._visible_indices[0] if self._visible_indices else 0
@@ -275,10 +275,15 @@ class QuestionWizardDialog(
         finally:
             self._splitter_guarding = False
 
+    def resizeEvent(self, event) -> None:  # type: ignore[override]
+        super().resizeEvent(event)
+        QTimer.singleShot(0, self._clamp_splitter_sizes)
+
     def showEvent(self, event: QShowEvent) -> None:
         super().showEvent(event)
         self._bind_screen_change_signal()
         QTimer.singleShot(0, self._fit_into_available_geometry)
+        QTimer.singleShot(0, self._clamp_splitter_sizes)
 
     def _bind_screen_change_signal(self) -> None:
         if self._screen_change_bound:
@@ -427,16 +432,23 @@ class QuestionWizardDialog(
             return
         if not (0 <= self._current_question_idx < len(self.entries)):
             return
-        card = self._question_cards.get(self._current_question_idx)
-        if card is None:
+        page = self._question_cards.get(self._current_question_idx)
+        if page is None:
+            page = QWidget(self._detail_stack)
+            page_layout = QVBoxLayout(page)
+            page_layout.setContentsMargins(0, 0, 0, 0)
+            page_layout.setSpacing(0)
+
             card = self._build_entry_card(
                 self._current_question_idx,
                 self.entries[self._current_question_idx],
-                self._detail_stack,
+                page,
             )
-            self._question_cards[self._current_question_idx] = card
-            self._detail_stack.addWidget(card)
-        self._detail_stack.setCurrentWidget(card)
+            page_layout.addWidget(card, 0, Qt.AlignmentFlag.AlignTop)
+            page_layout.addStretch(1)
+            self._question_cards[self._current_question_idx] = page
+            self._detail_stack.addWidget(page)
+        self._detail_stack.setCurrentWidget(page)
         if self._detail_scroll is not None:
             self._detail_scroll.verticalScrollBar().setValue(0)
 
