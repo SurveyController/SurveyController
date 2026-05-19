@@ -2,10 +2,10 @@
 
 from __future__ import annotations
 
-from typing import Any, Dict, List, Optional, Sequence
+from typing import Any, Dict, List, Sequence
 
 from PySide6.QtCore import Qt
-from PySide6.QtWidgets import QAbstractItemView, QHBoxLayout, QWidget
+from PySide6.QtWidgets import QAbstractItemView, QHBoxLayout
 from qfluentwidgets import (
     BodyLabel,
     LineEdit,
@@ -14,6 +14,7 @@ from qfluentwidgets import (
     TableWidget,
     TitleLabel,
 )
+from software.ui.helpers.qfluent_compat import resolve_mask_dialog_parent
 
 
 class QuestionSelectorDialog(MessageBoxBase):
@@ -25,12 +26,13 @@ class QuestionSelectorDialog(MessageBoxBase):
         questions: Sequence[Dict[str, Any]],
         parent=None,
     ):
-        self._fallback_parent: Optional[QWidget] = None
-        if parent is None:
-            self._fallback_parent = QWidget()
-            self._fallback_parent.resize(960, 640)
-            parent = self._fallback_parent
-        super().__init__(parent)
+        resolved_parent = resolve_mask_dialog_parent(parent)
+        super().__init__(resolved_parent)
+        self._fallback_parent = resolved_parent if resolved_parent is not parent else None
+        if self._fallback_parent is not None:
+            self.destroyed.connect(self._fallback_parent.deleteLater)
+        self.setAttribute(Qt.WidgetAttribute.WA_QuitOnClose, False)
+        self.setAttribute(Qt.WidgetAttribute.WA_DeleteOnClose, True)
         self.setWindowTitle(title)
         self.widget.setFixedWidth(720)
         self.widget.setMinimumHeight(480)

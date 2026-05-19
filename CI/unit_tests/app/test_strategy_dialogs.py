@@ -71,6 +71,9 @@ def test_question_selector_filters_and_returns_unique_selected_indices(qtbot) ->
     dialog._on_search("年龄")
     assert dialog.table.rowCount() == 1
     assert dialog.table.item(0, 3).text() == "人口"
+    dialog.close()
+    dialog.deleteLater()
+    qtbot.wait(0)
 
 
 def test_condition_rule_dialog_builds_valid_rule_and_preserves_existing_id(qtbot) -> None:

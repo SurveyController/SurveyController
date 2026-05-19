@@ -19,6 +19,7 @@ from qfluentwidgets import (
 )
 from software.logging.action_logger import bind_logged_action, log_action
 from software.ui.helpers.fluent_tooltip import install_tooltip_filter
+from software.ui.helpers.qfluent_compat import set_indeterminate_progress_ring_active
 
 
 def _set_text_if_changed(widget: Any, text: str) -> None:
@@ -371,13 +372,38 @@ class DashboardProgressMixin:
             if item is None:
                 continue
             widget = item.widget()
-            if widget is not None:
-                widget.deleteLater()
+            if widget is None:
+                continue
+            self._dispose_thread_progress_widget(widget)
         self._thread_progress_rows.clear()
         self._last_device_quota_fail_count = 0
         self.thread_progress_hint.show()
         self.thread_progress_hint.setText("会话进度会在任务开始后显示")
         self._refresh_thread_progress_layout()
+
+    def _dispose_thread_progress_widget(self, widget: QWidget) -> None:
+        if widget is None:
+            return
+        try:
+            for busy_bar in widget.findChildren(IndeterminateProgressBar):
+                set_indeterminate_progress_ring_active(busy_bar, False)
+        except RuntimeError:
+            return
+        except Exception:
+            pass
+        try:
+            widget.hide()
+        except RuntimeError:
+            return
+        except Exception:
+            pass
+        try:
+            self.thread_progress_rows_layout.removeWidget(widget)
+        except RuntimeError:
+            return
+        except Exception:
+            pass
+        widget.deleteLater()
 
     def _set_thread_step_busy(self, row: Dict[str, Any], busy: bool) -> None:
         step_bar = row.get("step_bar")
@@ -565,7 +591,7 @@ class DashboardProgressMixin:
         for name in stale:
             row = self._thread_progress_rows.pop(name, None)
             if row and row.get("widget") is not None:
-                row["widget"].deleteLater()
+                self._dispose_thread_progress_widget(row["widget"])
         self._refresh_thread_progress_layout()
 
     def on_run_state_changed(self, running: bool):
