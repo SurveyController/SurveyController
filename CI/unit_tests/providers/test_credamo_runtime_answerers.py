@@ -378,3 +378,36 @@ class CredamoRuntimeAnswerersTests:
         monkeypatch.setattr(runtime_answerers.random, "shuffle", lambda values: values.reverse())
         monkeypatch.setattr(runtime_answerers, "_click_element", _click_element)
         assert await runtime_answerers._answer_order(object(), root_order)
+
+    @pytest.mark.asyncio
+    async def test_build_answer_action_and_apply_batch_failure_path(self, monkeypatch) -> None:
+        config = SimpleNamespace(
+            single_prob=[[0, 100]],
+            multiple_prob=[[100, 0]],
+            scale_prob=[[0, 100]],
+            matrix_prob=[[100, 0], [0, 100]],
+            texts=[["文本"]],
+            texts_prob=[[1.0]],
+            multi_text_blank_modes=[[]],
+            multi_text_blank_int_ranges=[[]],
+        )
+        monkeypatch.setattr(runtime_answerers, "weighted_index", lambda probs: 1 if len(probs) > 1 and probs[1] else 0)
+
+        action = runtime_answerers.build_answer_action(
+            root_index=0,
+            question_num=3,
+            entry_type="single",
+            config_index=0,
+            config=config,
+            question_meta=SimpleNamespace(options=2),
+        )
+
+        assert action is not None
+        assert action.selected_indices == (1,)
+
+        class _FailPage:
+            async def evaluate(self, *_args):
+                raise RuntimeError("js boom")
+
+        result = await runtime_answerers.apply_answer_actions(_FailPage(), [action])
+        assert result.failed == (3,)

@@ -16,7 +16,7 @@ from software.network.browser.runtime_async import BrowserDriver
 from software.providers.contracts import SurveyQuestionMeta
 
 from .navigation import _click_next_page_button, dismiss_resume_dialog_if_present, try_click_start_answer_button
-from .runtime_answerers import answer_question_by_meta
+from .runtime_answerers import answer_page_batch, answer_question_by_meta
 from .runtime_interactions import (
     _collect_visible_question_snapshot,
     _is_question_visible,
@@ -312,6 +312,29 @@ async def brush(
             psycho_plan=psycho_plan,
         )
 
+        batch_applied: set[int] = set()
+        page_has_dynamic_logic = any(
+            bool(getattr(item, "has_jump", False)) or bool(getattr(item, "has_dependent_display_logic", False))
+            for item in questions
+        )
+        if not page_has_dynamic_logic:
+            batch_candidates: list[SurveyQuestionMeta] = []
+            for candidate in questions:
+                candidate_num = int(getattr(candidate, "num", 0) or 0)
+                if candidate_num <= 0:
+                    continue
+                candidate_snapshot = snapshot.get(candidate_num) if isinstance(snapshot, dict) else None
+                if bool((candidate_snapshot or {}).get("visible")):
+                    batch_candidates.append(candidate)
+            if batch_candidates:
+                batch_result = await answer_page_batch(
+                    driver,
+                    batch_candidates,
+                    ctx,
+                    psycho_plan=psycho_plan,
+                )
+                batch_applied = {int(item) for item in batch_result.applied}
+
         for question in questions:
             if _abort_requested(active_stop):
                 _update_abort_status(ctx, normalized_thread_name)
@@ -340,6 +363,9 @@ async def brush(
                     )
                 except Exception:
                     logging.info("更新问卷星线程步骤失败", exc_info=True)
+
+            if question_num in batch_applied:
+                continue
 
             await answer_question_by_meta(driver, question, ctx, psycho_plan=psycho_plan)
 

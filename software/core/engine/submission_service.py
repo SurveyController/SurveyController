@@ -277,10 +277,6 @@ class SubmissionService:
             return await self._build_success_outcome(driver, stop_signal, thread_name=thread_name)
 
         if not completion_detected and not stop_signal.is_set():
-            if await _provider_submission_requires_verification(driver, provider=self.config.survey_provider):
-                return await self._handle_detected_submission_verification(driver, stop_signal, gui_instance, thread_name=thread_name)
-
-        if not completion_detected and not stop_signal.is_set():
             verification_outcome = await self._check_submission_verification_after_submit(
                 driver,
                 stop_signal,
@@ -291,15 +287,8 @@ class SubmissionService:
                 return verification_outcome
 
         if not completion_detected and not stop_signal.is_set():
-            extra_wait_seconds = max(1.0, float(POST_SUBMIT_URL_MAX_WAIT or 0.0) * 3.0)
-            extra_poll = max(0.05, float(POST_SUBMIT_URL_POLL_INTERVAL or 0.1))
-            completion_detected = await self._wait_for_completion_page(driver, stop_signal, extra_wait_seconds, extra_poll)
-
-        if not completion_detected and not stop_signal.is_set():
-            try:
-                completion_detected = await self._detect_completion_once(driver)
-            except Exception:
-                completion_detected = False
+            if await _provider_submission_requires_verification(driver, provider=self.config.survey_provider):
+                return await self._handle_detected_submission_verification(driver, stop_signal, gui_instance, thread_name=thread_name)
 
         if not completion_detected and not stop_signal.is_set():
             recovered = await self._attempt_submission_recovery(
@@ -326,11 +315,6 @@ class SubmissionService:
                     )
                     if verification_outcome is not None:
                         return verification_outcome
-                if not completion_detected and not stop_signal.is_set():
-                    try:
-                        completion_detected = await self._detect_completion_once(driver)
-                    except Exception:
-                        completion_detected = False
 
         if not completion_detected:
             stopped = self.stop_policy.record_failure(

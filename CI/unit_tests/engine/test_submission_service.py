@@ -100,7 +100,7 @@ class SubmissionServiceTests:
         with (
             patch("software.core.engine.submission_service._provider_submission_requires_verification", new=AsyncMock(return_value=False)),
             patch("software.core.engine.submission_service._provider_wait_for_submission_verification", new=AsyncMock(return_value=False)),
-            patch.object(service, "_wait_for_completion_page", new=AsyncMock(side_effect=[False, False])),
+            patch.object(service, "_wait_for_completion_page", new=AsyncMock(side_effect=[False])),
             patch("software.core.engine.submission_service.duration_control.is_survey_completion_page", new=AsyncMock(return_value=False)),
             patch("software.core.engine.submission_service.random.uniform", return_value=0.2),
         ):
@@ -175,7 +175,7 @@ class SubmissionServiceTests:
         with (
             patch("software.core.engine.submission_service._provider_submission_requires_verification", new=AsyncMock(return_value=False)),
             patch.object(service, "_check_submission_verification_after_submit", new=AsyncMock(return_value=None)),
-            patch.object(service, "_wait_for_completion_page", new=AsyncMock(side_effect=[False, False, True])),
+            patch.object(service, "_wait_for_completion_page", new=AsyncMock(side_effect=[False, True])),
             patch.object(service, "_attempt_submission_recovery", new=AsyncMock(return_value=True)) as recovery_mock,
             patch("software.core.engine.submission_service.random.uniform", return_value=0.2),
         ):

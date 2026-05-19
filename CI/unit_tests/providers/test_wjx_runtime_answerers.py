@@ -304,3 +304,60 @@ class WjxRuntimeAnswerersTests:
         assert await runtime_answerers.answer_question_by_meta(object(), _question(2), dispatch_ctx, psycho_plan=None) is True
         assert await runtime_answerers.answer_question_by_meta(object(), _question(99), _ctx(), psycho_plan=None) is False
         assert dispatch_record == ["prepare", "single", "prepare", "matrix"]
+
+    @pytest.mark.asyncio
+    async def test_answer_page_batch_records_applied_and_reports_failed(self, monkeypatch) -> None:
+        ctx = _ctx(question_config_index_map={1: ("single", 0), 2: ("text", 0)})
+        recorded: list[tuple[tuple[object, ...], dict[str, object]]] = []
+        actions = {
+            1: runtime_answerers.AnswerAction(
+                question_num=1,
+                kind="choice",
+                input_type="radio",
+                selected_indices=(1,),
+                selected_texts=("B",),
+                record_type="single",
+            ),
+            2: runtime_answerers.AnswerAction(
+                question_num=2,
+                kind="text",
+                text_values=("文本",),
+                record_type="text",
+            ),
+        }
+
+        async def _build(_driver, question, _ctx, *, psycho_plan):
+            assert psycho_plan == "plan"
+            return actions[int(question.num)]
+
+        async def _apply(_driver, answer_actions):
+            assert [action.question_num for action in answer_actions] == [1, 2]
+            return runtime_answerers.BatchFillResult(applied=(1,), failed=(2,))
+
+        monkeypatch.setattr(runtime_answerers, "build_answer_action", _build)
+        monkeypatch.setattr(runtime_answerers, "apply_answer_actions", _apply)
+        monkeypatch.setattr(runtime_answerers, "record_answer", lambda *args, **kwargs: recorded.append((args, kwargs)))
+
+        result = await runtime_answerers.answer_page_batch(
+            object(),
+            [_question(1), _question(2)],
+            ctx,
+            psycho_plan="plan",
+        )
+
+        assert result.applied == (1,)
+        assert result.failed == (2,)
+        assert recorded == [((1, "single"), {"selected_indices": [1], "selected_texts": ["B"]})]
+
+    @pytest.mark.asyncio
+    async def test_apply_answer_actions_returns_failed_when_js_errors(self) -> None:
+        class _Driver:
+            async def execute_script(self, *_args):
+                raise RuntimeError("js boom")
+
+        result = await runtime_answerers.apply_answer_actions(
+            _Driver(),
+            [runtime_answerers.AnswerAction(question_num=5, kind="choice", input_type="radio", selected_indices=(0,))],
+        )
+
+        assert result.failed == (5,)

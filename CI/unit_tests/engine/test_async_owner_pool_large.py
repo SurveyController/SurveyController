@@ -251,7 +251,10 @@ class AsyncBrowserOwnerLargeTests:
         assert session.owner_id == 6
         assert session.browser_name == "edge"
         assert browser.new_context_calls == [{"proxy_address": "http://1.1.1.1:80", "user_agent": "UA"}]
-        assert context.route_calls[0][0] == "**/*"
+        route_patterns = [pattern for pattern, _handler in context.route_calls]
+        assert "**/*" not in route_patterns
+        assert any("png" in pattern and "webp" in pattern for pattern in route_patterns)
+        assert any("google-analytics" in pattern for pattern in route_patterns)
         assert owner.active_contexts == 1
         assert "browser_pid" not in captured
         assert "browser_close_callback" not in captured

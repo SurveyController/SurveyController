@@ -116,17 +116,14 @@ class WorkbenchRunCoordinator:
             self.controller.set_runtime_ui_state(target=normalized_target)
         except Exception:
             logging.debug("同步目标份数到运行态失败", exc_info=True)
-        target_spin = getattr(self.dashboard, "target_spin", None)
-        if target_spin is None:
-            return
-        try:
-            target_spin.blockSignals(True)
-            target_spin.setValue(normalized_target)
-            target_spin.blockSignals(False)
-        except Exception:
-            logging.debug("同步目标份数到主页输入框失败", exc_info=True)
 
     def build_config(self) -> RuntimeConfig:
+        builder = getattr(self.dashboard, "config_builder", None)
+        if callable(builder):
+            cfg = builder()
+            if not isinstance(cfg, RuntimeConfig):
+                raise TypeError("config_builder 必须返回 RuntimeConfig")
+            return cfg
         cfg = self.dashboard.build_base_config()
         if self.reverse_fill_page is not None:
             try:

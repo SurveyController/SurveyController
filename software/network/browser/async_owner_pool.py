@@ -30,6 +30,23 @@ from software.network.browser.startup import (
 )
 
 
+_STATIC_RESOURCE_ROUTE_PATTERNS = (
+    "**/*.{png,jpg,jpeg,gif,webp,avif,svg,ico,bmp}",
+    "**/*.{woff,woff2,ttf,otf,eot}",
+    "**/*.{mp4,webm,mp3,wav,ogg,m4a,mov,avi}",
+)
+_TRACKING_ROUTE_PATTERNS = (
+    "**://www.google-analytics.com/**",
+    "**://*.google-analytics.com/**",
+    "**://*.doubleclick.net/**",
+    "**://hm.baidu.com/**",
+    "**://*.hm.baidu.com/**",
+    "**://cnzz.com/**",
+    "**://*.cnzz.com/**",
+)
+_RUNTIME_ABORT_ROUTE_PATTERNS = _STATIC_RESOURCE_ROUTE_PATTERNS + _TRACKING_ROUTE_PATTERNS
+
+
 @dataclass
 class AsyncBrowserSession:
     driver: PlaywrightAsyncDriver
@@ -219,10 +236,8 @@ class AsyncBrowserOwner:
                 user_agent=user_agent,
             )
             context = await browser.new_context(**context_args)
-            await context.route(
-                "**/*",
-                _route_runtime_resource,
-            )
+            for route_pattern in _RUNTIME_ABORT_ROUTE_PATTERNS:
+                await context.route(route_pattern, _abort_runtime_resource)
             page = await context.new_page()
             driver = PlaywrightAsyncDriver(
                 context=context,
@@ -258,6 +273,16 @@ class AsyncBrowserOwner:
         self._closed = True
         self._availability_event.set()
         await self._shutdown_browser()
+
+
+async def _abort_runtime_resource(route: Any, request: Any = None) -> None:
+    del request
+    try:
+        result = route.abort()
+        if inspect.isawaitable(result):
+            await result
+    except Exception as exc:
+        log_suppressed_exception("AsyncBrowserOwner._abort_runtime_resource", exc, level=logging.WARNING)
 
 
 async def _route_runtime_resource(route: Any, request: Any) -> None:

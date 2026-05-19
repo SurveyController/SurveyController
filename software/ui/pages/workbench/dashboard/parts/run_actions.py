@@ -107,30 +107,9 @@ class DashboardRunActionsMixin:
         self.random_ip_cb.blockSignals(False)
         self._sync_random_ip_toggle_presentation(bool(cfg.random_ip_enabled))
 
-        try:
-            self.strategy_page.set_rules(getattr(cfg, "answer_rules", []) or [])
-            self.strategy_page.set_dimension_groups(getattr(cfg, "dimension_groups", []) or [])
-        except Exception as exc:
-            log_suppressed_exception(
-                "apply_config: self.strategy_page.set_rules(...)",
-                exc,
-                level=logging.WARNING,
-            )
-        main_win = self.window()
-        if hasattr(main_win, "reverse_fill_page"):
-            try:
-                main_win.reverse_fill_page.apply_config(cfg)
-            except Exception as exc:
-                log_suppressed_exception(
-                    "apply_config: reverse_fill_page.apply_config(cfg)",
-                    exc,
-                    level=logging.WARNING,
-                )
-
         self._refresh_entry_table()
         self._sync_start_button_state()
         self._refresh_ip_cost_infobar()
-        self.controller.sync_runtime_ui_state_from_config(cfg)
 
     def _go_to_runtime_page(self) -> None:
         main_win = self.window()
@@ -153,10 +132,14 @@ class DashboardRunActionsMixin:
             cfg.url,
             default=str(getattr(self.controller, "survey_provider", "wjx") or "wjx"),
         )
-        self.runtime_page.update_config(cfg)
-        cfg.target = max(1, self.target_spin.value())
-        cfg.threads = max(1, self.thread_spin.value())
-        cfg.random_ip_enabled = self.random_ip_cb.isChecked()
+        writer = getattr(self.controller, "write_runtime_ui_state_to_config", None)
+        if callable(writer):
+            writer(cfg)
+        else:
+            self.runtime_page.update_config(cfg)
+            cfg.target = max(1, self.target_spin.value())
+            cfg.threads = max(1, self.thread_spin.value())
+            cfg.random_ip_enabled = self.random_ip_cb.isChecked()
         cfg.answer_rules = list(self.strategy_page.get_rules() or [])
         cfg.dimension_groups = list(self.strategy_page.get_dimension_groups() or [])
         return cfg

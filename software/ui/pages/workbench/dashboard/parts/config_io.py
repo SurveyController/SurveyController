@@ -38,6 +38,7 @@ class DashboardConfigIOMixin:
         def _refresh_entry_table(self) -> None: ...
         def update_question_meta(self, title: str, count: int) -> None: ...
         def _sync_start_button_state(self, running: bool | None = None) -> None: ...
+        def window(self) -> Any: ...
 
     def _on_show_config_list(self):
         try:
@@ -107,6 +108,35 @@ class DashboardConfigIOMixin:
             )
             self._toast("文件不存在，可能已被删除", "warning")
             return
+        workbench = getattr(self.window(), "workbench", None)
+        if workbench is not None and hasattr(workbench, "load_config_from_path"):
+            try:
+                workbench.load_config_from_path(path)
+            except Exception as exc:
+                logging.error("[CONFIG] load_saved_config failed: %s", exc, exc_info=True)
+                log_action(
+                    "CONFIG",
+                    "load_config",
+                    "load_cfg_btn",
+                    "dashboard",
+                    result="failed",
+                    level=logging.ERROR,
+                    payload={"file": os.path.basename(path)},
+                    detail=exc,
+                )
+                logging.error("手动载入配置失败: %s", exc, exc_info=True)
+                self._toast(f"载入失败：{exc}", "error")
+                return
+            log_action(
+                "CONFIG",
+                "load_config",
+                "load_cfg_btn",
+                "dashboard",
+                result="success",
+                payload={"file": os.path.basename(path)},
+            )
+            self._toast("已载入配置", "success")
+            return
         try:
             cfg = self.controller.load_saved_config(path, strict=True)
         except Exception as exc:
@@ -155,12 +185,16 @@ class DashboardConfigIOMixin:
         self._toast("已载入配置", "success")
 
     def _on_save_config(self):
-        cfg = build_runtime_config_snapshot(
-            self._build_config(),
-            question_entries=self.workbench_state.get_entries(),
-            questions_info=self.workbench_state.questions_info,
-        )
-        self.controller.config = cfg
+        workbench = getattr(self.window(), "workbench", None)
+        if workbench is not None and hasattr(workbench, "build_current_config_snapshot"):
+            cfg = workbench.build_current_config_snapshot()
+        else:
+            cfg = build_runtime_config_snapshot(
+                self._build_config(),
+                question_entries=self.workbench_state.get_entries(),
+                questions_info=self.workbench_state.questions_info,
+            )
+            self.controller.config = cfg
         configs_dir = get_user_config_directory()
         os.makedirs(configs_dir, exist_ok=True)
         default_name = build_default_config_filename(self._survey_title)

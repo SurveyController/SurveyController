@@ -318,3 +318,53 @@ class TencentRuntimeAnswerersTests:
         monkeypatch.setattr(runtime_answerers, "weighted_sample_without_replacement", lambda candidates, _weights, count: list(candidates)[:count])
         await runtime_answerers._answer_qq_multiple(object(), question, 0, ctx_prob)
         assert recorded[0][1]["selected_indices"][0] == 0
+
+    @pytest.mark.asyncio
+    async def test_answer_page_batch_skips_dropdown_and_records_applied(self, monkeypatch) -> None:
+        ctx = _ctx(question_config_index_map={1: ("single", 0), 2: ("dropdown", 0)})
+        recorded: list[tuple[tuple[object, ...], dict[str, object]]] = []
+        action = runtime_answerers.AnswerAction(
+            question_num=1,
+            question_id="q1",
+            kind="choice",
+            input_type="radio",
+            selected_indices=(1,),
+            selected_texts=("B",),
+            record_type="single",
+        )
+
+        async def _build(_driver, question, _ctx, *, psycho_plan):
+            assert psycho_plan == "plan"
+            return action if int(question.num) == 1 else None
+
+        async def _apply(_driver, actions):
+            assert [item.question_num for item in actions] == [1]
+            return runtime_answerers.BatchFillResult(applied=(1,), failed=())
+
+        monkeypatch.setattr(runtime_answerers, "build_answer_action", _build)
+        monkeypatch.setattr(runtime_answerers, "apply_answer_actions", _apply)
+        monkeypatch.setattr(runtime_answerers, "record_answer", lambda *args, **kwargs: recorded.append((args, kwargs)))
+
+        result = await runtime_answerers.answer_page_batch(
+            object(),
+            [_question(1), _question(2)],
+            ctx,
+            psycho_plan="plan",
+        )
+
+        assert result.applied == (1,)
+        assert result.skipped == (2,)
+        assert recorded == [((1, "single"), {"selected_indices": [1], "selected_texts": ["B"]})]
+
+    @pytest.mark.asyncio
+    async def test_apply_answer_actions_returns_failed_without_page(self) -> None:
+        class _Driver:
+            async def page(self):
+                return None
+
+        result = await runtime_answerers.apply_answer_actions(
+            _Driver(),
+            [runtime_answerers.AnswerAction(question_num=4, question_id="q4", kind="choice", selected_indices=(0,))],
+        )
+
+        assert result.failed == (4,)

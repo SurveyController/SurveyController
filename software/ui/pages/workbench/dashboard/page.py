@@ -1,7 +1,7 @@
 """主控制面板：卡片式配置区 + 底部状态条（不包含日志）"""
 
 import threading
-from typing import Optional
+from typing import Callable, Optional
 import logging
 from software.app.config import NON_HEADLESS_MAX_THREADS
 from software.logging.action_logger import bind_logged_action
@@ -76,6 +76,7 @@ from software.ui.widgets.full_width_infobar import FullWidthInfoBar
 from software.ui.widgets.no_wheel import NoWheelSpinBox
 from software.ui.widgets.value_slider import ValueSlider
 from software.ui.controller.run_controller import RunController
+from software.io.config import RuntimeConfig
 from software.ui.pages.workbench.runtime_panel.main import RuntimePage
 from software.ui.pages.workbench.strategy.page import QuestionStrategyPage
 from software.ui.pages.workbench.session import WorkbenchState
@@ -110,6 +111,7 @@ class DashboardPage(
         self.runtime_page = runtime_page
         self.strategy_page = strategy_page
         self.run_coordinator = None
+        self.config_builder: Optional[Callable[[], RuntimeConfig]] = None
         self._open_wizard_after_parse = False
         self._survey_title = ""
         self._last_pause_reason = ""

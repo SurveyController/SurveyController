@@ -114,6 +114,9 @@ class MainWindowLifecycleMixin:
             logging.warning("保存日志失败: %s", exc)
 
     def _collect_current_config_snapshot(self):
+        workbench = getattr(self, "workbench", None)
+        if workbench is not None and hasattr(workbench, "build_current_config_snapshot"):
+            return workbench.build_current_config_snapshot()
         cfg = build_runtime_config_snapshot(
             self.dashboard._build_config(),
             question_entries=self.workbench_state.get_entries(),
@@ -241,6 +244,11 @@ class MainWindowLifecycleMixin:
         except Exception as exc:
             logging.warning("加载默认配置失败: %s", exc)
             cfg = RuntimeConfig()
+        workbench = getattr(self, "workbench", None)
+        if workbench is not None and hasattr(workbench, "apply_config"):
+            workbench.apply_config(cfg)
+            self.controller.refresh_random_ip_counter()
+            return
         self.runtime_page.apply_config(cfg)
         self.dashboard.apply_config(cfg)
         self.workbench_state.set_entries(cfg.question_entries or [], cfg.questions_info or [])

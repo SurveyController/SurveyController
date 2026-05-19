@@ -28,6 +28,7 @@ from software.ui.controller.run_controller_parts.runtime import (
 from software.ui.controller.run_controller_parts.runtime_preparation import (
     PreparedExecutionArtifacts,
 )
+from software.ui.controller.runtime_settings_state import RuntimeSettingsState
 from software.ui.controller.ui_dispatcher import UiCallbackDispatcher
 
 BoolVar = _BoolVar
@@ -52,57 +53,6 @@ class RunControllerRuntimeState:
     init_gate_stop_event: Optional[Any] = None
     prepared_execution_artifacts: Optional[Any] = None
     startup_service_warnings: List[str] = field(default_factory=list)
-
-
-class RuntimeUiStateStore:
-    """集中管理运行参数页同步到控制器的 UI 状态。"""
-
-    def __init__(self) -> None:
-        self._state: Dict[str, Any] = {}
-
-    @staticmethod
-    def normalize_value(key: str, value: Any) -> Any:
-        if key in {"target", "threads"}:
-            return max(1, int(value or 1))
-        if key in {"random_ip_enabled", "headless_mode", "timed_mode_enabled"}:
-            return bool(value)
-        if key == "proxy_source":
-            normalized = str(value or "default").strip().lower()
-            return normalized if normalized in {"default", "benefit", "custom"} else "default"
-        if key in {"answer_duration", "submit_interval"}:
-            raw = value if isinstance(value, (list, tuple)) else (0, 0)
-            low = max(0, int(raw[0] if len(raw) >= 1 else 0))
-            high = max(low, int(raw[1] if len(raw) >= 2 else low))
-            return (low, high)
-        return value
-
-    def get(self) -> Dict[str, Any]:
-        return dict(self._state)
-
-    def update(self, **updates: Any) -> tuple[Dict[str, Any], bool]:
-        normalized: Dict[str, Any] = {}
-        changed = False
-        for key, value in updates.items():
-            normalized_value = self.normalize_value(key, value)
-            normalized[key] = normalized_value
-            if self._state.get(key) != normalized_value:
-                changed = True
-        if normalized:
-            self._state.update(normalized)
-        return dict(self._state), changed
-
-    def sync_from_config(self, config: RuntimeConfig) -> tuple[Dict[str, Any], bool]:
-        return self.update(
-            target=getattr(config, "target", 1),
-            threads=getattr(config, "threads", 1),
-            random_ip_enabled=getattr(config, "random_ip_enabled", False),
-            headless_mode=getattr(config, "headless_mode", True),
-            timed_mode_enabled=getattr(config, "timed_mode_enabled", False),
-            survey_provider=getattr(config, "survey_provider", "wjx"),
-            proxy_source=getattr(config, "proxy_source", "default"),
-            submit_interval=getattr(config, "submit_interval", (0, 0)),
-            answer_duration=getattr(config, "answer_duration", (0, 0)),
-        )
 
 
 class RunController(
@@ -152,7 +102,7 @@ class RunController(
         self._status_timer.setInterval(600)
         self._status_timer.timeout.connect(self._emit_status)
         self._runtime_state = RunControllerRuntimeState()
-        self._runtime_ui_store = RuntimeUiStateStore()
+        self._runtime_settings_state = RuntimeSettingsState()
         self._ui_dispatcher = UiCallbackDispatcher(self._uiCallbackQueued.emit)
         self._random_ip_toggle_lock = threading.Lock()
         self._random_ip_toggle_active = False
@@ -320,18 +270,16 @@ class RunController(
         self._sync_adapter_ui_bridge()
 
     def get_runtime_ui_state(self) -> Dict[str, Any]:
-        return self._runtime_ui_store.get()
+        return self._runtime_settings_state.get()
 
     def _threads_update_locked(self) -> bool:
         return bool(self.running or self._starting or self._initializing)
 
     def set_runtime_ui_state(self, emit: bool = True, **updates: Any) -> Dict[str, Any]:
-        if "threads" in updates and self._threads_update_locked():
-            updates = dict(updates)
-            updates.pop("threads", None)
-            if not updates:
-                return self._runtime_ui_store.get()
-        state, changed = self._runtime_ui_store.update(**updates)
+        state, changed = self._runtime_settings_state.update(
+            lock_threads=self._threads_update_locked(),
+            **updates,
+        )
         if emit and changed:
             self.runtimeUiStateChanged.emit(dict(state))
         return dict(state)
@@ -339,22 +287,19 @@ class RunController(
     def sync_runtime_ui_state_from_config(
         self, config: RuntimeConfig, *, emit: bool = True
     ) -> Dict[str, Any]:
-        if self._threads_update_locked():
-            state, changed = self._runtime_ui_store.update(
-                target=getattr(config, "target", 1),
-                random_ip_enabled=getattr(config, "random_ip_enabled", False),
-                headless_mode=getattr(config, "headless_mode", True),
-                timed_mode_enabled=getattr(config, "timed_mode_enabled", False),
-                survey_provider=getattr(config, "survey_provider", "wjx"),
-                proxy_source=getattr(config, "proxy_source", "default"),
-                submit_interval=getattr(config, "submit_interval", (0, 0)),
-                answer_duration=getattr(config, "answer_duration", (0, 0)),
-            )
-        else:
-            state, changed = self._runtime_ui_store.sync_from_config(config)
+        state, changed = self._runtime_settings_state.sync_from_config(
+            config,
+            lock_threads=self._threads_update_locked(),
+        )
         if emit and changed:
             self.runtimeUiStateChanged.emit(dict(state))
         return dict(state)
+
+    def write_to_config(self, config: RuntimeConfig) -> RuntimeConfig:
+        return self._runtime_settings_state.write_to_config(config)
+
+    def write_runtime_ui_state_to_config(self, config: RuntimeConfig) -> RuntimeConfig:
+        return self.write_to_config(config)
 
     def notify_random_ip_loading(self, loading: bool, message: str = "") -> None:
         self.randomIpLoadingChanged.emit(bool(loading), str(message or ""))

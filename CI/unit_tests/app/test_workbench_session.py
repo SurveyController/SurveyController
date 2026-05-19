@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from types import SimpleNamespace
+from typing import Any
 
 from software.core.questions.config import QuestionEntry
 from software.io.config import RuntimeConfig
@@ -58,6 +59,7 @@ class _FakeSlider:
 
 class _FakeDashboard:
     def __init__(self, *, target: int = 1) -> None:
+        self.controller: Any = None
         self.target_spin = _FakeSpinBox(target)
         self.progress_bar = SimpleNamespace(setValue=lambda _value: None)
         self.progress_pct = SimpleNamespace(setText=lambda _value: None)
@@ -128,7 +130,7 @@ def _state_with_one_entry() -> WorkbenchState:
     return state
 
 
-def test_set_reverse_fill_target_updates_controller_and_dashboard_spinbox() -> None:
+def test_set_reverse_fill_target_updates_controller_without_touching_dashboard_spinbox() -> None:
     controller = _FakeController()
     dashboard = _FakeDashboard(target=9)
     coordinator = WorkbenchRunCoordinator(
@@ -140,8 +142,8 @@ def test_set_reverse_fill_target_updates_controller_and_dashboard_spinbox() -> N
     coordinator.set_reverse_fill_target(20)
 
     assert controller.runtime_updates == [{"target": 20}]
-    assert dashboard.target_spin.value() == 20
-    assert dashboard.target_spin.blocked == [True, False]
+    assert dashboard.target_spin.value() == 9
+    assert dashboard.target_spin.blocked == []
 
 
 def test_set_reverse_fill_target_normalizes_small_values_to_one() -> None:
@@ -156,7 +158,7 @@ def test_set_reverse_fill_target_normalizes_small_values_to_one() -> None:
     coordinator.set_reverse_fill_target(0)
 
     assert controller.runtime_updates == [{"target": 1}]
-    assert dashboard.target_spin.value() == 1
+    assert dashboard.target_spin.value() == 9
 
 
 def test_start_reverse_fill_uses_reverse_fill_target_override() -> None:

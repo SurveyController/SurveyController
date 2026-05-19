@@ -2,11 +2,10 @@
 
 from __future__ import annotations
 
-import copy
 import logging
 import os
 import sys
-from typing import Any, Dict, List
+from typing import List
 
 from PySide6.QtCore import Qt, QTimer, Signal, QEvent, Slot
 from PySide6.QtGui import QIcon, QGuiApplication, QColor
@@ -24,19 +23,11 @@ from qfluentwidgets import (
 )
 from shiboken6 import isValid
 
-from software.ui.pages.workbench.dashboard.page import DashboardPage
-from software.ui.pages.workbench.reverse_fill.page import ReverseFillPage
-from software.ui.pages.workbench.runtime_panel.main import RuntimePage
-from software.ui.pages.workbench.strategy.page import QuestionStrategyPage
-from software.ui.pages.workbench.session import (
-    WorkbenchRunCoordinator,
-    WorkbenchState,
-)
-
 from software.ui.dialogs.contact import ContactDialog
 from software.ui.dialogs.quota_redeem import QuotaRedeemDialog
 
 from software.ui.controller.run_controller import RunController
+from software.ui.pages.workbench.presenter import WorkbenchPresenter
 from software.ui.shell.main_window_parts.dialogs import MainWindowDialogsMixin
 from software.ui.shell.main_window_parts.lifecycle import (
     MainWindowLifecycleMixin,
@@ -59,7 +50,6 @@ from software.network.proxy import (
     format_status_payload,
 )
 from software.app.runtime_paths import get_resource_path
-from software.providers.common import detect_survey_provider
 
 from software.ui.shell.boot import create_boot_splash, finish_boot_splash
 
@@ -140,26 +130,13 @@ class MainWindow(
             self._boot_splash = create_boot_splash(self)
 
         self.controller = RunController(self)
-        self.workbench_state = WorkbenchState(self)
-        # 立即初始化关键页面
-        self.runtime_page = RuntimePage(self.controller, self)
-        self.strategy_page = QuestionStrategyPage(self)
-        self.dashboard = DashboardPage(
-            self.controller,
-            self.workbench_state,
-            self.runtime_page,
-            self.strategy_page,
-            self,
-        )
-        self.run_coordinator = WorkbenchRunCoordinator(
-            controller=self.controller,
-            state=self.workbench_state,
-            dashboard=self.dashboard,
-        )
-        self.dashboard.set_run_coordinator(self.run_coordinator)
-        self.reverse_fill_page = ReverseFillPage(self.controller, self)
-        self.run_coordinator.bind_reverse_fill_page(self.reverse_fill_page)
-        self.reverse_fill_page.set_run_coordinator(self.run_coordinator)
+        self.workbench = WorkbenchPresenter(controller=self.controller, host=self)
+        self.workbench_state = self.workbench.state
+        self.runtime_page = self.workbench.runtime_page
+        self.strategy_page = self.workbench.strategy_page
+        self.dashboard = self.workbench.dashboard
+        self.run_coordinator = self.workbench.run_coordinator
+        self.reverse_fill_page = self.workbench.reverse_fill_page
 
         # 延迟初始化非关键页面（懒加载）
         self._log_page = None
@@ -170,18 +147,6 @@ class MainWindow(
         self._ip_usage_page = None
         self._settings_page = None
         self._last_logged_page = ""
-
-        # 设置对象名称
-        self.dashboard.setObjectName("dashboard")
-        self.runtime_page.setObjectName("runtime")
-        self.strategy_page.setObjectName("strategy")
-        self.reverse_fill_page.setObjectName("reverse_fill")
-        self.reverse_fill_page.set_open_wizard_handler(self._open_reverse_fill_wizard)
-        self.reverse_fill_page.surveyUrlChanged.connect(self._sync_dashboard_url_from_reverse_fill)
-        self.dashboard.url_edit.textChanged.connect(self._sync_reverse_fill_url_from_dashboard)
-        self.workbench_state.entriesChanged.connect(
-            lambda _count: self._sync_reverse_fill_context()
-        )
 
         self._init_navigation()
         if not self._import_check_mode:
@@ -198,7 +163,7 @@ class MainWindow(
             custom_confirm_handler=self.show_custom_confirm_dialog_ui,
         )
         self._refresh_title_random_ip_user_id()
-        self._sync_reverse_fill_context()
+        self.workbench.sync_reverse_fill_context()
         self._register_popups()
         self._center_on_screen()
 
@@ -560,24 +525,7 @@ class MainWindow(
             self.show()
 
     def _bind_controller_signals(self):
-        self.controller.surveyParsed.connect(
-            self._on_survey_parsed,
-            Qt.ConnectionType.QueuedConnection,
-        )
-        self.controller.surveyParseFailed.connect(
-            self._on_survey_parse_failed,
-            Qt.ConnectionType.QueuedConnection,
-        )
         self.controller.runFailed.connect(self._on_run_failed)
-        self.controller.runStateChanged.connect(self.dashboard.on_run_state_changed)
-        self.controller.runStateChanged.connect(self.reverse_fill_page.on_run_state_changed)
-        self.controller.statusUpdated.connect(self.dashboard.update_status)
-        self.controller.statusUpdated.connect(self.reverse_fill_page.update_status)
-        self.controller.threadProgressUpdated.connect(self.dashboard.update_thread_progress)
-        self.controller.pauseStateChanged.connect(self.dashboard.on_pause_state_changed)
-        self.controller.pauseStateChanged.connect(self.reverse_fill_page.on_pause_state_changed)
-        self.controller.cleanupFinished.connect(self.dashboard.on_cleanup_finished)
-        self.controller.cleanupFinished.connect(self.reverse_fill_page.on_cleanup_finished)
         self.controller.quickBugReportSuggested.connect(self._prompt_quick_bug_report)
         self.controller.freeAiUnstableSuggested.connect(self._notify_free_ai_unstable)
         self.controller.startupHintEmitted.connect(
@@ -624,38 +572,12 @@ class MainWindow(
 
     # ---------- controller callbacks ----------
     @Slot(list, str)
-    def _on_survey_parsed(self, info: List[Dict[str, Any]], title: str):
-        parsed_title = title or "问卷"
-        parsed_url = str(getattr(getattr(self.controller, "config", None), "url", "") or "")
-        self._sync_dashboard_url_from_reverse_fill(parsed_url)
-        self._sync_reverse_fill_url_from_dashboard(parsed_url)
-        self.strategy_page.set_questions_info(info or [])
-        if getattr(self.dashboard, "_open_wizard_after_parse", False):
-            self.dashboard._open_wizard_after_parse = False
-            info_snapshot = copy.deepcopy(info or [])
-            open_wizard = self._open_parse_wizard_after_parse
-            QTimer.singleShot(
-                0,
-                lambda: open_wizard(info_snapshot, parsed_title),
-            )
-            return
-        self.workbench_state.set_questions(info, self.controller.question_entries)
-        self.strategy_page.set_dimension_groups([])
-        self.strategy_page.set_entries(
-            self.workbench_state.entries,
-            self.workbench_state.entry_questions_info,
-        )
-        self.dashboard.update_question_meta(parsed_title, len(self.controller.question_entries))
-        self._sync_reverse_fill_context()
+    def _on_survey_parsed(self, info: list, title: str):
+        self.workbench.on_survey_parsed(info, title)
 
     @Slot(str)
     def _on_survey_parse_failed(self, msg: str):
-        text = str(msg or "").strip()
-        if "问卷已暂停" in text:
-            # 该提示已由 dashboard 处理为专用引导文案，主窗口层不重复弹出。
-            self.dashboard._open_wizard_after_parse = False
-            return
-        self.dashboard._open_wizard_after_parse = False
+        self.workbench.on_survey_parse_failed(msg)
 
     def _on_run_failed(self, msg: str) -> None:
         text = str(msg or "")
@@ -709,174 +631,29 @@ class MainWindow(
             self._on_quota_redeem_dialog_destroyed(dialog)
 
     def _sync_reverse_fill_context(self) -> None:
-        try:
-            url_edit = getattr(self.dashboard, "url_edit", None)
-            url_text = url_edit.text() if url_edit is not None and hasattr(url_edit, "text") else ""
-            survey_provider = str(
-                getattr(self.controller, "survey_provider", "")
-                or getattr(
-                    getattr(self.controller, "config", None),
-                    "survey_provider",
-                    "",
-                )
-                or detect_survey_provider(url_text, default="")
-                or ""
-            )
-            self.reverse_fill_page.set_question_context(
-                self.workbench_state.questions_info,
-                self.workbench_state.get_entries(),
-                survey_title=getattr(self.dashboard, "_survey_title", "") or "",
-                survey_provider=survey_provider,
-            )
-        except Exception:
-            logging.info("同步反填页上下文失败", exc_info=True)
+        self.workbench.sync_reverse_fill_context()
 
     def _sync_dashboard_url_from_reverse_fill(self, url: str) -> None:
-        text = str(url or "").strip()
-        url_edit = getattr(self.dashboard, "url_edit", None)
-        if url_edit is None or not hasattr(url_edit, "text") or not hasattr(url_edit, "setText"):
-            return
-        if str(url_edit.text() or "").strip() == text:
-            return
-        url_edit.blockSignals(True)
-        url_edit.setText(text)
-        url_edit.blockSignals(False)
-        refresh_preview = getattr(self.reverse_fill_page, "_refresh_preview", None)
-        if callable(refresh_preview):
-            refresh_preview()
+        self.workbench.sync_dashboard_url_from_reverse_fill(url)
 
     def _sync_reverse_fill_url_from_dashboard(self, url: str) -> None:
-        text = str(url or "").strip()
-        url_edit = getattr(self.reverse_fill_page, "url_edit", None)
-        if url_edit is None or not hasattr(url_edit, "text") or not hasattr(url_edit, "setText"):
-            return
-        if str(url_edit.text() or "").strip() == text:
-            return
-        url_edit.blockSignals(True)
-        url_edit.setText(text)
-        url_edit.blockSignals(False)
+        self.workbench.sync_reverse_fill_url_from_dashboard(url)
 
     def _open_reverse_fill_wizard(self, issue_question_nums: List[int]) -> None:
-        info = list(self.workbench_state.questions_info or [])
-        if not info:
-            self._toast("当前还没有解析出题目，无法打开配置向导。", "warning")
-            return
-        issue_nums = {int(num) for num in list(issue_question_nums or []) if int(num) > 0}
-        if not issue_nums:
-            self._toast("当前没有需要处理的异常题目。", "warning")
-            return
-        self._open_parse_wizard_after_parse(
-            copy.deepcopy(info),
-            str(getattr(self.dashboard, "_survey_title", "") or "问卷"),
-            issue_question_nums=sorted(issue_nums),
-        )
+        self.workbench.open_reverse_fill_wizard(issue_question_nums)
 
     def _open_parse_wizard_after_parse(
         self,
-        info: List[Dict[str, Any]],
+        info: List[dict],
         parsed_title: str,
         *,
         issue_question_nums: List[int] | None = None,
     ) -> None:
-        try:
-            pending_entries = copy.deepcopy(self.controller.question_entries)
-            selected_info = list(copy.deepcopy(info or []))
-            selected_entries = pending_entries
-            selected_issue_nums = {
-                int(num) for num in list(issue_question_nums or []) if int(num) > 0
-            }
-            if selected_issue_nums:
-                info_by_num = {int(getattr(item, "num", 0) or 0): item for item in selected_info}
-                entry_by_num = {
-                    int(getattr(entry, "question_num", 0) or 0): entry
-                    for entry in selected_entries
-                    if int(getattr(entry, "question_num", 0) or 0) > 0
-                }
-                selected_info = [
-                    copy.deepcopy(info_by_num[num])
-                    for num in selected_issue_nums
-                    if num in info_by_num
-                ]
-                selected_entries = [
-                    copy.deepcopy(entry_by_num[num])
-                    for num in selected_issue_nums
-                    if num in entry_by_num
-                ]
-                if not selected_info or not selected_entries:
-                    self._toast(
-                        "异常题目配置数据不完整，暂时无法打开配置向导。",
-                        "warning",
-                    )
-                    return
-            accepted = self.dashboard.run_question_wizard(
-                selected_entries, selected_info, parsed_title
-            )
-        except Exception as exc:
-            logging.exception("自动配置向导打开失败")
-            log_action(
-                "UI",
-                "open_parse_wizard",
-                "question_wizard",
-                "main_window",
-                result="failed",
-                level=logging.ERROR,
-                detail=exc,
-                payload={"question_count": len(info or [])},
-            )
-            current_entries = self.workbench_state.get_entries()
-            self.dashboard.update_question_meta(parsed_title, len(current_entries))
-            self.dashboard._toast(
-                "自动配置向导打开失败，已保留原有题目设置；详细原因已写入日志",
-                "error",
-                duration=4200,
-            )
-            return
-
-        if accepted:
-            if selected_issue_nums:
-                updated_entries_by_num = {
-                    int(getattr(entry, "question_num", 0) or 0): entry
-                    for entry in selected_entries
-                    if int(getattr(entry, "question_num", 0) or 0) > 0
-                }
-                merged_entries = []
-                for entry in pending_entries:
-                    question_num = int(getattr(entry, "question_num", 0) or 0)
-                    merged_entries.append(
-                        copy.deepcopy(updated_entries_by_num.get(question_num, entry))
-                    )
-                pending_entries = merged_entries
-            self.workbench_state.set_questions(info, pending_entries)
-            self.controller.question_entries = pending_entries
-            if not selected_issue_nums:
-                self.strategy_page.set_dimension_groups([])
-            self.strategy_page.set_entries(
-                self.workbench_state.entries,
-                self.workbench_state.entry_questions_info,
-            )
-            self._sync_reverse_fill_context()
-            self.dashboard.update_question_meta(parsed_title, len(pending_entries))
-            log_action(
-                "UI",
-                "open_parse_wizard",
-                "question_wizard",
-                "main_window",
-                result="accepted",
-                payload={"question_count": len(info or [])},
-            )
-            return
-
-        current_entries = self.workbench_state.get_entries()
-        self.dashboard.update_question_meta(parsed_title, len(current_entries))
-        log_action(
-            "UI",
-            "open_parse_wizard",
-            "question_wizard",
-            "main_window",
-            result="cancelled",
-            payload={"question_count": len(info or [])},
+        self.workbench.open_parse_wizard_after_parse(
+            info,
+            parsed_title,
+            issue_question_nums=issue_question_nums,
         )
-        self._toast("已取消自动配置，保留原有题目设置", "warning")
 
 
 def create_window() -> MainWindow:
