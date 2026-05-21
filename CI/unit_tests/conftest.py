@@ -1,11 +1,26 @@
 from __future__ import annotations
 
+import os
 import threading
 from types import SimpleNamespace
 from typing import Any
 from unittest.mock import MagicMock
 
 import pytest
+
+
+@pytest.fixture(autouse=True)
+def isolate_qsettings(monkeypatch: pytest.MonkeyPatch, tmp_path) -> None:
+    settings_file = tmp_path / "qsettings.ini"
+    monkeypatch.setenv("SURVEYCONTROLLER_QSETTINGS_FILE", os.fspath(settings_file))
+
+    from software.integrations.ai import settings as ai_settings
+
+    ai_settings._RUNTIME_AI_SETTINGS = None
+
+    yield
+
+    ai_settings._RUNTIME_AI_SETTINGS = None
 
 
 @pytest.fixture

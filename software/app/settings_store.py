@@ -1,16 +1,21 @@
 """应用级设置访问门面。"""
 from __future__ import annotations
 
+import os
 from typing import Any
 
 from PySide6.QtCore import QSettings
 
 _SETTINGS_ORG = "SurveyController"
 _SETTINGS_APP = "Settings"
+_SETTINGS_FILE_ENV = "SURVEYCONTROLLER_QSETTINGS_FILE"
 
 
 def app_settings() -> QSettings:
     """返回应用级 QSettings 实例。"""
+    isolated_settings_file = os.environ.get(_SETTINGS_FILE_ENV)
+    if isolated_settings_file:
+        return QSettings(isolated_settings_file, QSettings.Format.IniFormat)
     return QSettings(_SETTINGS_ORG, _SETTINGS_APP)
 
 

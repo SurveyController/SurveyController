@@ -144,6 +144,18 @@ class RuntimeAISection(QObject):
         self.ai_privacy_bar.setMinimumWidth(0)
         self.ai_privacy_bar.setMaximumWidth(16777215)
         self.ai_privacy_bar.contentLabel.setVisible(False)
+        self.ai_privacy_bar_spacer = QWidget(self.ai_privacy_bar)
+        self.ai_privacy_bar_spacer.setSizePolicy(
+            QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed
+        )
+        self.ai_privacy_tutorial_link = HyperlinkButton(
+            FluentIcon.LINK,
+            "https://surveydoc.hungrym0.top/api-key-configuration.html#api-key-%E9%85%8D%E7%BD%AE",
+            "使用教程",
+            self.ai_privacy_bar,
+        )
+        self.ai_privacy_bar.addWidget(self.ai_privacy_bar_spacer, 1)
+        self.ai_privacy_bar.addWidget(self.ai_privacy_tutorial_link)
         self.group.addSettingCard(self.ai_privacy_bar)
 
         self.ai_mode_card = SettingCard(

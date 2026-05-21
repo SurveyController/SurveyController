@@ -214,6 +214,11 @@ class MainWindowLazyPagesMixin:
         changelog_action.triggered.connect(self._open_changelog_releases)
         menu.addAction(changelog_action)
 
+        # 使用教程
+        tutorial_action = Action(FluentIcon.HELP, "使用教程")
+        tutorial_action.triggered.connect(self._open_usage_tutorial)
+        menu.addAction(tutorial_action)
+
         # IP 使用记录
         ip_usage_action = Action(FluentIcon.CALENDAR, "IP 使用记录")
         ip_usage_action.triggered.connect(
@@ -256,3 +261,6 @@ class MainWindowLazyPagesMixin:
         from software.app.version import GITHUB_RELEASES_PAGE_URL
 
         webbrowser.open(GITHUB_RELEASES_PAGE_URL)
+
+    def _open_usage_tutorial(self) -> None:
+        webbrowser.open("https://surveydoc.hungrym0.top/")

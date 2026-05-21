@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from pathlib import Path
 from unittest.mock import patch
 
 import software.app.settings_store as settings_store
@@ -7,11 +8,22 @@ import software.app.settings_store as settings_store
 
 class SettingsStoreTests:
     def test_app_settings_builds_expected_qsettings_scope(self) -> None:
-        with patch("software.app.settings_store.QSettings", return_value="settings") as qsettings:
+        with (
+            patch.dict("os.environ", {"SURVEYCONTROLLER_QSETTINGS_FILE": ""}),
+            patch("software.app.settings_store.QSettings", return_value="settings") as qsettings,
+        ):
             result = settings_store.app_settings()
 
         assert result == "settings"
         qsettings.assert_called_once_with("SurveyController", "Settings")
+
+    def test_app_settings_can_use_isolated_ini_file(self, tmp_path) -> None:
+        settings_file = tmp_path / "isolated.ini"
+        with patch.dict("os.environ", {"SURVEYCONTROLLER_QSETTINGS_FILE": str(settings_file)}):
+            result = settings_store.app_settings()
+
+        assert Path(result.fileName()) == settings_file
+        assert result.format() == settings_store.QSettings.Format.IniFormat
 
     def test_get_bool_from_qsettings_accepts_common_true_values(self) -> None:
         for value in (True, "true", "TRUE", "1", "yes", "on", 1):
