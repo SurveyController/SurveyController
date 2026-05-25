@@ -137,8 +137,25 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         shell: powershell
         run: |
-          Get-ChildItem "${{ steps.release_meta.outputs.release_dir }}" | ForEach-Object {
-            gh release upload "${{ steps.release_meta.outputs.tag }}" $_.FullName --clobber --repo "${{ github.repository }}"
+          $releaseDir = "${{ steps.release_meta.outputs.release_dir }}"
+          $packVersion = "${{ steps.release_meta.outputs.pack_version }}"
+          $channel = "${{ steps.release_meta.outputs.channel }}"
+          $setupName = "${{ steps.release_meta.outputs.setup_name }}"
+          $assetNames = @(
+            $setupName,
+            "SurveyController-$packVersion-$channel-full.nupkg",
+            "SurveyController-$packVersion-$channel-delta.nupkg"
+          )
+          foreach ($assetName in $assetNames) {
+            $assetPath = Join-Path $releaseDir $assetName
+            if (-not (Test-Path $assetPath)) {
+              if ($assetName -like "*-delta.nupkg") {
+                Write-Host "Optional delta package not found: $assetName"
+                continue
+              }
+              throw "Release asset not found: $assetPath"
+            }
+            gh release upload "${{ steps.release_meta.outputs.tag }}" $assetPath --clobber --repo "${{ github.repository }}"
           }
 
       - name: Normalize R2 endpoint
