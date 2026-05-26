@@ -226,10 +226,15 @@ class _FakeParsingController:
         self.question_entries = []
         self.survey_title = ""
         self.survey_provider = ""
+        self.runtime_state_updates: list[dict[str, Any]] = []
         self.parsed: list[Any] = []
         self.failures: list[str] = []
         self._async_engine_client = SimpleNamespace(parse_survey=lambda _url: future)
         self._dispatch_to_ui_async = lambda callback: callback()
+
+    def set_runtime_ui_state(self, **updates):
+        self.runtime_state_updates.append(dict(updates))
+        return dict(updates)
 
 
 class UiHelperAndParsingTests:
@@ -395,6 +400,27 @@ class UiHelperAndParsingTests:
         assert controller.config.url == "http://survey"
         assert controller.config.survey_provider == "wjx"
         assert controller.question_entries == ["http://survey:1"]
+        assert controller.runtime_state_updates == [{"survey_provider": "wjx"}]
+
+    def test_parse_survey_syncs_qq_provider_into_runtime_ui_state(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        definition = SimpleNamespace(
+            title="腾讯问卷",
+            provider="qq",
+            questions=[SimpleNamespace(is_description=False, name="q1")],
+        )
+        controller = _FakeParsingController(_FakeFuture(result=definition))
+        monkeypatch.setattr(parsing_module, "is_supported_survey_url", lambda _url: True)
+        monkeypatch.setattr(
+            parsing_module,
+            "build_default_question_entries",
+            lambda info, survey_url, existing_entries: [f"{survey_url}:{len(info)}"],
+        )
+
+        controller.parse_survey("https://wj.qq.com/s2/26778849/5e9e/")
+
+        assert controller.config.survey_provider == "qq"
+        assert controller.survey_provider == "qq"
+        assert controller.runtime_state_updates[-1] == {"survey_provider": "qq"}
 
     def test_parse_survey_handles_empty_unsupported_and_known_business_error(
         self,

@@ -259,6 +259,10 @@ class DashboardRunActionsMixin:
         writer = getattr(self.controller, "write_runtime_ui_state_to_config", None)
         if callable(writer):
             writer(cfg)
+            cfg.survey_provider = detect_survey_provider(
+                cfg.url,
+                default=str(getattr(self.controller, "survey_provider", cfg.survey_provider) or cfg.survey_provider),
+            )
         else:
             self.runtime_page.update_config(cfg)
             cfg.target = max(1, self.target_spin.value())

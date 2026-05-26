@@ -65,6 +65,9 @@ class RunControllerParsingMixin:
             self.config.question_entries = list(self.question_entries or [])
             self.survey_title = title or ""
             self.survey_provider = provider
+            sync_runtime_state = getattr(self, "set_runtime_ui_state", None)
+            if callable(sync_runtime_state):
+                sync_runtime_state(survey_provider=provider)
             self.surveyParsed.emit(info, title or "")
 
         def _apply_parse_failure(message: str) -> None:

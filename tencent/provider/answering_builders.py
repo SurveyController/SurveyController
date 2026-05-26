@@ -428,31 +428,6 @@ async def _build_qq_matrix_action(
     )
 
 
-async def _build_qq_matrix_star_action(
-    question: SurveyQuestionMeta,
-    config_index: int,
-    ctx: ExecutionState,
-    *,
-    psycho_plan: Optional[Any],
-) -> Optional[AnswerAction]:
-    action = await _build_qq_matrix_action(
-        question,
-        config_index,
-        ctx,
-        psycho_plan=psycho_plan,
-    )
-    if action is None:
-        return None
-    return AnswerAction(
-        question_num=action.question_num,
-        question_id=action.question_id,
-        kind="matrix_star",
-        matrix_indices=action.matrix_indices,
-        record_type=action.record_type,
-        pending_distribution_choices=action.pending_distribution_choices,
-    )
-
-
 async def build_answer_action(
     driver: BrowserDriver,
     question: SurveyQuestionMeta,
@@ -488,9 +463,7 @@ async def build_answer_action(
         return await _build_qq_text_action(question, config_index, ctx)
     if entry_type in {"scale", "score"}:
         return await _build_qq_score_like_action(question, config_index, ctx, psycho_plan=psycho_plan)
-    if entry_type == "matrix" and getattr(question, "provider_type", "") == "matrix_star":
-        return await _build_qq_matrix_star_action(question, config_index, ctx, psycho_plan=psycho_plan)
-    if entry_type == "matrix":
+    if entry_type == "matrix" and getattr(question, "provider_type", "") != "matrix_star":
         return await _build_qq_matrix_action(question, config_index, ctx, psycho_plan=psycho_plan)
     return None
 

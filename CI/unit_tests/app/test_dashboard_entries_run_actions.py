@@ -348,3 +348,17 @@ def test_run_question_wizard_and_run_actions(monkeypatch, qtbot) -> None:
     page._go_to_runtime_answer_duration()
     assert page._window.switched == "runtime"
     page.runtime_page.focus_answer_duration_setting.assert_called_once()
+
+
+def test_build_base_config_keeps_qq_provider_when_runtime_state_is_stale(qtbot) -> None:
+    page = _EntriesPage()
+    qtbot.addWidget(page.entry_table)
+    page.url_edit = SimpleNamespace(text=lambda: "https://wj.qq.com/s2/26778849/5e9e/")
+    page.controller.survey_provider = "qq"
+    page.controller.write_runtime_ui_state_to_config = MagicMock(
+        side_effect=lambda cfg: setattr(cfg, "survey_provider", "wjx")
+    )
+
+    built = page.build_base_config()
+
+    assert built.survey_provider == "qq"

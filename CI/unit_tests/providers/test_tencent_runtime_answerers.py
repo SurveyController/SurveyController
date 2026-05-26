@@ -385,22 +385,6 @@ class TencentRuntimeAnswerersTests:
         assert recorded == [((1, "single"), {"selected_indices": [1], "selected_texts": ["B"]})]
 
     @pytest.mark.asyncio
-    async def test_build_answer_action_supports_matrix_star_batch_action(self, monkeypatch) -> None:
-        ctx = _ctx(question_config_index_map={10: ("matrix", 0)})
-        question = _question(10, provider_type="matrix_star", option_texts=["1", "2", "3"], options=3, rows=2)
-        monkeypatch.setattr(runtime_answerers, "is_strict_ratio_question", lambda _ctx, _current: False)
-        monkeypatch.setattr(runtime_answerers, "apply_matrix_row_consistency", lambda probs, _current, _row_index: probs)
-        monkeypatch.setattr(runtime_answerers, "resolve_distribution_probabilities", lambda probs, *_args, **_kwargs: probs)
-        monkeypatch.setattr(runtime_answerers, "get_tendency_index", lambda *_args, **_kwargs: 1)
-
-        action = await runtime_answerers.build_answer_action(object(), question, ctx, psycho_plan=None)
-
-        assert action is not None
-        assert action.kind == "matrix_star"
-        assert action.matrix_indices == (1, 1)
-        assert action.record_type == "matrix"
-
-    @pytest.mark.asyncio
     async def test_apply_answer_actions_returns_failed_without_page(self) -> None:
         class _Driver:
             async def page(self):
