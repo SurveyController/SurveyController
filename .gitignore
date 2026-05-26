@@ -26,6 +26,7 @@ CLAUDE.md
 __pycache__/
 .pytest_cache/
 .pytest_tmp/
+.uv-cache/
 *.pyc
 %SystemDrive%/
 /configs/

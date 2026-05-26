@@ -121,6 +121,7 @@ $targetRoot = Join-Path $repoRoot $OutputDir
 $releaseRoot = Join-Path $repoRoot $ReleaseDir
 $buildRoot = Join-Path $repoRoot "build\nuitka"
 $nuitkaCacheRoot = Join-Path $repoRoot "build\nuitka-cache"
+$nuitkaDistDir = Join-Path $buildRoot "SurveyController.dist"
 $packDir = Join-Path $targetRoot "lib"
 $mainExe = Join-Path $packDir "SurveyController.exe"
 $packVersion = Get-PackVersion -RepoRoot $repoRoot -ProvidedVersion $PackVersion
@@ -163,6 +164,9 @@ if (-not $SkipSync) {
 Write-Step "Build standalone bundle with Nuitka"
 New-Item -ItemType Directory -Path $buildRoot -Force | Out-Null
 New-Item -ItemType Directory -Path $nuitkaCacheRoot -Force | Out-Null
+# Work around a Nuitka 2.8.x Windows crash where short-path lookup runs before
+# the standalone dist directory is created.
+New-Item -ItemType Directory -Path $nuitkaDistDir -Force | Out-Null
 Push-Location $repoRoot
 try {
     $env:NUITKA_CACHE_DIR = $nuitkaCacheRoot
