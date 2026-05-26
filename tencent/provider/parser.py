@@ -25,6 +25,9 @@ QQ_SUPPORTED_PROVIDER_TYPES = {
     "matrix_radio",
     "matrix_star",
 }
+QQ_DESCRIPTION_PROVIDER_TYPES = {
+    "description",
+}
 QQ_PROVIDER_TYPE_TO_INTERNAL = {
     "radio": "3",
     "checkbox": "4",
@@ -42,6 +45,7 @@ _QQ_HTTP_LOCALES = ("zhs", "zht", "zh", "en")
 _QQ_LOGIN_PATH_RE = re.compile(r"^/r/login\.html(?:/)?$", re.IGNORECASE)
 _QQ_FILLBLANK_TOKEN_RE = re.compile(r"\{fillblank-[^{}]+\}", re.IGNORECASE)
 _QQ_FILLBLANK_SUFFIX_RE = re.compile(r"\s*[_＿]*\s*\{fillblank-[^{}]+\}", re.IGNORECASE)
+_QQ_MARKDOWN_IMAGE_RE = re.compile(r"!\[[^\]]*]\(([^)\s]+)\)(?:\{[^}]*\})?", re.IGNORECASE)
 _QQ_LOGIN_REQUIRED_MESSAGE = "作答该问卷需要登录，请自行在后台开放访问权限"
 _QQ_LOGIN_REQUIRED_TOKENS = (
     "open.weixin.qq.com/connect/confirm",
@@ -56,10 +60,27 @@ _QQ_LOGIN_REQUIRED_TOKENS = (
 )
 
 
+def _extract_markdown_image_urls(text: Any) -> List[str]:
+    raw_text = str(text or "").strip()
+    if not raw_text:
+        return []
+    return [str(match.group(1) or "").strip() for match in _QQ_MARKDOWN_IMAGE_RE.finditer(raw_text) if str(match.group(1) or "").strip()]
+
+
+def _strip_markdown_images(text: Any) -> str:
+    raw_text = str(text or "")
+    if not raw_text:
+        return ""
+    return _QQ_MARKDOWN_IMAGE_RE.sub(" ", raw_text)
+
+
 def _normalize_media_url(raw: Any) -> str:
     text = str(raw or "").strip()
     if not text:
         return ""
+    markdown_urls = _extract_markdown_image_urls(text)
+    if markdown_urls:
+        text = markdown_urls[0]
     if text.startswith("//"):
         return f"https:{text}"
     return text
@@ -136,7 +157,8 @@ def _build_question_media_from_payload(question: Dict[str, Any], provider_type: 
 def _normalize_html_text(value: Any) -> str:
     if not value:
         return ""
-    return _HTML_SPACE_RE.sub(" ", str(value)).strip()
+    cleaned = _strip_markdown_images(value)
+    return _HTML_SPACE_RE.sub(" ", cleaned).strip()
 
 
 def _is_qq_login_required_url(url: Any) -> bool:
@@ -425,6 +447,8 @@ def _build_row_texts(question: Dict[str, Any]) -> List[str]:
 
 
 def _resolve_option_count(question: Dict[str, Any], provider_type: str, option_texts: List[str]) -> int:
+    if provider_type in QQ_DESCRIPTION_PROVIDER_TYPES:
+        return 0
     if provider_type in {"nps", "star"}:
         return max(len(option_texts), int(question.get("star_num") or 0))
     if provider_type == "matrix_star":
@@ -451,6 +475,77 @@ def _build_page_number_map(questions: List[Dict[str, Any]]) -> Dict[Tuple[str, s
     return page_map
 
 
+def _merge_question_media_lists(*groups: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    merged: List[Dict[str, Any]] = []
+    seen: set[tuple[str, int | None, str]] = set()
+    for group in groups:
+        for item in list(group or []):
+            if not isinstance(item, dict):
+                continue
+            key = (
+                str(item.get("scope") or ""),
+                item.get("index"),
+                str(item.get("source_url") or ""),
+            )
+            if key in seen:
+                continue
+            seen.add(key)
+            merged.append(item)
+    return merged
+
+
+def _merge_same_page_descriptions_into_questions(items: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    pending: List[Dict[str, Any]] = []
+    for item in items:
+        if bool(item.get("is_description")):
+            pending.append(item)
+            continue
+
+        if pending:
+            current_page = int(item.get("page") or 1)
+            mergeable = [desc for desc in pending if int(desc.get("page") or 1) == current_page]
+            if mergeable:
+                title_parts = [
+                    str(desc.get("title") or "").strip()
+                    for desc in mergeable
+                    if str(desc.get("title") or "").strip()
+                ]
+                title_parts.append(str(item.get("title") or "").strip())
+                item["title"] = " ".join(part for part in title_parts if part).strip()
+
+                description_parts = [
+                    str(desc.get("description") or "").strip()
+                    for desc in mergeable
+                    if str(desc.get("description") or "").strip()
+                ]
+                current_description = str(item.get("description") or "").strip()
+                if current_description:
+                    description_parts.append(current_description)
+                item["description"] = "\n".join(part for part in description_parts if part).strip()
+
+                merged_media: List[Dict[str, Any]] = []
+                for desc in mergeable:
+                    merged_media.extend(list(desc.get("question_media") or []))
+                item["question_media"] = _merge_question_media_lists(
+                    merged_media,
+                    list(item.get("question_media") or []),
+                )
+        pending = []
+
+    return items
+
+
+def _assign_visible_display_numbers(items: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    visible_counter = 1
+    for item in items:
+        if bool(item.get("is_description")):
+            item["display_num"] = None
+            continue
+        item["display_num"] = visible_counter
+        visible_counter += 1
+    return items
+
+
 def _standardize_qq_questions(questions: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
     page_map = _build_page_number_map(questions)
     normalized: List[Dict[str, Any]] = []
@@ -465,16 +560,18 @@ def _standardize_qq_questions(questions: List[Dict[str, Any]]) -> List[Dict[str,
         option_texts = _build_option_texts(question, provider_type)
         fillable_options = _build_fillable_option_indices(question, provider_type)
         option_count = _resolve_option_count(question, provider_type, option_texts)
-        type_code = QQ_PROVIDER_TYPE_TO_INTERNAL.get(provider_type, "0")
-        supported = provider_type in QQ_SUPPORTED_PROVIDER_TYPES
+        is_description = provider_type in QQ_DESCRIPTION_PROVIDER_TYPES
+        type_code = QQ_PROVIDER_TYPE_TO_INTERNAL.get(provider_type, "0") if not is_description else "0"
+        supported = provider_type in QQ_SUPPORTED_PROVIDER_TYPES or is_description
         unsupported_reason = "" if supported else f"暂不支持腾讯题型：{provider_type or 'unknown'}"
-        is_text_like = provider_type in {"text", "textarea"}
-        is_rating = provider_type in {"nps", "star"}
+        is_text_like = provider_type in {"text", "textarea"} and not is_description
+        is_rating = provider_type in {"nps", "star"} and not is_description
         multi_min_limit = question.get("min_length") if provider_type == "checkbox" else None
         multi_max_limit = question.get("max_length") if provider_type == "checkbox" else None
         normalized.append({
             "num": idx,
             "title": title,
+            "display_num": None,
             "description": description,
             "type_code": type_code,
             "options": option_count,
@@ -489,7 +586,7 @@ def _standardize_qq_questions(questions: List[Dict[str, Any]]) -> List[Dict[str,
             "has_attached_option_select": False,
             "is_location": False,
             "is_rating": is_rating,
-            "is_description": False,
+            "is_description": is_description,
             "rating_max": option_count if is_rating else 0,
             "text_inputs": 1 if is_text_like else 0,
             "text_input_labels": [],
@@ -517,7 +614,7 @@ def _standardize_qq_questions(questions: List[Dict[str, Any]]) -> List[Dict[str,
             "unsupported_reason": unsupported_reason,
             "required": bool(question.get("required", False)),
         })
-    return normalized
+    return _assign_visible_display_numbers(_merge_same_page_descriptions_into_questions(normalized))
 
 
 async def _extract_qq_media_via_browser(page: Any) -> Dict[str, List[Dict[str, Any]]]:
@@ -542,17 +639,8 @@ async def _extract_qq_media_via_browser(page: Any) -> Dict[str, List[Dict[str, A
   roots.forEach((root, index) => {
     const questionId = clean(root.getAttribute('data-question-id') || root.getAttribute('data-id') || root.id || String(index + 1));
     const holder = { list: [], __seen: new Set() };
-    const titleNode = root.querySelector('.question-title, .title, .topic-title');
-    Array.from((titleNode || root).querySelectorAll('img')).forEach((img) => {
-      uniquePush(holder, {
-        kind: 'image',
-        scope: 'title',
-        index: null,
-        source_url: normalizeUrl(img.getAttribute('src') || img.getAttribute('data-src')),
-        label: '题干图',
-      });
-    });
-    Array.from(root.querySelectorAll('.choice-item, .option-item, li')).forEach((item, optionIndex) => {
+    const optionNodes = Array.from(root.querySelectorAll('.choice-item, .option-item, li'));
+    optionNodes.forEach((item, optionIndex) => {
       const label = clean(item.innerText || item.textContent || '') || `选项 ${optionIndex + 1}`;
       Array.from(item.querySelectorAll('img')).forEach((img) => {
         uniquePush(holder, {
@@ -564,7 +652,8 @@ async def _extract_qq_media_via_browser(page: Any) -> Dict[str, List[Dict[str, A
         });
       });
     });
-    Array.from(root.querySelectorAll('tbody tr, .matrix-row')).forEach((row, rowIndex) => {
+    const rowNodes = Array.from(root.querySelectorAll('tbody tr, .matrix-row'));
+    rowNodes.forEach((row, rowIndex) => {
       const labelNode = row.querySelector('th, td, .label, .row-title');
       const label = clean((labelNode && (labelNode.innerText || labelNode.textContent)) || '') || `第 ${rowIndex + 1} 行`;
       Array.from(row.querySelectorAll('img')).forEach((img) => {
@@ -575,6 +664,18 @@ async def _extract_qq_media_via_browser(page: Any) -> Dict[str, List[Dict[str, A
           source_url: normalizeUrl(img.getAttribute('src') || img.getAttribute('data-src')),
           label,
         });
+      });
+    });
+    Array.from(root.querySelectorAll('img')).forEach((img) => {
+      if (img.closest('.choice-item, .option-item, li, tbody tr, .matrix-row')) {
+        return;
+      }
+      uniquePush(holder, {
+        kind: 'image',
+        scope: 'title',
+        index: null,
+        source_url: normalizeUrl(img.getAttribute('src') || img.getAttribute('data-src')),
+        label: '题干图',
       });
     });
     result[questionId] = holder.list;

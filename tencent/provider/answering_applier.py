@@ -148,6 +148,47 @@ async def apply_answer_actions(driver: BrowserDriver, actions: Sequence[AnswerAc
                     });
                     return applied === indices.length;
                 };
+                const applyMatrixStar = (section, indices) => {
+                    const rateRows = Array.from(section.querySelectorAll('ul.t-rate, .t-rate')).filter(visible);
+                    const itemRows = Array.from(section.querySelectorAll('.question-item, tbody tr, .matrix-row')).filter((row) => row && row.querySelector('ul.t-rate, .t-rate') && visible(row));
+                    const rows = itemRows.length ? itemRows : rateRows;
+                    if (!rows.length) return false;
+                    const isActiveStar = (node) => {
+                        const cls = String(node?.className || '');
+                        const ariaChecked = String(node?.getAttribute?.('aria-checked') || '').toLowerCase();
+                        const ariaSelected = String(node?.getAttribute?.('aria-selected') || '').toLowerCase();
+                        return cls.includes('active') || cls.includes('full') || cls.includes('selected') || ariaChecked === 'true' || ariaSelected === 'true';
+                    };
+                    const selectedIndex = (stars) => {
+                        let selected = -1;
+                        stars.forEach((star, index) => {
+                            if (isActiveStar(star)) selected = index;
+                        });
+                        return selected;
+                    };
+                    let applied = 0;
+                    indices.forEach((rawIndex, rowIndex) => {
+                        const starIndex = Number(rawIndex);
+                        const row = rows[rowIndex];
+                        if (!row || starIndex < 0) return;
+                        let stars = Array.from(row.querySelectorAll('li.t-rate__star, li[class*="rate__star"], ul.t-rate > li, [class*="t-rate"] > li, [role="radio"], [class*="star-list"] > li, [class*="star"] li')).filter(visible);
+                        if (!stars.length && (String(row.tagName || '').toLowerCase() === 'ul' || row.classList.contains('t-rate'))) {
+                            stars = Array.from(row.querySelectorAll('li')).filter(visible);
+                        }
+                        const target = stars[starIndex] || null;
+                        if (!target) return;
+                        const clickTargets = Array.from(target.querySelectorAll('svg, use, path, span, i')).filter(visible);
+                        clickTargets.push(target);
+                        for (const node of clickTargets) {
+                            try { node.scrollIntoView({ block: 'center', inline: 'nearest' }); } catch (e) {}
+                            try { node.click(); } catch (e) {}
+                            dispatch(node, ['pointerdown', 'mousedown', 'mouseup', 'click', 'change']);
+                            if (selectedIndex(stars) === starIndex) break;
+                        }
+                        if (selectedIndex(stars) === starIndex) applied += 1;
+                    });
+                    return applied === indices.length;
+                };
                 const applied = [];
                 const failed = [];
                 for (const action of actions || []) {
@@ -169,6 +210,8 @@ async def apply_answer_actions(driver: BrowserDriver, actions: Sequence[AnswerAc
                             ok = applyText(section, action.textValues);
                         } else if (action.kind === 'matrix') {
                             ok = applyMatrix(section, action.matrixIndices || []);
+                        } else if (action.kind === 'matrix_star') {
+                            ok = applyMatrixStar(section, action.matrixIndices || []);
                         }
                     } catch (e) {
                         ok = false;

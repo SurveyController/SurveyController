@@ -16,6 +16,7 @@ from software.ui.pages.workbench.question_editor.wizard_dialog import (
     QuestionWizardDialog,
 )
 from software.ui.pages.workbench.question_editor.question_media_preview import (
+    QuestionMediaStrip,
     QuestionMediaThumbnail,
 )
 
@@ -445,6 +446,19 @@ def test_question_media_thumbnail_blocks_private_address_fetch(monkeypatch, qtbo
     qtbot.wait(100)
 
     assert calls == []
+
+
+def test_question_media_strip_can_hide_item_labels(qtbot) -> None:
+    widget = QuestionMediaStrip(
+        "题干图片",
+        [{"source_url": "https://example.com/a.png", "label": "题干图"}],
+        show_item_labels=False,
+    )
+    qtbot.addWidget(widget)
+
+    labels = [label.text() for label in widget.findChildren(BodyLabel)]
+    assert "题干图片" in labels
+    assert "题干图" not in labels
 
 
 def test_question_wizard_dialog_multi_text_ignores_empty_answer_group(qtbot) -> None:

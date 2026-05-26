@@ -362,7 +362,15 @@ class WizardCardsMixin:
 
         title_media = self._media_items_for(idx, "title")
         if title_media:
-            card_layout.addWidget(QuestionMediaStrip("题干图片", title_media, fixed_size=72, parent=card))
+            card_layout.addWidget(
+                QuestionMediaStrip(
+                    "题干图片",
+                    title_media,
+                    fixed_size=96,
+                    show_item_labels=False,
+                    parent=card,
+                )
+            )
 
         card_layout.addWidget(HorizontalSeparator(card))
 

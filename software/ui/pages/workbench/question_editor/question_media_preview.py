@@ -150,6 +150,7 @@ class QuestionMediaThumbnail(QWidget):
         media_item: Dict[str, Any],
         *,
         fixed_size: int = 72,
+        show_label: bool = True,
         parent: Optional[QWidget] = None,
     ) -> None:
         super().__init__(parent)
@@ -171,13 +172,15 @@ class QuestionMediaThumbnail(QWidget):
         )
         layout.addWidget(self.image_label, 0, Qt.AlignmentFlag.AlignLeft)
 
+        self.text_label: Optional[BodyLabel] = None
         label_text = str(self._media_item.get("label") or "").strip()
-        self.text_label = BodyLabel(label_text, self)
-        self.text_label.setWordWrap(True)
-        self.text_label.setMaximumWidth(self._fixed_size + 28)
-        self.text_label.setStyleSheet("font-size: 12px;")
-        _apply_label_color(self.text_label, "#666666", "#bfbfbf")
-        layout.addWidget(self.text_label, 0, Qt.AlignmentFlag.AlignLeft)
+        if show_label and label_text:
+            self.text_label = BodyLabel(label_text, self)
+            self.text_label.setWordWrap(True)
+            self.text_label.setMaximumWidth(self._fixed_size + 28)
+            self.text_label.setStyleSheet("font-size: 12px;")
+            _apply_label_color(self.text_label, "#666666", "#bfbfbf")
+            layout.addWidget(self.text_label, 0, Qt.AlignmentFlag.AlignLeft)
 
         self._set_placeholder()
         _bind_media_shutdown_guard()
@@ -234,6 +237,7 @@ class QuestionMediaStrip(CardWidget):
         media_items: list[Dict[str, Any]],
         *,
         fixed_size: int = 72,
+        show_item_labels: bool = True,
         parent: Optional[QWidget] = None,
     ) -> None:
         super().__init__(parent)
@@ -250,6 +254,13 @@ class QuestionMediaStrip(CardWidget):
         row.setContentsMargins(0, 0, 0, 0)
         row.setSpacing(12)
         for item in media_items:
-            row.addWidget(QuestionMediaThumbnail(item, fixed_size=fixed_size, parent=self))
+            row.addWidget(
+                QuestionMediaThumbnail(
+                    item,
+                    fixed_size=fixed_size,
+                    show_label=show_item_labels,
+                    parent=self,
+                )
+            )
         row.addStretch(1)
         layout.addLayout(row)

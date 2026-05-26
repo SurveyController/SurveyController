@@ -216,6 +216,41 @@ class TencentParserTests:
         third = normalized[2]
         assert third["unsupported"]
         assert "暂不支持腾讯题型" in third["unsupported_reason"]
+        assert first["display_num"] == 1
+        assert second["display_num"] == 2
+        assert third["display_num"] == 3
+
+    def test_standardize_qq_questions_marks_description_and_merges_into_next_question(self) -> None:
+        description_question = {
+            "id": "q5",
+            "type": "description",
+            "title": "模特A：无眼镜",
+            "description": "请观察以下模特照片",
+            "page_id": "page-a",
+            "page": "2",
+        }
+        matrix_question = {
+            "id": "q6",
+            "type": "matrix_radio",
+            "title": "请根据您对模特的第一印象进行评价",
+            "options": [{"text": "1"}, {"text": "2"}, {"text": "3"}],
+            "sub_titles": [{"text": "专业"}, {"text": "时尚"}],
+            "page_id": "page-a",
+            "page": "2",
+        }
+
+        normalized = qq_parser._standardize_qq_questions([description_question, matrix_question])
+
+        first = normalized[0]
+        assert first["is_description"] is True
+        assert first["unsupported"] is False
+        assert first["display_num"] is None
+
+        second = normalized[1]
+        assert second["is_description"] is False
+        assert second["display_num"] == 1
+        assert second["title"] == "模特A：无眼镜 请根据您对模特的第一印象进行评价"
+        assert second["description"] == "请观察以下模特照片"
 
     def test_build_question_media_from_payload_normalizes_protocol_relative_urls_and_deduplicates(self) -> None:
         media = qq_parser._build_question_media_from_payload(
@@ -263,6 +298,49 @@ class TencentParserTests:
                 "label": "行1",
             },
         ]
+
+    def test_markdown_image_text_is_stripped_from_title_and_converted_to_media_url(self) -> None:
+        normalized = qq_parser._standardize_qq_questions(
+            [
+                {
+                    "id": "q5",
+                    "type": "description",
+                    "title": "模特A：无眼镜 ![2552.jpeg](https://wj.gtimg.com/attachments/question/20260523/8cWPTabEOrZS.jpg){auto,auto}",
+                    "description": "请观察以下模特照片",
+                    "page_id": "page-a",
+                    "page": "2",
+                },
+                {
+                    "id": "q6",
+                    "type": "matrix_radio",
+                    "title": "请根据您对模特的第一印象进行评价",
+                    "options": [{"text": "1"}, {"text": "2"}],
+                    "sub_titles": [{"text": "专业"}],
+                    "page_id": "page-a",
+                    "page": "2",
+                },
+            ]
+        )
+
+        second = normalized[1]
+        assert second["title"] == "模特A：无眼镜 请根据您对模特的第一印象进行评价"
+        assert second["question_media"] == [
+            {
+                "kind": "image",
+                "scope": "title",
+                "index": None,
+                "source_url": "https://wj.gtimg.com/attachments/question/20260523/8cWPTabEOrZS.jpg",
+                "label": "题干图",
+            }
+        ]
+
+    def test_normalize_media_url_extracts_markdown_image_target(self) -> None:
+        assert (
+            qq_parser._normalize_media_url(
+                "![2552.jpeg](https://wj.gtimg.com/attachments/question/20260523/8cWPTabEOrZS.jpg){auto,auto}"
+            )
+            == "https://wj.gtimg.com/attachments/question/20260523/8cWPTabEOrZS.jpg"
+        )
 
     def test_merge_browser_media_skips_duplicates_and_keeps_existing_order(self) -> None:
         info = [
@@ -364,6 +442,79 @@ class TencentParserTests:
                 "scope": "title",
                 "index": None,
                 "source_url": "https://example.com/q1.png",
+                "label": "题干图",
+            }
+        ]
+
+    @pytest.mark.asyncio
+    async def test_extract_qq_media_via_browser_collects_title_image_outside_title_node(self) -> None:
+        class _EvalPage:
+            async def evaluate(self, script: str):
+                assert "root.querySelectorAll('img')" in script
+                assert "img.closest('.choice-item, .option-item, li, tbody tr, .matrix-row')" in script
+                return {
+                    "q5": [
+                        {
+                            "kind": "image",
+                            "scope": "title",
+                            "index": None,
+                            "source_url": "https://example.com/model-a.jpg",
+                            "label": "题干图",
+                        }
+                    ]
+                }
+
+        media = await qq_parser._extract_qq_media_via_browser(_EvalPage())
+
+        assert media == {
+            "q5": [
+                {
+                    "kind": "image",
+                    "scope": "title",
+                    "index": None,
+                    "source_url": "https://example.com/model-a.jpg",
+                    "label": "题干图",
+                }
+            ]
+        }
+
+    def test_merge_same_page_descriptions_carries_media_to_next_question(self) -> None:
+        merged = qq_parser._merge_same_page_descriptions_into_questions(
+            [
+                {
+                    "num": 5,
+                    "page": 2,
+                    "title": "模特A",
+                    "description": "",
+                    "is_description": True,
+                    "question_media": [
+                        {
+                            "kind": "image",
+                            "scope": "title",
+                            "index": None,
+                            "source_url": "https://example.com/model-a.jpg",
+                            "label": "题干图",
+                        }
+                    ],
+                },
+                {
+                    "num": 6,
+                    "page": 2,
+                    "title": "请评分",
+                    "description": "",
+                    "is_description": False,
+                    "question_media": [],
+                },
+            ]
+        )
+
+        assert merged[1]["title"] == "模特A 请评分"
+        assert merged[1]["question_media"] == [
+            {
+                "kind": "image",
+                "scope": "title",
+                "index": None,
+                "source_url": "https://example.com/model-a.jpg",
                 "label": "题干图",
             }
         ]

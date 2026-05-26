@@ -234,6 +234,22 @@ async def _build_qq_matrix_action(
     )
 
 
+async def _build_qq_matrix_star_action(
+    question: SurveyQuestionMeta,
+    matrix_index: int,
+    ctx: ExecutionState,
+    *,
+    psycho_plan: Optional[Any],
+) -> Optional[AnswerAction]:
+    _sync_patch_targets()
+    return await _builders._build_qq_matrix_star_action(
+        question,
+        matrix_index,
+        ctx,
+        psycho_plan=psycho_plan,
+    )
+
+
 async def build_answer_action(
     driver: BrowserDriver,
     question: SurveyQuestionMeta,
@@ -285,6 +301,7 @@ for _name in [
     "_build_qq_score_like_action",
     "_build_qq_multiple_action",
     "_build_qq_matrix_action",
+    "_build_qq_matrix_star_action",
     "build_answer_action",
     "apply_answer_actions",
     "_record_answer_action",
