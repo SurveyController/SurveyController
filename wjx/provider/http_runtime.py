@@ -20,9 +20,25 @@ from software.core.task import ExecutionConfig, ExecutionState
 from software.providers.answering import AnswerAction
 from software.providers.answering.recording import record_answer_action
 from software.providers.http_logic import build_http_logic_plan
+from software.providers.http_progress import update_http_submit_step
 from software.providers.contracts import SurveyQuestionMeta
+from software.providers.errors import SubmissionVerificationRequiredError
 from wjx.provider.answering_builders import build_answer_action
 from wjx.provider.parser import _parse_wjx_html
+
+
+WJX_SUBMISSION_VERIFICATION_MESSAGE = "问卷星触发智能验证，当前链路已停止。请启用随机 IP 后再提交。"
+_WJX_VERIFICATION_TOKENS = (
+    "智能验证",
+    "安全校验",
+    "请先完成验证",
+    "拖动滑块",
+    "滑块验证",
+    "验证码",
+    "captcha",
+    "nc_token",
+    "aliyun",
+)
 
 
 def _proxy_arg(proxy_address: str | None) -> Any:
@@ -144,8 +160,18 @@ def _question_error_label(config: ExecutionConfig, question_num: int) -> str:
     return f"{prefix}（{title}）" if title else prefix
 
 
+def is_wjx_submission_verification_response(response_text: str) -> bool:
+    text = str(response_text or "").strip()
+    if not text:
+        return False
+    lowered = text.lower()
+    return any(token in text or token in lowered for token in _WJX_VERIFICATION_TOKENS)
+
+
 def _raise_submit_rejected(config: ExecutionConfig, response_text: str) -> None:
     text = str(response_text or "").strip()
+    if is_wjx_submission_verification_response(text):
+        raise SubmissionVerificationRequiredError(WJX_SUBMISSION_VERIFICATION_MESSAGE)
     match = re.match(r"^\s*(\d+)〒(\d+)〒(.+)$", text)
     if not match:
         raise RuntimeError(f"问卷星提交被拒绝：{text[:200]}")
@@ -210,7 +236,6 @@ async def brush_wjx_http(
     proxy_address: str | None = None,
     user_agent: str | None = None,
 ) -> bool:
-    del thread_name
     if stop_signal is not None and stop_signal.is_set():
         return False
 
@@ -224,6 +249,7 @@ async def brush_wjx_http(
     }
     await _load_wjx_page(config.url, headers=headers, proxies=proxies)
 
+    await update_http_submit_step(ctx, thread_name, "生成答案")
     actions = await _build_actions(config, ctx, psycho_plan=psycho_plan, stop_signal=stop_signal)
     if not actions:
         return False
@@ -263,6 +289,7 @@ async def brush_wjx_http(
         "wxappid": "wx8fe84c5d52db247a",
         "iwx": "1",
     }
+    await update_http_submit_step(ctx, thread_name, "提交问卷")
     response = await http_client.apost(
         submit_url,
         params=params,
@@ -278,6 +305,7 @@ async def brush_wjx_http(
         proxies=proxies,
     )
     response.raise_for_status()
+    await update_http_submit_step(ctx, thread_name, "校验结果")
     response_text = str(response.text or "").strip()
     lowered = response_text.lower()
     success = (
@@ -286,10 +314,10 @@ async def brush_wjx_http(
         or lowered.startswith("10")
         or lowered in {"1", "ok"}
     )
-    failure = any(token in response_text for token in ("抱歉", "不符合", "错误", "重新提交", "验证码"))
+    failure = any(token in response_text for token in ("抱歉", "不符合", "错误", "重新提交")) or is_wjx_submission_verification_response(response_text)
     if not success or failure:
         _raise_submit_rejected(config, response_text)
     return True
 
 
-__all__ = ["brush_wjx_http"]
+__all__ = ["WJX_SUBMISSION_VERIFICATION_MESSAGE", "brush_wjx_http", "is_wjx_submission_verification_response"]

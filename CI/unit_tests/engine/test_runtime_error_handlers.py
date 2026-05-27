@@ -7,6 +7,7 @@ from software.core.engine import runtime_error_handlers
 from software.core.engine.failure_reason import FailureReason
 from software.core.engine.run_stop_policy import RunStopPolicy
 from software.core.task import ExecutionConfig, ExecutionState
+from software.providers.errors import SubmissionVerificationRequiredError
 
 
 class RuntimeErrorHandlerTests:
@@ -49,3 +50,21 @@ class RuntimeErrorHandlerTests:
         assert stop_signal.is_set()
         assert state.get_terminal_stop_snapshot()[0] == "free_ai_unstable"
         assert state.get_terminal_stop_snapshot()[1] == FailureReason.FILL_FAILED.value
+
+    def test_submission_verification_error_stops_immediately(self) -> None:
+        config = ExecutionConfig(fail_threshold=5, stop_on_fail_enabled=True)
+        state = ExecutionState(config=config)
+        stop_signal = threading.Event()
+
+        stopped = runtime_error_handlers.handle_submission_verification_error(
+            SubmissionVerificationRequiredError("问卷星触发智能验证，当前链路已停止。请启用随机 IP 后再提交。"),
+            stop_signal,
+            thread_name="Worker-1",
+            state=state,
+        )
+
+        assert stopped
+        assert stop_signal.is_set()
+        assert state.get_terminal_stop_snapshot()[0] == "submission_verification"
+        assert state.get_terminal_stop_snapshot()[1] == FailureReason.SUBMISSION_VERIFICATION_REQUIRED.value
+        assert "启用随机 IP" in state.get_terminal_stop_snapshot()[2]

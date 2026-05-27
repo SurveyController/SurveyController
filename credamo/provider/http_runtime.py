@@ -23,6 +23,7 @@ from software.providers.answering import AnswerAction
 from software.providers.answering.recording import record_answer_action
 from software.providers.contracts import SurveyQuestionMeta
 from software.providers.http_logic import build_http_logic_plan
+from software.providers.http_progress import update_http_submit_step
 
 from .answering_builders import build_answer_action
 
@@ -763,7 +764,6 @@ async def brush_credamo_http(
     proxy_address: str | None = None,
     user_agent: str | None = None,
 ) -> bool:
-    del thread_name
     if stop_signal is not None and stop_signal.is_set():
         return False
 
@@ -787,6 +787,7 @@ async def brush_credamo_http(
             raise RuntimeError("见数详情接口未返回可提交题目")
         raw_by_num = _raw_questions_by_num(raw_questions)
 
+        await update_http_submit_step(ctx, thread_name, "生成答案")
         actions = await _build_actions(
             config,
             ctx,
@@ -806,6 +807,7 @@ async def brush_credamo_http(
 
         if stop_signal is not None and stop_signal.is_set():
             return False
+        await update_http_submit_step(ctx, thread_name, "提交问卷")
         time_code = _new_time_code()
         init_data = await _init_answer(
             session,
@@ -830,6 +832,7 @@ async def brush_credamo_http(
             body=body,
             user_agent=user_agent_value,
         )
+        await update_http_submit_step(ctx, thread_name, "校验结果")
     return True
 
 

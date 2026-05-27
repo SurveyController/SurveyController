@@ -40,6 +40,7 @@ class RunControllerExecutionMixin:
         cleanupFinished: Any
         quickBugReportSuggested: Any
         freeAiUnstableSuggested: Any
+        submissionVerificationSuggested: Any
         quota_request_form_opener: Optional[Callable[[], bool]]
         on_ip_counter: Optional[Callable[[float, float, bool], None]]
         on_random_ip_loading: Optional[Callable[[bool, str], None]]
@@ -570,7 +571,7 @@ class RunControllerExecutionMixin:
         ctx = getattr(self, "_execution_state", None)
         if ctx is None:
             return
-        category, failure_reason, _message = ctx.get_terminal_stop_snapshot()
+        category, failure_reason, message = ctx.get_terminal_stop_snapshot()
         category = str(category or "").strip()
         failure_reason = str(failure_reason or "").strip()
         if not category:
@@ -579,10 +580,13 @@ class RunControllerExecutionMixin:
             self._quick_feedback_prompt_emitted = True
             self.freeAiUnstableSuggested.emit()
             return
+        if category == "submission_verification":
+            self._quick_feedback_prompt_emitted = True
+            self.submissionVerificationSuggested.emit(str(message or "提交触发智能验证，请启用随机 IP 后再试"))
+            return
         if category in {
             "target_reached",
             "user_stopped",
-            "submission_verification",
         }:
             return
         if failure_reason in {

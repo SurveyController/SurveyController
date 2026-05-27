@@ -14,7 +14,9 @@ from software.core.engine.failure_reason import FailureReason
 from software.core.engine.provider_common import ensure_joint_psychometric_answer_plan
 from software.core.engine.run_stop_policy import RunStopPolicy
 from software.core.engine.runtime_error_handlers import handle_ai_runtime_error as _handle_ai_runtime_error_impl
+from software.core.engine.runtime_error_handlers import handle_submission_verification_error
 from software.core.task import ExecutionConfig, ExecutionState
+from software.providers.errors import SubmissionVerificationRequiredError
 import software.network.http as http_client
 from software.network.proxy.pool import is_proxy_responsive_async
 from software.network.session_policy import (
@@ -25,6 +27,7 @@ from software.network.session_policy import (
     _select_user_agent_for_session,
 )
 from software.providers.common import SURVEY_PROVIDER_CREDAMO, SURVEY_PROVIDER_QQ, SURVEY_PROVIDER_WJX, normalize_survey_provider
+from software.providers.http_progress import update_http_submit_step
 from software.providers.http_logic import get_http_logic_fallback_reason
 from software.providers.registry import fill_survey_http
 
@@ -70,6 +73,9 @@ class AsyncSlotRunner:
             self.state.update_thread_step(self.slot_label, 0, 0, status_text=status_text, running=True)
         except Exception:
             logging.info("更新 slot 步骤失败：%s", status_text, exc_info=True)
+
+    async def _update_http_step(self, status_text: str) -> None:
+        await update_http_submit_step(self.state, self.slot_label, status_text)
 
     async def _should_stop_loop(self) -> bool:
         await self.run_context.wait_if_paused()
@@ -313,6 +319,14 @@ class AsyncSlotRunner:
             state=self.state,
         )
 
+    async def _handle_submission_verification_error(self, exc: SubmissionVerificationRequiredError) -> bool:
+        return handle_submission_verification_error(
+            exc,
+            self.stop_proxy,
+            thread_name=self.slot_label,
+            state=self.state,
+        )
+
     def _uses_http_runtime(self) -> bool:
         provider = normalize_survey_provider(self.config.survey_provider)
         if not bool(str(self.config.url or "").strip()) or provider not in {SURVEY_PROVIDER_WJX, SURVEY_PROVIDER_QQ, SURVEY_PROVIDER_CREDAMO}:
@@ -396,6 +410,7 @@ class AsyncSlotRunner:
             dispatch_delay_seconds = 0.0
             try:
                 self._joint_pre_answer_timed_out = False
+                await self._update_http_step("准备请求")
                 if not await self._prepare_round_context():
                     should_requeue_dispatch = False
                     break
@@ -458,6 +473,11 @@ class AsyncSlotRunner:
                     self._update_step("等待提交间隔")
             except AIRuntimeError as exc:
                 if await self._handle_ai_runtime_error(exc):
+                    should_requeue_dispatch = False
+                    break
+                self._release_round_resources(requeue_reverse_fill=True)
+            except SubmissionVerificationRequiredError as exc:
+                if await self._handle_submission_verification_error(exc):
                     should_requeue_dispatch = False
                     break
                 self._release_round_resources(requeue_reverse_fill=True)

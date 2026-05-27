@@ -7,6 +7,7 @@ import pytest
 from software.core.task import ExecutionConfig, ExecutionState
 from software.providers.answering import AnswerAction
 from software.providers.contracts import SurveyQuestionMeta
+from software.providers.errors import SubmissionVerificationRequiredError
 from credamo.provider import answering_builders as credamo_builders
 from credamo.provider import http_runtime as credamo_http
 from tencent.provider import answering_builders as qq_builders
@@ -684,6 +685,16 @@ def test_wjx_submit_rejected_message_includes_question_title_and_display_num() -
 
     with pytest.raises(RuntimeError, match=r"第8题（年龄）.*答案不符合要求"):
         wjx_http._raise_submit_rejected(config, "9〒10〒您提交的答案不符合要求，请检查并修改后重新提交！")
+
+
+def test_wjx_submit_rejected_detects_submission_verification() -> None:
+    config = ExecutionConfig(url="https://www.wjx.cn/vm/demo.aspx", survey_provider="wjx")
+
+    assert wjx_http.is_wjx_submission_verification_response("请先完成智能验证")
+    assert wjx_http.is_wjx_submission_verification_response("7〒需要安全校验，请重新提交！")
+
+    with pytest.raises(SubmissionVerificationRequiredError, match="启用随机 IP"):
+        wjx_http._raise_submit_rejected(config, "7〒需要安全校验，请重新提交！")
 
 
 def _async_result(value):

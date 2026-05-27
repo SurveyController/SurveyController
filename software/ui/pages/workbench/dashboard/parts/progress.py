@@ -55,7 +55,7 @@ class DashboardProgressMixin:
 
     THREAD_VIEW_QUESTION_LIST = "question_list"
     THREAD_VIEW_PROGRESS = "thread_progress"
-    _THREAD_BUSY_STATUSES = {"提交中", "等待结果确认"}
+    _THREAD_BUSY_STATUSES: set[str] = set()
 
     if TYPE_CHECKING:
         controller: RunController
@@ -479,7 +479,7 @@ class DashboardProgressMixin:
         step_busy_bar = IndeterminateProgressBar(start=True, parent=row_widget)
         step_busy_bar.hide()
         step_value = BodyLabel("0/0", row_widget)
-        step_value.setMinimumWidth(58)
+        step_value.setMinimumWidth(112)
         step_value.setAlignment(Qt.AlignmentFlag.AlignCenter)
         step_layout.addWidget(step_prefix)
         step_layout.addWidget(step_bar, 1)
@@ -608,10 +608,8 @@ class DashboardProgressMixin:
             _set_text_if_changed(row["counter"], f"成功 {success_count} | 提交失败 {fail_count}")
             self._set_thread_step_busy(row, step_busy)
             _set_value_if_changed(row["step_bar"], step_percent)
-            _set_text_if_changed(
-                row["step_value"],
-                f"{step_current}/{step_total}" if step_total > 0 else "0/0",
-            )
+            step_value_text = f"{step_current}/{step_total}" if step_total > 0 else "0/0"
+            _set_text_if_changed(row["step_value"], step_value_text)
             _set_value_if_changed(row["cum_bar"], cumulative_percent)
             _set_text_if_changed(row["cum_value"], f"{cumulative_percent}%")
 

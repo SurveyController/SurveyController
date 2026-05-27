@@ -491,6 +491,9 @@ class MainWindow(
     def _notify_free_ai_unstable(self) -> None:
         self._toast("AI 填空连续失败，请稍后再试", "warning", duration=3500)
 
+    def _notify_submission_verification(self, message: str) -> None:
+        self._toast(str(message or "提交触发智能验证，请启用随机 IP 后再试"), "warning", duration=4500)
+
     def _center_on_screen(self):
         """窗口居中显示，适配多显示器与缩放。"""
         try:
@@ -651,6 +654,7 @@ class MainWindow(
         self.controller.runFailed.connect(self._on_run_failed)
         self.controller.quickBugReportSuggested.connect(self._prompt_quick_bug_report)
         self.controller.freeAiUnstableSuggested.connect(self._notify_free_ai_unstable)
+        self.controller.submissionVerificationSuggested.connect(self._notify_submission_verification)
         self.controller.on_ip_counter = self._on_random_ip_counter_update
 
     def _register_popups(self):

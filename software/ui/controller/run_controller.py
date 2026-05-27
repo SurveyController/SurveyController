@@ -69,6 +69,7 @@ class RunController(
     cleanupFinished = Signal()
     quickBugReportSuggested = Signal()
     freeAiUnstableSuggested = Signal()
+    submissionVerificationSuggested = Signal(str)
     runtimeUiStateChanged = Signal(dict)
     randomIpLoadingChanged = Signal(bool, str)
     _uiCallbackQueued = Signal()

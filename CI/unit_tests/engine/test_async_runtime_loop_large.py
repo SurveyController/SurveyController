@@ -12,6 +12,7 @@ from software.core.engine.async_runtime_loop import AsyncSlotRunner
 from software.core.engine.failure_reason import FailureReason
 from software.core.task import ExecutionConfig, ExecutionState
 from software.providers.contracts import SurveyQuestionMeta
+from software.providers.errors import SubmissionVerificationRequiredError
 
 
 class _FakeScheduler:
@@ -67,8 +68,9 @@ def _build_runner(
         url="https://www.wjx.cn/vm/demo.aspx",
     )
     state = state or ExecutionState(config=config)
+    state.step_updates = []
     state.update_thread_status = lambda *_args, **_kwargs: None
-    state.update_thread_step = lambda *_args, **_kwargs: None
+    state.update_thread_step = lambda *args, **kwargs: state.step_updates.append((args, kwargs))
     stop_event = asyncio.Event()
     if stop_set:
         stop_event.set()
@@ -208,6 +210,7 @@ class AsyncRuntimeLoopLargeTests:
         runner, state, ctx, scheduler = _build_runner(config=config)
 
         await runner.run()
+        await asyncio.sleep(0)
 
         assert ctx.stop_event.is_set()
         assert scheduler.release_calls == []
@@ -228,6 +231,21 @@ class AsyncRuntimeLoopLargeTests:
 
         assert scheduler.release_calls[0]["token_id"] == 6
         assert runner.stop_policy.failure_calls == []
+
+    @pytest.mark.asyncio
+    async def test_run_http_runtime_reports_fixed_submit_steps(self, monkeypatch) -> None:
+        config = ExecutionConfig(url="https://www.credamo.com/answer.html#/s/demo", survey_provider="credamo")
+        runner, state, _ctx, scheduler = _build_runner(config=config)
+        scheduler.acquire_values = [6, None]
+        monkeypatch.setattr(runtime_loop, "fill_survey_http", lambda *_args, **_kwargs: asyncio.sleep(0, result=True))
+        monkeypatch.setattr(runner, "_prepare_round_context", lambda: asyncio.sleep(0, result=True))
+        monkeypatch.setattr(runner, "_select_session_proxy_and_ua", lambda: asyncio.sleep(0, result=(None, "UA")))
+        monkeypatch.setattr(runtime_loop, "update_http_submit_step", lambda state, thread, label: asyncio.sleep(0, result=state.update_thread_step(thread, 1, 4, status_text=label, running=True)))
+
+        await runner.run()
+
+        labels = [kwargs.get("status_text") for _args, kwargs in state.step_updates]
+        assert "准备请求" in labels
 
     @pytest.mark.asyncio
     async def test_run_no_submit_path_records_single_test_success(self, monkeypatch) -> None:
@@ -264,6 +282,27 @@ class AsyncRuntimeLoopLargeTests:
 
         assert release_flags == [True]
         assert scheduler.release_calls[0]["requeue"] is True
+
+    @pytest.mark.asyncio
+    async def test_run_submission_verification_error_stops_without_requeue(self, monkeypatch) -> None:
+        config = ExecutionConfig(url="https://www.wjx.cn/vm/demo.aspx", survey_provider="wjx")
+        runner, state, ctx, scheduler = _build_runner(config=config)
+        scheduler.acquire_values = [8]
+        monkeypatch.setattr(
+            runtime_loop,
+            "fill_survey_http",
+            lambda *_args, **_kwargs: (_ for _ in ()).throw(SubmissionVerificationRequiredError("请启用随机 IP 后再提交")),
+        )
+        monkeypatch.setattr(runner, "_prepare_round_context", lambda: asyncio.sleep(0, result=True))
+        monkeypatch.setattr(runner, "_select_session_proxy_and_ua", lambda: asyncio.sleep(0, result=(None, "UA")))
+
+        await runner.run()
+        await asyncio.sleep(0)
+
+        assert ctx.stop_event.is_set()
+        assert scheduler.release_calls[0]["requeue"] is False
+        assert state.get_terminal_stop_snapshot()[0] == "submission_verification"
+        assert state.get_terminal_stop_snapshot()[1] == FailureReason.SUBMISSION_VERIFICATION_REQUIRED.value
 
     @pytest.mark.asyncio
     async def test_run_http_transport_error_breaks_when_handler_requests_stop(self, monkeypatch) -> None:

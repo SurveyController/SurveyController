@@ -17,6 +17,7 @@ from software.core.task import ExecutionConfig, ExecutionState
 from software.providers.answering import AnswerAction
 from software.providers.answering.recording import record_answer_action
 from software.providers.http_logic import build_http_logic_plan
+from software.providers.http_progress import update_http_submit_step
 from software.providers.contracts import SurveyQuestionMeta
 from tencent.provider.answering_builders import build_answer_action
 from tencent.provider.parser import (
@@ -204,6 +205,7 @@ async def brush_qq_http(
         if question is not None
     ]
 
+    await update_http_submit_step(ctx, thread_name, "生成答案")
     for question in questions:
         if stop_signal is not None and stop_signal.is_set():
             return False
@@ -291,6 +293,7 @@ async def brush_qq_http(
     }
     if answer_session_id:
         submit_headers["X-Answer-Session"] = answer_session_id
+    await update_http_submit_step(ctx, thread_name, "提交问卷")
     response = await http_client.apost(
         f"https://wj.qq.com/api/v2/respondent/surveys/{survey_id}/answers",
         params={"pv_uid": str(uuid.uuid4()), "hash": hash_value, "_": str(int(time.time() * 1000))},
@@ -300,6 +303,7 @@ async def brush_qq_http(
         proxies=proxies,
     )
     response.raise_for_status()
+    await update_http_submit_step(ctx, thread_name, "校验结果")
     payload = response.json()
     if not isinstance(payload, dict):
         raise RuntimeError("腾讯问卷提交返回了非 JSON 对象")

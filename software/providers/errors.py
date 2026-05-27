@@ -23,7 +23,12 @@ class SurveyNotOpenError(SurveyProviderStatusError):
     """问卷尚未开放。"""
 
 
+class SubmissionVerificationRequiredError(RuntimeError):
+    """提交被平台智能验证拦截。"""
+
+
 __all__ = [
+    "SubmissionVerificationRequiredError",
     "SurveyEnterpriseUnavailableError",
     "SurveyNotOpenError",
     "SurveyPausedError",

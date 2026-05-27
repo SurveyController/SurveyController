@@ -280,11 +280,11 @@ def test_dashboard_thread_progress_rows_keep_visible_after_update(monkeypatch, q
                 {
                     "thread_name": "Slot-1",
                     "thread_display_name": "会话 1",
-                    "status_text": "答题中",
+                    "status_text": "生成答案",
                     "success_count": 1,
                     "fail_count": 0,
                     "step_current": 2,
-                    "step_total": 5,
+                    "step_total": 4,
                     "running": True,
                 }
             ],
@@ -295,5 +295,6 @@ def test_dashboard_thread_progress_rows_keep_visible_after_update(monkeypatch, q
     row = page._thread_progress_rows["Slot-1"]
     assert page.thread_view_stack.currentWidget() is page.thread_view_progress_card
     assert page.thread_progress_rows_layout.count() == 1
+    assert row["step_value"].text() == "2/4"
     assert row["widget"].sizeHint().height() > 0
     assert page.thread_progress_rows_container.sizeHint().height() > 0
