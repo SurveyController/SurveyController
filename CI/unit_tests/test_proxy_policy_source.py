@@ -93,7 +93,7 @@ class ProxyPolicySourceTests:
             assert proxy_source.set_proxy_area_code("110000") == "110000"
             assert proxy_source.get_default_proxy_area_code() == "110000"
             assert proxy_source.get_proxy_area_code() == "110000"
-            assert proxy_source._resolve_default_pool_by_area("110000") == proxy_source.PROXY_POOL_ORDINARY
+            assert proxy_source._resolve_default_pool_by_area("110000") == proxy_source.PROXY_POOL_QUALITY
             assert proxy_source._resolve_default_pool_by_area("110100") == proxy_source.PROXY_POOL_QUALITY
             assert proxy_source.set_proxy_area_code(None) is None
             assert proxy_source.get_proxy_area_code() is None

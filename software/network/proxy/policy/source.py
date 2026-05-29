@@ -270,8 +270,6 @@ def _resolve_default_pool_by_area(area_code: Optional[str]) -> Optional[str]:
     normalized_area = _normalize_area_code(area_code)
     if not normalized_area:
         return None
-    if _is_province_level_area_code(normalized_area) and normalized_area in _ORDINARY_POOL_PROVINCE_CODES:
-        return PROXY_POOL_ORDINARY
     return PROXY_POOL_QUALITY
 
 

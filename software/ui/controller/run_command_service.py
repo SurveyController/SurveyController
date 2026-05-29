@@ -476,17 +476,31 @@ class RunCommandService(RandomIpRuntimeService, RunControllerInitializationMixin
         execution_state: ExecutionState,
         stop_signal: threading.Event,
     ) -> None:
+        try:
+            observed_seq = execution_state._runtime_change_sequence()
+        except Exception:
+            observed_seq = -1
         while not stop_signal.is_set():
             try:
-                execution_state.wait_for_runtime_change(
+                stopped = execution_state.wait_for_runtime_change(
                     stop_signal=stop_signal,
-                    timeout=0.25,
+                    timeout=1.0,
                 )
             except Exception:
                 logging.debug("等待运行态变更失败", exc_info=True)
-                time.sleep(0.25)
+                time.sleep(1.0)
+                stopped = bool(stop_signal.is_set())
             if self._execution_state is not execution_state:
                 break
+            try:
+                current_seq = execution_state._runtime_change_sequence()
+            except Exception:
+                current_seq = observed_seq + 1
+            if stopped:
+                break
+            if current_seq == observed_seq:
+                continue
+            observed_seq = current_seq
             try:
                 self._dispatch_to_ui_async(self.emit_status_snapshot)
             except Exception:

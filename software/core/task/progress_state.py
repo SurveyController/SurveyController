@@ -36,6 +36,7 @@ if TYPE_CHECKING:
         def _format_thread_display_name(thread_name: str, thread_index: int) -> str: ...
 
         def _get_or_create_thread_state_locked(self, thread_name: str) -> ThreadProgressState: ...
+        def notify_runtime_change(self) -> None: ...
 
 
 class ThreadProgressMixin:
@@ -100,6 +101,7 @@ class ThreadProgressMixin:
         count = max(1, int(expected_count or 1))
         now = time.time()
         normalized_prefix = str(prefix or "Worker").strip() or "Worker"
+        changed = False
         with self.lock:
             for idx in range(1, count + 1):
                 name = f"{normalized_prefix}-{idx}"
@@ -110,9 +112,13 @@ class ThreadProgressMixin:
                         thread_index=idx,
                         last_update_ts=now,
                     )
+                    changed = True
                 else:
                     state.thread_index = idx
                     state.last_update_ts = now
+                    changed = True
+        if changed:
+            self.notify_runtime_change()
 
     def update_thread_status(
         self: "_ThreadProgressHost",
@@ -128,6 +134,7 @@ class ThreadProgressMixin:
             if running is not None:
                 state.running = bool(running)
             state.last_update_ts = now
+        self.notify_runtime_change()
 
     def update_thread_step(
         self: "_ThreadProgressHost",
@@ -152,6 +159,7 @@ class ThreadProgressMixin:
             if running is not None:
                 thread_state.running = bool(running)
             thread_state.last_update_ts = now
+        self.notify_runtime_change()
 
     def increment_thread_success(
         self: "_ThreadProgressHost",
@@ -168,6 +176,7 @@ class ThreadProgressMixin:
             state.status_text = str(status_text or "提交成功")
             state.running = True
             state.last_update_ts = now
+        self.notify_runtime_change()
 
     def increment_thread_fail(
         self: "_ThreadProgressHost",
@@ -182,6 +191,7 @@ class ThreadProgressMixin:
             state.status_text = str(status_text or "失败重试")
             state.running = True
             state.last_update_ts = now
+        self.notify_runtime_change()
 
     def mark_thread_finished(
         self: "_ThreadProgressHost",
@@ -195,6 +205,7 @@ class ThreadProgressMixin:
             state.running = False
             state.status_text = str(status_text or "已停止")
             state.last_update_ts = now
+        self.notify_runtime_change()
 
     def snapshot_thread_progress(self: "_ThreadProgressHost") -> List[Dict[str, Any]]:
         with self.lock:

@@ -179,10 +179,35 @@ class WjxParserTests:
             (wjx_parser.http_client, "aget", AsyncMock(return_value=_FakeHttpResponse("<html><body>http-empty</body></html>"))),
             (wjx_parser, "parse_survey_questions_from_html", lambda _html: []),
             (wjx_parser, "extract_survey_title_from_html", lambda _html: "HTTP 标题"),
+            (wjx_parser.asyncio, "sleep", AsyncMock()),
         )
 
         with pytest.raises(RuntimeError, match="无法打开问卷链接.*http-empty"):
             await wjx_parser.parse_wjx_survey("https://www.wjx.cn/vm/demo.aspx")
+
+    @pytest.mark.asyncio
+    async def test_parse_wjx_survey_retries_when_http_page_is_temporarily_empty(self, patch_attrs) -> None:
+        aget = AsyncMock(
+            side_effect=[
+                _FakeHttpResponse("<html><body>temp-empty</body></html>"),
+                _FakeHttpResponse("<html><body>ok</body></html>"),
+            ]
+        )
+        sleep = AsyncMock()
+
+        patch_attrs(
+            (wjx_parser.http_client, "aget", aget),
+            (wjx_parser, "parse_survey_questions_from_html", lambda html: [] if "temp-empty" in html else [{"num": 1, "title": "Q1", "type_code": "3"}]),
+            (wjx_parser, "extract_survey_title_from_html", lambda _html: "标题"),
+            (wjx_parser.asyncio, "sleep", sleep),
+        )
+
+        info, title = await wjx_parser.parse_wjx_survey("https://www.wjx.cn/vm/demo.aspx")
+
+        assert info == [{"num": 1, "title": "Q1", "type_code": "3"}]
+        assert title == "标题"
+        assert aget.await_count == 2
+        sleep.assert_awaited_once_with(wjx_parser._PARSE_RETRY_DELAY_SECONDS)
 
     @pytest.mark.asyncio
     async def test_parse_wjx_survey_keeps_http_fast_path_even_when_static_page_has_hidden_questions(self, patch_attrs) -> None:

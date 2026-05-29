@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import asyncio
+import logging
 import re
 from typing import Any, Dict, List, Optional, Tuple
 
@@ -28,6 +30,8 @@ _NOT_OPEN_TIME_RE = re.compile(
     r"此问卷将于\s*(\d{4}[-/]\d{1,2}[-/]\d{1,2}\s+\d{1,2}:\d{2})\s*开放"
 )
 _PAGE_SUMMARY_MAX_LENGTH = 120
+_PARSE_RETRY_ATTEMPTS = 3
+_PARSE_RETRY_DELAY_SECONDS = 0.35
 
 
 def _build_unparseable_page_summary(html: str) -> str:
@@ -155,10 +159,27 @@ def _parse_wjx_html(html: str) -> Tuple[List[Dict[str, Any]], str]:
 
 
 async def parse_wjx_survey(url: str) -> Tuple[List[Dict[str, Any]], str]:
+    resp = None
     try:
-        resp = await http_client.aget(url, timeout=12, headers=DEFAULT_HTTP_HEADERS, proxies={})
-        resp.raise_for_status()
-        info, title = _parse_wjx_html(resp.text)
+        info: List[Dict[str, Any]] = []
+        title = ""
+        for attempt in range(1, _PARSE_RETRY_ATTEMPTS + 1):
+            resp = await http_client.aget(url, timeout=12, headers=DEFAULT_HTTP_HEADERS, proxies={})
+            resp.raise_for_status()
+            info, title = _parse_wjx_html(resp.text)
+            if info:
+                break
+            if attempt >= _PARSE_RETRY_ATTEMPTS:
+                break
+            summary = _build_unparseable_page_summary(resp.text)
+            logging.warning(
+                "问卷星解析命中临时空页面，准备重试 | url=%r | attempt=%s/%s | summary=%s",
+                url,
+                attempt,
+                _PARSE_RETRY_ATTEMPTS,
+                summary,
+            )
+            await asyncio.sleep(_PARSE_RETRY_DELAY_SECONDS)
     except (
         SurveyPausedError,
         SurveyStoppedError,
@@ -171,7 +192,7 @@ async def parse_wjx_survey(url: str) -> Tuple[List[Dict[str, Any]], str]:
             raise RuntimeError(f"无法获取问卷网页：WinError 10013：{exc}") from exc
         raise RuntimeError(f"无法获取问卷网页：{exc}") from exc
     if not info:
-        summary = _build_unparseable_page_summary(resp.text)
+        summary = _build_unparseable_page_summary(getattr(resp, "text", ""))
         raise RuntimeError(f"无法打开问卷链接，HTTP 页面未返回可解析题目：{summary}")
     normalized_title = _normalize_html_text(title) if title else ""
     return info, normalized_title

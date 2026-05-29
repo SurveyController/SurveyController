@@ -40,6 +40,10 @@ def on_random_ip_loading_changed(
     setter = getattr(runtime_port, "on_random_ip_loading_changed", None)
     if callable(setter):
         setter(bool(loading), str(message or ""))
+        return
+    legacy_setter = getattr(runtime_port, "set_random_ip_loading", None)
+    if callable(legacy_setter):
+        legacy_setter(bool(loading), str(message or ""))
 
 
 __all__ = [

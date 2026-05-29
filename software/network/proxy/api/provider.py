@@ -12,7 +12,7 @@ from software.network.proxy.session.auth import extract_proxy_async, format_rand
 from software.app.config import (
     DEFAULT_HTTP_HEADERS,
     PROXY_MAX_PROXIES,
-    PROXY_POOL_ORDINARY,
+    PROXY_POOL_QUALITY,
     PROXY_SOURCE_CUSTOM,
     PROXY_SOURCE_DEFAULT,
     PROXY_STATUS_TIMEOUT_SECONDS,
@@ -359,7 +359,7 @@ async def fetch_proxy_batch_async(
         upstream = get_proxy_upstream(current_source)
         if upstream != "default":
             minute = 1
-        pool = _resolve_default_pool_by_area(area_code) or PROXY_POOL_ORDINARY
+        pool = _resolve_default_pool_by_area(area_code) or PROXY_POOL_QUALITY
         area_value = _resolve_official_area_request_value(current_source, area_code)
         fetched: List[ProxyLease] = []
         errors: List[str] = []
