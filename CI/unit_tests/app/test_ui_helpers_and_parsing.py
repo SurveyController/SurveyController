@@ -144,13 +144,14 @@ class _FakeParent:
 
 
 class _FakeBar:
-    def __init__(self, parent: _FakeParent) -> None:
+    def __init__(self, parent: _FakeParent, *, property_raises: bool = False) -> None:
         self._parent = parent
         self._props: dict[str, Any] = {}
         self.closedSignal = _FakeSignal()
         self.destroyed = _FakeSignal()
         self.invalid = False
         self.moved_to = None
+        self.property_raises = property_raises
 
     def parent(self):
         return self._parent
@@ -159,6 +160,8 @@ class _FakeBar:
         self._props[key] = value
 
     def property(self, key: str) -> Any:
+        if self.property_raises:
+            raise RuntimeError("property unavailable")
         return self._props.get(key)
 
     def pos(self):
@@ -343,9 +346,10 @@ class UiHelperAndParsingTests:
         monkeypatch.setattr(qfluent_compat, "QParallelAnimationGroup", _FakeAnimationGroup)
         monkeypatch.setattr(qfluent_compat, "QPropertyAnimation", _FakeAnimation)
         monkeypatch.setattr(qfluent_compat, "isValid", lambda obj: not getattr(obj, "invalid", False))
-        qfluent_compat._install_infobar_manager_guards(_FakeManager)
+        local_manager_cls = type("LocalFakeManager", (_FakeManager,), {"managers": {}})
+        qfluent_compat._install_infobar_manager_guards(local_manager_cls)
 
-        manager = cast(Any, _FakeManager())
+        manager = cast(Any, local_manager_cls())
         parent = _FakeParent()
         first_bar = _FakeBar(parent)
         second_bar = _FakeBar(parent)
@@ -359,6 +363,32 @@ class UiHelperAndParsingTests:
         cached_drop_ani = manager._surveycontroller_bar_animations[id(second_bar)]["dropAni"]
         assert cached_drop_ani.start_value == (0, 0)
         assert cached_drop_ani.end_value == ("pos", None)
+
+    def test_install_infobar_manager_guards_remove_uses_cached_animation_without_qt_property(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        monkeypatch.setattr(qfluent_compat, "QParallelAnimationGroup", _FakeAnimationGroup)
+        monkeypatch.setattr(qfluent_compat, "QPropertyAnimation", _FakeAnimation)
+        monkeypatch.setattr(qfluent_compat, "isValid", lambda obj: not getattr(obj, "invalid", False))
+        local_manager_cls = type(
+            "LocalFakeManagerRemove",
+            (_FakeManager,),
+            {"managers": {}, "_surveycontroller_remove_guard_installed": False},
+        )
+        qfluent_compat._install_infobar_manager_guards(local_manager_cls)
+
+        manager = cast(Any, local_manager_cls())
+        parent = _FakeParent()
+        first_bar = _FakeBar(parent)
+        second_bar = _FakeBar(parent, property_raises=True)
+
+        manager.add(first_bar)
+        manager.add(second_bar)
+        manager.remove(second_bar)
+
+        assert second_bar not in manager.infoBars[parent]
+        assert id(second_bar) not in manager._surveycontroller_bar_animations
 
     def test_ui_callback_dispatcher_covers_enqueue_drain_and_async_paths(
         self,

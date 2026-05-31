@@ -89,7 +89,7 @@ def _install_infobar_manager_guards(info_bar_manager_cls) -> None:
         current = self.infoBars[parent]
         if len(alive) != len(current):
             current[:] = alive
-        return alive
+        return current
 
     _install_top_position_guard(info_bar_manager_cls, _prune_invalid_bars)
 
@@ -122,11 +122,13 @@ def _install_infobar_manager_guards(info_bar_manager_cls) -> None:
     def _set_bar_animation(self, info_bar, key: str, animation: Any) -> None:
         _get_bar_animation_store(self).setdefault(id(info_bar), {})[key] = animation
 
-    def _get_bar_animation(self, info_bar, key: str) -> Any:
+    def _get_bar_animation(self, info_bar, key: str, *, cached_only: bool = False) -> Any:
         required_method = "start" if key == "slideAni" else "setStartValue"
         animation = _get_bar_animation_store(self).get(id(info_bar), {}).get(key)
         if animation is not None and hasattr(animation, required_method):
             return animation
+        if cached_only:
+            return None
         try:
             animation = info_bar.property(key)
         except RuntimeError:
@@ -228,11 +230,11 @@ def _install_infobar_manager_guards(info_bar_manager_cls) -> None:
         if info_bar not in bars:
             return
 
+        drop_ani = _get_bar_animation(self, info_bar, "dropAni", cached_only=True)
+        slide_ani = _get_bar_animation(self, info_bar, "slideAni", cached_only=True)
         bars.remove(info_bar)
-        _drop_signal_callbacks(self, info_bar)
 
         if _is_alive(info_bar):
-            drop_ani = _get_bar_animation(self, info_bar, "dropAni")
             if drop_ani:
                 try:
                     self.aniGroups[parent].removeAnimation(drop_ani)
@@ -243,13 +245,13 @@ def _install_infobar_manager_guards(info_bar_manager_cls) -> None:
                 except ValueError:
                     pass
 
-            slide_ani = _get_bar_animation(self, info_bar, "slideAni")
             if slide_ani:
                 try:
                     self.slideAnis.remove(slide_ani)
                 except ValueError:
                     pass
 
+        _drop_signal_callbacks(self, info_bar)
         _safe_update_drop_ani(self, parent)
         try:
             self.aniGroups[parent].start()

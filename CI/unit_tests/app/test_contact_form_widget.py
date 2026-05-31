@@ -175,8 +175,9 @@ def test_contact_form_send_validation_and_completion_paths(monkeypatch, qtbot) -
     assert len(form._attachments.attachments) == 0
 
 
-def test_contact_form_bug_report_auto_payload(monkeypatch, qtbot) -> None:
+def test_contact_form_bug_report_auto_payload(monkeypatch, qtbot, tmp_path) -> None:
     _patch_contact_form_dependencies(monkeypatch, user_id=0)
+    monkeypatch.setattr(widget_module, "get_fatal_crash_log_path", lambda: str(tmp_path / "fatal_crash.log"))
     form = ContactForm(
         default_type="报错反馈",
         manage_polling=False,
