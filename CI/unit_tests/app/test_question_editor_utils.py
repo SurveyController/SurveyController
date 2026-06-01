@@ -35,6 +35,8 @@ class QuestionEditorUtilsTests:
         assert editor_utils.resolve_display_question_num({"num": "7"}, fallback=1) == 7
         assert editor_utils.resolve_display_question_num(SimpleNamespace(num="5"), fallback=1) == 5
         assert editor_utils.resolve_display_question_num({}, fallback="3") == 3
+        assert editor_utils.resolve_config_question_num({"num": "7", "display_num": "1"}, fallback=1) == 7
+        assert editor_utils.resolve_config_question_num({"display_num": "9"}, fallback=1) == 1
 
         assert editor_utils._normalize_question_title("  A B \n C\t") == "ABC"
         assert editor_utils._normalize_question_title(None) == ""

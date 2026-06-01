@@ -32,7 +32,7 @@ from .utils import (
     _apply_label_color,
     _shorten_text,
     build_entry_info_list,
-    resolve_display_question_num,
+    resolve_config_question_num,
 )
 from .constants import _get_entry_type_label
 from .wizard_cards import WizardCardsMixin
@@ -416,7 +416,7 @@ class QuestionWizardDialog(
     def _build_tree_question_widget(self, idx: int, parent: QWidget) -> QWidget:
         info = self._get_entry_info(idx)
         entry = self.entries[idx]
-        qnum = resolve_display_question_num(info, idx + 1) or idx + 1
+        qnum = resolve_config_question_num(info, idx + 1) or idx + 1
         title = str(info.title or "").strip() or "未命名题目"
 
         row = QWidget(parent)
@@ -442,8 +442,12 @@ class QuestionWizardDialog(
         row_layout.setContentsMargins(0, 0, 0, 0)
         row_layout.setSpacing(6)
 
-        if str(getattr(relation, "kind", "") or "").strip().lower() == "jump":
+        relation_kind = str(getattr(relation, "kind", "") or "").strip().lower()
+        if relation_kind == "jump":
             badge = self._make_badge("跳题", "#b45309", "#fbbf24", row)
+            row_layout.addWidget(badge, 0, Qt.AlignmentFlag.AlignLeft)
+        elif relation_kind == "display":
+            badge = self._make_badge("条件", "#166534", "#4ade80", row)
             row_layout.addWidget(badge, 0, Qt.AlignmentFlag.AlignLeft)
 
         label = BodyLabel(_shorten_text(str(getattr(relation, "label", "") or ""), 24), row)
@@ -489,6 +493,8 @@ class QuestionWizardDialog(
                             0,
                             self._build_tree_relation_widget(relation, self._tree_widget),
                         )
+                    if item.childCount() > 0:
+                        item.setExpanded(True)
             page_item.setExpanded(True)
 
     def _show_empty_state(self) -> None:

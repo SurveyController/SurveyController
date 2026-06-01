@@ -87,6 +87,7 @@ def test_question_wizard_dialog_shows_logic_view_and_switches_question(qtbot) ->
 
     relation_item = page_item.child(0).child(0)
     assert isinstance(relation_item, QTreeWidgetItem)
+    assert page_item.child(0).isExpanded()
     dlg._on_tree_item_clicked(relation_item, 0)
     assert dlg._current_question_idx == 1
 
@@ -137,6 +138,80 @@ def test_question_wizard_dialog_tree_uses_compact_question_label_and_type_badge(
     relation_labels = [label.text() for label in relation_row.findChildren(BodyLabel)]
     assert relation_badges == ["跳题"]
     assert relation_labels == ["选中“A” -> 结束"]
+
+
+def test_question_wizard_dialog_tree_marks_display_relation_and_expands(qtbot) -> None:
+    info = [
+        SurveyQuestionMeta(
+            num=1,
+            title="入口题",
+            page=1,
+            option_texts=["显示下一题", "不显示"],
+            has_dependent_display_logic=True,
+            controls_display_targets=[
+                {"condition_option_indices": [0], "target_question_num": 2}
+            ],
+            logic_parse_status=LOGIC_PARSE_STATUS_COMPLETE,
+        ),
+        SurveyQuestionMeta(
+            num=2,
+            title="条件题",
+            page=1,
+            has_display_condition=True,
+            display_conditions=[
+                {"condition_question_num": 1, "condition_option_indices": [0]}
+            ],
+            logic_parse_status=LOGIC_PARSE_STATUS_COMPLETE,
+        ),
+    ]
+    dlg = QuestionWizardDialog(_build_entries(), info, "demo")
+    qtbot.addWidget(dlg)
+    dlg.show()
+
+    qtbot.waitUntil(lambda: dlg._tree_widget.topLevelItemCount() > 0)
+    question_item = dlg._tree_widget.topLevelItem(0).child(0)
+    assert question_item.isExpanded()
+
+    relation_item = question_item.child(0)
+    relation_row = dlg._tree_widget.itemWidget(relation_item, 0)
+    assert relation_row is not None
+    relation_badges = [badge.text() for badge in relation_row.findChildren(InfoBadge)]
+    relation_labels = [label.text() for label in relation_row.findChildren(BodyLabel)]
+    assert relation_badges == ["条件"]
+    assert relation_labels == ["选中“显示下一题” -> 显示第2题"]
+
+
+def test_question_wizard_dialog_tree_uses_real_question_num_when_display_num_repeats(qtbot) -> None:
+    info = [
+        SurveyQuestionMeta(
+            num=1,
+            display_num=1,
+            title="入口题",
+            page=1,
+            option_texts=["显示下一题"],
+            logic_parse_status=LOGIC_PARSE_STATUS_COMPLETE,
+        ),
+        SurveyQuestionMeta(
+            num=2,
+            display_num=1,
+            title="条件题",
+            page=1,
+            logic_parse_status=LOGIC_PARSE_STATUS_COMPLETE,
+        ),
+    ]
+    dlg = QuestionWizardDialog(_build_entries(), info, "demo")
+    qtbot.addWidget(dlg)
+    dlg.show()
+
+    qtbot.waitUntil(lambda: dlg._tree_widget.topLevelItemCount() > 0)
+    page_item = dlg._tree_widget.topLevelItem(0)
+    first_row = dlg._tree_widget.itemWidget(page_item.child(0), 0)
+    second_row = dlg._tree_widget.itemWidget(page_item.child(1), 0)
+
+    assert first_row is not None
+    assert second_row is not None
+    assert [label.text() for label in first_row.findChildren(BodyLabel)][0] == "1."
+    assert [label.text() for label in second_row.findChildren(BodyLabel)][0] == "2."
 
 
 def test_question_wizard_dialog_hides_logic_view_when_unknown(qtbot) -> None:

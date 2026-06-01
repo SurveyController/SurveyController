@@ -11,7 +11,7 @@ from software.providers.contracts import (
     ensure_survey_question_meta,
 )
 
-from .utils import _shorten_text, resolve_display_question_num
+from .utils import _shorten_text, resolve_config_question_num
 
 
 @dataclass(frozen=True)
@@ -274,7 +274,7 @@ def build_logic_tree_state(
         state.outbound_summary[index] = "；".join(outbound_segments) if outbound_segments else "无"
 
         search_chunks = [
-            str(resolve_display_question_num(info, index + 1) or index + 1),
+            str(resolve_config_question_num(info, index + 1) or index + 1),
             str(info.title or "").strip(),
             str(info.description or "").strip(),
             *[str(text or "").strip() for text in list(info.option_texts or [])],

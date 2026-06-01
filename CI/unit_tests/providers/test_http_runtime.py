@@ -79,6 +79,17 @@ def test_wjx_ktimes_sampling_failure_falls_back_to_90(monkeypatch) -> None:
     assert wjx_http._sample_ktimes(config) == 90
 
 
+def test_wjx_scene_id_extraction_prefers_page_value() -> None:
+    page_html = """
+    <script>
+      window.initAlicom({ sceneId: "scene-real-123" });
+    </script>
+    """
+
+    assert wjx_http._extract_wjx_scene_id(page_html) == "scene-real-123"
+    assert wjx_http._extract_wjx_scene_id("<html></html>") == "q0hcfsca"
+
+
 @pytest.mark.asyncio
 async def test_wjx_starttime_extraction_prefers_page_value(monkeypatch) -> None:
     config = ExecutionConfig(
@@ -125,6 +136,42 @@ async def test_wjx_starttime_extraction_prefers_page_value(monkeypatch) -> None:
     assert ok is True
     assert captured["params"]["starttime"] == "2026/5/30 1:23:18"
     assert captured["params"]["cst"] == str(expected_start * 1000)
+
+
+@pytest.mark.asyncio
+async def test_wjx_submit_body_uses_extracted_scene_id(monkeypatch) -> None:
+    config = ExecutionConfig(
+        url="https://www.wjx.cn/vm/demo.aspx",
+        survey_provider="wjx",
+    )
+    config.questions_metadata = {
+        1: SurveyQuestionMeta(num=1, title="Q1", type_code="3", options=2, option_texts=["A", "B"]),
+    }
+    state = ExecutionState(config=config)
+    captured: dict[str, object] = {}
+
+    async def fake_load(*_args, **_kwargs):
+        return """
+        <html>
+          <script>var captchaConfig = { sceneId: 'scene-from-page' };</script>
+        </html>
+        """
+
+    async def fake_build_action(*_args, **_kwargs):
+        return AnswerAction(question_num=1, kind="choice", selected_indices=(0,), record_type="single")
+
+    async def fake_post(*_args, **kwargs):
+        captured.update(kwargs)
+        return _FakeResponse(text="success")
+
+    monkeypatch.setattr(wjx_http, "_load_wjx_page", fake_load)
+    monkeypatch.setattr(wjx_http, "build_answer_action", fake_build_action)
+    monkeypatch.setattr(wjx_http.http_client, "apost", fake_post)
+
+    ok = await wjx_http.brush_wjx_http(config, state, user_agent="UA")
+
+    assert ok is True
+    assert captured["data"] == {"submitdata": "1$1", "sceneId": "scene-from-page"}
 
 
 def test_qq_question_answer_builders_cover_choice_text_and_matrix() -> None:
@@ -1159,11 +1206,14 @@ def test_wjx_submit_rejected_detects_submission_verification() -> None:
     config = ExecutionConfig(url="https://www.wjx.cn/vm/demo.aspx", survey_provider="wjx")
 
     assert wjx_http.is_wjx_submission_verification_response("7〒需要安全校验，请重新提交！")
+    assert wjx_http.is_wjx_submission_verification_response("22〒请输入验证码")
     assert not wjx_http.is_wjx_submission_verification_response("请先完成智能验证")
     assert not wjx_http.is_wjx_submission_verification_response("请先完成验证码校验后重新提交")
 
     with pytest.raises(SubmissionVerificationRequiredError, match="启用随机 IP"):
         wjx_http._raise_submit_rejected(config, "7〒需要安全校验，请重新提交！")
+    with pytest.raises(SubmissionVerificationRequiredError, match="启用随机 IP"):
+        wjx_http._raise_submit_rejected(config, "22〒请输入验证码")
 
     with pytest.raises(SubmissionVerificationRequiredError, match="更换随机 IP"):
         wjx_http._raise_submit_rejected(
@@ -1177,6 +1227,7 @@ def test_wjx_submit_response_classifier_keeps_verification_strict() -> None:
     assert wjx_http.classify_wjx_submit_response("10〒/joinnew/complete.aspx") == wjx_http.WjxSubmitResult.SUCCESS
     assert wjx_http.classify_wjx_submit_response("success") == wjx_http.WjxSubmitResult.SUCCESS
     assert wjx_http.classify_wjx_submit_response("7〒需要安全校验，请重新提交！") == wjx_http.WjxSubmitResult.VERIFICATION
+    assert wjx_http.classify_wjx_submit_response("22〒请输入验证码") == wjx_http.WjxSubmitResult.VERIFICATION
     assert wjx_http.classify_wjx_submit_response("请先完成智能验证") == wjx_http.WjxSubmitResult.REJECTED
     assert wjx_http.classify_wjx_submit_response("9〒10〒您提交的答案不符合要求，请检查并修改后重新提交！") == wjx_http.WjxSubmitResult.REJECTED
 

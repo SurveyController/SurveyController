@@ -30,7 +30,7 @@ from .constants import (
     _get_entry_type_label,
 )
 from .question_media_preview import QuestionMediaStrip
-from .utils import _apply_label_color, _shorten_text, resolve_display_question_num
+from .utils import _apply_label_color, _shorten_text, resolve_config_question_num
 from .wizard_validation import (
     validate_before_accept,
     validate_non_zero_weights,
@@ -162,12 +162,12 @@ class WizardCardsMixin:
 
     def _format_question_label(self, idx: int) -> str:
         info = self._get_entry_info(idx)
-        qnum = resolve_display_question_num(info, idx + 1)
+        qnum = resolve_config_question_num(info, idx + 1)
         return f"第{qnum or idx + 1}题"
 
     def _format_compact_question_label(self, idx: int) -> str:
         info = self._get_entry_info(idx)
-        qnum = resolve_display_question_num(info, idx + 1)
+        qnum = resolve_config_question_num(info, idx + 1)
         return f"{qnum or idx + 1}."
 
     def _media_items_for(
@@ -327,7 +327,7 @@ class WizardCardsMixin:
     ) -> CardWidget:
         """构建单个题目的配置卡片。"""
         info_entry = self._get_entry_info(idx)
-        qnum = str(resolve_display_question_num(info_entry, idx + 1) or "")
+        qnum = str(resolve_config_question_num(info_entry, idx + 1) or "")
         title_text = str(info_entry.get("title") or "").strip()
         option_texts = [self._display_text_for_option(idx, i, str(text or "")) for i, text in enumerate(list(info_entry.get("option_texts") or []))]
         row_texts = [self._display_text_for_row(idx, i, str(text or "")) for i, text in enumerate(list(info_entry.get("row_texts") or []))]

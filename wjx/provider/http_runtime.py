@@ -39,6 +39,10 @@ from wjx.provider.parser import _parse_wjx_html, _raise_wjx_page_state_errors
 WJX_SUBMISSION_VERIFICATION_MESSAGE = "问卷星触发智能验证，当前链路已停止。请启用随机 IP 后再提交。"
 WJX_PROXY_SUBMISSION_VERIFICATION_MESSAGE = "问卷星触发智能验证，当前随机 IP 已被风控，正在更换随机 IP 重试。"
 _WJX_SUBMISSION_VERIFICATION_TEXT = "需要安全校验，请重新提交"
+_WJX_SUBMISSION_VERIFICATION_MARKERS = (
+    _WJX_SUBMISSION_VERIFICATION_TEXT,
+    "请输入验证码",
+)
 
 
 class WjxSubmitResult:
@@ -61,6 +65,12 @@ _WJX_NOW_TIME_PATTERNS = (
     re.compile(r'var\s+nowTime\s*=\s*["\']([^"\']+)["\']', re.IGNORECASE),
     re.compile(r'var\s+interviewStartTime\s*=\s*["\']([^"\']+)["\']', re.IGNORECASE),
 )
+_WJX_SCENE_ID_PATTERNS = (
+    re.compile(r'\bsceneId\s*[:=]\s*["\']([^"\']+)["\']', re.IGNORECASE),
+    re.compile(r'\bscene_id\s*[:=]\s*["\']([^"\']+)["\']', re.IGNORECASE),
+    re.compile(r'\bdata-scene-id\s*=\s*["\']([^"\']+)["\']', re.IGNORECASE),
+)
+_WJX_DEFAULT_SCENE_ID = "q0hcfsca"
 
 
 def _proxy_arg(proxy_address: str | None) -> Any:
@@ -108,6 +118,20 @@ def _extract_wjx_starttime_seconds(page_html: str) -> int | None:
             except ValueError:
                 continue
     return None
+
+
+def _extract_wjx_scene_id(page_html: str) -> str:
+    text = html_lib.unescape(str(page_html or ""))
+    if not text:
+        return _WJX_DEFAULT_SCENE_ID
+    for pattern in _WJX_SCENE_ID_PATTERNS:
+        match = pattern.search(text)
+        if not match:
+            continue
+        value = str(match.group(1) or "").strip()
+        if value:
+            return value
+    return _WJX_DEFAULT_SCENE_ID
 
 
 def _resolve_user_agent(user_agent: str | None) -> str:
@@ -238,7 +262,7 @@ def is_wjx_submission_verification_response(response_text: str) -> bool:
     text = str(response_text or "").strip()
     if not text:
         return False
-    return _WJX_SUBMISSION_VERIFICATION_TEXT in text
+    return any(marker in text for marker in _WJX_SUBMISSION_VERIFICATION_MARKERS)
 
 
 def classify_wjx_submit_response(response_text: str) -> str:
@@ -414,6 +438,7 @@ async def brush_wjx_http(
     current_ms = int(time.time() * 1000)
     ktimes = _sample_ktimes(config)
     start_seconds = _extract_wjx_starttime_seconds(page_html) or int(current_ms / 1000)
+    scene_id = _extract_wjx_scene_id(page_html)
     jqnonce = str(uuid.uuid4())
     domain = _submit_domain(config.url)
     submit_url = f"https://{domain}/joinnew/processjq.ashx"
@@ -444,7 +469,7 @@ async def brush_wjx_http(
     response = await http_client.apost(
         submit_url,
         params=params,
-        data={"submitdata": submitdata, "sceneId": "q0hcfsca"},
+        data={"submitdata": submitdata, "sceneId": scene_id},
         headers={
             **headers,
             "Accept": "text/plain, */*; q=0.01",

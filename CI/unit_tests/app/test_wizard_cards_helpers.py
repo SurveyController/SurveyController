@@ -72,8 +72,8 @@ class WizardCardsHelperTests:
 
         assert host._resolve_matrix_weights(QuestionEntry("matrix", [[0, 2], [3]], custom_weights=[[1, -2, 9]], rows=2), 2, 2) == [[1.0, 0.0], [1.0, 0.0]]
         assert host._resolve_matrix_weights(QuestionEntry("matrix", [0, 0, 3], rows=2), 2, 2) == [[1.0, 1.0], [1.0, 1.0]]
-        assert host._format_question_label(0) == "第21题"
-        assert host._format_compact_question_label(0) == "21."
+        assert host._format_question_label(0) == "第11题"
+        assert host._format_compact_question_label(0) == "11."
         assert host._media_items_for(0, "title")[0]["scope"] == "title"
         assert host._display_text_for_option(0, 1, "") == "选项 2"
         assert host._display_text_for_row(0, 0, "") == "第 1 行"

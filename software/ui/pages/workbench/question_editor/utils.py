@@ -122,6 +122,18 @@ def resolve_display_question_num(info: Any, fallback: Any = None) -> Optional[in
     return _normalize_question_num(fallback)
 
 
+def resolve_config_question_num(info: Any, fallback: Any = None) -> Optional[int]:
+    raw_num = None
+    try:
+        raw_num = info.get("num") if hasattr(info, "get") else getattr(info, "num", None)
+    except Exception:
+        raw_num = None
+    normalized = _normalize_question_num(raw_num)
+    if normalized is not None:
+        return normalized
+    return _normalize_question_num(fallback)
+
+
 def _normalize_question_title(raw: Any) -> str:
     try:
         text = str(raw or "").strip()
