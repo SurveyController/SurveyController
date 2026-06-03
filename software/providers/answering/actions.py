@@ -15,6 +15,7 @@ class AnswerAction:
     input_type: str = ""
     selected_indices: tuple[int, ...] = ()
     matrix_indices: tuple[int, ...] = ()
+    scalar_value: Optional[int] = None
     text_values: tuple[str, ...] = ()
     slider_value: Optional[float] = None
     option_fill_texts: tuple[tuple[int, str], ...] = ()
@@ -39,6 +40,7 @@ def action_payload(action: AnswerAction) -> dict[str, Any]:
         "inputType": str(action.input_type or ""),
         "selectedIndices": [int(item) for item in action.selected_indices],
         "matrixIndices": [int(item) for item in action.matrix_indices],
+        "scalarValue": action.scalar_value,
         "textValues": [str(item or "") for item in action.text_values],
         "sliderValue": action.slider_value,
         "optionFillTexts": [

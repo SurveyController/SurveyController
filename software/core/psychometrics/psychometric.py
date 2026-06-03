@@ -270,7 +270,7 @@ def build_psychometric_plan(
 
         choices[_build_choice_key(item.question_index, item.row_index)] = item.choice_index_for_score(score_index)
 
-    logger.info(
+    logger.debug(
         "心理测量计划已启用 | 目标α=%.2f 题数=%d θ=%.2f σ_e=%.2f 主方向=%s 反向题=%d",
         target_alpha,
         k,

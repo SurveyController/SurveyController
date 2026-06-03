@@ -14,6 +14,7 @@ from urllib.parse import urlparse
 
 import software.network.http as http_client
 from software.app.config import DEFAULT_HTTP_HEADERS, DEFAULT_USER_AGENT, USER_AGENT_PRESETS
+from software.core.ai.batch_runtime import prefill_free_ai_answers_for_questions
 from software.core.modes.duration_control import sample_answer_duration_seconds
 from software.core.persona.context import record_answer
 from software.core.questions.distribution import record_pending_distribution_choice
@@ -338,6 +339,12 @@ async def _build_action_plan(
         if bool(getattr(question, "unsupported", False)):
             raise RuntimeError(f"问卷星第{question.num}题暂不支持：{question.unsupported_reason or question.type_code}")
 
+    await prefill_free_ai_answers_for_questions(
+        questions,
+        ctx,
+        thread_name=thread_name,
+    )
+
     async def _build_action(question: SurveyQuestionMeta) -> AnswerAction | None:
         if stop_signal is not None and stop_signal.is_set():
             return None
@@ -382,96 +389,98 @@ async def brush_wjx_http(
 ) -> bool:
     if stop_signal is not None and stop_signal.is_set():
         return False
+    try:
+        shortid = _shortid_from_url(config.url)
+        proxies = _proxy_arg(proxy_address)
+        if str(proxy_address or "").strip():
+            logging.debug("问卷星 HTTP 会话使用随机IP：%s", mask_proxy_for_log(proxy_address))
+        user_agent_value = _resolve_user_agent(user_agent)
+        headers = {
+            **DEFAULT_HTTP_HEADERS,
+            "User-Agent": user_agent_value,
+            "Referer": config.url,
+        }
+        page_html = await _load_wjx_page(config.url, headers=headers, proxies=proxies)
 
-    shortid = _shortid_from_url(config.url)
-    proxies = _proxy_arg(proxy_address)
-    if str(proxy_address or "").strip():
-        logging.info("问卷星 HTTP 会话使用随机IP：%s", mask_proxy_for_log(proxy_address))
-    user_agent_value = _resolve_user_agent(user_agent)
-    headers = {
-        **DEFAULT_HTTP_HEADERS,
-        "User-Agent": user_agent_value,
-        "Referer": config.url,
-    }
-    page_html = await _load_wjx_page(config.url, headers=headers, proxies=proxies)
+        await update_http_submit_step(ctx, thread_name, "生成答案")
+        plan = await _build_action_plan(
+            config,
+            ctx,
+            psycho_plan=psycho_plan,
+            stop_signal=stop_signal,
+            thread_name=thread_name,
+        )
+        actions = list(plan.actions)
+        if not actions:
+            return False
+        for action in actions:
+            _record_action(ctx, action)
+        submitdata = _submitdata_from_actions(
+            actions,
+            questions=_question_items(config),
+            skipped_question_nums=plan.skipped_question_nums,
+        )
+        if not bool(getattr(config, "submit_enabled", True)):
+            logging.info("问卷星 HTTP 单测已生成答案，未提交。")
+            return True
 
-    await update_http_submit_step(ctx, thread_name, "生成答案")
-    plan = await _build_action_plan(
-        config,
-        ctx,
-        psycho_plan=psycho_plan,
-        stop_signal=stop_signal,
-        thread_name=thread_name,
-    )
-    actions = list(plan.actions)
-    if not actions:
-        return False
-    for action in actions:
-        _record_action(ctx, action)
-    submitdata = _submitdata_from_actions(
-        actions,
-        questions=_question_items(config),
-        skipped_question_nums=plan.skipped_question_nums,
-    )
-    if not bool(getattr(config, "submit_enabled", True)):
-        logging.info("问卷星 HTTP 单测已生成答案，未提交。")
+        current_ms = int(time.time() * 1000)
+        ktimes = _sample_ktimes(config)
+        start_seconds, ktimes = _resolve_wjx_submit_timing(
+            page_html=page_html,
+            current_ms=current_ms,
+            sampled_ktimes=ktimes,
+        )
+        scene_id = _extract_wjx_scene_id(page_html)
+        jqnonce = str(uuid.uuid4())
+        domain = _submit_domain(config.url)
+        submit_url = f"https://{domain}/joinnew/processjq.ashx"
+        params = {
+            "shortid": shortid,
+            "starttime": _format_wjx_starttime(start_seconds),
+            "cst": str(start_seconds * 1000),
+            "source": "directphone",
+            "submittype": "1",
+            "ktimes": str(ktimes),
+            "rn": str(2000000000 + random.random() * 100000000),
+            "jcn": shortid,
+            "nw": "1",
+            "jwt": "4",
+            "jpm": "62",
+            "capt": "2",
+            "t": str(current_ms),
+            "wxfs": "100",
+            "jqnonce": jqnonce,
+            "jqsign": _build_jqsign(jqnonce, ktimes),
+            "access_token": "1",
+            "openid": str(random.randint(100000000, 999999999)),
+            "unionId": str(random.randint(100000000, 999999999)),
+            "wxappid": "wx8fe84c5d52db247a",
+            "iwx": "1",
+        }
+        await update_http_submit_step(ctx, thread_name, "提交问卷")
+        response = await http_client.apost(
+            submit_url,
+            params=params,
+            data={"submitdata": submitdata, "sceneId": scene_id},
+            headers={
+                **headers,
+                "Accept": "text/plain, */*; q=0.01",
+                "Content-Type": "application/x-www-form-urlencoded; charset=UTF-8",
+                "Origin": f"https://{domain}",
+                "X-Requested-With": "XMLHttpRequest",
+            },
+            timeout=_WJX_SUBMIT_TIMEOUT_SECONDS,
+            proxies=proxies,
+        )
+        response.raise_for_status()
+        await update_http_submit_step(ctx, thread_name, "校验结果")
+        response_text = str(response.text or "").strip()
+        if classify_wjx_submit_response(response_text) != WjxSubmitResult.SUCCESS:
+            _raise_submit_rejected(config, response_text, proxy_address=proxy_address)
         return True
-
-    current_ms = int(time.time() * 1000)
-    ktimes = _sample_ktimes(config)
-    start_seconds, ktimes = _resolve_wjx_submit_timing(
-        page_html=page_html,
-        current_ms=current_ms,
-        sampled_ktimes=ktimes,
-    )
-    scene_id = _extract_wjx_scene_id(page_html)
-    jqnonce = str(uuid.uuid4())
-    domain = _submit_domain(config.url)
-    submit_url = f"https://{domain}/joinnew/processjq.ashx"
-    params = {
-        "shortid": shortid,
-        "starttime": _format_wjx_starttime(start_seconds),
-        "cst": str(start_seconds * 1000),
-        "source": "directphone",
-        "submittype": "1",
-        "ktimes": str(ktimes),
-        "rn": str(2000000000 + random.random() * 100000000),
-        "jcn": shortid,
-        "nw": "1",
-        "jwt": "4",
-        "jpm": "62",
-        "capt": "2",
-        "t": str(current_ms),
-        "wxfs": "100",
-        "jqnonce": jqnonce,
-        "jqsign": _build_jqsign(jqnonce, ktimes),
-        "access_token": "1",
-        "openid": str(random.randint(100000000, 999999999)),
-        "unionId": str(random.randint(100000000, 999999999)),
-        "wxappid": "wx8fe84c5d52db247a",
-        "iwx": "1",
-    }
-    await update_http_submit_step(ctx, thread_name, "提交问卷")
-    response = await http_client.apost(
-        submit_url,
-        params=params,
-        data={"submitdata": submitdata, "sceneId": scene_id},
-        headers={
-            **headers,
-            "Accept": "text/plain, */*; q=0.01",
-            "Content-Type": "application/x-www-form-urlencoded; charset=UTF-8",
-            "Origin": f"https://{domain}",
-            "X-Requested-With": "XMLHttpRequest",
-        },
-        timeout=_WJX_SUBMIT_TIMEOUT_SECONDS,
-        proxies=proxies,
-    )
-    response.raise_for_status()
-    await update_http_submit_step(ctx, thread_name, "校验结果")
-    response_text = str(response.text or "").strip()
-    if classify_wjx_submit_response(response_text) != WjxSubmitResult.SUCCESS:
-        _raise_submit_rejected(config, response_text, proxy_address=proxy_address)
-    return True
+    finally:
+        ctx.clear_free_ai_prefill_answers(thread_name)
 
 
 __all__ = [

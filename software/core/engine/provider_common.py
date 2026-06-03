@@ -104,7 +104,7 @@ def provider_run_context(
             for name, diagnostic in diagnostics.items()
             if not bool(getattr(diagnostic, "skipped", False))
         ]
-        logging.info(
+        logging.debug(
             "本轮启用联合信效度计划：样本槽位=%d，维度数=%d，锁定题目数=%d，目标α=%.2f，维度=%s",
             int(reserved_sample_index or 0) + 1,
             len(active_dimensions),

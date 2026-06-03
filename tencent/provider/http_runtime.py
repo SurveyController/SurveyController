@@ -10,6 +10,7 @@ from typing import Any, Mapping
 
 import software.network.http as http_client
 from software.app.config import DEFAULT_HTTP_HEADERS, DEFAULT_USER_AGENT
+from software.core.ai.batch_runtime import prefill_free_ai_answers_for_questions
 from software.core.modes.duration_control import sample_answer_duration_seconds
 from software.core.persona.context import record_answer
 from software.core.questions.distribution import record_pending_distribution_choice
@@ -72,9 +73,24 @@ def _raw_questions_by_id(questions: list[Any]) -> dict[str, Mapping[str, Any]]:
 
 def _option_items(raw_question: Mapping[str, Any]) -> list[Mapping[str, Any]]:
     options = raw_question.get("options")
-    if not isinstance(options, list):
+    if isinstance(options, list):
+        return [item for item in options if isinstance(item, Mapping)]
+
+    provider_type = str(raw_question.get("type") or "").strip()
+    if provider_type not in {"star", "nps", "matrix_star"}:
         return []
-    return [item for item in options if isinstance(item, Mapping)]
+    try:
+        count = int(raw_question.get("star_num") or 0)
+    except Exception:
+        count = 0
+    if count <= 0:
+        return []
+    raw_start = raw_question.get("star_begin_num")
+    try:
+        start = int(raw_start) if raw_start is not None else (0 if provider_type == "nps" else 1)
+    except Exception:
+        start = 0 if provider_type == "nps" else 1
+    return [{"id": "", "text": str(start + index)} for index in range(count)]
 
 
 def _option_answer(raw_option: Mapping[str, Any], *, checked: bool) -> dict[str, Any]:
@@ -82,6 +98,34 @@ def _option_answer(raw_option: Mapping[str, Any], *, checked: bool) -> dict[str,
         "id": str(raw_option.get("id") or "").strip(),
         "text": str(raw_option.get("text") or "").strip(),
         "checked": 1 if checked else 0,
+    }
+
+
+def _score_question_answer(raw_question: Mapping[str, Any], action: AnswerAction) -> dict[str, Any]:
+    provider_type = str(raw_question.get("type") or "").strip()
+    option_items = _option_items(raw_question)
+    if not option_items:
+        raise RuntimeError(f"腾讯问卷第{int(action.question_num or 0)}题没有可提交的评分选项")
+    selected_index: int | None = action.scalar_value
+    if selected_index is None and action.selected_indices:
+        selected_index = int(action.selected_indices[0])
+    if selected_index is None:
+        normalized_index = -1
+    else:
+        try:
+            normalized_index = int(selected_index)
+        except Exception:
+            normalized_index = -1
+    if normalized_index < 0 or normalized_index >= len(option_items):
+        raise RuntimeError(f"腾讯问卷第{int(action.question_num or 0)}题没有生成评分答案")
+    selected_option = option_items[normalized_index]
+    answer_value = str(selected_option.get("id") or "").strip() or str(selected_option.get("text") or "").strip()
+    if not answer_value:
+        answer_value = str(normalized_index)
+    return {
+        "id": str(raw_question.get("id") or action.question_id).strip(),
+        "type": provider_type,
+        "answer": answer_value,
     }
 
 
@@ -108,36 +152,63 @@ def _text_question_answer(raw_question: Mapping[str, Any], action: AnswerAction)
     }
 
 
-def _matrix_question_answer(raw_question: Mapping[str, Any], action: AnswerAction) -> dict[str, Any]:
+def _matrix_question_answer(raw_question: Mapping[str, Any], action: AnswerAction) -> list[dict[str, Any]]:
     rows = raw_question.get("sub_titles")
-    normalized_rows: list[dict[str, Any]] = []
+    normalized_answers: list[dict[str, Any]] = []
+    question_id = str(raw_question.get("id") or action.question_id).strip()
+    provider_type = str(raw_question.get("type") or "").strip()
     if isinstance(rows, list):
         option_template = _option_items(raw_question)
+        if not option_template:
+            raise RuntimeError(f"腾讯问卷第{int(action.question_num or 0)}题没有可提交的矩阵列")
         for row_index, row in enumerate(rows):
             if not isinstance(row, Mapping):
                 continue
             selected_index = action.matrix_indices[row_index] if row_index < len(action.matrix_indices) else -1
-            normalized_rows.append(
+            try:
+                selected_index = int(selected_index)
+            except Exception:
+                selected_index = -1
+            if selected_index < 0 or selected_index >= len(option_template):
+                raise RuntimeError(f"腾讯问卷第{int(action.question_num or 0)}题第{row_index + 1}行没有生成矩阵答案")
+            selected_option = option_template[selected_index]
+            row_id = str(row.get("id") or "").strip()
+            if provider_type == "matrix_radio":
+                option_id = str(selected_option.get("id") or "").strip()
+                if not option_id:
+                    raise RuntimeError(f"腾讯问卷第{int(action.question_num or 0)}题第{row_index + 1}行缺少矩阵列 id")
+                if row_id:
+                    composite_id = f"{question_id}_{row_id}_{option_id}"
+                else:
+                    composite_id = f"{question_id}_{option_id}"
+                answer_value = "on"
+            else:
+                score_value = str(selected_option.get("text") or "").strip()
+                if not score_value:
+                    score_value = str(selected_index + 1)
+                if row_id:
+                    composite_id = f"{question_id}-{row_id}-{score_value}"
+                else:
+                    composite_id = f"{question_id}-{score_value}"
+                answer_value = "on"
+            normalized_answers.append(
                 {
-                    "id": str(row.get("id") or "").strip(),
-                    "text": str(row.get("text") or "").strip(),
-                    "options": [
-                        _option_answer(option, checked=index == int(selected_index))
-                        for index, option in enumerate(option_template)
-                    ],
+                    "id": composite_id,
+                    "type": provider_type,
+                    "answer": answer_value,
                 }
             )
-    return {
-        "id": str(raw_question.get("id") or action.question_id).strip(),
-        "type": str(raw_question.get("type") or "").strip(),
-        "sub_titles": normalized_rows,
-    }
+    if not normalized_answers:
+        raise RuntimeError(f"腾讯问卷第{int(action.question_num or 0)}题没有生成矩阵答案")
+    return normalized_answers
 
 
-def _question_answer(raw_question: Mapping[str, Any], action: AnswerAction) -> dict[str, Any]:
+def _question_answer(raw_question: Mapping[str, Any], action: AnswerAction) -> dict[str, Any] | list[dict[str, Any]]:
     provider_type = str(raw_question.get("type") or "").strip()
     if action.kind == "text" or provider_type in {"text", "textarea", "number"}:
         return _text_question_answer(raw_question, action)
+    if provider_type in {"star", "nps"}:
+        return _score_question_answer(raw_question, action)
     if action.kind == "matrix" or provider_type.startswith("matrix_"):
         return _matrix_question_answer(raw_question, action)
     return _choice_question_answer(raw_question, action)
@@ -205,140 +276,160 @@ async def brush_qq_http(
 ) -> bool:
     if stop_signal is not None and stop_signal.is_set():
         return False
-
-    survey_id, hash_value = _extract_qq_identifiers(config.url)
-    page_url = _build_qq_survey_page_url(survey_id, hash_value)
-    headers = _headers(page_url, user_agent)
-    proxies = _proxy_arg(proxy_address)
-    answer_session_id, _session_data, raw_questions = await _fetch_submit_source(
-        survey_id,
-        hash_value,
-        headers=headers,
-        proxies=proxies,
-    )
-
-    metadata = _metadata_by_provider_id(config)
-    raw_by_id = _raw_questions_by_id(raw_questions)
-    questions = [
-        question
-        for raw_question in raw_questions
-        for question_id in [str(raw_question.get("id") or "").strip() if isinstance(raw_question, Mapping) else ""]
-        for question in [metadata.get(question_id)]
-        if question is not None
-    ]
-
-    await update_http_submit_step(ctx, thread_name, "生成答案")
-    for question in questions:
-        if stop_signal is not None and stop_signal.is_set():
-            return False
-        if bool(getattr(question, "unsupported", False)):
-            raise RuntimeError(f"腾讯问卷第{question.num}题暂不支持：{question.unsupported_reason or question.type_code}")
-
-    async def _build_action(question: SurveyQuestionMeta) -> AnswerAction | None:
-        if stop_signal is not None and stop_signal.is_set():
-            return None
-        return await build_answer_action(None, question, ctx, psycho_plan=psycho_plan)
-
-    plan = await build_http_logic_plan(
-        questions,
-        build_action=_build_action,
-    )
-    actions = list(plan.actions)
-    action_by_question_id = {
-        str(action.question_id or "").strip(): action
-        for action in actions
-        if str(action.question_id or "").strip()
-    }
-    if not action_by_question_id:
-        raise RuntimeError("腾讯问卷没有生成可提交答案")
-
-    page_questions: OrderedDict[str, list[dict[str, Any]]] = OrderedDict()
-    for raw_question in raw_questions:
-        if stop_signal is not None and stop_signal.is_set():
-            return False
-        question_id = str(raw_question.get("id") or "").strip() if isinstance(raw_question, Mapping) else ""
-        if not question_id:
-            continue
-        action = action_by_question_id.get(question_id)
-        if action is None:
-            continue
-        raw_source = raw_by_id.get(question_id, raw_question)
-        page_id = str((raw_source.get("page_id") if isinstance(raw_source, Mapping) else "") or "").strip() or "p-1-abcd"
-        page_questions.setdefault(page_id, []).append(_question_answer(raw_source, action))
-
-    if not page_questions:
-        raise RuntimeError("腾讯问卷没有生成可提交答案")
-
-    for action in actions:
-        _record_action(ctx, action)
-
     try:
-        duration = int(
-            sample_answer_duration_seconds(
-                config.answer_duration_range_seconds,
-                survey_provider="qq",
-                default_unconfigured_seconds=90,
-            )
-            or 90
+        survey_id, hash_value = _extract_qq_identifiers(config.url)
+        page_url = _build_qq_survey_page_url(survey_id, hash_value)
+        headers = _headers(page_url, user_agent)
+        proxies = _proxy_arg(proxy_address)
+        answer_session_id, _session_data, raw_questions = await _fetch_submit_source(
+            survey_id,
+            hash_value,
+            headers=headers,
+            proxies=proxies,
         )
-    except Exception:
-        duration = 90
-    duration = max(1, duration)
-    user_agent_value = str(user_agent or "").strip() or DEFAULT_USER_AGENT
-    submit_body = {
-        "survey_id": int(survey_id),
-        "hash": hash_value,
-        "answer_survey": {
-            "duration": duration,
-            "ua": user_agent_value,
-            "referrer": "",
-            "uid": str(uuid.uuid4()),
-            "sid": str(uuid.uuid4()),
-            "openid": "",
-            "latitude": None,
-            "longitude": None,
-            "is_update": False,
-            "locale": "zhs",
-            "pages": [
-                {
-                    "id": page_id,
-                    "questions": questions_on_page,
-                }
-                for page_id, questions_on_page in page_questions.items()
-            ],
-        },
-    }
-    if not bool(getattr(config, "submit_enabled", True)):
-        logging.info("腾讯问卷 HTTP 单测已生成答案，未提交。")
-        return True
 
-    submit_headers = {
-        **DEFAULT_HTTP_HEADERS,
-        "User-Agent": user_agent_value,
-        "Accept": "application/json, text/plain, */*",
-        "Content-Type": "application/json;charset=UTF-8",
-        "Origin": "https://wj.qq.com",
-        "Referer": page_url,
-    }
-    if answer_session_id:
-        submit_headers["X-Answer-Session"] = answer_session_id
-    await update_http_submit_step(ctx, thread_name, "提交问卷")
-    response = await http_client.apost(
-        f"https://wj.qq.com/api/v2/respondent/surveys/{survey_id}/answers",
-        params={"pv_uid": str(uuid.uuid4()), "hash": hash_value, "_": str(int(time.time() * 1000))},
-        json=submit_body,
-        headers=submit_headers,
-        timeout=_QQ_SUBMIT_TIMEOUT_SECONDS,
-        proxies=proxies,
-    )
-    response.raise_for_status()
-    await update_http_submit_step(ctx, thread_name, "校验结果")
-    payload = response.json()
-    if not isinstance(payload, dict):
-        raise RuntimeError("腾讯问卷提交返回了非 JSON 对象")
-    if classify_qq_submit_payload(payload) != QqSubmitResult.SUCCESS:
-        _raise_qq_submit_failed(payload)
-    return True
+        metadata = _metadata_by_provider_id(config)
+        raw_by_id = _raw_questions_by_id(raw_questions)
+        questions = [
+            question
+            for raw_question in raw_questions
+            for question_id in [str(raw_question.get("id") or "").strip() if isinstance(raw_question, Mapping) else ""]
+            for question in [metadata.get(question_id)]
+            if question is not None
+        ]
+
+        await update_http_submit_step(ctx, thread_name, "生成答案")
+        for question in questions:
+            if stop_signal is not None and stop_signal.is_set():
+                return False
+            if bool(getattr(question, "unsupported", False)):
+                raise RuntimeError(f"腾讯问卷第{question.num}题暂不支持：{question.unsupported_reason or question.type_code}")
+
+        await prefill_free_ai_answers_for_questions(
+            questions,
+            ctx,
+            thread_name=thread_name,
+        )
+
+        async def _build_action(question: SurveyQuestionMeta) -> AnswerAction | None:
+            if stop_signal is not None and stop_signal.is_set():
+                return None
+            return await build_answer_action(
+                None,
+                question,
+                ctx,
+                psycho_plan=psycho_plan,
+                thread_name=thread_name,
+            )
+
+        plan = await build_http_logic_plan(
+            questions,
+            build_action=_build_action,
+        )
+        actions = list(plan.actions)
+        action_by_question_id = {
+            str(action.question_id or "").strip(): action
+            for action in actions
+            if str(action.question_id or "").strip()
+        }
+        if not action_by_question_id:
+            raise RuntimeError("腾讯问卷没有生成可提交答案")
+
+        page_questions: OrderedDict[str, list[dict[str, Any]]] = OrderedDict()
+        for raw_question in raw_questions:
+            if stop_signal is not None and stop_signal.is_set():
+                return False
+            question_id = str(raw_question.get("id") or "").strip() if isinstance(raw_question, Mapping) else ""
+            if not question_id:
+                continue
+            action = action_by_question_id.get(question_id)
+            if action is None:
+                continue
+            raw_source = raw_by_id.get(question_id, raw_question)
+            page_id = str((raw_source.get("page_id") if isinstance(raw_source, Mapping) else "") or "").strip()
+            if not page_id:
+                raise RuntimeError(f"腾讯问卷第{int(action.question_num or 0)}题缺少 page_id")
+            question_answer = _question_answer(raw_source, action)
+            if isinstance(question_answer, list):
+                page_questions.setdefault(page_id, []).extend(question_answer)
+            else:
+                page_questions.setdefault(page_id, []).append(question_answer)
+
+        if not page_questions:
+            raise RuntimeError("腾讯问卷没有生成可提交答案")
+
+        for action in actions:
+            _record_action(ctx, action)
+
+        try:
+            duration = int(
+                sample_answer_duration_seconds(
+                    config.answer_duration_range_seconds,
+                    survey_provider="qq",
+                    default_unconfigured_seconds=90,
+                )
+                or 90
+            )
+        except Exception:
+            duration = 90
+        duration = max(1, duration)
+        user_agent_value = str(user_agent or "").strip() or DEFAULT_USER_AGENT
+        submit_body = {
+            "survey_id": int(survey_id),
+            "hash": hash_value,
+            "answer_survey": {
+                "duration": duration,
+                "ua": user_agent_value,
+                "referrer": "",
+                "uid": str(uuid.uuid4()),
+                "sid": str(uuid.uuid4()),
+                "openid": "",
+                "latitude": None,
+                "longitude": None,
+                "is_update": False,
+                "locale": "zhs",
+                "pages": [
+                    {
+                        "id": page_id,
+                        "questions": questions_on_page,
+                    }
+                    for page_id, questions_on_page in page_questions.items()
+                ],
+            },
+        }
+        if not bool(getattr(config, "submit_enabled", True)):
+            logging.info("腾讯问卷 HTTP 单测已生成答案，未提交。")
+            return True
+
+        submit_headers = {
+            **DEFAULT_HTTP_HEADERS,
+            "User-Agent": user_agent_value,
+            "Accept": "application/json, text/plain, */*",
+            "Content-Type": "application/json;charset=UTF-8",
+            "Origin": "https://wj.qq.com",
+            "Referer": page_url,
+        }
+        if answer_session_id:
+            submit_headers["X-Answer-Session"] = answer_session_id
+        await update_http_submit_step(ctx, thread_name, "提交问卷")
+        response = await http_client.apost(
+            f"https://wj.qq.com/api/v2/respondent/surveys/{survey_id}/answers",
+            params={"pv_uid": str(uuid.uuid4()), "hash": hash_value, "_": str(int(time.time() * 1000))},
+            json=submit_body,
+            headers=submit_headers,
+            timeout=_QQ_SUBMIT_TIMEOUT_SECONDS,
+            proxies=proxies,
+        )
+        response.raise_for_status()
+        await update_http_submit_step(ctx, thread_name, "校验结果")
+        payload = response.json()
+        if not isinstance(payload, dict):
+            raise RuntimeError("腾讯问卷提交返回了非 JSON 对象")
+        if classify_qq_submit_payload(payload) != QqSubmitResult.SUCCESS:
+            _raise_qq_submit_failed(payload)
+        return True
+    finally:
+        ctx.clear_free_ai_prefill_answers(thread_name)
 
 
 __all__ = ["QqSubmitResult", "brush_qq_http", "classify_qq_submit_payload"]

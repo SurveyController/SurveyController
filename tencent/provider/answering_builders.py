@@ -45,6 +45,7 @@ async def _build_qq_single_action(
     ctx: ExecutionState,
     *,
     psycho_plan: Optional[Any] = None,
+    thread_name: str = "",
 ) -> Optional[AnswerAction]:
     config = ctx.config
     current = int(question.num or 0)
@@ -93,6 +94,8 @@ async def _build_qq_single_action(
         question_title=str(question.title or ""),
         question_number=current,
         option_text=selected_text,
+        ctx=ctx,
+        thread_name=thread_name,
     )
     selected_texts = [f"{selected_text} / {fill_value}" if selected_text and fill_value else (fill_value or selected_text)]
     return AnswerAction(
@@ -112,6 +115,8 @@ async def _build_qq_text_action(
     question: SurveyQuestionMeta,
     config_index: int,
     ctx: ExecutionState,
+    *,
+    thread_name: str = "",
 ) -> Optional[AnswerAction]:
     config = ctx.config
     current = int(question.num or 0)
@@ -129,20 +134,26 @@ async def _build_qq_text_action(
     )
     ai_enabled = bool(config.text_ai_flags[config_index]) if config_index < len(config.text_ai_flags) else False
     if ai_enabled:
-        title = str(question.title or "")
-        description = str(question.description or "").strip()
-        ai_prompt = title.strip()
-        if description and description not in ai_prompt:
-            ai_prompt = f"{ai_prompt}\n补充说明：{description}"
-        try:
-            generated = await agenerate_ai_answer(ai_prompt, question_type="fill_blank", blank_count=1)
-        except AIRuntimeError as exc:
-            raise AIRuntimeError(f"腾讯问卷第{current}题 AI 生成失败：{exc}") from exc
-        text_values = (
-            [str(item or "").strip() or DEFAULT_FILL_TEXT for item in list(generated or [])]
-            if isinstance(generated, list)
-            else [str(generated or "").strip() or DEFAULT_FILL_TEXT]
-        )
+        cached_answers = ctx.get_free_ai_prefill_answer(thread_name, current)
+        if cached_answers:
+            text_values = [str(item or "").strip() or DEFAULT_FILL_TEXT for item in cached_answers]
+        else:
+            question_type = "multi_fill_blank" if blank_count > 1 else "fill_blank"
+            try:
+                generated = await agenerate_ai_answer(
+                    str(question.title or ""),
+                    question_type=question_type,
+                    blank_count=blank_count,
+                    description=str(question.description or ""),
+                    question_number=current,
+                )
+            except AIRuntimeError as exc:
+                raise AIRuntimeError(f"腾讯问卷第{current}题 AI 生成失败：{exc}") from exc
+            text_values = (
+                [str(item or "").strip() or DEFAULT_FILL_TEXT for item in list(generated or [])]
+                if isinstance(generated, list)
+                else [str(generated or "").strip() or DEFAULT_FILL_TEXT]
+            )
     if len(text_values) < blank_count:
         text_values.extend([text_values[-1] if text_values else DEFAULT_FILL_TEXT] * (blank_count - len(text_values)))
     return AnswerAction(
@@ -161,6 +172,7 @@ async def _build_qq_dropdown_action(
     ctx: ExecutionState,
     *,
     psycho_plan: Optional[Any],
+    thread_name: str = "",
 ) -> Optional[AnswerAction]:
     config = ctx.config
     current = int(question.num or 0)
@@ -208,6 +220,8 @@ async def _build_qq_dropdown_action(
         question_title=str(question.title or ""),
         question_number=current,
         option_text=selected_text,
+        ctx=ctx,
+        thread_name=thread_name,
     )
     selected_texts = [f"{selected_text} / {fill_value}" if selected_text and fill_value else (fill_value or selected_text)]
     return AnswerAction(
@@ -258,6 +272,7 @@ async def _build_qq_score_like_action(
         kind="choice",
         input_type="radio",
         selected_indices=(selected_index,),
+        scalar_value=selected_index,
         record_type="score",
         pending_distribution_choices=((selected_index, option_count, None),),
     )
@@ -268,6 +283,8 @@ async def _build_qq_multiple_action(
     question: SurveyQuestionMeta,
     config_index: int,
     ctx: ExecutionState,
+    *,
+    thread_name: str = "",
 ) -> Optional[AnswerAction]:
     config = ctx.config
     current = int(question.num or 0)
@@ -303,6 +320,8 @@ async def _build_qq_multiple_action(
                 question_title=str(question.title or ""),
                 question_number=current,
                 option_text=selected_text,
+                ctx=ctx,
+                thread_name=thread_name,
             )
             if fill_value:
                 fill_texts.append((option_idx, fill_value))
@@ -500,6 +519,7 @@ async def build_answer_action(
     ctx: ExecutionState,
     *,
     psycho_plan: Optional[Any],
+    thread_name: str = "",
 ) -> Optional[AnswerAction]:
     question_id = str(getattr(question, "provider_question_id", "") or "").strip()
     if not question_id:
@@ -521,13 +541,33 @@ async def build_answer_action(
     if not required_config_fields or not all(hasattr(ctx.config, field_name) for field_name in required_config_fields):
         return None
     if entry_type == "single":
-        return await _build_qq_single_action(driver, question, config_index, ctx, psycho_plan=psycho_plan)
+        return await _build_qq_single_action(
+            driver,
+            question,
+            config_index,
+            ctx,
+            psycho_plan=psycho_plan,
+            thread_name=thread_name,
+        )
     if entry_type == "multiple":
-        return await _build_qq_multiple_action(driver, question, config_index, ctx)
+        return await _build_qq_multiple_action(
+            driver,
+            question,
+            config_index,
+            ctx,
+            thread_name=thread_name,
+        )
     if entry_type == "dropdown":
-        return await _build_qq_dropdown_action(driver, question, config_index, ctx, psycho_plan=psycho_plan)
+        return await _build_qq_dropdown_action(
+            driver,
+            question,
+            config_index,
+            ctx,
+            psycho_plan=psycho_plan,
+            thread_name=thread_name,
+        )
     if entry_type in {"text", "multi_text"}:
-        return await _build_qq_text_action(question, config_index, ctx)
+        return await _build_qq_text_action(question, config_index, ctx, thread_name=thread_name)
     if entry_type in {"scale", "score"}:
         return await _build_qq_score_like_action(question, config_index, ctx, psycho_plan=psycho_plan)
     if entry_type == "matrix":

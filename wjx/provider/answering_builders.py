@@ -123,6 +123,8 @@ async def _build_wjx_single_action(
         question_title=str(question.title or ""),
         question_number=current,
         option_text=selected_text,
+        ctx=ctx,
+        thread_name=thread_name,
     )
     selected_texts = [f"{selected_text} / {fill_value}" if selected_text and fill_value else (fill_value or selected_text)]
     return AnswerAction(
@@ -204,6 +206,8 @@ async def _build_wjx_dropdown_action(
         question_title=str(question.title or ""),
         question_number=current,
         option_text=selected_text,
+        ctx=ctx,
+        thread_name=thread_name,
     )
     selected_texts = [f"{selected_text} / {fill_value}" if selected_text and fill_value else (fill_value or selected_text)]
     return AnswerAction(
@@ -240,21 +244,27 @@ async def _build_wjx_text_action(
         text_values = [str(reverse_fill_answer.text_value or "").strip() or DEFAULT_FILL_TEXT]
     else:
         ai_enabled = bool(config.text_ai_flags[config_index]) if config_index < len(config.text_ai_flags) else False
-        title = str(question.title or "").strip()
-        description = str(question.description or "").strip()
         if ai_enabled:
-            ai_prompt = title or f"第{current}题"
-            if description and description not in ai_prompt:
-                ai_prompt = f"{ai_prompt}\n补充说明：{description}"
-            try:
-                generated = await agenerate_ai_answer(ai_prompt, question_type="fill_blank", blank_count=blank_count)
-            except AIRuntimeError as exc:
-                raise AIRuntimeError(f"问卷星第{current}题 AI 生成失败：{exc}") from exc
-            text_values = (
-                [str(item or "").strip() or DEFAULT_FILL_TEXT for item in list(generated or [])]
-                if isinstance(generated, list)
-                else [str(generated or "").strip() or DEFAULT_FILL_TEXT]
-            )
+            cached_answers = ctx.get_free_ai_prefill_answer(thread_name, current)
+            if cached_answers:
+                text_values = [str(item or "").strip() or DEFAULT_FILL_TEXT for item in cached_answers]
+            else:
+                question_type = "multi_fill_blank" if blank_count > 1 else "fill_blank"
+                try:
+                    generated = await agenerate_ai_answer(
+                        str(question.title or ""),
+                        question_type=question_type,
+                        blank_count=blank_count,
+                        description=str(question.description or ""),
+                        question_number=current,
+                    )
+                except AIRuntimeError as exc:
+                    raise AIRuntimeError(f"问卷星第{current}题 AI 生成失败：{exc}") from exc
+                text_values = (
+                    [str(item or "").strip() or DEFAULT_FILL_TEXT for item in list(generated or [])]
+                    if isinstance(generated, list)
+                    else [str(generated or "").strip() or DEFAULT_FILL_TEXT]
+                )
         else:
             text_entry_types = list(getattr(ctx.config, "text_entry_types", []) or [])
             multi_text_blank_modes = list(getattr(ctx.config, "multi_text_blank_modes", []) or [])
@@ -373,6 +383,8 @@ async def _build_wjx_multiple_action(
                 question_title=str(question.title or ""),
                 question_number=current,
                 option_text=selected_text,
+                ctx=ctx,
+                thread_name=thread_name,
             )
             if fill_value:
                 fill_texts.append((option_idx, fill_value))

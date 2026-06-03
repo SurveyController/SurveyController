@@ -1,8 +1,8 @@
-"""AI 运行时辅助函数 - 调用 AI 模型生成答案"""
-import re
 import asyncio
-from typing import Optional, Union, List
 import logging
+import re
+from typing import List, Optional, Union
+
 from software.logging.log_utils import log_suppressed_exception
 
 from software.integrations.ai.client import agenerate_answer
@@ -71,23 +71,50 @@ def _cleanup_question_title(raw_title: str) -> str:
     return title.strip()
 
 
-async def agenerate_ai_answer(
+def build_ai_question_prompt(
     question_title: str,
     *,
-    question_type: str = "fill_blank",
-    blank_count: Optional[int] = None,
-) -> Union[str, List[str]]:
-    cleaned = _cleanup_question_title(question_title)
-    if not cleaned:
-        raise AIRuntimeError("题干为空，无法调用 AI")
+    description: str = "",
+    question_number: int = 0,
+) -> str:
+    title = _cleanup_question_title(question_title)
+    if not title:
+        title = f"第{int(question_number or 0)}题" if int(question_number or 0) > 0 else ""
+    extra_description = _normalize_text(description)
+    if extra_description and extra_description not in title:
+        title = f"{title}\n补充说明：{extra_description}" if title else extra_description
+    if not title:
+        return ""
 
     try:
         from software.core.persona.context import build_ai_context_prompt
         context_prompt = build_ai_context_prompt()
         if context_prompt:
-            cleaned = f"{context_prompt}\n\n请回答以下问卷问题：{cleaned}"
+            return f"{context_prompt}\n\n请回答以下问卷问题：{title}"
     except Exception as exc:
-        log_suppressed_exception("agenerate_ai_answer: from software.core.persona.context import build_ai_context_prompt", exc, level=logging.WARNING)
+        log_suppressed_exception(
+            "build_ai_question_prompt: from software.core.persona.context import build_ai_context_prompt",
+            exc,
+            level=logging.WARNING,
+        )
+    return title
+
+
+async def agenerate_ai_answer(
+    question_title: str,
+    *,
+    question_type: str = "fill_blank",
+    blank_count: Optional[int] = None,
+    description: str = "",
+    question_number: int = 0,
+) -> Union[str, List[str]]:
+    cleaned = build_ai_question_prompt(
+        question_title,
+        description=description,
+        question_number=question_number,
+    )
+    if not cleaned:
+        raise AIRuntimeError("题干为空，无法调用 AI")
 
     last_error: Exception | None = None
     for attempt in range(1, _AI_FILL_MAX_ATTEMPTS + 1):

@@ -37,7 +37,7 @@
 > [!TIP]
 > **安装包：** 前往 [发行版](https://github.com/SurveyController/SurveyController/releases/latest) 下载最新版本 .exe 安装包，安装后直接运行即可
 
-建议配合[教程文档](https://surveydoc.hungrym0.top/)食用。
+建议配合[教程文档](https://surveydoc.hungrym0.top/)食用。二开可前往 [SurveyCore](https://github.com/SurveyController/SurveyCore)
 
 ### 从源码运行
 
@@ -184,8 +184,8 @@ sequenceDiagram
 感谢以下贡献者对本项目的支持：
 
 <div style="display: flex; gap: 10px;">
-  <a href="https://github.com/shiahonb777">
-    <img src="https://github.com/shiahonb777.png" width="50" height="50" alt="shiahonb777" style="border-radius: 50%;" />
+  <a href="https://github.com/shiaho777">
+    <img src="https://github.com/shiaho777.png" width="50" height="50" alt="shiaho777" style="border-radius: 50%;" />
   </a>
   <a href="https://github.com/BingBuLiang">
     <img src="https://github.com/BingBuLiang.png" width="50" height="50" alt="BingBuLiang" style="border-radius: 50%;" />

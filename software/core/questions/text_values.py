@@ -6,6 +6,7 @@ from typing import Any, Optional, Sequence
 
 from software.app.config import DEFAULT_FILL_TEXT
 from software.core.ai.runtime import AIRuntimeError, agenerate_ai_answer
+from software.core.task import ExecutionState
 from software.core.questions.schema import (
     _TEXT_RANDOM_ID_CARD,
     _TEXT_RANDOM_ID_CARD_TOKEN,
@@ -34,6 +35,8 @@ async def resolve_option_fill_text_from_config(
     question_number: int = 0,
     option_text: Optional[str] = None,
     driver: Any = None,
+    ctx: Optional[ExecutionState] = None,
+    thread_name: str = "",
 ) -> Optional[str]:
     del driver
     raw_value = get_fill_text_from_config(fill_entries, option_index)
@@ -44,6 +47,10 @@ async def resolve_option_fill_text_from_config(
         return None
     if text != OPTION_FILL_AI_TOKEN:
         return resolve_dynamic_text_token(text)
+    if ctx is not None:
+        cached = ctx.get_free_ai_option_fill_prefill_answer(thread_name, question_number, option_index)
+        if cached:
+            return cached
 
     title = str(question_title or "").strip() or f"第{int(question_number or 0)}题"
     option_hint = str(option_text or "").strip()

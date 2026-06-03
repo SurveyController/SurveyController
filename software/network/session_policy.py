@@ -246,7 +246,7 @@ def _mark_proxy_in_use(ctx: ExecutionState, thread_name: str, lease: Optional[Pr
         return None
     if thread_name:
         ctx.mark_proxy_in_use(thread_name, lease)
-    logging.info(
+    logging.debug(
         "线程[%s] 已分配随机IP：%s（来源=%s）",
         thread_name or "?",
         mask_proxy_for_log(lease.address),

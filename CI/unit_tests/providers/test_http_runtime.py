@@ -197,7 +197,91 @@ def test_qq_question_answer_builders_cover_choice_text_and_matrix() -> None:
 
     assert choice["options"][1]["checked"] == 1
     assert text["text"] == "hello"
-    assert matrix["sub_titles"][0]["options"][0]["checked"] == 1
+    assert matrix == [{"id": "q3_r1_o1", "type": "matrix_radio", "answer": "on"}]
+
+
+def test_qq_score_answer_uses_scalar_answer_field_for_nps() -> None:
+    score = qq_http._question_answer(
+        {
+            "id": "q8",
+            "type": "nps",
+            "star_begin_num": 0,
+            "star_num": 11,
+        },
+        AnswerAction(question_num=8, question_id="q8", kind="choice", selected_indices=(3,), scalar_value=3, record_type="score"),
+    )
+
+    assert score == {
+        "id": "q8",
+        "type": "nps",
+        "answer": "3",
+    }
+
+
+def test_qq_score_answer_rejects_missing_score_choice() -> None:
+    with pytest.raises(RuntimeError, match="没有生成评分答案"):
+        qq_http._question_answer(
+            {
+                "id": "q8",
+                "type": "star",
+                "star_begin_num": 1,
+                "star_num": 5,
+            },
+            AnswerAction(question_num=8, question_id="q8", kind="choice", scalar_value=9, record_type="score"),
+        )
+
+
+def test_qq_matrix_star_answer_builds_star_options_without_raw_options() -> None:
+    matrix = qq_http._question_answer(
+        {
+            "id": "q4",
+            "type": "matrix_star",
+            "star_begin_num": 1,
+            "star_num": 5,
+            "sub_titles": [{"id": "g1", "text": "薪资福利"}],
+        },
+        AnswerAction(question_num=4, question_id="q4", kind="matrix", matrix_indices=(2,), record_type="matrix"),
+    )
+
+    assert matrix == [{"id": "q4-g1-3", "type": "matrix_star", "answer": "on"}]
+
+
+def test_qq_matrix_radio_answer_uses_question_row_id_and_option_id() -> None:
+    matrix = qq_http._question_answer(
+        {
+            "id": "q16",
+            "type": "matrix_radio",
+            "options": [{"id": "o1", "text": "较弱"}, {"id": "o2", "text": "一般"}],
+            "sub_titles": [{"id": "g1", "text": "专业实践能力"}, {"id": "g2", "text": "外语能力"}],
+        },
+        AnswerAction(question_num=16, question_id="q16", kind="matrix", matrix_indices=(1, 0), record_type="matrix"),
+    )
+
+    assert matrix == [
+        {"id": "q16_g1_o2", "type": "matrix_radio", "answer": "on"},
+        {"id": "q16_g2_o1", "type": "matrix_radio", "answer": "on"},
+    ]
+
+
+def test_qq_matrix_radio_answer_rejects_missing_option_id() -> None:
+    with pytest.raises(RuntimeError, match="缺少矩阵列 id"):
+        qq_http._question_answer(
+            {
+                "id": "q16",
+                "type": "matrix_radio",
+                "options": [{"text": "较弱"}, {"text": "一般"}],
+                "sub_titles": [{"id": "g1", "text": "专业实践能力"}],
+            },
+            AnswerAction(question_num=16, question_id="q16", kind="matrix", matrix_indices=(1,), record_type="matrix"),
+        )
+
+
+def test_qq_matrix_answer_rejects_empty_business_answer() -> None:
+    with pytest.raises(RuntimeError, match="没有可提交的矩阵列"):
+        qq_http._question_answer(
+            {"id": "q4", "type": "matrix_radio", "sub_titles": [{"id": "g1", "text": "薪资福利"}]},
+            AnswerAction(question_num=4, question_id="q4", kind="matrix", matrix_indices=(0,), record_type="matrix"),
+        )
 
 
 def test_credamo_signature_headers_match_frontend_algorithm() -> None:
@@ -1000,7 +1084,7 @@ async def test_qq_http_runtime_skips_description_metadata(monkeypatch) -> None:
     assert ok is True
     assert built_questions == [6]
     submitted_questions = captured["json"]["answer_survey"]["pages"][0]["questions"]
-    assert [item["id"] for item in submitted_questions] == ["q6"]
+    assert submitted_questions == [{"id": "q6-r1-1", "type": "matrix_star", "answer": "on"}]
 
 
 @pytest.mark.asyncio
@@ -1111,6 +1195,72 @@ async def test_wjx_builder_allows_logic_question_for_http(monkeypatch) -> None:
 
 
 @pytest.mark.asyncio
+async def test_wjx_builder_uses_prefilled_free_ai_text_answer(monkeypatch) -> None:
+    config = ExecutionConfig(survey_provider="wjx")
+    config.question_config_index_map = {1: ("text", 0)}
+    config.text_ai_flags = [True]
+    state = ExecutionState(config=config)
+    state.set_free_ai_prefill_answers("slot-1", {1: ("预填答案",)})
+    question = SurveyQuestionMeta(
+        num=1,
+        title="请填写职业",
+        type_code="1",
+        text_inputs=1,
+    )
+
+    async def fail_generate(*_args, **_kwargs):
+        raise AssertionError("命中预取答案后不该再调用单题 AI")
+
+    monkeypatch.setattr(wjx_builders, "agenerate_ai_answer", fail_generate)
+
+    action = await wjx_builders.build_answer_action(
+        None,
+        question,
+        state,
+        psycho_plan=None,
+        thread_name="slot-1",
+    )
+
+    assert action is not None
+    assert action.kind == "text"
+    assert action.text_values == ("预填答案",)
+
+
+@pytest.mark.asyncio
+async def test_wjx_builder_uses_prefilled_free_ai_option_fill_answer(monkeypatch) -> None:
+    config = ExecutionConfig(survey_provider="wjx")
+    config.question_config_index_map = {1: ("single", 0)}
+    config.single_prob = [[1.0, 0.0]]
+    config.single_option_fill_texts = [["__AI_FILL__", None]]
+    state = ExecutionState(config=config)
+    state.set_free_ai_option_fill_prefill_answers("slot-opt-1", {(1, 0): "补充说明"})
+    question = SurveyQuestionMeta(
+        num=1,
+        title="请选择水果",
+        type_code="3",
+        option_texts=["苹果", "香蕉"],
+        options=2,
+    )
+
+    async def fail_option_fill(*_args, **_kwargs):
+        raise AssertionError("命中附加填空预取后不该再调用单题 AI")
+
+    monkeypatch.setattr(wjx_builders, "weighted_index", lambda _probs: 0)
+    monkeypatch.setattr(wjx_builders, "agenerate_ai_answer", fail_option_fill)
+
+    action = await wjx_builders.build_answer_action(
+        None,
+        question,
+        state,
+        psycho_plan=None,
+        thread_name="slot-opt-1",
+    )
+
+    assert action is not None
+    assert action.option_fill_texts == ((0, "补充说明"),)
+
+
+@pytest.mark.asyncio
 async def test_qq_builder_supports_dropdown_and_matrix_star_for_http(monkeypatch) -> None:
     config = ExecutionConfig(survey_provider="qq")
     config.question_config_index_map = {
@@ -1159,6 +1309,113 @@ async def test_qq_builder_supports_dropdown_and_matrix_star_for_http(monkeypatch
     assert matrix_action is not None
     assert matrix_action.kind == "matrix"
     assert matrix_action.matrix_indices == (2,)
+
+
+@pytest.mark.asyncio
+async def test_qq_builder_uses_prefilled_free_ai_text_answer(monkeypatch) -> None:
+    config = ExecutionConfig(survey_provider="qq")
+    config.question_config_index_map = {1: ("text", 0)}
+    config.text_ai_flags = [True]
+    state = ExecutionState(config=config)
+    state.set_free_ai_prefill_answers("slot-2", {1: ("上海", "羽毛球")})
+    question = SurveyQuestionMeta(
+        num=1,
+        title="请依次填写城市和爱好",
+        provider="qq",
+        provider_question_id="q1",
+        provider_type="text",
+        text_inputs=2,
+    )
+
+    async def fail_generate(*_args, **_kwargs):
+        raise AssertionError("命中预取答案后不该再调用单题 AI")
+
+    monkeypatch.setattr(qq_builders, "agenerate_ai_answer", fail_generate)
+
+    action = await qq_builders.build_answer_action(
+        None,
+        question,
+        state,
+        psycho_plan=None,
+        thread_name="slot-2",
+    )
+
+    assert action is not None
+    assert action.kind == "text"
+    assert action.text_values == ("上海", "羽毛球")
+
+
+@pytest.mark.asyncio
+async def test_qq_builder_uses_prefilled_free_ai_option_fill_answer(monkeypatch) -> None:
+    config = ExecutionConfig(survey_provider="qq")
+    config.question_config_index_map = {1: ("single", 0)}
+    config.single_prob = [[1.0, 0.0]]
+    config.single_option_fill_texts = [["__AI_FILL__", None]]
+    state = ExecutionState(config=config)
+    state.set_free_ai_option_fill_prefill_answers("slot-opt-2", {(1, 0): "补充信息"})
+    question = SurveyQuestionMeta(
+        num=1,
+        title="请选择职业方向",
+        provider="qq",
+        provider_question_id="q1",
+        provider_type="radio",
+        option_texts=["技术", "产品"],
+        options=2,
+    )
+
+    async def fail_option_fill(*_args, **_kwargs):
+        raise AssertionError("命中附加填空预取后不该再调用单题 AI")
+
+    monkeypatch.setattr(qq_builders, "weighted_index", lambda _probs: 0)
+    monkeypatch.setattr(qq_builders, "agenerate_ai_answer", fail_option_fill)
+
+    action = await qq_builders.build_answer_action(
+        None,
+        question,
+        state,
+        psycho_plan=None,
+        thread_name="slot-opt-2",
+    )
+
+    assert action is not None
+    assert action.option_fill_texts == ((0, "补充信息"),)
+
+
+@pytest.mark.asyncio
+async def test_wjx_http_runtime_clears_prefill_cache_on_error(monkeypatch) -> None:
+    config = ExecutionConfig(
+        url="https://www.wjx.cn/vm/demo.aspx",
+        survey_provider="wjx",
+    )
+    config.questions_metadata = {
+        1: SurveyQuestionMeta(num=1, title="Q1", type_code="1", text_inputs=1),
+    }
+    config.question_config_index_map = {1: ("text", 0)}
+    config.text_ai_flags = [True]
+    state = ExecutionState(config=config)
+
+    async def fake_load(*_args, **_kwargs):
+        return "<html><body><input type='hidden' value='2026/5/30 1:23:18' id='starttime' name='starttime' /></body></html>"
+
+    async def fake_prefill(_questions, ctx, *, thread_name=""):
+        ctx.set_free_ai_prefill_answers(thread_name, {1: ("缓存答案",)})
+        return None
+
+    async def fake_build_action(*_args, **_kwargs):
+        raise RuntimeError("boom")
+
+    monkeypatch.setattr(wjx_http, "_load_wjx_page", fake_load)
+    monkeypatch.setattr(wjx_http, "prefill_free_ai_answers_for_questions", fake_prefill)
+    monkeypatch.setattr(wjx_http, "build_answer_action", fake_build_action)
+
+    with pytest.raises(RuntimeError, match="boom"):
+        await wjx_http.brush_wjx_http(
+            config,
+            state,
+            thread_name="slot-3",
+        )
+
+    assert state.get_free_ai_prefill_answer("slot-3", 1) is None
 
 
 def test_credamo_builder_supports_dropdown_and_order_for_http(monkeypatch) -> None:
