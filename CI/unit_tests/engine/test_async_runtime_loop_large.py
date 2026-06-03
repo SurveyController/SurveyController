@@ -256,6 +256,74 @@ class AsyncRuntimeLoopLargeTests:
         assert "准备请求" in labels
 
     @pytest.mark.asyncio
+    async def test_run_reports_success_when_random_proxy_enabled(self, monkeypatch) -> None:
+        config = ExecutionConfig(
+            url="https://www.wjx.cn/vm/demo.aspx",
+            survey_provider="wjx",
+            random_proxy_ip_enabled=True,
+        )
+        runner, _state, _ctx, scheduler = _build_runner(config=config)
+        scheduler.acquire_values = [6, None]
+        reports: list[dict[str, object]] = []
+
+        async def fake_report(**kwargs):
+            reports.append(kwargs)
+            return True
+
+        async def select_proxy():
+            runner.proxy_session.proxy_provider = "default"
+            return "http://1.1.1.1:80", "UA"
+
+        monkeypatch.setattr(runner.http_submitter, "submit", lambda **_kwargs: asyncio.sleep(0, result=True))
+        monkeypatch.setattr(runner, "_prepare_round_context", lambda: asyncio.sleep(0, result=True))
+        monkeypatch.setattr(runner, "_select_session_proxy_and_ua", select_proxy)
+        monkeypatch.setattr(runtime_loop, "get_session_snapshot", lambda: {"user_id": 73952})
+        monkeypatch.setattr(runtime_loop, "report_submission_result_async", fake_report)
+
+        await runner.run()
+        await asyncio.sleep(0)
+
+        assert reports == [
+            {
+                "user_id": 73952,
+                "survey_url": "https://www.wjx.cn/vm/demo.aspx",
+                "result": "success",
+                "proxy_provider": "default",
+            }
+        ]
+
+    @pytest.mark.asyncio
+    async def test_run_reports_failure_when_random_proxy_enabled(self, monkeypatch) -> None:
+        config = ExecutionConfig(
+            url="https://www.wjx.cn/vm/demo.aspx",
+            survey_provider="wjx",
+            random_proxy_ip_enabled=True,
+        )
+        runner, _state, _ctx, scheduler = _build_runner(config=config)
+        scheduler.acquire_values = [6, None]
+        reports: list[dict[str, object]] = []
+
+        async def fake_report(**kwargs):
+            reports.append(kwargs)
+            return True
+
+        monkeypatch.setattr(runner, "_prepare_round_context", lambda: (_ for _ in ()).throw(RuntimeError("boom")))
+        monkeypatch.setattr(runtime_loop, "get_session_snapshot", lambda: {"user_id": 73952})
+        monkeypatch.setattr(runtime_loop, "report_submission_result_async", fake_report)
+
+        await runner.run()
+        await asyncio.sleep(0)
+
+        assert reports == [
+            {
+                "user_id": 73952,
+                "survey_url": "https://www.wjx.cn/vm/demo.aspx",
+                "result": "failed",
+                "proxy_provider": "unknown",
+            }
+        ]
+
+    @pytest.mark.asyncio
     async def test_run_airuntime_error_releases_resources_and_requeues(self, monkeypatch) -> None:
         config = ExecutionConfig(url="https://www.credamo.com/answer.html#/s/demo", survey_provider="credamo")
         runner, _state, _ctx, scheduler = _build_runner(config=config)

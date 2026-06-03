@@ -12,6 +12,7 @@ if TYPE_CHECKING:
 
 from software.app.config import (
     NAVIGATION_TEXT_VISIBLE_SETTING_KEY,
+    SUBMISSION_REPORT_TELEMETRY_SETTING_KEY,
     TASK_RESULT_SYSTEM_NOTIFICATION_SETTING_KEY,
 )
 
@@ -88,6 +89,17 @@ BEHAVIOR_SWITCHES = (
         event="toggle_task_result_windows_notification",
         target="task_result_notification_switch",
         handler_name="_on_task_result_notification_toggled",
+    ),
+    SwitchCardDefinition(
+        attr_name="submission_report_telemetry_card",
+        icon=FluentIcon.SEND,
+        title="提交结果遥测",
+        content="启用随机 IP 时，提交成功或失败结果会同步上报服务端做统计，便于排查问题",
+        setting_key=SUBMISSION_REPORT_TELEMETRY_SETTING_KEY,
+        default=True,
+        event="toggle_submission_report_telemetry",
+        target="submission_report_telemetry_switch",
+        handler_name="_on_submission_report_telemetry_toggled",
     ),
 )
 

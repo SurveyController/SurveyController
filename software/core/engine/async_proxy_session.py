@@ -35,6 +35,7 @@ class AsyncProxySession:
         self.runtime_bridge = runtime_bridge
         self.update_step = update_step
         self.proxy_address: Optional[str] = None
+        self.proxy_provider: str = "unknown"
 
     async def select_proxy_and_user_agent(self) -> tuple[Optional[str], Optional[str]]:
         should_wait_for_proxy = bool(self.config.random_proxy_ip_enabled)
@@ -51,7 +52,19 @@ class AsyncProxySession:
                 return None, None
         ua_value, _ = _select_user_agent_for_session(self.state)
         self.proxy_address = proxy_address
+        self.proxy_provider = self._resolve_current_proxy_provider()
         return proxy_address, ua_value
+
+    def _resolve_current_proxy_provider(self) -> str:
+        if not self.proxy_address:
+            return "unknown"
+        try:
+            with self.state.lock:
+                lease = self.state.proxy_in_use_by_thread.get(self.slot_label)
+                return str(getattr(lease, "source", "") or "unknown").strip() or "unknown"
+        except Exception:
+            logging.info("读取代理来源失败", exc_info=True)
+        return "unknown"
 
     def mark_successful_proxy(self) -> None:
         if not self.proxy_address:
@@ -68,6 +81,7 @@ class AsyncProxySession:
             except Exception:
                 logging.info("释放代理占用失败", exc_info=True)
         self.proxy_address = None
+        self.proxy_provider = "unknown"
 
 
 __all__ = ["AsyncProxySession"]

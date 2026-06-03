@@ -30,6 +30,8 @@ from software.network.session_policy import (
     _mark_proxy_temporarily_bad,
     _record_bad_proxy_and_maybe_pause,
 )
+from software.network.proxy.session import get_session_snapshot
+from software.network.submission_report import report_submission_result_async
 from software.providers.http_progress import update_http_submit_step
 
 
@@ -250,6 +252,29 @@ class AsyncSlotRunner:
         self.proxy_session.mark_successful_proxy()
         return self.stop_policy.record_success(self.stop_proxy, thread_name=self.slot_label)
 
+    def _report_submission_result(self, result: str) -> None:
+        if not bool(self.config.random_proxy_ip_enabled):
+            return
+        try:
+            session = get_session_snapshot()
+            user_id = int(session.get("user_id") or 0)
+        except Exception:
+            logging.info("读取提交结果上报账号失败", exc_info=True)
+            return
+        if user_id <= 0:
+            return
+        try:
+            asyncio.create_task(
+                report_submission_result_async(
+                    user_id=user_id,
+                    survey_url=str(self.config.url or ""),
+                    result=result,
+                    proxy_provider=self.proxy_session.proxy_provider,
+                )
+            )
+        except Exception:
+            logging.info("提交结果上报任务创建失败", exc_info=True)
+
     def _handle_http_transport_error(self, exc: BaseException) -> bool:
         if self.proxy_session.proxy_address:
             try:
@@ -328,6 +353,7 @@ class AsyncSlotRunner:
                     continue
 
                 should_stop = self._mark_http_submit_success()
+                self._report_submission_result("success")
                 if should_stop:
                     should_requeue_dispatch = False
                     break
@@ -335,16 +361,19 @@ class AsyncSlotRunner:
                 if dispatch_delay_seconds > 0:
                     self._update_step("等待提交间隔")
             except AIRuntimeError as exc:
+                self._report_submission_result("failed")
                 if await self._handle_ai_runtime_error(exc):
                     should_requeue_dispatch = False
                     break
                 self._release_round_resources(requeue_reverse_fill=True)
             except SubmissionVerificationRequiredError as exc:
+                self._report_submission_result("failed")
                 if await self._handle_submission_verification_error(exc):
                     should_requeue_dispatch = False
                     break
                 self._release_round_resources(requeue_reverse_fill=True)
             except SurveyProviderUnavailableAtRuntimeError as exc:
+                self._report_submission_result("failed")
                 if await self._handle_survey_provider_unavailable_error(exc):
                     should_requeue_dispatch = False
                     break
@@ -352,6 +381,7 @@ class AsyncSlotRunner:
             except (
                 http_client.TransportError,
             ) as exc:
+                self._report_submission_result("failed")
                 if self._handle_http_transport_error(exc):
                     should_requeue_dispatch = False
                     break
@@ -361,6 +391,7 @@ class AsyncSlotRunner:
                     should_requeue_dispatch = False
                     break
                 logging.exception("HTTP 会话[%s]运行异常", self.slot_label)
+                self._report_submission_result("failed")
                 if self.stop_policy.record_failure(
                     self.stop_proxy,
                     thread_name=self.slot_label,

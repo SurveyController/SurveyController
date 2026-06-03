@@ -25,6 +25,7 @@ from software.app.config import (
     DEFAULT_AUTO_SAVE_LOG_RETENTION_COUNT,
     DEFAULT_AUTO_SAVE_LOGS,
     NAVIGATION_TEXT_VISIBLE_SETTING_KEY,
+    SUBMISSION_REPORT_TELEMETRY_SETTING_KEY,
     TASK_RESULT_SYSTEM_NOTIFICATION_SETTING_KEY,
     app_settings,
     get_bool_from_qsettings,
@@ -66,6 +67,7 @@ class SettingsPage(ScrollArea):
     ask_save_card: SwitchSettingCard
     prevent_sleep_card: SwitchSettingCard
     task_result_notification_card: SwitchSettingCard
+    submission_report_telemetry_card: SwitchSettingCard
     auto_update_card: SwitchSettingCard
     auto_save_logs_card: ExpandComboSwitchSettingCard
     auto_save_logs_combo: "ComboBox"
@@ -89,6 +91,7 @@ class SettingsPage(ScrollArea):
             "ask_save_on_close": True,
             "prevent_sleep_during_run": True,
             TASK_RESULT_SYSTEM_NOTIFICATION_SETTING_KEY: True,
+            SUBMISSION_REPORT_TELEMETRY_SETTING_KEY: True,
             AUTO_SAVE_LOGS_SETTING_KEY: DEFAULT_AUTO_SAVE_LOGS,
             AUTO_SAVE_LOG_RETENTION_COUNT_SETTING_KEY: DEFAULT_AUTO_SAVE_LOG_RETENTION_COUNT,
             "auto_check_update": True,
@@ -371,6 +374,15 @@ class SettingsPage(ScrollArea):
             persist=persist,
         )
 
+    def _apply_submission_report_telemetry_state(self, checked: bool, persist: bool = True):
+        self._persist_bool_setting(
+            key=SUBMISSION_REPORT_TELEMETRY_SETTING_KEY,
+            checked=checked,
+            event="toggle_submission_report_telemetry",
+            target="submission_report_telemetry_switch",
+            persist=persist,
+        )
+
     def _apply_auto_save_logs_state(self, checked: bool, persist: bool = True):
         self._persist_bool_setting(
             key=AUTO_SAVE_LOGS_SETTING_KEY,
@@ -448,6 +460,9 @@ class SettingsPage(ScrollArea):
     def _on_task_result_notification_toggled(self, checked: bool):
         self._apply_task_result_notification_state(checked)
 
+    def _on_submission_report_telemetry_toggled(self, checked: bool):
+        self._apply_submission_report_telemetry_state(checked)
+
     def _on_auto_save_logs_toggled(self, checked: bool):
         self._apply_auto_save_logs_state(checked)
 
@@ -500,6 +515,10 @@ class SettingsPage(ScrollArea):
             self.task_result_notification_card,
             self._defaults[TASK_RESULT_SYSTEM_NOTIFICATION_SETTING_KEY],
         )
+        self._set_switch_state(
+            self.submission_report_telemetry_card,
+            self._defaults[SUBMISSION_REPORT_TELEMETRY_SETTING_KEY],
+        )
         self._set_switch_state(self.auto_save_logs_card, self._defaults[AUTO_SAVE_LOGS_SETTING_KEY])
         self._set_auto_save_retention_index(
             self._defaults[AUTO_SAVE_LOG_RETENTION_COUNT_SETTING_KEY]
@@ -519,6 +538,10 @@ class SettingsPage(ScrollArea):
         )
         self._apply_task_result_notification_state(
             self._defaults[TASK_RESULT_SYSTEM_NOTIFICATION_SETTING_KEY],
+            persist=False,
+        )
+        self._apply_submission_report_telemetry_state(
+            self._defaults[SUBMISSION_REPORT_TELEMETRY_SETTING_KEY],
             persist=False,
         )
         self._apply_auto_save_logs_state(
