@@ -39,6 +39,12 @@ _REVERSE_FILL_FORMATS = {
 }
 DEFAULT_ANSWER_DURATION_RANGE_SECONDS = (60, 120)
 MAX_ANSWER_DURATION_SECONDS = 30 * 60
+_DEFAULT_RANDOM_UA_RATIOS = {"wechat": 33, "mobile": 33, "pc": 34}
+_USER_AGENT_DEVICE_TO_PRESET_KEYS = {
+    "wechat": ["wechat_android"],
+    "mobile": ["mobile_android"],
+    "pc": ["pc_web"],
+}
 
 __all__ = [
     "CURRENT_CONFIG_SCHEMA_VERSION",
@@ -55,26 +61,45 @@ __all__ = [
 ]
 
 
-def _filter_valid_user_agent_keys(selected_keys: List[str]) -> List[str]:
-    return [key for key in (selected_keys or []) if key in USER_AGENT_PRESETS]
+def _coerce_int(value: Any, default: int = 0) -> int:
+    try:
+        return int(value)
+    except Exception:
+        return default
+
+
+def _normalize_user_agent_ratios(raw_ratios: Any) -> Dict[str, int]:
+    if not isinstance(raw_ratios, dict):
+        return dict(_DEFAULT_RANDOM_UA_RATIOS)
+
+    ratios: Dict[str, int] = {}
+    for device_type in _DEFAULT_RANDOM_UA_RATIOS:
+        value = _coerce_int(raw_ratios.get(device_type), 0)
+        if value < 0 or value > 100:
+            return dict(_DEFAULT_RANDOM_UA_RATIOS)
+        ratios[device_type] = value
+
+    if sum(ratios.values()) != 100:
+        return dict(_DEFAULT_RANDOM_UA_RATIOS)
+    return ratios
 
 
 def _select_user_agent_from_ratios(ratios: Dict[str, int]) -> Tuple[Optional[str], Optional[str]]:
     """根据设备类型占比选择 User-Agent。"""
-    device_to_ua_keys = {
-        "wechat": ["wechat_android"],
-        "mobile": ["mobile_android"],
-        "pc": ["pc_web"],
-    }
-    weighted_devices: List[str] = []
-    for device_type, weight in ratios.items():
+    devices: List[str] = []
+    weights: List[int] = []
+    for device_type, ua_keys in _USER_AGENT_DEVICE_TO_PRESET_KEYS.items():
+        if not ua_keys:
+            continue
+        weight = max(0, _coerce_int((ratios or {}).get(device_type), 0))
         if weight > 0:
-            weighted_devices.extend([device_type] * weight)
-    if not weighted_devices:
+            devices.append(device_type)
+            weights.append(weight)
+    if not devices:
         return None, None
 
-    device_type = random.choice(weighted_devices)
-    ua_keys = device_to_ua_keys.get(device_type, [])
+    device_type = random.choices(devices, weights=weights, k=1)[0]
+    ua_keys = _USER_AGENT_DEVICE_TO_PRESET_KEYS.get(device_type, [])
     if not ua_keys:
         return None, None
 
@@ -323,7 +348,6 @@ def build_runtime_config_snapshot(
     snapshot.questions_info = clone_questions_info(info_source, default_provider=default_provider)
     snapshot.answer_rules = copy.deepcopy(list(getattr(snapshot, "answer_rules", []) or []))
     snapshot.dimension_groups = copy.deepcopy(list(getattr(snapshot, "dimension_groups", []) or []))
-    snapshot.random_ua_keys = copy.deepcopy(list(getattr(snapshot, "random_ua_keys", []) or []))
     snapshot.random_ua_ratios = copy.deepcopy(dict(getattr(snapshot, "random_ua_ratios", {}) or {}))
     return snapshot
 
@@ -394,22 +418,8 @@ def normalize_runtime_config_payload(raw: Dict[str, Any]) -> RuntimeConfig:
     config.random_ip_enabled = _as_bool(raw.get("random_ip_enabled"), False)
     raw_area_code = raw.get("proxy_area_code")
     config.proxy_area_code = None if raw_area_code is None else str(raw_area_code)
-    config.random_ua_enabled = bool(raw.get("random_ua_enabled", False))
-    config.random_ua_keys = _filter_valid_user_agent_keys(raw.get("random_ua_keys") or [])
-
-    raw_ratios = raw.get("random_ua_ratios")
-    if isinstance(raw_ratios, dict):
-        total = sum(_as_int(v, 0) for v in raw_ratios.values())
-        if total == 100:
-            config.random_ua_ratios = {
-                "wechat": _as_int(raw_ratios.get("wechat"), 33),
-                "mobile": _as_int(raw_ratios.get("mobile"), 33),
-                "pc": _as_int(raw_ratios.get("pc"), 34),
-            }
-        else:
-            config.random_ua_ratios = {"wechat": 33, "mobile": 33, "pc": 34}
-    else:
-        config.random_ua_ratios = {"wechat": 33, "mobile": 33, "pc": 34}
+    config.random_ua_enabled = _as_bool(raw.get("random_ua_enabled"), False)
+    config.random_ua_ratios = _normalize_user_agent_ratios(raw.get("random_ua_ratios"))
 
     config.fail_stop_enabled = bool(raw.get("fail_stop_enabled", True))
     config.pause_on_aliyun_captcha = bool(raw.get("pause_on_aliyun_captcha", True))

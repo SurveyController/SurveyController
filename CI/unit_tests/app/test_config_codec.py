@@ -149,6 +149,7 @@ class ConfigCodecTests:
                 "random_ip_enabled": "yes",
                 "proxy_source": "bad",
                 "custom_proxy_api": "https://proxy.example",
+                "random_ua_enabled": "false",
                 "random_ua_keys": ["pc_web", "bad"],
                 "random_ua_ratios": {"wechat": 20, "mobile": 20, "pc": 20},
                 "reverse_fill_format": "bad",
@@ -168,7 +169,8 @@ class ConfigCodecTests:
         assert cfg.answer_datetime_window == ("2026-02-10 09:00:00", "")
         assert cfg.random_ip_enabled is True
         assert cfg.proxy_source == "default"
-        assert cfg.random_ua_keys == ["pc_web"]
+        assert cfg.random_ua_enabled is False
+        assert not hasattr(cfg, "random_ua_keys")
         assert cfg.random_ua_ratios == {"wechat": 33, "mobile": 33, "pc": 34}
         assert cfg.reverse_fill_format == "auto"
         assert cfg.reverse_fill_start_row == 1
@@ -211,9 +213,30 @@ class ConfigCodecTests:
             1800,
         )
 
-    def test_select_user_agent_from_ratios_handles_empty_unknown_and_valid_devices(self, monkeypatch) -> None:
+    def test_random_ua_ratio_normalization_ignores_unknown_keys_and_rejects_invalid_values(self) -> None:
+        assert normalize_runtime_config_payload(
+            {"random_ua_ratios": {"wechat": 100, "unknown": 0}}
+        ).random_ua_ratios == {"wechat": 100, "mobile": 0, "pc": 0}
+        assert normalize_runtime_config_payload(
+            {"random_ua_ratios": {"wechat": 50, "unknown": 50}}
+        ).random_ua_ratios == {"wechat": 33, "mobile": 33, "pc": 34}
+        assert normalize_runtime_config_payload(
+            {"random_ua_ratios": {"wechat": 200, "mobile": -100, "pc": 0}}
+        ).random_ua_ratios == {"wechat": 33, "mobile": 33, "pc": 34}
+
+    def test_random_ua_legacy_keys_are_not_serialized(self) -> None:
+        cfg = normalize_runtime_config_payload(
+            {
+                "random_ua_keys": ["pc_web"],
+                "random_ua_ratios": {"wechat": 0, "mobile": 0, "pc": 100},
+            }
+        )
+
+        assert not hasattr(cfg, "random_ua_keys")
+        assert "random_ua_keys" not in serialize_runtime_config(cfg)
+
+    def test_select_user_agent_from_ratios_handles_empty_unknown_and_valid_devices(self) -> None:
         assert _select_user_agent_from_ratios({"wechat": 0, "mobile": 0}) == (None, None)
-        monkeypatch.setattr("software.core.config.codec.random.choice", lambda values: values[0])
         ua, label = _select_user_agent_from_ratios({"pc": 1})
         assert ua
         assert label
