@@ -31,6 +31,7 @@ _CIPHER = "P96D0A7D0M8C3R2D0M1"
 _RANDOM_CHARS = "ABCDEFGHJKMNPQRSTWXYZabcdefhijkmnprstwxyz2345678"
 _DEFAULT_ORIGIN = "https://www.credamo.com"
 _RESOLUTION = "1920px*1080px"
+_CREDAMO_REQUEST_TIMEOUT_SECONDS = 30
 
 
 @dataclass(frozen=True)
@@ -216,7 +217,7 @@ async def _fetch_detail(
     response = await session.get(
         f"{origin.rstrip('/')}/v1/survey/noauth/detail/get/{short_url}",
         headers=headers,
-        timeout=20,
+        timeout=_CREDAMO_REQUEST_TIMEOUT_SECONDS,
     )
     return _ensure_api_ok(_json_payload(response, "详情"), "详情")
 
@@ -237,7 +238,7 @@ async def _init_answer(
             "resolution": _RESOLUTION,
         },
         headers=headers,
-        timeout=20,
+        timeout=_CREDAMO_REQUEST_TIMEOUT_SECONDS,
     )
     data = _ensure_api_ok(_json_payload(response, "初始化"), "初始化")
     answer_token = str(data.get("answerToken") or "").strip()
@@ -777,7 +778,7 @@ async def _save_answers(
             answer_token=answer_token,
             json_body=True,
         ),
-        timeout=20,
+        timeout=_CREDAMO_REQUEST_TIMEOUT_SECONDS,
     )
     payload = _json_payload(response, "提交")
     return _ensure_api_ok(payload, "提交")

@@ -43,6 +43,8 @@ _WJX_SUBMISSION_VERIFICATION_MARKERS = (
     _WJX_SUBMISSION_VERIFICATION_TEXT,
     "请输入验证码",
 )
+_WJX_PAGE_LOAD_TIMEOUT_SECONDS = 20
+_WJX_SUBMIT_TIMEOUT_SECONDS = 30
 
 
 class WjxSubmitResult:
@@ -288,7 +290,7 @@ def _raise_submit_rejected(
 
 
 async def _load_wjx_page(url: str, *, headers: dict[str, str], proxies: Any) -> str:
-    response = await http_client.aget(url, timeout=15, headers=headers, proxies=proxies)
+    response = await http_client.aget(url, timeout=_WJX_PAGE_LOAD_TIMEOUT_SECONDS, headers=headers, proxies=proxies)
     response.raise_for_status()
     try:
         _raise_wjx_page_state_errors(response.text)
@@ -461,7 +463,7 @@ async def brush_wjx_http(
             "Origin": f"https://{domain}",
             "X-Requested-With": "XMLHttpRequest",
         },
-        timeout=20,
+        timeout=_WJX_SUBMIT_TIMEOUT_SECONDS,
         proxies=proxies,
     )
     response.raise_for_status()

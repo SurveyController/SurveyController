@@ -436,7 +436,7 @@ def test_dashboard_thread_progress_shows_progress_bar_after_thread_finishes(monk
                     "status_text": "已完成",
                     "success_count": 1,
                     "fail_count": 0,
-                    "step_current": 4,
+                    "step_current": 2,
                     "step_total": 4,
                     "running": False,
                 }

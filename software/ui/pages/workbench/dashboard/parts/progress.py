@@ -52,6 +52,13 @@ def _resolve_thread_step_percent(step_current: int, step_total: int) -> int:
     return int(min(100, (current / float(total)) * 100))
 
 
+def _resolve_thread_step_display_percent(step_current: int, step_total: int, status_text: str, *, running: bool) -> int:
+    text = str(status_text or "").strip()
+    if not running and text == "已完成":
+        return 100
+    return _resolve_thread_step_percent(step_current, step_total)
+
+
 def _should_use_indeterminate_thread_step(status_text: str, *, running: bool) -> bool:
     text = str(status_text or "").strip()
     if not running:
@@ -601,7 +608,12 @@ class DashboardProgressMixin:
             set_indeterminate_progress_ring_active(step_busy_bar, False)
             step_busy_bar.hide()
             step_bar.show()
-            target_percent = _resolve_thread_step_percent(step_current, step_total)
+            target_percent = _resolve_thread_step_display_percent(
+                step_current,
+                step_total,
+                status_text,
+                running=running,
+            )
             if running:
                 self._animate_thread_step_bar_to(row, target_percent)
             else:

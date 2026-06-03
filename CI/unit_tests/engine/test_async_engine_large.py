@@ -273,7 +273,7 @@ class AsyncRuntimeEngineLargeTests:
             return [
                 ProxyLease(address="http://1.1.1.1:8000"),
                 ProxyLease(address="http://2.2.2.2:8000"),
-            ]
+            ][: int(kwargs["expected_count"])]
 
         monkeypatch.setattr(async_engine, "AsyncScheduler", _FakeScheduler)
         monkeypatch.setattr(async_engine, "AsyncSlotRunner", _FakeRunner)
@@ -283,12 +283,12 @@ class AsyncRuntimeEngineLargeTests:
 
         assert "slot-1" in events
         assert "slot-2" in events
-        assert "fetch-4" in events
+        assert "fetch-2" in events
         assert [lease.address for lease in state.config.proxy_ip_pool] == [
             "http://1.1.1.1:8000",
             "http://2.2.2.2:8000",
         ]
-        assert loading_calls[0] == (True, "正在准备代理 0/4")
+        assert loading_calls[0] == (True, "正在准备代理 0/2")
         assert loading_calls[-1] == (False, "")
 
     @pytest.mark.asyncio
@@ -309,15 +309,19 @@ class AsyncRuntimeEngineLargeTests:
 
             async def run(self) -> None:
                 for _idx in range(2):
+                    state.register_proxy_waiter()
                     deadline = asyncio.get_running_loop().time() + 1.0
-                    while not state.config.proxy_ip_pool and asyncio.get_running_loop().time() < deadline:
-                        await asyncio.sleep(0.01)
-                    with state.lock:
-                        if state.config.proxy_ip_pool:
-                            state.config.proxy_ip_pool.popleft()
-                            state.cur_num += 1
-                    state.notify_runtime_change()
-                    await asyncio.sleep(0)
+                    try:
+                        while not state.config.proxy_ip_pool and asyncio.get_running_loop().time() < deadline:
+                            await asyncio.sleep(0.01)
+                        with state.lock:
+                            if state.config.proxy_ip_pool:
+                                state.config.proxy_ip_pool.popleft()
+                                state.cur_num += 1
+                        state.notify_runtime_change()
+                        await asyncio.sleep(0)
+                    finally:
+                        state.unregister_proxy_waiter()
 
         class _FakeScheduler:
             def __init__(self, *, concurrency: int) -> None:

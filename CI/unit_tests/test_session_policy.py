@@ -11,36 +11,41 @@ class SessionPolicyTests:
     def test_record_bad_proxy_never_pauses_task(self) -> None:
         assert not session_policy._record_bad_proxy_and_maybe_pause(ExecutionState(), object())
 
-    def test_resolve_proxy_request_num_caps_by_waiters_remaining_and_global_limit(self) -> None:
+    def test_resolve_proxy_request_num_caps_by_waiters_remaining_and_worker_count(self) -> None:
         ctx = ExecutionState(config=ExecutionConfig(target_num=200, num_threads=32))
         ctx.cur_num = 10
         ctx.proxy_waiting_threads = 120
         ctx.proxy_in_use_by_thread = {'Worker-1': ProxyLease(address='http://1.1.1.1:8000'), 'Worker-2': ProxyLease(address='http://2.2.2.2:8000')}
-        assert session_policy._resolve_proxy_request_num_locked(ctx) == 64
+        assert session_policy._resolve_proxy_request_num_locked(ctx) == 32
         ctx.config.target_num = 12
         assert session_policy._resolve_proxy_request_num_locked(ctx) == 0
 
-    def test_resolve_proxy_request_num_prefills_available_parallel_slots(self) -> None:
+    def test_resolve_proxy_request_num_follows_waiting_slots_without_prefill_burst(self) -> None:
         ctx = ExecutionState(config=ExecutionConfig(target_num=64, num_threads=32))
         ctx.cur_num = 0
         ctx.proxy_waiting_threads = 1
-        assert session_policy._resolve_proxy_request_num_locked(ctx) == 64
+        assert session_policy._resolve_proxy_request_num_locked(ctx) == 1
 
+        ctx.proxy_waiting_threads = 6
         ctx.proxy_in_use_by_thread = {
             f'Worker-{index}': ProxyLease(address=f'http://1.1.1.{index}:8000')
             for index in range(1, 9)
         }
-        assert session_policy._resolve_proxy_request_num_locked(ctx) == 48
+        assert session_policy._resolve_proxy_request_num_locked(ctx) == 6
 
         ctx.config.target_num = 20
-        assert session_policy._resolve_proxy_request_num_locked(ctx) == 12
+        assert session_policy._resolve_proxy_request_num_locked(ctx) == 6
 
-    def test_resolve_proxy_prefetch_request_count_fills_double_thread_buffer(self) -> None:
+    def test_resolve_proxy_prefetch_request_count_keeps_small_buffer_only(self) -> None:
         ctx = ExecutionState(config=ExecutionConfig(random_proxy_ip_enabled=True, target_num=50, num_threads=6))
         ctx.config.proxy_ip_pool = [ProxyLease(address=f'http://1.1.1.{index}:8000') for index in range(1, 4)]
-        assert session_policy.resolve_proxy_prefetch_request_count(ctx) == 9
+        assert session_policy.resolve_proxy_prefetch_request_count(ctx) == 0
 
-        ctx.cur_num = 48
+        ctx.config.proxy_ip_pool = []
+        ctx.proxy_waiting_threads = 2
+        assert session_policy.resolve_proxy_prefetch_request_count(ctx) == 4
+
+        ctx.cur_num = 50
         assert session_policy.resolve_proxy_prefetch_request_count(ctx) == 0
 
     def test_purge_unusable_proxy_pool_removes_invalid_duplicate_unpoolable_and_expiring_items(self) -> None:

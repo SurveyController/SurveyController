@@ -34,6 +34,9 @@ class QqSubmitResult:
     FAILED = "failed"
 
 
+_QQ_SUBMIT_TIMEOUT_SECONDS = 30
+
+
 def _proxy_arg(proxy_address: str | None) -> Any:
     proxy = str(proxy_address or "").strip()
     return proxy if proxy else {}
@@ -325,7 +328,7 @@ async def brush_qq_http(
         params={"pv_uid": str(uuid.uuid4()), "hash": hash_value, "_": str(int(time.time() * 1000))},
         json=submit_body,
         headers=submit_headers,
-        timeout=20,
+        timeout=_QQ_SUBMIT_TIMEOUT_SECONDS,
         proxies=proxies,
     )
     response.raise_for_status()

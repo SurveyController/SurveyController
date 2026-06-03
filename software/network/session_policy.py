@@ -15,8 +15,7 @@ from software.core.config.codec import _select_user_agent_from_ratios
 
 _PROXY_WAIT_POLL_SECONDS = 0.3
 _BAD_PROXY_COOLDOWN_SECONDS = 180.0
-_PROXY_FETCH_BUFFER_MULTIPLIER = 2
-_PROXY_FETCH_MIN_BATCH_SIZE = 20
+_PROXY_PREFETCH_BUFFER_SIZE = 2
 _PROXY_PREFETCH_IDLE_SECONDS = 0.35
 
 
@@ -63,7 +62,7 @@ def _blocked_proxy_addresses_locked(ctx: ExecutionState, *, exclude_thread_name:
 
 def _resolve_proxy_fetch_max_batch_size(ctx: ExecutionState) -> int:
     worker_count = max(1, int(getattr(ctx.config, "num_threads", 1) or 1))
-    dynamic_limit = max(_PROXY_FETCH_MIN_BATCH_SIZE, worker_count * _PROXY_FETCH_BUFFER_MULTIPLIER)
+    dynamic_limit = worker_count
     return max(1, min(int(PROXY_MAX_PROXIES or dynamic_limit), dynamic_limit))
 
 
@@ -262,10 +261,8 @@ def _resolve_proxy_request_num_locked(ctx: ExecutionState) -> int:
     remaining_to_start = max(0, int(ctx.config.target_num or 0) - int(ctx.cur_num or 0) - active_count)
     if remaining_to_start <= 0:
         return 0
-    parallel_capacity = max(1, int(getattr(ctx.config, "num_threads", 1) or 1))
-    idle_capacity = max(0, parallel_capacity - active_count)
-    buffer_capacity = max(waiting_count, idle_capacity * _PROXY_FETCH_BUFFER_MULTIPLIER)
-    return max(1, min(buffer_capacity, remaining_to_start, _resolve_proxy_fetch_max_batch_size(ctx)))
+    request_capacity = min(waiting_count, _resolve_proxy_fetch_max_batch_size(ctx))
+    return max(1, min(request_capacity, remaining_to_start))
 
 
 def resolve_proxy_prefetch_request_count(ctx: ExecutionState) -> int:
@@ -277,9 +274,9 @@ def resolve_proxy_prefetch_request_count(ctx: ExecutionState) -> int:
         remaining_to_start = max(0, int(ctx.config.target_num or 0) - int(ctx.cur_num or 0) - active_count)
         if remaining_to_start <= 0:
             return 0
-        worker_count = max(1, int(getattr(ctx.config, "num_threads", 1) or 1))
+        waiting_count = max(0, int(ctx.proxy_waiting_threads or 0))
         target_buffer = min(
-            worker_count * _PROXY_FETCH_BUFFER_MULTIPLIER,
+            waiting_count + _PROXY_PREFETCH_BUFFER_SIZE,
             remaining_to_start,
             _resolve_proxy_fetch_max_batch_size(ctx),
         )
