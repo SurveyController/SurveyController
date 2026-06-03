@@ -26,6 +26,8 @@ from software.providers.common import (
     SURVEY_PROVIDER_WJX,
 )
 
+HTTP_PROXY_MIN_REMAINING_TTL_SECONDS = 30
+
 
 # ==================== 地址规范化 ====================
 
@@ -151,8 +153,8 @@ def get_proxy_required_ttl_seconds(
             max_seconds = _to_non_negative_int(answer_duration_range_seconds[0], 0)
     normalized_provider = str(survey_provider or "").strip().lower()
     if normalized_provider in {SURVEY_PROVIDER_WJX, SURVEY_PROVIDER_QQ, SURVEY_PROVIDER_CREDAMO}:
-        # 三条 HTTP 链路都通过提交参数表达作答时长，因此只要求代理在分配时尚未过期。
-        return 0
+        # HTTP 链路不会真实等待作答时长，但代理仍要撑过加载、提交、结果校验。
+        return HTTP_PROXY_MIN_REMAINING_TTL_SECONDS
     if normalized_provider:
         minute = get_proxy_minute_by_answer_seconds(
             max_seconds,

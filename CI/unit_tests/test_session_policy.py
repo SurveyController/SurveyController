@@ -243,6 +243,17 @@ class SessionPolicyTests:
         assert merged == 1
         assert [lease.address for lease in ctx.config.proxy_ip_pool] == ['http://1.1.1.1:8000', 'http://2.2.2.2:8000']
 
+    def test_merge_prefetched_proxy_leases_discards_proxy_below_http_ttl_floor(self) -> None:
+        ctx = ExecutionState(config=ExecutionConfig(random_proxy_ip_enabled=True, survey_provider='wjx'))
+        fetched = [
+            ProxyLease(address='http://1.1.1.1:8000', expire_ts=time.time() + 10),
+            ProxyLease(address='http://2.2.2.2:8000', expire_ts=time.time() + 45),
+        ]
+        merged = session_policy.merge_prefetched_proxy_leases(ctx, fetched)
+
+        assert merged == 1
+        assert [lease.address for lease in ctx.config.proxy_ip_pool] == ['http://2.2.2.2:8000']
+
     def test_select_user_agent_returns_none_when_disabled(self) -> None:
         ctx = ExecutionState(config=ExecutionConfig(random_user_agent_enabled=False))
         with patch.object(session_policy, '_select_user_agent_from_ratios') as select_user_agent:

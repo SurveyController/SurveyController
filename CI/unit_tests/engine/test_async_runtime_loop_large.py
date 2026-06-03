@@ -241,6 +241,37 @@ class AsyncRuntimeLoopLargeTests:
         assert runner.stop_policy.failure_calls == []
 
     @pytest.mark.asyncio
+    async def test_run_random_proxy_enabled_never_submits_without_proxy(self, monkeypatch) -> None:
+        config = ExecutionConfig(
+            url="https://www.wjx.cn/vm/demo.aspx",
+            survey_provider="wjx",
+            random_proxy_ip_enabled=True,
+        )
+        runner, _state, _ctx, scheduler = _build_runner(config=config)
+        scheduler.acquire_values = [6, None]
+        submit_calls: list[dict[str, object]] = []
+        release_flags: list[bool] = []
+
+        async def fake_submit(**kwargs):
+            submit_calls.append(kwargs)
+            return True
+
+        monkeypatch.setattr(runner.http_submitter, "submit", fake_submit)
+        monkeypatch.setattr(runner, "_prepare_round_context", lambda: asyncio.sleep(0, result=True))
+        monkeypatch.setattr(runner, "_select_session_proxy_and_ua", lambda: asyncio.sleep(0, result=(None, "UA")))
+        monkeypatch.setattr(
+            runner,
+            "_release_round_resources",
+            lambda *, requeue_reverse_fill: release_flags.append(requeue_reverse_fill),
+        )
+
+        await runner.run()
+
+        assert submit_calls == []
+        assert release_flags == [True]
+        assert scheduler.release_calls[0]["requeue"] is True
+
+    @pytest.mark.asyncio
     async def test_run_http_runtime_reports_fixed_submit_steps(self, monkeypatch) -> None:
         config = ExecutionConfig(url="https://www.credamo.com/answer.html#/s/demo", survey_provider="credamo")
         runner, state, _ctx, scheduler = _build_runner(config=config)
@@ -428,6 +459,22 @@ class AsyncRuntimeLoopLargeTests:
         await runner.run()
 
         assert scheduler.release_calls[0]["requeue"] is False
+
+    @pytest.mark.asyncio
+    async def test_http_transport_error_discards_proxy_without_cooldown(self) -> None:
+        config = ExecutionConfig(
+            url="https://www.wjx.cn/vm/demo.aspx",
+            survey_provider="wjx",
+            random_proxy_ip_enabled=True,
+        )
+        runner, state, _ctx, _scheduler = _build_runner(config=config)
+        proxy_address = "http://1.1.1.1:80"
+        runner.proxy_session.proxy_address = proxy_address
+
+        assert runner._handle_http_transport_error(runtime_loop.http_client.ConnectTimeout("proxy bad")) is False
+
+        assert not state.is_proxy_in_cooldown(proxy_address)
+        assert runner.stop_policy.failure_calls[0]["status_text"] == "代理连接失败"
 
     @pytest.mark.asyncio
     async def test_run_remote_protocol_error_uses_transport_handler(self, monkeypatch) -> None:

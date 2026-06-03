@@ -27,6 +27,7 @@ from software.core.task import ExecutionConfig, ExecutionState
 from software.providers.errors import SubmissionVerificationRequiredError, SurveyProviderUnavailableAtRuntimeError
 import software.network.http as http_client
 from software.network.session_policy import (
+    _discard_unresponsive_proxy,
     _mark_proxy_temporarily_bad,
     _record_bad_proxy_and_maybe_pause,
 )
@@ -278,9 +279,9 @@ class AsyncSlotRunner:
     def _handle_http_transport_error(self, exc: BaseException) -> bool:
         if self.proxy_session.proxy_address:
             try:
-                _mark_proxy_temporarily_bad(self.state, self.proxy_session.proxy_address)
+                _discard_unresponsive_proxy(self.state, self.proxy_session.proxy_address)
             except Exception:
-                logging.info("标记 HTTP 代理异常失败", exc_info=True)
+                logging.info("废弃 HTTP 连接失败代理失败", exc_info=True)
         return self._handle_proxy_unavailable(
             status_text="代理连接失败" if self.proxy_session.proxy_address else "网络请求失败",
             log_message=f"HTTP 请求失败，本轮按失败处理：{exc}",

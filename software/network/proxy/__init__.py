@@ -41,6 +41,7 @@ from software.network.proxy.policy.source import (
     source_uses_custom_api_override,
 )
 from software.network.proxy.pool import (
+    HTTP_PROXY_MIN_REMAINING_TTL_SECONDS,
     get_proxy_required_ttl_seconds,
     prefetch_proxy_pool,
     proxy_lease_has_sufficient_ttl,
@@ -50,6 +51,7 @@ from software.network.proxy.session import format_quota_value
 
 __all__ = [
     "AreaProxyQualityError",
+    "HTTP_PROXY_MIN_REMAINING_TTL_SECONDS",
     "ProxyApiFatalError",
     "PROXY_SOURCE_BENEFIT",
     "PROXY_SOURCE_CUSTOM",

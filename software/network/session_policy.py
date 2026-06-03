@@ -100,7 +100,7 @@ def _mark_proxy_temporarily_bad(
     ctx.mark_proxy_in_cooldown(normalized, cooldown_seconds)
     _discard_unresponsive_proxy(ctx, normalized)
     logging.info(
-        "代理进入冷却 %.0fs：%s",
+        "代理已本地临时屏蔽 %.0fs：%s",
         float(cooldown_seconds or 0.0),
         mask_proxy_for_log(normalized),
     )
@@ -141,7 +141,7 @@ def _purge_unusable_proxy_pool_locked(
             continue
         if ctx._is_proxy_in_cooldown_locked(lease.address):
             removed += 1
-            logging.info("已移除冷却中的代理：%s", mask_proxy_for_log(lease.address))
+            logging.info("已移除本地临时屏蔽中的代理：%s", mask_proxy_for_log(lease.address))
             continue
         if not proxy_lease_has_sufficient_ttl(lease, required_ttl_seconds=required_ttl_seconds):
             removed += 1
@@ -174,7 +174,7 @@ def _pop_available_proxy_lease_locked(ctx: ExecutionState) -> Optional[ProxyLeas
             logging.info("已跳过即将过期的代理：%s", mask_proxy_for_log(lease.address))
             continue
         if ctx._is_proxy_in_cooldown_locked(lease.address):
-            logging.info("已跳过冷却中的代理：%s", mask_proxy_for_log(lease.address))
+            logging.info("已跳过本地临时屏蔽中的代理：%s", mask_proxy_for_log(lease.address))
             continue
         if lease.address in blocked_addresses:
             logging.info("已跳过已占用或已成功使用过的代理：%s", mask_proxy_for_log(lease.address))
@@ -209,7 +209,7 @@ def _merge_fetched_proxy_leases_locked(
             logging.info("已丢弃即将过期的新代理：%s", mask_proxy_for_log(lease.address))
             continue
         if ctx._is_proxy_in_cooldown_locked(lease.address):
-            logging.info("已跳过冷却中的新代理：%s", mask_proxy_for_log(lease.address))
+            logging.info("已跳过本地临时屏蔽中的新代理：%s", mask_proxy_for_log(lease.address))
             continue
         if lease.address in existing:
             logging.info("已跳过重复或正在占用的新代理：%s", mask_proxy_for_log(lease.address))
