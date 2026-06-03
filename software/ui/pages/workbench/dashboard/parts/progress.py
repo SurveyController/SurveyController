@@ -66,7 +66,19 @@ def _should_use_indeterminate_thread_step(status_text: str, *, running: bool) ->
     )
 
 
-THREAD_STEP_MIN_VISIBLE_MS = 90
+def _thread_progress_signature(item: Dict[str, Any], display_name: str, status_text: str) -> tuple[Any, ...]:
+    return (
+        display_name,
+        status_text,
+        max(0, int(item.get("success_count") or 0)),
+        max(0, int(item.get("fail_count") or 0)),
+        max(0, int(item.get("step_current") or 0)),
+        max(0, int(item.get("step_total") or 0)),
+        bool(item.get("running", True)),
+    )
+
+
+THREAD_STEP_MIN_VISIBLE_MS = 0
 THREAD_STEP_ANIMATION_MS = 140
 
 
@@ -522,6 +534,7 @@ class DashboardProgressMixin:
             "step_timer": step_timer,
             "pending_step_payload": None,
             "displayed_status_text": "",
+            "last_payload_signature": None,
             "last_step_switch_ts": 0.0,
         }
         step_timer.timeout.connect(
@@ -621,6 +634,10 @@ class DashboardProgressMixin:
             "step_total": step_total,
             "running": running,
         }
+        if THREAD_STEP_MIN_VISIBLE_MS <= 0:
+            row["pending_step_payload"] = None
+            self._apply_thread_step_payload(row, payload)
+            return
         displayed_status_text = str(row.get("displayed_status_text") or "")
         step_timer = row.get("step_timer")
         if displayed_status_text == str(status_text or ""):
@@ -672,12 +689,18 @@ class DashboardProgressMixin:
             self._thread_clear_timer.stop()
         if not thread_rows:
             if running_now:
+                refresh_needed = self.thread_progress_hint.isHidden()
                 self.thread_progress_hint.show()
+                previous_text = self.thread_progress_hint.text()
                 self.thread_progress_hint.setText("正在等待会话状态...")
-                self._refresh_thread_progress_layout()
+                if refresh_needed or previous_text != self.thread_progress_hint.text():
+                    self._refresh_thread_progress_layout()
             return
 
-        self.thread_progress_hint.hide()
+        layout_changed = False
+        if not self.thread_progress_hint.isHidden():
+            self.thread_progress_hint.hide()
+            layout_changed = True
         if (
             running_now
             and getattr(self, "_thread_view_current", self.THREAD_VIEW_QUESTION_LIST)
@@ -700,12 +723,18 @@ class DashboardProgressMixin:
             if row is None:
                 row = self._create_thread_progress_row(thread_display_name)
                 self._thread_progress_rows[thread_name] = row
+                layout_changed = True
             else:
                 _set_text_if_changed(row["name"], thread_display_name)
 
             status_text = str(item.get("status_text") or "运行中")
             if not bool(item.get("running", True)) and not status_text:
                 status_text = "已停止"
+
+            signature = _thread_progress_signature(item, thread_display_name, status_text)
+            if row.get("last_payload_signature") == signature:
+                continue
+            row["last_payload_signature"] = signature
 
             success_count = max(0, int(item.get("success_count") or 0))
             fail_count = max(0, int(item.get("fail_count") or 0))
@@ -727,7 +756,9 @@ class DashboardProgressMixin:
             row = self._thread_progress_rows.pop(name, None)
             if row and row.get("widget") is not None:
                 self._dispose_thread_progress_widget(row["widget"])
-        self._refresh_thread_progress_layout()
+                layout_changed = True
+        if layout_changed:
+            self._refresh_thread_progress_layout()
 
     def on_run_state_changed(self, running: bool):
         self._sync_start_button_state(running=running)

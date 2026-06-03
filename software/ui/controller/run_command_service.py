@@ -38,6 +38,8 @@ from software.ui.controller.run_controller_parts.runtime_shutdown import (
     clear_finished_thread,
 )
 
+STATUS_SNAPSHOT_MIN_INTERVAL_SECONDS = 0.15
+
 
 @dataclass
 class _RuntimeLifecycleState:
@@ -483,11 +485,20 @@ class RunCommandService(RandomIpRuntimeService, RunControllerInitializationMixin
             observed_seq = execution_state._runtime_change_sequence()
         except Exception:
             observed_seq = -1
+        pending_snapshot = False
+        last_snapshot_at = 0.0
         while not stop_signal.is_set():
+            if pending_snapshot:
+                timeout = max(
+                    0.0,
+                    STATUS_SNAPSHOT_MIN_INTERVAL_SECONDS - (time.monotonic() - last_snapshot_at),
+                )
+            else:
+                timeout = 1.0
             try:
                 stopped = execution_state.wait_for_runtime_change(
                     stop_signal=stop_signal,
-                    timeout=1.0,
+                    timeout=timeout,
                 )
             except Exception:
                 logging.debug("等待运行态变更失败", exc_info=True)
@@ -501,11 +512,18 @@ class RunCommandService(RandomIpRuntimeService, RunControllerInitializationMixin
                 current_seq = observed_seq + 1
             if stopped:
                 break
-            if current_seq == observed_seq:
+            if current_seq != observed_seq:
+                observed_seq = current_seq
+                pending_snapshot = True
+            if not pending_snapshot:
                 continue
-            observed_seq = current_seq
+            now = time.monotonic()
+            if last_snapshot_at > 0 and now - last_snapshot_at < STATUS_SNAPSHOT_MIN_INTERVAL_SECONDS:
+                continue
             try:
                 self._dispatch_to_ui_async(self.emit_status_snapshot)
+                last_snapshot_at = now
+                pending_snapshot = False
             except Exception:
                 logging.debug("派发运行态快照失败", exc_info=True)
         if self._execution_state is execution_state:

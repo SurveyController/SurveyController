@@ -349,7 +349,7 @@ def test_dashboard_thread_progress_shows_indeterminate_bar_while_fetching_proxy(
     assert row["step_busy_bar"].isVisible() is True
 
 
-def test_dashboard_thread_progress_keeps_previous_step_briefly_before_switch(
+def test_dashboard_thread_progress_switches_to_current_step_immediately(
     monkeypatch,
     qtbot,
 ) -> None:
@@ -405,11 +405,9 @@ def test_dashboard_thread_progress_keeps_previous_step_briefly_before_switch(
         }
     )
 
-    assert row["status"].text() == "构造答案"
-    assert row["displayed_status_text"] == "构造答案"
-    qtbot.wait(130)
     assert row["status"].text() == "提交问卷"
     assert row["displayed_status_text"] == "提交问卷"
+    qtbot.wait(50)
     assert row["step_bar"].isHidden() is True
     assert row["step_busy_bar"].isVisible() is True
 
