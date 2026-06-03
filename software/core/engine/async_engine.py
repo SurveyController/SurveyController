@@ -8,6 +8,7 @@ import logging
 import threading
 from typing import Any, Callable, Optional
 
+from software.app.version import __VERSION__
 from software.core.engine.async_events import AsyncRunContext
 from software.core.engine.async_runtime_loop import AsyncSlotRunner
 from software.core.engine.async_scheduler import AsyncScheduler
@@ -24,6 +25,24 @@ from software.network.session_policy import (
     wait_for_proxy_prefetch_cycle,
 )
 from software.providers.registry import parse_survey
+
+
+def _format_seconds_range(value: Any) -> str:
+    try:
+        start, end = value
+        return f"{int(start)}-{int(end)}秒"
+    except Exception:
+        return "未知"
+
+
+def _format_proxy_source(source: Any) -> str:
+    normalized = str(source or "default").strip().lower()
+    labels = {
+        "default": "默认",
+        "benefit": "限时福利",
+        "custom": "自定义",
+    }
+    return labels.get(normalized, normalized or "默认")
 
 
 class AsyncRuntimeEngine:
@@ -111,10 +130,18 @@ class AsyncRuntimeEngine:
             status_sink=self._status_bus.emit,
         )
         logging.info(
-            "AsyncRuntimeEngine 已启动：总并发=%s，纯 HTTP 运行时",
+            "任务启动：版本=%s 问卷链接=%s 平台=%s 目标份数=%s 当前进度=%s/%s 并发数=%s 作答时长=%s 随机IP=%s 代理源=%s 运行时=纯HTTP",
+            __VERSION__,
+            config.url or "",
+            config.survey_provider or "",
+            config.target_num,
+            state.cur_num,
+            config.target_num,
             worker_count,
+            _format_seconds_range(config.answer_duration_range_seconds),
+            "开启" if config.random_proxy_ip_enabled else "关闭",
+            _format_proxy_source(config.proxy_source),
         )
-        logging.info("目标份数: %s, 当前进度: %s/%s", config.target_num, state.cur_num, config.target_num)
         stop_event = self._stop_event
         if stop_event is None:
             raise RuntimeError("AsyncRuntimeEngine stop_event 未初始化")

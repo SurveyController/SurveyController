@@ -93,7 +93,6 @@ def _resolve_wjx_submit_start_seconds(*, current_ms: int, ktimes: int) -> int:
 
 
 def _resolve_wjx_submit_timing(*, page_html: str, current_ms: int, sampled_ktimes: int) -> tuple[int, int]:
-    current_seconds = max(1, int(int(current_ms or 0) / 1000))
     ktimes = max(1, int(sampled_ktimes or 1))
     return _resolve_wjx_submit_start_seconds(
         current_ms=current_ms,

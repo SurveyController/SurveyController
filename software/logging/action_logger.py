@@ -5,6 +5,24 @@ import functools
 import logging
 from typing import Any, Callable, Mapping, Optional
 
+_IMPORTANT_INFO_EVENTS = frozenset(
+    {
+        ("CONFIG", "change_config_directory"),
+        ("CONFIG", "change_proxy_source"),
+        ("CONFIG", "load_config"),
+        ("CONFIG", "reset_ui_settings"),
+        ("CONFIG", "save_config"),
+        ("CONFIG", "toggle_random_ip"),
+        ("RUN", "restart_run"),
+        ("RUN", "resume_run"),
+        ("RUN", "start_run"),
+        ("UI", "parse_survey"),
+        ("UPDATE", "apply_downloaded_update"),
+        ("UPDATE", "check_updates"),
+        ("UPDATE", "download_update"),
+    }
+)
+
 
 def _normalize_token(value: Any, fallback: str) -> str:
     text = str(value or "").strip()
@@ -41,6 +59,17 @@ def _normalize_detail(detail: Any) -> str:
     return " ".join(text.split())
 
 
+def _should_emit_action_log(scope: str, event: str, level: int, result: str) -> bool:
+    if level >= logging.WARNING:
+        return True
+    normalized_result = _normalize_token(result, "unknown").lower()
+    if normalized_result in {"blocked", "failed", "error", "cancelled"}:
+        return True
+    normalized_scope = _normalize_token(scope, "UI").upper()
+    normalized_event = _normalize_token(event, "unknown").lower()
+    return (normalized_scope, normalized_event) in _IMPORTANT_INFO_EVENTS
+
+
 def log_action(
     scope: str,
     event: str,
@@ -53,6 +82,9 @@ def log_action(
     payload: Optional[Mapping[str, Any]] = None,
 ) -> None:
     """Emit a structured action log using stable key-value fields."""
+
+    if not _should_emit_action_log(scope, event, level, result):
+        return
 
     normalized_scope = _normalize_token(scope, "UI").upper()
     normalized_event = _normalize_token(event, "unknown").lower()
