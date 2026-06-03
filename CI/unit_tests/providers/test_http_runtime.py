@@ -91,7 +91,7 @@ def test_wjx_scene_id_extraction_prefers_page_value() -> None:
 
 
 @pytest.mark.asyncio
-async def test_wjx_submit_starttime_uses_page_starttime(monkeypatch) -> None:
+async def test_wjx_submit_timing_uses_configured_answer_duration(monkeypatch) -> None:
     config = ExecutionConfig(
         url="https://www.wjx.cn/vm/demo.aspx",
         survey_provider="wjx",
@@ -135,9 +135,9 @@ async def test_wjx_submit_starttime_uses_page_starttime(monkeypatch) -> None:
     )
 
     assert ok is True
-    assert captured["params"]["ktimes"] == "5"
-    assert captured["params"]["starttime"] == "2026/5/30 1:23:18"
-    assert captured["params"]["cst"] == str(page_start * 1000)
+    assert captured["params"]["ktimes"] == "90"
+    assert captured["params"]["starttime"] == "2026/5/30 1:21:53"
+    assert captured["params"]["cst"] == str((page_start + 5 - 90) * 1000)
 
 
 @pytest.mark.asyncio

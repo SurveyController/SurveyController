@@ -51,20 +51,6 @@ class WjxSubmitResult:
     REJECTED = "rejected"
 
 
-_WJX_STARTTIME_INPUT_PATTERNS = (
-    re.compile(
-        r'<input\b[^>]*\b(?:id|name)=["\']starttime["\'][^>]*\bvalue=["\']([^"\']+)["\']',
-        re.IGNORECASE | re.DOTALL,
-    ),
-    re.compile(
-        r'<input\b[^>]*\bvalue=["\']([^"\']+)["\'][^>]*\b(?:id|name)=["\']starttime["\']',
-        re.IGNORECASE | re.DOTALL,
-    ),
-)
-_WJX_NOW_TIME_PATTERNS = (
-    re.compile(r'var\s+nowTime\s*=\s*["\']([^"\']+)["\']', re.IGNORECASE),
-    re.compile(r'var\s+interviewStartTime\s*=\s*["\']([^"\']+)["\']', re.IGNORECASE),
-)
 _WJX_SCENE_ID_PATTERNS = (
     re.compile(r'\bsceneId\s*[:=]\s*["\']([^"\']+)["\']', re.IGNORECASE),
     re.compile(r'\bscene_id\s*[:=]\s*["\']([^"\']+)["\']', re.IGNORECASE),
@@ -100,26 +86,6 @@ def _format_wjx_starttime(timestamp_seconds: int) -> str:
     return f"{dt.year}/{dt.month}/{dt.day} {dt.hour}:{dt.minute}:{dt.second}"
 
 
-def _extract_wjx_starttime_seconds(page_html: str) -> int | None:
-    text = str(page_html or "")
-    if not text:
-        return None
-
-    for pattern in _WJX_STARTTIME_INPUT_PATTERNS + _WJX_NOW_TIME_PATTERNS:
-        match = pattern.search(text)
-        if not match:
-            continue
-        raw_value = html_lib.unescape(str(match.group(1) or "").strip())
-        if not raw_value:
-            continue
-        for candidate in (raw_value, raw_value.replace("-", "/")):
-            try:
-                return int(datetime.strptime(candidate, "%Y/%m/%d %H:%M:%S").timestamp())
-            except ValueError:
-                continue
-    return None
-
-
 def _resolve_wjx_submit_start_seconds(*, current_ms: int, ktimes: int) -> int:
     current_seconds = max(1, int(int(current_ms or 0) / 1000))
     duration_seconds = max(1, int(ktimes or 1))
@@ -128,12 +94,6 @@ def _resolve_wjx_submit_start_seconds(*, current_ms: int, ktimes: int) -> int:
 
 def _resolve_wjx_submit_timing(*, page_html: str, current_ms: int, sampled_ktimes: int) -> tuple[int, int]:
     current_seconds = max(1, int(int(current_ms or 0) / 1000))
-    page_start_seconds = _extract_wjx_starttime_seconds(page_html)
-    if page_start_seconds is not None and 0 < page_start_seconds <= current_seconds:
-        start_seconds = int(page_start_seconds)
-        ktimes = max(1, current_seconds - start_seconds)
-        return start_seconds, ktimes
-
     ktimes = max(1, int(sampled_ktimes or 1))
     return _resolve_wjx_submit_start_seconds(
         current_ms=current_ms,
