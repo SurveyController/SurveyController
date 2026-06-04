@@ -119,13 +119,19 @@ def _score_question_answer(raw_question: Mapping[str, Any], action: AnswerAction
     if normalized_index < 0 or normalized_index >= len(option_items):
         raise RuntimeError(f"腾讯问卷第{int(action.question_num or 0)}题没有生成评分答案")
     selected_option = option_items[normalized_index]
-    answer_value = str(selected_option.get("id") or "").strip() or str(selected_option.get("text") or "").strip()
-    if not answer_value:
-        answer_value = str(normalized_index)
+    question_id = str(raw_question.get("id") or action.question_id).strip()
+    score_value = str(selected_option.get("text") or "").strip()
+    if not score_value:
+        score_value = str(selected_option.get("id") or "").strip()
+    if not score_value:
+        score_value = str(normalized_index)
+    answer_id = question_id
+    if provider_type in {"star", "nps"} and score_value:
+        answer_id = f"{question_id}-{score_value}"
     return {
-        "id": str(raw_question.get("id") or action.question_id).strip(),
+        "id": answer_id,
         "type": provider_type,
-        "answer": answer_value,
+        "answer": score_value,
     }
 
 

@@ -187,32 +187,32 @@ def test_qq_question_answer_builders_cover_choice_text_and_matrix() -> None:
     )
     matrix = qq_http._question_answer(
         {
-            "id": "q3",
+            "id": "q-16-6ef8",
             "type": "matrix_radio",
-            "options": [{"id": "o1", "text": "A"}, {"id": "o2", "text": "B"}],
-            "sub_titles": [{"id": "r1", "text": "R1"}],
+            "options": [{"id": "o-101-1d22", "text": "A"}, {"id": "o-102-98ff", "text": "B"}],
+            "sub_titles": [{"id": "g-101-f3a5", "text": "R1"}],
         },
-        AnswerAction(question_id="q3", kind="matrix", matrix_indices=(0,)),
+        AnswerAction(question_id="q-16-6ef8", kind="matrix", matrix_indices=(0,)),
     )
 
     assert choice["options"][1]["checked"] == 1
     assert text["text"] == "hello"
-    assert matrix == [{"id": "q3_r1_o1", "type": "matrix_radio", "answer": "on"}]
+    assert matrix == [{"id": "q-16-6ef8_g-101-f3a5_o-101-1d22", "type": "matrix_radio", "answer": "on"}]
 
 
 def test_qq_score_answer_uses_scalar_answer_field_for_nps() -> None:
     score = qq_http._question_answer(
         {
-            "id": "q8",
+            "id": "q-15-a899",
             "type": "nps",
             "star_begin_num": 0,
             "star_num": 11,
         },
-        AnswerAction(question_num=8, question_id="q8", kind="choice", selected_indices=(3,), scalar_value=3, record_type="score"),
+        AnswerAction(question_num=8, question_id="q-15-a899", kind="choice", selected_indices=(3,), scalar_value=3, record_type="score"),
     )
 
     assert score == {
-        "id": "q8",
+        "id": "q-15-a899-3",
         "type": "nps",
         "answer": "3",
     }
@@ -234,32 +234,32 @@ def test_qq_score_answer_rejects_missing_score_choice() -> None:
 def test_qq_matrix_star_answer_builds_star_options_without_raw_options() -> None:
     matrix = qq_http._question_answer(
         {
-            "id": "q4",
+            "id": "q-13-7d39",
             "type": "matrix_star",
             "star_begin_num": 1,
             "star_num": 5,
-            "sub_titles": [{"id": "g1", "text": "薪资福利"}],
+            "sub_titles": [{"id": "g-101-ae7c", "text": "薪资福利"}],
         },
-        AnswerAction(question_num=4, question_id="q4", kind="matrix", matrix_indices=(2,), record_type="matrix"),
+        AnswerAction(question_num=4, question_id="q-13-7d39", kind="matrix", matrix_indices=(2,), record_type="matrix"),
     )
 
-    assert matrix == [{"id": "q4-g1-3", "type": "matrix_star", "answer": "on"}]
+    assert matrix == [{"id": "q-13-7d39-g-101-ae7c-3", "type": "matrix_star", "answer": "on"}]
 
 
 def test_qq_matrix_radio_answer_uses_question_row_id_and_option_id() -> None:
     matrix = qq_http._question_answer(
         {
-            "id": "q16",
+            "id": "q-16-6ef8",
             "type": "matrix_radio",
-            "options": [{"id": "o1", "text": "较弱"}, {"id": "o2", "text": "一般"}],
-            "sub_titles": [{"id": "g1", "text": "专业实践能力"}, {"id": "g2", "text": "外语能力"}],
+            "options": [{"id": "o-101-1d22", "text": "较弱"}, {"id": "o-102-98ff", "text": "一般"}],
+            "sub_titles": [{"id": "g-101-f3a5", "text": "专业实践能力"}, {"id": "g-102-fefa", "text": "外语能力"}],
         },
-        AnswerAction(question_num=16, question_id="q16", kind="matrix", matrix_indices=(1, 0), record_type="matrix"),
+        AnswerAction(question_num=16, question_id="q-16-6ef8", kind="matrix", matrix_indices=(1, 0), record_type="matrix"),
     )
 
     assert matrix == [
-        {"id": "q16_g1_o2", "type": "matrix_radio", "answer": "on"},
-        {"id": "q16_g2_o1", "type": "matrix_radio", "answer": "on"},
+        {"id": "q-16-6ef8_g-101-f3a5_o-102-98ff", "type": "matrix_radio", "answer": "on"},
+        {"id": "q-16-6ef8_g-102-fefa_o-101-1d22", "type": "matrix_radio", "answer": "on"},
     ]
 
 
@@ -270,9 +270,9 @@ def test_qq_matrix_radio_answer_rejects_missing_option_id() -> None:
                 "id": "q16",
                 "type": "matrix_radio",
                 "options": [{"text": "较弱"}, {"text": "一般"}],
-                "sub_titles": [{"id": "g1", "text": "专业实践能力"}],
+                "sub_titles": [{"id": "g-101-f3a5", "text": "专业实践能力"}],
             },
-            AnswerAction(question_num=16, question_id="q16", kind="matrix", matrix_indices=(1,), record_type="matrix"),
+            AnswerAction(question_num=16, question_id="q-16-6ef8", kind="matrix", matrix_indices=(1,), record_type="matrix"),
         )
 
 
@@ -1036,7 +1036,7 @@ async def test_qq_http_runtime_skips_description_metadata(monkeypatch) -> None:
             num=6,
             title="模特A评分",
             provider="qq",
-            provider_question_id="q6",
+            provider_question_id="q-13-7d39",
             provider_type="matrix_star",
             type_code="6",
             option_texts=["1", "2"],
@@ -1053,10 +1053,10 @@ async def test_qq_http_runtime_skips_description_metadata(monkeypatch) -> None:
         return "sess", {}, [
             {"id": "q5", "type": "description", "title": "模特A", "page_id": "p1"},
             {
-                "id": "q6",
+                "id": "q-13-7d39",
                 "type": "matrix_star",
                 "options": [{"id": "o1", "text": "1"}, {"id": "o2", "text": "2"}],
-                "sub_titles": [{"id": "r1", "text": "专业"}],
+                "sub_titles": [{"id": "g-101-ae7c", "text": "专业"}],
                 "page_id": "p1",
             },
         ]
@@ -1084,7 +1084,7 @@ async def test_qq_http_runtime_skips_description_metadata(monkeypatch) -> None:
     assert ok is True
     assert built_questions == [6]
     submitted_questions = captured["json"]["answer_survey"]["pages"][0]["questions"]
-    assert submitted_questions == [{"id": "q6-r1-1", "type": "matrix_star", "answer": "on"}]
+    assert submitted_questions == [{"id": "q-13-7d39-g-101-ae7c-1", "type": "matrix_star", "answer": "on"}]
 
 
 @pytest.mark.asyncio
