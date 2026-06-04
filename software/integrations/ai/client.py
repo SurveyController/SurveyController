@@ -6,6 +6,7 @@ from __future__ import annotations
 import logging
 from typing import List, Optional, Union
 
+from software.core.task import ExecutionState
 from software.integrations.ai.free_api import FreeAITimeoutError, call_free_ai_api_async
 from software.integrations.ai.protocols import (
     _CHAT_COMPLETIONS_SUFFIX,
@@ -60,7 +61,7 @@ async def agenerate_answer(
     *,
     question_type: str = FREE_QUESTION_TYPE_FILL,
     blank_count: Optional[int] = None,
-    ctx: object = None,
+    ctx: ExecutionState | None = None,
 ) -> Union[str, List[str]]:
     """根据问题标题异步生成答案。"""
     config = get_ai_settings()

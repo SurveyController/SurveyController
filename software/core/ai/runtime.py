@@ -3,6 +3,7 @@ import logging
 import re
 from typing import List, Optional, Union
 
+from software.core.task import ExecutionState
 from software.logging.log_utils import log_suppressed_exception
 
 from software.integrations.ai.client import agenerate_answer
@@ -144,7 +145,7 @@ async def agenerate_ai_answer(
     blank_count: Optional[int] = None,
     description: str = "",
     question_number: int = 0,
-    ctx: object = None,
+    ctx: ExecutionState | None = None,
 ) -> Union[str, List[str]]:
     cleaned = build_ai_question_prompt(
         question_title,
