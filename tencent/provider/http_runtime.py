@@ -305,12 +305,6 @@ async def brush_qq_http(
             if bool(getattr(question, "unsupported", False)):
                 raise RuntimeError(f"腾讯问卷第{question.num}题暂不支持：{question.unsupported_reason or question.type_code}")
 
-        await prefill_free_ai_answers_for_questions(
-            questions,
-            ctx,
-            thread_name=thread_name,
-        )
-
         async def _build_action(question: SurveyQuestionMeta) -> AnswerAction | None:
             if stop_signal is not None and stop_signal.is_set():
                 return None
@@ -320,6 +314,7 @@ async def brush_qq_http(
                 ctx,
                 psycho_plan=psycho_plan,
                 thread_name=thread_name,
+                allow_ai_placeholder=True,
             )
 
         plan = await build_http_logic_plan(
@@ -327,6 +322,12 @@ async def brush_qq_http(
             build_action=_build_action,
         )
         actions = list(plan.actions)
+        await prefill_free_ai_answers_for_questions(
+            questions,
+            actions,
+            ctx,
+            thread_name=thread_name,
+        )
         action_by_question_id = {
             str(action.question_id or "").strip(): action
             for action in actions

@@ -339,12 +339,6 @@ async def _build_action_plan(
         if bool(getattr(question, "unsupported", False)):
             raise RuntimeError(f"问卷星第{question.num}题暂不支持：{question.unsupported_reason or question.type_code}")
 
-    await prefill_free_ai_answers_for_questions(
-        questions,
-        ctx,
-        thread_name=thread_name,
-    )
-
     async def _build_action(question: SurveyQuestionMeta) -> AnswerAction | None:
         if stop_signal is not None and stop_signal.is_set():
             return None
@@ -354,11 +348,24 @@ async def _build_action_plan(
             ctx,
             psycho_plan=psycho_plan,
             thread_name=thread_name,
+            allow_ai_placeholder=True,
         )
 
-    return await build_http_logic_plan(
+    plan = await build_http_logic_plan(
         questions,
         build_action=_build_action,
+    )
+    actions = list(plan.actions)
+    await prefill_free_ai_answers_for_questions(
+        questions,
+        actions,
+        ctx,
+        thread_name=thread_name,
+    )
+    return HttpLogicPlan(
+        actions=tuple(actions),
+        skipped_question_nums=plan.skipped_question_nums,
+        terminated_early=plan.terminated_early,
     )
 
 

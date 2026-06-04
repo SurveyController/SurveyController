@@ -25,6 +25,7 @@ from software.network.proxy.session import (
     get_device_id,
     get_session_snapshot,
 )
+from software.core.task import ExecutionState
 
 logger = logging.getLogger(__name__)
 
@@ -71,6 +72,7 @@ class FreeAIBatchPollResult:
     expires_at: str = ""
     poll_after_ms: int = 1000
     items: List[FreeAIBatchItemResult] | None = None
+    detail: str = ""
 
 
 @dataclass(frozen=True)
@@ -108,13 +110,16 @@ _FREE_AI_ERROR_MESSAGES = {
     "device_banned": "免费 AI 调用失败：当前设备已被封禁",
     "user_ai_banned": "免费 AI 调用失败：当前账号已被禁止使用免费 AI",
     "ai_not_configured": "免费 AI 调用失败：服务端未配置 AI",
+    "ai_global_queue_full": "免费 AI 批量调用失败：服务端全局队列已满",
     "ai_task_queue_full": "免费 AI 批量调用失败：任务队列已满",
     "ai_task_not_found": "免费 AI 批量调用失败：任务不存在或设备不匹配",
+    "ai_task_expired": "免费 AI 批量调用失败：任务已超时",
     "ai_upstream_failed": "免费 AI 调用失败：上游模型服务异常",
     "ai_empty_response": "免费 AI 调用失败：上游返回空答案",
     "ai_usage_missing": "免费 AI 调用失败：服务端使用记录异常",
     "ai_invalid_answers_format": "免费 AI 调用失败：服务端返回的 answers 格式无效",
     "ai_answers_count_mismatch": "免费 AI 调用失败：服务端返回的答案数量与空位数量不匹配",
+    "expired": "免费 AI 批量调用失败：任务已超时",
 }
 
 _FREE_AI_LOG_TEXT_LIMIT = 240
@@ -125,8 +130,11 @@ _FREE_AI_BATCH_MIN_POLL_MS = 200
 _FREE_AI_BATCH_MAX_POLL_MS = 3000
 _FREE_AI_BATCH_DEFAULT_POLL_MS = 1000
 _FREE_AI_BATCH_MAX_CONCURRENCY = 4
+_FREE_AI_MAX_REQUESTS_PER_MINUTE = 100
+_FREE_AI_RATE_WINDOW_SECONDS = 60.0
 _FREE_AI_BATCH_TERMINAL_STATUSES = frozenset({"completed", "partial", "failed", "expired"})
 _FREE_AI_BATCH_ACTIVE_STATUSES = frozenset({"queued", "running"})
+_FREE_AI_BATCH_CREATE_ACCEPTED_STATUS_CODES = frozenset({200, 202})
 _FREE_AI_BATCH_SEMAPHORE = asyncio.Semaphore(_FREE_AI_BATCH_MAX_CONCURRENCY)
 
 __all__ = [
@@ -238,6 +246,39 @@ def _clamp_poll_after_ms(value: Any) -> int:
     except Exception:
         poll_after_ms = _FREE_AI_BATCH_DEFAULT_POLL_MS
     return max(_FREE_AI_BATCH_MIN_POLL_MS, min(_FREE_AI_BATCH_MAX_POLL_MS, poll_after_ms))
+
+
+def _get_free_ai_rate_limit_lock(ctx: ExecutionState) -> asyncio.Lock:
+    loop = asyncio.get_running_loop()
+    current_lock = getattr(ctx, "_free_ai_rate_limit_async_lock", None)
+    current_loop = getattr(ctx, "_free_ai_rate_limit_async_lock_loop", None)
+    if not isinstance(current_lock, asyncio.Lock) or current_loop is not loop:
+        current_lock = asyncio.Lock()
+        setattr(ctx, "_free_ai_rate_limit_async_lock", current_lock)
+        setattr(ctx, "_free_ai_rate_limit_async_lock_loop", loop)
+    return current_lock
+
+
+def _prune_free_ai_request_timestamps(ctx: ExecutionState, now: float) -> None:
+    while ctx.free_ai_request_timestamps and (now - ctx.free_ai_request_timestamps[0]) >= _FREE_AI_RATE_WINDOW_SECONDS:
+        ctx.free_ai_request_timestamps.popleft()
+
+
+async def _await_free_ai_rate_limit_async(ctx: ExecutionState | None) -> None:
+    if ctx is None:
+        return
+    lock = _get_free_ai_rate_limit_lock(ctx)
+    while True:
+        wait_seconds = 0.0
+        async with lock:
+            now = time.monotonic()
+            _prune_free_ai_request_timestamps(ctx, now)
+            if len(ctx.free_ai_request_timestamps) < _FREE_AI_MAX_REQUESTS_PER_MINUTE:
+                ctx.free_ai_request_timestamps.append(now)
+                return
+            oldest = ctx.free_ai_request_timestamps[0]
+            wait_seconds = max(0.05, _FREE_AI_RATE_WINDOW_SECONDS - (now - oldest))
+        await asyncio.sleep(wait_seconds)
 
 
 def _extract_free_answers(data: Dict[str, Any], question_type: str, blank_count: Optional[int]) -> List[str]:
@@ -506,6 +547,7 @@ async def call_free_ai_api_async(
     blank_count: Optional[int],
     system_prompt: str = "",
     timeout: int = _AI_REQUEST_TIMEOUT_SECONDS,
+    ctx: ExecutionState | None = None,
 ) -> List[str]:
     user_id, device_id = await _ensure_free_ai_identity_async()
     _log_free_ai_request_start(
@@ -529,6 +571,7 @@ async def call_free_ai_api_async(
         payload["blank_count"] = int(blank_count or 0)
 
     async def _send_request():
+        await _await_free_ai_rate_limit_async(ctx)
         response = await http_client.apost(AI_FREE_ENDPOINT, headers=headers, json=payload, timeout=timeout, proxies={})
         status_code = int(getattr(response, "status_code", 0) or 0)
         if status_code in _AI_RETRYABLE_STATUS_CODES:
@@ -585,6 +628,7 @@ async def _submit_free_ai_batch_task_with_identity_async(
     device_id: str,
     system_prompt: str = "",
     timeout: int = _AI_REQUEST_TIMEOUT_SECONDS,
+    ctx: ExecutionState | None = None,
 ) -> FreeAIBatchCreateResult:
     normalized_items = _normalize_batch_items(items)
     if len(normalized_items) > _FREE_AI_BATCH_MAX_ITEMS:
@@ -604,6 +648,7 @@ async def _submit_free_ai_batch_task_with_identity_async(
     )
 
     async def _send_request():
+        await _await_free_ai_rate_limit_async(ctx)
         response = await http_client.apost(
             _batch_submit_endpoint(),
             headers=headers,
@@ -623,7 +668,7 @@ async def _submit_free_ai_batch_task_with_identity_async(
             raise FreeAITimeoutError("免费 AI 批量任务创建超时") from exc
         raise
     status_code = int(getattr(response, "status_code", 0) or 0)
-    if status_code != 200:
+    if status_code not in _FREE_AI_BATCH_CREATE_ACCEPTED_STATUS_CODES:
         detail = _extract_free_error_detail(response)
         raise RuntimeError(_format_free_ai_error(detail, status_code))
     data = _extract_json_dict(response)
@@ -645,6 +690,7 @@ async def submit_free_ai_batch_task_async(
     *,
     system_prompt: str = "",
     timeout: int = _AI_REQUEST_TIMEOUT_SECONDS,
+    ctx: ExecutionState | None = None,
 ) -> FreeAIBatchCreateResult:
     user_id, device_id = await _ensure_free_ai_identity_async()
     return await _submit_free_ai_batch_task_with_identity_async(
@@ -653,6 +699,7 @@ async def submit_free_ai_batch_task_async(
         device_id=device_id,
         system_prompt=system_prompt,
         timeout=timeout,
+        ctx=ctx,
     )
 
 
@@ -684,6 +731,7 @@ async def _poll_free_ai_batch_task_with_identity_async(
     *,
     device_id: str,
     timeout: int = _AI_REQUEST_TIMEOUT_SECONDS,
+    ctx: ExecutionState | None = None,
 ) -> FreeAIBatchPollResult:
     normalized_task_id = str(task_id or "").strip()
     if not normalized_task_id:
@@ -692,6 +740,7 @@ async def _poll_free_ai_batch_task_with_identity_async(
     headers = _build_free_ai_headers(device_id)
 
     async def _send_request():
+        await _await_free_ai_rate_limit_async(ctx)
         response = await http_client.aget(
             _batch_task_endpoint(normalized_task_id),
             headers=headers,
@@ -724,6 +773,7 @@ async def _poll_free_ai_batch_task_with_identity_async(
         expires_at=str(data.get("expires_at") or "").strip(),
         poll_after_ms=_clamp_poll_after_ms(data.get("poll_after_ms")),
         items=_extract_batch_poll_items(data),
+        detail=_extract_free_error_detail(response),
     )
     if result.status in _FREE_AI_BATCH_TERMINAL_STATUSES:
         _log_batch_task_terminal(
@@ -740,12 +790,14 @@ async def poll_free_ai_batch_task_async(
     task_id: str,
     *,
     timeout: int = _AI_REQUEST_TIMEOUT_SECONDS,
+    ctx: ExecutionState | None = None,
 ) -> FreeAIBatchPollResult:
     _user_id, device_id = await _ensure_free_ai_identity_async()
     return await _poll_free_ai_batch_task_with_identity_async(
         task_id,
         device_id=device_id,
         timeout=timeout,
+        ctx=ctx,
     )
 
 
@@ -783,13 +835,13 @@ async def wait_free_ai_batch_result_async(
     *,
     system_prompt: str = "",
     timeout: int = _AI_REQUEST_TIMEOUT_SECONDS,
+    ctx: ExecutionState | None = None,
 ) -> FreeAIBatchResolvedResult:
     normalized_items = _normalize_batch_items(items)
     async with _FREE_AI_BATCH_SEMAPHORE:
         user_id, device_id = await _ensure_free_ai_identity_async()
         completed: Dict[str, List[str]] = {}
         failed: Dict[str, str] = {}
-        terminal_pending: set[str] = set()
         task_ids: List[str] = []
         pending_tasks: List[_PendingBatchTask] = []
 
@@ -801,6 +853,7 @@ async def wait_free_ai_batch_result_async(
                     device_id=device_id,
                     system_prompt=system_prompt,
                     timeout=timeout,
+                    ctx=ctx,
                 )
             except Exception as exc:
                 error_text = str(exc)
@@ -831,6 +884,7 @@ async def wait_free_ai_batch_result_async(
                         task.task_id,
                         device_id=device_id,
                         timeout=timeout,
+                        ctx=ctx,
                     )
                     _consume_batch_poll_result(
                         poll_result,
@@ -856,13 +910,16 @@ async def wait_free_ai_batch_result_async(
                     if item_id not in completed and item_id not in failed
                 }
                 if poll_result.status == "failed":
+                    task_error = _format_free_ai_error(poll_result.detail, 0)
                     for item_id in unresolved_item_ids:
-                        failed[item_id] = "免费 AI 批量任务失败"
+                        failed[item_id] = task_error
                 elif poll_result.status == "partial":
                     for item_id in unresolved_item_ids:
                         failed.setdefault(item_id, "免费 AI 批量任务结果不完整")
                 elif poll_result.status == "expired":
-                    terminal_pending.update(unresolved_item_ids)
+                    task_error = _format_free_ai_error(poll_result.detail or "expired", 0)
+                    for item_id in unresolved_item_ids:
+                        failed.setdefault(item_id, task_error)
                 else:
                     for item_id in unresolved_item_ids:
                         failed.setdefault(item_id, "免费 AI 批量任务结果异常")
@@ -873,7 +930,6 @@ async def wait_free_ai_batch_result_async(
             for item_id in task.expected_items:
                 if item_id not in completed and item_id not in failed:
                     pending.add(item_id)
-        pending.update(item_id for item_id in terminal_pending if item_id not in completed and item_id not in failed)
         return FreeAIBatchResolvedResult(
             completed=completed,
             failed=failed,

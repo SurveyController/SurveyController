@@ -5,7 +5,7 @@ from __future__ import annotations
 from typing import Any, Optional, Sequence
 
 from software.app.config import DEFAULT_FILL_TEXT
-from software.core.ai.runtime import AIRuntimeError, agenerate_ai_answer
+from software.core.ai.runtime import AIRuntimeError, agenerate_ai_answer, build_ai_option_fill_prompt
 from software.core.task import ExecutionState
 from software.core.questions.schema import (
     _TEXT_RANDOM_ID_CARD,
@@ -37,6 +37,8 @@ async def resolve_option_fill_text_from_config(
     driver: Any = None,
     ctx: Optional[ExecutionState] = None,
     thread_name: str = "",
+    allow_ai_placeholder: bool = False,
+    ai_placeholder_text: str = DEFAULT_FILL_TEXT,
 ) -> Optional[str]:
     del driver
     raw_value = get_fill_text_from_config(fill_entries, option_index)
@@ -51,16 +53,17 @@ async def resolve_option_fill_text_from_config(
         cached = ctx.get_free_ai_option_fill_prefill_answer(thread_name, question_number, option_index)
         if cached:
             return cached
+    if allow_ai_placeholder:
+        return str(ai_placeholder_text or "").strip() or DEFAULT_FILL_TEXT
 
-    title = str(question_title or "").strip() or f"第{int(question_number or 0)}题"
-    option_hint = str(option_text or "").strip()
-    ai_prompt = f"{title}\n\n当前需要填写的是某个选择题选项后面的补充输入框。"
-    if option_hint:
-        ai_prompt += f"\n已选择的选项是：{option_hint}"
-    ai_prompt += "\n请只输出最终要填写的内容，不要解释。"
+    ai_prompt = build_ai_option_fill_prompt(
+        question_title=question_title,
+        question_number=question_number,
+        option_text=str(option_text or ""),
+    )
 
     try:
-        answer = await agenerate_ai_answer(ai_prompt, question_type="fill_blank")
+        answer = await agenerate_ai_answer(ai_prompt, question_type="fill_blank", ctx=ctx)
     except AIRuntimeError as exc:
         raise AIRuntimeError(f"第{question_number}题附加填空 AI 生成失败：{exc}") from exc
     return str(answer).strip() or DEFAULT_FILL_TEXT

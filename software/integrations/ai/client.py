@@ -60,6 +60,7 @@ async def agenerate_answer(
     *,
     question_type: str = FREE_QUESTION_TYPE_FILL,
     blank_count: Optional[int] = None,
+    ctx: object = None,
 ) -> Union[str, List[str]]:
     """根据问题标题异步生成答案。"""
     config = get_ai_settings()
@@ -78,6 +79,7 @@ async def agenerate_answer(
             question_type=resolved_question_type,
             blank_count=resolved_blank_count,
             system_prompt=system_prompt,
+            ctx=ctx,
         )
         if resolved_question_type == FREE_QUESTION_TYPE_FILL:
             return answers[0]

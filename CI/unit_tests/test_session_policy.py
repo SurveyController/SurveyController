@@ -36,14 +36,19 @@ class SessionPolicyTests:
         ctx.config.target_num = 20
         assert session_policy._resolve_proxy_request_num_locked(ctx) == 6
 
-    def test_resolve_proxy_prefetch_request_count_keeps_small_buffer_only(self) -> None:
+    def test_resolve_proxy_prefetch_request_count_only_refills_for_waiting_slots(self) -> None:
         ctx = ExecutionState(config=ExecutionConfig(random_proxy_ip_enabled=True, target_num=50, num_threads=6))
         ctx.config.proxy_ip_pool = [ProxyLease(address=f'http://1.1.1.{index}:8000') for index in range(1, 4)]
         assert session_policy.resolve_proxy_prefetch_request_count(ctx) == 0
 
         ctx.config.proxy_ip_pool = []
+        assert session_policy.resolve_proxy_prefetch_request_count(ctx) == 0
+
         ctx.proxy_waiting_threads = 2
-        assert session_policy.resolve_proxy_prefetch_request_count(ctx) == 4
+        assert session_policy.resolve_proxy_prefetch_request_count(ctx) == 2
+
+        ctx.config.proxy_ip_pool = [ProxyLease(address='http://1.1.1.9:8000')]
+        assert session_policy.resolve_proxy_prefetch_request_count(ctx) == 1
 
         ctx.cur_num = 50
         assert session_policy.resolve_proxy_prefetch_request_count(ctx) == 0

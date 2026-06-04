@@ -3,9 +3,13 @@ from __future__ import annotations
 import pytest
 
 from software.core.ai import batch_runtime
-from software.core.questions.utils import OPTION_FILL_AI_TOKEN
+from software.core.ai.runtime import (
+    build_free_ai_option_fill_placeholder,
+    build_free_ai_text_placeholder,
+)
 from software.core.task import ExecutionConfig, ExecutionState
 from software.integrations.ai import free_api
+from software.providers.answering import AnswerAction
 from software.providers.contracts import SurveyQuestionMeta
 
 
@@ -14,10 +18,11 @@ async def test_wait_free_ai_batch_result_async_marks_only_invalid_item_failed(mo
     async def fake_identity():
         return 73952, "device-1"
 
-    async def fake_submit(items, *, user_id, device_id, system_prompt="", timeout=0):
+    async def fake_submit(items, *, user_id, device_id, system_prompt="", timeout=0, ctx=None):
         assert user_id == 73952
         assert device_id == "device-1"
         assert [item.item_id for item in items] == ["q1", "q2"]
+        assert ctx is None
         return free_api.FreeAIBatchCreateResult(
             task_id="task-1",
             status="queued",
@@ -26,9 +31,10 @@ async def test_wait_free_ai_batch_result_async_marks_only_invalid_item_failed(mo
             poll_after_ms=0,
         )
 
-    async def fake_poll(task_id, *, device_id, timeout=0):
+    async def fake_poll(task_id, *, device_id, timeout=0, ctx=None):
         assert task_id == "task-1"
         assert device_id == "device-1"
+        assert ctx is None
         return free_api.FreeAIBatchPollResult(
             task_id="task-1",
             status="completed",
@@ -80,18 +86,26 @@ async def test_wait_free_ai_batch_result_async_marks_only_invalid_item_failed(mo
     assert result.task_ids == ["task-1"]
 
 
-def test_build_free_ai_batch_items_includes_option_fill_ai_items() -> None:
-    config = ExecutionConfig(survey_provider="wjx")
-    config.question_config_index_map = {1: ("single", 0), 2: ("text", 0)}
-    config.text_ai_flags = [True]
-    config.single_option_fill_texts = [[OPTION_FILL_AI_TOKEN, None]]
-    state = ExecutionState(config=config)
+def test_build_free_ai_batch_items_includes_only_action_matched_ai_items() -> None:
     questions = [
         SurveyQuestionMeta(num=1, title="你喜欢的水果", option_texts=["苹果", "香蕉"], options=2),
         SurveyQuestionMeta(num=2, title="请填写职业", text_inputs=1),
     ]
+    actions = [
+        AnswerAction(
+            question_num=1,
+            kind="choice",
+            selected_indices=(0,),
+            option_fill_texts=((0, build_free_ai_option_fill_placeholder(1, 0)),),
+        ),
+        AnswerAction(
+            question_num=2,
+            kind="text",
+            text_values=(build_free_ai_text_placeholder(2, 0),),
+        ),
+    ]
 
-    items, item_question_map, item_option_fill_map = batch_runtime._build_free_ai_batch_items(questions, state)
+    items, item_question_map, item_option_fill_map = batch_runtime._build_free_ai_batch_items_for_actions(questions, actions)
 
     assert [item.item_id for item in items] == ["q1_opt0", "q2"]
     assert item_question_map == {"q2": 2}
@@ -100,17 +114,17 @@ def test_build_free_ai_batch_items_includes_option_fill_ai_items() -> None:
 
 @pytest.mark.asyncio
 async def test_prefill_free_ai_answers_for_questions_raises_when_batch_incomplete(monkeypatch) -> None:
-    config = ExecutionConfig(survey_provider="wjx")
-    config.question_config_index_map = {1: ("text", 0), 2: ("single", 0)}
-    config.text_ai_flags = [True]
-    config.single_option_fill_texts = [[OPTION_FILL_AI_TOKEN]]
-    state = ExecutionState(config=config)
+    state = ExecutionState(config=ExecutionConfig(survey_provider="wjx"))
     questions = [
         SurveyQuestionMeta(num=1, title="请填写职业", text_inputs=1),
         SurveyQuestionMeta(num=2, title="请选择水果", option_texts=["苹果"], options=1),
     ]
+    actions = [
+        AnswerAction(question_num=1, kind="text", text_values=(build_free_ai_text_placeholder(1, 0),)),
+        AnswerAction(question_num=2, kind="choice", selected_indices=(0,), option_fill_texts=((0, build_free_ai_option_fill_placeholder(2, 0)),)),
+    ]
 
-    async def fake_wait(_items, *, system_prompt=""):
+    async def fake_wait(_items, *, system_prompt="", ctx=None):
         assert system_prompt
         return free_api.FreeAIBatchResolvedResult(
             completed={},
@@ -124,6 +138,7 @@ async def test_prefill_free_ai_answers_for_questions_raises_when_batch_incomplet
     with pytest.raises(RuntimeError, match="免费 AI 批量预取未完成"):
         await batch_runtime.prefill_free_ai_answers_for_questions(
             questions,
+            actions,
             state,
             thread_name="slot-1",
         )

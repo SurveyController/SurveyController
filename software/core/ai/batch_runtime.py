@@ -2,11 +2,16 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
-from typing import Dict, Iterable, List, Tuple
+from dataclasses import dataclass, replace
+from typing import Dict, Iterable, List, Sequence, Tuple
 
-from software.core.ai.runtime import build_ai_question_prompt
-from software.core.questions.text_values import OPTION_FILL_AI_TOKEN
+from software.app.config import DEFAULT_FILL_TEXT
+from software.core.ai.runtime import (
+    build_ai_option_fill_prompt,
+    build_ai_question_prompt,
+    is_free_ai_option_fill_placeholder,
+    is_free_ai_text_placeholder,
+)
 from software.core.task import ExecutionState
 from software.integrations.ai.free_api import (
     FreeAIBatchItem,
@@ -20,6 +25,7 @@ from software.integrations.ai.settings import (
     _normalize_ai_mode,
     get_default_system_prompt,
 )
+from software.providers.answering import AnswerAction
 from software.providers.contracts import SurveyQuestionMeta
 
 
@@ -39,61 +45,75 @@ def _item_id_for_question(question_num: int) -> str:
     return f"q{int(question_num or 0)}"
 
 
+def _item_id_for_option_fill(question_num: int, option_index: int) -> str:
+    return f"q{int(question_num or 0)}_opt{int(option_index or 0)}"
+
+
 def _question_type_for_blank_count(blank_count: int) -> str:
     return FREE_QUESTION_TYPE_MULTI if int(blank_count or 0) > 1 else FREE_QUESTION_TYPE_FILL
 
 
-def _build_free_ai_batch_items(
+def _system_prompt_for_free_mode(ctx: ExecutionState) -> str:
+    return str(getattr(ctx.config, "ai_system_prompt", "") or "").strip() or get_default_system_prompt(AI_MODE_FREE)
+
+
+def _question_map(questions: Iterable[SurveyQuestionMeta]) -> Dict[int, SurveyQuestionMeta]:
+    result: Dict[int, SurveyQuestionMeta] = {}
+    for question in list(questions or []):
+        question_num = int(getattr(question, "num", 0) or 0)
+        if question_num > 0:
+            result[question_num] = question
+    return result
+
+
+def _build_free_ai_batch_items_for_actions(
     questions: Iterable[SurveyQuestionMeta],
-    ctx: ExecutionState,
+    actions: Sequence[AnswerAction],
 ) -> tuple[List[FreeAIBatchItem], Dict[str, int], Dict[str, Tuple[int, int]]]:
     items: List[FreeAIBatchItem] = []
     item_question_map: Dict[str, int] = {}
     item_option_fill_map: Dict[str, Tuple[int, int]] = {}
-    config = ctx.config
-    text_ai_flags = list(getattr(config, "text_ai_flags", []) or [])
-    for question in list(questions or []):
-        question_num = int(getattr(question, "num", 0) or 0)
+    question_by_num = _question_map(questions)
+
+    for action in list(actions or []):
+        question_num = int(getattr(action, "question_num", 0) or 0)
         if question_num <= 0:
             continue
-        config_entry = (config.question_config_index_map or {}).get(question_num)
-        if not config_entry:
+        question = question_by_num.get(question_num)
+        if question is None:
             continue
-        entry_type, config_index = config_entry
-        normalized_entry_type = str(entry_type or "").strip()
-        if normalized_entry_type in {"text", "multi_text"}:
-            ai_enabled = bool(text_ai_flags[config_index]) if config_index < len(text_ai_flags) else False
-            if ai_enabled:
-                blank_count = max(1, int(getattr(question, "text_inputs", 1) or 1))
-                question_content = build_ai_question_prompt(
-                    str(getattr(question, "title", "") or ""),
-                    description=str(getattr(question, "description", "") or ""),
-                    question_number=question_num,
-                )
-                if question_content:
-                    item_id = _item_id_for_question(question_num)
-                    items.append(
-                        FreeAIBatchItem(
-                            item_id=item_id,
-                            question_type=_question_type_for_blank_count(blank_count),
-                            question_content=question_content,
-                            blank_count=blank_count if blank_count > 1 else None,
-                        )
+
+        placeholder_texts = [value for value in action.text_values if is_free_ai_text_placeholder(value)]
+        if placeholder_texts:
+            blank_count = len(tuple(action.text_values or ()))
+            question_content = build_ai_question_prompt(
+                str(getattr(question, "title", "") or ""),
+                description=str(getattr(question, "description", "") or ""),
+                question_number=question_num,
+            )
+            if question_content:
+                item_id = _item_id_for_question(question_num)
+                items.append(
+                    FreeAIBatchItem(
+                        item_id=item_id,
+                        question_type=_question_type_for_blank_count(blank_count),
+                        question_content=question_content,
+                        blank_count=blank_count if blank_count > 1 else None,
                     )
-                    item_question_map[item_id] = question_num
-        fill_entries = _option_fill_entries_for_question(config, normalized_entry_type, config_index)
-        if not fill_entries:
-            continue
+                )
+                item_question_map[item_id] = question_num
+
         option_texts = [str(item or "").strip() for item in list(getattr(question, "option_texts", []) or [])]
-        for option_index, raw_value in enumerate(fill_entries):
-            if str(raw_value or "").strip() != OPTION_FILL_AI_TOKEN:
+        for option_index, fill_value in tuple(action.option_fill_texts or ()):
+            if not is_free_ai_option_fill_placeholder(fill_value):
                 continue
-            option_prompt = _build_option_fill_prompt(
+            normalized_option_index = int(option_index)
+            option_prompt = build_ai_option_fill_prompt(
                 question_title=str(getattr(question, "title", "") or ""),
                 question_number=question_num,
-                option_text=option_texts[option_index] if option_index < len(option_texts) else "",
+                option_text=option_texts[normalized_option_index] if normalized_option_index < len(option_texts) else "",
             )
-            option_item_id = _item_id_for_option_fill(question_num, option_index)
+            option_item_id = _item_id_for_option_fill(question_num, normalized_option_index)
             items.append(
                 FreeAIBatchItem(
                     item_id=option_item_id,
@@ -101,52 +121,8 @@ def _build_free_ai_batch_items(
                     question_content=option_prompt,
                 )
             )
-            item_option_fill_map[option_item_id] = (question_num, option_index)
+            item_option_fill_map[option_item_id] = (question_num, normalized_option_index)
     return items, item_question_map, item_option_fill_map
-
-
-def _item_id_for_option_fill(question_num: int, option_index: int) -> str:
-    return f"q{int(question_num or 0)}_opt{int(option_index or 0)}"
-
-
-def _option_fill_entries_for_question(
-    config: object,
-    entry_type: str,
-    config_index: int,
-) -> List[str | None]:
-    if entry_type == "single":
-        raw_entries = getattr(config, "single_option_fill_texts", [])
-    elif entry_type == "dropdown":
-        raw_entries = getattr(config, "droplist_option_fill_texts", [])
-    elif entry_type == "multiple":
-        raw_entries = getattr(config, "multiple_option_fill_texts", [])
-    else:
-        return []
-    if config_index >= len(raw_entries):
-        return []
-    entries = raw_entries[config_index]
-    if not isinstance(entries, list):
-        return []
-    return [None if item is None else str(item) for item in entries]
-
-
-def _build_option_fill_prompt(
-    *,
-    question_title: str,
-    question_number: int,
-    option_text: str,
-) -> str:
-    title = str(question_title or "").strip() or f"第{int(question_number or 0)}题"
-    prompt = f"{title}\n\n当前需要填写的是某个选择题选项后面的补充输入框。"
-    normalized_option_text = str(option_text or "").strip()
-    if normalized_option_text:
-        prompt += f"\n已选择的选项是：{normalized_option_text}"
-    prompt += "\n请只输出最终要填写的内容，不要解释。"
-    return prompt
-
-
-def _system_prompt_for_free_mode(ctx: ExecutionState) -> str:
-    return str(getattr(ctx.config, "ai_system_prompt", "") or "").strip() or get_default_system_prompt(AI_MODE_FREE)
 
 
 def _resolved_answers_by_question_num(
@@ -218,8 +194,81 @@ def _raise_prefill_incomplete_error(
     raise RuntimeError(f"免费 AI 批量预取未完成，已停止本轮提交：{detail}")
 
 
+def _rebuild_selected_texts(
+    action: AnswerAction,
+    question: SurveyQuestionMeta | None,
+    fill_map: Dict[int, str],
+) -> tuple[str, ...]:
+    option_texts = [str(item or "").strip() for item in list(getattr(question, "option_texts", []) or [])]
+    existing = list(action.selected_texts or ())
+    rebuilt: list[str] = []
+    for position, option_index in enumerate(tuple(action.selected_indices or ())):
+        normalized_index = int(option_index)
+        base_text = option_texts[normalized_index] if normalized_index < len(option_texts) else ""
+        if not base_text and position < len(existing):
+            base_text = str(existing[position] or "").split(" / ", 1)[0].strip()
+        fill_value = str(fill_map.get(normalized_index) or "").strip()
+        if fill_value:
+            rebuilt.append(f"{base_text} / {fill_value}" if base_text else fill_value)
+        else:
+            rebuilt.append(base_text)
+    return tuple(rebuilt)
+
+
+def _apply_prefilled_answers_to_actions(
+    questions: Iterable[SurveyQuestionMeta],
+    actions: Sequence[AnswerAction],
+    resolved_answers: Dict[int, tuple[str, ...]],
+    resolved_option_fill_answers: Dict[Tuple[int, int], str],
+) -> List[AnswerAction]:
+    question_by_num = _question_map(questions)
+    updated_actions: List[AnswerAction] = []
+    for action in list(actions or []):
+        question_num = int(getattr(action, "question_num", 0) or 0)
+        updated_action = action
+
+        if question_num in resolved_answers and tuple(action.text_values or ()):
+            updated_action = replace(
+                updated_action,
+                text_values=tuple(
+                    str(item or "").strip() or DEFAULT_FILL_TEXT
+                    for item in resolved_answers[question_num]
+                ),
+            )
+
+        if tuple(updated_action.option_fill_texts or ()):
+            fill_map: Dict[int, str] = {}
+            option_fill_texts: list[tuple[int, str]] = []
+            changed = False
+            for option_index, raw_value in tuple(updated_action.option_fill_texts or ()):
+                normalized_option_index = int(option_index)
+                normalized_value = str(raw_value or "").strip()
+                if is_free_ai_option_fill_placeholder(normalized_value):
+                    normalized_value = str(
+                        resolved_option_fill_answers.get((question_num, normalized_option_index), "")
+                    ).strip()
+                    changed = True
+                if normalized_value:
+                    fill_map[normalized_option_index] = normalized_value
+                    option_fill_texts.append((normalized_option_index, normalized_value))
+            if changed:
+                updated_action = replace(
+                    updated_action,
+                    option_fill_texts=tuple(option_fill_texts),
+                    selected_texts=_rebuild_selected_texts(
+                        updated_action,
+                        question_by_num.get(question_num),
+                        fill_map,
+                    ),
+                )
+
+        updated_actions.append(updated_action)
+    return updated_actions
+
+
 async def prefill_free_ai_answers_for_questions(
     questions: Iterable[SurveyQuestionMeta],
+    actions: List[AnswerAction],
     ctx: ExecutionState,
     *,
     thread_name: str = "",
@@ -227,19 +276,31 @@ async def prefill_free_ai_answers_for_questions(
     ctx.clear_free_ai_prefill_answers(thread_name)
     if not _is_free_ai_mode(ctx):
         return FreeAIPrefillSummary()
-    items, item_question_map, item_option_fill_map = _build_free_ai_batch_items(questions, ctx)
+    if not actions:
+        return FreeAIPrefillSummary()
+
+    items, item_question_map, item_option_fill_map = _build_free_ai_batch_items_for_actions(questions, actions)
     if not items:
         return FreeAIPrefillSummary()
+
     result = await wait_free_ai_batch_result_async(
         items,
         system_prompt=_system_prompt_for_free_mode(ctx),
+        ctx=ctx,
     )
     if result.failed or result.pending:
         _raise_prefill_incomplete_error(result, item_question_map, item_option_fill_map)
+
     resolved_answers = _resolved_answers_by_question_num(result, item_question_map)
     resolved_option_fill_answers = _resolved_option_fill_answers(result, item_option_fill_map)
     ctx.set_free_ai_prefill_answers(thread_name, resolved_answers)
     ctx.set_free_ai_option_fill_prefill_answers(thread_name, resolved_option_fill_answers)
+    actions[:] = _apply_prefilled_answers_to_actions(
+        questions,
+        actions,
+        resolved_answers,
+        resolved_option_fill_answers,
+    )
     return FreeAIPrefillSummary(
         requested=len(items),
         completed=len(result.completed),

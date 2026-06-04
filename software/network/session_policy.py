@@ -15,7 +15,6 @@ from software.core.config.codec import _select_user_agent_from_ratios
 
 _PROXY_WAIT_POLL_SECONDS = 0.3
 _BAD_PROXY_COOLDOWN_SECONDS = 180.0
-_PROXY_PREFETCH_BUFFER_SIZE = 2
 _PROXY_PREFETCH_IDLE_SECONDS = 0.35
 
 
@@ -266,7 +265,10 @@ def _resolve_proxy_request_num_locked(ctx: ExecutionState) -> int:
 
 
 def resolve_proxy_prefetch_request_count(ctx: ExecutionState) -> int:
-    """计算后台预取还需要补多少代理。"""
+    """计算后台预取还需要补多少代理。
+
+    仅按当前真实等待中的线程数补货，避免在线程仍在 AI/HTTP 阶段时持续囤积代理。
+    """
     if not bool(getattr(ctx.config, "random_proxy_ip_enabled", False)):
         return 0
     with ctx.lock:
@@ -275,11 +277,9 @@ def resolve_proxy_prefetch_request_count(ctx: ExecutionState) -> int:
         if remaining_to_start <= 0:
             return 0
         waiting_count = max(0, int(ctx.proxy_waiting_threads or 0))
-        target_buffer = min(
-            waiting_count + _PROXY_PREFETCH_BUFFER_SIZE,
-            remaining_to_start,
-            _resolve_proxy_fetch_max_batch_size(ctx),
-        )
+        if waiting_count <= 0:
+            return 0
+        target_buffer = min(waiting_count, remaining_to_start, _resolve_proxy_fetch_max_batch_size(ctx))
         current_pool_size = len(_ensure_proxy_pool_deque_locked(ctx))
     return max(0, int(target_buffer) - int(current_pool_size))
 

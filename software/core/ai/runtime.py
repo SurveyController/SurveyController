@@ -16,6 +16,8 @@ class AIRuntimeError(RuntimeError):
 
 _AI_FILL_MAX_ATTEMPTS = 4
 _AI_FILL_RETRY_BACKOFF_SECONDS = 0.4
+_FREE_AI_TEXT_PLACEHOLDER_PREFIX = "__FREE_AI_TEXT__"
+_FREE_AI_OPTION_FILL_PLACEHOLDER_PREFIX = "__FREE_AI_OPTION_FILL__"
 
 
 def _is_retryable_ai_generation_error(error: Exception) -> bool:
@@ -100,6 +102,41 @@ def build_ai_question_prompt(
     return title
 
 
+def build_ai_option_fill_prompt(
+    *,
+    question_title: str,
+    question_number: int,
+    option_text: str = "",
+) -> str:
+    title = _cleanup_question_title(question_title)
+    if not title:
+        title = f"第{int(question_number or 0)}题" if int(question_number or 0) > 0 else ""
+    if not title:
+        title = "当前题目"
+    prompt = f"{title}\n\n当前需要填写的是某个选择题选项后面的补充输入框。"
+    normalized_option_text = _normalize_text(option_text)
+    if normalized_option_text:
+        prompt += f"\n已选择的选项是：{normalized_option_text}"
+    prompt += "\n请只输出最终要填写的内容，不要解释。"
+    return prompt
+
+
+def build_free_ai_text_placeholder(question_num: int, blank_index: int) -> str:
+    return f"{_FREE_AI_TEXT_PLACEHOLDER_PREFIX}{int(question_num or 0)}_{int(blank_index or 0)}"
+
+
+def build_free_ai_option_fill_placeholder(question_num: int, option_index: int) -> str:
+    return f"{_FREE_AI_OPTION_FILL_PLACEHOLDER_PREFIX}{int(question_num or 0)}_{int(option_index or 0)}"
+
+
+def is_free_ai_text_placeholder(value: object) -> bool:
+    return str(value or "").startswith(_FREE_AI_TEXT_PLACEHOLDER_PREFIX)
+
+
+def is_free_ai_option_fill_placeholder(value: object) -> bool:
+    return str(value or "").startswith(_FREE_AI_OPTION_FILL_PLACEHOLDER_PREFIX)
+
+
 async def agenerate_ai_answer(
     question_title: str,
     *,
@@ -107,6 +144,7 @@ async def agenerate_ai_answer(
     blank_count: Optional[int] = None,
     description: str = "",
     question_number: int = 0,
+    ctx: object = None,
 ) -> Union[str, List[str]]:
     cleaned = build_ai_question_prompt(
         question_title,
@@ -123,6 +161,7 @@ async def agenerate_ai_answer(
                 cleaned,
                 question_type=question_type,
                 blank_count=blank_count,
+                ctx=ctx,
             )
             if question_type == "multi_fill_blank":
                 if not isinstance(answer, list):

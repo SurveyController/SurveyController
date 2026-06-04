@@ -237,7 +237,7 @@ class AsyncRuntimeEngineLargeTests:
         assert engine._state is None
 
     @pytest.mark.asyncio
-    async def test_run_starts_async_proxy_prefetch_without_blocking_slots(self, monkeypatch) -> None:
+    async def test_run_without_waiting_slots_does_not_prefetch_proxy_pool(self, monkeypatch) -> None:
         engine = _build_engine()
         config = ExecutionConfig(
             num_threads=2,
@@ -283,13 +283,9 @@ class AsyncRuntimeEngineLargeTests:
 
         assert "slot-1" in events
         assert "slot-2" in events
-        assert "fetch-2" in events
-        assert [lease.address for lease in state.config.proxy_ip_pool] == [
-            "http://1.1.1.1:8000",
-            "http://2.2.2.2:8000",
-        ]
-        assert loading_calls[0] == (True, "正在准备代理 0/2")
-        assert loading_calls[-1] == (False, "")
+        assert not any(event.startswith("fetch-") for event in events)
+        assert list(state.config.proxy_ip_pool) == []
+        assert loading_calls == []
 
     @pytest.mark.asyncio
     async def test_run_keeps_prefetching_proxy_pool_after_first_batch_is_consumed(self, monkeypatch) -> None:
