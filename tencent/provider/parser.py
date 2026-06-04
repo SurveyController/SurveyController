@@ -5,7 +5,7 @@ from __future__ import annotations
 import logging
 import re
 import time
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Mapping, Optional, Sequence, Tuple
 from urllib.parse import urlparse
 
 import software.network.http as http_client
@@ -128,7 +128,7 @@ def _collect_image_urls(value: Any, *, depth: int = 0) -> List[str]:
     return []
 
 
-def _build_question_media_from_payload(question: Dict[str, Any], provider_type: str) -> List[Dict[str, Any]]:
+def _build_question_media_from_payload(question: Mapping[str, Any], provider_type: str) -> List[Dict[str, Any]]:
     media: List[Dict[str, Any]] = []
     seen: set[tuple[str, int | None, str]] = set()
 
@@ -320,7 +320,7 @@ def _raise_if_qq_login_required(value: Any) -> None:
 
 
 def _build_qq_parse_result(
-    questions: List[Dict[str, Any]],
+    questions: Sequence[Mapping[str, Any]],
     *,
     raw_title: Any,
     empty_error_message: str,
@@ -392,7 +392,7 @@ async def _fetch_qq_survey_via_http(survey_id: str, hash_value: str) -> Tuple[Li
     raise RuntimeError("腾讯问卷 HTTP 解析失败：未获得可用 locale")
 
 
-def _build_option_texts(question: Dict[str, Any], provider_type: str) -> List[str]:
+def _build_option_texts(question: Mapping[str, Any], provider_type: str) -> List[str]:
     if provider_type in {"nps", "star"}:
         start = int(question.get("star_begin_num") or 0)
         count = max(0, int(question.get("star_num") or 0))
@@ -435,7 +435,7 @@ def _option_payload_contains_fillblank(value: Any, *, depth: int = 0) -> bool:
     return bool(_QQ_FILLBLANK_TOKEN_RE.search(str(value or "")))
 
 
-def _build_fillable_option_indices(question: Dict[str, Any], provider_type: str) -> List[int]:
+def _build_fillable_option_indices(question: Mapping[str, Any], provider_type: str) -> List[int]:
     if provider_type not in {"radio", "checkbox", "select"}:
         return []
     raw_options = question.get("options")
@@ -448,7 +448,7 @@ def _build_fillable_option_indices(question: Dict[str, Any], provider_type: str)
     return fillable
 
 
-def _build_row_texts(question: Dict[str, Any]) -> List[str]:
+def _build_row_texts(question: Mapping[str, Any]) -> List[str]:
     raw_sub_titles = question.get("sub_titles")
     if not isinstance(raw_sub_titles, list):
         return []
@@ -460,7 +460,7 @@ def _build_row_texts(question: Dict[str, Any]) -> List[str]:
     return row_texts
 
 
-def _resolve_option_count(question: Dict[str, Any], provider_type: str, option_texts: List[str]) -> int:
+def _resolve_option_count(question: Mapping[str, Any], provider_type: str, option_texts: List[str]) -> int:
     if provider_type in QQ_DESCRIPTION_PROVIDER_TYPES:
         return 0
     if provider_type in {"nps", "star"}:
@@ -475,7 +475,7 @@ def _resolve_option_count(question: Dict[str, Any], provider_type: str, option_t
     return 0
 
 
-def _build_page_number_map(questions: List[Dict[str, Any]]) -> Dict[Tuple[str, str], int]:
+def _build_page_number_map(questions: Sequence[Mapping[str, Any]]) -> Dict[Tuple[str, str], int]:
     page_map: Dict[Tuple[str, str], int] = {}
     next_page = 1
     for question in questions:
@@ -694,7 +694,7 @@ def _resolve_qq_jump_target_num(
 
 
 def _attach_qq_logic_metadata(
-    raw_questions: List[Dict[str, Any]],
+    raw_questions: Sequence[Mapping[str, Any]],
     normalized_questions: List[Dict[str, Any]],
 ) -> None:
     if not raw_questions or not normalized_questions:
@@ -881,7 +881,7 @@ def _attach_qq_logic_metadata(
             normalized_question["logic_parse_status"] = LOGIC_PARSE_STATUS_UNKNOWN
 
 
-def _standardize_qq_questions(questions: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+def _standardize_qq_questions(questions: Sequence[Mapping[str, Any]]) -> List[Dict[str, Any]]:
     page_map = _build_page_number_map(questions)
     normalized: List[Dict[str, Any]] = []
     for idx, question in enumerate(questions, start=1):

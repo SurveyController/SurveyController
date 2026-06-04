@@ -42,22 +42,30 @@ TYPE_IGNORE_SCAN_ROOTS = (
     ROOT_DIR / "tencent",
     ROOT_DIR / "credamo",
 )
+UNICODE_ESCAPE_PATTERNS = (
+    "\\" + "u",
+    "\\" + "U",
+    "\\" + "N{",
+)
+UNICODE_ESCAPE_SCAN_ROOTS = (
+    ROOT_DIR / "CI",
+)
 UNICODE_SPACE_TRANSLATION = str.maketrans({
-    "\u00a0": " ",
-    "\u2000": " ",
-    "\u2001": " ",
-    "\u2002": " ",
-    "\u2003": " ",
-    "\u2004": " ",
-    "\u2005": " ",
-    "\u2006": " ",
-    "\u2007": " ",
-    "\u2008": " ",
-    "\u2009": " ",
-    "\u200a": " ",
-    "\u202f": " ",
-    "\u205f": " ",
-    "\u3000": " ",
+    chr(0x00A0): " ",
+    chr(0x2000): " ",
+    chr(0x2001): " ",
+    chr(0x2002): " ",
+    chr(0x2003): " ",
+    chr(0x2004): " ",
+    chr(0x2005): " ",
+    chr(0x2006): " ",
+    chr(0x2007): " ",
+    chr(0x2008): " ",
+    chr(0x2009): " ",
+    chr(0x200A): " ",
+    chr(0x202F): " ",
+    chr(0x205F): " ",
+    chr(0x3000): " ",
 })
 
 IMPORT_SMOKE_CODE = r"""
@@ -471,6 +479,41 @@ def run_type_ignore_check(target_dirs: Iterable[Path]) -> list[dict]:
     return issues
 
 
+def run_unicode_escape_check(target_dirs: Iterable[Path]) -> list[dict]:
+    """禁止 CI Python 源码出现 Unicode 转义序列。"""
+    allowed_roots = {path.resolve() for path in UNICODE_ESCAPE_SCAN_ROOTS if path.exists()}
+    issues: list[dict] = []
+    for target_dir in target_dirs:
+        try:
+            resolved_target = target_dir.resolve()
+        except OSError:
+            continue
+        if resolved_target not in allowed_roots:
+            continue
+        for path in sorted(target_dir.rglob("*.py")):
+            if "__pycache__" in path.parts:
+                continue
+            try:
+                lines = path.read_text(encoding="utf-8").splitlines()
+            except UnicodeDecodeError:
+                lines = path.read_text(encoding="utf-8", errors="replace").splitlines()
+            for row, line in enumerate(lines, start=1):
+                for pattern in UNICODE_ESCAPE_PATTERNS:
+                    column = line.find(pattern)
+                    if column < 0:
+                        continue
+                    issues.append(
+                        {
+                            "phase": "unicode-escape",
+                            "path": format_path(path),
+                            "row": row,
+                            "column": column + 1,
+                            "message": "CI 代码禁止 Unicode 转义序列，请直接写字符，或用 chr(0xXXXX) 这类形式表达。",
+                        }
+                    )
+    return issues
+
+
 def run_module_import_checks(modules: Iterable[str]) -> list[dict]:
     issues_by_signature: dict[tuple[str, str, str], dict] = {}
     env = make_child_env()
@@ -684,6 +727,11 @@ def print_issues(title: str, issues: Iterable[dict]) -> None:
             print(f"   {message_lines[0]}")
             for line in message_lines[1:]:
                 print(f"   {line}")
+            continue
+
+        if phase in {"type-ignore", "unicode-escape"}:
+            print(f"{index}. {item['path']}:{item['row']}:{item['column']}")
+            print(f"   {item['message']}")
 
 
 def print_scan_targets(target_dirs: Iterable[Path]) -> None:

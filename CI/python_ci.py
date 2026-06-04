@@ -25,6 +25,7 @@ from CI.python_checks.common import (
     run_pyright_check,
     run_ruff_check,
     run_type_ignore_check,
+    run_unicode_escape_check,
     run_unit_tests,
     run_window_smoke_check,
 )
@@ -87,6 +88,7 @@ def main() -> int:
     compile_issues = run_compile_checks(compile_targets)
     ruff_issues, ruff_error = run_ruff_check(target_dirs)
     type_ignore_issues = run_type_ignore_check(target_dirs)
+    unicode_escape_issues = run_unicode_escape_check([ROOT_DIR / "CI"])
     pyright_issues, pyright_error = run_pyright_check(target_dirs) if pyright_mode else ([], None)
     unit_test_issue, coverage_summary = run_unit_tests()
     import_issues = run_module_import_checks(modules) if args.full else []
@@ -103,6 +105,7 @@ def main() -> int:
         len(compile_issues)
         + len(ruff_issues)
         + len(type_ignore_issues)
+        + len(unicode_escape_issues)
         + len(pyright_issues)
         + (1 if unit_test_issue else 0)
         + len(import_issues)
@@ -113,6 +116,7 @@ def main() -> int:
     print(f"[INFO] Compile issues: {len(compile_issues)}")
     print(f"[INFO] Ruff diagnostics: {len(ruff_issues)}")
     print(f"[INFO] Type ignore diagnostics: {len(type_ignore_issues)}")
+    print(f"[INFO] Unicode escape diagnostics: {len(unicode_escape_issues)}")
     if pyright_mode:
         print(f"[INFO] Pyright diagnostics: {len(pyright_issues)}")
     print(f"[INFO] Unit test failures: {1 if unit_test_issue else 0}")
@@ -135,6 +139,7 @@ def main() -> int:
     print_issues("[Compile failures]", compile_issues)
     print_issues("[Ruff diagnostics]", ruff_issues)
     print_issues("[Type ignore diagnostics]", type_ignore_issues)
+    print_issues("[Unicode escape diagnostics]", unicode_escape_issues)
     if pyright_mode:
         print_issues("[Pyright diagnostics]", pyright_issues)
     if unit_test_issue:
