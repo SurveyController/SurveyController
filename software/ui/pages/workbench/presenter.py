@@ -131,6 +131,9 @@ class WorkbenchPresenter:
         if phase == "error":
             self.on_survey_parse_failed(str((snapshot or {}).get("parse_error") or ""))
             return
+        if phase in {"idle", "parsing"}:
+            self._clear_parsed_questions_state()
+            return
         if phase != "ready":
             return
 
@@ -175,11 +178,22 @@ class WorkbenchPresenter:
     @Slot(str)
     def on_survey_parse_failed(self, msg: str) -> None:
         text = str(msg or "").strip()
+        self._clear_parsed_questions_state()
         self._notify_dashboard_parse_failed(text)
         if "问卷已暂停" in text:
             self.dashboard._open_wizard_after_parse = False
             return
         self.dashboard._open_wizard_after_parse = False
+
+    def _clear_parsed_questions_state(self) -> None:
+        self.state.set_questions([], [])
+        self.strategy_page.set_questions_info([])
+        self.strategy_page.set_entries(
+            self.state.entries,
+            self.state.entry_questions_info,
+        )
+        self.dashboard.update_question_meta("", 0)
+        self.sync_reverse_fill_context()
 
     def _notify_dashboard_parse_succeeded(
         self,

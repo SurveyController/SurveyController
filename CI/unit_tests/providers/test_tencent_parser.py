@@ -111,6 +111,16 @@ class TencentParserTests:
         with pytest.raises(RuntimeError, match="缺少 data 对象：meta"):
             qq_parser._ensure_qq_api_ok({"code": "OK", "data": []}, "meta")
 
+    @pytest.mark.asyncio
+    async def test_parse_qq_survey_does_not_repeat_http_failure_prefix(self, patch_attrs) -> None:
+        async def fake_fetch(*_args, **_kwargs):
+            raise RuntimeError("腾讯问卷 HTTP 解析失败：量表题不支持")
+
+        patch_attrs((qq_parser, "_fetch_qq_survey_via_http", fake_fetch))
+
+        with pytest.raises(RuntimeError, match="^腾讯问卷 HTTP 解析失败：量表题不支持$"):
+            await qq_parser.parse_qq_survey("https://wj.qq.com/s2/123/hash/")
+
     def test_builders_and_standardize_questions_cover_fillblank_rating_and_unsupported(self) -> None:
         question = {
             "id": "q1",
@@ -163,6 +173,8 @@ class TencentParserTests:
         assert second["is_rating"]
         assert second["option_texts"] == ["3", "4", "5", "6"]
         assert second["rating_max"] == 4
+        assert second["unsupported"] is True
+        assert second["unsupported_reason"] == "当前版本暂不支持腾讯问卷量表题，请改用 v3.2.1 旧版本"
 
         third = normalized[2]
         assert third["unsupported"]
@@ -170,6 +182,33 @@ class TencentParserTests:
         assert first["display_num"] == 1
         assert second["display_num"] == 2
         assert third["display_num"] == 3
+
+    def test_build_parse_result_blocks_tencent_score_and_matrix_star_questions(self) -> None:
+        with pytest.raises(RuntimeError, match="请改用 v3.2.1 旧版本"):
+            qq_parser._build_qq_parse_result(
+                [
+                    {
+                        "id": "q1",
+                        "type": "star",
+                        "title": "综合满意度",
+                        "star_begin_num": 1,
+                        "star_num": 5,
+                        "page_id": "p1",
+                        "page": 1,
+                    },
+                    {
+                        "id": "q2",
+                        "type": "matrix_star",
+                        "title": "矩阵满意度",
+                        "sub_titles": [{"text": "服务态度"}],
+                        "star_num": 5,
+                        "page_id": "p1",
+                        "page": 1,
+                    },
+                ],
+                raw_title="腾讯问卷",
+                empty_error_message="empty",
+            )
 
     def test_standardize_qq_questions_marks_description_and_merges_into_next_question(self) -> None:
         description_question = {

@@ -1088,6 +1088,58 @@ async def test_qq_http_runtime_skips_description_metadata(monkeypatch) -> None:
 
 
 @pytest.mark.asyncio
+async def test_qq_http_runtime_uses_latest_dynamic_ids_for_score_questions(monkeypatch) -> None:
+    config = ExecutionConfig(
+        url="https://wj.qq.com/s2/123/hash/",
+        survey_provider="qq",
+    )
+    config.questions_metadata = {
+        8: SurveyQuestionMeta(
+            num=8,
+            title="留校工作推荐度",
+            provider="qq",
+            provider_question_id="q-15-old",
+            provider_type="nps",
+            type_code="5",
+            is_rating=True,
+            options=11,
+            rating_max=11,
+            option_texts=[str(index) for index in range(11)],
+        ),
+    }
+    config.question_config_index_map = {8: ("score", 0)}
+    config.scale_prob = [[0.0, 0.0, 0.0, 1.0] + [0.0] * 7]
+    state = ExecutionState(config=config)
+    captured: dict[str, object] = {}
+
+    async def fake_fetch(*_args, **_kwargs):
+        return "sess", {}, [
+            {
+                "id": "q-15-new",
+                "type": "nps",
+                "title": "留校工作推荐度",
+                "star_begin_num": 0,
+                "star_num": 11,
+                "page_id": "p1",
+                "page": 1,
+            },
+        ]
+
+    async def fake_post(*_args, **kwargs):
+        captured.update(kwargs)
+        return _FakeResponse(payload={"code": "OK"})
+
+    monkeypatch.setattr(qq_http, "_fetch_submit_source", fake_fetch)
+    monkeypatch.setattr(qq_http.http_client, "apost", fake_post)
+
+    ok = await qq_http.brush_qq_http(config, state)
+
+    assert ok is True
+    submitted_questions = captured["json"]["answer_survey"]["pages"][0]["questions"]
+    assert submitted_questions == [{"id": "q-15-new-3", "type": "nps", "answer": "3"}]
+
+
+@pytest.mark.asyncio
 async def test_credamo_http_runtime_uses_proxy_and_posts_json(monkeypatch) -> None:
     config = ExecutionConfig(
         url="https://www.credamo.com/s/A73QR3ano",

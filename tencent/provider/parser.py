@@ -27,6 +27,11 @@ QQ_SUPPORTED_PROVIDER_TYPES = {
 QQ_DESCRIPTION_PROVIDER_TYPES = {
     "description",
 }
+_QQ_BLOCKED_RUNTIME_PROVIDER_TYPES = {
+    "nps": "量表",
+    "star": "量表",
+    "matrix_star": "矩阵量表",
+}
 QQ_PROVIDER_TYPE_TO_INTERNAL = {
     "radio": "3",
     "checkbox": "4",
@@ -324,6 +329,7 @@ def _build_qq_parse_result(
     info = _standardize_qq_questions(questions)
     if not info:
         raise RuntimeError(empty_error_message)
+    _raise_if_qq_contains_blocked_runtime_types(info)
     return info, title
 
 
@@ -892,7 +898,11 @@ def _standardize_qq_questions(questions: List[Dict[str, Any]]) -> List[Dict[str,
         is_description = provider_type in QQ_DESCRIPTION_PROVIDER_TYPES
         type_code = QQ_PROVIDER_TYPE_TO_INTERNAL.get(provider_type, "0") if not is_description else "0"
         supported = provider_type in QQ_SUPPORTED_PROVIDER_TYPES or is_description
-        unsupported_reason = "" if supported else f"暂不支持腾讯题型：{provider_type or 'unknown'}"
+        blocked_runtime_label = _QQ_BLOCKED_RUNTIME_PROVIDER_TYPES.get(provider_type)
+        if blocked_runtime_label:
+            unsupported_reason = f"当前版本暂不支持腾讯问卷{blocked_runtime_label}题，请改用 v3.2.1 旧版本"
+        else:
+            unsupported_reason = "" if supported else f"暂不支持腾讯题型：{provider_type or 'unknown'}"
         is_text_like = provider_type in {"text", "textarea"} and not is_description
         is_rating = provider_type in {"nps", "star"} and not is_description
         multi_min_limit = question.get("min_length") if provider_type == "checkbox" else None
@@ -939,12 +949,35 @@ def _standardize_qq_questions(questions: List[Dict[str, Any]]) -> List[Dict[str,
             "provider_page_id": page_id,
             "provider_type": provider_type,
             "provider_page_raw": page_raw,
-            "unsupported": not supported,
+            "unsupported": bool((not supported) or blocked_runtime_label),
             "unsupported_reason": unsupported_reason,
             "required": bool(question.get("required", False)),
         })
     _attach_qq_logic_metadata(questions, normalized)
     return _assign_visible_display_numbers(_merge_same_page_descriptions_into_questions(normalized))
+
+
+def _raise_if_qq_contains_blocked_runtime_types(info: List[Dict[str, Any]]) -> None:
+    blocked_questions: List[str] = []
+    for item in info:
+        provider_type = str(item.get("provider_type") or "").strip().lower()
+        type_label = _QQ_BLOCKED_RUNTIME_PROVIDER_TYPES.get(provider_type)
+        if not type_label:
+            continue
+        question_num = item.get("display_num")
+        if question_num in (None, ""):
+            question_num = item.get("num")
+        title = _normalize_html_text(item.get("title") or "") or "未命名题目"
+        blocked_questions.append(f"第 {question_num} 题：{title}（{type_label}）")
+    if not blocked_questions:
+        return
+    detail = "\n".join(blocked_questions[:8])
+    if len(blocked_questions) > 8:
+        detail += f"\n其余 {len(blocked_questions) - 8} 道已省略"
+    raise RuntimeError(
+        "腾讯问卷当前版本暂不支持量表、矩阵量表题，请改用 v3.2.1 旧版本：\n"
+        f"{detail}"
+    )
 
 
 async def parse_qq_survey(url: str) -> Tuple[List[Dict[str, Any]], str]:
@@ -957,7 +990,13 @@ async def parse_qq_survey(url: str) -> Tuple[List[Dict[str, Any]], str]:
     except Exception as exc:
         _raise_if_qq_login_required(exc)
         logging.exception("腾讯问卷 HTTP 解析失败，url=%r", url)
-        raise RuntimeError(f"腾讯问卷 HTTP 解析失败：{exc}") from exc
+        message = str(exc or "").strip() or "腾讯问卷 HTTP 解析失败"
+        if not (
+            message.startswith("腾讯问卷 HTTP 解析失败：")
+            or message.startswith("腾讯问卷当前版本暂不支持")
+        ):
+            message = f"腾讯问卷 HTTP 解析失败：{message}"
+        raise RuntimeError(message) from exc
 
 
 __all__ = [

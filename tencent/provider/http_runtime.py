@@ -2,11 +2,12 @@
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import time
 import uuid
 from collections import OrderedDict
-from typing import Any, Mapping
+from typing import Any, Mapping, Optional
 
 import software.network.http as http_client
 from software.app.config import DEFAULT_HTTP_HEADERS, DEFAULT_USER_AGENT
@@ -19,7 +20,8 @@ from software.providers.answering import AnswerAction
 from software.providers.answering.recording import record_answer_action
 from software.providers.http_logic import build_http_logic_plan
 from software.providers.http_progress import update_http_submit_step
-from software.providers.contracts import SurveyQuestionMeta
+from software.providers.common import SURVEY_PROVIDER_QQ
+from software.providers.contracts import SurveyQuestionMeta, ensure_survey_question_metas
 from tencent.provider.answering_builders import build_answer_action
 from tencent.provider.parser import (
     _build_qq_api_headers,
@@ -27,6 +29,7 @@ from tencent.provider.parser import (
     _ensure_qq_api_ok,
     _extract_qq_identifiers,
     _request_qq_api,
+    _standardize_qq_questions,
 )
 
 
@@ -49,15 +52,11 @@ def _headers(page_url: str, user_agent: str | None = None) -> dict[str, str]:
     return headers
 
 
-def _metadata_by_provider_id(config: ExecutionConfig) -> dict[str, SurveyQuestionMeta]:
-    result: dict[str, SurveyQuestionMeta] = {}
-    for item in (config.questions_metadata or {}).values():
-        if bool(getattr(item, "is_description", False)):
-            continue
-        question_id = str(getattr(item, "provider_question_id", "") or "").strip()
-        if question_id:
-            result[question_id] = item
-    return result
+def _safe_int(value: Any) -> int:
+    try:
+        return int(value or 0)
+    except Exception:
+        return 0
 
 
 def _raw_questions_by_id(questions: list[Any]) -> dict[str, Mapping[str, Any]]:
@@ -69,6 +68,103 @@ def _raw_questions_by_id(questions: list[Any]) -> dict[str, Mapping[str, Any]]:
         if question_id:
             result[question_id] = item
     return result
+
+
+def _normalize_match_text(raw: Any) -> str:
+    return "".join(str(raw or "").split())
+
+
+def _meaningful_type_code(question: SurveyQuestionMeta) -> str:
+    type_code = str(getattr(question, "type_code", "") or "").strip()
+    return "" if type_code in {"", "0"} else type_code
+
+
+def _question_signature(question: SurveyQuestionMeta) -> tuple[str, str]:
+    provider_type = str(getattr(question, "provider_type", "") or "").strip().lower()
+    type_marker = provider_type or _meaningful_type_code(question)
+    return type_marker, _normalize_match_text(getattr(question, "title", ""))
+
+
+def _question_types_compatible(current: SurveyQuestionMeta, existing: SurveyQuestionMeta) -> bool:
+    current_provider_type = str(getattr(current, "provider_type", "") or "").strip().lower()
+    existing_provider_type = str(getattr(existing, "provider_type", "") or "").strip().lower()
+    if current_provider_type and existing_provider_type:
+        return current_provider_type == existing_provider_type
+    current_type = _meaningful_type_code(current)
+    existing_type = _meaningful_type_code(existing)
+    if current_type and existing_type:
+        return current_type == existing_type
+    return True
+
+
+def _merge_submit_question_meta(existing: SurveyQuestionMeta, current: SurveyQuestionMeta) -> SurveyQuestionMeta:
+    merged = current.to_dict()
+    merged["num"] = int(getattr(existing, "num", 0) or merged.get("num") or 0)
+    merged["display_num"] = getattr(existing, "display_num", None)
+    if not str(merged.get("title") or "").strip():
+        merged["title"] = str(getattr(existing, "title", "") or "").strip()
+    if not str(merged.get("description") or "").strip():
+        merged["description"] = str(getattr(existing, "description", "") or "").strip()
+    merged["has_jump"] = bool(getattr(existing, "has_jump", False))
+    merged["jump_rules"] = list(getattr(existing, "jump_rules", []) or [])
+    merged["has_display_condition"] = bool(getattr(existing, "has_display_condition", False))
+    merged["display_conditions"] = list(getattr(existing, "display_conditions", []) or [])
+    merged["has_dependent_display_logic"] = bool(getattr(existing, "has_dependent_display_logic", False))
+    merged["controls_display_targets"] = list(getattr(existing, "controls_display_targets", []) or [])
+    merged["logic_parse_status"] = str(getattr(existing, "logic_parse_status", "") or merged.get("logic_parse_status") or "")
+    merged["question_media"] = list(getattr(existing, "question_media", []) or merged.get("question_media") or [])
+    merged["required"] = bool(getattr(existing, "required", merged.get("required", False)))
+    return ensure_survey_question_metas([merged], default_provider=SURVEY_PROVIDER_QQ)[0]
+
+
+def _match_existing_submit_question(
+    current: SurveyQuestionMeta,
+    existing_by_signature: dict[tuple[str, str], list[SurveyQuestionMeta]],
+    ordered_existing: list[SurveyQuestionMeta],
+    index: int,
+) -> Optional[SurveyQuestionMeta]:
+    signature = _question_signature(current)
+    if signature[1]:
+        candidates = existing_by_signature.get(signature) or []
+        if candidates:
+            return candidates.pop(0)
+    if index < len(ordered_existing):
+        candidate = ordered_existing[index]
+        if _question_types_compatible(current, candidate):
+            return candidate
+    return None
+
+
+def _normalize_submit_questions(config: ExecutionConfig, raw_questions: list[Any]) -> list[SurveyQuestionMeta]:
+    normalized_inputs = _standardize_qq_questions(
+        [item for item in raw_questions if isinstance(item, Mapping)]
+    )
+    normalized_questions = ensure_survey_question_metas(
+        normalized_inputs,
+        default_provider=SURVEY_PROVIDER_QQ,
+    )
+    current_questions = [item for item in normalized_questions if not bool(getattr(item, "is_description", False))]
+    ordered_existing = [
+        item
+        for _, item in sorted((config.questions_metadata or {}).items(), key=lambda pair: int(pair[0]))
+        if not bool(getattr(item, "is_description", False))
+    ]
+    existing_by_signature: dict[tuple[str, str], list[SurveyQuestionMeta]] = {}
+    for item in ordered_existing:
+        signature = _question_signature(item)
+        if signature[1]:
+            existing_by_signature.setdefault(signature, []).append(item)
+
+    merged_questions: list[SurveyQuestionMeta] = []
+    for index, current in enumerate(current_questions):
+        existing = _match_existing_submit_question(
+            current,
+            existing_by_signature,
+            ordered_existing,
+            index,
+        )
+        merged_questions.append(_merge_submit_question_meta(existing, current) if existing is not None else current)
+    return merged_questions
 
 
 def _option_items(raw_question: Mapping[str, Any]) -> list[Mapping[str, Any]]:
@@ -258,6 +354,60 @@ async def _fetch_submit_source(
     return answer_session_id, session_data, raw_questions
 
 
+def _submit_response_answer_hash(payload: Mapping[str, Any]) -> str:
+    data = payload.get("data")
+    if not isinstance(data, Mapping):
+        return ""
+    return str(data.get("answer_hash") or "").strip()
+
+
+def _extract_answer_session_state(session_data: Mapping[str, Any]) -> tuple[int, int]:
+    answer_session = session_data.get("answer_session")
+    if not isinstance(answer_session, Mapping):
+        return 0, 0
+    last_submitted_at = _safe_int(answer_session.get("last_submitted_at"))
+    last_answer_id = _safe_int(answer_session.get("last_answer_id"))
+    return last_submitted_at, last_answer_id
+
+
+async def _confirm_qq_submit_persisted(
+    survey_id: str,
+    hash_value: str,
+    *,
+    headers: dict[str, str],
+    proxies: Any,
+    answer_session_id: str,
+    initial_session_data: Mapping[str, Any],
+    submit_payload: Mapping[str, Any],
+) -> None:
+    answer_hash = _submit_response_answer_hash(submit_payload)
+    if not answer_hash:
+        raise RuntimeError("腾讯问卷提交返回缺少 answer_hash，无法确认服务端是否已收录")
+    if not answer_session_id:
+        return
+
+    initial_submitted_at, initial_answer_id = _extract_answer_session_state(initial_session_data)
+    verify_headers = dict(headers)
+    verify_headers["X-Answer-Session"] = answer_session_id
+    for attempt in range(3):
+        session_payload = await _request_qq_api(
+            survey_id,
+            "session",
+            hash_value=hash_value,
+            headers=verify_headers,
+            proxies=proxies,
+        )
+        session_data = _ensure_qq_api_ok(session_payload, "session")
+        last_submitted_at, last_answer_id = _extract_answer_session_state(session_data)
+        if last_submitted_at > initial_submitted_at:
+            return
+        if last_answer_id > 0 and last_answer_id != initial_answer_id:
+            return
+        if attempt < 2:
+            await asyncio.sleep(0.2)
+    raise RuntimeError("腾讯问卷提交后未确认到服务端已记录答案")
+
+
 def classify_qq_submit_payload(payload: Mapping[str, Any]) -> str:
     code = str(payload.get("code") or "").upper()
     if code in {"OK", "0"}:
@@ -287,22 +437,15 @@ async def brush_qq_http(
         page_url = _build_qq_survey_page_url(survey_id, hash_value)
         headers = _headers(page_url, user_agent)
         proxies = _proxy_arg(proxy_address)
-        answer_session_id, _session_data, raw_questions = await _fetch_submit_source(
+        answer_session_id, session_data, raw_questions = await _fetch_submit_source(
             survey_id,
             hash_value,
             headers=headers,
             proxies=proxies,
         )
 
-        metadata = _metadata_by_provider_id(config)
         raw_by_id = _raw_questions_by_id(raw_questions)
-        questions = [
-            question
-            for raw_question in raw_questions
-            for question_id in [str(raw_question.get("id") or "").strip() if isinstance(raw_question, Mapping) else ""]
-            for question in [metadata.get(question_id)]
-            if question is not None
-        ]
+        questions = _normalize_submit_questions(config, raw_questions)
 
         await update_http_submit_step(ctx, thread_name, "生成答案")
         for question in questions:
@@ -434,6 +577,15 @@ async def brush_qq_http(
             raise RuntimeError("腾讯问卷提交返回了非 JSON 对象")
         if classify_qq_submit_payload(payload) != QqSubmitResult.SUCCESS:
             _raise_qq_submit_failed(payload)
+        await _confirm_qq_submit_persisted(
+            survey_id,
+            hash_value,
+            headers=headers,
+            proxies=proxies,
+            answer_session_id=answer_session_id,
+            initial_session_data=session_data,
+            submit_payload=payload,
+        )
         return True
     finally:
         ctx.clear_free_ai_prefill_answers(thread_name)

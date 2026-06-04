@@ -252,6 +252,8 @@ def test_presenter_parse_success_failed_and_reverse_fill_wizard(monkeypatch) -> 
     p.on_survey_parse_failed("问卷已暂停")
     p.dashboard._on_survey_parse_failed.assert_called_with("问卷已暂停")
     assert p.dashboard._open_wizard_after_parse is False
+    assert p.state.get_entries() == []
+    assert p.strategy_page.set_questions_info.call_args.args[0] == []
 
     p.state.set_questions(info, p.controller.question_entries)
     p.open_reverse_fill_wizard([])
@@ -279,3 +281,23 @@ def test_presenter_parse_success_failed_and_reverse_fill_wizard(monkeypatch) -> 
         "error",
         duration=4200,
     )
+
+
+def test_presenter_clears_old_questions_while_parsing_snapshot() -> None:
+    p = _presenter()
+    info = [SurveyQuestionMeta(num=1, title="Q1", type_code="3", option_texts=["A"])]
+    p.state.set_questions(info, p.controller.question_entries)
+
+    p.on_survey_snapshot_changed(
+        {
+            "phase": "parsing",
+            "url": "https://wj.qq.com/s2/123/hash/",
+            "survey_title": "",
+            "questions_info": [],
+            "question_entries": [],
+            "parse_error": "",
+        }
+    )
+
+    assert p.state.get_entries() == []
+    assert p.strategy_page.set_questions_info.call_args.args[0] == []

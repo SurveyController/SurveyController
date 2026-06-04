@@ -58,6 +58,9 @@ class SurveyParseService:
             {
                 "phase": "parsing",
                 "url": normalized_url,
+                "survey_title": "",
+                "questions_info": [],
+                "question_entries": [],
                 "parse_error": "",
             }
         )
@@ -93,6 +96,9 @@ class SurveyParseService:
                 {
                     "phase": "error",
                     "url": normalized_url,
+                    "survey_title": "",
+                    "questions_info": [],
+                    "question_entries": [],
                     "parse_error": str(message or "解析失败，请稍后重试"),
                 }
             )
