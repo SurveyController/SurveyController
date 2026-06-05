@@ -159,6 +159,9 @@ class AsyncRuntimeEngine:
                     fetch_lock_acquired = await _acquire_proxy_fetch_lock_async(state, state.stop_event)
                     if not fetch_lock_acquired or state.stop_event.is_set() or stop_event.is_set():
                         return
+                    request_count = resolve_proxy_prefetch_request_count(state)
+                    if request_count <= 0:
+                        continue
                     fetched = await fetch_proxy_batch_async(
                         expected_count=request_count,
                         stop_signal=state.stop_event,

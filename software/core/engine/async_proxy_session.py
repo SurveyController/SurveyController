@@ -48,6 +48,7 @@ class AsyncProxySession:
             wait=should_wait_for_proxy,
         )
         if self.config.random_proxy_ip_enabled and not proxy_address:
+            logging.warning("线程[%s]未获取到随机IP，本轮将跳过提交", self.slot_label)
             if _record_bad_proxy_and_maybe_pause(self.state, self.runtime_bridge):
                 return None, None
         ua_value, _ = _select_user_agent_for_session(self.state)

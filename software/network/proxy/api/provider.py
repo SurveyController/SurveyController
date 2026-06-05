@@ -249,10 +249,7 @@ def _proxy_api_candidates(expected_count: int, proxy_url: Optional[str]) -> List
         raise RuntimeError("自定义代理API地址不能为空，请先在设置中填写API地址")
     if "{num}" in url:
         return [url.format(num=max(1, expected_count))]
-    if "num=" in url.lower() or "count=" in url.lower():
-        return [url]
-    separator = "&" if "?" in url else "?"
-    return [f"{url}{separator}num={max(1, expected_count)}", url]
+    return [url]
 
 
 def _extract_minute_from_url(url: str) -> Optional[int]:
