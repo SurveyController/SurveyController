@@ -14,9 +14,11 @@ from qfluentwidgets import (
     ExpandGroupSettingCard,
     FluentIcon,
     HyperlinkButton,
+    IconInfoBadge,
     IndicatorPosition,
     IndeterminateProgressRing,
     InfoBarPosition,
+    InfoLevel,
     LineEdit,
     PushButton,
     SwitchButton,
@@ -227,8 +229,7 @@ class RandomIPSettingCard(ExpandGroupSettingCard):
         self.testApiSpinner = IndeterminateProgressRing(self.testBtnContainer)
         self.testApiSpinner.setFixedSize(20, 20)
         self.testApiSpinner.hide()
-        self.testApiStatus = BodyLabel("", self.testBtnContainer)
-        self.testApiStatus.setFixedWidth(20)
+        self.testApiStatus = IconInfoBadge(FluentIcon.INFO, self.testBtnContainer, InfoLevel.INFOAMTION)
         self.testApiStatus.hide()
         for widget in (self.testApiBtn, self.testApiSpinner, self.testApiStatus):
             test_layout.addWidget(widget)
@@ -516,17 +517,17 @@ class RandomIPSettingCard(ExpandGroupSettingCard):
         self.testApiStatus.show()
         if success:
             if error:
-                self.testApiStatus.setText("⚠")
-                self.testApiStatus.setStyleSheet("color: orange; font-size: 16px; font-weight: bold;")
+                self.testApiStatus.setIcon(FluentIcon.INFO)
+                self.testApiStatus.setLevel(InfoLevel.WARNING)
                 logging.warning("API检测成功但有警告: %s", error)
                 self._toast("warning", error, duration=5000)
             else:
-                self.testApiStatus.setText("✔")
-                self.testApiStatus.setStyleSheet("color: green; font-size: 16px; font-weight: bold;")
+                self.testApiStatus.setIcon(FluentIcon.ACCEPT_MEDIUM)
+                self.testApiStatus.setLevel(InfoLevel.SUCCESS)
                 logging.info("API检测成功，获取到 %s 个代理", len(proxies))
         else:
-            self.testApiStatus.setText("✖")
-            self.testApiStatus.setStyleSheet("color: red; font-size: 16px; font-weight: bold;")
+            self.testApiStatus.setIcon(FluentIcon.CANCEL_MEDIUM)
+            self.testApiStatus.setLevel(InfoLevel.ERROR)
             logging.error("API检测失败: %s", error)
             self._toast("error", error, duration=5000)
 

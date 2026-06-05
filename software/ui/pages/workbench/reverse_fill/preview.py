@@ -4,11 +4,49 @@ from __future__ import annotations
 
 from typing import Any
 
+from PySide6.QtCore import Qt
+from PySide6.QtWidgets import QHBoxLayout, QTableWidgetItem, QWidget
+from qfluentwidgets import BodyLabel, FluentIcon, IconInfoBadge
+
 from software.core.reverse_fill.schema import ReverseFillSpec, reverse_fill_format_label
 from software.core.reverse_fill.validation import build_reverse_fill_spec
 from software.providers.common import SURVEY_PROVIDER_WJX, normalize_survey_provider
-from software.ui.pages.workbench.reverse_fill.logic import actionable_issue_question_nums, build_plan_rows
+from software.ui.pages.workbench.reverse_fill.logic import (
+    actionable_issue_question_nums,
+    build_plan_rows,
+    status_badge_level_for_label,
+)
 from software.ui.pages.workbench.shared.table_helpers import set_table_text
+
+
+def _make_status_badge(level: str, parent: QWidget) -> IconInfoBadge:
+    normalized = str(level or "").strip().lower()
+    if normalized == "success":
+        return IconInfoBadge.success(FluentIcon.ACCEPT_MEDIUM, parent=parent)
+    if normalized == "warning":
+        return IconInfoBadge.warning(FluentIcon.INFO, parent=parent)
+    if normalized == "error":
+        return IconInfoBadge.error(FluentIcon.CANCEL_MEDIUM, parent=parent)
+    return IconInfoBadge.info(FluentIcon.INFO, parent=parent)
+
+
+def _set_status_cell(page: Any, row: int, column: int, text: str) -> None:
+    table = page.mapping_table
+    container = QWidget(table)
+    layout = QHBoxLayout(container)
+    layout.setContentsMargins(8, 0, 8, 0)
+    layout.setSpacing(6)
+    layout.setAlignment(Qt.AlignmentFlag.AlignVCenter)
+    layout.addWidget(_make_status_badge(status_badge_level_for_label(text), container))
+    layout.addWidget(BodyLabel(text, container))
+    layout.addStretch(1)
+    item = table.item(row, column)
+    if item is None:
+        item = QTableWidgetItem("")
+        table.setItem(row, column, item)
+    item.setData(Qt.ItemDataRole.UserRole, text)
+    item.setToolTip(text)
+    table.setCellWidget(row, column, container)
 
 
 def clear_tables(page: Any) -> None:
@@ -22,6 +60,9 @@ def populate_plan_table(page: Any, spec: ReverseFillSpec) -> None:
     page.mapping_table.setRowCount(len(rows))
     for row_index, row_values in enumerate(rows):
         for column_index, value in enumerate(row_values):
+            if column_index == 2:
+                _set_status_cell(page, row_index, column_index, value)
+                continue
             set_table_text(page.mapping_table, row_index, column_index, value)
 
 

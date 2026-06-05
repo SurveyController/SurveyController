@@ -202,9 +202,9 @@ class WizardSectionsSliderMixin:
                     jumpto = jump_map[opt_idx]
                     total_questions = len(self.entries)
                     if jumpto > total_questions:
-                        jump_text = "➔ 提前结束"
+                        jump_text = "提前结束"
                     else:
-                        jump_text = f"➔ 跳至第{jumpto}题"
+                        jump_text = f"跳至第{jumpto}题"
                     jump_label = BodyLabel(jump_text, jump_container)
                     jump_label.setStyleSheet("font-size: 11px; font-weight: 500;")
                     _apply_label_color(jump_label, "#d93025", "#ff6b6b")

@@ -14,12 +14,16 @@ from software.core.reverse_fill.schema import (
 
 
 _STATUS_LABELS = {
-    "reverse": "🟢 正常",
-    "reverse_fill": "🟢 正常",
-    "fallback": "🟡 需要处理",
-    "fallback_config": "🟡 需要处理",
-    "blocked": "🔴 不支持",
+    "reverse": "正常",
+    "reverse_fill": "正常",
+    "fallback": "需要处理",
+    "fallback_config": "需要处理",
+    "blocked": "不支持",
 }
+
+_SUCCESS_STATUS_LABELS = {"正常", "已处理"}
+_WARNING_STATUS_LABELS = {"需要处理", "可回退"}
+_ERROR_STATUS_LABELS = {"不支持"}
 
 _QUESTION_TYPE_LABELS = {
     "single": "单选题",
@@ -39,10 +43,21 @@ _NON_ACTIONABLE_ISSUE_CATEGORIES = {"auto_handled"}
 def status_label_for_plan(plan: Any) -> str:
     status = str(getattr(plan, "status", "") or "")
     if status == REVERSE_FILL_STATUS_FALLBACK and bool(getattr(plan, "fallback_resolved", False)):
-        return "🟢 已处理"
+        return "已处理"
     if status == REVERSE_FILL_STATUS_FALLBACK and bool(getattr(plan, "fallback_ready", False)):
-        return "🟡 可回退"
+        return "可回退"
     return _STATUS_LABELS.get(status, status)
+
+
+def status_badge_level_for_label(label: str) -> str:
+    normalized = str(label or "").strip()
+    if normalized in _SUCCESS_STATUS_LABELS:
+        return "success"
+    if normalized in _WARNING_STATUS_LABELS:
+        return "warning"
+    if normalized in _ERROR_STATUS_LABELS:
+        return "error"
+    return "info"
 
 
 def question_type_label(value: Any) -> str:
@@ -104,7 +119,7 @@ def build_plan_rows(spec: ReverseFillSpec) -> list[list[str]]:
             [
                 "全局",
                 str(issue.category or "全局"),
-                "🔴 不支持",
+                "不支持",
                 "无",
                 str(issue.reason or ""),
                 str(issue.suggestion or ""),
