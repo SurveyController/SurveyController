@@ -7,6 +7,7 @@ on:
 
 permissions:
   contents: write
+  actions: write
 
 env:
   R2_FEED_PREFIX: "surveycontroller/win/stable"
@@ -26,15 +27,50 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v5
 
-      - name: Download previous Velopack feed
+      - name: Restore previous Velopack artifact
+        shell: powershell
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $releaseDir = Join-Path "${{ github.workspace }}" "Releases"
+          New-Item -ItemType Directory -Path $releaseDir -Force | Out-Null
+          try {
+            $artifacts = gh api "repos/${{ github.repository }}/actions/artifacts?per_page=100" | ConvertFrom-Json
+            $targetArtifact = @($artifacts.artifacts) |
+              Where-Object {
+                $_.name -eq "velopack-release-assets" -and
+                -not $_.expired -and
+                $_.workflow_run -and
+                $_.workflow_run.head_branch -eq "main"
+              } |
+              Sort-Object created_at -Descending |
+              Select-Object -First 1
+            if ($null -eq $targetArtifact) {
+              throw "No reusable velopack-release-assets artifact found on main"
+            }
+            $zipPath = Join-Path "${{ runner.temp }}" "velopack-release-assets.zip"
+            gh api `
+              -H "Accept: application/octet-stream" `
+              "repos/${{ github.repository }}/actions/artifacts/$($targetArtifact.id)/zip" > $zipPath
+            Expand-Archive -LiteralPath $zipPath -DestinationPath $releaseDir -Force
+            Write-Host "Restored artifact id=$($targetArtifact.id) created_at=$($targetArtifact.created_at)"
+          } catch {
+            Write-Host "No previous artifact restored: $($_.Exception.Message)"
+          }
+
+      - name: Download previous Velopack feed from R2
         shell: powershell
         continue-on-error: true
         run: |
           $channel = "${env:VELOPACK_CHANNEL}"
           $releaseDir = Join-Path "${{ github.workspace }}" "Releases"
-          New-Item -ItemType Directory -Path $releaseDir -Force | Out-Null
-          $feedBase = "https://dl.hungrym0.top/${env:R2_FEED_PREFIX}"
           $manifestPath = Join-Path $releaseDir "releases.$channel.json"
+          if (Test-Path $manifestPath) {
+            Write-Host "Previous manifest already restored from artifact: $manifestPath"
+            exit 0
+          }
+          $feedBase = "https://dl.hungrym0.top/${env:R2_FEED_PREFIX}"
           try {
             Invoke-WebRequest -Uri "$feedBase/releases.$channel.json" -OutFile $manifestPath -UseBasicParsing
             $manifest = Get-Content $manifestPath -Raw | ConvertFrom-Json
@@ -53,7 +89,7 @@ jobs:
               }
             }
           } catch {
-            Write-Host "No previous feed downloaded: $($_.Exception.Message)"
+            Write-Host "No previous feed downloaded from R2: $($_.Exception.Message)"
           }
 
       - name: Set up uv
@@ -131,6 +167,30 @@ jobs:
           name: velopack-release-assets
           path: ${{ steps.release_meta.outputs.release_dir }}
           if-no-files-found: error
+
+      - name: Remove old workflow artifacts
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: powershell
+        run: |
+          $artifactName = "velopack-release-assets"
+          $artifacts = gh api "repos/${{ github.repository }}/actions/artifacts?per_page=100" | ConvertFrom-Json
+          $expiredArtifacts = @($artifacts.artifacts) |
+            Where-Object { $_.name -eq $artifactName -and $_.expired }
+          foreach ($artifact in $expiredArtifacts) {
+            Write-Host "Skip expired artifact id=$($artifact.id)"
+          }
+          $staleArtifacts = @($artifacts.artifacts) |
+            Where-Object {
+              $_.name -eq $artifactName -and
+              -not $_.expired
+            } |
+            Sort-Object created_at -Descending |
+            Select-Object -Skip 1
+          foreach ($artifact in $staleArtifacts) {
+            Write-Host "Delete stale artifact id=$($artifact.id) created_at=$($artifact.created_at)"
+            gh api --method DELETE "repos/${{ github.repository }}/actions/artifacts/$($artifact.id)"
+          }
 
       - name: Upload release assets to GitHub Release
         env:
