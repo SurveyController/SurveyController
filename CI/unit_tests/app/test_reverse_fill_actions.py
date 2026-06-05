@@ -132,17 +132,21 @@ class ReverseFillActionsTests:
         page.controller.survey_provider = "wjx"
         page._issue_question_nums = [0, "3", 5]
 
-        actions.on_survey_parsed(
-            page,
-            [{"num": 1, "title": "Q1", "unsupported": True}, {"num": 2, "title": "Q2"}],
-            "标题",
-        )
+        with patch.object(actions, "replace_feedback_progress_infobar") as replace_progress:
+            actions.on_survey_parsed(
+                page,
+                [{"num": 1, "title": "Q1", "unsupported": True}, {"num": 2, "title": "Q2"}],
+                "标题",
+            )
+        replace_progress.assert_called_once_with(page)
         assert page._survey_title == "标题"
         assert page._parsed_url == "https://wjx.cn/test"
         page._toast.assert_called()
 
         page._parse_requested_from_reverse_fill = True
-        actions.on_survey_parse_failed(page, "问卷已暂停")
+        with patch.object(actions, "replace_feedback_progress_infobar") as replace_progress:
+            actions.on_survey_parse_failed(page, "问卷已暂停")
+        replace_progress.assert_called_once_with(page)
         assert page._parse_requested_from_reverse_fill is False
 
         page._open_wizard_handler = MagicMock()

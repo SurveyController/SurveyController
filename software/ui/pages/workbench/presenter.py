@@ -203,11 +203,17 @@ class WorkbenchPresenter:
         handler = getattr(self.dashboard, "_on_survey_parsed", None)
         if callable(handler):
             handler(list(info or []), str(title or ""))
+        reverse_handler = getattr(self.reverse_fill_page, "_on_survey_parsed", None)
+        if callable(reverse_handler):
+            reverse_handler(list(info or []), str(title or ""))
 
     def _notify_dashboard_parse_failed(self, message: str) -> None:
         handler = getattr(self.dashboard, "_on_survey_parse_failed", None)
         if callable(handler):
             handler(str(message or ""))
+        reverse_handler = getattr(self.reverse_fill_page, "_on_survey_parse_failed", None)
+        if callable(reverse_handler):
+            reverse_handler(str(message or ""))
 
     @Slot(dict)
     def on_runtime_snapshot_changed(self, snapshot: dict[str, Any]) -> None:

@@ -107,6 +107,8 @@ class _FakeReverseFillPage:
         self.loading_events: list[tuple[bool, str]] = []
         self.status_updates: list[tuple[str, int, int]] = []
         self.pause_states: list[tuple[bool, str]] = []
+        self.parse_success_calls: list[tuple[list, str]] = []
+        self.parse_failed_calls: list[str] = []
 
     def apply_config(self, cfg: RuntimeConfig) -> None:
         self.applied.append(cfg)
@@ -145,6 +147,12 @@ class _FakeReverseFillPage:
 
     def on_pause_state_changed(self, paused: bool, reason: str = "") -> None:
         self.pause_states.append((bool(paused), str(reason or "")))
+
+    def _on_survey_parsed(self, info: list, title: str) -> None:
+        self.parse_success_calls.append((list(info or []), str(title or "")))
+
+    def _on_survey_parse_failed(self, error_msg: str) -> None:
+        self.parse_failed_calls.append(str(error_msg or ""))
 
 
 class _FakeStrategyPage:
@@ -266,10 +274,23 @@ def test_workbench_presenter_survey_parsed_updates_state_and_context() -> None:
     assert presenter.state.get_entries() == [entry]
     assert [(item.num, item.title) for item in dashboard.parse_success_calls[-1][0]] == [(1, "Q1")]
     assert dashboard.parse_success_calls[-1][1] == "Parsed"
+    assert [(item.num, item.title) for item in reverse_fill_page.parse_success_calls[-1][0]] == [(1, "Q1")]
+    assert reverse_fill_page.parse_success_calls[-1][1] == "Parsed"
     assert [(item.num, item.title) for item in strategy_page.questions_info] == [(1, "Q1")]
     assert strategy_page.dimension_groups == []
     assert dashboard.meta == ("Parsed", 1)
     assert reverse_fill_page.contexts[-1]["question_entries"] == [entry]
+
+
+def test_workbench_presenter_parse_failed_notifies_reverse_fill_page() -> None:
+    presenter = _presenter_with_fakes()
+    dashboard = cast(_FakeDashboard, presenter.dashboard)
+    reverse_fill_page = cast(_FakeReverseFillPage, presenter.reverse_fill_page)
+
+    presenter.on_survey_parse_failed("问卷已暂停")
+
+    assert dashboard.parse_failed_calls[-1] == "问卷已暂停"
+    assert reverse_fill_page.parse_failed_calls[-1] == "问卷已暂停"
 
 
 def test_workbench_presenter_syncs_urls_without_looping() -> None:
