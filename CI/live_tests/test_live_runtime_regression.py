@@ -18,6 +18,10 @@ OUTER_TIMEOUT_SECONDS = 300
 TRANSIENT_EXTERNAL_FAILURE_PATTERNS = (
     re.compile(r"HTTP 页面未返回可解析题目"),
 )
+KNOWN_UNSUPPORTED_LIVE_CASE_PATTERNS = (
+    re.compile(r"腾讯问卷当前版本暂不支持量表、矩阵量表题"),
+    re.compile(r"当前版本暂不支持腾讯问卷(?:矩阵)?量表题"),
+)
 UNICODE_ESCAPE_PATTERN = re.compile(
     f"{re.escape(chr(92) + 'u')}[0-9a-fA-F]{{4}}|{re.escape(chr(92) + 'U')}[0-9a-fA-F]{{8}}"
 )
@@ -64,6 +68,10 @@ def _is_transient_external_failure(output: str) -> bool:
     return any(pattern.search(output or "") for pattern in TRANSIENT_EXTERNAL_FAILURE_PATTERNS)
 
 
+def _is_known_unsupported_live_case(output: str) -> bool:
+    return any(pattern.search(output or "") for pattern in KNOWN_UNSUPPORTED_LIVE_CASE_PATTERNS)
+
+
 def _fail_without_assert_repr(message: str) -> None:
     pytest.fail(message, pytrace=False)
 
@@ -104,6 +112,11 @@ def test_live_runtime_regression(survey_case: LiveSurveyCase) -> None:
     if result.returncode != 0 and _is_transient_external_failure(output):
         pytest.skip(
             f"Live survey returned an unparseable external page for {survey_case.name}.\n"
+            f"Output:\n{output}"
+        )
+    if result.returncode != 0 and _is_known_unsupported_live_case(output):
+        pytest.skip(
+            f"Live survey uses a currently unsupported Tencent scale question type for {survey_case.name}.\n"
             f"Output:\n{output}"
         )
 

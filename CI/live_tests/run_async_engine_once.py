@@ -26,6 +26,29 @@ from software.providers.registry import parse_survey  # noqa: E402
 from software.ui.controller.run_controller_parts.runtime_preparation import prepare_execution_artifacts  # noqa: E402
 
 
+def _iter_exception_messages(exc: BaseException) -> list[str]:
+    messages: list[str] = []
+    seen: set[int] = set()
+    current: BaseException | None = exc
+    while current is not None and id(current) not in seen:
+        seen.add(id(current))
+        message = str(current or "").strip()
+        if message and message not in messages:
+            messages.append(message)
+        current = current.__cause__ or current.__context__
+    return messages
+
+
+def _print_failure(exc: BaseException) -> None:
+    messages = _iter_exception_messages(exc)
+    if not messages:
+        messages = ["真实问卷回归失败，未获得错误详情"]
+    print("Live runtime regression failed:")
+    for index, message in enumerate(messages, start=1):
+        prefix = "error" if index == 1 else f"cause {index - 1}"
+        print(f"{prefix}: {message}")
+
+
 def _build_live_test_config(url: str) -> RuntimeConfig:
     normalized_url = str(url or "").strip()
     if not normalized_url:
@@ -63,29 +86,30 @@ def main() -> int:
     parser.add_argument("--timeout", type=float, default=180.0)
     args = parser.parse_args()
 
-    logging.basicConfig(
-        level=logging.INFO,
-        format="%(asctime)s %(levelname)s %(message)s",
-    )
-    config = _build_live_test_config(args.url)
-
-    prepared = prepare_execution_artifacts(config, fallback_survey_title=config.survey_title)
-    execution_config = prepared.execution_config_template
-    execution_config.target_num = 1
-    execution_config.num_threads = 1
-    execution_config.submit_interval_range_seconds = (0, 0)
-    execution_config.answer_duration_range_seconds = (0, 0)
-    execution_config.random_proxy_ip_enabled = False
-    execution_config.random_user_agent_enabled = False
-    state = ExecutionState(config=execution_config)
-    state.initialize_reverse_fill_runtime()
-
-    client = AsyncEngineClient()
     try:
-        future = client.start_run(execution_config, state, runtime_bridge=None)
-        future.result(timeout=max(1.0, float(args.timeout or 1.0)))
-    finally:
-        client.shutdown(timeout=15.0)
+        logging.disable(logging.CRITICAL)
+        config = _build_live_test_config(args.url)
+
+        prepared = prepare_execution_artifacts(config, fallback_survey_title=config.survey_title)
+        execution_config = prepared.execution_config_template
+        execution_config.target_num = 1
+        execution_config.num_threads = 1
+        execution_config.submit_interval_range_seconds = (0, 0)
+        execution_config.answer_duration_range_seconds = (0, 0)
+        execution_config.random_proxy_ip_enabled = False
+        execution_config.random_user_agent_enabled = False
+        state = ExecutionState(config=execution_config)
+        state.initialize_reverse_fill_runtime()
+
+        client = AsyncEngineClient()
+        try:
+            future = client.start_run(execution_config, state, runtime_bridge=None)
+            future.result(timeout=max(1.0, float(args.timeout or 1.0)))
+        finally:
+            client.shutdown(timeout=15.0)
+    except Exception as exc:
+        _print_failure(exc)
+        return 1
 
     print(
         f"provider={execution_config.survey_provider} cur_num={state.cur_num} "
