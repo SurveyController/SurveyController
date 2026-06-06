@@ -9,6 +9,7 @@ from software.app.config import DEFAULT_FILL_TEXT
 from software.core.ai.runtime import (
     AIRuntimeError,
     agenerate_ai_answer,
+    build_free_ai_option_fill_placeholder,
     build_free_ai_text_placeholder,
 )
 from software.core.persona.context import apply_persona_boost
@@ -102,6 +103,7 @@ async def _build_qq_single_action(
         ctx=ctx,
         thread_name=thread_name,
         allow_ai_placeholder=allow_ai_placeholder,
+        ai_placeholder_text=build_free_ai_option_fill_placeholder(current, selected_index),
     )
     selected_texts = [f"{selected_text} / {fill_value}" if selected_text and fill_value else (fill_value or selected_text)]
     return AnswerAction(
@@ -237,6 +239,7 @@ async def _build_qq_dropdown_action(
         ctx=ctx,
         thread_name=thread_name,
         allow_ai_placeholder=allow_ai_placeholder,
+        ai_placeholder_text=build_free_ai_option_fill_placeholder(current, selected_index),
     )
     selected_texts = [f"{selected_text} / {fill_value}" if selected_text and fill_value else (fill_value or selected_text)]
     return AnswerAction(
@@ -339,6 +342,7 @@ async def _build_qq_multiple_action(
                 ctx=ctx,
                 thread_name=thread_name,
                 allow_ai_placeholder=allow_ai_placeholder,
+                ai_placeholder_text=build_free_ai_option_fill_placeholder(current, option_idx),
             )
             if fill_value:
                 fill_texts.append((option_idx, fill_value))

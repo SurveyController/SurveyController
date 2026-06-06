@@ -1,9 +1,10 @@
-"""免费 AI 批量预取运行时辅助。"""
+"""AI 批量预取运行时辅助。"""
 
 from __future__ import annotations
 
+import asyncio
 from dataclasses import dataclass, replace
-from typing import Dict, Iterable, List, Sequence, Tuple
+from typing import Any, Dict, Iterable, List, Sequence, Tuple
 
 from software.app.config import DEFAULT_FILL_TEXT
 from software.core.ai.runtime import (
@@ -18,6 +19,7 @@ from software.integrations.ai.free_api import (
     FreeAIBatchResolvedResult,
     wait_free_ai_batch_result_async,
 )
+from software.integrations.ai.client import agenerate_answer
 from software.integrations.ai.settings import (
     AI_MODE_FREE,
     FREE_QUESTION_TYPE_FILL,
@@ -27,6 +29,8 @@ from software.integrations.ai.settings import (
 )
 from software.providers.answering import AnswerAction
 from software.providers.contracts import SurveyQuestionMeta
+
+_PROVIDER_BATCH_MAX_CONCURRENCY = 4
 
 
 @dataclass(frozen=True)
@@ -55,6 +59,10 @@ def _question_type_for_blank_count(blank_count: int) -> str:
 
 def _system_prompt_for_free_mode(ctx: ExecutionState) -> str:
     return str(getattr(ctx.config, "ai_system_prompt", "") or "").strip() or get_default_system_prompt(AI_MODE_FREE)
+
+
+def _prefill_label_for_ctx(ctx: ExecutionState) -> str:
+    return "免费 AI" if _is_free_ai_mode(ctx) else "AI"
 
 
 def _question_map(questions: Iterable[SurveyQuestionMeta]) -> Dict[int, SurveyQuestionMeta]:
@@ -159,6 +167,8 @@ def _raise_prefill_incomplete_error(
     result: FreeAIBatchResolvedResult,
     item_question_map: Dict[str, int],
     item_option_fill_map: Dict[str, Tuple[int, int]],
+    *,
+    label: str = "AI",
 ) -> None:
     failed_labels: list[str] = []
     pending_labels: list[str] = []
@@ -191,7 +201,59 @@ def _raise_prefill_incomplete_error(
     if pending_labels:
         parts.append("未完成：" + "；".join(pending_labels[:5]))
     detail = "；".join(parts) if parts else "存在未完成题目"
-    raise RuntimeError(f"免费 AI 批量预取未完成，已停止本轮提交：{detail}")
+    raise RuntimeError(f"{label} 批量预取未完成，已停止本轮提交：{detail}")
+
+
+def _normalize_provider_item_answers(item: FreeAIBatchItem, raw_answer: Any) -> List[str]:
+    if item.question_type == FREE_QUESTION_TYPE_MULTI:
+        if isinstance(raw_answer, list):
+            answers = [str(value or "").strip() for value in raw_answer]
+        else:
+            answers = [part.strip() for part in str(raw_answer or "").split("||")]
+        answers = [value for value in answers if value]
+        expected = int(item.blank_count or 0)
+        if expected > 0 and len(answers) != expected:
+            raise RuntimeError(f"期望 {expected} 个答案，实际返回 {len(answers)} 个")
+        if not answers:
+            raise RuntimeError("AI 未返回有效答案")
+        return answers
+
+    answer = str(raw_answer or "").strip()
+    if not answer:
+        raise RuntimeError("AI 未返回有效答案")
+    return [answer]
+
+
+async def _wait_provider_batch_result_async(
+    items: Iterable[FreeAIBatchItem],
+    *,
+    ctx: ExecutionState,
+) -> FreeAIBatchResolvedResult:
+    normalized_items = list(items or [])
+    completed: Dict[str, List[str]] = {}
+    failed: Dict[str, str] = {}
+    semaphore = asyncio.Semaphore(_PROVIDER_BATCH_MAX_CONCURRENCY)
+
+    async def _run_item(item: FreeAIBatchItem) -> None:
+        async with semaphore:
+            try:
+                raw_answer = await agenerate_answer(
+                    item.question_content,
+                    question_type=item.question_type,
+                    blank_count=item.blank_count,
+                    ctx=ctx,
+                )
+                completed[item.item_id] = _normalize_provider_item_answers(item, raw_answer)
+            except Exception as exc:
+                failed[item.item_id] = str(exc or "AI 调用失败")
+
+    await asyncio.gather(*(_run_item(item) for item in normalized_items))
+    return FreeAIBatchResolvedResult(
+        completed=completed,
+        failed=failed,
+        pending=set(),
+        task_ids=[],
+    )
 
 
 def _rebuild_selected_texts(
@@ -274,8 +336,6 @@ async def prefill_free_ai_answers_for_questions(
     thread_name: str = "",
 ) -> FreeAIPrefillSummary:
     ctx.clear_free_ai_prefill_answers(thread_name)
-    if not _is_free_ai_mode(ctx):
-        return FreeAIPrefillSummary()
     if not actions:
         return FreeAIPrefillSummary()
 
@@ -283,13 +343,21 @@ async def prefill_free_ai_answers_for_questions(
     if not items:
         return FreeAIPrefillSummary()
 
-    result = await wait_free_ai_batch_result_async(
-        items,
-        system_prompt=_system_prompt_for_free_mode(ctx),
-        ctx=ctx,
-    )
+    if _is_free_ai_mode(ctx):
+        result = await wait_free_ai_batch_result_async(
+            items,
+            system_prompt=_system_prompt_for_free_mode(ctx),
+            ctx=ctx,
+        )
+    else:
+        result = await _wait_provider_batch_result_async(items, ctx=ctx)
     if result.failed or result.pending:
-        _raise_prefill_incomplete_error(result, item_question_map, item_option_fill_map)
+        _raise_prefill_incomplete_error(
+            result,
+            item_question_map,
+            item_option_fill_map,
+            label=_prefill_label_for_ctx(ctx),
+        )
 
     resolved_answers = _resolved_answers_by_question_num(result, item_question_map)
     resolved_option_fill_answers = _resolved_option_fill_answers(result, item_option_fill_map)
@@ -309,7 +377,28 @@ async def prefill_free_ai_answers_for_questions(
     )
 
 
+def assert_no_free_ai_placeholders_in_actions(
+    actions: Sequence[AnswerAction],
+    *,
+    provider_label: str = "问卷",
+) -> None:
+    question_nums: set[int] = set()
+    for action in list(actions or []):
+        values = list(action.text_values or ())
+        values.extend(value for _, value in tuple(action.option_fill_texts or ()))
+        values.extend(action.selected_texts or ())
+        if any(is_free_ai_text_placeholder(value) or is_free_ai_option_fill_placeholder(value) for value in values):
+            question_num = int(getattr(action, "question_num", 0) or 0)
+            if question_num > 0:
+                question_nums.add(question_num)
+
+    if question_nums:
+        labels = "、".join(f"第{num}题" for num in sorted(question_nums)[:8])
+        raise RuntimeError(f"{provider_label}存在未替换的 AI 占位符，已停止提交：{labels}")
+
+
 __all__ = [
     "FreeAIPrefillSummary",
+    "assert_no_free_ai_placeholders_in_actions",
     "prefill_free_ai_answers_for_questions",
 ]

@@ -14,7 +14,7 @@ from urllib.parse import urlparse
 
 import software.network.http as http_client
 from software.app.config import DEFAULT_HTTP_HEADERS, DEFAULT_USER_AGENT, USER_AGENT_PRESETS
-from software.core.ai.batch_runtime import prefill_free_ai_answers_for_questions
+from software.core.ai.batch_runtime import assert_no_free_ai_placeholders_in_actions, prefill_free_ai_answers_for_questions
 from software.core.modes.duration_control import sample_answer_duration_seconds
 from software.core.persona.context import record_answer
 from software.core.questions.distribution import record_pending_distribution_choice
@@ -420,6 +420,7 @@ async def brush_wjx_http(
         actions = list(plan.actions)
         if not actions:
             return False
+        assert_no_free_ai_placeholders_in_actions(actions, provider_label="问卷星")
         for action in actions:
             _record_action(ctx, action)
         submitdata = _submitdata_from_actions(

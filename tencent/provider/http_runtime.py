@@ -11,7 +11,7 @@ from typing import Any, Mapping, Optional
 
 import software.network.http as http_client
 from software.app.config import DEFAULT_HTTP_HEADERS, DEFAULT_USER_AGENT
-from software.core.ai.batch_runtime import prefill_free_ai_answers_for_questions
+from software.core.ai.batch_runtime import assert_no_free_ai_placeholders_in_actions, prefill_free_ai_answers_for_questions
 from software.core.modes.duration_control import sample_answer_duration_seconds
 from software.core.persona.context import record_answer
 from software.core.questions.distribution import record_pending_distribution_choice
@@ -477,6 +477,7 @@ async def brush_qq_http(
             ctx,
             thread_name=thread_name,
         )
+        assert_no_free_ai_placeholders_in_actions(actions, provider_label="腾讯问卷")
         action_by_question_id = {
             str(action.question_id or "").strip(): action
             for action in actions
