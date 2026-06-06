@@ -4,8 +4,9 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
+from PySide6.QtCore import QEvent, QTimer
 from PySide6.QtWidgets import QWidget
-from qfluentwidgets import ScrollArea
+from qfluentwidgets import ExpandGroupSettingCard, ScrollArea
 
 from software.app.config import HTTP_MAX_THREADS
 from software.ui.controller.run_controller import RunController
@@ -56,6 +57,7 @@ class RuntimePage(
         super().__init__(parent)
         self.controller = controller
         self._last_benefit_proxy_compatible = None
+        self._layout_refresh_pending = False
         self.view = QWidget(self)
         self.setWidget(self.view)
         self.setWidgetResizable(True)
@@ -96,6 +98,7 @@ class RuntimePage(
             self._on_runtime_snapshot_changed(self.controller.get_runtime_snapshot())
         elif hasattr(self.controller, "get_runtime_ui_state"):
             self._apply_runtime_ui_state(self.controller.get_runtime_ui_state())
+        self._queue_expanded_card_layout_refresh()
 
     def _on_runtime_snapshot_changed(self, snapshot: dict) -> None:
         runtime_snapshot = dict(snapshot or {})
@@ -106,3 +109,36 @@ class RuntimePage(
             str(random_ip.get("loading_message") or ""),
         )
         self.on_run_state_changed(bool(runtime_snapshot.get("running")))
+        self._queue_expanded_card_layout_refresh()
+
+    def event(self, event) -> bool:
+        handled = super().event(event)
+        if event.type() in {QEvent.Type.Show, QEvent.Type.Resize, QEvent.Type.LayoutRequest}:
+            self._queue_expanded_card_layout_refresh()
+        return handled
+
+    def _queue_expanded_card_layout_refresh(self) -> None:
+        if self._layout_refresh_pending:
+            return
+        self._layout_refresh_pending = True
+        QTimer.singleShot(0, self._refresh_expanded_card_layouts)
+
+    def _refresh_expanded_card_layouts(self) -> None:
+        self._layout_refresh_pending = False
+        try:
+            cards = self.view.findChildren(ExpandGroupSettingCard)
+        except RuntimeError:
+            return
+        for card in cards:
+            if getattr(card, "isExpand", False):
+                adjust_view_size = getattr(card, "_adjustViewSize", None)
+                if callable(adjust_view_size):
+                    adjust_view_size()
+            card.updateGeometry()
+        try:
+            layout = self.view.layout()
+        except RuntimeError:
+            return
+        if layout is not None:
+            layout.activate()
+        self.view.updateGeometry()

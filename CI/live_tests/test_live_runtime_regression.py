@@ -18,6 +18,9 @@ OUTER_TIMEOUT_SECONDS = 300
 TRANSIENT_EXTERNAL_FAILURE_PATTERNS = (
     re.compile(r"HTTP 页面未返回可解析题目"),
 )
+UNICODE_ESCAPE_PATTERN = re.compile(
+    f"{re.escape(chr(92) + 'u')}[0-9a-fA-F]{{4}}|{re.escape(chr(92) + 'U')}[0-9a-fA-F]{{8}}"
+)
 
 
 @dataclass(frozen=True)
@@ -59,6 +62,17 @@ def _format_output(stdout: str, stderr: str) -> str:
 
 def _is_transient_external_failure(output: str) -> bool:
     return any(pattern.search(output or "") for pattern in TRANSIENT_EXTERNAL_FAILURE_PATTERNS)
+
+
+def test_live_tests_do_not_use_unicode_escapes() -> None:
+    offenders: list[str] = []
+    for path in sorted(Path(__file__).resolve().parent.glob("*.py")):
+        text = path.read_text(encoding="utf-8")
+        for match in UNICODE_ESCAPE_PATTERN.finditer(text):
+            line_number = text.count("\n", 0, match.start()) + 1
+            offenders.append(f"{path.relative_to(ROOT_DIR)}:{line_number}: {match.group(0)}")
+
+    assert not offenders, "真实问卷回归禁止使用 Unicode 转义字符:\n" + "\n".join(offenders)
 
 
 @pytest.mark.parametrize("survey_case", _resolve_live_survey_cases(), ids=lambda case: case.name)
