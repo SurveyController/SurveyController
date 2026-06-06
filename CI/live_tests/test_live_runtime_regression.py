@@ -64,6 +64,10 @@ def _is_transient_external_failure(output: str) -> bool:
     return any(pattern.search(output or "") for pattern in TRANSIENT_EXTERNAL_FAILURE_PATTERNS)
 
 
+def _fail_without_assert_repr(message: str) -> None:
+    pytest.fail(message, pytrace=False)
+
+
 def test_live_tests_do_not_use_unicode_escapes() -> None:
     offenders: list[str] = []
     for path in sorted(Path(__file__).resolve().parent.glob("*.py")):
@@ -72,7 +76,8 @@ def test_live_tests_do_not_use_unicode_escapes() -> None:
             line_number = text.count("\n", 0, match.start()) + 1
             offenders.append(f"{path.relative_to(ROOT_DIR)}:{line_number}: {match.group(0)}")
 
-    assert not offenders, "真实问卷回归禁止使用 Unicode 转义字符:\n" + "\n".join(offenders)
+    if offenders:
+        _fail_without_assert_repr("真实问卷回归禁止使用 Unicode 转义字符:\n" + "\n".join(offenders))
 
 
 @pytest.mark.parametrize("survey_case", _resolve_live_survey_cases(), ids=lambda case: case.name)
@@ -102,12 +107,14 @@ def test_live_runtime_regression(survey_case: LiveSurveyCase) -> None:
             f"Output:\n{output}"
         )
 
-    assert result.returncode == 0, (
-        f"Live runtime regression failed for {survey_case.name}.\n"
-        f"Exit code: {result.returncode}\n"
-        f"Output:\n{output}"
-    )
-    assert "cur_num=1" in output, (
-        f"Live runtime regression did not report a successful submission for {survey_case.name}.\n"
-        f"Output:\n{output}"
-    )
+    if result.returncode != 0:
+        _fail_without_assert_repr(
+            f"Live runtime regression failed for {survey_case.name}.\n"
+            f"Exit code: {result.returncode}\n"
+            f"Output:\n{output}"
+        )
+    if "cur_num=1" not in output:
+        _fail_without_assert_repr(
+            f"Live runtime regression did not report a successful submission for {survey_case.name}.\n"
+            f"Output:\n{output}"
+        )
