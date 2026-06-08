@@ -57,7 +57,10 @@ def get_results(source: WizardResultSource) -> Dict[int, Any]:
     for idx, sliders in source.slider_map.items():
         weights = [max(0, slider.value()) for slider in sliders]
         if weights and not any(weight > 0 for weight in weights):
-            raise ValueError(f"{source._format_question_label(idx)}的选项配比不能全为0。")
+            entry = source.entries[idx] if 0 <= idx < len(getattr(source, "entries", [])) else None
+            question_type = str(getattr(entry, "question_type", "") or "").strip()
+            label = "多选概率" if question_type == "multiple" else "选项配比"
+            raise ValueError(f"{source._format_question_label(idx)}的{label}不能全为0。")
         result[idx] = weights
 
     for idx, row_sliders in source.matrix_row_slider_map.items():

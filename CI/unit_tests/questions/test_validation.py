@@ -27,6 +27,32 @@ class QuestionValidationTests:
         assert result is not None
         assert '最少选择 2 项' in result
 
+    def test_multiple_validation_rejects_credamo_all_zero_probabilities(self) -> None:
+        entry = QuestionEntry(
+            question_type='multiple',
+            probabilities=[0.0, 0.0, 0.0],
+            option_count=3,
+            question_num=2,
+            survey_provider='credamo',
+        )
+        result = validate_question_config([entry], [{'num': 2, 'provider': 'credamo'}])
+        assert result is not None
+        assert '多选题' in result
+        assert '所有选项概率都小于等于 0%' in result
+
+    def test_multiple_validation_rejects_credamo_empty_probabilities(self) -> None:
+        entry = QuestionEntry(
+            question_type='multiple',
+            probabilities=[],
+            option_count=3,
+            question_num=2,
+            survey_provider='credamo',
+        )
+        result = validate_question_config([entry], [{'num': 2, 'provider': 'credamo'}])
+        assert result is not None
+        assert '多选题' in result
+        assert '所有选项概率都小于等于 0%' in result
+
     def test_single_question_uses_custom_weights_and_rejects_all_zero(self) -> None:
         entry = QuestionEntry(question_type='single', probabilities=[100.0, 0.0], custom_weights=[0.0, 0.0], distribution_mode='custom', option_count=2, question_num=3)
         result = validate_question_config([entry])

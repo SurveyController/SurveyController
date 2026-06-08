@@ -23,6 +23,7 @@ class WizardValidationHost(Protocol):
     slider_map: Dict[int, List[NoWheelSlider]]
     matrix_row_slider_map: Dict[int, List[List[NoWheelSlider]]]
     attached_select_slider_map: Dict[int, List[Dict[str, Any]]]
+    entries: List[Any]
 
     def _format_question_label(self, idx: int) -> str: ...
     def _get_entry_info(self, idx: int) -> SurveyQuestionMeta: ...
@@ -96,8 +97,14 @@ def validate_non_zero_weights(host: WizardValidationHost) -> bool:
     for idx, sliders in host.slider_map.items():
         weights = [max(0, slider.value()) for slider in sliders]
         if weights and not any(weight > 0 for weight in weights):
+            entry = host.entries[idx] if 0 <= idx < len(getattr(host, "entries", [])) else None
+            question_type = str(getattr(entry, "question_type", "") or "").strip()
+            if question_type == "multiple":
+                message = f"{host._format_question_label(idx)}的多选概率不能全为0，请至少保留一个大于0的值。"
+            else:
+                message = f"{host._format_question_label(idx)}的选项配比不能全为0，请至少保留一个大于0的值。"
             host._show_validation_error(
-                f"{host._format_question_label(idx)}的选项配比不能全为0，请至少保留一个大于0的值。",
+                message,
                 idx,
                 sliders[0],
             )

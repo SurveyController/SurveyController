@@ -136,8 +136,6 @@ class WizardSectionsSliderMixin:
         weights = list(raw_weights or [])
         if len(weights) < options:
             weights += [default_weight] * (options - len(weights))
-        if all(w <= 0 for w in weights):
-            weights = [default_weight] * options
 
         sliders: List[NoWheelSlider] = []
         is_multiple = entry.question_type == "multiple"

@@ -221,6 +221,12 @@ def test_wizard_validation_random_integer_and_weights(qtbot) -> None:
     assert "选项配比不能全为0" in host.errors[-1][0]
 
     host = _Host()
+    host.entries = [QuestionEntry("multiple", [0, 0], question_num=1)]
+    host.slider_map = {0: [_Slider(0), _Slider(0)]}
+    assert validation.validate_non_zero_weights(host) is False
+    assert "多选概率不能全为0" in host.errors[-1][0]
+
+    host = _Host()
     host.matrix_row_slider_map = {0: [[_Slider(0)]]}
     assert validation.validate_non_zero_weights(host) is False
     assert "第1行" in host.errors[-1][0]

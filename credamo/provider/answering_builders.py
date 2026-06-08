@@ -161,8 +161,6 @@ def _normalize_positive_indices(weights: Any, option_count: int) -> list[int]:
             value = 0.0
         if value > 0:
             selected.append(index)
-    if not selected:
-        selected = [random.randrange(total)]
     return selected
 
 

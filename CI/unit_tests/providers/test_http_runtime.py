@@ -390,6 +390,40 @@ def test_credamo_builder_includes_static_option_fill_text() -> None:
     assert action.option_fill_texts[0][0] == 1
 
 
+def test_credamo_builder_does_not_randomize_empty_multiple_probabilities() -> None:
+    config = ExecutionConfig(survey_provider="credamo")
+    config.multiple_prob = [[]]
+    question = SurveyQuestionMeta(num=1, title="多选题", provider="credamo", options=3)
+
+    action = credamo_builders.build_answer_action(
+        root_index=0,
+        question_num=1,
+        entry_type="multiple",
+        config_index=0,
+        config=config,
+        question_meta=question,
+    )
+
+    assert action is None
+
+
+def test_credamo_builder_does_not_randomize_all_zero_multiple_probabilities() -> None:
+    config = ExecutionConfig(survey_provider="credamo")
+    config.multiple_prob = [[0.0, 0.0, 0.0]]
+    question = SurveyQuestionMeta(num=1, title="多选题", provider="credamo", options=3)
+
+    action = credamo_builders.build_answer_action(
+        root_index=0,
+        question_num=1,
+        entry_type="multiple",
+        config_index=0,
+        config=config,
+        question_meta=question,
+    )
+
+    assert action is None
+
+
 def test_credamo_forced_choice_prefers_text_when_api_choice_order_changes() -> None:
     config = ExecutionConfig(survey_provider="credamo")
     config.questions_metadata = {

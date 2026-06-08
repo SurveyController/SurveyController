@@ -126,8 +126,9 @@ class WizardSectionsTextMixin:
                 _apply_label_color(num_lbl, "#888888", "#a6a6a6")
                 row_layout.addWidget(num_lbl)
                 edit = LineEdit(parent_card)
-                edit.setText(initial_text)
-                edit.setPlaceholderText("输入答案")
+                normalized_initial = str(initial_text or "").strip()
+                edit.setText("" if normalized_initial == DEFAULT_FILL_TEXT else normalized_initial)
+                edit.setPlaceholderText(DEFAULT_FILL_TEXT)
                 row_layout.addWidget(edit, 1)
                 del_btn = PushButton("×", parent_card)
                 del_btn.setFixedWidth(32)
@@ -369,8 +370,9 @@ class WizardSectionsTextMixin:
                 edits_in_row: List[LineEdit] = []
                 for i in range(num_blanks):
                     edit = LineEdit(parent_card)
-                    edit.setText(values[i] if i < len(values) else "")
-                    edit.setPlaceholderText(f"填空{i + 1}")
+                    normalized_value = str(values[i] if i < len(values) else "").strip()
+                    edit.setText("" if normalized_value == DEFAULT_FILL_TEXT else normalized_value)
+                    edit.setPlaceholderText(DEFAULT_FILL_TEXT)
                     edit.setMinimumWidth(72)
                     edit.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
                     row_layout.addWidget(edit, 1)
