@@ -107,7 +107,7 @@ class DefaultBuilderRuntimeTests:
 
         assert entries[0].probabilities == [0, 1]
         assert entries[0].custom_weights == [0, 1]
-        assert entries[0].option_fill_texts == ["", "其他"]
+        assert entries[0].option_fill_texts == [None, "其他"]
         assert entries[0].fillable_option_indices == [1]
         assert entries[0].attached_option_selects == [
             {"option_index": 1, "option_text": "其他", "select_options": ["北京", "上海"], "weights": [1.0, 0.0]}
@@ -116,6 +116,24 @@ class DefaultBuilderRuntimeTests:
         assert entries[1].distribution_mode == "custom"
         assert entries[2].texts == ["旧答案"]
         assert entries[2].ai_enabled is True
+
+    def test_build_default_question_entries_drops_stale_option_fill_texts(self) -> None:
+        existing = QuestionEntry(
+            "single",
+            [1, 0],
+            option_count=2,
+            question_num=1,
+            question_title="单选题",
+            option_fill_texts=["旧填空", None],
+            fillable_option_indices=[0],
+        )
+        entries = build_default_question_entries(
+            [SurveyQuestionMeta(num=1, title="单选题", type_code="3", options=2, fillable_options=[])],
+            existing_entries=[existing],
+        )
+
+        assert entries[0].fillable_option_indices == []
+        assert entries[0].option_fill_texts is None
 
     def test_build_default_question_entries_does_not_reuse_mismatched_title_or_type(self) -> None:
         existing = QuestionEntry(

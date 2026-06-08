@@ -12,6 +12,7 @@ from software.core.questions.utils import (
     weighted_index,
 )
 from software.providers.answering import AnswerAction
+from software.providers.answering.option_fill import resolve_static_option_fill_text
 
 
 def build_answer_action(
@@ -34,7 +35,15 @@ def build_answer_action(
         if selected_index is None:
             weights = config.single_prob[config_index] if config_index < len(config.single_prob) else -1
             selected_index = weighted_index(normalize_droplist_probs(weights, option_count))
-        return AnswerAction(root_index=int(root_index), question_num=int(question_num), kind="single", selected_indices=(selected_index,))
+        fill_entries = config.single_option_fill_texts[config_index] if config_index < len(config.single_option_fill_texts) else None
+        fill_value = resolve_static_option_fill_text(fill_entries, selected_index, question=question_meta)
+        return AnswerAction(
+            root_index=int(root_index),
+            question_num=int(question_num),
+            kind="single",
+            selected_indices=(selected_index,),
+            option_fill_texts=((selected_index, fill_value),) if fill_value else (),
+        )
     if kind == "multiple":
         raw_option_count = int(getattr(question_meta, "options", 0) or 0)
         if raw_option_count <= 0:
@@ -44,7 +53,19 @@ def build_answer_action(
         selected = _normalize_positive_indices(weights, option_count)
         if not selected:
             return None
-        return AnswerAction(root_index=int(root_index), question_num=int(question_num), kind="multiple", selected_indices=tuple(selected))
+        fill_entries = config.multiple_option_fill_texts[config_index] if config_index < len(config.multiple_option_fill_texts) else None
+        fill_texts: list[tuple[int, str]] = []
+        for option_index in selected:
+            fill_value = resolve_static_option_fill_text(fill_entries, option_index, question=question_meta)
+            if fill_value:
+                fill_texts.append((option_index, fill_value))
+        return AnswerAction(
+            root_index=int(root_index),
+            question_num=int(question_num),
+            kind="multiple",
+            selected_indices=tuple(selected),
+            option_fill_texts=tuple(fill_texts),
+        )
     if kind == "dropdown":
         raw_option_count = int(getattr(question_meta, "options", 0) or 0)
         if raw_option_count <= 0:
@@ -54,11 +75,14 @@ def build_answer_action(
         if selected_index is None:
             weights = config.droplist_prob[config_index] if config_index < len(config.droplist_prob) else -1
             selected_index = weighted_index(normalize_droplist_probs(weights, option_count))
+        fill_entries = config.droplist_option_fill_texts[config_index] if config_index < len(config.droplist_option_fill_texts) else None
+        fill_value = resolve_static_option_fill_text(fill_entries, selected_index, question=question_meta)
         return AnswerAction(
             root_index=int(root_index),
             question_num=int(question_num),
             kind="select",
             selected_indices=(selected_index,),
+            option_fill_texts=((selected_index, fill_value),) if fill_value else (),
             record_type="dropdown",
         )
     if kind in {"scale", "score"}:

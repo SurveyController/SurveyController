@@ -20,6 +20,7 @@ from software.core.persona.context import record_answer
 from software.core.questions.distribution import record_pending_distribution_choice
 from software.core.task import ExecutionConfig, ExecutionState
 from software.providers.answering import AnswerAction
+from software.providers.answering.option_fill import option_fill_text_map
 from software.providers.answering.recording import record_answer_action
 from software.providers.contracts import SurveyQuestionMeta
 from software.providers.http_logic import build_http_logic_plan
@@ -467,10 +468,10 @@ def _selected_item(items: list[Mapping[str, Any]], index: int, *, question_num: 
     return items[selected_index]
 
 
-def _choice_payload(raw_choice: Mapping[str, Any]) -> dict[str, Any]:
+def _choice_payload(raw_choice: Mapping[str, Any], *, fill_text: str = "") -> dict[str, Any]:
     return {
         "choiceId": _id_from_mapping(raw_choice, "choiceId", "id"),
-        "choiceContent": "",
+        "choiceContent": str(fill_text or "").strip(),
     }
 
 
@@ -540,6 +541,7 @@ def _choice_answer(
     question_num = int(action.question_num or 0)
     question_type = _raw_question_type(raw_question)
     selector = _raw_selector(raw_question)
+    fill_by_index = option_fill_text_map(action.option_fill_texts)
     item: dict[str, Any] = {
         "qstId": _id_from_mapping(raw_question, "qstId", "id"),
         "answerTime": 0,
@@ -548,13 +550,17 @@ def _choice_answer(
     }
     if selector == 2 or action.kind == "multiple":
         item["answerQstChoiceList"] = [
-            _choice_payload(_selected_item(choices, int(index), question_num=question_num, label="选项"))
+            _choice_payload(
+                _selected_item(choices, int(index), question_num=question_num, label="选项"),
+                fill_text=fill_by_index.get(int(index), ""),
+            )
             for index in action.selected_indices
         ]
     else:
         selected_index = _selected_choice_index(choices, action, config=config)
         item["answerQstChoice"] = _choice_payload(
-            _selected_item(choices, selected_index, question_num=question_num, label="选项")
+            _selected_item(choices, selected_index, question_num=question_num, label="选项"),
+            fill_text=fill_by_index.get(int(selected_index), ""),
         )
     try:
         sub_selector = int(raw_question.get("subSelector") or 0)

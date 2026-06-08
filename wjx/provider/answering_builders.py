@@ -46,6 +46,7 @@ from software.core.reverse_fill.schema import (
 )
 from software.core.task import ExecutionState
 from software.providers.answering import AnswerAction
+from software.providers.answering.option_fill import default_missing_option_fill
 from software.providers.answering.selection import (
     coerce_positive_int as _coerce_positive_int,
     valid_forced_choice_index as _valid_forced_choice_index,
@@ -134,6 +135,7 @@ async def _build_wjx_single_action(
         allow_ai_placeholder=allow_ai_placeholder,
         ai_placeholder_text=build_free_ai_option_fill_placeholder(current, selected_index),
     )
+    fill_value = default_missing_option_fill(question, selected_index, fill_value)
     selected_texts = [f"{selected_text} / {fill_value}" if selected_text and fill_value else (fill_value or selected_text)]
     return AnswerAction(
         question_num=current,
@@ -220,6 +222,7 @@ async def _build_wjx_dropdown_action(
         allow_ai_placeholder=allow_ai_placeholder,
         ai_placeholder_text=build_free_ai_option_fill_placeholder(current, selected_index),
     )
+    fill_value = default_missing_option_fill(question, selected_index, fill_value)
     selected_texts = [f"{selected_text} / {fill_value}" if selected_text and fill_value else (fill_value or selected_text)]
     return AnswerAction(
         question_num=current,
@@ -407,6 +410,7 @@ async def _build_wjx_multiple_action(
                 allow_ai_placeholder=allow_ai_placeholder,
                 ai_placeholder_text=build_free_ai_option_fill_placeholder(current, option_idx),
             )
+            fill_value = default_missing_option_fill(question, option_idx, fill_value)
             if fill_value:
                 fill_texts.append((option_idx, fill_value))
                 selected_text = f"{selected_text} / {fill_value}" if selected_text else fill_value

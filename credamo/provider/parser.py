@@ -379,6 +379,16 @@ def _normalize_question(raw: Dict[str, Any], fallback_num: int) -> Dict[str, Any
     if forced_option_index is None:
         forced_option_index, forced_option_text = _extract_arithmetic_option(raw_title or title, option_texts, extra_fragments=extra_fragments)
     forced_texts = _extract_forced_texts(raw_title or title, extra_fragments=extra_fragments)
+    raw_fillable_options = raw.get("fillable_options")
+    fillable_options: List[int] = []
+    if isinstance(raw_fillable_options, list):
+        for raw_index in raw_fillable_options:
+            try:
+                option_index = int(raw_index)
+            except Exception:
+                continue
+            if 0 <= option_index < len(option_texts) and option_index not in fillable_options:
+                fillable_options.append(option_index)
     multi_min_limit: Optional[int] = None
     multi_max_limit: Optional[int] = None
     if type_code == "4":
@@ -417,6 +427,7 @@ def _normalize_question(raw: Dict[str, Any], fallback_num: int) -> Dict[str, Any
         "forced_option_index": forced_option_index,
         "forced_option_text": forced_option_text,
         "forced_texts": forced_texts,
+        "fillable_options": fillable_options,
         "multi_min_limit": multi_min_limit,
         "multi_max_limit": multi_max_limit,
     }
@@ -449,6 +460,31 @@ def _item_texts(items: list[Mapping[str, Any]], *keys: str) -> list[str]:
         if text:
             result.append(text)
     return result
+
+
+def _payload_contains_choice_fill(value: Any, *, depth: int = 0) -> bool:
+    if depth > 4 or value is None:
+        return False
+    if isinstance(value, Mapping):
+        for key, item in value.items():
+            key_text = str(key or "").strip().lower()
+            if any(marker in key_text for marker in ("fill", "blank", "input", "other")):
+                if item not in (None, "", [], {}, False):
+                    return True
+            if _payload_contains_choice_fill(item, depth=depth + 1):
+                return True
+        return False
+    if isinstance(value, (list, tuple, set)):
+        return any(_payload_contains_choice_fill(item, depth=depth + 1) for item in value)
+    return False
+
+
+def _fillable_choice_indices(choices: list[Mapping[str, Any]]) -> list[int]:
+    fillable: list[int] = []
+    for index, choice in enumerate(choices):
+        if _payload_contains_choice_fill(choice):
+            fillable.append(index)
+    return fillable
 
 
 def _raw_to_normalized_input(raw_question: Mapping[str, Any], *, fallback_num: int) -> Dict[str, Any]:
@@ -487,6 +523,7 @@ def _raw_to_normalized_input(raw_question: Mapping[str, Any], *, fallback_num: i
         "question_kind": provider_type,
         "provider_type": provider_type,
         "option_texts": option_texts,
+        "fillable_options": _fillable_choice_indices(choices) if question_type == 2 else [],
         "matrix_column_texts": option_texts if question_type == 4 else [],
         "row_texts": row_texts,
         "text_inputs": text_inputs,

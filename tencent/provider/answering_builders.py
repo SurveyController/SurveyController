@@ -38,6 +38,7 @@ from software.core.questions.utils import (
 )
 from software.core.task import ExecutionState
 from software.providers.answering import AnswerAction
+from software.providers.answering.option_fill import default_missing_option_fill
 from software.providers.contracts import SurveyQuestionMeta
 
 from .answering_rules import apply_multiple_constraints, normalize_selected_indices
@@ -105,6 +106,7 @@ async def _build_qq_single_action(
         allow_ai_placeholder=allow_ai_placeholder,
         ai_placeholder_text=build_free_ai_option_fill_placeholder(current, selected_index),
     )
+    fill_value = default_missing_option_fill(question, selected_index, fill_value)
     selected_texts = [f"{selected_text} / {fill_value}" if selected_text and fill_value else (fill_value or selected_text)]
     return AnswerAction(
         question_num=current,
@@ -241,6 +243,7 @@ async def _build_qq_dropdown_action(
         allow_ai_placeholder=allow_ai_placeholder,
         ai_placeholder_text=build_free_ai_option_fill_placeholder(current, selected_index),
     )
+    fill_value = default_missing_option_fill(question, selected_index, fill_value)
     selected_texts = [f"{selected_text} / {fill_value}" if selected_text and fill_value else (fill_value or selected_text)]
     return AnswerAction(
         question_num=current,
@@ -344,6 +347,7 @@ async def _build_qq_multiple_action(
                 allow_ai_placeholder=allow_ai_placeholder,
                 ai_placeholder_text=build_free_ai_option_fill_placeholder(current, option_idx),
             )
+            fill_value = default_missing_option_fill(question, option_idx, fill_value)
             if fill_value:
                 fill_texts.append((option_idx, fill_value))
                 selected_text = f"{selected_text} / {fill_value}" if selected_text else fill_value

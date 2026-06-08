@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import re
 import time
 import uuid
 from collections import OrderedDict
@@ -17,6 +18,7 @@ from software.core.persona.context import record_answer
 from software.core.questions.distribution import record_pending_distribution_choice
 from software.core.task import ExecutionConfig, ExecutionState
 from software.providers.answering import AnswerAction
+from software.providers.answering.option_fill import option_fill_text_map
 from software.providers.answering.recording import record_answer_action
 from software.providers.http_logic import build_http_logic_plan
 from software.providers.http_progress import update_http_submit_step
@@ -39,6 +41,7 @@ class QqSubmitResult:
 
 
 _QQ_SUBMIT_TIMEOUT_SECONDS = 30
+_QQ_FILLBLANK_TOKEN_RE = re.compile(r"\{(fillblank-[^{}]+)\}", re.IGNORECASE)
 
 
 def _proxy_arg(proxy_address: str | None) -> Any:
@@ -189,6 +192,43 @@ def _option_items(raw_question: Mapping[str, Any]) -> list[Mapping[str, Any]]:
     return [{"id": "", "text": str(start + index)} for index in range(count)]
 
 
+def _extract_option_blank_id(value: Any, *, depth: int = 0) -> str:
+    if depth > 4 or value is None:
+        return ""
+    if isinstance(value, Mapping):
+        for key, item in value.items():
+            key_text = str(key or "").strip()
+            match = _QQ_FILLBLANK_TOKEN_RE.search(key_text)
+            if match:
+                return str(match.group(1) or "").strip()
+            lowered_key = key_text.lower()
+            if "fillblank" in lowered_key:
+                raw_id = str(item or "").strip()
+                return raw_id or "fillblank"
+            nested = _extract_option_blank_id(item, depth=depth + 1)
+            if nested:
+                return nested
+        return ""
+    if isinstance(value, (list, tuple, set)):
+        for item in value:
+            nested = _extract_option_blank_id(item, depth=depth + 1)
+            if nested:
+                return nested
+        return ""
+    match = _QQ_FILLBLANK_TOKEN_RE.search(str(value or ""))
+    return str(match.group(1) or "").strip() if match else ""
+
+
+def _option_blank_answer(raw_option: Mapping[str, Any], fill_text: str) -> dict[str, str]:
+    blank_id = _extract_option_blank_id(raw_option)
+    if not blank_id:
+        blank_id = str(raw_option.get("id") or "").strip()
+    return {
+        "id": blank_id,
+        "text": str(fill_text or "").strip(),
+    }
+
+
 def _option_answer(raw_option: Mapping[str, Any], *, checked: bool) -> dict[str, Any]:
     return {
         "id": str(raw_option.get("id") or "").strip(),
@@ -233,14 +273,24 @@ def _score_question_answer(raw_question: Mapping[str, Any], action: AnswerAction
 
 def _choice_question_answer(raw_question: Mapping[str, Any], action: AnswerAction) -> dict[str, Any]:
     selected = {int(item) for item in action.selected_indices}
+    fill_by_index = option_fill_text_map(action.option_fill_texts)
+    blanks: list[dict[str, str]] = []
     options = [
         _option_answer(option, checked=index in selected)
         for index, option in enumerate(_option_items(raw_question))
     ]
+    raw_options = _option_items(raw_question)
+    for index, option in enumerate(raw_options):
+        if index not in selected:
+            continue
+        fill_text = fill_by_index.get(index, "")
+        if not fill_text:
+            continue
+        blanks.append(_option_blank_answer(option, fill_text))
     return {
         "id": str(raw_question.get("id") or action.question_id).strip(),
         "type": str(raw_question.get("type") or "").strip(),
-        "blanks": [],
+        "blanks": blanks,
         "options": options,
     }
 

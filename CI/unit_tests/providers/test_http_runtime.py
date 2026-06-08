@@ -344,6 +344,52 @@ def test_credamo_question_answer_payload_covers_current_types() -> None:
     assert all(item["answerTime"] == 10000 for item in items)
 
 
+def test_credamo_choice_payload_includes_option_fill_text() -> None:
+    raw_by_num = {
+        1: {"qstId": "101", "questionType": 2, "selector": 1, "choices": [{"choiceId": "11"}, {"choiceId": "12"}]},
+        2: {"qstId": "102", "questionType": 2, "selector": 2, "choices": [{"choiceId": "21"}, {"choiceId": "22"}]},
+    }
+    actions = [
+        AnswerAction(question_num=1, kind="single", selected_indices=(1,), option_fill_texts=((1, "补充"),)),
+        AnswerAction(question_num=2, kind="multiple", selected_indices=(0, 1), option_fill_texts=((1, "其他"),)),
+    ]
+
+    items = credamo_http._answer_payload_items(raw_by_num, actions, answer_duration_seconds=20)
+
+    assert items[0]["answerQstChoice"] == {"choiceId": 12, "choiceContent": "补充"}
+    assert items[1]["answerQstChoiceList"] == [
+        {"choiceId": 21, "choiceContent": ""},
+        {"choiceId": 22, "choiceContent": "其他"},
+    ]
+
+
+def test_credamo_builder_includes_static_option_fill_text() -> None:
+    config = ExecutionConfig(survey_provider="credamo")
+    config.single_prob = [[0.0, 1.0]]
+    config.single_option_fill_texts = [[None, "__RANDOM_NAME__"]]
+    question = SurveyQuestionMeta(
+        num=1,
+        title="请选择",
+        provider="credamo",
+        options=2,
+        fillable_options=[1],
+    )
+
+    action = credamo_builders.build_answer_action(
+        root_index=0,
+        question_num=1,
+        entry_type="single",
+        config_index=0,
+        config=config,
+        question_meta=question,
+    )
+
+    assert action is not None
+    assert action.selected_indices == (1,)
+    assert action.option_fill_texts
+    assert action.option_fill_texts[0][0] == 1
+
+
 def test_credamo_forced_choice_prefers_text_when_api_choice_order_changes() -> None:
     config = ExecutionConfig(survey_provider="credamo")
     config.questions_metadata = {
@@ -1263,6 +1309,30 @@ async def test_wjx_builder_allows_logic_question_for_http(monkeypatch) -> None:
 
 
 @pytest.mark.asyncio
+async def test_wjx_builder_defaults_selected_fillable_option_text() -> None:
+    config = ExecutionConfig(survey_provider="wjx")
+    config.question_config_index_map = {9: ("single", 0)}
+    config.single_prob = [[0.0, 1.0, 0.0]]
+    config.single_option_fill_texts = [None]
+    state = ExecutionState(config=config)
+    question = SurveyQuestionMeta(
+        num=9,
+        title="您对乌江寨整体的满意度如何？",
+        type_code="3",
+        option_texts=["非常满意", "一般（需要我们改进的地方）", "不满意（需要我们改进的地方）"],
+        options=3,
+        fillable_options=[1, 2],
+    )
+
+    action = await wjx_builders.build_answer_action(None, question, state, psycho_plan=None)
+
+    assert action is not None
+    assert action.selected_indices == (1,)
+    assert action.option_fill_texts == ((1, "无"),)
+    assert wjx_http._submitdata_from_actions([action], questions=[question]) == "9$2!无"
+
+
+@pytest.mark.asyncio
 async def test_wjx_builder_uses_prefilled_free_ai_text_answer(monkeypatch) -> None:
     config = ExecutionConfig(survey_provider="wjx")
     config.question_config_index_map = {1: ("text", 0)}
@@ -1447,6 +1517,56 @@ async def test_qq_builder_uses_prefilled_free_ai_option_fill_answer(monkeypatch)
 
     assert action is not None
     assert action.option_fill_texts == ((0, "补充信息"),)
+
+
+@pytest.mark.asyncio
+async def test_qq_builder_defaults_selected_fillable_option_text() -> None:
+    config = ExecutionConfig(survey_provider="qq")
+    config.question_config_index_map = {1: ("single", 0)}
+    config.single_prob = [[0.0, 1.0]]
+    config.single_option_fill_texts = [None]
+    state = ExecutionState(config=config)
+    question = SurveyQuestionMeta(
+        num=1,
+        title="其他说明",
+        provider="qq",
+        provider_question_id="q1",
+        provider_type="radio",
+        option_texts=["A", "其他"],
+        options=2,
+        fillable_options=[1],
+    )
+
+    action = await qq_builders.build_answer_action(None, question, state, psycho_plan=None)
+
+    assert action is not None
+    assert action.selected_indices == (1,)
+    assert action.option_fill_texts == ((1, "无"),)
+
+
+def test_qq_choice_payload_includes_option_fill_blanks() -> None:
+    action = AnswerAction(
+        question_num=1,
+        question_id="q1",
+        kind="choice",
+        selected_indices=(1,),
+        option_fill_texts=((1, "补充信息"),),
+    )
+
+    answer = qq_http._question_answer(
+        {
+            "id": "q1",
+            "type": "radio",
+            "options": [
+                {"id": "o1", "text": "A"},
+                {"id": "o2", "text": "其他 {fillblank-1}"},
+            ],
+        },
+        action,
+    )
+
+    assert answer["blanks"] == [{"id": "fillblank-1", "text": "补充信息"}]
+    assert answer["options"][1]["checked"] == 1
 
 
 @pytest.mark.asyncio

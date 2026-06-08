@@ -26,6 +26,25 @@ class CredamoParserTests:
         assert question['options'] == 3
         assert question['logic_parse_status'] == 'none'
 
+    def test_normalize_question_keeps_fillable_options(self) -> None:
+        raw = {
+            "qstNo": "Q1",
+            "qstTitle": "请选择",
+            "questionType": 2,
+            "selector": 1,
+            "choices": [
+                {"choiceId": "11", "choiceContent": "A"},
+                {"choiceId": "12", "choiceContent": "其他", "fillBlank": True},
+            ],
+            "qstId": "101",
+        }
+
+        normalized_input = parser._raw_to_normalized_input(raw, fallback_num=1)
+        question = parser._normalize_question(normalized_input, fallback_num=1)
+
+        assert normalized_input["fillable_options"] == [1]
+        assert question["fillable_options"] == [1]
+
     def test_normalize_question_detects_matrix_scale(self) -> None:
         question = parser._normalize_question({'question_num': 'Q11', 'title': 'Q11', 'question_kind': 'matrix', 'provider_type': 'matrix', 'option_texts': ['选项 1', '选项 2', '选项 3', '选项 4', '选项 5'], 'row_texts': ['陈述 1', '陈述 2', '陈述 3', '陈述 4', '陈述 5', '陈述 6', '陈述 7'], 'text_inputs': 0, 'page': 1, 'question_id': 'question-5'}, fallback_num=11)
         assert question['num'] == 11
