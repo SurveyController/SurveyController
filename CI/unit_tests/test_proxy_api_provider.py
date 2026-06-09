@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import logging
 import threading
 from types import SimpleNamespace
 
@@ -97,12 +98,12 @@ class ProxyApiProviderTests:
         assert warning == ""
         assert proxies == ["3.3.3.3:7000"]
 
-    def test_fetch_custom_proxy_batch_uses_candidate_urls_and_normalizes_leases(self, patch_attrs) -> None:
+    def test_fetch_custom_proxy_batch_preserves_fixed_url_and_keeps_returned_batch(self, patch_attrs) -> None:
         original_source = proxy_source.get_proxy_source()
         original_override = proxy_source.get_custom_proxy_api_override()
         try:
             proxy_source.set_proxy_source(proxy_source.PROXY_SOURCE_CUSTOM)
-            proxy_source.set_proxy_api_override("https://proxy.example/api?num={num}")
+            proxy_source.set_proxy_api_override("https://proxy.example/api?num=100&sign=abc")
             calls: list[str] = []
 
             async def fake_get(url: str, **_kwargs):
@@ -113,7 +114,7 @@ class ProxyApiProviderTests:
 
             leases = asyncio.run(provider.fetch_proxy_batch_async(expected_count=2))
 
-            assert calls == ["https://proxy.example/api?num=2"]
+            assert calls == ["https://proxy.example/api?num=100&sign=abc"]
             assert [lease.address for lease in leases] == ["http://4.4.4.4:8000", "http://5.5.5.5:8000"]
             assert all(isinstance(lease, ProxyLease) for lease in leases)
         finally:
@@ -138,6 +139,28 @@ class ProxyApiProviderTests:
 
             assert calls == ["https://proxy.example/api?minute=1&trade_no=abc"]
             assert [lease.address for lease in leases] == ["http://4.4.4.4:8000"]
+        finally:
+            proxy_source.set_proxy_source(original_source)
+            proxy_source.set_proxy_api_override(original_override)
+
+    def test_fetch_custom_proxy_batch_warns_when_returned_batch_exceeds_request_by_twenty_percent(self, patch_attrs, caplog) -> None:
+        original_source = proxy_source.get_proxy_source()
+        original_override = proxy_source.get_custom_proxy_api_override()
+        try:
+            proxy_source.set_proxy_source(proxy_source.PROXY_SOURCE_CUSTOM)
+            proxy_source.set_proxy_api_override("https://proxy.example/api?num=100&sign=abc")
+
+            async def fake_get(*_args, **_kwargs):
+                return _Response('{"items": ["4.4.4.4:8000", "5.5.5.5:8000"]}')
+
+            patch_attrs((provider.http_client, "aget", fake_get))
+
+            with caplog.at_level(logging.WARNING):
+                leases = asyncio.run(provider.fetch_proxy_batch_async(expected_count=1))
+
+            assert [lease.address for lease in leases] == ["http://4.4.4.4:8000", "http://5.5.5.5:8000"]
+            assert "自定义代理API返回 2 个有效代理" in caplog.text
+            assert "当前运行本轮请求 1 个" in caplog.text
         finally:
             proxy_source.set_proxy_source(original_source)
             proxy_source.set_proxy_api_override(original_override)

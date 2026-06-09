@@ -243,13 +243,23 @@ def _extract_custom_api_error(data: Any) -> Optional[str]:
 
 # ==================== API 候选和测试 ====================
 
-def _proxy_api_candidates(expected_count: int, proxy_url: Optional[str]) -> List[str]:
+def _proxy_api_candidates(proxy_url: Optional[str]) -> List[str]:
     url = proxy_url or get_effective_proxy_api_url()
     if not url:
         raise RuntimeError("自定义代理API地址不能为空，请先在设置中填写API地址")
-    if "{num}" in url:
-        return [url.format(num=max(1, expected_count))]
     return [url]
+
+
+def _warn_custom_api_returned_large_batch(returned_count: int, requested_count: int) -> None:
+    requested = max(1, int(requested_count or 1))
+    returned = max(0, int(returned_count or 0))
+    if returned <= int(requested * 1.2):
+        return
+    logging.warning(
+        "自定义代理API返回 %s 个有效代理，当前运行本轮请求 %s 个，将缓存到代理池并按任务并发逐个使用。可能会引发代理池余额浪费",
+        returned,
+        requested,
+    )
 
 
 def _extract_minute_from_url(url: str) -> Optional[int]:
@@ -405,7 +415,7 @@ async def fetch_proxy_batch_async(
 
     candidates: List[str] = []
     errors: List[str] = []
-    for url in _proxy_api_candidates(expected_count, proxy_url):
+    for url in _proxy_api_candidates(proxy_url):
         try:
             resp = await http_client.aget(
                 url,
@@ -463,6 +473,9 @@ async def fetch_proxy_batch_async(
             break
     if not normalized:
         raise RuntimeError("随机IP接口返回为空")
+    if is_custom:
+        _warn_custom_api_returned_large_batch(len(normalized), expected_count)
+        return normalized
     return normalized[:expected_count]
 
 
