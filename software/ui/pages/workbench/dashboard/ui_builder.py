@@ -6,7 +6,7 @@ from typing import Any
 
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QColor
-from PySide6.QtWidgets import QHBoxLayout, QVBoxLayout, QWidget, QSizePolicy
+from PySide6.QtWidgets import QHBoxLayout, QVBoxLayout, QWidget, QSizePolicy, QStackedWidget
 from qfluentwidgets import (
     Action,
     BodyLabel,
@@ -20,7 +20,6 @@ from qfluentwidgets import (
     InfoBarIcon,
     LineEdit,
     ProgressRing,
-    PopUpAniStackedWidget,
     PushButton,
     ScrollArea,
     SegmentedWidget,
@@ -268,7 +267,7 @@ def build_dashboard_page_ui(page: Any) -> None:
     switch_row.addStretch(1)
     layout.addLayout(switch_row)
 
-    page.thread_view_stack = PopUpAniStackedWidget(page)
+    page.thread_view_stack = QStackedWidget(page)
 
     page.thread_view_question_card = CardWidget(page.thread_view_stack)
     question_list_layout = QVBoxLayout(page.thread_view_question_card)
