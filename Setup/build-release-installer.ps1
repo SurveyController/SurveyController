@@ -235,7 +235,6 @@ try {
         "--include-data-file=assets/community_qr.png=assets/community_qr.png"
         "--include-data-file=assets/pay_ldxp_favicon.ico=assets/pay_ldxp_favicon.ico"
         "--include-data-file=assets/reverse_fill_example.xlsx=assets/reverse_fill_example.xlsx"
-        "--include-data-file=assets/gui.png=assets/gui.png"
         "--include-data-dir=software/assets=software/assets"
         "--include-data-file=software/ui/theme.json=software/ui/theme.json"
         "--include-data-file=icon.ico=icon.ico"
