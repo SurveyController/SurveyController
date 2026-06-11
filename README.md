@@ -37,7 +37,7 @@
 > [!TIP]
 > **安装包：** 前往 [发行版](https://github.com/SurveyController/SurveyController/releases/latest) 下载最新版本 .exe 安装包，安装后直接运行即可
 
-建议配合[教程文档](https://surveydoc.hungrym0.top/)食用。二开可前往 [SurveyCore](https://github.com/SurveyController/SurveyCore)
+建议配合[教程文档](https://surveydoc.hungrym0.com/)食用。二开可前往 [SurveyCore](https://github.com/SurveyController/SurveyCore)
 
 ### 从源码运行
 
@@ -94,7 +94,7 @@ uv run python SurveyController.py
 | **User-Agent** | HTTP 请求标识，决定问卷后台看到的访问设备来源 |
 | **作答时长** | 控制每份问卷提交时的作答时长参数 |
 
-详细配置项请参考[教程文档](https://surveydoc.hungrym0.top/runtime.html)。
+详细配置项请参考[教程文档](https://surveydoc.hungrym0.com/runtime.html)。
 
 ## 技术架构
 

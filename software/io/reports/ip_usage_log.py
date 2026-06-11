@@ -6,7 +6,7 @@ from typing import Any
 import software.network.http as http_client
 from software.app.config import DEFAULT_HTTP_HEADERS
 
-_API_URL = "https://api-wjx.hungrym0.top/ipzan/usage"
+_API_URL = "https://api-wjx.hungrym0.com/ipzan/usage"
 
 
 def _to_int(raw: Any) -> int | None:

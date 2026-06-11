@@ -150,7 +150,7 @@ class RuntimeAISection(QObject):
         )
         self.ai_privacy_tutorial_link = HyperlinkButton(
             FluentIcon.LINK,
-            "https://surveydoc.hungrym0.top/api-key-configuration.html#api-key-%E9%85%8D%E7%BD%AE",
+            "https://surveydoc.hungrym0.com/api-key-configuration.html#api-key-%E9%85%8D%E7%BD%AE",
             "使用教程",
             self.ai_privacy_bar,
         )

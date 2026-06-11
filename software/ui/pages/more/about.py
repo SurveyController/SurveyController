@@ -236,7 +236,7 @@ class AboutPage(ScrollArea):
         self.github_btn.clicked.connect(
             lambda: webbrowser.open(f"https://github.com/{GITHUB_OWNER}/{GITHUB_REPO}")
         )
-        self.website_btn.clicked.connect(lambda: webbrowser.open("https://surveydoc.hungrym0.top/"))
+        self.website_btn.clicked.connect(lambda: webbrowser.open("https://surveydoc.hungrym0.com/"))
 
         # 异步获取发布时间
         self._load_publish_time()

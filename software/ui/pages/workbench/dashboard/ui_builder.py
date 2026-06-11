@@ -157,7 +157,7 @@ def build_dashboard_page_ui(page: Any) -> None:
     proxy_source_row.addWidget(page.custom_proxy_api_edit, 1)
     page.custom_proxy_trial_link = HyperlinkButton(
         FluentIcon.LINK,
-        "https://surveydoc.hungrym0.top/random.html#%E8%87%AA%E5%AE%9A%E4%B9%89%E4%BB%A3%E7%90%86%E6%BA%90",
+        "https://surveydoc.hungrym0.com/random.html#%E8%87%AA%E5%AE%9A%E4%B9%89%E4%BB%A3%E7%90%86%E6%BA%90",
         "使用教程",
         page,
     )

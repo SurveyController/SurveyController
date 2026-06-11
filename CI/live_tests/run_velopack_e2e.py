@@ -20,7 +20,7 @@ from packaging.version import InvalidVersion, Version
 ROOT_DIR = Path(__file__).resolve().parents[2]
 VERSION_FILE = ROOT_DIR / "software" / "app" / "version.py"
 RESULT_WAIT_SECONDS = 240
-DEFAULT_FEED_URL = "https://dl.hungrym0.top/surveycontroller/win/stable/"
+DEFAULT_FEED_URL = "https://dl.hungrym0.com/surveycontroller/win/stable/"
 DEFAULT_CHANNEL = "stable"
 
 

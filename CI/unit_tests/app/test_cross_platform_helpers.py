@@ -16,7 +16,7 @@ def test_config_ignores_dotenv_file_and_reads_process_env(monkeypatch, tmp_path)
     import software.app.config as config_module
 
     reloaded = importlib.reload(config_module)
-    assert reloaded.CONTACT_API_URL == "https://bot.hungrym0.top"
+    assert reloaded.CONTACT_API_URL == "https://bot.hungrym0.com"
 
     monkeypatch.setenv("CONTACT_API_URL", "https://env.example")
     reloaded = importlib.reload(config_module)
