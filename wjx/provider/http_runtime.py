@@ -60,6 +60,14 @@ _WJX_SCENE_ID_PATTERNS = (
     re.compile(r'\bdata-scene-id\s*=\s*["\']([^"\']+)["\']', re.IGNORECASE),
 )
 _WJX_DEFAULT_SCENE_ID = "q0hcfsca"
+_WJX_SPECIAL_CHAR_REPLACEMENTS = (
+    ("$", "ξ"),
+    ("}", "｝"),
+    ("^", "ˆ"),
+    ("|", "¦"),
+    ("!", "！"),
+    ("<", "＜"),
+)
 
 
 def _proxy_arg(proxy_address: str | None) -> Any:
@@ -129,6 +137,15 @@ def _build_jqsign(jqnonce: str, ktimes: int) -> str:
     return "".join(chr(ord(ch) ^ t_value) for ch in jqnonce)
 
 
+def _escape_wjx_submit_text(value: Any) -> str:
+    text = str(value or "").strip()
+    if not text:
+        return ""
+    for source, target in _WJX_SPECIAL_CHAR_REPLACEMENTS:
+        text = text.replace(source, target)
+    return text
+
+
 def _question_items(config: ExecutionConfig) -> list[SurveyQuestionMeta]:
     return sorted(
         list((config.questions_metadata or {}).values()),
@@ -137,13 +154,17 @@ def _question_items(config: ExecutionConfig) -> list[SurveyQuestionMeta]:
 
 
 def _format_selected_indices(indices: tuple[int, ...], *, option_fill_texts: tuple[tuple[int, str], ...] = ()) -> str:
-    fills = {int(index): str(value or "").strip() for index, value in option_fill_texts if str(value or "").strip()}
+    fills = {
+        int(index): _escape_wjx_submit_text(value)
+        for index, value in option_fill_texts
+        if _escape_wjx_submit_text(value)
+    }
     parts: list[str] = []
     for index in indices:
         value = str(int(index) + 1)
         fill = fills.get(int(index), "")
         if fill:
-            value = f"{value}!{fill}"
+            value = f"{value}^{fill}"
         parts.append(value)
     return "|".join(parts)
 
@@ -156,7 +177,7 @@ def _submitdata_answer(action: AnswerAction) -> str:
         )
     if action.kind == "text":
         separator = "^" if len(action.text_values) > 1 else ""
-        return separator.join(str(item or "").strip() for item in action.text_values)
+        return separator.join(_escape_wjx_submit_text(item) for item in action.text_values)
     if action.kind == "matrix":
         return ",".join(
             f"{row_index + 1}!{int(item) + 1}"

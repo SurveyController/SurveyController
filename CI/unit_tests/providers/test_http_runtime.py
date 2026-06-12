@@ -42,6 +42,28 @@ def test_wjx_submitdata_formats_common_actions() -> None:
     assert submitdata == "1$1}2$1|3}3$甲^乙}4$1!2,2!3}5$66.0"
 
 
+def test_wjx_submitdata_uses_current_fill_delimiter_and_escapes_special_chars() -> None:
+    submitdata = wjx_http._submitdata_from_actions(
+        [
+            AnswerAction(
+                question_num=9,
+                kind="choice",
+                selected_indices=(1,),
+                option_fill_texts=((1, "改进!内容^A$B}C|D<"),),
+                record_type="single",
+            ),
+            AnswerAction(
+                question_num=10,
+                kind="text",
+                text_values=("A!B", "C$D"),
+                record_type="text",
+            ),
+        ]
+    )
+
+    assert submitdata == "9$2^改进！内容ˆAξB｝C¦D＜}10$A！B^CξD"
+
+
 def test_wjx_submitdata_keeps_frontend_skip_placeholders() -> None:
     submitdata = wjx_http._submitdata_from_actions(
         [
@@ -1363,7 +1385,7 @@ async def test_wjx_builder_defaults_selected_fillable_option_text() -> None:
     assert action is not None
     assert action.selected_indices == (1,)
     assert action.option_fill_texts == ((1, "无"),)
-    assert wjx_http._submitdata_from_actions([action], questions=[question]) == "9$2!无"
+    assert wjx_http._submitdata_from_actions([action], questions=[question]) == "9$2^无"
 
 
 @pytest.mark.asyncio
