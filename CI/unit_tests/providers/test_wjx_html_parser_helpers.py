@@ -68,8 +68,8 @@ class WjxHtmlParserHelperTests:
     def test_extract_survey_title_from_html_strips_wjx_suffix(self) -> None:
         html = """
         <html>
-          <head><title>备用标题 - 问卷星</title></head>
-          <body><div id="divTitle"><h1>正式标题 - 问卷星</h1></div></body>
+          <head><title>备用标题 ｜ 问卷星</title></head>
+          <body><div id="divTitle"><h1>正式标题 ｜ 问卷星</h1></div></body>
         </html>
         """
         assert html_parser_common.extract_survey_title_from_html(html) == "正式标题"
@@ -78,8 +78,13 @@ class WjxHtmlParserHelperTests:
         soup = _soup("<div id='div12' topic='12'></div>")
         assert html_parser_common._extract_question_number_from_div(soup.div) == 12
         assert html_parser_common._extract_question_number_from_div(_soup("<div id='div77'></div>").div) == 77
-        assert html_parser_common._cleanup_question_title(" 1. 【单选题】 题目标题 ") == "题目标题"
+        assert html_parser_common._cleanup_question_title(" １． 【单选题】 题目标题 ") == "题目标题"
+        assert html_parser_common._cleanup_question_title(" 第1题 【多选题】 题目标题 ") == "题目标题"
+        assert html_parser_common._cleanup_question_title(" Q1 题目标题 ") == "题目标题"
         assert html_parser_common._extract_display_question_number("* 18. 题目") == 18
+        assert html_parser_common._extract_display_question_number("第8题 题目") == 8
+        assert html_parser_common._extract_display_question_number("Q9 题目") == 9
+        assert html_parser_common._extract_display_question_number("10、题目") == 10
 
     def test_extract_display_heading_text_includes_split_topic_number(self) -> None:
         soup = _soup(
@@ -192,6 +197,11 @@ class WjxHtmlParserHelperTests:
         assert html_parser_choice._extract_force_select_option(label_div, "请务必选A项", ["(A) 苹果", "(B) 香蕉"]) == (0, "(A) 苹果")
         assert html_parser_choice._extract_force_select_option(index_div, "请直接选第2项", ["甲", "乙", "丙"]) == (1, "乙")
         assert html_parser_choice._extract_force_select_option(None, "请直接选第9项", ["甲", "乙"]) == (None, None)
+
+    def test_force_select_text_matching_requires_exact_normalized_text(self) -> None:
+        question_div = _soup("<div><div class='topichtml'>请直接选满意</div></div>").div
+        assert html_parser_choice._extract_force_select_option(question_div, "请直接选满意", ["不满意", "满意度一般"]) == (None, None)
+        assert html_parser_choice._extract_force_select_option(question_div, "请直接选满意", ["数字1", "满意"]) == (1, "满意")
 
     def test_choice_option_and_attached_select_parsing_marks_fillable_options(self) -> None:
         question_div = _soup(
@@ -394,6 +404,44 @@ class WjxHtmlParserHelperTests:
                 "raw_relation": "3,2,2",
             }
         ]
+
+    def test_jump_rule_helper_rejects_undefined_text_format(self) -> None:
+        question_div = _soup(
+            """
+            <div hasjump="1" type="3">
+              <input type="radio" data-jumpto="去第8题" />
+            </div>
+            """
+        ).div
+
+        assert html_parser_rules._extract_jump_rules_from_html(question_div, 1, ["A"]) == (True, [])
+
+    def test_display_rule_helper_skips_dirty_chunks_and_keeps_valid_blocks(self) -> None:
+        question_div = _soup("<div relation='1,1|脏数据|3,2,3|4,a,1|5,1'></div>").div
+
+        assert html_parser_rules._extract_display_conditions_from_html(question_div, 6) == (
+            True,
+            [
+                {
+                    "condition_question_num": 1,
+                    "condition_mode": "selected",
+                    "condition_option_indices": [0],
+                    "raw_relation": "1,1",
+                },
+                {
+                    "condition_question_num": 3,
+                    "condition_mode": "selected",
+                    "condition_option_indices": [1, 2],
+                    "raw_relation": "3,2,3",
+                },
+                {
+                    "condition_question_num": 5,
+                    "condition_mode": "selected",
+                    "condition_option_indices": [0],
+                    "raw_relation": "5,1",
+                },
+            ],
+        )
 
     def test_jump_rule_helper_supports_select_option_jumps(self) -> None:
         question_div = _soup(

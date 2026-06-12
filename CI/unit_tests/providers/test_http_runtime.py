@@ -112,6 +112,11 @@ def test_wjx_scene_id_extraction_prefers_page_value() -> None:
     assert wjx_http._extract_wjx_scene_id("<html></html>") == "q0hcfsca"
 
 
+def test_wjx_scene_id_extraction_supports_snake_case_and_data_attr() -> None:
+    assert wjx_http._extract_wjx_scene_id("<script>var x = { scene_id: 'scene-snake-1' }</script>") == "scene-snake-1"
+    assert wjx_http._extract_wjx_scene_id("<div data-scene-id='scene-data-2'></div>") == "scene-data-2"
+
+
 @pytest.mark.asyncio
 async def test_wjx_submit_timing_uses_configured_answer_duration(monkeypatch) -> None:
     config = ExecutionConfig(
@@ -1705,6 +1710,16 @@ def test_wjx_submit_rejected_message_includes_question_title_and_display_num() -
 
     with pytest.raises(RuntimeError, match=r"第8题（年龄）.*答案不符合要求"):
         wjx_http._raise_submit_rejected(config, "9〒10〒您提交的答案不符合要求，请检查并修改后重新提交！")
+
+
+def test_wjx_submit_rejected_message_uses_delimiter_split_without_regex() -> None:
+    config = ExecutionConfig(url="https://www.wjx.cn/vm/demo.aspx", survey_provider="wjx")
+    config.questions_metadata = {
+        10: SurveyQuestionMeta(num=10, display_num=8, title="年龄", type_code="1"),
+    }
+
+    with pytest.raises(RuntimeError, match=r"第8题（年龄）.*格式错误"):
+        wjx_http._raise_submit_rejected(config, " 9 〒 10 〒 格式错误 ")
 
 
 def test_wjx_submit_rejected_detects_submission_verification() -> None:

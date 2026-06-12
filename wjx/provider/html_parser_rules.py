@@ -6,6 +6,8 @@ try:
 except ImportError:
     BeautifulSoup = None
 
+from software.providers.match_utils import normalize_match_text
+
 from .html_parser_choice import (
     _collect_choice_option_texts,
     _collect_select_option_texts,
@@ -13,6 +15,7 @@ from .html_parser_choice import (
 )
 from .html_parser_common import _cleanup_question_title, _is_select_placeholder_option, _normalize_html_text
 from .html_parser_matrix import _collect_matrix_option_texts, _collect_slider_matrix_metadata, _question_div_looks_like_slider_matrix
+from .regexes import WJX_JUMP_TARGET_RE, WJX_RELATION_CHUNK_RE
 
 
 def _extract_question_title(question_div, fallback_number: int) -> str:
@@ -185,16 +188,15 @@ def _extract_jump_rules_from_html(question_div, question_number: int, option_tex
     terminate_keywords = ("结束作答", "结束答题", "结束填写", "终止作答", "停止作答")
 
     def _parse_jump_target(raw_value: Any) -> Optional[int]:
-        text_value = str(raw_value or "").strip()
+        text_value = normalize_match_text(raw_value)
         if not text_value:
             return None
-        if text_value.isdigit():
-            return int(text_value)
-        match = re.search(r"(\d+)", text_value)
+        match = WJX_JUMP_TARGET_RE.fullmatch(text_value)
         if not match:
             return None
         try:
-            return int(match.group(1))
+            target_text = match.group("signed") or match.group("target") or ""
+            return int(target_text)
         except Exception:
             return None
 
@@ -263,22 +265,22 @@ def _extract_display_conditions_from_html(question_div, question_number: int) ->
     conditions: List[Dict[str, Any]] = []
     seen: set[Tuple[int, Tuple[int, ...]]] = set()
     for chunk in re.split(r"\s*[|]\s*", relation_raw):
-        text = str(chunk or "").strip()
-        if not text or "," not in text:
+        text = normalize_match_text(chunk)
+        if not text:
             continue
-        source_text, option_text = text.split(",", 1)
-        source_match = re.search(r"\d+", source_text)
-        if not source_match:
+        match = WJX_RELATION_CHUNK_RE.fullmatch(text)
+        if not match:
             continue
         try:
-            source_question_num = int(source_match.group(0))
+            source_question_num = int(match.group("source"))
         except Exception:
             continue
         option_indices: List[int] = []
         seen_indices = set()
-        for match in re.finditer(r"\d+", option_text):
+        option_text = str(match.group("options") or "")
+        for raw_option in option_text.split(","):
             try:
-                option_num = int(match.group(0))
+                option_num = int(str(raw_option or "").strip())
             except Exception:
                 continue
             if option_num <= 0:

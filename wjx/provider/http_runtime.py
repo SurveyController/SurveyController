@@ -3,7 +3,6 @@ from __future__ import annotations
 import logging
 import random
 import html as html_lib
-import re
 import time
 import uuid
 from datetime import datetime
@@ -33,6 +32,7 @@ from software.providers.errors import (
 )
 from wjx.provider.answering_builders import build_answer_action
 from wjx.provider.parser import _parse_wjx_html, _raise_wjx_page_state_errors
+from wjx.provider.regexes import WJX_SCENE_ID_PATTERNS
 
 
 WJX_SUBMISSION_VERIFICATION_MESSAGE = "问卷星触发智能验证，当前链路已停止。请启用随机 IP 后再提交。"
@@ -52,11 +52,6 @@ class WjxSubmitResult:
     REJECTED = "rejected"
 
 
-_WJX_SCENE_ID_PATTERNS = (
-    re.compile(r'\bsceneId\s*[:=]\s*["\']([^"\']+)["\']', re.IGNORECASE),
-    re.compile(r'\bscene_id\s*[:=]\s*["\']([^"\']+)["\']', re.IGNORECASE),
-    re.compile(r'\bdata-scene-id\s*=\s*["\']([^"\']+)["\']', re.IGNORECASE),
-)
 _WJX_DEFAULT_SCENE_ID = "q0hcfsca"
 _WJX_SPECIAL_CHAR_REPLACEMENTS = (
     ("$", "ξ"),
@@ -113,11 +108,11 @@ def _extract_wjx_scene_id(page_html: str) -> str:
     text = html_lib.unescape(str(page_html or ""))
     if not text:
         return _WJX_DEFAULT_SCENE_ID
-    for pattern in _WJX_SCENE_ID_PATTERNS:
+    for pattern in WJX_SCENE_ID_PATTERNS:
         match = pattern.search(text)
         if not match:
             continue
-        value = str(match.group(1) or "").strip()
+        value = str(match.group("value") or "").strip()
         if value:
             return value
     return _WJX_DEFAULT_SCENE_ID
@@ -298,11 +293,14 @@ def _raise_submit_rejected(
             else WJX_SUBMISSION_VERIFICATION_MESSAGE
         )
         raise SubmissionVerificationRequiredError(message)
-    match = re.match(r"^\s*(\d+)〒(\d+)〒(.+)$", text)
-    if not match:
+    parts = [part.strip() for part in text.split("〒", 2)]
+    if len(parts) != 3:
         raise RuntimeError(f"问卷星提交被拒绝：{text[:200]}")
-    question_num = int(match.group(2) or 0)
-    reason = str(match.group(3) or "").strip() or text
+    try:
+        question_num = int(parts[1])
+    except Exception:
+        question_num = 0
+    reason = parts[2] or text
     if question_num > 0:
         label = _question_error_label(config, question_num)
         raise RuntimeError(f"问卷星提交被拒绝：{label}，{reason}")

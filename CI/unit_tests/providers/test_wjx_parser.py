@@ -22,6 +22,10 @@ class WjxParserTests:
         html = "<html><body>此问卷（123）已暂停，不能填写</body></html>"
         assert wjx_parser.is_paused_survey_page(html)
 
+    def test_is_paused_survey_page_accepts_fullwidth_digits_and_parentheses(self) -> None:
+        html = "<html><body>此问卷（１２３）已暂停，请稍后再来</body></html>"
+        assert wjx_parser.is_paused_survey_page(html)
+
     def test_is_stopped_survey_page_accepts_work_error_copy(self) -> None:
         html = """
         <html>
@@ -98,6 +102,20 @@ class WjxParserTests:
             == "该问卷暂未开放，无法解析，开放时间：2026-05-06 09:30"
         )
 
+    def test_build_not_open_survey_message_supports_chinese_date_and_seconds(self) -> None:
+        html = """
+        <html>
+          <body>
+            此问卷将于　2026年5月6日 9:30:45 开放
+            请到时再进入此页面进行填写
+          </body>
+        </html>
+        """
+        assert (
+            wjx_parser.build_not_open_survey_message(html)
+            == "该问卷暂未开放，无法解析，开放时间：2026-05-06 09:30:45"
+        )
+
     def test_build_not_open_survey_message_skips_open_question_container(self) -> None:
         html = """
         <html>
@@ -155,6 +173,16 @@ class WjxParserTests:
         )
 
         with pytest.raises(wjx_parser.SurveyNotOpenError, match="开放时间：2026-05-06 09:30"):
+            await wjx_parser.parse_wjx_survey("https://www.wjx.cn/vm/demo.aspx")
+
+    @pytest.mark.asyncio
+    async def test_parse_wjx_survey_raises_not_open_error_with_chinese_datetime(self, patch_attrs) -> None:
+        html = "<html><body>此问卷将于 2026年5月6日 9:30:45 开放，请到时再进入此页面进行填写</body></html>"
+        patch_attrs(
+            (wjx_parser.http_client, "aget", AsyncMock(return_value=_FakeHttpResponse(html))),
+        )
+
+        with pytest.raises(wjx_parser.SurveyNotOpenError, match="开放时间：2026-05-06 09:30:45"):
             await wjx_parser.parse_wjx_survey("https://www.wjx.cn/vm/demo.aspx")
 
     @pytest.mark.asyncio

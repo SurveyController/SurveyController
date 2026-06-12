@@ -2,11 +2,11 @@ from __future__ import annotations
 
 import asyncio
 import logging
-import re
 from typing import Any, Dict, List, Optional, Tuple
 
 import software.network.http as http_client
 from software.app.config import DEFAULT_HTTP_HEADERS
+from software.providers.match_utils import normalize_match_text
 from software.providers.errors import (
     SurveyEnterpriseUnavailableError,
     SurveyNotOpenError,
@@ -18,18 +18,31 @@ from wjx.provider.html_parser import (
     extract_survey_title_from_html,
     parse_survey_questions_from_html,
 )
+from wjx.provider.regexes import WJX_NOT_OPEN_TIME_RE, WJX_PAUSED_SURVEY_RE
 
 PAUSED_SURVEY_ERROR_MESSAGE = "问卷已暂停，需要前往问卷星后台重新发布"
 STOPPED_SURVEY_ERROR_MESSAGE = "问卷已停止，无法作答"
 ENTERPRISE_UNAVAILABLE_SURVEY_ERROR_MESSAGE = "问卷发布者企业标准版未购买或已到期，暂时不能填写"
 NOT_OPEN_SURVEY_ERROR_MESSAGE = "该问卷暂未开放，无法解析"
-_PAUSED_SURVEY_ID_RE = re.compile(r"此问卷[（(]\d+[）)]已暂停")
-_NOT_OPEN_TIME_RE = re.compile(
-    r"此问卷将于\s*(\d{4}[-/]\d{1,2}[-/]\d{1,2}\s+\d{1,2}:\d{2})\s*开放"
-)
 _PAGE_SUMMARY_MAX_LENGTH = 120
 _PARSE_RETRY_ATTEMPTS = 3
 _PARSE_RETRY_DELAY_SECONDS = 0.35
+
+
+def _format_not_open_time(match) -> str:
+    try:
+        year = int(match.group("year"))
+        month = int(match.group("month"))
+        day = int(match.group("day"))
+        hour = int(match.group("hour"))
+        minute = int(match.group("minute"))
+        second_text = match.group("second")
+        if second_text:
+            second = int(second_text)
+            return f"{year:04d}-{month:02d}-{day:02d} {hour:02d}:{minute:02d}:{second:02d}"
+        return f"{year:04d}-{month:02d}-{day:02d} {hour:02d}:{minute:02d}"
+    except Exception:
+        return ""
 
 
 def _build_unparseable_page_summary(html: str) -> str:
@@ -42,12 +55,12 @@ def _build_unparseable_page_summary(html: str) -> str:
 
 def is_paused_survey_page(html: str) -> bool:
     
-    text = _normalize_html_text(html)
+    text = normalize_match_text(html)
     if not text or "已暂停" not in text:
         return False
     if "不能填写" in text or "问卷已暂停" in text:
         return True
-    return bool(_PAUSED_SURVEY_ID_RE.search(text))
+    return bool(WJX_PAUSED_SURVEY_RE.search(text))
 
 
 def _html_has_question_content(html: str) -> bool:
@@ -68,7 +81,7 @@ def _html_has_question_content(html: str) -> bool:
 
 def is_stopped_survey_page(html: str) -> bool:
     
-    text = _normalize_html_text(html)
+    text = normalize_match_text(html)
     if not text or "停止状态" not in text or "无法作答" not in text:
         return False
 
@@ -80,6 +93,7 @@ def is_stopped_survey_page(html: str) -> bool:
             error_container = soup.find("div", id=selector_id)
             if error_container is not None:
                 error_text = _normalize_html_text(error_container.get_text(" ", strip=True))
+                error_text = normalize_match_text(error_text)
                 if "停止状态" in error_text and "无法作答" in error_text:
                     return True
     except Exception:
@@ -94,7 +108,7 @@ def is_stopped_survey_page(html: str) -> bool:
 
 def is_enterprise_unavailable_survey_page(html: str) -> bool:
     
-    text = _normalize_html_text(html)
+    text = normalize_match_text(html)
     if not text:
         return False
     normalized = "".join(text.split())
@@ -109,7 +123,7 @@ def is_enterprise_unavailable_survey_page(html: str) -> bool:
 
 def build_not_open_survey_message(html: str) -> Optional[str]:
     
-    text = _normalize_html_text(html)
+    text = normalize_match_text(html)
     if not text:
         return None
 
@@ -131,9 +145,9 @@ def build_not_open_survey_message(html: str) -> Optional[str]:
     if not any(keyword in normalized for keyword in keywords):
         return None
 
-    match = _NOT_OPEN_TIME_RE.search(text)
+    match = WJX_NOT_OPEN_TIME_RE.search(text)
     if match:
-        open_time = str(match.group(1) or "").replace("/", "-").strip()
+        open_time = _format_not_open_time(match)
         if open_time:
             return f"{NOT_OPEN_SURVEY_ERROR_MESSAGE}，开放时间：{open_time}"
     return NOT_OPEN_SURVEY_ERROR_MESSAGE
@@ -211,5 +225,3 @@ __all__ = [
     "is_stopped_survey_page",
     "parse_wjx_survey",
 ]
-
-

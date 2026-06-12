@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from bs4 import BeautifulSoup
+
 from wjx.provider.questions import multiple_limits
 
 
@@ -29,6 +31,10 @@ class WjxMultipleLimitsTests:
         element = _FakeElement({"minvalue": "2", "maxvalue": "6"})
         assert multiple_limits._extract_min_max_from_attributes(element) == (2, 6)
 
+    def test_extract_min_max_from_attributes_supports_beautifulsoup_tag(self) -> None:
+        element = BeautifulSoup("<div minvalue='2' maxvalue='6'></div>", "html.parser").div
+        assert multiple_limits._extract_min_max_from_attributes(element) == (2, 6)
+
     def test_extract_multi_limit_range_from_text_supports_cn_and_en_patterns(self) -> None:
         assert multiple_limits._extract_multi_limit_range_from_text("请选择2-4项你喜欢的功能") == (2, 4)
         assert multiple_limits._extract_multi_limit_range_from_text("至少选2项，最多选5项") == (2, 5)
@@ -41,6 +47,7 @@ class WjxMultipleLimitsTests:
         assert multiple_limits._extract_multi_limit_range_from_text("请选择5到2项") == (2, 5)
         assert multiple_limits._extract_multi_limit_range_from_text("最多选择 4 项") == (None, 4)
         assert multiple_limits._extract_multi_limit_range_from_text("最少选择 2 项") == (2, None)
+        assert multiple_limits._extract_multi_limit_range_from_text("请至少选择２项，最多选择４项") == (2, 4)
 
     def test_extract_range_from_json_obj_walks_nested_lists(self) -> None:
         payload = [{"ignore": 1}, {"rules": [{"minValue": "2"}, {"maxValue": "6"}]}]

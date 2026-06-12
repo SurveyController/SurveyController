@@ -1,3 +1,4 @@
+import html as html_lib
 import logging
 import re
 from typing import Any, List, Optional
@@ -7,20 +8,51 @@ try:
 except ImportError:
     BeautifulSoup = None
 
-from software.app.config import _HTML_SPACE_RE
 from software.core.questions.utils import _normalize_question_type_code
 from software.logging.log_utils import log_suppressed_exception
+from software.providers.match_utils import normalize_match_text
+
+from .regexes import WJX_MODLEN_CLASS_RE, WJX_QUESTION_PREFIX_RE, WJX_TITLE_SUFFIX_RE
 
 _TEXT_INPUT_ALLOWED_TYPES = {"text", "tel", "email", "number", "search", "url", "password"}
 _KNOWN_NON_TEXT_QUESTION_TYPES = {"3", "4", "5", "6", "7", "8", "11", "12", "13", "15", "16", "17"}
 _SELECT_PLACEHOLDER_PREFIXES = ("请选择", "请先选择")
 _LOCATION_VERIFY_MARKERS = ("地图", "省市", "省份", "城市", "地区", "map", "city", "province", "area")
+_DISPLAY_SPACE_RE = re.compile(r"\s+")
 
 
 def _normalize_html_text(value: Optional[str]) -> str:
-    if not value:
+    if value is None:
         return ""
-    return _HTML_SPACE_RE.sub(" ", value).strip()
+    try:
+        text = str(value)
+    except Exception:
+        return ""
+    if not text:
+        return ""
+    text = html_lib.unescape(text)
+    text = _DISPLAY_SPACE_RE.sub(" ", text)
+    return text.strip()
+
+
+def _extract_prefixed_question_number(raw_title: Any) -> Optional[int]:
+    text = normalize_match_text(raw_title)
+    if not text:
+        return None
+    match = WJX_QUESTION_PREFIX_RE.match(text)
+    if not match:
+        return None
+    number_text = (
+        match.group("cn_num")
+        or match.group("q_num")
+        or match.group("plain_num")
+        or ""
+    )
+    try:
+        number = int(number_text)
+    except Exception:
+        return None
+    return number if number > 0 else None
 
 
 def _text_looks_like_select_placeholder(value: Any) -> bool:
@@ -158,7 +190,7 @@ def extract_survey_title_from_html(html: str) -> Optional[str]:
 
     for raw in candidates:
         cleaned = raw
-        cleaned = re.sub(r"(?:[-|]\s*)?(?:问卷星.*)$", "", cleaned, flags=re.IGNORECASE)
+        cleaned = WJX_TITLE_SUFFIX_RE.sub("", cleaned)
         cleaned = cleaned.strip(" -_|")
         if cleaned:
             return cleaned
@@ -178,22 +210,12 @@ def _cleanup_question_title(raw_title: str) -> str:
     title = _normalize_html_text(raw_title)
     if not title:
         return ""
-    title = re.sub(r"^\*?\s*\d+\.\s*", "", title)
+    title = WJX_QUESTION_PREFIX_RE.sub("", title)
     title = title.replace("【单选题】", "").replace("【多选题】", "")
     return title.strip()
 
 def _extract_display_question_number(raw_title: Any) -> Optional[int]:
-    text = _normalize_html_text(str(raw_title or ""))
-    if not text:
-        return None
-    match = re.match(r"^\*?\s*(\d+)\.\s*", text)
-    if not match:
-        return None
-    try:
-        number = int(match.group(1))
-    except Exception:
-        return None
-    return number if number > 0 else None
+    return _extract_prefixed_question_number(raw_title)
 
 def _extract_display_heading_text(question_div) -> str:
     if question_div is None:
@@ -512,16 +534,16 @@ def _extract_rating_option_count(question_div) -> int:
     if question_div is None:
         return 0
     try:
-        rating_list = question_div.find("ul", class_=re.compile(r"modlen(\d+)"))
+        rating_list = question_div.find("ul", class_=WJX_MODLEN_CLASS_RE)
     except Exception:
         rating_list = None
     if rating_list:
         try:
             class_attr = rating_list.get("class") or []
             for cls in class_attr:
-                match = re.search(r"modlen(\d+)", str(cls))
+                match = WJX_MODLEN_CLASS_RE.search(str(cls))
                 if match:
-                    return int(match.group(1))
+                    return int(match.group("count"))
         except Exception as exc:
             log_suppressed_exception("survey.parser._extract_rating_option_count modlen", exc, level=logging.ERROR)
     try:
