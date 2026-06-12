@@ -1,5 +1,3 @@
-"""代理地区数据。"""
-
 from software.network.proxy.areas.service import (
     build_benefit_city_code_index,
     load_area_codes,

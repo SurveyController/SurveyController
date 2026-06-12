@@ -1,5 +1,3 @@
-"""运行参数页配置读写同步。"""
-
 from __future__ import annotations
 
 import logging

@@ -1,5 +1,3 @@
-"""联系表单网络访问门面。"""
-
 from __future__ import annotations
 
 from typing import Any

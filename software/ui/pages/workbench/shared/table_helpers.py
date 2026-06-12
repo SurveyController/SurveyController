@@ -1,5 +1,3 @@
-"""Workbench 表格通用小工具。"""
-
 from __future__ import annotations
 
 from PySide6.QtCore import Qt

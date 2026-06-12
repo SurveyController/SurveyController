@@ -1,5 +1,3 @@
-"""运行参数设置页面。"""
-
 from __future__ import annotations
 
 from typing import TYPE_CHECKING
@@ -37,7 +35,7 @@ class RuntimePage(
     RuntimeProxySyncMixin,
     ScrollArea,
 ):
-    """独立的运行参数/开关页，方便在侧边栏查看。"""
+    
 
     MIN_THREADS = 1
     HTTP_MAX_THREADS = HTTP_MAX_THREADS

@@ -1,12 +1,10 @@
-"""AI 自动填充辅助 - 检查 AI 配置就绪状态"""
-
 from qfluentwidgets import InfoBar, InfoBarPosition
 
 from software.integrations.ai import get_ai_readiness_error
 
 
 def ensure_ai_ready(parent) -> bool:
-    """检查 AI 配置是否可用，不可用时给出提示。"""
+    
     readiness_error = get_ai_readiness_error()
     if readiness_error:
         InfoBar.warning(

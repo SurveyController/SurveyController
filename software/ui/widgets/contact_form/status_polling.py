@@ -1,5 +1,3 @@
-"""联系表单状态轮询。"""
-
 import json
 from typing import Any, Callable, Optional, cast
 
@@ -10,7 +8,7 @@ from software.app.config import DEFAULT_HTTP_HEADERS, PROXY_STATUS_TIMEOUT_SECON
 
 
 class StatusPollingMixin:
-    """使用 Qt 异步网络请求轮询在线状态。"""
+    
 
     _status_endpoint: str
     _status_formatter: Optional[Callable]

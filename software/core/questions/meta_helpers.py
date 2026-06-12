@@ -1,5 +1,3 @@
-"""解析后题目元数据的共享辅助逻辑。"""
-
 from __future__ import annotations
 
 from typing import Any, Dict, List, Mapping, Tuple

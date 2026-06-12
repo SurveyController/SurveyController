@@ -1,4 +1,3 @@
-"""应用更新检测与执行。"""
 from __future__ import annotations
 
 import logging
@@ -17,7 +16,7 @@ from software.logging.action_logger import log_action
 
 try:
     from packaging import version
-except ImportError:  # pragma: no cover
+except ImportError:  
     version = None
 
 _VELOPACK_MODULE_NAME = "velopack"
@@ -292,7 +291,7 @@ def _build_update_result_from_release(update_info: Any, current_version: str) ->
 
 
 class UpdateManager:
-    """Velopack 更新管理器。"""
+    
 
     @staticmethod
     def check_updates() -> dict[str, Any]:
@@ -388,7 +387,7 @@ class UpdateManager:
 
 
 def show_update_notification(gui) -> None:
-    """显示更新通知（如果 gui.update_info 存在）。"""
+    
     if not getattr(gui, "update_info", None):
         return
 
@@ -442,7 +441,7 @@ def perform_update(
     *,
     on_progress: Optional[Callable[[int, int, float], None]] = None,
 ) -> None:
-    """执行更新：下载 Velopack 更新包并等待应用安装。"""
+    
     if not getattr(gui, "update_info", None):
         return
 

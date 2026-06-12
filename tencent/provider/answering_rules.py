@@ -1,5 +1,3 @@
-"""腾讯问卷 HTTP 答案构造规则。"""
-
 from __future__ import annotations
 
 from typing import Sequence

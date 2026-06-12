@@ -1,4 +1,3 @@
-"""代理源和配置管理 - 代理源切换、地区设置、API覆盖、占用时长"""
 import logging
 import threading
 from dataclasses import dataclass
@@ -49,7 +48,7 @@ _ORDINARY_POOL_PROVINCE_CODES: Set[str] = {
 
 @dataclass(frozen=True)
 class ProxySettings:
-    """当前代理配置快照。"""
+    
 
     source: str
     custom_api_url: str
@@ -58,7 +57,7 @@ class ProxySettings:
     occupy_minute: int
 
 
-# ==================== 代理源 get/set ====================
+
 
 def normalize_proxy_source(source: Optional[str]) -> str:
     try:
@@ -108,7 +107,7 @@ def get_proxy_upstream(source: Optional[str] = None) -> str:
     return PROXY_UPSTREAM_DEFAULT
 
 
-# ==================== 代理占用时长 ====================
+
 
 def _map_answer_seconds_to_proxy_minute(total_seconds: int) -> int:
     seconds = max(0, int(total_seconds))
@@ -237,7 +236,7 @@ def get_proxy_occupy_minute() -> int:
     return minute
 
 
-# ==================== 地区和 API 覆盖 ====================
+
 
 def _validate_proxy_api_url(api_url: Optional[str]) -> str:
     try:
@@ -323,7 +322,7 @@ def set_proxy_api_override(api_url: Optional[str]) -> str:
 
 
 def get_proxy_settings() -> ProxySettings:
-    """读取当前代理配置。"""
+    
     return ProxySettings(
         source=normalize_proxy_source(get_proxy_source()),
         custom_api_url=get_custom_proxy_api_override(),
@@ -334,7 +333,7 @@ def get_proxy_settings() -> ProxySettings:
 
 
 def apply_proxy_source_settings(source: str, *, custom_api_url: Optional[str] = None) -> ProxySettings:
-    """统一更新代理源与自定义 API 地址。"""
+    
     normalized = normalize_proxy_source(source)
     if normalized == PROXY_SOURCE_CUSTOM:
         set_proxy_api_override(custom_api_url if custom_api_url else None)
@@ -345,18 +344,18 @@ def apply_proxy_source_settings(source: str, *, custom_api_url: Optional[str] = 
 
 
 def apply_proxy_area_code(area_code: Optional[str]) -> ProxySettings:
-    """统一更新地区覆盖。"""
+    
     set_proxy_area_code(area_code)
     return get_proxy_settings()
 
 
 def apply_custom_proxy_api(custom_api_url: Optional[str]) -> ProxySettings:
-    """统一更新自定义代理 API 地址。"""
+    
     set_proxy_api_override(custom_api_url if custom_api_url else None)
     return get_proxy_settings()
 
 
-# ==================== 工具函数 ====================
+
 
 def _to_non_negative_int(value: Any, default: int = 0) -> int:
     try:

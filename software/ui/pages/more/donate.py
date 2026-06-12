@@ -1,5 +1,3 @@
-"""捐助页面"""
-
 import os
 from typing import Optional
 
@@ -24,7 +22,7 @@ from software.app.runtime_paths import get_resource_path
 
 
 class DonatePage(ScrollArea):
-    """捐助页面，展示付款二维码和感谢文字"""
+    
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -43,18 +41,18 @@ class DonatePage(ScrollArea):
         layout.setSpacing(16)
         layout.setAlignment(Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignHCenter)
 
-        # 标题
+        
         title = TitleLabel("支持作者", self)
         layout.addWidget(title, 0, Qt.AlignmentFlag.AlignHCenter)
 
-        # 说明文字
+        
         desc = BodyLabel("如果这个项目对你有帮助，欢迎请作者喝杯奶茶~", self)
         desc.setStyleSheet("color: #606060;")
         layout.addWidget(desc, 0, Qt.AlignmentFlag.AlignHCenter)
 
         layout.addSpacing(10)
 
-        # 二维码卡片（微信/支付宝）
+        
         self.qr_row = QBoxLayout(QBoxLayout.Direction.LeftToRight)
         self.qr_row.setSpacing(16)
         self.qr_row.setAlignment(Qt.AlignmentFlag.AlignHCenter)
@@ -73,7 +71,7 @@ class DonatePage(ScrollArea):
 
         layout.addSpacing(16)
 
-        # 感谢语
+        
         thanks = BodyLabel("感谢每一位支持者，你们的鼓励是我持续更新的动力！", self)
         thanks.setStyleSheet("color: #606060;")
         layout.addWidget(thanks, 0, Qt.AlignmentFlag.AlignHCenter)
@@ -91,19 +89,19 @@ class DonatePage(ScrollArea):
     ) -> CardWidget:
         card = CardWidget(self)
 
-        # 使用水平布局，左侧放装饰条，右侧放内容
+        
         main_layout = QHBoxLayout(card)
         main_layout.setContentsMargins(0, 0, 0, 0)
         main_layout.setSpacing(0)
 
-        # 添加品牌色装饰条（独立的 QWidget）
+        
         if brand_color:
             accent_bar = QWidget(card)
             accent_bar.setFixedWidth(4)
             accent_bar.setStyleSheet(f"background-color: {brand_color};")
             main_layout.addWidget(accent_bar)
 
-        # 内容区域
+        
         content_widget = QWidget(card)
         card_layout = QVBoxLayout(content_widget)
         card_layout.setContentsMargins(24, 20, 24, 20)

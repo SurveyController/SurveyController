@@ -1,5 +1,3 @@
-"""题目图片缩略图组件。"""
-
 from __future__ import annotations
 
 import ipaddress

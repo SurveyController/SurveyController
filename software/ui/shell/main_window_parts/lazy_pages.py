@@ -1,5 +1,3 @@
-"""MainWindow 懒加载页面与导航相关方法。"""
-
 from __future__ import annotations
 
 import logging
@@ -27,19 +25,19 @@ if TYPE_CHECKING:
 
 
 class MainWindowLazyPagesMixin:
-    """主窗口中与页面懒加载、导航切换相关的方法集合。"""
+    
 
     if TYPE_CHECKING:
-        # 以下属性由 FluentWindow / MainWindow 主类提供。
+        
         dashboard: DashboardPage
         runtime_page: RuntimePage
         strategy_page: QuestionStrategyPage
         reverse_fill_page: ReverseFillPage
         stackedWidget: QStackedWidget
-        navigationInterface: Any  # qfluentwidgets.NavigationInterface
+        navigationInterface: Any  
         addSubInterface: Any
         switchTo: Any
-        close: Any  # 继承自 QWidget
+        close: Any  
 
     def _init_navigation(self):
         self.addSubInterface(
@@ -74,7 +72,7 @@ class MainWindowLazyPagesMixin:
             onClick=lambda: self._switch_to_lazy_page("logs", self._get_log_page()),
             position=NavigationItemPosition.TOP,
         )
-        # 社区页面
+        
         self.navigationInterface.addItem(
             routeKey="community",
             icon=FluentIcon.CHAT,
@@ -82,7 +80,7 @@ class MainWindowLazyPagesMixin:
             onClick=lambda: self._switch_to_lazy_page("community", self._get_community_page()),
             position=NavigationItemPosition.BOTTOM,
         )
-        # 设置页面
+        
         self.navigationInterface.addItem(
             routeKey="settings",
             icon=FluentIcon.SETTING,
@@ -90,7 +88,7 @@ class MainWindowLazyPagesMixin:
             onClick=lambda: self._switch_to_lazy_page("settings", self._get_settings_page()),
             position=NavigationItemPosition.BOTTOM,
         )
-        # "更多"弹出式子菜单
+        
         self.navigationInterface.addItem(
             routeKey="about_menu",
             icon=FluentIcon.MORE,
@@ -137,7 +135,7 @@ class MainWindowLazyPagesMixin:
             logging.info("同步懒加载页面侧边栏高亮失败", exc_info=True)
 
     def _get_log_page(self):
-        """懒加载日志页面"""
+        
         if self._log_page is None:
             from software.ui.pages.workbench.log_panel.page import LogPage
 
@@ -146,7 +144,7 @@ class MainWindowLazyPagesMixin:
         return self._log_page
 
     def _get_settings_page(self):
-        """懒加载设置页面"""
+        
         if self._settings_page is None:
             from software.ui.pages.settings.settings import SettingsPage
 
@@ -155,7 +153,7 @@ class MainWindowLazyPagesMixin:
         return self._settings_page
 
     def _get_community_page(self):
-        """懒加载社区页面"""
+        
         if self._community_page is None:
             from software.ui.pages.community import CommunityPage
 
@@ -164,7 +162,7 @@ class MainWindowLazyPagesMixin:
         return self._community_page
 
     def _get_about_page(self):
-        """懒加载关于页面"""
+        
         if self._about_page is None:
             from software.ui.pages.more.about import AboutPage
 
@@ -175,7 +173,7 @@ class MainWindowLazyPagesMixin:
         return self._about_page
 
     def _get_ip_usage_page(self):
-        """懒加载 IP 使用记录页面"""
+        
         if self._ip_usage_page is None:
             from software.ui.pages.more.ip_usage_page import IpUsagePage
 
@@ -186,7 +184,7 @@ class MainWindowLazyPagesMixin:
         return self._ip_usage_page
 
     def _get_donate_page(self):
-        """懒加载捐助页面"""
+        
         if self._donate_page is None:
             from software.ui.pages.more.donate import DonatePage
 
@@ -197,60 +195,60 @@ class MainWindowLazyPagesMixin:
         return self._donate_page
 
     def _show_about_menu(self):
-        """显示关于子菜单"""
+        
         from software.app.version import __VERSION__
 
         menu = RoundMenu(parent=self)
 
-        # 版本信息（不可点击）
+        
         version_action = Action(FluentIcon.INFO, f"SurveyController v{__VERSION__}")
         version_action.setEnabled(False)
         menu.addAction(version_action)
 
         menu.addSeparator()
 
-        # 更新日志
+        
         changelog_action = Action(FluentIcon.HISTORY, "更新日志")
         changelog_action.triggered.connect(self._open_changelog_releases)
         menu.addAction(changelog_action)
 
-        # 使用教程
+        
         tutorial_action = Action(FluentIcon.LIBRARY, "使用教程")
         tutorial_action.triggered.connect(self._open_usage_tutorial)
         menu.addAction(tutorial_action)
 
-        # IP 使用记录
+        
         ip_usage_action = Action(FluentIcon.CALENDAR, "IP 使用记录")
         ip_usage_action.triggered.connect(
             lambda: self._switch_to_more_page(self._get_ip_usage_page())
         )
         menu.addAction(ip_usage_action)
 
-        # 捐助
+        
         donate_action = Action(FluentIcon.HEART, "捐助")
         donate_action.triggered.connect(lambda: self._switch_to_more_page(self._get_donate_page()))
         menu.addAction(donate_action)
 
-        # 关于
+        
         about_action = Action(FluentIcon.INFO, "关于")
         about_action.triggered.connect(lambda: self._switch_to_more_page(self._get_about_page()))
         menu.addAction(about_action)
 
         menu.addSeparator()
 
-        # 退出
+        
         quit_action = Action(FluentIcon.CLOSE, "退出程序")
         quit_action.triggered.connect(self.close)
         menu.addAction(quit_action)
 
-        # 获取导航项的位置并显示菜单
+        
         nav_item = self.navigationInterface.widget("about_menu")
         if nav_item:
             pos = nav_item.mapToGlobal(nav_item.rect().topRight())
             menu.exec(pos, aniType=MenuAnimationType.DROP_DOWN)
 
     def _switch_to_more_page(self, page):
-        """切换到更多相关页面，并同步侧边栏高亮"""
+        
         self.switchTo(page)
         try:
             self.navigationInterface.setCurrentItem("about_menu")

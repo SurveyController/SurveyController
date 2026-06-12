@@ -1,5 +1,3 @@
-"""ExecutionState 的线程进度相关状态与辅助方法。"""
-
 from __future__ import annotations
 
 import time
@@ -10,7 +8,7 @@ from typing import TYPE_CHECKING, Any, Dict, List, Protocol
 
 @dataclass
 class ThreadProgressState:
-    """单个工作线程的运行状态快照。"""
+    
 
     thread_name: str
     thread_index: int = 0

@@ -1,5 +1,3 @@
-"""运行时动作请求。"""
-
 from __future__ import annotations
 
 from dataclasses import dataclass

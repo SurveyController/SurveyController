@@ -1,5 +1,3 @@
-"""信效度固定调参配置。"""
-
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -7,7 +5,7 @@ from dataclasses import dataclass
 
 @dataclass(frozen=True)
 class ReliabilityProfile:
-    """固定信效度策略下的集中调参。"""
+    
 
     distribution_warmup_samples: int
     distribution_gain: float

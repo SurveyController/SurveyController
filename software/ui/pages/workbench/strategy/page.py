@@ -1,5 +1,3 @@
-"""题目策略页：条件规则 + 维度分组。"""
-
 from __future__ import annotations
 
 import copy
@@ -46,7 +44,7 @@ from .rule_dialog import (
 
 
 class ConditionRulePanel(QWidget):
-    """条件规则列表面板。"""
+    
 
     changed = Signal()
 
@@ -350,7 +348,7 @@ class ConditionRulePanel(QWidget):
 
 
 class QuestionStrategyPage(ScrollArea):
-    """题目策略页。"""
+    
 
     strategyChanged = Signal()
 

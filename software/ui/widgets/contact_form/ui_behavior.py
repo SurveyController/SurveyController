@@ -1,5 +1,3 @@
-"""联系表单界面行为。"""
-
 from typing import Any, cast
 
 from PySide6.QtGui import QGuiApplication

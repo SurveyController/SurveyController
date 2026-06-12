@@ -1,5 +1,3 @@
-"""题目向导搜索弹层与 delegate。"""
-
 from __future__ import annotations
 
 from typing import Any, cast
@@ -17,7 +15,7 @@ SEARCH_RESULT_DETAIL_ROLE = SEARCH_RESULT_INDEX_ROLE + 2
 
 
 class QuestionSearchCompleterDelegate(ListItemDelegate):
-    """搜索建议下拉项。"""
+    
 
     def __init__(self, parent: QAbstractItemView) -> None:
         super().__init__(cast(QListView, cast(Any, parent)))

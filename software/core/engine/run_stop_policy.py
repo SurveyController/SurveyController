@@ -1,5 +1,3 @@
-"""运行停止策略。"""
-
 from __future__ import annotations
 
 import math
@@ -18,7 +16,7 @@ from software.core.task import ExecutionConfig, ExecutionState
 
 
 class RunStopPolicy:
-    """统一处理暂停、成功、失败、达标停止等策略。"""
+    
 
     def __init__(
         self,

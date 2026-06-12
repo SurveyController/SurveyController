@@ -1,5 +1,3 @@
-"""DashboardPage 题目表格与批量编辑相关方法。"""
-
 from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any, Callable, Dict, List, Optional, Sequence
@@ -161,7 +159,7 @@ _WIZARD_META_RULES: Sequence[WizardApplyRule] = (
 
 
 def question_summary(entry: QuestionEntry) -> str:
-    """生成题目配置摘要"""
+    
     bias = getattr(entry, "psycho_bias", "custom") or "custom"
     if (
         getattr(entry, "question_type", "") in PSYCHO_SUPPORTED_TYPES
@@ -278,7 +276,7 @@ def _build_entry_row_signature(entry: QuestionEntry, index: int) -> tuple[str, s
 
 
 class DashboardEntriesMixin:
-    """题目配置表与编辑向导相关方法。"""
+    
 
     if TYPE_CHECKING:
         workbench_state: Any

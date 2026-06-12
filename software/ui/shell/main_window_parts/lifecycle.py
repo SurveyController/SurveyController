@@ -1,5 +1,3 @@
-"""MainWindow 生命周期与配置落盘相关方法。"""
-
 from __future__ import annotations
 
 import logging
@@ -25,7 +23,7 @@ from software.logging.log_utils import (
 
 
 class MainWindowLifecycleMixin:
-    """收口主窗口的保存、启动恢复、标题刷新与关闭清理。"""
+    
 
     if TYPE_CHECKING:
         _async_dialog_refs: Any

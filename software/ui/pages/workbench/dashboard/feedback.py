@@ -1,5 +1,3 @@
-"""Dashboard 页面运行反馈。"""
-
 from __future__ import annotations
 
 from typing import Any

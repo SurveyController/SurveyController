@@ -1,8 +1,3 @@
-"""虚拟画像生成器 - 每份问卷自动生成一个逻辑自洽的虚拟人物
-
-画像在每份问卷开始时随机生成，各属性之间有逻辑约束，
-确保不会出现"18岁已退休"或"未婚有三个孩子"这类矛盾。
-"""
 import random
 import threading
 from dataclasses import dataclass
@@ -11,21 +6,18 @@ from typing import Dict, List, Optional
 
 @dataclass
 class Persona:
-    """虚拟人物画像"""
-    gender: str = ""                    # "男" / "女"
-    age_group: str = ""                 # "18-25" / "26-35" / "36-45" / "46-60"
-    education: str = ""                 # "高中及以下" / "大专" / "本科" / "研究生及以上"
-    occupation: str = ""                # "学生" / "上班族" / "自由职业" / "退休"
-    income_level: str = ""              # "低" / "中" / "高"
-    marital_status: str = ""            # "未婚" / "已婚"
+    
+    gender: str = ""                    
+    age_group: str = ""                 
+    education: str = ""                 
+    occupation: str = ""                
+    income_level: str = ""              
+    marital_status: str = ""            
     has_children: bool = False
-    satisfaction_tendency: float = 0.5  # 整体满意倾向 0.0~1.0（越高越倾向正面评价）
+    satisfaction_tendency: float = 0.5  
 
     def to_keyword_map(self) -> Dict[str, List[str]]:
-        """将画像转换为关键词映射表，用于与选项文本匹配。
-
-        返回 {属性名: [该属性对应的关键词列表]}。
-        """
+        
         mapping: Dict[str, List[str]] = {}
         if self.gender:
             mapping["gender"] = (
@@ -83,7 +75,7 @@ class Persona:
                 if self.marital_status == "未婚"
                 else ["已婚", "已婚已育", "已婚未育", "结婚"]
             )
-        # 子女
+        
         if self.has_children:
             mapping["has_children"] = ["有孩子", "有子女", "已育", "有小孩"]
         else:
@@ -91,7 +83,7 @@ class Persona:
         return mapping
 
     def to_description(self) -> str:
-        """生成画像的自然语言描述，用于 AI prompt。"""
+        
         parts = []
         if self.gender:
             parts.append(f"{self.gender}性")
@@ -113,33 +105,24 @@ class Persona:
         return "、".join(parts)
 
 
-# ── 画像生成 ──────────────────────────────────────────────
+
 
 
 def generate_persona() -> Persona:
-    """随机生成一个逻辑自洽的虚拟人物画像。
-
-    属性之间的约束规则：
-    - 18-25岁大概率是学生或初入职场，低收入，未婚无子女
-    - 26-35岁可能已婚可能未婚，收入中等
-    - 36-45岁大概率已婚，可能有子女
-    - 46-60岁大概率已婚有子女，可能退休
-    - 学生一般低收入
-    - 退休一般46-60岁
-    """
+    
     p = Persona()
 
-    # 性别
+    
     p.gender = random.choice(["男", "女"])
 
-    # 年龄组（加权：年轻人更多一些）
+    
     p.age_group = random.choices(
         ["18-25", "26-35", "36-45", "46-60"],
         weights=[35, 35, 20, 10],
         k=1,
     )[0]
 
-    # 学历（受年龄影响）
+    
     if p.age_group == "18-25":
         p.education = random.choices(
             ["高中及以下", "大专", "本科", "研究生及以上"],
@@ -159,7 +142,7 @@ def generate_persona() -> Persona:
             k=1,
         )[0]
 
-    # 职业（受年龄影响）
+    
     if p.age_group == "18-25":
         p.occupation = random.choices(
             ["学生", "上班族", "自由职业"],
@@ -179,7 +162,7 @@ def generate_persona() -> Persona:
             k=1,
         )[0]
 
-    # 收入（受职业和年龄影响）
+    
     if p.occupation == "学生":
         p.income_level = random.choices(["低", "中"], weights=[85, 15], k=1)[0]
     elif p.occupation == "退休":
@@ -191,7 +174,7 @@ def generate_persona() -> Persona:
     else:
         p.income_level = random.choices(["低", "中", "高"], weights=[40, 45, 15], k=1)[0]
 
-    # 婚姻状况（受年龄影响）
+    
     if p.age_group == "18-25":
         p.marital_status = random.choices(["未婚", "已婚"], weights=[90, 10], k=1)[0]
     elif p.age_group == "26-35":
@@ -201,9 +184,9 @@ def generate_persona() -> Persona:
     else:
         p.marital_status = random.choices(["未婚", "已婚"], weights=[10, 90], k=1)[0]
 
-    # 子女（受婚姻和年龄影响）
+    
     if p.marital_status == "未婚":
-        p.has_children = random.random() < 0.03  # 极小概率
+        p.has_children = random.random() < 0.03  
     elif p.age_group in ("36-45", "46-60"):
         p.has_children = random.random() < 0.90
     elif p.age_group == "26-35":
@@ -211,28 +194,28 @@ def generate_persona() -> Persona:
     else:
         p.has_children = random.random() < 0.10
 
-    # 满意度倾向（正态分布，均值0.6，偏向中等偏上）
+    
     raw = random.gauss(0.6, 0.15)
     p.satisfaction_tendency = max(0.1, min(0.9, raw))
 
     return p
 
 
-# ── 线程局部画像管理 ────────────────────────────────────────
+
 
 _thread_local = threading.local()
 
 
 def set_current_persona(persona: Persona) -> None:
-    """为当前线程设置画像（每份问卷开始时调用）。"""
+    
     _thread_local.persona = persona
 
 
 def get_current_persona() -> Optional[Persona]:
-    """获取当前线程的画像。"""
+    
     return getattr(_thread_local, "persona", None)
 
 
 def reset_persona() -> None:
-    """清除当前线程的画像（问卷结束后调用）。"""
+    
     _thread_local.persona = None

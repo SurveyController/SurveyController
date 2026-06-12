@@ -1,5 +1,3 @@
-"""反填页纯逻辑。"""
-
 from __future__ import annotations
 
 import os

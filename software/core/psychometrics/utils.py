@@ -1,13 +1,10 @@
-"""
-数学工具函数
-"""
 import math
 import random
 from typing import Any, List
 
 from software.core.psychometrics.orientation import infer_dimension_orientation
 
-# 逆正态分布函数的系数
+
 _NORMAL_INV_COEFFS = {
     "a": [
         -39.69683028665376,
@@ -42,7 +39,7 @@ _NORMAL_INV_COEFFS = {
 
 
 def randn() -> float:
-    """生成标准正态分布随机数（Box-Muller变换）"""
+    
     u = 0.0
     v = 0.0
     while u == 0:
@@ -53,7 +50,7 @@ def randn() -> float:
 
 
 def normal_inv(p: float) -> float:
-    """逆正态分布函数（分位数函数）"""
+    
     if p <= 0:
         return float("-inf")
     if p >= 1:
@@ -88,7 +85,7 @@ def normal_inv(p: float) -> float:
 
 
 def z_to_category(z: float, option_count: int) -> int:
-    """将连续的 Z 分数转换为离散的选项索引"""
+    
     m = max(2, min(50, option_count))
     
     for j in range(1, m):
@@ -100,7 +97,7 @@ def z_to_category(z: float, option_count: int) -> int:
 
 
 def variance(values: List[float]) -> float:
-    """计算样本方差"""
+    
     if not values or len(values) < 2:
         return 0.0
     
@@ -110,7 +107,7 @@ def variance(values: List[float]) -> float:
 
 
 def correlation(xs: List[float], ys: List[float]) -> float:
-    """计算 Pearson 相关系数"""
+    
     if not xs or not ys or len(xs) != len(ys) or len(xs) < 2:
         return 0.0
     
@@ -134,27 +131,27 @@ def correlation(xs: List[float], ys: List[float]) -> float:
 
 
 def infer_reversed_keys(items: List[Any]) -> set[str]:
-    """根据最终目标配比推断反向题。"""
+    
     return set(infer_dimension_orientation(items).reversed_keys)
 
 
 def cronbach_alpha(matrix: List[List[float]]) -> float:
-    """计算 Cronbach's Alpha 系数"""
+    
     if not matrix or len(matrix) == 0:
         return 0.0
     
-    k = len(matrix[0])  # 题目数
+    k = len(matrix[0])  
     if k < 2:
         return 0.0
     
-    # 计算总分的方差
+    
     totals = [sum(row) for row in matrix]
     var_total = variance(totals)
     
     if var_total == 0:
         return 0.0
     
-    # 计算各题目方差之和
+    
     sum_item_var = 0.0
     for j in range(k):
         item_values = [row[j] for row in matrix]

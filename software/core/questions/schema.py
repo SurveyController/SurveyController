@@ -1,5 +1,3 @@
-"""题目配置数据结构。"""
-
 from __future__ import annotations
 
 from dataclasses import dataclass, field
@@ -33,7 +31,7 @@ __all__ = [
 
 
 def _infer_option_count(entry: "QuestionEntry") -> int:
-    """当配置中缺少选项数量时，尽可能从已保存的权重/文本推导。"""
+    
 
     def _nested_length(raw: Any) -> Optional[int]:
         if not isinstance(raw, list):

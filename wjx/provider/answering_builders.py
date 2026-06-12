@@ -1,5 +1,3 @@
-"""WJX batch answer action builders."""
-
 from __future__ import annotations
 
 import math

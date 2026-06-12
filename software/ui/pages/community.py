@@ -1,5 +1,3 @@
-"""社区页面 - 网格卡片布局"""
-
 import os
 import webbrowser
 from typing import Any, cast
@@ -35,7 +33,7 @@ _GITHUB_URL = f"https://github.com/{GITHUB_OWNER}/{GITHUB_REPO}"
 
 
 class CommunityPage(ScrollArea):
-    """社区页面 - 网格卡片布局，展示QQ群、联系开发者、参与贡献、开源声明等"""
+    
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -49,7 +47,7 @@ class CommunityPage(ScrollArea):
 
         self._build_ui()
 
-    # ── 构建 UI ──────────────────────────────────────────────
+    
 
     def _build_ui(self):
         root_layout = QVBoxLayout(self.view)
@@ -67,14 +65,14 @@ class CommunityPage(ScrollArea):
         cl.setSpacing(20)
         cl.setAlignment(Qt.AlignmentFlag.AlignTop)
 
-        # ── 页面标题 ──
+        
         page_title = SubtitleLabel("社区", self.content_widget)
         page_title.setStyleSheet("font-size: 28px; font-weight: bold; letter-spacing: 2px;")
         cl.addWidget(page_title)
 
         cl.addSpacing(8)
 
-        # ── 网格卡片布局 ──
+        
         grid_widget = QWidget(self.content_widget)
         card_layout = AdaptiveFlowLayout(
             grid_widget,
@@ -84,7 +82,7 @@ class CommunityPage(ScrollArea):
         )
         card_layout.setContentsMargins(0, 0, 0, 0)
 
-        # 自适应卡片流式布局（窗口变窄自动换行）
+        
         self.qq_card = self._build_qq_card()
         card_layout.addWidget(self.qq_card)
 
@@ -99,7 +97,7 @@ class CommunityPage(ScrollArea):
 
         cl.addWidget(grid_widget)
 
-        # ── Footer ──
+        
         footer = CaptionLabel(
             "欢迎加入社区，一起让这个项目变得更好",
             self.content_widget,
@@ -111,17 +109,17 @@ class CommunityPage(ScrollArea):
 
         cl.addStretch(1)
 
-    # ── 卡片工厂方法 ──
+    
 
     def _create_grid_card(self, title: str, icon=None) -> tuple[ElevatedCardWidget, QVBoxLayout]:
-        """创建网格卡片"""
+        
         card = ElevatedCardWidget(self.content_widget)
         layout = QVBoxLayout(card)
         layout.setContentsMargins(20, 20, 20, 20)
         layout.setSpacing(14)
         layout.setAlignment(Qt.AlignmentFlag.AlignTop)
 
-        # 标题行（带图标）
+        
         title_layout = QHBoxLayout()
         title_layout.setSpacing(8)
         title_layout.setContentsMargins(0, 0, 0, 0)
@@ -140,7 +138,7 @@ class CommunityPage(ScrollArea):
         return card, layout
 
     def _setup_card_button(self, button: PushButton):
-        """统一按钮尺寸，样式交给 QFluentWidgets 原生控件。"""
+        
         button.setFixedHeight(36)
         button.setIconSize(QSize(16, 16))
         button.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
@@ -152,7 +150,7 @@ class CommunityPage(ScrollArea):
         primary_button: PushButton,
         secondary_button: PushButton | None = None,
     ) -> QWidget:
-        """统一卡片按钮区，保持 QFluentWidgets 原生按钮风格。"""
+        
         action_bar = QWidget(parent)
 
         layout = QVBoxLayout(action_bar)
@@ -171,7 +169,7 @@ class CommunityPage(ScrollArea):
         layout.addLayout(button_row)
         return action_bar
 
-    # ── QQ 群卡片 ──
+    
 
     def _build_qq_card(self) -> ElevatedCardWidget:
         card, layout = self._create_grid_card("QQ 群交流", FluentIcon.CHAT)
@@ -194,7 +192,7 @@ class CommunityPage(ScrollArea):
         text_layout.addStretch(1)
         content_row.addLayout(text_layout, 1)
 
-        # 二维码展示
+        
         self.qq_qr_label = ImageLabel(card)
         self.qq_qr_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.qq_qr_label.setFixedSize(144, 144)
@@ -222,7 +220,7 @@ class CommunityPage(ScrollArea):
         return card
 
     def _load_qr_image(self):
-        """加载QQ群二维码图片"""
+        
         try:
             path = os.path.join(get_assets_directory(), "community_qr.jpg")
             if os.path.exists(path):
@@ -247,7 +245,7 @@ class CommunityPage(ScrollArea):
             self.qq_qr_label.setStyleSheet("font-size: 12px; color: #999;")
 
     def _round_pixmap(self, pixmap: QPixmap, radius: int = 8) -> QPixmap:
-        """圆角处理"""
+        
         if pixmap.isNull():
             return pixmap
         output = QPixmap(pixmap.size())
@@ -262,12 +260,12 @@ class CommunityPage(ScrollArea):
         return output
 
     def _open_qq_qr_image(self):
-        """打开QQ群二维码原图"""
+        
         path = os.path.join(get_assets_directory(), "community_qr.jpg")
         if os.path.exists(path):
             QDesktopServices.openUrl(QUrl.fromLocalFile(path))
 
-    # ── 联系开发者卡片 ──
+    
 
     def _build_contact_card(self) -> ElevatedCardWidget:
         card, layout = self._create_grid_card("联系开发者", FluentIcon.SEND)
@@ -295,7 +293,7 @@ class CommunityPage(ScrollArea):
         return card
 
     def _open_contact_dialog(self):
-        """打开联系开发者对话框"""
+        
         window = self.window()
         if hasattr(window, "_open_contact_dialog"):
             cast(Any, window)._open_contact_dialog()
@@ -310,7 +308,7 @@ class CommunityPage(ScrollArea):
         )
         dialog.exec()
 
-    # ── 参与贡献卡片 ──
+    
 
     def _build_contribute_card(self) -> ElevatedCardWidget:
         card, layout = self._create_grid_card("参与贡献", FluentIcon.DEVELOPER_TOOLS)
@@ -337,7 +335,7 @@ class CommunityPage(ScrollArea):
 
         return card
 
-    # ── 开源许可卡片 ──
+    
 
     def _build_license_card(self) -> ElevatedCardWidget:
         card, layout = self._create_grid_card("开源许可", FluentIcon.CERTIFICATE)

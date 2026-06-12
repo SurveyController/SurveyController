@@ -1,4 +1,3 @@
-"""问卷星 HTML 解析公共辅助。"""
 import logging
 import re
 from typing import Any, List, Optional
@@ -111,7 +110,7 @@ def _soup_question_is_required(question_div) -> bool:
     return False
 
 def extract_survey_title_from_html(html: str) -> Optional[str]:
-    """尝试从问卷 HTML 文本中提取标题。"""
+    
 
 
     if not BeautifulSoup:
@@ -310,7 +309,7 @@ def _count_text_inputs_in_soup(question_div) -> int:
     return count
 
 def _extract_text_input_labels(question_div) -> List[str]:
-    """提取多项填空题每个输入框的标签信息"""
+    
     labels = []
 
     def _label_before_node(node) -> str:
@@ -382,11 +381,7 @@ def _extract_text_input_labels(question_div) -> List[str]:
     return labels
 
 def _soup_question_looks_like_description(question_div, type_code: str) -> bool:
-    """检测是否为说明页/阅读材料（有 topic 和 type 属性但无可交互控件）。
-
-    问卷星有时会给纯阅读材料/说明文字也打上 topic 和 type 属性，
-    导致解析器误将其识别为正常题目。此函数通过检测交互控件的缺失来识别这类情况。
-    """
+    
     if question_div is None:
         return False
     try:
@@ -401,31 +396,31 @@ def _soup_question_looks_like_description(question_div, type_code: str) -> bool:
             return True
     except Exception:
         pass
-    # 只对选择类题型做检测（type 3/4 是最常见的误识别情况）
+    
     if type_code not in {"3", "4"}:
         return False
     try:
-        # 检查是否有 radio/checkbox input（单选/多选题必备）
+        
         choice_inputs = question_div.find_all(
             "input", attrs={"type": lambda v: v and v.lower() in ("radio", "checkbox")}
         )
         if choice_inputs:
             return False
-        # 检查是否有标准选项容器
+        
         has_control_group = bool(question_div.select_one(".ui-controlgroup"))
         if has_control_group:
             return False
-        # 检查是否有 jqradio/jqcheck 样式的选项（另一种模板）
+        
         has_jq_controls = bool(question_div.select_one(".jqradio, .jqcheck"))
         if has_jq_controls:
             return False
     except Exception:
         return False
-    # 没有任何选择控件 → 说明页
+    
     return True
 
 def _soup_question_looks_like_reorder(question_div) -> bool:
-    """兜底判断：通过 DOM 特征识别排序题（静态 HTML）。"""
+    
     if question_div is None:
         return False
     try:
@@ -445,7 +440,7 @@ def _soup_question_looks_like_reorder(question_div) -> bool:
         return False
 
 def _soup_question_looks_like_numeric_scale(question_div) -> bool:
-    """检测是否更像数字量表/NPS（大量数字刻度+两端文字提示）。"""
+    
     if question_div is None:
         return False
     try:
@@ -483,10 +478,10 @@ def _soup_question_looks_like_numeric_scale(question_div) -> bool:
     return total >= 5 and numeric_count >= max(3, int(total * 0.7)) and (total >= 9 or has_scale_title)
 
 def _soup_question_looks_like_rating(question_div) -> bool:
-    """识别评价题（星级评价）"""
+    
     if question_div is None:
         return False
-    # NPS/数字刻度题虽然也有 rate-off/rate-on 样式，但应判为量表而非评价题
+    
     if _soup_question_looks_like_numeric_scale(question_div):
         return False
     has_rate_icon = False
@@ -505,7 +500,7 @@ def _soup_question_looks_like_rating(question_div) -> bool:
     except Exception:
         has_iconfont = False
 
-    # 评价题需要“星级/评价”特征，避免普通量表误判
+    
     if has_tag_wrap:
         return True
     if has_rate_icon or has_iconfont:
@@ -513,7 +508,7 @@ def _soup_question_looks_like_rating(question_div) -> bool:
     return False
 
 def _extract_rating_option_count(question_div) -> int:
-    """尝试解析评价题的星级数量。"""
+    
     if question_div is None:
         return 0
     try:

@@ -1,5 +1,3 @@
-"""运行参数页代理源常量。"""
-
 from __future__ import annotations
 
 PROXY_SOURCE_DEFAULT = "default"

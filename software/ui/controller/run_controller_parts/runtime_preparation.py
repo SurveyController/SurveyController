@@ -1,5 +1,3 @@
-"""RunController 运行前准备逻辑。"""
-
 from __future__ import annotations
 
 import copy
@@ -48,7 +46,7 @@ from wjx.provider.parser import (
 
 @dataclass(frozen=True)
 class PreparedExecutionArtifacts:
-    """运行前准备完成后产出的只读启动资料。"""
+    
 
     execution_config_template: ExecutionConfig
     survey_provider: str
@@ -58,7 +56,7 @@ class PreparedExecutionArtifacts:
 
 
 class RuntimePreparationError(Exception):
-    """启动前准备失败，携带给 UI 的提示文案。"""
+    
 
     def __init__(
         self,

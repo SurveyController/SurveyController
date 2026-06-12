@@ -1,6 +1,3 @@
-#!/usr/bin/env python
-"""离线单元测试检查。"""
-
 from __future__ import annotations
 
 from pathlib import Path

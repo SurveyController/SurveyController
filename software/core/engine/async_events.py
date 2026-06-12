@@ -1,5 +1,3 @@
-"""Async runtime events and context objects."""
-
 from __future__ import annotations
 
 import asyncio
@@ -10,7 +8,7 @@ from software.core.task import ExecutionState
 
 
 class AsyncRunContext:
-    """Per-run async state shared by scheduler slots."""
+    
 
     def __init__(
         self,
@@ -39,7 +37,7 @@ class AsyncRunContext:
 
 
 class ThreadEventProxy:
-    """Small threading.Event-shaped proxy backed by an asyncio.Event."""
+    
 
     def __init__(self, event: asyncio.Event, *, loop: asyncio.AbstractEventLoop) -> None:
         self._event = event

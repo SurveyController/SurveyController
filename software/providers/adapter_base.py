@@ -1,5 +1,3 @@
-"""Provider 适配层公共壳。"""
-
 from __future__ import annotations
 
 from dataclasses import dataclass

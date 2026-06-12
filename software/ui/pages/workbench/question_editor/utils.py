@@ -1,5 +1,3 @@
-"""UI 辅助函数"""
-
 from collections.abc import Mapping, Sequence
 from typing import Any, Dict, List, Optional, Tuple
 
@@ -30,7 +28,7 @@ def _shorten_text(text: str, limit: int = 80) -> str:
 
 
 def _apply_label_color(label: QLabel, light: str, dark: str) -> None:
-    """为标签设置浅色/深色主题颜色。"""
+    
     try:
         getattr(label, "setTextColor")(QColor(light), QColor(dark))
     except AttributeError:
@@ -42,7 +40,7 @@ def _apply_label_color(label: QLabel, light: str, dark: str) -> None:
 
 
 def _configure_wrapped_text_label(label: QLabel, width: int) -> None:
-    """让固定宽度文本标签按词换行，并把内容顶对齐显示完整。"""
+    
     label.setWordWrap(True)
     label.setFixedWidth(width)
     label.setAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignTop)
@@ -50,7 +48,7 @@ def _configure_wrapped_text_label(label: QLabel, width: int) -> None:
 
 
 def _bind_slider_input(slider: NoWheelSlider, edit: LineEdit) -> None:
-    """绑定滑块与输入框，避免循环触发。"""
+    
     min_value = int(slider.minimum())
     max_value = int(slider.maximum())
     edit.setValidator(QIntValidator(min_value, max_value, edit))
@@ -213,7 +211,7 @@ def build_entry_info_list(
     entries: Sequence[QuestionEntry],
     questions_info: Optional[Sequence[SurveyQuestionMeta | Mapping[str, Any]]],
 ) -> List[SurveyQuestionMeta]:
-    """将当前配置题目与原始题目元数据按稳定标识对齐，避免依赖裸下标。"""
+    
     selectable_info: List[SurveyQuestionMeta] = []
     provider_map: Dict[Tuple[str, str], List[int]] = {}
     question_num_map: Dict[int, List[int]] = {}

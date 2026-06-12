@@ -1,5 +1,3 @@
-"""关于页面"""
-
 import threading
 import webbrowser
 from datetime import datetime
@@ -45,7 +43,7 @@ from shiboken6 import isValid
 
 
 class AboutPage(ScrollArea):
-    """关于页面，包含版本号、链接、检查更新等。"""
+    
 
     _updateCheckFinished = Signal(object)
     _updateCheckError = Signal(str)
@@ -86,7 +84,7 @@ class AboutPage(ScrollArea):
         content_layout.setSpacing(16)
         content_layout.setAlignment(Qt.AlignmentFlag.AlignTop)
 
-        # 1. 顶部 Hero 区域
+        
         hero_widget = QWidget()
         hero_layout = QVBoxLayout(hero_widget)
         hero_layout.setSpacing(10)
@@ -109,7 +107,7 @@ class AboutPage(ScrollArea):
         content_layout.addWidget(hero_widget)
         content_layout.addSpacing(10)
 
-        # 警示声明 - 使用内嵌InfoBar样式
+        
         disclaimer_bar = FullWidthInfoBar(
             icon=InfoBarIcon.WARNING,
             title="",
@@ -125,11 +123,11 @@ class AboutPage(ScrollArea):
         disclaimer_bar.setMaximumWidth(16777215)
         content_layout.addWidget(disclaimer_bar)
 
-        # 2. 版本信息 + 相关链接（两个卡片并排）
+        
         cards_row = QHBoxLayout()
         cards_row.setSpacing(16)
 
-        # 左卡片：版本信息
+        
         version_card = CardWidget(self)
         version_layout = QVBoxLayout(version_card)
         version_layout.setContentsMargins(20, 16, 20, 16)
@@ -153,7 +151,7 @@ class AboutPage(ScrollArea):
         version_row.addWidget(self.update_btn)
         version_layout.addLayout(version_row)
 
-        # 右卡片：相关链接
+        
         links_card = CardWidget(self)
         links_layout = QVBoxLayout(links_card)
         links_layout.setContentsMargins(20, 16, 20, 16)
@@ -179,7 +177,7 @@ class AboutPage(ScrollArea):
 
         content_layout.addLayout(cards_row)
 
-        # 4. 致谢 & 许可
+        
         credit_card = CardWidget(self)
         credit_layout = QVBoxLayout(credit_card)
         credit_layout.setContentsMargins(20, 16, 20, 16)
@@ -191,7 +189,7 @@ class AboutPage(ScrollArea):
         license_layout.addStretch(1)
         credit_layout.addLayout(license_layout)
 
-        # 贡献者
+        
         contributors_layout = QHBoxLayout()
         contributors_layout.addWidget(BodyLabel("贡献者：", self))
         contributor1_link = HyperlinkButton("https://github.com/hungryM0", "@HUNGRY_M0", self)
@@ -209,7 +207,7 @@ class AboutPage(ScrollArea):
         contributors_layout.addStretch(1)
         credit_layout.addLayout(contributors_layout)
 
-        # 服务条款链接
+        
         terms_layout = QHBoxLayout()
         terms_layout.addWidget(BodyLabel("服务条款与隐私声明：", self))
         self.terms_btn = HyperlinkButton("", "查看详情", self)
@@ -220,7 +218,7 @@ class AboutPage(ScrollArea):
 
         content_layout.addWidget(credit_card)
 
-        # Footer
+        
         footer_layout = QHBoxLayout()
         footer_layout.setSpacing(8)
         copyright_text = CaptionLabel("Copyright © 2026 HUNGRY_M0. All rights reserved.", self)
@@ -238,7 +236,7 @@ class AboutPage(ScrollArea):
         )
         self.website_btn.clicked.connect(lambda: webbrowser.open("https://surveydoc.hungrym0.com/"))
 
-        # 异步获取发布时间
+        
         self._load_publish_time()
 
     def _set_update_loading(self, loading: bool):
@@ -252,7 +250,7 @@ class AboutPage(ScrollArea):
 
     @Slot(object)
     def _on_update_result(self, update_info):
-        """处理更新检查结果（在主线程中执行）"""
+        
         self._set_update_loading(False)
         win = self.window()
         status = update_info.get("status", "unknown") if update_info else "unknown"
@@ -298,7 +296,7 @@ class AboutPage(ScrollArea):
 
     @Slot(str)
     def _on_update_error(self, error_msg: str):
-        """处理更新检查错误（在主线程中执行）"""
+        
         self._set_update_loading(False)
         InfoBar.error(
             "",
@@ -326,7 +324,7 @@ class AboutPage(ScrollArea):
         threading.Thread(target=_do_check, daemon=True).start()
 
     def _load_publish_time(self):
-        """异步加载当前版本的发布时间"""
+        
         self._publishTimeLoaded.connect(
             self._on_publish_time_loaded, Qt.ConnectionType.QueuedConnection
         )
@@ -355,11 +353,11 @@ class AboutPage(ScrollArea):
 
     @Slot(str)
     def _on_publish_time_loaded(self, time_str: str):
-        """更新发布时间标签"""
+        
         self.publish_time_label.setText(f"({time_str})")
 
     def _show_terms_of_service(self):
-        """显示服务条款对话框"""
+        
         dialog = getattr(self, "_terms_dialog", None)
         if dialog is not None and isValid(dialog):
             dialog.raise_()

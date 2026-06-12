@@ -1,5 +1,3 @@
-"""RunController 关闭收尾辅助。"""
-
 from __future__ import annotations
 
 import threading
@@ -21,7 +19,7 @@ def collect_unique_threads(candidates: Iterable[Any]) -> List[threading.Thread]:
 
 
 class RuntimeShutdownHelper:
-    """收集运行控制器需要等待的后台线程。"""
+    
 
     def __init__(self, controller: Any) -> None:
         self.controller = controller

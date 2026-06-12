@@ -1,6 +1,3 @@
-# -*- coding: utf-8 -*-
-"""AI 设置、默认值与基础归一化。"""
-
 from __future__ import annotations
 
 from typing import Any, Dict, List, Optional
@@ -99,7 +96,7 @@ __all__ = [
 
 
 def get_default_system_prompt(ai_mode: Any = AI_MODE_PROVIDER) -> str:
-    """根据模式返回默认系统提示词。"""
+    
     mode = str(ai_mode or AI_MODE_FREE).strip().lower()
     if mode == AI_MODE_FREE:
         return DEFAULT_SYSTEM_PROMPT_FREE
@@ -149,7 +146,7 @@ def _persist_ai_settings(settings: Dict[str, Any]) -> None:
 
 
 def get_ai_settings() -> Dict[str, Any]:
-    """获取 AI 配置。"""
+    
     settings = dict(_ensure_runtime_settings())
     settings["ai_mode"] = _normalize_ai_mode(settings.get("ai_mode"))
     provider = str(settings.get("provider") or "deepseek").strip()
@@ -169,7 +166,7 @@ def save_ai_settings(
     model: Optional[str] = None,
     system_prompt: Optional[str] = None,
 ):
-    """保存 AI 配置。"""
+    
     settings = _ensure_runtime_settings()
     if ai_mode is not None:
         settings["ai_mode"] = _normalize_ai_mode(ai_mode)
@@ -201,7 +198,7 @@ def save_ai_settings(
 
 
 def reset_ai_settings() -> None:
-    """重置 AI 配置并清理持久化存储。"""
+    
     global _RUNTIME_AI_SETTINGS
     store = app_settings()
     for key in (
@@ -219,7 +216,7 @@ def reset_ai_settings() -> None:
 
 
 def get_ai_readiness_error(config: Optional[Dict[str, Any]] = None) -> str:
-    """返回 AI 配置不可用的原因；空字符串表示已就绪。"""
+    
     settings = get_ai_settings() if config is None else dict(config)
     ai_mode = _normalize_ai_mode(settings.get("ai_mode"))
     if ai_mode == AI_MODE_FREE:

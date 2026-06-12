@@ -1,5 +1,3 @@
-"""条件规则弹窗。"""
-
 from __future__ import annotations
 
 import copy
@@ -97,7 +95,7 @@ def build_question_label(question: SurveyQuestionMeta) -> str:
 
 
 class ConditionRuleDialog(MessageBoxBase):
-    """新增/编辑条件规则弹窗。"""
+    
 
     def __init__(
         self,

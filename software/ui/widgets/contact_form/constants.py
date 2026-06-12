@@ -1,5 +1,3 @@
-"""联系表单常量。"""
-
 from decimal import Decimal
 
 REQUEST_MESSAGE_TYPE = "额度申请"

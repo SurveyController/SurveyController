@@ -1,5 +1,3 @@
-"""IP 使用图表的数学辅助。"""
-
 from __future__ import annotations
 
 import math

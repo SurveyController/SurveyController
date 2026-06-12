@@ -1,4 +1,3 @@
-"""安全存储。Windows 用 DPAPI+注册表，macOS 用 Keychain。"""
 from __future__ import annotations
 
 import base64
@@ -12,15 +11,15 @@ from typing import Any, Optional, cast
 
 if sys.platform == "win32":
     import winreg
-else:  # pragma: no cover
+else:  
     winreg = None
 
-try:  # pragma: no cover - 缺依赖时走 unsupported
+try:  
     keyring = importlib.import_module("keyring")
     _keyring_errors = importlib.import_module("keyring.errors")
     KeyringError = cast(type[Exception], getattr(_keyring_errors, "KeyringError"))
     PasswordDeleteError = cast(type[Exception], getattr(_keyring_errors, "PasswordDeleteError"))
-except Exception:  # pragma: no cover
+except Exception:  
     keyring = None
     KeyringError = Exception
     PasswordDeleteError = Exception

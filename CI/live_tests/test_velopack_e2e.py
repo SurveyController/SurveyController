@@ -1,5 +1,3 @@
-"""Velopack 增量更新端到端测试。"""
-
 from __future__ import annotations
 
 import os

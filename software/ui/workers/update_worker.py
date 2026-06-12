@@ -1,5 +1,3 @@
-"""后台更新检查 Worker 对象。"""
-
 from __future__ import annotations
 
 import logging
@@ -8,7 +6,7 @@ from PySide6.QtCore import QObject, Signal, Slot
 
 
 class UpdateCheckWorker(QObject):
-    """在独立 QThread 中执行更新检查，避免主线程卡顿。"""
+    
 
     finished = Signal(bool, dict)
 

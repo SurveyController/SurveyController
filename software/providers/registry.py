@@ -1,5 +1,3 @@
-"""Provider 调度入口。"""
-
 from __future__ import annotations
 
 from typing import Any, Optional
@@ -93,7 +91,7 @@ def _get_provider_adapter(*, provider: Optional[str] = None, ctx: Any = None, ur
 
 
 async def parse_survey(url: str) -> SurveyDefinition:
-    """解析问卷结构，返回标准化后的 SurveyDefinition。"""
+    
     normalized_url = normalize_survey_parse_url(url)
     return await _get_provider_adapter(url=normalized_url).parse_survey_async(normalized_url)
 
@@ -108,7 +106,7 @@ async def fill_survey(
     psycho_plan: Any = None,
     provider: Optional[str] = None,
 ) -> bool:
-    """Provider 运行时答题分发。"""
+    
     adapter = _get_provider_adapter(provider=provider, ctx=state)
     try:
         state.update_thread_status(thread_name, "识别题目", running=True)
@@ -143,7 +141,7 @@ async def fill_survey_http(
     proxy_address: str | None = None,
     user_agent: str | None = None,
 ) -> bool:
-    """Provider 原生 HTTP 答题提交分发。"""
+    
     adapter = _get_provider_adapter(provider=provider, ctx=state)
     try:
         state.update_thread_status(thread_name, "构造答案", running=True)
@@ -169,17 +167,17 @@ async def fill_survey_http(
 
 
 async def is_completion_page(driver: Any, provider: Optional[str] = None) -> bool:
-    """Provider 完成页识别分发。"""
+    
     return bool(await _get_provider_adapter(provider=provider).is_completion_page_async(driver))
 
 
 async def submission_requires_verification(driver: Any, provider: Optional[str] = None) -> bool:
-    """Provider 提交后风控/验证识别分发。"""
+    
     return bool(await _get_provider_adapter(provider=provider).submission_requires_verification_async(driver))
 
 
 async def submission_validation_message(driver: Any, provider: Optional[str] = None) -> str:
-    """Provider 提交后校验文案提取分发。"""
+    
     return str(await _get_provider_adapter(provider=provider).submission_validation_message_async(driver) or "").strip()
 
 
@@ -190,7 +188,7 @@ async def wait_for_submission_verification(
     timeout: int = 3,
     stop_signal: Any = None,
 ) -> bool:
-    """Provider 提交后短时间轮询风控/验证命中。"""
+    
     return bool(
         await _get_provider_adapter(provider=provider).wait_for_submission_verification_async(
             driver,
@@ -226,7 +224,7 @@ async def handle_submission_verification_detected(
     *,
     provider: Optional[str] = None,
 ) -> RuntimeActionResult:
-    """Provider 提交后命中风控/验证时的后续策略分发。"""
+    
     return await _get_provider_adapter(provider=provider, ctx=ctx).handle_submission_verification_detected_async(
         ctx,
         stop_signal,
@@ -234,12 +232,12 @@ async def handle_submission_verification_detected(
 
 
 async def consume_submission_success_signal(driver: Any, provider: Optional[str] = None) -> bool:
-    """Provider 提交成功短路标记读取。"""
+    
     return bool(await _get_provider_adapter(provider=provider).consume_submission_success_signal_async(driver))
 
 
 async def is_device_quota_limit_page(driver: Any, provider: Optional[str] = None) -> bool:
-    """Provider 设备次数上限页识别。"""
+    
     return bool(await _get_provider_adapter(provider=provider).is_device_quota_limit_page_async(driver))
 
 

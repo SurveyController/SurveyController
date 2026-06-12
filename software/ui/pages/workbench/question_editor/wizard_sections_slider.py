@@ -1,5 +1,3 @@
-"""向导滑块题配置区。"""
-
 from typing import TYPE_CHECKING, Any, Dict, List
 
 from PySide6.QtCore import (
@@ -103,7 +101,7 @@ class WizardSectionsSliderMixin:
             slider_min, slider_max = self._resolve_slider_bounds(idx, entry)
         options = max(1, int(entry.option_count or 1))
 
-        # 倾向预设选择器（仅支持的题型）
+        
         _preset_seg = None
         if entry_supports_psycho_presets(entry, option_texts):
             preset_row = QHBoxLayout()
@@ -440,7 +438,7 @@ class WizardSectionsSliderMixin:
                 slider.valueChanged.connect(_update_option_preview)
             _update_option_preview()
 
-        # 预设与滑块联动，用标志位避免循环触发。
+        
         if _preset_seg is not None:
             _applying_preset = [False]
 

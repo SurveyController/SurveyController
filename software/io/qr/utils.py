@@ -1,4 +1,3 @@
-"""二维码生成与处理工具。"""
 import logging
 import os
 from typing import Optional
@@ -9,7 +8,7 @@ import zxingcpp
 
 
 def _load_qimage(image_path: str) -> QImage:
-    """从文件路径读取 QImage。"""
+    
     if not os.path.exists(image_path):
         raise FileNotFoundError(f"图片文件不存在: {image_path}")
 
@@ -21,19 +20,7 @@ def _load_qimage(image_path: str) -> QImage:
 
 
 def decode_qrcode(image_source: object) -> Optional[str]:
-    """
-    解码二维码图片，提取其中的链接。
-
-    参数:
-        image_source: 图片文件路径(str) 或 zxing-cpp 支持的图像对象
-            （如 QImage）
-
-    返回:
-        str: 解码出的数据；如果解码失败返回 None
-
-    示例:
-        >>> url = decode_qrcode("qrcode.png")
-    """
+    
     try:
         if isinstance(image_source, str):
             image = _load_qimage(image_source)

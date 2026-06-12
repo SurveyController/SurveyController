@@ -1,5 +1,3 @@
-"""设置页静态定义。"""
-
 from __future__ import annotations
 
 from dataclasses import dataclass

@@ -1,5 +1,3 @@
-"""异步运行槽位的代理与 UA 会话辅助。"""
-
 from __future__ import annotations
 
 import logging
@@ -16,7 +14,7 @@ from software.network.session_policy import (
 
 
 class AsyncProxySession:
-    """管理单个运行槽位当前轮次的代理和 UA。"""
+    
 
     def __init__(
         self,

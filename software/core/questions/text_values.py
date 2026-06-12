@@ -1,5 +1,3 @@
-"""纯 HTTP 运行时填空文本辅助函数。"""
-
 from __future__ import annotations
 
 from typing import Any, Optional, Sequence

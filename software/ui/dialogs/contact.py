@@ -1,5 +1,3 @@
-"""联系开发者对话框"""
-
 from typing import cast
 
 from PySide6.QtCore import Qt, QTimer
@@ -18,7 +16,7 @@ _DIALOG_PARENT_MARGIN = 64
 
 
 class ContactDialog(MessageBoxBase):
-    """联系开发者（Qt 版本）。包装 ContactForm，保留原有对话框入口。"""
+    
 
     def __init__(
         self,
@@ -92,7 +90,7 @@ class ContactDialog(MessageBoxBase):
         self.form.stop_status_polling()
 
     def _on_send_succeeded(self):
-        """发送成功后延迟关闭，让InfoBar有时间显示"""
+        
         QTimer.singleShot(2800, self.accept)
 
     def closeEvent(self, e: QCloseEvent) -> None:

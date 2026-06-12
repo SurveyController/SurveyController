@@ -1,5 +1,3 @@
-"""AI 批量预取运行时辅助。"""
-
 from __future__ import annotations
 
 import asyncio

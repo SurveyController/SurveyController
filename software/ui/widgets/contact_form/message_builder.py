@@ -1,5 +1,3 @@
-"""联系表单消息与请求字段拼装。"""
-
 from .constants import REQUEST_MESSAGE_TYPE
 
 

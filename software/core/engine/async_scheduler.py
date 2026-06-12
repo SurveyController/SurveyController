@@ -1,5 +1,3 @@
-"""Async scheduler for fill attempts."""
-
 from __future__ import annotations
 
 import asyncio
@@ -19,7 +17,7 @@ class _ScheduledToken:
 
 
 class AsyncScheduler:
-    """Bounded async attempt scheduler with delayed requeue."""
+    
 
     def __init__(self, *, concurrency: int) -> None:
         self._concurrency = max(1, int(concurrency or 1))

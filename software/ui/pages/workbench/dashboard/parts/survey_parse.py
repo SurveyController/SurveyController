@@ -1,5 +1,3 @@
-"""DashboardPage 问卷解析流程。"""
-
 from __future__ import annotations
 
 import logging
@@ -49,7 +47,7 @@ class DashboardSurveyParseMixin:
             )
             self._toast("请粘贴问卷链接", "warning")
             return
-        # 第一层检测：是否为受支持的问卷平台
+        
         if not is_supported_survey_url(url):
             log_action(
                 "UI",
@@ -62,7 +60,7 @@ class DashboardSurveyParseMixin:
             )
             self._toast("仅支持问卷星、腾讯问卷与 Credamo 见数链接", "error")
             return
-        # 第二层检测：是否为具体的问卷链接（排除问卷星投票/考试等）
+        
         provider = detect_survey_provider(url)
         if not (
             provider in {SURVEY_PROVIDER_QQ, SURVEY_PROVIDER_CREDAMO} or is_wjx_survey_url(url)
@@ -78,7 +76,7 @@ class DashboardSurveyParseMixin:
             )
             self._toast("链接不是可解析的公开问卷", "error")
             return
-        # 使用进度消息条显示解析状态，duration=-1 表示不自动关闭
+        
         self._toast("正在解析问卷...", "info", duration=-1, show_progress=True)
         self._open_wizard_after_parse = True
         self.controller.parse_survey(url)
@@ -92,9 +90,9 @@ class DashboardSurveyParseMixin:
         )
 
     def _on_survey_parsed(self, info: list, title: str):
-        """问卷解析成功后关闭进度条并记录结果。"""
+        
         _ = title
-        # 关闭进度消息条
+        
         if self._progress_infobar:
             try:
                 self._progress_infobar.close()
@@ -135,8 +133,8 @@ class DashboardSurveyParseMixin:
         )
 
     def _on_survey_parse_failed(self, error_msg: str):
-        """问卷解析失败的处理"""
-        # 关闭进度消息条
+        
+        
         if self._progress_infobar:
             try:
                 self._progress_infobar.close()
@@ -174,7 +172,7 @@ class DashboardSurveyParseMixin:
         elif "暂未开放" in text:
             self._toast(text, "warning", duration=2200)
         else:
-            # 显示解析失败消息
+            
             self._toast(
                 f"解析失败：{text or '请确认链接有效且网络正常'}",
                 "error",

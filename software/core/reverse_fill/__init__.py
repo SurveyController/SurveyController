@@ -1,5 +1,3 @@
-"""Reverse fill 轻量导出。"""
-
 from software.core.reverse_fill.runtime import create_reverse_fill_runtime_state, resolve_current_reverse_fill_answer
 from software.core.reverse_fill.schema import (
     REVERSE_FILL_FORMAT_AUTO,

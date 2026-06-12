@@ -1,5 +1,3 @@
-"""配置向导运行时状态。"""
-
 from __future__ import annotations
 
 from dataclasses import dataclass, field
@@ -44,7 +42,7 @@ class WizardRuntimeState:
 
 
 def bind_runtime_state(owner: Any, state: WizardRuntimeState) -> None:
-    """把运行时状态对象挂到对话框实例上，先保持旧属性兼容。"""
+    
 
     owner._runtime_state = state
     owner.slider_map = state.slider_map

@@ -1,5 +1,3 @@
-"""额度兑换弹窗"""
-
 from __future__ import annotations
 
 import logging
@@ -39,7 +37,7 @@ from software.ui.helpers.proxy_access import (
 
 
 class QuotaRedeemDialog(MessageBoxBase):
-    """额度兑换弹窗"""
+    
 
     _redeemFinished = Signal(bool, object)
     _SHOP_URL = "https://pay.ldxp.cn/shop/surveycontroller"
@@ -307,7 +305,7 @@ class QuotaRedeemDialog(MessageBoxBase):
 
 
 def load_shop_icon() -> QIcon | None:
-    """加载发卡店铺图标"""
+    
     icon_path = get_resource_path(QuotaRedeemDialog._SHOP_ICON_PATH)
     if not os.path.exists(icon_path):
         return None

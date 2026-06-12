@@ -1,5 +1,3 @@
-"""统一封装常用 InfoBar 行为。"""
-
 from __future__ import annotations
 
 from typing import Optional
@@ -19,7 +17,7 @@ def show_message_bar(
     position=InfoBarPosition.TOP,
     duration: int = 2000,
 ) -> InfoBar:
-    """按级别创建统一样式的消息条。"""
+    
     kind = str(level or "info").strip().lower()
     factory = {
         "success": InfoBar.success,
@@ -39,7 +37,7 @@ def show_message_bar(
 
 
 def replace_message_bar(current: Optional[InfoBar]) -> None:
-    """关闭旧消息条，避免重复堆叠。"""
+    
     if current is None:
         return
     if not isValid(current):
@@ -48,7 +46,7 @@ def replace_message_bar(current: Optional[InfoBar]) -> None:
 
 
 def reposition_message_bar(bar: Optional[InfoBar]) -> None:
-    """让 QFluentWidgets 原生管理器在布局稳定后重新计算位置。"""
+    
     if bar is None:
         return
 

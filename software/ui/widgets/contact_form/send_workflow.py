@@ -1,5 +1,3 @@
-"""联系表单发送前校验。"""
-
 import re
 from dataclasses import dataclass
 from decimal import Decimal

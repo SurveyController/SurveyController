@@ -1,5 +1,3 @@
-"""DashboardPage 启动运行与配置同步。"""
-
 from __future__ import annotations
 
 import logging
@@ -260,7 +258,7 @@ class DashboardRunActionsMixin:
         self.url_edit.setText(cfg.url)
         self.target_spin.setValue(max(1, int(cfg.target or 1)))
         self.thread_spin.setValue(max(1, int(cfg.threads or 1)))
-        # 阻塞信号避免加载配置时触发弹窗或多余同步
+        
         self.random_ip_cb.blockSignals(True)
         self.random_ip_cb.setChecked(bool(cfg.random_ip_enabled))
         self.random_ip_cb.blockSignals(False)

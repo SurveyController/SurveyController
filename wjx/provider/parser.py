@@ -1,5 +1,3 @@
-"""问卷星解析实现（provider 层）。"""
-
 from __future__ import annotations
 
 import asyncio
@@ -43,7 +41,7 @@ def _build_unparseable_page_summary(html: str) -> str:
     return text
 
 def is_paused_survey_page(html: str) -> bool:
-    """检测页面是否为“问卷已暂停，不能填写”提示页。"""
+    
     text = _normalize_html_text(html)
     if not text or "已暂停" not in text:
         return False
@@ -69,7 +67,7 @@ def _html_has_question_content(html: str) -> bool:
 
 
 def is_stopped_survey_page(html: str) -> bool:
-    """检测页面是否为“问卷停止作答”提示页。"""
+    
     text = _normalize_html_text(html)
     if not text or "停止状态" not in text or "无法作答" not in text:
         return False
@@ -95,7 +93,7 @@ def is_stopped_survey_page(html: str) -> bool:
 
 
 def is_enterprise_unavailable_survey_page(html: str) -> bool:
-    """检测企业标准版未购买或到期导致的不可填写提示。"""
+    
     text = _normalize_html_text(html)
     if not text:
         return False
@@ -110,7 +108,7 @@ def is_enterprise_unavailable_survey_page(html: str) -> bool:
 
 
 def build_not_open_survey_message(html: str) -> Optional[str]:
-    """构造"问卷暂未开放"提示文案。"""
+    
     text = _normalize_html_text(html)
     if not text:
         return None
@@ -120,7 +118,7 @@ def build_not_open_survey_message(html: str) -> Optional[str]:
 
     normalized = "".join(text.split())
     
-    # 保留所有关键词，但通过DOM检查优先避免误判
+    
     keywords = (
         "此问卷将于",
         "请到时再进入此页面进行填写",

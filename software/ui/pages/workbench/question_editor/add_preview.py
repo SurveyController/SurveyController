@@ -1,5 +1,3 @@
-"""AddPreviewMixin：配置预览区 UI 构建方法。"""
-
 import logging
 from typing import TYPE_CHECKING, Any
 
@@ -33,9 +31,9 @@ from .utils import _apply_label_color, _bind_slider_input
 
 
 class AddPreviewMixin:
-    """配置预览区 UI 构建方法。依赖 QuestionAddDialog 的 state 属性。"""
+    
 
-    # ------- 以下属性/方法由主类（QuestionAddDialog）提供 -------
+    
     if TYPE_CHECKING:
         _entry_index: int
         answer_count_label: Any

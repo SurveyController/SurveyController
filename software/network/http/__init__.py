@@ -1,5 +1,3 @@
-"""HTTP 客户端导出。"""
-
 from software.network.http.client import (
     ConnectionError,
     ConnectTimeout,

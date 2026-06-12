@@ -1,5 +1,3 @@
-"""联系表单专用输入控件。"""
-
 from typing import Callable, Optional
 
 from PySide6.QtWidgets import QWidget
@@ -13,7 +11,7 @@ from qfluentwidgets import (
 
 
 class PasteOnlyLineEdit(LineEdit):
-    """只显示 Fluent 风格“复制 / 粘贴 / 全选”菜单的 LineEdit。"""
+    
 
     def __init__(self, parent=None, on_paste: Optional[Callable[[QWidget], bool]] = None):
         super().__init__(parent)
@@ -39,7 +37,7 @@ class PasteOnlyLineEdit(LineEdit):
 
 
 class PasteOnlyPlainTextEdit(PlainTextEdit):
-    """只显示 Fluent 风格“复制 / 粘贴 / 全选”菜单的 PlainTextEdit。"""
+    
 
     def __init__(self, parent=None, on_paste: Optional[Callable[[QWidget], bool]] = None):
         super().__init__(parent)

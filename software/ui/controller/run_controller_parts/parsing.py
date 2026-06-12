@@ -1,5 +1,3 @@
-"""RunController 解析与题目默认配置相关逻辑。"""
-
 from __future__ import annotations
 
 import concurrent.futures
@@ -36,9 +34,9 @@ class RunControllerParsingMixin:
 
         def _dispatch_to_ui_async(self, callback: Any) -> None: ...
 
-    # -------------------- Parsing --------------------
+    
     def parse_survey(self, url: str):
-        """通过异步引擎解析问卷结构。"""
+        
         if not url:
             self.surveyParseFailed.emit("请填写问卷链接")
             return

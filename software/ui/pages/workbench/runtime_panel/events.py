@@ -1,5 +1,3 @@
-"""运行参数页事件绑定。"""
-
 from __future__ import annotations
 
 from typing import Any

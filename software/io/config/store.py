@@ -1,4 +1,3 @@
-"""配置文件存储读写。"""
 from __future__ import annotations
 
 import json
@@ -109,7 +108,7 @@ def _strip_json_comments(raw_text: str) -> str:
 
 
 def load_config(path: Optional[str] = None, *, strict: bool = False) -> RuntimeConfig:
-    """读取配置。strict=True 时读取失败直接抛错。"""
+    
     config_path = os.fspath(path or _default_config_path())
     if not os.path.exists(config_path):
         return RuntimeConfig()
@@ -155,7 +154,7 @@ def load_config(path: Optional[str] = None, *, strict: bool = False) -> RuntimeC
 
 
 def save_config(config: RuntimeConfig, path: Optional[str] = None) -> str:
-    """保存配置。"""
+    
     config_path = os.fspath(path or _default_config_path())
     os.makedirs(os.path.dirname(config_path) or ".", exist_ok=True)
     payload = serialize_runtime_config(config)

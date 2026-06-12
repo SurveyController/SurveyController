@@ -23,7 +23,7 @@ class BoolState:
 
 
 class RunRuntimePort(RuntimeControlPort):
-    """运行服务传给内核的中性控制端口。"""
+    
 
     def __init__(
         self,

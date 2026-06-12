@@ -1,5 +1,3 @@
-"""新增题目弹窗：基础信息 + 题目配置预览。"""
-
 from typing import List, Optional
 
 from PySide6.QtWidgets import (
@@ -38,7 +36,7 @@ from .add_preview import AddPreviewMixin
 
 
 class QuestionAddDialog(AddPreviewMixin, MessageBoxBase):
-    """新增题目弹窗：基础信息 + 题目配置预览。"""
+    
 
     def __init__(self, entries: List[QuestionEntry], parent=None):
         resolved_parent = resolve_mask_dialog_parent(parent)
@@ -79,7 +77,7 @@ class QuestionAddDialog(AddPreviewMixin, MessageBoxBase):
         base_layout.setSpacing(10)
         base_layout.addWidget(SubtitleLabel("基础信息", base_card))
 
-        # 题目类型
+        
         type_row_widget = QWidget(base_card)
         type_row = QHBoxLayout(type_row_widget)
         type_row.setContentsMargins(0, 0, 0, 0)
@@ -92,7 +90,7 @@ class QuestionAddDialog(AddPreviewMixin, MessageBoxBase):
         type_row.addWidget(self.type_combo, 1)
         base_layout.addWidget(type_row_widget)
 
-        # 填写策略
+        
         self.strategy_row_widget = QWidget(base_card)
         strategy_row = QHBoxLayout(self.strategy_row_widget)
         strategy_row.setContentsMargins(0, 0, 0, 0)
@@ -117,7 +115,7 @@ class QuestionAddDialog(AddPreviewMixin, MessageBoxBase):
         option_row.addWidget(self.option_spin, 1)
         base_layout.addWidget(self.option_row_widget)
 
-        # 填空题答案数量（只读）
+        
         self.answer_count_widget = QWidget(base_card)
         answer_count_layout = QHBoxLayout(self.answer_count_widget)
         answer_count_layout.setContentsMargins(0, 0, 0, 0)
@@ -128,7 +126,7 @@ class QuestionAddDialog(AddPreviewMixin, MessageBoxBase):
         answer_count_layout.addWidget(self.answer_count_label, 1)
         base_layout.addWidget(self.answer_count_widget)
 
-        # 矩阵行数
+        
         self.row_count_widget = QWidget(base_card)
         row_count_layout = QHBoxLayout(self.row_count_widget)
         row_count_layout.setContentsMargins(0, 0, 0, 0)
@@ -140,7 +138,7 @@ class QuestionAddDialog(AddPreviewMixin, MessageBoxBase):
         row_count_layout.addWidget(self.row_count_spin, 1)
         base_layout.addWidget(self.row_count_widget)
 
-        # 矩阵策略
+        
         self.matrix_strategy_widget = QWidget(base_card)
         matrix_strategy_layout = QHBoxLayout(self.matrix_strategy_widget)
         matrix_strategy_layout.setContentsMargins(0, 0, 0, 0)

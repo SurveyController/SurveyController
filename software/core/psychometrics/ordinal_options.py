@@ -1,5 +1,3 @@
-"""量表型选项识别工具。"""
-
 from __future__ import annotations
 
 import re

@@ -1,4 +1,3 @@
-"""日志配置与工具函数 - 初始化日志系统、级别控制、缓冲区管理"""
 import atexit
 import logging
 import os
@@ -56,7 +55,7 @@ _LOG_LISTENER_ID = 0
 
 
 def _should_filter_noise(message: str) -> bool:
-    """过滤第三方库广告、运行期噪音和无意义空行。"""
+    
     if message is None:
         return True
     text = str(message)
@@ -68,7 +67,7 @@ def _should_filter_noise(message: str) -> bool:
 
 
 def _safe_internal_log(message: str, exc: Optional[BaseException] = None) -> None:
-    """在日志系统内部安全输出，避免递归调用 logging。"""
+    
     try:
         ORIGINAL_STDERR.write(f"[LogInternal] {message}\n")
         if exc is not None:
@@ -88,14 +87,14 @@ def log_suppressed_exception(
     *,
     level: int = logging.INFO,
 ) -> None:
-    """记录被吞掉的异常，默认按 INFO 级别输出。"""
+    
     try:
         if exc is None:
             logging.log(level, "[Suppressed] %s", context)
         else:
             logging.log(level, "[Suppressed] %s: %s", context, exc, exc_info=True)
     except Exception as inner_exc:
-        # 记录日志失败不应影响主流程
+        
         _safe_internal_log("log_suppressed_exception failed", inner_exc)
 
 
@@ -105,7 +104,7 @@ def log_deduped_message(
     *,
     level: int = logging.INFO,
 ) -> bool:
-    """同一 key 下只记录内容发生变化的日志，避免后台任务刷屏。"""
+    
     normalized_key = str(key or "").strip()
     normalized_message = str(message or "").strip()
     if not normalized_key or not normalized_message:
@@ -123,7 +122,7 @@ def log_deduped_message(
 
 
 def reset_deduped_log_message(key: str) -> None:
-    """清空去重状态，让后续同类问题重新输出一次。"""
+    
     normalized_key = str(key or "").strip()
     if not normalized_key:
         return
@@ -184,46 +183,39 @@ class LogBufferEntry:
 
 
 class LogBufferHandler(logging.Handler):
-    """完全异步的日志缓冲处理器
+    
 
-    优化策略：
-    1. 使用无锁队列（queue.Queue）接收日志
-    2. 后台线程负责处理日志（格式化、分类、存储）
-    3. 主线程写入日志时完全无阻塞
-    4. 读取时使用版本号检测变化，避免无效拷贝
-    """
-
-    # ANSI 转义序列正则表达式
+    
     _ANSI_ESCAPE_PATTERN = re.compile(r'\x1b\[[0-9;]*m')
 
     def __init__(self, capacity: int = LOG_BUFFER_CAPACITY):
         super().__init__()
         self.capacity = capacity
 
-        # 使用队列接收日志，避免业务线程做格式化和 UI 相关工作
+        
         self._queue: queue.Queue = queue.Queue(maxsize=max(1000, int(capacity or 0) * 4))
 
-        # 处理后的日志记录（只在后台线程中修改）
+        
         self._records: Deque[LogBufferEntry] = deque(maxlen=capacity if capacity else None)
         self._records_lock = threading.RLock()
 
-        # 版本号：每次 _records 变化时递增，用于检测变化
+        
         self._version = 0
         self._version_lock = threading.Lock()
         self._listeners: dict[int, Callable[[int], None]] = {}
         self._listeners_lock = threading.Lock()
 
-        # 后台处理线程
+        
         self._worker_thread: Optional[threading.Thread] = None
         self._stop_event = threading.Event()
 
         self.setFormatter(logging.Formatter(LOG_FORMAT, datefmt="%Y-%m-%d %H:%M:%S"))
 
-        # 启动后台处理线程
+        
         self._start_worker()
 
     def _start_worker(self):
-        """启动后台日志处理线程"""
+        
         if self._worker_thread and self._worker_thread.is_alive():
             return
 
@@ -236,17 +228,17 @@ class LogBufferHandler(logging.Handler):
         self._worker_thread.start()
 
     def _worker_loop(self):
-        """后台线程：处理日志队列"""
+        
         while not self._stop_event.is_set():
             try:
-                # 批量处理：一次最多处理 100 条日志
+                
                 batch = []
                 try:
-                    # 阻塞等待第一条日志（最多 0.1 秒）
+                    
                     record = self._queue.get(timeout=0.1)
                     batch.append(record)
 
-                    # 非阻塞获取更多日志（批量处理）
+                    
                     while len(batch) < 100:
                         try:
                             record = self._queue.get_nowait()
@@ -256,74 +248,74 @@ class LogBufferHandler(logging.Handler):
                 except queue.Empty:
                     continue
 
-                # 处理批量日志
+                
                 for record in batch:
                     self._process_record(record)
 
-                # 更新版本号（表示有新日志）
+                
                 with self._version_lock:
                     self._version += 1
                     current_version = self._version
                 self._notify_listeners(current_version)
 
             except Exception as exc:
-                # 后台线程不应崩溃
+                
                 _safe_internal_log("LogBufferHandler worker loop failed", exc)
 
     def _process_record(self, record: logging.LogRecord):
-        """处理单条日志记录（在后台线程中执行）"""
+        
         try:
             original_level = record.levelname
             message = self.format(record)
 
-            # 过滤包含敏感信息的日志
+            
             if self._should_filter_sensitive(message):
                 return
-            # 过滤无意义噪声日志（广告、空行）
+            
             if _should_filter_noise(message):
                 return
 
-            # 清理 ANSI 转义序列
+            
             message = self._strip_ansi_codes(message)
 
-            # 判断日志类别
+            
             category = self._determine_category(record, message)
 
-            # 应用类别标签
+            
             display_text = self._apply_category_label(message, original_level, category)
 
-            # 构造日志条目并添加到缓冲区
+            
             entry = LogBufferEntry(text=display_text, category=category)
             with self._records_lock:
                 self._records.append(entry)
 
         except Exception as exc:
-            # 处理失败不应影响其他日志
+            
             _safe_internal_log("LogBufferHandler process_record failed", exc)
 
     def emit(self, record: logging.LogRecord):
-        """接收日志记录（完全无阻塞）"""
+        
         try:
-            # 直接放入队列，不做任何处理
+            
             self._queue.put_nowait(record)
         except queue.Full:
-            # 队列满时丢弃日志（极端情况）
+            
             _safe_internal_log("LogBufferHandler queue full, dropping log")
         except Exception:
             self.handleError(record)
 
     def get_records(self, _try_lock: bool = False) -> List[LogBufferEntry]:
-        """获取日志记录"""
+        
         with self._records_lock:
             return list(self._records)
 
     def get_version(self) -> int:
-        """获取当前版本号（用于检测变化）"""
+        
         with self._version_lock:
             return self._version
 
     def add_listener(self, listener: Callable[[int], None]) -> int:
-        """注册日志变化监听。监听函数必须自己切回 UI 线程。"""
+        
         global _LOG_LISTENER_ID
         if not callable(listener):
             return 0
@@ -349,16 +341,16 @@ class LogBufferHandler(logging.Handler):
                 _safe_internal_log("LogBufferHandler listener failed", exc)
 
     def stop(self):
-        """停止后台处理线程"""
+        
         self._stop_event.set()
         if self._worker_thread and self._worker_thread.is_alive():
             self._worker_thread.join(timeout=1.0)
 
     def flush_remaining(self):
-        """刷新队列中剩余的日志（在关闭前调用）"""
+        
         try:
             processed = False
-            # 处理队列中剩余的所有日志
+            
             while not self._queue.empty():
                 try:
                     record = self._queue.get_nowait()
@@ -376,14 +368,14 @@ class LogBufferHandler(logging.Handler):
 
     @staticmethod
     def _strip_ansi_codes(text: str) -> str:
-        """移除 ANSI 转义序列"""
+        
         if not text:
             return text
         return LogBufferHandler._ANSI_ESCAPE_PATTERN.sub('', text)
 
     @staticmethod
     def _should_filter_sensitive(message: str) -> bool:
-        """检查是否应过滤包含敏感信息的日志"""
+        
         if not message:
             return False
         sensitive_patterns = [
@@ -469,7 +461,7 @@ class LogBufferHandler(logging.Handler):
 
 
 class AsyncFileHandler(logging.Handler):
-    """后台批量写文件，避免日志落盘拖慢业务线程。"""
+    
 
     _STOP = object()
 
@@ -547,7 +539,7 @@ class AsyncFileHandler(logging.Handler):
 
 
 LOG_BUFFER_HANDLER = LogBufferHandler()
-# 立即把缓冲处理器注册到根日志记录器，保证启动前的日志也能被收集
+
 _root_logger = logging.getLogger()
 if not any(isinstance(h, LogBufferHandler) for h in _root_logger.handlers):
     _root_logger.addHandler(LOG_BUFFER_HANDLER)
@@ -624,7 +616,7 @@ def setup_logging():
         root_logger.addHandler(LOG_BUFFER_HANDLER)
     _ensure_session_log_handler(root_logger)
 
-    # HTTP 客户端在 INFO 会记录每个成功请求，日志页会被无诊断价值的 2xx 请求刷屏。
+    
     for noisy_logger in ("urllib3", "httpx", "httpcore"):
         logging.getLogger(noisy_logger).setLevel(logging.WARNING)
 
@@ -648,16 +640,13 @@ def setup_logging():
 
 
 def register_popup_handler(handler: Optional[Callable[[str, str, str], Any]]) -> None:
-    """Register a UI callback used to surface popup messages in a GUI-friendly way."""
+    
     global _popup_handler
     _popup_handler = handler
 
 
 def _dispatch_popup(kind: str, title: str, message: str, default: Any = None) -> Any:
-    """
-    Send popup requests to the registered handler. Falls back to logging only
-    when no UI handler is available to keep engine code decoupled from GUI/Qt.
-    """
+    
     logging.log(
         logging.INFO if kind in {"info", "confirm"} else logging.ERROR if kind == "error" else logging.WARNING,
         f"[Popup {kind.upper()}] {title} | {message}",
@@ -665,7 +654,7 @@ def _dispatch_popup(kind: str, title: str, message: str, default: Any = None) ->
     if _popup_handler:
         try:
             return _popup_handler(kind, title, message)
-        except Exception:  # pragma: no cover - UI handler errors shouldn't crash engine
+        except Exception:  
             logging.info("popup handler failed", exc_info=True)
     return default
 
@@ -685,7 +674,7 @@ def _ensure_logs_dir(runtime_directory: str) -> str:
 
 
 def get_auto_save_log_settings() -> tuple[bool, int]:
-    """读取日志自动保存开关与保留份数。"""
+    
     settings = app_settings()
     enabled = get_bool_from_qsettings(settings.value(AUTO_SAVE_LOGS_SETTING_KEY), DEFAULT_AUTO_SAVE_LOGS)
     max_keep = max(AUTO_SAVE_LOG_RETENTION_OPTIONS) if AUTO_SAVE_LOG_RETENTION_OPTIONS else DEFAULT_AUTO_SAVE_LOG_RETENTION_COUNT
@@ -699,7 +688,7 @@ def get_auto_save_log_settings() -> tuple[bool, int]:
 
 
 def prune_session_log_files(runtime_directory: str, keep_count: int) -> int:
-    """只保留最近 keep_count 份自动会话日志。"""
+    
     logs_dir = _ensure_logs_dir(runtime_directory)
     keep_count = max(1, int(keep_count))
     candidates: list[tuple[float, str]] = []
@@ -726,7 +715,7 @@ def prune_session_log_files(runtime_directory: str, keep_count: int) -> int:
 
 
 def finalize_session_log_persistence(runtime_directory: str) -> None:
-    """按用户设置决定是否保留本次会话日志，并清理历史文件。"""
+    
     global _DELETE_SESSION_LOG_ON_SHUTDOWN
 
     enabled, keep_count = get_auto_save_log_settings()
@@ -808,39 +797,39 @@ def export_full_log_to_file(
 
 
 def log_popup_error(title: str, message: str, **kwargs: Any):
-    """Error popup routed to the active UI handler (if any)."""
+    
     _ = kwargs
     return _dispatch_popup("error", title, message, default=False)
 
 
 def log_popup_warning(title: str, message: str, **kwargs: Any):
-    """Warning popup routed to the active UI handler (if any)."""
+    
     _ = kwargs
     return _dispatch_popup("warning", title, message, default=True)
 
 
 def log_popup_confirm(title: str, message: str, **kwargs: Any) -> bool:
-    """Confirmation dialog routed to the active UI handler (if any)."""
+    
     _ = kwargs
     return bool(_dispatch_popup("confirm", title, message, default=False))
 
 
 def shutdown_logging():
-    """优雅关闭日志系统（在程序退出前调用）"""
+    
     try:
         session_log_path = str(_SESSION_LOG_PATH or "")
-        # 1. 刷新剩余日志
+        
         LOG_BUFFER_HANDLER.flush_remaining()
         flush_session_log_file()
 
-        # 2. 停止后台线程
+        
         LOG_BUFFER_HANDLER.stop()
 
-        # 3. 恢复标准流（避免守护线程在解释器关闭时写入）
+        
         sys.stdout = ORIGINAL_STDOUT
         sys.stderr = ORIGINAL_STDERR
 
-        # 4. 移除所有 handler（避免在解释器关闭时触发）
+        
         root_logger = logging.getLogger()
         for handler in root_logger.handlers[:]:
             try:

@@ -1,5 +1,3 @@
-"""QFluentWidgets 稳定性补丁。"""
-
 from __future__ import annotations
 
 from typing import Any, cast
@@ -19,7 +17,7 @@ from shiboken6 import isValid
 
 
 def install_qfluentwidgets_animation_guards() -> None:
-    """为已知的 QFluentWidgets 动画/消息条兼容问题打补丁。"""
+    
     try:
         from qfluentwidgets import IndeterminateProgressBar
         from qfluentwidgets.components.widgets.info_bar import InfoBarManager
@@ -71,7 +69,7 @@ def install_qfluentwidgets_animation_guards() -> None:
 
 
 def _install_infobar_manager_guards(info_bar_manager_cls) -> None:
-    """为 InfoBar 管理器补充已销毁对象保护，避免双重关闭时崩溃。"""
+    
     def _is_alive(obj) -> bool:
         if obj is None:
             return False
@@ -284,7 +282,7 @@ def _install_infobar_manager_guards(info_bar_manager_cls) -> None:
 
 
 def _install_top_position_guard(info_bar_manager_cls, prune_invalid_bars) -> None:
-    """修正 TOP InfoBar 偶发按左上角初始尺寸定位的问题。"""
+    
     try:
         from qfluentwidgets import InfoBarPosition
 
@@ -334,7 +332,7 @@ def _install_top_position_guard(info_bar_manager_cls, prune_invalid_bars) -> Non
 
 
 def set_indeterminate_progress_ring_active(ring: Any, active: bool) -> None:
-    """统一控制 ProgressRing 动画状态，避免隐藏控件还在后台乱转。"""
+    
     if ring is None:
         return
 
@@ -367,7 +365,7 @@ def set_indeterminate_progress_ring_active(ring: Any, active: bool) -> None:
 
 
 def resolve_mask_dialog_parent(parent: QWidget | None) -> QWidget:
-    """为 MessageBoxBase 提供可靠的父窗口，避免空父窗口直接崩。"""
+    
     if parent is not None and parent.width() > 0 and parent.height() > 0:
         return parent
 

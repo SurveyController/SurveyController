@@ -1,5 +1,3 @@
-"""联系表单里的额度申请规则。"""
-
 from decimal import Decimal, InvalidOperation
 from typing import Optional
 

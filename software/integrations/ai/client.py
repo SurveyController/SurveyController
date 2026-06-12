@@ -1,6 +1,3 @@
-# -*- coding: utf-8 -*-
-"""AI 服务门面 - 对外保持稳定入口。"""
-
 from __future__ import annotations
 
 import logging
@@ -63,7 +60,7 @@ async def agenerate_answer(
     blank_count: Optional[int] = None,
     ctx: ExecutionState | None = None,
 ) -> Union[str, List[str]]:
-    """根据问题标题异步生成答案。"""
+    
     config = get_ai_settings()
     readiness_error = get_ai_readiness_error(config)
     if readiness_error:
@@ -121,7 +118,7 @@ async def agenerate_answer(
 
 
 async def atest_connection() -> str:
-    """异步测试 AI 连接。"""
+    
     try:
         ai_mode = _normalize_ai_mode(get_ai_settings().get("ai_mode"))
         logger.info("AI 连接测试开始 | mode=%s", ai_mode)

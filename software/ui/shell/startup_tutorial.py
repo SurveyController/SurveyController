@@ -1,5 +1,3 @@
-"""启动后的教程提示。"""
-
 from __future__ import annotations
 
 from PySide6.QtCore import Qt, Signal
@@ -20,7 +18,7 @@ STARTUP_TUTORIAL_HINT_SEEN_SETTING_KEY = "startup_tutorial_hint_seen"
 
 
 class StartupTutorialFlyoutView(FlyoutViewBase):
-    """首次启动教程入口提示。"""
+    
 
     openRequested = Signal()
     dismissed = Signal()

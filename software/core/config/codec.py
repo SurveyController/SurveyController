@@ -1,4 +1,3 @@
-"""运行时配置序列化与校验逻辑。"""
 from __future__ import annotations
 
 import copy
@@ -85,7 +84,7 @@ def _normalize_user_agent_ratios(raw_ratios: Any) -> Dict[str, int]:
 
 
 def _select_user_agent_from_ratios(ratios: Dict[str, int]) -> Tuple[Optional[str], Optional[str]]:
-    """根据设备类型占比选择 User-Agent。"""
+    
     devices: List[str] = []
     weights: List[int] = []
     for device_type, ua_keys in _USER_AGENT_DEVICE_TO_PRESET_KEYS.items():
@@ -353,7 +352,7 @@ def build_runtime_config_snapshot(
 
 
 def normalize_runtime_config_payload(raw: Dict[str, Any]) -> RuntimeConfig:
-    """将磁盘载荷规整为 RuntimeConfig。"""
+    
 
     def _as_int(value: Any, default: int = 0) -> int:
         try:

@@ -1,5 +1,3 @@
-"""IP 使用页图表视图。"""
-
 from __future__ import annotations
 
 from PySide6.QtCore import QPointF, QRectF

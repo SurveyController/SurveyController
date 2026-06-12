@@ -1,5 +1,3 @@
-"""异步运行时的停止信号等待工具。"""
-
 from __future__ import annotations
 
 import asyncio

@@ -1,4 +1,3 @@
-"""随机 IP 会话数值与状态归一化。"""
 from __future__ import annotations
 
 import logging

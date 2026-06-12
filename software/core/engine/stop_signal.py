@@ -1,5 +1,3 @@
-"""线程/协程共用的停止信号协议。"""
-
 from __future__ import annotations
 
 from typing import Optional, Protocol

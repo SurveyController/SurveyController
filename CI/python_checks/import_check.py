@@ -1,6 +1,3 @@
-#!/usr/bin/env python
-"""模块导入全检。"""
-
 from __future__ import annotations
 
 from CI.python_checks.common import (

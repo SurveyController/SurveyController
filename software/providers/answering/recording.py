@@ -1,5 +1,3 @@
-"""Shared answer recording helpers."""
-
 from __future__ import annotations
 
 from collections.abc import Callable

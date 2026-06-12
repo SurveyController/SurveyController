@@ -1,5 +1,3 @@
-"""Shared clipboard and drag/drop QR-code handling for survey entry areas."""
-
 from __future__ import annotations
 
 import logging
@@ -59,7 +57,7 @@ def _decode_windows_dib(raw_data: bytes) -> Optional[QImage]:
 
 
 class SurveyClipboardMixin:
-    """Handle survey QR-code drag/drop, paste and clipboard parsing."""
+    
 
     if TYPE_CHECKING:
         from typing import Any

@@ -49,12 +49,12 @@ class DashboardPage(
     DashboardProgressMixin,
     QWidget,
 ):
-    """主页：左侧配置 + 底部状态，不再包含日志。"""
+    
 
     thread_slider: Any
 
-    _ipBalanceChecked = Signal(float)  # 发送剩余IP数信号
-    _randomIpHeartbeatUpdated = Signal(object)  # 发送随机IP服务状态信号
+    _ipBalanceChecked = Signal(float)  
+    _randomIpHeartbeatUpdated = Signal(object)  
     def __init__(
         self,
         controller: RunController,
@@ -81,7 +81,7 @@ class DashboardPage(
         self._ip_benefit_infobar: Optional[FullWidthInfoBar] = None
         self._ip_low_infobar_dismissed = False
         self._ip_low_threshold = 5000
-        self._api_balance_cache: Optional[float] = None  # 缓存 API 余额
+        self._api_balance_cache: Optional[float] = None  
         self._ip_balance_fetch_lock = threading.Lock()
         self._ip_balance_fetching = False
         self._last_ip_balance_fetch_ts = 0.0

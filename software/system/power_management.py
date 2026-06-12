@@ -1,5 +1,3 @@
-"""运行期间的系统电源管理。"""
-
 from __future__ import annotations
 
 import ctypes
@@ -17,7 +15,7 @@ def _kernel32() -> Any:
 
 
 class SystemSleepBlocker:
-    """在任务执行期间阻止系统自动休眠。"""
+    
 
     def __init__(self) -> None:
         self._active = False

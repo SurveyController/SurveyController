@@ -1,5 +1,3 @@
-"""Velopack 增量更新端到端测试入口。"""
-
 from __future__ import annotations
 
 import argparse

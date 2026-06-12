@@ -1,5 +1,3 @@
-"""ContactForm 发送流程与收尾逻辑。"""
-
 from __future__ import annotations
 
 import logging

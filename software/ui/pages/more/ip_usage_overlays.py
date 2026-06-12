@@ -1,5 +1,3 @@
-"""IP 使用页覆盖层组件。"""
-
 from __future__ import annotations
 
 import math

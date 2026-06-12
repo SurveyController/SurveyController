@@ -1,4 +1,3 @@
-"""问卷星 HTML 解析模块 - 从 HTML 解析问卷结构。"""
 from typing import Any, Dict, List, Optional
 
 from software.providers.contracts import (
@@ -197,7 +196,7 @@ def _question_div_has_question_ancestor(question_div, fieldset) -> bool:
 
 
 def parse_survey_questions_from_html(html: str) -> List[Dict[str, Any]]:
-    """从 HTML 解析问卷题目列表"""
+    
     if not BeautifulSoup:
         raise RuntimeError("BeautifulSoup is required for HTML parsing")
     soup = BeautifulSoup(html, "html.parser")
@@ -265,7 +264,7 @@ def parse_survey_questions_from_html(html: str) -> List[Dict[str, Any]]:
                     has_meaningful = any(_text_looks_meaningful(text) for text in option_texts)
                     if not option_texts or not has_meaningful:
                         option_texts = [str(i + 1) for i in range(option_count)]
-            # 量表题（type_code="5"）如果不是评价题，需要提取数字刻度选项文本
+            
             elif type_code == "5":
                 scale_texts = _extract_rating_option_texts(question_div)
                 if scale_texts:

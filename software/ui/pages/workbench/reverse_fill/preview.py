@@ -1,5 +1,3 @@
-"""ReverseFillPage 预检与预览刷新。"""
-
 from __future__ import annotations
 
 from typing import Any

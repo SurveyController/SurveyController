@@ -1,5 +1,3 @@
-"""题目向导内部共享 UI 小工具。"""
-
 from __future__ import annotations
 
 from PySide6.QtGui import QColor

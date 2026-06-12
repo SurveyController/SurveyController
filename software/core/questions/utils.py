@@ -1,4 +1,3 @@
-"""题型处理共享辅助函数"""
 import json
 import math
 import os
@@ -49,7 +48,7 @@ def _should_treat_question_as_text_like(
 
 
 def weighted_index(probabilities: List[float]) -> int:
-    """根据权重列表随机选择索引"""
+    
 
     if not probabilities:
         raise ValueError("probabilities cannot be empty")
@@ -76,14 +75,14 @@ def weighted_index(probabilities: List[float]) -> int:
             continue
         running += weight
         last_positive_index = index
-        # 只允许命中正权重区间，避免 pivot == 0 时误落到前导 0 权重选项。
+        
         if pivot < running:
             return index
     return last_positive_index
 
 
 def normalize_probabilities(values: List[float]) -> List[float]:
-    """归一化概率列表"""
+    
     if not values:
         raise ValueError("概率列表不能为空")
     total = sum(values)
@@ -93,19 +92,19 @@ def normalize_probabilities(values: List[float]) -> List[float]:
 
 
 def generate_random_chinese_name() -> str:
-    """生成随机中文姓名，如果存在画像则根据性别选择名字风格"""
+    
     surname_pool = [
         "张", "王", "李", "赵", "陈", "杨", "刘", "黄", "周", "吴", "徐", "孙", "马", "朱", "胡", "林",
         "郭", "何", "高", "罗", "郑", "梁", "谢", "宋", "唐", "韩", "曹", "许", "邓", "冯",
     ]
-    # 偏男性化的名字用字
+    
     male_given_pool = "伟俊涛强磊刚凯鹏鑫宇浩瑞博杰宁豪轩皓浩宇子豪思远家豪文博宇航志强明浩志伟文涛梓豪志鹏伟豪君豪承泽"
-    # 偏女性化的名字用字
+    
     female_given_pool = "婷雅静怡欣萱琳玲芳颖慧敏雪晶莉倩蕾佳媛茜悦岚蓉瑶诗梦菲琪韵彤璐"
-    # 中性用字
+    
     neutral_given_pool = "嘉明华建安晨泽文超洋"
 
-    # 尝试从画像获取性别
+    
     gender = None
     try:
         from software.core.persona.generator import get_current_persona
@@ -130,7 +129,7 @@ def generate_random_chinese_name() -> str:
 
 
 def generate_random_mobile() -> str:
-    """生成随机手机号"""
+    
     prefixes = (
         "130", "131", "132", "133", "134", "135", "136", "137", "138", "139",
         "147", "150", "151", "152", "153", "155", "156", "157", "158", "159",
@@ -143,7 +142,7 @@ def generate_random_mobile() -> str:
 
 @lru_cache(maxsize=1)
 def _load_id_card_area_codes() -> Tuple[str, ...]:
-    """加载可用于随机身份证的 6 位行政区划代码。"""
+    
     asset_path = get_resource_path(os.path.join("software", "assets", "area_codes_2022.json"))
     fallback_codes = ("110100", "310100", "440100", "330100", "510100")
     try:
@@ -179,7 +178,7 @@ def _resolve_current_persona() -> Any:
 
 
 def _choose_random_birth_date_for_id_card() -> date:
-    """根据当前画像生成更像真人填写习惯的出生日期。"""
+    
     today = date.today()
     persona = _resolve_current_persona()
     age_range_map = {
@@ -197,7 +196,7 @@ def _choose_random_birth_date_for_id_card() -> date:
 
 
 def _choose_id_card_sequence_tail() -> str:
-    """生成身份证顺序码，尽量与当前画像性别保持一致。"""
+    
     persona = _resolve_current_persona()
     gender = str(getattr(persona, "gender", "") or "").strip()
     seq_prefix = random.randint(0, 99)
@@ -216,7 +215,7 @@ def _calculate_id_card_checksum(first_seventeen_digits: str) -> str:
 
 
 def generate_random_id_card() -> str:
-    """生成随机身份证号，仅保证格式和校验位算法合法，不对应真实身份。"""
+    
     area_code = random.choice(_load_id_card_area_codes())
     birth_date = _choose_random_birth_date_for_id_card()
     sequence_tail = _choose_id_card_sequence_tail()
@@ -225,7 +224,7 @@ def generate_random_id_card() -> str:
 
 
 def generate_random_generic_text() -> str:
-    """生成随机通用文本"""
+    
     samples = [
         "已填写", "同上", "无", "OK", "收到", "确认", "正常", "通过", "测试数据", "自动填写",
     ]
@@ -235,7 +234,7 @@ def generate_random_generic_text() -> str:
 
 
 def try_parse_random_int_range(raw: Any) -> Optional[Tuple[int, int]]:
-    """尝试解析随机整数范围，失败时返回 None。"""
+    
 
     def _coerce_int(value: Any) -> Optional[int]:
         try:
@@ -266,7 +265,7 @@ def try_parse_random_int_range(raw: Any) -> Optional[Tuple[int, int]]:
 
 
 def normalize_random_int_range(raw: Any) -> Tuple[int, int]:
-    """将整数范围规整为有序的 (min, max)。"""
+    
     parsed = try_parse_random_int_range(raw)
     if parsed is None:
         raise ValueError("随机整数范围无效")
@@ -274,7 +273,7 @@ def normalize_random_int_range(raw: Any) -> Tuple[int, int]:
 
 
 def serialize_random_int_range(raw: Any) -> List[int]:
-    """将整数范围序列化为 [min, max] 结构。"""
+    
     parsed = try_parse_random_int_range(raw)
     if parsed is None:
         return []
@@ -283,7 +282,7 @@ def serialize_random_int_range(raw: Any) -> List[int]:
 
 
 def describe_random_int_range(raw: Any) -> str:
-    """输出统一的整数范围描述文本。"""
+    
     parsed = try_parse_random_int_range(raw)
     if parsed is None:
         return "未设置"
@@ -292,13 +291,13 @@ def describe_random_int_range(raw: Any) -> str:
 
 
 def build_random_int_token(min_value: Any, max_value: Any) -> str:
-    """构造随机整数动态令牌。"""
+    
     normalized_min, normalized_max = normalize_random_int_range([min_value, max_value])
     return f"{RANDOM_INT_TOKEN_PREFIX}{normalized_min}:{normalized_max}"
 
 
 def parse_random_int_token(token: Any) -> Optional[Tuple[int, int]]:
-    """从动态令牌中提取随机整数范围。"""
+    
     if token is None:
         return None
     text = str(token).strip()
@@ -312,13 +311,13 @@ def parse_random_int_token(token: Any) -> Optional[Tuple[int, int]]:
 
 
 def generate_random_integer_text(min_value: Any, max_value: Any) -> str:
-    """生成指定闭区间内的随机整数文本。"""
+    
     normalized_min, normalized_max = normalize_random_int_range([min_value, max_value])
     return str(random.randint(normalized_min, normalized_max))
 
 
 def resolve_dynamic_text_token(token: Any) -> str:
-    """解析动态文本令牌"""
+    
     if token is None:
         return DEFAULT_FILL_TEXT
     text = str(token).strip()
@@ -337,7 +336,7 @@ def resolve_dynamic_text_token(token: Any) -> str:
 
 
 def extract_text_from_element(element) -> str:
-    """从元素提取文本内容"""
+    
     try:
         text = element.text or ""
     except Exception:
@@ -353,7 +352,7 @@ def extract_text_from_element(element) -> str:
 
 
 def get_fill_text_from_config(fill_entries: Optional[Sequence[Optional[str]]], option_index: int) -> Optional[str]:
-    """从配置获取填充文本"""
+    
     if not fill_entries or option_index < 0 or option_index >= len(fill_entries):
         return None
     value = fill_entries[option_index]
@@ -364,14 +363,14 @@ def get_fill_text_from_config(fill_entries: Optional[Sequence[Optional[str]]], o
 
 
 def normalize_single_like_prob_config(prob_config: Union[List[float], int, float, None], option_count: int) -> Union[List[float], int]:
-    """将单选/下拉/量表的权重长度对齐到选项数"""
+    
     if prob_config == -1 or prob_config is None:
         return -1
     return normalize_droplist_probs(prob_config, option_count)
 
 
 def normalize_droplist_probs(prob_config: Union[List[float], int, float, None], option_count: int) -> List[float]:
-    """归一化下拉题概率配置"""
+    
     if option_count <= 0:
         return []
     if prob_config == -1 or prob_config is None:
@@ -400,7 +399,7 @@ def normalize_droplist_probs(prob_config: Union[List[float], int, float, None], 
 
 
 def normalize_option_fill_texts(option_texts: Optional[List[Optional[str]]], option_count: int) -> Optional[List[Optional[str]]]:
-    """归一化选项填充文本配置"""
+    
     if not option_texts:
         return None
     normalized_count = option_count if option_count > 0 else len(option_texts)
@@ -456,11 +455,7 @@ def _custom_weights_has_positive(weights: Any) -> bool:
 
 
 def resolve_prob_config(prob_config: Any, custom_weights: Any, prefer_custom: bool = False) -> Any:
-    """
-    运行时兜底：当 UI/旧配置导致 `probabilities` 为空/`-1`/全<=0 时，优先使用 `custom_weights`。
-
-    目的：权重为 0 的选项不应被选中（除非所有权重都为 0，此时只能回退随机）。
-    """
+    
     if prefer_custom and _prob_config_is_unset(prob_config) and _custom_weights_has_positive(custom_weights):
         return custom_weights
     return prob_config

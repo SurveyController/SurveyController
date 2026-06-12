@@ -1,5 +1,3 @@
-"""通用 SettingCard 组件 - 可跨页面复用的设置卡片"""
-
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import QGraphicsOpacityEffect, QHBoxLayout, QVBoxLayout, QWidget
 from qfluentwidgets import (
@@ -21,7 +19,7 @@ def set_widget_enabled_with_opacity(
     *,
     disabled_opacity: float = 0.4,
 ) -> None:
-    """统一处理控件禁用态透明度。"""
+    
     widget.setEnabled(bool(enabled))
     effect = widget.graphicsEffect()
     if not isinstance(effect, QGraphicsOpacityEffect):
@@ -31,7 +29,7 @@ def set_widget_enabled_with_opacity(
 
 
 class SpinBoxSettingCard(SettingCard):
-    """带 SpinBox 的设置卡"""
+    
 
     def __init__(
         self,
@@ -78,7 +76,7 @@ class SpinBoxSettingCard(SettingCard):
 
 
 class SliderSettingCard(SettingCard):
-    """带数值滑动条的设置卡。"""
+    
 
     def __init__(
         self,
@@ -108,7 +106,7 @@ class SliderSettingCard(SettingCard):
 
 
 class SwitchSettingCard(SettingCard):
-    """带开关的设置卡"""
+    
 
     def __init__(self, icon, title, content, parent=None):
         super().__init__(icon, title, content, parent)
@@ -129,7 +127,7 @@ class SwitchSettingCard(SettingCard):
 
 
 class ComboSettingCard(SettingCard):
-    """带下拉框的设置卡。"""
+    
 
     def __init__(self, icon, title, content, min_width: int = 180, parent=None):
         super().__init__(icon, title, content, parent)
@@ -140,7 +138,7 @@ class ComboSettingCard(SettingCard):
 
 
 class ExpandComboSwitchSettingCard(ExpandGroupSettingCard):
-    """可展开的开关设置卡，展开后显示一个下拉选择。"""
+    
 
     def __init__(
         self,

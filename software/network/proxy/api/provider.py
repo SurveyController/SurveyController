@@ -1,4 +1,3 @@
-"""随机 IP / 代理管理 - 代理获取主逻辑"""
 import json
 import logging
 import re
@@ -23,7 +22,7 @@ from software.logging.log_utils import (
     log_suppressed_exception,
 )
 
-# 从 source.py 导入配置管理函数
+
 from software.network.proxy.policy.source import (
     PROXY_SOURCE_BENEFIT,
     PROXY_UPSTREAM_BENEFIT,
@@ -40,7 +39,7 @@ from software.network.proxy.policy.source import (
     is_official_proxy_source,
 )
 
-# 从 pool.py 导入租约和代理池函数
+
 from software.network.proxy.pool.pool import (
     _build_default_proxy_lease,
     _build_default_proxy_leases_from_batch,
@@ -67,14 +66,14 @@ _FATAL_PATTERNS = [
 
 
 class AreaProxyQualityError(RuntimeError):
-    """地区代理质量差导致无法使用时抛出。"""
+    pass
 
 
 class ProxyApiFatalError(RuntimeError):
-    """代理API致命错误（需要用户干预）时抛出。"""
+    pass
 
 
-# ==================== 状态查询 ====================
+
 
 def get_status() -> Any:
     response = http_client.get(
@@ -99,11 +98,11 @@ def _format_status_payload(payload: Any) -> tuple[str, str]:
 
 
 def format_status_payload(payload: Any) -> tuple[str, str]:
-    """公开的状态文案格式化接口。"""
+    
     return _format_status_payload(payload)
 
 
-# ==================== 代理解析 ====================
+
 
 def _normalize_expected_proxy_count(expected_count: Any) -> int:
     try:
@@ -198,7 +197,7 @@ def _parse_proxy_payload(text: str) -> List[str]:
     return unique
 
 
-# ==================== 错误检测 ====================
+
 
 def _is_area_quality_retry_payload(payload: Any) -> bool:
     if not isinstance(payload, dict):
@@ -226,7 +225,7 @@ def _is_default_batch_extract_payload(payload: Any) -> bool:
 
 
 def _extract_custom_api_error(data: Any) -> Optional[str]:
-    """从常见代理商响应中提取明确的致命错误。"""
+    
     if not isinstance(data, dict):
         return None
     code = data.get("code")
@@ -241,7 +240,7 @@ def _extract_custom_api_error(data: Any) -> Optional[str]:
     return None
 
 
-# ==================== API 候选和测试 ====================
+
 
 def _proxy_api_candidates(proxy_url: Optional[str]) -> List[str]:
     url = proxy_url or get_effective_proxy_api_url()
@@ -263,7 +262,7 @@ def _warn_custom_api_returned_large_batch(returned_count: int, requested_count: 
 
 
 def _extract_minute_from_url(url: str) -> Optional[int]:
-    """从URL中提取minute参数"""
+    
     try:
         split = urlsplit(url)
         for key, value in parse_qsl(split.query):
@@ -275,7 +274,7 @@ def _extract_minute_from_url(url: str) -> Optional[int]:
 
 
 def _check_minute_conflict(url: str) -> Optional[str]:
-    """检查URL中的minute参数是否与作答时长冲突"""
+    
     minute = _extract_minute_from_url(url)
     if minute is None:
         return None
@@ -323,7 +322,7 @@ def test_custom_proxy_api(url: str) -> tuple[bool, str, List[str]]:
         return False, f"解析失败: {e}", []
 
 
-# ==================== 核心获取函数 ====================
+
 
 def _resolve_official_area_request_value(source: str, area_code: Optional[str]) -> str:
     normalized_area = _normalize_area_code(area_code)

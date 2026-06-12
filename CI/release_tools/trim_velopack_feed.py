@@ -1,6 +1,3 @@
-#!/usr/bin/env python
-"""裁剪 Velopack feed，只保留最近 N 个 Full 版本及其有效 Delta。"""
-
 from __future__ import annotations
 
 import argparse
@@ -13,7 +10,7 @@ from typing import Any
 
 try:
     from packaging.version import Version, InvalidVersion
-except ImportError as exc:  # pragma: no cover
+except ImportError as exc:  
     raise SystemExit(f"缺少 packaging 依赖：{exc}")
 
 

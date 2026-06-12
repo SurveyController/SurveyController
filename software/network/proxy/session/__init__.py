@@ -1,5 +1,3 @@
-"""代理会话。"""
-
 from software.network.proxy.session.auth import (
     RandomIPAuthError,
     activate_trial_async,

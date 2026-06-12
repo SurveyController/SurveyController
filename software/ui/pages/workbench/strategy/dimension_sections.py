@@ -1,5 +1,3 @@
-"""维度分组区块组件。"""
-
 from __future__ import annotations
 
 import json
@@ -31,7 +29,7 @@ ENTRY_DRAG_MIME = "application/x-surveycontroller-dimension-entries"
 
 
 class DimensionEntryTable(TableWidget):
-    """维度题目表格，负责跨区块拖拽。"""
+    
 
     entriesDropped = Signal(list, object)
 
@@ -205,12 +203,12 @@ class DimensionEntryTable(TableWidget):
 
 
 class DimensionSectionWidget(QWidget):
-    """单个维度区块：标题 + 表格。"""
+    
 
     renameRequested = Signal(str)
     deleteRequested = Signal(str)
     entriesDropped = Signal(list, object)
-    addQuestionsRequested = Signal(str)  # 新增：请求添加题目信号
+    addQuestionsRequested = Signal(str)  
 
     def __init__(self, group_name: str, parent=None):
         super().__init__(parent)
@@ -278,7 +276,7 @@ class DimensionSectionWidget(QWidget):
             """
         )
 
-        # 添加题目按钮（仅在非未分组区域显示）
+        
         self.add_questions_btn = PushButton("添加题目", self)
         self.add_questions_btn.setIcon(FluentIcon.ADD)
         self.add_questions_btn.clicked.connect(

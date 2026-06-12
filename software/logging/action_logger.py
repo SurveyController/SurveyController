@@ -1,4 +1,3 @@
-"""Helpers for structured user-facing action logs."""
 from __future__ import annotations
 
 import functools
@@ -81,7 +80,7 @@ def log_action(
     detail: Any = None,
     payload: Optional[Mapping[str, Any]] = None,
 ) -> None:
-    """Emit a structured action log using stable key-value fields."""
+    
 
     if not _should_emit_action_log(scope, event, level, result):
         return
@@ -135,7 +134,7 @@ def bind_logged_action(
     payload_factory: Optional[Callable[..., Optional[Mapping[str, Any]]]] = None,
     forward_signal_args: bool = True,
 ) -> Callable[..., Any]:
-    """Wrap a Qt signal connection so the user action is logged before execution."""
+    
 
     @functools.wraps(callback)
     def _wrapped(*args: Any, **kwargs: Any) -> Any:

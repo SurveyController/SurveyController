@@ -1,6 +1,3 @@
-# -*- coding: utf-8 -*-
-"""AI 协议解析、响应提取与重试请求。"""
-
 from __future__ import annotations
 
 import logging

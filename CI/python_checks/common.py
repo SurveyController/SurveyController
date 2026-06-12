@@ -1,6 +1,3 @@
-#!/usr/bin/env python
-"""Python CI 检查的共享能力。"""
-
 from __future__ import annotations
 
 import getpass
@@ -21,9 +18,9 @@ TARGET_DIRS = [
 ]
 ENTRY_FILES = [ROOT_DIR / "SurveyController.py"]
 
-# Ruff 规则：
-#   F    - Pyflakes：未使用的 import、未定义的名称、重复定义等
-#   语法错误在 Ruff 新版本中会直接报告，无需额外开启 E999
+
+
+
 RUFF_SELECT = "F"
 CHILD_RESULT_PREFIX = "__WJX_CHECK__"
 IMPORT_TIMEOUT_SECONDS = 12
@@ -141,7 +138,7 @@ os._exit(0)
 
 
 def configure_console_encoding() -> None:
-    """在 Windows CI 的非 UTF-8 控制台中强制使用 UTF-8 输出，避免中文日志炸掉。"""
+    
     for stream_name in ("stdout", "stderr"):
         stream = getattr(sys, stream_name, None)
         reconfigure = getattr(stream, "reconfigure", None)
@@ -227,7 +224,7 @@ def make_child_env() -> dict[str, str]:
 
 
 def make_window_smoke_env() -> dict[str, str]:
-    """为主窗口冒烟检查选择更稳的 Qt 平台插件。"""
+    
     env = make_child_env()
     env["QT_QPA_PLATFORM"] = "minimal"
     return env
@@ -265,7 +262,7 @@ def summarize_child_output(stdout: str, stderr: str) -> str:
 
 
 def normalize_diagnostic_message(message: str) -> str:
-    """Normalize uncommon whitespace in diagnostics for stable console output."""
+    
     normalized = message.translate(UNICODE_SPACE_TRANSLATION)
     normalized = normalized.replace("\r\n", "\n").replace("\r", "\n")
     lines = [line.rstrip() for line in normalized.split("\n")]
@@ -369,7 +366,7 @@ def run_ruff_check(target_dirs: Iterable[Path]) -> tuple[list[dict], str | None]
 
 
 def run_pyright_check(target_dirs: Iterable[Path]) -> tuple[list[dict], str | None]:
-    """Run Pyright diagnostics."""
+    
     target_args = [str(path) for path in target_dirs]
     env = make_child_env()
     for entry_file in ENTRY_FILES:
@@ -432,7 +429,7 @@ def run_pyright_check(target_dirs: Iterable[Path]) -> tuple[list[dict], str | No
             }
         )
 
-    # Pyright exit codes: 0=no issues, 1=diagnostics found, 2=execution error
+    
     if result.returncode == 2 and not issues:
         summary = payload.get("summary", {})
         message = summary.get("errorMessage") or stderr_text or "Pyright execution error."
@@ -442,7 +439,7 @@ def run_pyright_check(target_dirs: Iterable[Path]) -> tuple[list[dict], str | No
 
 
 def run_type_ignore_check(target_dirs: Iterable[Path]) -> list[dict]:
-    """禁止产品代码用 type ignore / pyright 指令遮住类型问题。"""
+    
     allowed_roots = {path.resolve() for path in TYPE_IGNORE_SCAN_ROOTS if path.exists()}
     issues: list[dict] = []
     for target_dir in target_dirs:
@@ -480,7 +477,7 @@ def run_type_ignore_check(target_dirs: Iterable[Path]) -> list[dict]:
 
 
 def run_unicode_escape_check(target_dirs: Iterable[Path]) -> list[dict]:
-    """禁止 CI Python 源码出现 Unicode 转义序列。"""
+    
     allowed_roots = {path.resolve() for path in UNICODE_ESCAPE_SCAN_ROOTS if path.exists()}
     issues: list[dict] = []
     for target_dir in target_dirs:

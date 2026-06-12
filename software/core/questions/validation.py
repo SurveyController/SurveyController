@@ -1,5 +1,3 @@
-"""题目配置校验。"""
-
 from __future__ import annotations
 
 import re
@@ -23,7 +21,7 @@ _TEXT_MIN_LENGTH_PATTERNS = (
 
 
 def _extract_text_min_length(*fragments: Any) -> Optional[int]:
-    """从题干/说明里提取填空题最少字数要求。"""
+    
     limits: List[int] = []
     for fragment in fragments:
         text = str(fragment or "").strip()
@@ -79,7 +77,7 @@ def validate_question_config(
     entries: List[QuestionEntry],
     questions_info: Optional[List[SurveyQuestionMeta | Dict[str, Any]]] = None,
 ) -> Optional[str]:
-    """验证题目配置是否存在冲突，返回错误信息。"""
+    
     if not entries:
         return "未配置任何题目"
 
@@ -146,10 +144,10 @@ def validate_question_config(
                         f"  - 但只有 {positive_count} 个选项的概率大于 0%\n"
                         f"  - 请至少将 {multi_min_limit} 个选项的概率设为大于 0%"
                     )
-                # 多选题的概率表示“候选命中概率”，不是“本次一定同时勾选”。
-                # 运行时会在抽样后按题目最大可选数量自动收口，因此不能因为
-                # 正概率选项数超过题目上限就提前拦截启动，否则像“4个候选项，
-                # 题目最多选3项”这种正常配置会被误杀。
+                
+                
+                
+                
 
         if question_type in ("text", "multi_text") and question_info and not _is_text_ai_enabled(entry):
             min_text_length = _extract_text_min_length(question_info.title, question_info.description)

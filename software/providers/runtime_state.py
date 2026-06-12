@@ -1,5 +1,3 @@
-"""Provider 运行时状态仓库。"""
-
 from __future__ import annotations
 
 import threading
@@ -14,11 +12,11 @@ StateT = TypeVar("StateT")
 
 @dataclass
 class ProviderRuntimeState:
-    """Provider 运行时状态基类。"""
+    pass
 
 
 class ProviderRuntimeStateStore(Generic[StateT]):
-    """按 driver 实例隔离 provider 运行时状态。"""
+    
 
     def __init__(self, provider: str, factory: Callable[[], StateT]) -> None:
         self.provider = normalize_survey_provider(provider, default=SURVEY_PROVIDER_WJX)

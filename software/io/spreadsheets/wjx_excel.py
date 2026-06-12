@@ -1,5 +1,3 @@
-"""Read WJX Excel exports into a normalized raw structure."""
-
 from __future__ import annotations
 
 import os

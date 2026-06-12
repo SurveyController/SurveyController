@@ -1,5 +1,3 @@
-"""Reverse fill schema and shared constants."""
-
 from __future__ import annotations
 
 from collections import deque

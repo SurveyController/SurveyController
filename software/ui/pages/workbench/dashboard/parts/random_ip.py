@@ -1,5 +1,3 @@
-"""DashboardPage 随机 IP 与额度申请相关方法。"""
-
 from __future__ import annotations
 
 import logging
@@ -43,10 +41,10 @@ if TYPE_CHECKING:
 
 
 class DashboardRandomIPMixin:
-    """随机 IP、额度提示与额度申请逻辑。"""
+    
 
     if TYPE_CHECKING:
-        # 以下属性由 DashboardPage 主类提供，此处仅用于 Pylance 类型检查
+        
         card_btn: PushButton
         random_ip_row: RandomIpToggleRow
         random_ip_usage_ring: ProgressRing
@@ -68,7 +66,7 @@ class DashboardRandomIPMixin:
         _ip_balance_fetch_interval_sec: float
         _random_ip_status_fetch_lock: threading.Lock
         _random_ip_status_fetching: bool
-        _ipBalanceChecked: Any  # 同上
+        _ipBalanceChecked: Any  
         _randomIpHeartbeatUpdated: Any
         random_ip_status_dot: Any
         random_ip_status_spinner: Any
@@ -83,10 +81,10 @@ class DashboardRandomIPMixin:
             duration: int = 2000,
             show_progress: bool = False,
         ) -> Any: ...
-        def window(self) -> Any: ...  # 继承自 QWidget，此处仅供类型检查
+        def window(self) -> Any: ...  
 
     def _init_random_ip_status_refresh(self) -> None:
-        """初始化主页随机IP服务状态点。"""
+        
         try:
             from PySide6.QtCore import QTimer
         except Exception as exc:
@@ -105,7 +103,7 @@ class DashboardRandomIPMixin:
         self.refresh_random_ip_heartbeat_async()
 
     def refresh_random_ip_heartbeat_async(self) -> None:
-        """后台刷新随机IP服务状态，避免阻塞主页。"""
+        
         lock = getattr(self, "_random_ip_status_fetch_lock", None)
         if lock is None:
             return
@@ -222,7 +220,7 @@ class DashboardRandomIPMixin:
             )
 
     def _sync_random_ip_toggle_presentation(self, enabled: bool) -> None:
-        """同步概览页随机 IP 按钮的文案和图标。"""
+        
         try:
             self.random_ip_row.sync_toggle_presentation(enabled)
         except Exception as exc:
@@ -342,7 +340,7 @@ class DashboardRandomIPMixin:
             )
 
     def _refresh_ip_cost_infobar(self) -> None:
-        """根据当前配置刷新随机IP成本提示条。"""
+        
         try:
             _, _, custom_api = get_random_ip_counter_snapshot_local()
         except Exception:
@@ -352,7 +350,7 @@ class DashboardRandomIPMixin:
     def _set_ip_cost_infobar_state(
         self, *, title: str, content: str = "", show_adjust_link: bool = False
     ) -> None:
-        """统一更新高消耗额度提示条的文案与附加操作。"""
+        
         if not self._ip_cost_infobar:
             return
 
@@ -412,7 +410,7 @@ class DashboardRandomIPMixin:
         self._sync_random_ip_toggle_presentation(fallback_enabled)
 
     def _open_contact_dialog(self, default_type: str = "报错反馈", lock_message_type: bool = False):
-        """转交主窗口打开联系对话框。"""
+        
         win = self.window()
         if hasattr(win, "_open_contact_dialog"):
             try:
@@ -426,7 +424,7 @@ class DashboardRandomIPMixin:
         raise RuntimeError("主窗口不支持联系开发者弹窗")
 
     def _open_quota_redeem_dialog(self) -> bool:
-        """转交主窗口打开额度兑换对话框。"""
+        
         win = self.window()
         if hasattr(win, "_open_quota_redeem_dialog"):
             try:
@@ -440,7 +438,7 @@ class DashboardRandomIPMixin:
         raise RuntimeError("主窗口不支持额度兑换弹窗")
 
     def _on_request_quota_clicked(self):
-        """用户主动打开额度兑换弹窗。"""
+        
         self._open_quota_redeem_dialog()
 
     def _on_ip_low_infobar_closed(self):
@@ -449,7 +447,7 @@ class DashboardRandomIPMixin:
             self._ip_low_infobar.hide()
 
     def _update_ip_low_infobar(self, count: float, limit: float, custom_api: bool):
-        """更新随机IP余额不足提示条。"""
+        
         if not self._ip_low_infobar:
             return
         if custom_api:
@@ -467,7 +465,7 @@ class DashboardRandomIPMixin:
         self._on_ip_balance_checked(remaining if remaining <= threshold else threshold + 1)
 
     def _on_ip_balance_checked(self, remaining_ip: float):
-        """处理IP余额检查结果（在主线程中执行）"""
+        
         if not self._ip_low_infobar:
             return
         threshold = max(

@@ -1,4 +1,3 @@
-"""冻结包启动前的 DLL 与 Qt 路径准备。"""
 from __future__ import annotations
 
 import os
@@ -28,7 +27,7 @@ def _add_dll_directories(paths: list[str]) -> None:
 
 
 def prepare_frozen_runtime() -> None:
-    """在导入 PySide6 前准备冻结包运行环境。"""
+    
     if not getattr(sys, "frozen", False):
         return
 

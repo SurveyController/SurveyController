@@ -1,4 +1,3 @@
-"""答题时长控制 - 模拟真实答题时间分布"""
 from __future__ import annotations
 
 import logging
@@ -25,14 +24,14 @@ _NAVIGATION_TRANSIENT_ERRORS = (
 
 
 def _is_navigation_transient_error(exc: BaseException) -> bool:
-    """页面跳转时可能短暂无法读取状态。"""
+    
 
     message = str(exc or "").lower()
     return any(pattern in message for pattern in _NAVIGATION_TRANSIENT_ERRORS)
 
 
 def has_configured_answer_duration(answer_duration_range_seconds: Tuple[int, int] = (0, 0)) -> bool:
-    """是否配置了提交前作答时长等待。"""
+    
 
     try:
         raw_min, raw_max = answer_duration_range_seconds
@@ -47,7 +46,7 @@ def sample_answer_duration_seconds(
     survey_provider: Optional[str] = None,
     default_unconfigured_seconds: int = 0,
 ) -> float:
-    """按现有配置规则采样一次作答时长秒数。"""
+    
 
     try:
         raw_min, raw_max = answer_duration_range_seconds
@@ -82,7 +81,7 @@ async def wait_answer_duration_seconds(
     stop_signal: Optional[Any] = None,
     seconds: float = 0.0,
 ) -> bool:
-    """按给定秒数等待作答时长；返回 True 表示等待中被中断。"""
+    
 
     wait_seconds = max(0.0, float(seconds or 0.0))
     if wait_seconds <= 0:
@@ -103,7 +102,7 @@ async def simulate_answer_duration_delay(
     *,
     survey_provider: Optional[str] = None,
 ) -> bool:
-    """在提交前模拟答题时长等待；返回 True 表示等待中被中断。"""
+    
 
     wait_seconds = sample_answer_duration_seconds(
         answer_duration_range_seconds,
@@ -113,7 +112,7 @@ async def simulate_answer_duration_delay(
 
 
 async def is_survey_completion_page(driver: Any, provider: Optional[str] = None) -> bool:
-    """尝试检测当前页面是否为问卷提交完成页。"""
+    
     try:
         current_url = str(await driver.current_url() or "")
         if "complete" in current_url.lower():

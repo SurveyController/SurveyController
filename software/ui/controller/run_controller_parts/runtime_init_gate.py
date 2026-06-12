@@ -1,5 +1,3 @@
-"""RunController 启动提示与运行前状态辅助逻辑。"""
-
 from __future__ import annotations
 
 import copy
@@ -81,7 +79,7 @@ class RunControllerInitializationMixin:
     def _prepare_engine_state(
         self, proxy_pool: List[ProxyLease]
     ) -> tuple[ExecutionConfig, ExecutionState]:
-        """从已准备好的模板构建本次任务状态。"""
+        
         prepared = getattr(self, "_prepared_execution_artifacts", None)
         if prepared is None:
             raise RuntimeError("运行准备产物缺失，无法启动任务")

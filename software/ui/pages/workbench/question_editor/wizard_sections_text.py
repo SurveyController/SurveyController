@@ -1,5 +1,3 @@
-"""向导文本题配置区。"""
-
 from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple
 
 from PySide6.QtCore import QTimer
@@ -80,7 +78,7 @@ class WizardSectionsTextMixin:
     ) -> None:
         self._has_content = True
 
-        # 检测是否为多项填空题
+        
         is_multi_text = False
         blank_count = 1
         info_entry = self._get_entry_info(idx)
@@ -90,7 +88,7 @@ class WizardSectionsTextMixin:
             is_multi_text = True
             blank_count = max(1, text_input_count)
 
-        # 如果是多项填空题，使用矩阵式输入界面
+        
         if is_multi_text:
             self._build_multi_text_matrix_input(idx, entry, card, card_layout, blank_count)
             return
@@ -301,10 +299,10 @@ class WizardSectionsTextMixin:
         card_layout: QVBoxLayout,
         blank_count: int,
     ) -> None:
-        """为多项填空题构建矩阵式输入界面"""
+        
         from software.core.questions.text_shared import MULTI_TEXT_DELIMITER
 
-        # 表头
+        
         header_widget = QWidget(card)
         header_widget.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Maximum)
         header_layout = QHBoxLayout(header_widget)
@@ -327,7 +325,7 @@ class WizardSectionsTextMixin:
 
         card_layout.addWidget(header_widget)
 
-        # 答案行容器
+        
         rows_container = QWidget(card)
         rows_container.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Maximum)
         rows_layout = QVBoxLayout(rows_container)
@@ -422,13 +420,13 @@ class WizardSectionsTextMixin:
         _apply_label_color(section_label, "#666666", "#bfbfbf")
         card_layout.addWidget(section_label)
 
-        # 存储每个填空项的单选按钮组和AI复选框
+        
         blank_radio_groups: List[QButtonGroup] = []
         blank_mode_radios: List[Dict[str, RadioButton]] = []
         blank_ai_checkboxes: List[SwitchButton] = []
         blank_integer_range_edits: List[Tuple[LineEdit, LineEdit]] = []
 
-        # 解析现有配置
+        
         saved_modes = getattr(entry, "multi_text_blank_modes", None) or []
         if not isinstance(saved_modes, list):
             saved_modes = []
@@ -507,7 +505,7 @@ class WizardSectionsTextMixin:
             mode_row.addStretch(1)
             blank_layout.addLayout(mode_row)
 
-            # 每个填空项的AI复选框
+            
             ai_cb = SwitchButton(card, IndicatorPosition.RIGHT)
             ai_cb.setOnText("")
             ai_cb.setOffText("")
@@ -546,7 +544,7 @@ class WizardSectionsTextMixin:
             )
             blank_integer_range_edits.append((range_min_edit, range_max_edit))
 
-            # 互斥逻辑：控制该列输入框的启用/禁用
+            
             def make_sync_func(col_idx, radios, ai_checkbox, edits_list, int_range_edits):
                 def sync_column_state():
                     mode_id = radios["list"].group().checkedId()
@@ -554,7 +552,7 @@ class WizardSectionsTextMixin:
                     use_list = mode_id == 0 and not ai_enabled
                     use_integer_range = mode_id == 4 and not ai_enabled
 
-                    # 禁用/启用该列的所有输入框
+                    
                     for row in edits_list:
                         if col_idx < len(row):
                             row[col_idx].setEnabled(use_list)
@@ -562,7 +560,7 @@ class WizardSectionsTextMixin:
                     for edit in int_range_edits:
                         edit.setEnabled(use_integer_range)
 
-                    # AI和随机模式互斥
+                    
                     if ai_enabled:
                         radios["list"].setEnabled(False)
                         radios["name"].setEnabled(False)
@@ -591,10 +589,10 @@ class WizardSectionsTextMixin:
                     cb, checked, f
                 )
             )
-            # 初始化状态
+            
             sync_func()
 
-        # 存储到映射
+        
         if not hasattr(self, "multi_text_blank_radio_groups"):
             self.multi_text_blank_radio_groups = {}
         if not hasattr(self, "multi_text_blank_ai_checkboxes"):
@@ -605,7 +603,7 @@ class WizardSectionsTextMixin:
         self.multi_text_blank_ai_checkboxes[idx] = blank_ai_checkboxes
         self.multi_text_blank_integer_range_edits[idx] = blank_integer_range_edits
 
-        # 控制「添加答案组」按钮：所有填空都启用AI时禁用该按钮（答案列表无用）
+        
         def update_add_btn_state():
             all_ai = all(blank_ai_checkboxes[i].isChecked() for i in range(blank_count))
             add_btn.setEnabled(not all_ai)
@@ -613,5 +611,5 @@ class WizardSectionsTextMixin:
         for _ai_cb in blank_ai_checkboxes:
             _ai_cb.checkedChanged.connect(lambda _checked, f=update_add_btn_state: f())
 
-        # 初始化按钮状态
+        
         update_add_btn_state()

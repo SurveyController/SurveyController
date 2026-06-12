@@ -1,5 +1,3 @@
-"""Helpers for runtime error handling in execution loop."""
-
 from __future__ import annotations
 
 import logging

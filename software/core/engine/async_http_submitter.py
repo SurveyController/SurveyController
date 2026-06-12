@@ -1,5 +1,3 @@
-"""异步运行槽位的 HTTP provider 调用。"""
-
 from __future__ import annotations
 
 from typing import Optional
@@ -23,7 +21,7 @@ HTTP_RUNTIME_PROVIDERS = {
 
 
 class AsyncHttpSubmitter:
-    """封装纯 HTTP 提交链路的 provider 调用和支持性判断。"""
+    
 
     def __init__(self, *, config: ExecutionConfig, state: ExecutionState, slot_label: str) -> None:
         self.config = config

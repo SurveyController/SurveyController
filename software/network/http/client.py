@@ -1,4 +1,3 @@
-"""基于 httpx 的统一 HTTP 客户端（同步连接池封装）。"""
 from __future__ import annotations
 
 import atexit
@@ -70,7 +69,7 @@ class _ClientEntry:
 
 
 class _StreamResponse:
-    """给同步流响应补一个 requests 风格的 iter_content 接口。"""
+    
 
     def __init__(
         self,
@@ -127,12 +126,12 @@ class _StreamResponse:
             except Exception as exc:
                 log_suppressed_exception("_StreamResponse.close release()", exc, level=logging.WARNING)
 
-    def __del__(self) -> None:  # pragma: no cover
+    def __del__(self) -> None:  
         self.close()
 
 
 class _SyncClientManager:
-    """按配置缓存同步 Client，统一管理生命周期。"""
+    
 
     def __init__(self) -> None:
         self._lock = threading.RLock()
@@ -312,7 +311,7 @@ class _SyncClientManager:
 
 
 def _resolve_proxy(proxies: Any, url: str) -> Tuple[Optional[str], bool]:
-    """把 requests 风格 proxies 参数映射到 httpx。"""
+    
     if proxies is None:
         return None, True
     if proxies == {}:
@@ -332,7 +331,7 @@ def _resolve_proxy(proxies: Any, url: str) -> Tuple[Optional[str], bool]:
 
 
 def _normalize_timeout(timeout: Any) -> Any:
-    """兼容 requests 的 timeout 形态。"""
+    
     if timeout is None:
         return None
     if isinstance(timeout, (int, float)):
@@ -358,7 +357,7 @@ _client_manager = _SyncClientManager()
 
 
 def prewarm() -> None:
-    """在主线程预热 httpx/httpcore/ssl 导入链，规避首次后台初始化的原生崩溃。"""
+    
     global _PREWARMED
 
     if _PREWARMED:
@@ -369,7 +368,7 @@ def prewarm() -> None:
             return
         temp_client: httpx.Client | None = None
         try:
-            # 这里只预热客户端构造链，不读取环境代理或证书文件，避免启动阶段卡在系统 SSL 初始化。
+            
             temp_client = httpx.Client(
                 timeout=None,
                 limits=_CLIENT_LIMITS,
@@ -388,7 +387,7 @@ def prewarm() -> None:
 
 
 def close() -> None:
-    """关闭客户端池。"""
+    
     try:
         _client_manager.close()
     except Exception as exc:

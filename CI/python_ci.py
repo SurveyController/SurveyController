@@ -1,6 +1,3 @@
-#!/usr/bin/env python
-"""聚合 Python CI 检查入口。"""
-
 from __future__ import annotations
 
 import argparse

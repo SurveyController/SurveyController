@@ -1,5 +1,3 @@
-"""运行内核访问外层控制服务的最小端口。"""
-
 from __future__ import annotations
 
 from typing import Optional, Protocol

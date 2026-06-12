@@ -1,5 +1,3 @@
-"""主窗口模块 - 精简版，使用拆分后的组件"""
-
 from __future__ import annotations
 
 import logging
@@ -66,7 +64,7 @@ _BaseFluentWindow = MSFluentWindow if sys.platform == "win32" else FluentWindow
 
 
 class _ImportCheckWindow(QWidget):
-    """macOS CI 下避开 qframelesswindow 原生窗口初始化。"""
+    
 
     def __init__(self):
         super().__init__()
@@ -96,18 +94,18 @@ class MainWindow(
     MainWindowUpdateMixin,
     _BaseFluentWindow,
 ):
-    """主窗口，采用微软商店风格导航，支持主题动态切换。"""
+    
 
     _IMPORT_CHECK_ENV = "WJX_IMPORT_CHECK"
 
-    # 下载开始信号（显示转圈动画）
+    
     downloadStarted = Signal()
-    # 下载进度信号
-    downloadProgress = Signal(int, int, float)  # downloaded, total, speed
-    # 下载完成信号
-    downloadFinished = Signal(object)  # update_payload
-    # 下载失败信号
-    downloadFailed = Signal(str)  # error_message
+    
+    downloadProgress = Signal(int, int, float)  
+    
+    downloadFinished = Signal(object)  
+    
+    downloadFailed = Signal(str)  
 
     def __init__(self, parent=None):
         self._boot_splash = None
@@ -159,12 +157,12 @@ class MainWindow(
         self._apply_default_window_size()
         self._enable_window_material_effect()
 
-        # 应用窗口置顶设置
+        
         settings = app_settings()
         if get_bool_from_qsettings(settings.value("window_topmost"), False):
             self.apply_topmost_state(True, show=False)
 
-        # 创建启动页面
+        
         if not self._import_check_mode:
             self._boot_splash = create_boot_splash(self)
 
@@ -177,7 +175,7 @@ class MainWindow(
         self.run_coordinator = self.workbench.run_coordinator
         self.reverse_fill_page = self.workbench.reverse_fill_page
 
-        # 延迟初始化非关键页面（懒加载）
+        
         self._log_page = None
         self._community_page = None
         self._about_page = None
@@ -190,7 +188,7 @@ class MainWindow(
         if not self._import_check_mode:
             self._init_community_hint_badge_state()
         self.stackedWidget.currentChanged.connect(self._on_stack_widget_changed)
-        # 微软商店风格导航栏需要在事件循环后应用显示偏好，避免初始化时序抖动
+        
         QTimer.singleShot(0, self._configure_navigation_interface)
         self._bind_controller_signals()
         self._refresh_title_random_ip_user_id()
@@ -202,11 +200,11 @@ class MainWindow(
             finish_boot_splash(1500)
             QTimer.singleShot(0, self._run_post_init_tasks)
 
-        # 连接下载开始信号（显示转圈动画）
+        
         self.downloadStarted.connect(self._on_download_started)
-        # 连接下载进度信号
+        
         self.downloadProgress.connect(self._update_download_progress)
-        # 连接下载完成/失败信号
+        
         self.downloadFinished.connect(self._on_download_finished)
         self.downloadFailed.connect(self._on_download_failed)
         self._latest_badge = None
@@ -219,14 +217,14 @@ class MainWindow(
         self._download_cancelled = False
 
     def _apply_theme_mode(self, theme_mode: Theme):
-        """按指定主题模式应用样式（不覆盖用户配置文件）。"""
+        
         try:
             setTheme(theme_mode, save=False, lazy=False)
         except Exception:
             logging.info("应用主题模式失败", exc_info=True)
 
     def _enable_window_material_effect(self):
-        """启用窗口材质效果（Windows 下优先使用 Mica）。"""
+        
         if not sys.platform.startswith("win"):
             return
         if not hasattr(self, "setMicaEffectEnabled"):
@@ -237,13 +235,13 @@ class MainWindow(
             logging.info("启用窗口材质效果失败", exc_info=True)
 
     def _read_navigation_text_visible_setting(self) -> bool:
-        """读取导航标签可见性设置。"""
+        
         settings = app_settings()
         stored_value = settings.value(NAVIGATION_TEXT_VISIBLE_SETTING_KEY)
         return get_bool_from_qsettings(stored_value, True)
 
     def _configure_navigation_interface(self):
-        """应用微软商店风格导航栏偏好。"""
+        
         nav = getattr(self, "navigationInterface", None)
         if nav is None:
             return
@@ -254,7 +252,7 @@ class MainWindow(
             logging.info("应用导航栏显示偏好失败", exc_info=True)
 
     def _apply_default_window_size(self):
-        """按屏幕可用区域设置默认窗口尺寸，避免高缩放场景越界。"""
+        
         fallback_width, fallback_height = 1100, 780
         try:
             screen = self.screen() or QGuiApplication.primaryScreen()
@@ -278,7 +276,7 @@ class MainWindow(
             self.resize(fallback_width, fallback_height)
 
     def _on_theme_changed(self, _theme: Theme):
-        """主题变化后刷新主题敏感组件。"""
+        
         self._enable_window_material_effect()
         try:
             drawer = getattr(getattr(self, "dashboard", None), "config_drawer", None)
@@ -288,7 +286,7 @@ class MainWindow(
             logging.info("主题变更后刷新组件失败", exc_info=True)
 
     def changeEvent(self, e):
-        """系统主题/调色板变化时，在 AUTO 模式下重同步主题。"""
+        
         super().changeEvent(e)
         watched_events = {
             QEvent.Type.ApplicationPaletteChange,
@@ -313,25 +311,25 @@ class MainWindow(
             theme_mode = Theme.AUTO
         if theme_mode != Theme.AUTO:
             return
-        # setTheme(AUTO) 在 themeMode 已经是 AUTO 时会被 qconfig.set 短路，
-        # 导致内部 theme 属性不会被重新检测。这里手动强制刷新。
+        
+        
         from qfluentwidgets.common.style_sheet import updateStyleSheet
 
         old_theme = qconfig.theme
-        qconfig.theme = Theme.AUTO  # 触发 darkdetect 重新检测
+        qconfig.theme = Theme.AUTO  
         if qconfig.theme != old_theme:
             updateStyleSheet()
             qconfig.themeChangedFinished.emit()
             qconfig._cfg.themeChanged.emit(Theme.AUTO)
 
     def resizeEvent(self, e):
-        """调整启动页面组件位置"""
+        
         super().resizeEvent(e)
         if self._boot_splash:
             self._boot_splash.update_layout(self.width(), self.height())
 
     def closeEvent(self, e):
-        """窗口关闭时询问用户是否保存配置"""
+        
         if getattr(self, "_close_request_confirmed", False):
             self._finalize_confirmed_close()
             e.accept()
@@ -516,7 +514,7 @@ class MainWindow(
         self._toast(str(message or "提交触发智能验证，请启用随机 IP 后再试"), "warning", duration=4500)
 
     def _center_on_screen(self):
-        """窗口居中显示，适配多显示器与缩放。"""
+        
         try:
             screen = self.screen() or QGuiApplication.primaryScreen()
             if not screen:
@@ -652,7 +650,7 @@ class MainWindow(
         self._clear_startup_tutorial_refs()
 
     def apply_topmost_state(self, checked: bool, show: bool = False):
-        """应用窗口置顶状态，并刷新无边框特效以保留圆角。"""
+        
         flags = self.windowFlags()
         already_checked = bool(flags & Qt.WindowType.WindowStaysOnTopHint)
         if already_checked == checked:
@@ -711,7 +709,7 @@ class MainWindow(
 
         register_popup_handler(handler)
 
-    # ---------- controller callbacks ----------
+    
     @Slot(list, str)
     def _on_survey_parsed(self, info: list, title: str):
         self.workbench.on_survey_parsed(info, title)
@@ -829,7 +827,7 @@ class MainWindow(
 
 
 def create_window() -> MainWindow:
-    """供入口调用的工厂函数。"""
+    
     if _should_use_import_check_window():
         return cast(MainWindow, _ImportCheckWindow())
     return MainWindow()

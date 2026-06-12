@@ -1,5 +1,3 @@
-"""联系开发者表单组件，可嵌入页面或对话框。"""
-
 import logging
 import os
 import tempfile
@@ -105,7 +103,7 @@ QTimer = QtCore.QTimer
 
 
 class ContactForm(StatusPollingMixin, QWidget):
-    """联系开发者表单，负责消息发送、状态轮询和附件处理。"""
+    
 
     type_label_static: Any
     type_combo: Any
@@ -154,8 +152,8 @@ class ContactForm(StatusPollingMixin, QWidget):
     send_btn: Any
     send_spinner: Any
 
-    _statusLoaded = Signal(str, str)  # text, color
-    _sendFinished = Signal(bool, str)  # success, message
+    _statusLoaded = Signal(str, str)  
+    _sendFinished = Signal(bool, str)  
     sendSucceeded = Signal()
     quotaRequestSucceeded = Signal()
     cancelRequested = Signal()
@@ -275,7 +273,7 @@ class ContactForm(StatusPollingMixin, QWidget):
         super().hideEvent(event)
 
     def closeEvent(self, event):
-        """关闭事件：停止轮询并清理界面状态。"""
+        
         if self.has_pending_async_work():
             event.ignore()
             self.show_pending_async_warning()
@@ -283,12 +281,12 @@ class ContactForm(StatusPollingMixin, QWidget):
         self.stop_status_polling()
         self._stop_activity_indicators()
 
-        # 关闭所有可能存在的 InfoBar，避免其内部线程导致崩溃
+        
         self._close_all_infobars()
         super().closeEvent(event)
 
     def __del__(self):
-        """析构函数：确保轮询请求被清理"""
+        
         try:
             self.stop_status_polling()
         except Exception:

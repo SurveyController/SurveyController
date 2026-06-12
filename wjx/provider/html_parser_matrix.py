@@ -1,4 +1,3 @@
-"""问卷星 HTML 解析：矩阵与滑块。"""
 import logging
 import re
 from typing import Any, List, Optional, Tuple
@@ -8,7 +7,7 @@ from .html_parser_common import _normalize_html_text
 
 
 def _postprocess_matrix_option_texts(option_texts: List[str]) -> List[str]:
-    """矩阵列标题后处理：保序精确去重，并过滤空文本。"""
+    
     if not option_texts:
         return []
     cleaned: List[str] = []
@@ -17,7 +16,7 @@ def _postprocess_matrix_option_texts(option_texts: List[str]) -> List[str]:
         text = _normalize_html_text(raw_text)
         if not text:
             continue
-        # 只按“完全相同文本”判定重复，避免误合并相近选项。
+        
         if text in seen:
             continue
         seen.add(text)
@@ -26,7 +25,7 @@ def _postprocess_matrix_option_texts(option_texts: List[str]) -> List[str]:
 
 
 def _extract_matrix_header_texts(table) -> List[str]:
-    """从矩阵表格中挑出真正的表头行，避免把行标题或作答行误当成列标题。"""
+    
     if table is None:
         return []
 
@@ -50,7 +49,7 @@ def _extract_matrix_header_texts(table) -> List[str]:
         score = len(non_empty_texts)
         if score < 2:
             continue
-        # 保留最早出现、信息量最多的一行；常见情况是表头比分组说明行拥有更多列文本。
+        
         if score > best_score:
             best_score = score
             best_texts = non_empty_texts
@@ -133,8 +132,8 @@ def _collect_matrix_option_texts(soup, question_div, question_number: int) -> Tu
     if table is None and soup:
         table = soup.find(id=f"divRefTab{question_number}")
     if table:
-        # 按HTML中的出现顺序提取行标签，而不是按rowindex排序
-        # 这样可以保持与用户看到的顺序一致
+        
+        
         for row in table.find_all("tr"):
             row_index = str(row.get("rowindex") or "").strip()
             if row_index and str(row_index).isdigit():
@@ -145,13 +144,13 @@ def _collect_matrix_option_texts(soup, question_div, question_number: int) -> Tu
                     cells = []
                 if cells:
                     label_text = _extract_row_label(row, cells)
-                    # 直接按出现顺序添加到列表，而不是用rowindex作为索引
+                    
                     row_texts.append(label_text)
     if matrix_rows > 0:
-        # row_texts 已经按HTML顺序填充，无需再从map中提取
+        
         pass
     elif table:
-        # 某些矩阵题没有 rowindex，直接按表格数据行提取行信息。
+        
         data_rows = []
         header_id = f"drv{question_number}_1"
         for row in table.find_all("tr"):
@@ -166,7 +165,7 @@ def _collect_matrix_option_texts(soup, question_div, question_number: int) -> Tu
                 continue
             first_text = _extract_row_label(row, cells)
             other_texts = [_normalize_html_text(cell.get_text(" ", strip=True)) for cell in cells[1:]]
-            # 如果首列为空、后面有标题文字，多半是表头行
+            
             if not first_text and any(other_texts):
                 continue
             data_rows.append((first_text, cells))
@@ -182,7 +181,7 @@ def _collect_matrix_option_texts(soup, question_div, question_number: int) -> Tu
             if max_cols > 0:
                 option_texts = [str(i + 1) for i in range(max_cols)]
     if matrix_rows == 0 and question_div is not None:
-        # 当表格结构不足以识别时，改从输入控件命名中推断行列数。
+        
         try:
             inputs = question_div.find_all("input")
         except Exception:
@@ -241,7 +240,7 @@ def _collect_matrix_option_texts(soup, question_div, question_number: int) -> Tu
         option_texts = _extract_matrix_header_texts(table)
     raw_option_texts = list(option_texts)
     option_texts = _postprocess_matrix_option_texts(option_texts)
-    # 表头文本缺失时，按已识别的列数补数字标题。
+    
     if not option_texts:
         fallback_columns = len([text for text in raw_option_texts if _normalize_html_text(text)])
         if fallback_columns > 0:
@@ -249,7 +248,7 @@ def _collect_matrix_option_texts(soup, question_div, question_number: int) -> Tu
     return matrix_rows, option_texts, row_texts
 
 def _extract_slider_range(question_div, question_number: int) -> Tuple[Optional[float], Optional[float], Optional[float]]:
-    """尝试解析滑块题的最小值、最大值和步长。"""
+    
     try:
         slider_input = question_div.find("input", id=f"q{question_number}")
         if not slider_input:
@@ -274,7 +273,7 @@ def _extract_slider_range(question_div, question_number: int) -> Tuple[Optional[
     return None, None, None
 
 def _question_div_looks_like_slider_matrix(question_div) -> bool:
-    """识别问卷星 type=9 的多行滑块题结构。"""
+    
     if question_div is None:
         return False
     try:
@@ -319,7 +318,7 @@ def _build_slider_matrix_option_texts_from_input(slider_input) -> List[str]:
     return values
 
 def _collect_slider_matrix_metadata(question_div) -> Tuple[int, List[str], List[str]]:
-    """提取多行滑块题的行标题与刻度值。"""
+    
     if question_div is None:
         return 0, [], []
 

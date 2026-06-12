@@ -21,7 +21,7 @@ def _deep_merge(base: Dict[str, Any], patch: Dict[str, Any]) -> Dict[str, Any]:
 
 
 class RunStateStore:
-    """统一维护运行态/解析态快照，并在变化时通知外层。"""
+    
 
     def __init__(
         self,

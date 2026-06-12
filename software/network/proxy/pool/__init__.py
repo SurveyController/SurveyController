@@ -1,5 +1,3 @@
-"""代理池与预取。"""
-
 from software.network.proxy.pool.pool import (
     HTTP_PROXY_MIN_REMAINING_TTL_SECONDS,
     coerce_proxy_lease,

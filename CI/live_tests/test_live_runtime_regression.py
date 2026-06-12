@@ -1,5 +1,3 @@
-"""真实运行链路回归测试。"""
-
 from __future__ import annotations
 
 import os

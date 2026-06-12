@@ -1,5 +1,3 @@
-"""Credamo answer action builders."""
-
 from __future__ import annotations
 
 import random

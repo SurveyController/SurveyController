@@ -1,5 +1,3 @@
-"""工作台概览页专用卡片组件。"""
-
 from PySide6.QtCore import Qt, Signal
 from PySide6.QtWidgets import QHBoxLayout, QVBoxLayout, QWidget
 from qfluentwidgets import (
@@ -12,7 +10,7 @@ from qfluentwidgets import (
 
 
 class DashboardActionCard(CardWidget):
-    """首页快捷入口卡片。"""
+    
 
     openRequested = Signal()
 
@@ -65,7 +63,7 @@ class DashboardActionCard(CardWidget):
 
 
 class RuntimeSettingsHintCard(DashboardActionCard):
-    """首页上的运行参数跳转提示卡。"""
+    
 
     def __init__(self, parent=None):
         super().__init__(

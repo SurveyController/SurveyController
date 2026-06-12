@@ -1,10 +1,8 @@
-"""题目配置常量定义"""
-
 from typing import Dict
 
 from software.core.questions.config import QuestionEntry
 
-# 题目类型选项
+
 TYPE_CHOICES = [
     ("single", "单选题"),
     ("multiple", "多选题"),
@@ -18,7 +16,7 @@ TYPE_CHOICES = [
     ("location", "地区题"),
 ]
 
-# 填写策略选项
+
 STRATEGY_CHOICES = [
     ("random", "完全随机"),
     ("custom", "自定义配比"),
@@ -40,7 +38,7 @@ MULTIPLE_OPTION_WEIGHT_MAX = 100
 
 
 def _get_entry_type_label(entry: QuestionEntry) -> str:
-    """获取题目类型的中文标签"""
+    
     if bool(getattr(entry, "is_location", False)):
         return TYPE_LABEL_MAP["location"]
     return TYPE_LABEL_MAP.get(entry.question_type, entry.question_type)

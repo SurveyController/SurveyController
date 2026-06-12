@@ -1,16 +1,3 @@
-"""Adaptive flow layout for card grids.
-
-QFluentWidgets added ``AdaptiveFlowLayout`` in newer versions, but this project
-currently pins/uses an older ``qfluentwidgets`` that doesn't ship it.
-
-This implementation is intentionally small and focused:
-- Computes column count from available width and minimum item width
-- Wraps items to next row automatically
-- Makes each item in a row share the same width (adaptive grid feel)
-
-No extra UI behaviors, just layout.
-"""
-
 from __future__ import annotations
 
 from math import ceil
@@ -35,9 +22,9 @@ class AdaptiveFlowLayout(QLayout):
         self._h_spacing = max(0, int(hSpacing))
         self._v_spacing = max(0, int(vSpacing))
 
-    # ---- QLayout required API ----
+    
 
-    def addItem(self, item: QLayoutItem) -> None:  # noqa: N802 (Qt API)
+    def addItem(self, item: QLayoutItem) -> None:  
         self._items.append(item)
 
     def count(self) -> int:
@@ -81,7 +68,7 @@ class AdaptiveFlowLayout(QLayout):
         if not self._items:
             return QSize(width, height)
 
-        # Rough minimum: one column.
+        
         max_min_height = 0
         for item in self._items:
             size = item.minimumSize()
@@ -94,7 +81,7 @@ class AdaptiveFlowLayout(QLayout):
     def invalidate(self) -> None:
         super().invalidate()
 
-    # ---- Internal ----
+    
 
     def _effective_rect(self, rect: QRect) -> QRect:
         margins = self.contentsMargins()
@@ -113,8 +100,8 @@ class AdaptiveFlowLayout(QLayout):
         if available_width <= 0:
             return 1
 
-        # cols * min + (cols-1) * spacing <= available
-        # => cols <= (available + spacing) / (min + spacing)
+        
+        
         cols = (available_width + self._h_spacing) // (self._min_item_width + self._h_spacing)
         return max(1, int(cols))
 
@@ -126,11 +113,11 @@ class AdaptiveFlowLayout(QLayout):
         cols = self._column_count(r.width())
         rows = int(ceil(len(self._items) / cols))
 
-        # Compute shared item width per column.
+        
         total_spacing = self._h_spacing * (cols - 1)
         item_width = r.width() if cols == 1 else max(1, (r.width() - total_spacing) // cols)
 
-        # First pass: compute row heights.
+        
         row_heights: list[int] = [0] * rows
         for idx, item in enumerate(self._items):
             row = idx // cols
@@ -138,7 +125,7 @@ class AdaptiveFlowLayout(QLayout):
             min_h = item.minimumSize().height()
             row_heights[row] = max(row_heights[row], max(hint_h, min_h))
 
-        # Second pass: set geometries.
+        
         y = r.y()
         for row in range(rows):
             x = r.x()
@@ -159,7 +146,7 @@ class AdaptiveFlowLayout(QLayout):
             if row != rows - 1:
                 y += self._v_spacing
 
-        # Return used height including margins.
+        
         margins = self.contentsMargins()
         top = margins.top()
         bottom = margins.bottom()

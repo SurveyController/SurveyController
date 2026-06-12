@@ -1,4 +1,3 @@
-"""问卷星多选题限制识别。"""
 import json
 import re
 from typing import Any, Optional, Tuple
@@ -21,7 +20,7 @@ from software.app.config import (
 )
 
 def _safe_positive_int(value: Any) -> Optional[int]:
-    """安全转换为正整数"""
+    
     if value is None:
         return None
     if isinstance(value, bool):
@@ -45,7 +44,7 @@ def _safe_positive_int(value: Any) -> Optional[int]:
     return None
 
 def _extract_range_from_json_obj(obj: Any) -> Tuple[Optional[int], Optional[int]]:
-    """从JSON对象提取范围"""
+    
     min_limit: Optional[int] = None
     max_limit: Optional[int] = None
     if isinstance(obj, dict):
@@ -78,7 +77,7 @@ def _extract_range_from_json_obj(obj: Any) -> Tuple[Optional[int], Optional[int]
     return min_limit, max_limit
 
 def _extract_range_from_possible_json(text: Optional[str]) -> Tuple[Optional[int], Optional[int]]:
-    """从可能的JSON文本提取范围"""
+    
     min_limit: Optional[int] = None
     max_limit: Optional[int] = None
     if not text:
@@ -122,7 +121,7 @@ def _extract_range_from_possible_json(text: Optional[str]) -> Tuple[Optional[int
     return min_limit, max_limit
 
 def _extract_min_max_from_attributes(element) -> Tuple[Optional[int], Optional[int]]:
-    """从元素属性提取最小最大值"""
+    
     min_limit = None
     max_limit = None
     for attr in _MULTI_MIN_LIMIT_ATTRIBUTE_NAMES:
@@ -146,7 +145,7 @@ def _extract_min_max_from_attributes(element) -> Tuple[Optional[int], Optional[i
     return min_limit, max_limit
 
 def _extract_multi_limit_range_from_text(text: Optional[str]) -> Tuple[Optional[int], Optional[int]]:
-    """从文本提取多选限制范围"""
+    
     if not text:
         return None, None
     normalized = text.strip()

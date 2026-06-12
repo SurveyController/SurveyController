@@ -1,5 +1,3 @@
-"""Workbench shared random IP toggle row."""
-
 from __future__ import annotations
 
 from typing import Any, cast
@@ -19,7 +17,7 @@ from software.ui.widgets.setting_cards import set_widget_enabled_with_opacity
 
 
 class RandomIpToggleRow(QWidget):
-    """Shared random IP toggle row used by dashboard and reverse fill pages."""
+    
 
     def __init__(
         self,

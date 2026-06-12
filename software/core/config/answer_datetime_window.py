@@ -1,5 +1,3 @@
-"""作答日期时间窗的字符串规整与转换。"""
-
 from __future__ import annotations
 
 from datetime import datetime

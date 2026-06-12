@@ -1,11 +1,3 @@
-"""心理测量方向推断工具。
-
-核心原则：
-1. 先看最终目标配比长什么样，再判断题目更偏左、偏右还是居中。
-2. 维度主方向按偏斜强度累计决定，不再按题目数量硬猜。
-3. 反向题只从最终配比推断，不把快捷预设当题目语义真相。
-"""
-
 from __future__ import annotations
 
 import math
@@ -38,10 +30,7 @@ def normalize_probability_list(values: List[float]) -> List[float]:
 
 
 def build_bias_target_probabilities(option_count: int, bias: str) -> List[float]:
-    """根据预设方向生成默认目标配比。
-
-    这里只是“快捷生成配比”的工具，不代表题目语义。
-    """
+    
     count = max(2, int(option_count or 2))
     if count == 2:
         if bias == "left":

@@ -1,5 +1,3 @@
-"""应用程序设置页面"""
-
 from __future__ import annotations
 
 import logging
@@ -56,7 +54,7 @@ if TYPE_CHECKING:
 
 
 class SettingsPage(ScrollArea):
-    """应用程序设置页面"""
+    
     view: QWidget
     appearance_group: SettingCardGroup
     behavior_group: SettingCardGroup

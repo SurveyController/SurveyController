@@ -1,5 +1,3 @@
-"""Helpers for parsing reverse fill values."""
-
 from __future__ import annotations
 
 import re

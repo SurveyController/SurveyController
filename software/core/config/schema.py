@@ -1,4 +1,3 @@
-"""运行时配置数据模型。"""
 from __future__ import annotations
 
 from dataclasses import dataclass, field
@@ -12,7 +11,7 @@ if TYPE_CHECKING:
 
 @dataclass
 class RuntimeConfig:
-    """运行时配置对象。"""
+    
 
     url: str = ""
     survey_title: str = ""

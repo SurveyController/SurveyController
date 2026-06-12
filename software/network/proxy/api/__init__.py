@@ -1,5 +1,3 @@
-"""代理远端接口。"""
-
 from software.network.proxy.api.provider import (
     AreaProxyQualityError,
     ProxyApiFatalError,

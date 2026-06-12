@@ -1,4 +1,3 @@
-"""代理预取服务 - 封装代理池初始化逻辑"""
 from __future__ import annotations
 
 import asyncio
@@ -14,7 +13,7 @@ def prefetch_proxy_pool(
     proxy_api_url: Optional[str] = None,
     stop_signal: Optional[threading.Event] = None,
 ) -> List[ProxyLease]:
-    """预取一批代理 IP。"""
+    
     from software.network.proxy.api import fetch_proxy_batch_async
 
     effective_url = proxy_api_url or get_effective_proxy_api_url()

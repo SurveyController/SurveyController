@@ -1,5 +1,3 @@
-"""外部服务对接。"""
-
 from software.integrations.ai import (
     AI_PROVIDERS,
     DEFAULT_SYSTEM_PROMPT_FREE,

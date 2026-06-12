@@ -1,6 +1,3 @@
-#!/usr/bin/env python
-"""Run one real survey submission through AsyncRuntimeEngine."""
-
 from __future__ import annotations
 
 import argparse
@@ -18,12 +15,12 @@ ROOT_DIR = Path(__file__).resolve().parents[2]
 if str(ROOT_DIR) not in sys.path:
     sys.path.insert(0, str(ROOT_DIR))
 
-from software.core.config.schema import RuntimeConfig  # noqa: E402
-from software.core.engine.async_engine import AsyncEngineClient  # noqa: E402
-from software.core.questions.config import build_default_question_entries  # noqa: E402
-from software.core.task import ExecutionState  # noqa: E402
-from software.providers.registry import parse_survey  # noqa: E402
-from software.ui.controller.run_controller_parts.runtime_preparation import prepare_execution_artifacts  # noqa: E402
+from software.core.config.schema import RuntimeConfig  
+from software.core.engine.async_engine import AsyncEngineClient  
+from software.core.questions.config import build_default_question_entries  
+from software.core.task import ExecutionState  
+from software.providers.registry import parse_survey  
+from software.ui.controller.run_controller_parts.runtime_preparation import prepare_execution_artifacts  
 
 
 def _iter_exception_messages(exc: BaseException) -> list[str]:

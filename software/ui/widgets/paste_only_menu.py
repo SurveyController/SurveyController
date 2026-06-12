@@ -1,5 +1,3 @@
-"""只保留粘贴项的输入框右键菜单。"""
-
 from __future__ import annotations
 
 from PySide6.QtCore import QEvent, QObject
@@ -8,7 +6,7 @@ from qfluentwidgets import Action, FluentIcon, LineEdit, RoundMenu
 
 
 class PasteOnlyMenu(QObject):
-    """把输入框右键菜单收敛为单独的“粘贴”操作。"""
+    
 
     def eventFilter(self, watched, event):
         if event.type() == QEvent.Type.ContextMenu and isinstance(watched, LineEdit):

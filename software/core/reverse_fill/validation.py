@@ -1,5 +1,3 @@
-"""Build and validate WJX reverse fill specs."""
-
 from __future__ import annotations
 
 import copy

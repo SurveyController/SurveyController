@@ -1,12 +1,10 @@
-"""带当前数值显示的滑动条。"""
-
 from PySide6.QtCore import Qt, QTimer, Signal
 from PySide6.QtWidgets import QGraphicsOpacityEffect, QHBoxLayout, QWidget
 from qfluentwidgets import BodyLabel, Slider
 
 
 class ValueSlider(QWidget):
-    """滑动条 + 当前值标签，提供类似 SpinBox 的常用接口。"""
+    
 
     valueChanged = Signal(int)
 

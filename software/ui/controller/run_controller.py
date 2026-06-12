@@ -1,5 +1,3 @@
-"""运行控制器薄门面。"""
-
 from __future__ import annotations
 
 from typing import Any, Callable, Optional

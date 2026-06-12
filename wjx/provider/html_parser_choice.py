@@ -1,4 +1,3 @@
-"""问卷星 HTML 解析：选择题与文本输入辅助。"""
 import re
 import logging
 from typing import Any, Dict, List, Optional, Tuple
@@ -81,7 +80,7 @@ def _extract_force_select_option(
     title_text: str,
     option_texts: List[str],
 ) -> Tuple[Optional[int], Optional[str]]:
-    """识别“请选XX”类指令，返回强制选择的选项索引。"""
+    
     if not option_texts:
         return None, None
 
@@ -112,7 +111,7 @@ def _extract_force_select_option(
             best_text: Optional[str] = None
             best_length = -1
             for option_idx, raw_text, normalized_text in normalized_options:
-                # 跳过纯数字文本，避免“第1题”之类误判；数字题走索引匹配兜底。
+                
                 if normalized_text.isdigit():
                     continue
                 if normalized_text in compact_sentence:
@@ -239,7 +238,7 @@ def _text_looks_meaningful(text: str) -> bool:
     return bool(re.search(r"[A-Za-z0-9\u4e00-\u9fff]", text))
 
 def _extract_rating_option_texts(question_div) -> List[str]:
-    """优先从评价题的星级锚点提取文本（避免 iconfont 文本）"""
+    
     if question_div is None:
         return []
     selectors = (

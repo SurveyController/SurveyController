@@ -1,5 +1,3 @@
-"""可点击卡片组件。"""
-
 from __future__ import annotations
 
 from PySide6.QtCore import QPoint, Qt, Signal
@@ -9,7 +7,7 @@ from qfluentwidgets import ElevatedCardWidget
 
 
 class ClickableElevatedCardWidget(ElevatedCardWidget):
-    """支持忽略指定子控件点击的卡片。"""
+    
 
     backgroundClicked = Signal()
 

@@ -12,7 +12,7 @@ from software.app.config import _HTML_SPACE_RE
 
 
 class AIRuntimeError(RuntimeError):
-    """AI 填空运行时错误（需要终止任务）。"""
+    pass
 
 
 _AI_FILL_MAX_ATTEMPTS = 4

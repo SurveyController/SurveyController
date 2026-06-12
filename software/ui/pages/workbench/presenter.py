@@ -1,5 +1,3 @@
-"""工作台页面装配与状态同步。"""
-
 from __future__ import annotations
 
 import copy
@@ -27,7 +25,7 @@ from software.ui.pages.workbench.strategy.page import QuestionStrategyPage
 
 
 class WorkbenchPresenter:
-    """集中处理工作台内部页面关系，避免主窗口直接管页面细节。"""
+    
 
     def __init__(self, *, controller: Any, host: Any) -> None:
         self.controller = controller

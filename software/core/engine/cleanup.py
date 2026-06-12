@@ -1,4 +1,3 @@
-"""异步清理任务执行器 - 后台回收浏览器实例等资源。"""
 from __future__ import annotations
 import logging
 from software.logging.log_utils import log_suppressed_exception
@@ -12,7 +11,7 @@ logger = logging.getLogger(__name__)
 
 
 class CleanupRunner:
-    """Run cleanup tasks in a single background worker to avoid blocking the UI."""
+    
 
     def __init__(self) -> None:
         self._lock = threading.Lock()
@@ -20,7 +19,7 @@ class CleanupRunner:
         self._thread: Optional[threading.Thread] = None
 
     def submit(self, task: Callable[[], None], delay_seconds: float = 0.0) -> None:
-        """提交普通清理任务（非 PID 清理）"""
+        
         delay = max(0.0, float(delay_seconds or 0.0))
         with self._lock:
             self._queue.append((task, delay))
@@ -30,7 +29,7 @@ class CleanupRunner:
             self._thread.start()
 
     def _worker(self) -> None:
-        """后台工作线程：处理普通清理任务队列"""
+        
         while True:
             with self._lock:
                 if not self._queue:

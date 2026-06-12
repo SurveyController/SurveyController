@@ -1,5 +1,3 @@
-"""兼容导出：运行内核控制端口。"""
-
 from software.core.engine.runtime_control_port import (
     RuntimeControlPort,
     on_random_ip_loading_changed as set_random_ip_loading,

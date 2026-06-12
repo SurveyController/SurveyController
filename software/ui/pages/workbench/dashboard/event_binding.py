@@ -1,5 +1,3 @@
-"""Dashboard 页面事件绑定。"""
-
 from __future__ import annotations
 
 import logging

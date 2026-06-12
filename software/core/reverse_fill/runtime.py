@@ -1,5 +1,3 @@
-"""Runtime helpers for reverse fill."""
-
 from __future__ import annotations
 
 from collections import deque

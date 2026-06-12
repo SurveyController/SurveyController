@@ -1,4 +1,3 @@
-"""代理池和租约管理 - 代理租约构建、TTL检查、地址规范化、健康检查"""
 from datetime import datetime, timezone
 import logging
 import time
@@ -29,7 +28,7 @@ from software.providers.common import (
 HTTP_PROXY_MIN_REMAINING_TTL_SECONDS = 30
 
 
-# ==================== 地址规范化 ====================
+
 
 def _normalize_proxy_address(proxy_address: Optional[str]) -> Optional[str]:
     if not proxy_address:
@@ -75,7 +74,7 @@ def _mask_proxy_for_log(proxy_address: Optional[str]) -> str:
     return raw
 
 
-# ==================== 租约构建 ====================
+
 
 def _parse_expire_at_to_ts(expire_at: Optional[str]) -> float:
     text = str(expire_at or "").strip()
@@ -138,7 +137,7 @@ def _coerce_proxy_lease(item: Any, *, source: str = "") -> Optional[ProxyLease]:
     return None
 
 
-# ==================== TTL 检查 ====================
+
 
 def get_proxy_required_ttl_seconds(
     answer_duration_range_seconds: Optional[Tuple[int, int]],
@@ -153,7 +152,7 @@ def get_proxy_required_ttl_seconds(
             max_seconds = _to_non_negative_int(answer_duration_range_seconds[0], 0)
     normalized_provider = str(survey_provider or "").strip().lower()
     if normalized_provider in {SURVEY_PROVIDER_WJX, SURVEY_PROVIDER_QQ, SURVEY_PROVIDER_CREDAMO}:
-        # HTTP 链路不会真实等待作答时长，但代理仍要撑过加载、提交、结果校验。
+        
         return HTTP_PROXY_MIN_REMAINING_TTL_SECONDS
     if normalized_provider:
         minute = get_proxy_minute_by_answer_seconds(
@@ -174,7 +173,7 @@ def proxy_lease_has_sufficient_ttl(lease: Optional[ProxyLease], *, required_ttl_
     return (expire_ts - time.time()) >= max(0, int(required_ttl_seconds or 0))
 
 
-# ==================== 默认代理构建 ====================
+
 
 def _build_default_proxy_lease(payload: dict, *, source: str = PROXY_SOURCE_DEFAULT) -> Optional[ProxyLease]:
     if not isinstance(payload, dict):
@@ -212,7 +211,7 @@ def _build_default_proxy_leases_from_batch(payload: dict, *, source: str = PROXY
     return leases
 
 
-# ==================== 健康检查 ====================
+
 
 def _proxy_is_responsive(proxy_address: str, skip_for_default: bool = True) -> bool:
     masked_proxy = _mask_proxy_for_log(proxy_address)
@@ -259,27 +258,27 @@ async def _proxy_is_responsive_async(proxy_address: str, skip_for_default: bool 
 
 
 def normalize_proxy_address(proxy_address: Optional[str]) -> Optional[str]:
-    """公开的代理地址规范化接口。"""
+    
     return _normalize_proxy_address(proxy_address)
 
 
 def mask_proxy_for_log(proxy_address: Optional[str]) -> str:
-    """公开的代理日志脱敏接口。"""
+    
     return _mask_proxy_for_log(proxy_address)
 
 
 def coerce_proxy_lease(item: Any, *, source: str = "") -> Optional[ProxyLease]:
-    """公开的代理租约标准化接口。"""
+    
     return _coerce_proxy_lease(item, source=source)
 
 
 def is_proxy_responsive(proxy_address: str, *, skip_for_default: bool = True) -> bool:
-    """公开的代理可用性检测接口。"""
+    
     return _proxy_is_responsive(proxy_address, skip_for_default=skip_for_default)
 
 
 async def is_proxy_responsive_async(proxy_address: str, *, skip_for_default: bool = True) -> bool:
-    """公开的异步代理可用性检测接口。"""
+    
     return await _proxy_is_responsive_async(proxy_address, skip_for_default=skip_for_default)
 
 

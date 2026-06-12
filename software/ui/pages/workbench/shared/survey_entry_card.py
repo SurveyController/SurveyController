@@ -1,5 +1,3 @@
-"""Shared survey URL and QR-code entry card."""
-
 from __future__ import annotations
 
 from typing import Iterable
@@ -19,7 +17,7 @@ from software.ui.widgets.paste_only_menu import PasteOnlyMenu
 
 
 class SurveyEntryCard(CardWidget):
-    """Card containing the common survey URL field and QR image entry."""
+    
 
     def __init__(
         self,

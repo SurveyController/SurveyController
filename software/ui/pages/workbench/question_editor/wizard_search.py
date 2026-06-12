@@ -1,5 +1,3 @@
-"""题目配置向导搜索辅助。"""
-
 import html
 from typing import TYPE_CHECKING, Any, List, Tuple, cast
 

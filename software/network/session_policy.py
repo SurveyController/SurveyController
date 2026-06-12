@@ -1,4 +1,3 @@
-"""会话策略 - 代理切换与浏览器实例复用逻辑"""
 import asyncio
 from collections import deque
 from typing import Iterable, Optional, Tuple
@@ -69,10 +68,7 @@ def _record_bad_proxy_and_maybe_pause(
     ctx: ExecutionState,
     runtime_bridge: Optional[RuntimeUiBridge],
 ) -> bool:
-    """
-    记录代理不可用事件。
-    现阶段不再根据代理异常次数自动暂停任务，统一由提交连续失败止损控制。
-    """
+    
     _ = ctx, runtime_bridge
     return False
 
@@ -228,7 +224,7 @@ def _merge_fetched_proxy_leases_locked(
 
 
 def merge_prefetched_proxy_leases(ctx: ExecutionState, fetched: Iterable[object]) -> int:
-    """把后台预热到的代理并入运行池，返回实际入池数量。"""
+    
     if not fetched:
         return 0
     with ctx.lock:
@@ -265,10 +261,7 @@ def _resolve_proxy_request_num_locked(ctx: ExecutionState) -> int:
 
 
 def resolve_proxy_prefetch_request_count(ctx: ExecutionState) -> int:
-    """计算后台预取还需要补多少代理。
-
-    仅按当前真实等待中的线程数补货，避免在线程仍在 AI/HTTP 阶段时持续囤积代理。
-    """
+    
     if not bool(getattr(ctx.config, "random_proxy_ip_enabled", False)):
         return 0
     with ctx.lock:
@@ -285,7 +278,7 @@ def resolve_proxy_prefetch_request_count(ctx: ExecutionState) -> int:
 
 
 def should_continue_proxy_prefetch(ctx: ExecutionState) -> bool:
-    """随机 IP 运行期间是否还需要后台补仓。"""
+    
     if not bool(getattr(ctx.config, "random_proxy_ip_enabled", False)):
         return False
     if _should_stop_proxy_wait(ctx, getattr(ctx, "stop_event", None)):
@@ -378,7 +371,7 @@ async def _select_proxy_for_session_async(
                     return None
                 continue
 
-            # 代理池为空时，使用全局 fetch 锁避免多线程并发重复请求代理 API（会快速耗尽额度）
+            
             fetch_lock_acquired = await _acquire_proxy_fetch_lock_async(ctx, stop_signal)
             if not fetch_lock_acquired:
                 return None

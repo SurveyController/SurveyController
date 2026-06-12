@@ -1,4 +1,3 @@
-"""问卷星多选题规则与约束。"""
 import logging
 import random
 from typing import List, Optional, Set, Tuple
@@ -6,7 +5,7 @@ from typing import List, Optional, Set, Tuple
 _WARNED_PROB_MISMATCH: Set[int] = set()
 
 def _normalize_selected_indices(indices: List[int], option_count: int) -> List[int]:
-    """去重并过滤越界索引，保持原始顺序。"""
+    
     normalized: List[int] = []
     seen: Set[int] = set()
     for idx in indices:

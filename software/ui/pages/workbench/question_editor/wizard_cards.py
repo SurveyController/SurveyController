@@ -1,5 +1,3 @@
-"""题目配置向导卡片与校验。"""
-
 import copy
 from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple, cast
 
@@ -105,7 +103,7 @@ class WizardCardsMixin:
     def _resolve_matrix_weights(
         self, entry: QuestionEntry, rows: int, columns: int
     ) -> List[List[float]]:
-        """解析矩阵题的配比配置，返回按行的默认权重。"""
+        
 
         def _clean_row(raw_row: Any) -> Optional[List[float]]:
             if not isinstance(raw_row, (list, tuple)):
@@ -325,7 +323,7 @@ class WizardCardsMixin:
         entry: QuestionEntry,
         parent: QWidget,
     ) -> CardWidget:
-        """构建单个题目的配置卡片。"""
+        
         info_entry = self._get_entry_info(idx)
         qnum = str(resolve_config_question_num(info_entry, idx + 1) or "")
         title_text = str(info_entry.get("title") or "").strip()

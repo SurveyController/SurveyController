@@ -1,5 +1,3 @@
-"""配置向导地区题选项。"""
-
 from __future__ import annotations
 
 import json

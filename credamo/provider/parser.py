@@ -1,5 +1,3 @@
-"""Credamo 见数问卷纯 HTTP 解析。"""
-
 from __future__ import annotations
 
 import ast
@@ -59,7 +57,7 @@ _MULTI_SELECT_RANGE_RE = re.compile(
 
 
 class CredamoParseError(RuntimeError):
-    """Credamo 接口结构无法解析时抛出的业务异常。"""
+    pass
 
 
 def _normalize_text(value: Any) -> str:

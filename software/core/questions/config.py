@@ -1,5 +1,3 @@
-"""题目配置门面导出。"""
-
 from software.core.questions.default_builder import build_default_question_entries
 from software.core.questions.normalization import configure_probabilities
 from software.core.questions.schema import (

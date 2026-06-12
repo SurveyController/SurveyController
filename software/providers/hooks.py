@@ -1,5 +1,3 @@
-"""Provider hook 构建工具。"""
-
 from __future__ import annotations
 
 import inspect

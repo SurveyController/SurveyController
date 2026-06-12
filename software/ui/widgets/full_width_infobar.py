@@ -1,12 +1,10 @@
-"""Full-width InfoBar widget."""
-
 from PySide6.QtCore import QEvent, QSize, QTimer
 from PySide6.QtWidgets import QSizePolicy
 from qfluentwidgets import InfoBar
 
 
 class FullWidthInfoBar(InfoBar):
-    """InfoBar that stretches to its parent's width."""
+    
 
     def __init__(self, *args, **kwargs):
         self._syncing = False

@@ -1,5 +1,3 @@
-"""问卷平台识别与元数据补全。"""
-
 from __future__ import annotations
 
 import re

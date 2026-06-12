@@ -1,5 +1,3 @@
-"""运行参数页开关和运行态同步。"""
-
 from __future__ import annotations
 
 import logging
@@ -26,7 +24,7 @@ class RuntimeControlSyncMixin:
     HTTP_MAX_THREADS: int
 
     def focus_answer_duration_setting(self):
-        """跳转并聚焦到“作答时长”设置项。"""
+        
         page = cast(Any, self)
 
         def _focus_target():

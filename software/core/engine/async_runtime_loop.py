@@ -1,5 +1,3 @@
-"""Async-first fill runtime loop."""
-
 from __future__ import annotations
 
 import asyncio
@@ -37,7 +35,7 @@ from software.providers.http_progress import update_http_submit_step
 
 
 class AsyncSlotRunner:
-    """One logical slot running repeated fill attempts as coroutines."""
+    
 
     def __init__(
         self,

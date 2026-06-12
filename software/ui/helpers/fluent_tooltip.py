@@ -1,5 +1,3 @@
-"""Fluent tooltip 辅助工具。"""
-
 from __future__ import annotations
 
 from typing import Iterable, Optional
@@ -9,7 +7,7 @@ from qfluentwidgets import ToolTipFilter, ToolTipPosition
 
 
 class FluentToolTipFilter(ToolTipFilter):
-    """支持禁用控件显示提示的 Fluent tooltip 过滤器。"""
+    
 
     def __init__(
         self,
@@ -37,7 +35,7 @@ def install_tooltip_filter(
     show_delay: int = 300,
     show_on_disabled: bool = True,
 ) -> Optional[FluentToolTipFilter]:
-    """给单个控件安装 Fluent tooltip 过滤器。"""
+    
     if widget is None:
         return None
 
@@ -68,7 +66,7 @@ def install_tooltip_filters(
     show_delay: int = 300,
     show_on_disabled: bool = True,
 ) -> None:
-    """批量安装 Fluent tooltip 过滤器。"""
+    
     for widget in widgets:
         install_tooltip_filter(
             widget,

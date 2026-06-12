@@ -1,5 +1,3 @@
-"""腾讯问卷原生 HTTP 答题提交。"""
-
 from __future__ import annotations
 
 import asyncio

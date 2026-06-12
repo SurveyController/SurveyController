@@ -1,5 +1,3 @@
-"""随机 IP 设置卡。"""
-
 from __future__ import annotations
 
 import logging
@@ -44,7 +42,7 @@ _PROXY_SOURCE_CUSTOM = "custom"
 
 
 class SearchableComboBox(EditableComboBox):
-    """带搜索过滤的下拉框。"""
+    
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -99,7 +97,7 @@ class _ProxyApiTestWorker(QObject):
 
 
 class RandomIPSettingCard(ExpandGroupSettingCard):
-    """随机IP设置卡。"""
+    
 
     def __init__(self, parent=None):
         super().__init__(

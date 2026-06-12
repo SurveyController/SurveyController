@@ -1,5 +1,3 @@
-"""RunController 运行控制与状态管理逻辑。"""
-
 from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any, Callable, Dict, Optional

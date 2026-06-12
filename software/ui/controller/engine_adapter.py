@@ -1,5 +1,3 @@
-"""运行控制器使用的引擎/UI 适配层。"""
-
 from __future__ import annotations
 
 import asyncio
@@ -22,7 +20,7 @@ from software.core.task import ExecutionState
 
 
 class BoolVar:
-    """简单的布尔状态封装，用于 UI 适配。"""
+    
 
     def __init__(self, value: bool = False):
         self._value = bool(value)
@@ -35,7 +33,7 @@ class BoolVar:
 
 
 class EngineGuiAdapter(RuntimeUiBridge):
-    """传给引擎的 UI 适配器，负责把回调桥接回 Qt 主线程。"""
+    
 
     def __init__(
         self,

@@ -1,5 +1,3 @@
-"""服务条款对话框。"""
-
 from PySide6.QtCore import Qt, QSize
 from PySide6.QtGui import QGuiApplication
 from qfluentwidgets import (
@@ -19,7 +17,7 @@ LEGAL_TEXT_FILES = (
 
 
 def _read_legal_text(relative_path: str) -> str:
-    """读取法律文本文件，缺失时给出可读提示。"""
+    
     full_path = get_resource_path(relative_path)
     try:
         with open(full_path, "r", encoding="utf-8") as file:
@@ -34,7 +32,7 @@ def _load_terms_content() -> str:
 
 
 def _resolve_dialog_size(parent) -> QSize:
-    """根据父窗口或屏幕大小，计算中等尺寸的条款弹窗。"""
+    
     if parent is not None and parent.width() > 0 and parent.height() > 0:
         base_width = parent.width()
         base_height = parent.height()
@@ -54,7 +52,7 @@ def _resolve_dialog_size(parent) -> QSize:
 
 
 class TermsOfServiceDialog(MessageBoxBase):
-    """服务条款弹窗，按官方推荐使用 MessageBoxBase 承载自定义内容。"""
+    
 
     def __init__(self, parent=None):
         super().__init__(parent)

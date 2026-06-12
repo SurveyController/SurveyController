@@ -1,4 +1,3 @@
-"""条件规则引擎：按用户配置的条件规则约束后续题目作答。"""
 from __future__ import annotations
 
 import logging
@@ -24,8 +23,8 @@ class AnswerRule:
     target_question_num: int
     action_mode: str
     target_option_indices: List[int]
-    condition_row_index: Optional[int] = None  # 矩阵题条件行（0-based），None 表示非矩阵题
-    target_row_index: Optional[int] = None     # 矩阵题目标行（0-based），None 表示非矩阵题
+    condition_row_index: Optional[int] = None  
+    target_row_index: Optional[int] = None     
 
 
 def _to_int(value: Any, default: int = 0) -> int:
@@ -81,7 +80,7 @@ def sanitize_answer_rules(
     answer_rules: Optional[Sequence[Dict[str, Any]]],
     questions_info: Optional[Sequence[SurveyQuestionMeta | Dict[str, Any]]] = None,
 ) -> Tuple[List[Dict[str, Any]], Dict[str, int]]:
-    """清洗规则，并在提供题目信息时移除已不再受支持的题型规则。"""
+    
     stats = {"invalid": 0, "unsupported": 0}
     sanitized: List[Dict[str, Any]] = []
     question_map = _build_question_info_map(questions_info)
@@ -122,7 +121,7 @@ def normalize_rule_dict(raw: Any) -> Optional[Dict[str, Any]]:
     target_option_indices = _to_int_list(raw.get("target_option_indices"))
     if not condition_option_indices or not target_option_indices:
         return None
-    # 矩阵题行索引（可选）
+    
     condition_row_index: Optional[int] = None
     target_row_index: Optional[int] = None
     raw_cri = raw.get("condition_row_index")
@@ -175,7 +174,7 @@ def reset_consistency_context(
     answer_rules: Optional[Sequence[Dict[str, Any]]] = None,
     questions_info: Optional[Sequence[SurveyQuestionMeta | Dict[str, Any]]] = None,
 ) -> None:
-    """每份问卷开始时调用，注入并重置条件规则上下文。"""
+    
     parsed_rules: List[AnswerRule] = []
     sanitized_rules, _ = sanitize_answer_rules(answer_rules, questions_info)
     for item in sanitized_rules:
@@ -214,7 +213,7 @@ def _is_rule_triggered(rule: AnswerRule) -> bool:
     record = answered.get(rule.condition_question_num)
     if record is None:
         return False
-    # 矩阵题：从行级答案中取选中索引
+    
     if rule.condition_row_index is not None:
         selected_indices = set(_to_int_list(record.row_answers.get(rule.condition_row_index, [])))
     else:
@@ -237,7 +236,7 @@ def _pick_latest_triggered_rule(question_number: int, row_index: Optional[int] =
         if rule.target_row_index != row_index:
             continue
         if _is_rule_triggered(rule):
-            # 冲突按列表顺序覆盖：越靠后越优先
+            
             selected_rule = rule
     return selected_rule
 
@@ -286,7 +285,7 @@ def apply_single_like_consistency(
     probabilities: Sequence[float],
     question_number: int,
 ) -> List[float]:
-    """对单选/量表/评价题的权重进行规则约束。"""
+    
     base_probabilities = _sanitize_probabilities(probabilities)
     rule = _pick_latest_triggered_rule(question_number, row_index=None)
     if rule is None:
@@ -299,7 +298,7 @@ def apply_matrix_row_consistency(
     question_number: int,
     row_index: int,
 ) -> List[float]:
-    """对矩阵题指定行的权重进行规则约束。"""
+    
     base_probabilities = _sanitize_probabilities(probabilities)
     rule = _pick_latest_triggered_rule(question_number, row_index=row_index)
     if rule is None:
@@ -311,7 +310,7 @@ def get_multiple_rule_constraint(
     question_number: int,
     option_count: int,
 ) -> Tuple[Set[int], Set[int], Optional[str]]:
-    """获取多选题规则约束：必选集合 / 禁选集合 / 规则ID。"""
+    
     rule = _pick_latest_triggered_rule(question_number, row_index=None)
     if rule is None:
         return set(), set(), None

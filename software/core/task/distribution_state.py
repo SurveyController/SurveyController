@@ -1,5 +1,3 @@
-"""ExecutionState 的分布抽样与信效度配额状态。"""
-
 from __future__ import annotations
 
 import threading

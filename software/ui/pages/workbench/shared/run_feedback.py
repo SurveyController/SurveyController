@@ -1,5 +1,3 @@
-"""Workbench 页面共享运行反馈。"""
-
 from __future__ import annotations
 
 import logging

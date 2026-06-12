@@ -1,5 +1,3 @@
-"""严格自定义比例约束工具。"""
-
 from __future__ import annotations
 
 import math
@@ -8,7 +6,7 @@ from typing import Any, Dict, List, Optional, Sequence
 
 
 def has_positive_weight_values(raw: Any) -> bool:
-    """判断权重配置里是否存在正值，支持嵌套列表。"""
+    
     if isinstance(raw, (int, float)):
         try:
             value = float(raw)
@@ -39,7 +37,7 @@ def is_strict_custom_ratio_mode(
     probabilities: Any,
     custom_weights: Any,
 ) -> bool:
-    """自定义配比题进入严格模式：手动比例为硬约束。"""
+    
     mode = str(distribution_mode or "").strip().lower()
     if mode != "custom":
         return False
@@ -61,7 +59,7 @@ def is_strict_ratio_question(task_ctx: Any, question_number: Any) -> bool:
 
 
 def stochastic_round(value: float) -> int:
-    """按小数部分做随机取整，避免固定向上/向下偏差。"""
+    
     if not math.isfinite(value) or value <= 0.0:
         return 0
     lower = int(math.floor(value))
@@ -74,7 +72,7 @@ def weighted_sample_without_replacement(
     weights: Sequence[float],
     count: int,
 ) -> List[int]:
-    """按权重不放回抽样。"""
+    
     if count <= 0:
         return []
 
@@ -110,7 +108,7 @@ def weighted_sample_without_replacement(
 
 
 def build_rank_groups(probabilities: Sequence[float]) -> List[List[int]]:
-    """按权重值分组，返回从高到低的索引层级。"""
+    
     buckets: Dict[float, List[int]] = {}
     for idx, raw_weight in enumerate(probabilities):
         try:
@@ -127,7 +125,7 @@ def enforce_reference_rank_order(
     probabilities: Sequence[float],
     reference: Sequence[float],
 ) -> List[float]:
-    """按参考权重的层级约束结果，避免低权重层反超高权重层。"""
+    
     adjusted = [max(0.0, float(value)) if isinstance(value, (int, float)) else 0.0 for value in probabilities]
     groups = build_rank_groups(reference)
     if len(groups) <= 1:

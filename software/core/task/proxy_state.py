@@ -1,5 +1,3 @@
-"""ExecutionState 的代理与运行态同步相关方法。"""
-
 from __future__ import annotations
 
 import asyncio
@@ -13,7 +11,7 @@ from software.core.engine.stop_signal import StopSignalLike
 
 @dataclass
 class ProxyLease:
-    """代理租约对象，保存地址与过期时间信息。"""
+    
 
     address: str = ""
     expire_at: str = ""

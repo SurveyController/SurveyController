@@ -1,5 +1,3 @@
-"""运行参数页 - AI 提供商和 API Key 配置组件"""
-
 from typing import Optional
 import logging
 from software.logging.log_utils import log_suppressed_exception
@@ -37,7 +35,7 @@ from software.core.config.schema import RuntimeConfig
 
 
 class AIPromptSettingCard(ExpandGroupSettingCard):
-    """AI 系统提示词展开卡。"""
+    
 
     def __init__(self, prompt_text: str, default_prompt: str, parent=None):
         super().__init__(
@@ -96,7 +94,7 @@ class RuntimeAISection(QObject):
         self._ai_loading = False
         self._ai_test_thread: Optional[QThread] = None
         self._ai_test_worker: Optional[AITestWorker] = None
-        self._current_infobar: Optional[InfoBar] = None  # 存储当前显示的InfoBar引用
+        self._current_infobar: Optional[InfoBar] = None  
         ai_config = get_ai_settings()
         initial_mode = str(ai_config.get("ai_mode") or "free").strip().lower()
         if initial_mode not in self._AI_MODES:
@@ -243,14 +241,14 @@ class RuntimeAISection(QObject):
             "请查阅所选服务商的API文档后再填写准确的模型id号，切勿随意填写",
             self.group,
         )
-        # 可编辑下拉框 - 用于有推荐模型的服务商
+        
         self.ai_model_combo = EditableComboBox(self.ai_model_card)
         self.ai_model_combo.setMinimumWidth(280)
         self.ai_model_combo.setPlaceholderText("输入或选择模型名称")
         current_model = ai_config.get("model") or ""
         if current_model:
             self.ai_model_combo.setText(current_model)
-        # 纯输入框 - 用于自定义模式
+        
         self.ai_model_edit = LineEdit(self.ai_model_card)
         self.ai_model_edit.setMinimumWidth(280)
         self.ai_model_edit.setPlaceholderText("输入模型名称")
@@ -337,8 +335,8 @@ class RuntimeAISection(QObject):
         self.ai_test_card.button.setEnabled(not loading)
 
     def _show_ai_infobar(self, message: str, success: bool = True, duration: int = 2000):
-        """安全地显示 InfoBar，关闭之前的避免动画冲突"""
-        # 先关闭之前的 InfoBar
+        
+        
 
         if self._current_infobar is not None:
             try:
@@ -347,7 +345,7 @@ class RuntimeAISection(QObject):
                 pass
             self._current_infobar = None
 
-        # 显示新的 InfoBar
+        
         infobar_func = InfoBar.success if success else InfoBar.error
         self._current_infobar = infobar_func(
             "",
@@ -358,7 +356,7 @@ class RuntimeAISection(QObject):
         )
 
     def _update_ai_visibility(self):
-        """根据当前模式与提供商更新 AI 配置项的可见性和推荐模型"""
+        
         ai_mode = self._get_current_ai_mode()
         is_free_mode = ai_mode == "free"
         idx = self.ai_provider_combo.currentIndex()
@@ -373,30 +371,30 @@ class RuntimeAISection(QObject):
         if is_free_mode:
             return
 
-        # 更新推荐模型列表
+        
         provider_config = AI_PROVIDERS.get(provider_key, {})
         recommended_models = provider_config.get("recommended_models", [])
         default_model = provider_config.get("default_model", "")
 
-        # 控制显示哪个输入控件
+        
         self.ai_model_combo.setVisible(not is_custom)
         self.ai_model_edit.setVisible(is_custom)
 
         if is_custom:
-            # 自定义模式：切换时清空（除非是初始化加载）
+            
             if not self._ai_loading:
                 self.ai_model_edit.setText("")
                 save_ai_settings(model="")
         else:
-            # 非自定义模式：清空并填充推荐模型
+            
             self.ai_model_combo.clear()
             if recommended_models:
                 self.ai_model_combo.addItems(recommended_models)
 
-            # 更新占位符
+            
             self.ai_model_combo.setPlaceholderText(default_model or "输入模型名称")
 
-            # 切换服务商时使用新的默认模型（除非是初始化加载）
+            
             if not self._ai_loading:
                 self.ai_model_combo.setText(default_model)
                 save_ai_settings(model=default_model)
@@ -452,7 +450,7 @@ class RuntimeAISection(QObject):
         self._ai_loading = False
 
     def _on_ai_mode_changed(self):
-        """AI 模式变化"""
+        
         if self._ai_loading:
             return
         ai_mode = self._get_current_ai_mode()
@@ -470,7 +468,7 @@ class RuntimeAISection(QObject):
         self._update_ai_visibility()
 
     def _on_ai_provider_changed(self):
-        """AI 提供商选择变化"""
+        
         if self._ai_loading:
             return
         idx = self.ai_provider_combo.currentIndex()
@@ -491,37 +489,37 @@ class RuntimeAISection(QObject):
             self.ai_provider_link.setUrl("")
 
     def _on_ai_apikey_changed(self):
-        """API Key 变化"""
+        
         if self._ai_loading:
             return
         save_ai_settings(api_key=self.ai_apikey_edit.text())
 
     def _on_ai_baseurl_changed(self):
-        """Base URL 变化"""
+        
         if self._ai_loading:
             return
         save_ai_settings(base_url=self.ai_baseurl_edit.text())
 
     def _on_ai_model_changed(self, text: str):
-        """模型变化（EditableComboBox）"""
+        
         if self._ai_loading:
             return
         save_ai_settings(model=text.strip())
 
     def _on_ai_model_edit_changed(self):
-        """模型变化（LineEdit - 自定义模式）"""
+        
         if self._ai_loading:
             return
         save_ai_settings(model=self.ai_model_edit.text().strip())
 
     def _get_current_model_value(self) -> str:
-        """获取当前模型值"""
+        
         if self.ai_model_edit.isVisible():
             return self.ai_model_edit.text().strip()
         return self.ai_model_combo.currentText().strip()
 
     def _on_ai_prompt_changed(self):
-        """系统提示词变化"""
+        
         if self._ai_loading:
             return
         self._ai_system_prompt = self.ai_prompt_card.prompt_text()
@@ -529,7 +527,7 @@ class RuntimeAISection(QObject):
             save_ai_settings(system_prompt=self._ai_system_prompt)
 
     def _on_ai_test_clicked(self):
-        """测试 AI 连接"""
+        
         if self._ai_loading:
             return
         if self._ai_test_thread is not None and self._ai_test_thread.isRunning():
@@ -555,7 +553,7 @@ class RuntimeAISection(QObject):
         self._ai_test_thread.start()
 
     def _on_ai_test_finished(self, success: bool, message: str):
-        """测试 AI 连接完成"""
+        
         self._set_ai_test_loading(False)
         if success:
             self._show_ai_infobar(message, success=True, duration=3000)

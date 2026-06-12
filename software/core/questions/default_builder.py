@@ -1,5 +1,3 @@
-"""默认题目配置构建。"""
-
 from __future__ import annotations
 
 import copy
@@ -131,7 +129,7 @@ def build_default_question_entries(
     survey_url: str = "",
     existing_entries: Optional[List[QuestionEntry]] = None,
 ) -> List[QuestionEntry]:
-    """按解析结果生成默认题目配置，并尽量复用旧配置。"""
+    
 
     existing_by_num: Dict[int, QuestionEntry] = {}
     existing_by_title: Dict[str, QuestionEntry] = {}

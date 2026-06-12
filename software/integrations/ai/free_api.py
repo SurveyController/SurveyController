@@ -1,6 +1,3 @@
-# -*- coding: utf-8 -*-
-"""免费 AI 服务请求与响应解析。"""
-
 from __future__ import annotations
 
 import asyncio
@@ -31,7 +28,7 @@ logger = logging.getLogger(__name__)
 
 
 class FreeAITimeoutError(RuntimeError):
-    """免费 AI 在完成内部重试后仍然超时。"""
+    pass
 
 
 @dataclass(frozen=True)

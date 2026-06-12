@@ -1,4 +1,3 @@
-"""基于 httpx 的原生异步 HTTP 客户端。"""
 from __future__ import annotations
 
 import asyncio
@@ -34,7 +33,7 @@ class _AsyncClientEntry:
 
 
 class _AsyncStreamResponse:
-    """给异步流响应补一个兼容接口。"""
+    
 
     def __init__(self, response: httpx.Response, stream_ctx: Any, release: Any) -> None:
         self._response = response
@@ -86,7 +85,7 @@ class _AsyncStreamResponse:
 
 
 class _AsyncClientManager:
-    """按事件循环和配置缓存 AsyncClient。"""
+    
 
     def __init__(self) -> None:
         self._lock = threading.RLock()

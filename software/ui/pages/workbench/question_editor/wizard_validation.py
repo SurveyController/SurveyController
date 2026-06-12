@@ -1,5 +1,3 @@
-"""配置向导保存前校验。"""
-
 from __future__ import annotations
 
 from typing import Any, Dict, List, Protocol, Tuple

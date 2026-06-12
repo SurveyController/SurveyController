@@ -1,11 +1,3 @@
-# -*- coding: utf-8 -*-
-
-"""
-应用配置常量
-
-集中管理应用的各种配置参数，方便统一修改和维护
-"""
-
 import os
 import re
 import sys
@@ -69,7 +61,7 @@ def _resolve_env_value(key: str, default: str) -> str:
 
 
 def get_proxy_auth() -> str:
-    """获取代理认证信息（仅保留环境变量兼容）。"""
+    
     return os.environ.get("WJX_PROXY_AUTH", "")
 _DEFAULT_CONTACT_API = "https://bot.hungrym0.com"
 _DEFAULT_AUTH_TRIAL = "https://api-wjx.hungrym0.com/api/auth/trial"
@@ -80,11 +72,11 @@ _DEFAULT_SUBMISSION_REPORT_ENDPOINT = "https://api-wjx.hungrym0.com/api/submissi
 _DEFAULT_AI_FREE_ENDPOINT = "https://api-wjx.hungrym0.com/api/ai/free"
 _DEFAULT_STATUS_ENDPOINT = "https://api-wjx.hungrym0.com/api/status"
 
-# ==================== HTTP 运行时配置 ====================
-# 纯 HTTP 并发会话上限
+
+
 HTTP_MAX_THREADS = 64
 
-# ==================== 用户代理配置 ====================
+
 USER_AGENT_PRESETS = {
     "pc_web": {
         "label": "电脑网页端",
@@ -100,10 +92,10 @@ USER_AGENT_PRESETS = {
     },
 }
 
-# 默认用户代理
+
 DEFAULT_USER_AGENT = USER_AGENT_PRESETS["pc_web"]["ua"]
 
-# 默认 HTTP 请求头
+
 DEFAULT_HTTP_HEADERS = {
     "User-Agent": DEFAULT_USER_AGENT,
     "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
@@ -111,30 +103,30 @@ DEFAULT_HTTP_HEADERS = {
     "Connection": "close",
 }
 
-# ==================== 日志配置 ====================
+
 LOG_FORMAT = "%(asctime)s [%(levelname)s] %(message)s"
 LOG_BUFFER_CAPACITY = 2000
 LOG_DIR_NAME = "logs"
 LOG_REFRESH_INTERVAL_MS = 500
 
-# ==================== 资源路径配置 ====================
+
 APP_ICON_RELATIVE_PATH = "icon.ico"
 
-# ==================== 提交行为配置 ====================
-# 提交前初始延迟（秒）
+
+
 SUBMIT_INITIAL_DELAY = 0.35
-# 点击提交后的稳定延迟（秒）
+
 SUBMIT_CLICK_SETTLE_DELAY = 0.25
-# 提交后等待 URL 变化的最大时间（秒）
+
 POST_SUBMIT_URL_MAX_WAIT = 0.8
-# 提交后 URL 变化检测轮询间隔（秒）
+
 POST_SUBMIT_URL_POLL_INTERVAL = 0.05
-# 判定提交成功后的缓冲等待（秒）
+
 POST_SUBMIT_CLOSE_GRACE_SECONDS = 0.8
-# 停止操作的强制等待时间（秒）
+
 STOP_FORCE_WAIT_SECONDS = 0.3
 
-# ==================== 代理配置 ====================
+
 PROXY_MAX_PROXIES = 80
 PROXY_HEALTH_CHECK_URL = "https://www.wjx.cn"
 PROXY_HEALTH_CHECK_TIMEOUT = 15
@@ -149,14 +141,14 @@ PROXY_QUOTA_COST_MAP = {
     15: 8,
     30: 20,
 }
-# 代理源常量
+
 PROXY_SOURCE_DEFAULT = "default"
 PROXY_SOURCE_BENEFIT = "benefit"
 PROXY_SOURCE_CUSTOM = "custom"
-# 默认代理池类型
+
 PROXY_POOL_ORDINARY = "ordinary"
 PROXY_POOL_QUALITY = "quality"
-# ==================== API 端点配置 ====================
+
 CONTACT_API_URL = _resolve_env_value("CONTACT_API_URL", _DEFAULT_CONTACT_API)
 AUTH_TRIAL_ENDPOINT = _resolve_env_value("AUTH_TRIAL_ENDPOINT", _DEFAULT_AUTH_TRIAL)
 AUTH_BONUS_CLAIM_ENDPOINT = _resolve_env_value("AUTH_BONUS_CLAIM_ENDPOINT", _DEFAULT_AUTH_BONUS_CLAIM)
@@ -166,12 +158,6 @@ SUBMISSION_REPORT_ENDPOINT = _resolve_env_value("SUBMISSION_REPORT_ENDPOINT", _D
 AI_FREE_ENDPOINT = _resolve_env_value("AI_FREE_ENDPOINT", _DEFAULT_AI_FREE_ENDPOINT)
 STATUS_ENDPOINT = _resolve_env_value("STATUS_ENDPOINT", _DEFAULT_STATUS_ENDPOINT)
 
-
-# ==================== 时长控制配置 ====================
-# 时长控制持续时间抖动系数
-# 时长控制最小延迟（秒）
-
-# ==================== 问卷题型配置 ====================
 QUESTION_TYPE_LABELS = {
     "radio": "单选题",
     "checkbox": "多选题",
@@ -190,10 +176,10 @@ QUESTION_TYPE_LABELS = {
     "location": "地区题",
 }
 LOCATION_QUESTION_LABEL = "位置题"
-DEFAULT_FILL_TEXT = "无"  # 填空选项留空时的默认文本
+DEFAULT_FILL_TEXT = "无"  
 
-# ==================== 维度配置 ====================
-# 预设的常用维度列表（用户也可以自定义新维度）
+
+
 PRESET_DIMENSIONS = [
     "满意度",
     "信任感",
@@ -202,14 +188,14 @@ PRESET_DIMENSIONS = [
     "服务质量",
     "产品质量",
 ]
-DIMENSION_UNGROUPED = "未分组"  # 未指定维度的题目归为此组
+DIMENSION_UNGROUPED = "未分组"  
 
-# ==================== 正则表达式配置 ====================
+
 _HTML_SPACE_RE = re.compile(r"\s+")
 _LNGLAT_PATTERN = re.compile(r"^\s*-?\d+(?:\.\d+)?\s*,\s*-?\d+(?:\.\d+)?\s*$")
 _INVALID_FILENAME_CHARS_RE = re.compile(r'[\\/:*?"<>|]+')
 
-# ==================== 多选题限制检测配置 ====================
+
 _MULTI_LIMIT_ATTRIBUTE_NAMES = (
     "max",
     "maxvalue",
@@ -327,7 +313,7 @@ _ENGLISH_MULTI_MIN_PATTERNS = (
     re.compile(r"(?:at\s+least|min(?:imum)?\s*)\s*(\d+)", re.IGNORECASE),
 )
 
-# ==================== 更新配置 ====================
+
 VELOPACK_FEED_URL = _resolve_env_value(
     "SURVEYCONTROLLER_VELOPACK_FEED_URL",
     "https://dl.hungrym0.com/surveycontroller/win/stable/" if sys.platform == "win32" else "",

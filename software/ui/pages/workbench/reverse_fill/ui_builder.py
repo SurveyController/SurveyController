@@ -1,5 +1,3 @@
-"""反填页 UI 组装。"""
-
 from __future__ import annotations
 
 from PySide6.QtCore import Qt

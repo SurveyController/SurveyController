@@ -1,5 +1,3 @@
-"""HTTP 提交阶段进度辅助。"""
-
 from __future__ import annotations
 
 import asyncio
@@ -24,7 +22,7 @@ async def update_http_submit_step(
     *,
     min_visible_seconds: float = HTTP_SUBMIT_STEP_MIN_VISIBLE_SECONDS,
 ) -> None:
-    """更新 HTTP 提交阶段，并短暂让 UI 有机会刷出这个阶段。"""
+    
 
     label = str(step_label or "").strip()
     try:

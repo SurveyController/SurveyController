@@ -1,5 +1,3 @@
-"""Velopack CI 端到端更新探针。"""
-
 from __future__ import annotations
 
 import json

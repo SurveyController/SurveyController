@@ -1,5 +1,3 @@
-"""ContactForm 生命周期与常用状态操作。"""
-
 from __future__ import annotations
 
 import logging
@@ -74,7 +72,7 @@ def stop_activity_indicators(form: Any) -> None:
 
 
 def refresh_random_ip_user_id_hint(form: Any) -> None:
-    """刷新消息框下方的随机IP账号提示。"""
+    
     try:
         snapshot = _get_session_snapshot(form)
     except Exception as exc:
@@ -111,7 +109,7 @@ def stop_status_polling(form: Any) -> None:
 
 
 def close_all_infobars(form: Any) -> None:
-    """关闭所有子 InfoBar 组件，避免线程泄漏。"""
+    
     try:
         for child in form.findChildren(_info_bar(form)):
             try:

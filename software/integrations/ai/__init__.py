@@ -1,5 +1,3 @@
-"""AI 外部服务适配。"""
-
 from software.integrations.ai.client import (
     AI_PROVIDERS,
     DEFAULT_SYSTEM_PROMPT_FREE,

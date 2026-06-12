@@ -1,4 +1,3 @@
-"""问卷星 HTML 解析：规则与元数据。"""
 import re
 from typing import Any, Dict, List, Optional, Tuple
 
@@ -30,7 +29,7 @@ def _extract_question_title(question_div, fallback_number: int) -> str:
     return f"第{fallback_number}题"
 
 def _collect_multi_limit_text_fragments(question_div) -> List[str]:
-    """收集可能包含多选限制说明的文本，排除选项正文避免数字误判。"""
+    
     if question_div is None:
         return []
 
@@ -92,12 +91,12 @@ def _collect_multi_limit_text_fragments(question_div) -> List[str]:
     return deduped
 
 def _extract_multiple_choice_limits(question_div, question_number: int) -> Tuple[Optional[int], Optional[int]]:
-    """从多选题 HTML 中提取选择数量限制（最少/最多）"""
+    
     _ = question_number
     if question_div is None:
         return None, None
 
-    # 直接复用多选限制解析权威实现
+    
     try:
         from wjx.provider.questions.multiple_limits import (
             _extract_multi_limit_range_from_text,
@@ -108,14 +107,14 @@ def _extract_multiple_choice_limits(question_div, question_number: int) -> Tuple
         min_limit: Optional[int] = None
         max_limit: Optional[int] = None
 
-        # 1. 从属性提取
+        
         attr_min, attr_max = _extract_min_max_from_attributes(question_div)
         if attr_min is not None:
             min_limit = attr_min
         if attr_max is not None:
             max_limit = attr_max
 
-        # 2. 从 JSON 属性提取
+        
         if min_limit is None or max_limit is None:
             for attr_name in ("data", "data-setting", "data-validate"):
                 try:
@@ -130,7 +129,7 @@ def _extract_multiple_choice_limits(question_div, question_number: int) -> Tuple
                 if min_limit is not None and max_limit is not None:
                     break
 
-        # 3. 从文本提取
+        
         if min_limit is None or max_limit is None:
             for fragment in _collect_multi_limit_text_fragments(question_div):
                 cand_min, cand_max = _extract_multi_limit_range_from_text(fragment)
@@ -160,7 +159,7 @@ def _extract_question_metadata_from_html(soup, question_div, question_number: in
     if type_code in {"3", "4", "5", "11"}:
         option_texts, fillable_indices = _collect_choice_option_texts(question_div)
         option_count = len(option_texts)
-        # 如果是多选题（type_code == "4"），提取选择数量限制
+        
         if type_code == "4":
             multi_min_limit, multi_max_limit = _extract_multiple_choice_limits(question_div, question_number)
     elif type_code == "7":
@@ -179,7 +178,7 @@ def _extract_question_metadata_from_html(soup, question_div, question_number: in
     return option_texts, option_count, matrix_rows, row_texts, fillable_indices, multi_min_limit, multi_max_limit
 
 def _extract_jump_rules_from_html(question_div, question_number: int, option_texts: List[str]) -> Tuple[bool, List[Dict[str, Any]]]:
-    """从静态 HTML 中提取跳题逻辑。"""
+    
     _ = question_number
     has_jump_attr = str(question_div.get("hasjump") or "").strip() == "1"
     jump_rules: List[Dict[str, Any]] = []
@@ -202,7 +201,7 @@ def _extract_jump_rules_from_html(question_div, question_number: int, option_tex
     def _jump_target_terminates(jumpto_num: int, option_text: Optional[str]) -> bool:
         if option_text and any(keyword in option_text for keyword in terminate_keywords):
             return True
-        # 问卷星移动版脚本里 jumpto=1/-1 是特殊结束值，不是跳回第 1 题。
+        
         return int(jumpto_num or 0) in {1, -1}
 
     selectable_nodes = []
@@ -255,7 +254,7 @@ def _extract_jump_rules_from_html(question_div, question_number: int, option_tex
     return has_jump_attr or bool(jump_rules), jump_rules
 
 def _extract_display_conditions_from_html(question_div, question_number: int) -> Tuple[bool, List[Dict[str, Any]]]:
-    """从静态 HTML 中提取按答案显示/隐藏题目的条件逻辑。"""
+    
     _ = question_number
     relation_raw = str(question_div.get("relation") or "").strip()
     if not relation_raw:
@@ -304,7 +303,7 @@ def _extract_display_conditions_from_html(question_div, question_number: int) ->
     return bool(conditions), conditions
 
 def _attach_display_condition_metadata(questions_info: List[Dict[str, Any]]) -> None:
-    """为题目列表补充“受条件控制显示”和“控制后续显示”两类元数据。"""
+    
     by_num: Dict[int, Dict[str, Any]] = {}
     for info in questions_info:
         try:

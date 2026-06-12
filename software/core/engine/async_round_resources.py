@@ -1,5 +1,3 @@
-"""异步运行槽位的单轮答题资源租约。"""
-
 from __future__ import annotations
 
 import asyncio
@@ -17,7 +15,7 @@ JOINT_PRE_ANSWER_TIMEOUT = object()
 
 
 class AsyncRoundResources:
-    """管理反填样本和联合信效度槽位。"""
+    
 
     def __init__(
         self,

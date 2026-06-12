@@ -1,5 +1,3 @@
-"""MainWindow 对话框与线程安全弹窗方法。"""
-
 from __future__ import annotations
 
 import logging
@@ -21,7 +19,7 @@ from software.logging.action_logger import log_action
 
 
 class MainWindowDialogsMixin:
-    """为主窗口提供线程安全的消息提示与确认对话框。"""
+    
 
     _UI_DISPATCH_TIMEOUT_SECONDS = 5.0
 
@@ -36,7 +34,7 @@ class MainWindowDialogsMixin:
         def windowIcon(self) -> QIcon: ...
 
     def _qt_timer_context(self) -> QObject:
-        """声明该 mixin 只用于 QObject 宿主，统一提供定时器回调上下文。"""
+        
         return cast(QObject, self)
 
     def _dispatch_to_ui(self, func: Callable[[], Any]) -> Any:
@@ -182,7 +180,7 @@ class MainWindowDialogsMixin:
         dialog.destroyed.connect(_cleanup)
 
     def show_confirm_dialog(self, title: str, message: str) -> bool:
-        """显示确认对话框，返回用户是否确认。"""
+        
 
         def _show():
             log_action(
@@ -216,7 +214,7 @@ class MainWindowDialogsMixin:
         yes_text: str,
         cancel_text: str,
     ) -> bool:
-        """在 UI 线程显示自定义按钮确认框。"""
+        
         def _show() -> bool:
             log_action(
                 "DIALOG",
@@ -243,7 +241,7 @@ class MainWindowDialogsMixin:
         return bool(self._dispatch_to_ui(_show))
 
     def show_message_dialog(self, title: str, message: str, *, level: str = "info") -> None:
-        """显示消息对话框。level 仅用于日志/调用语义，不影响窗口样式。"""
+        
         _ = level
 
         def _show():

@@ -1,5 +1,3 @@
-"""题目配置转运行时数据。"""
-
 from __future__ import annotations
 
 import copy

@@ -1,4 +1,3 @@
-"""地区编码、支持列表与 benefit 上游地区解析服务。"""
 from __future__ import annotations
 
 import copy
@@ -50,7 +49,7 @@ def _read_asset_text(filename: str) -> str:
         return ""
 
 
-# 模块级缓存
+
 _AREA_CODES_CACHE: Dict[str, Any] | None = None
 _SUPPORTED_CODES_CACHE: Tuple[Set[str], bool] | None = None
 _BENEFIT_CACHE_LOCK = threading.RLock()
@@ -84,7 +83,7 @@ def _normalize_area_code(area_code: Any) -> str:
 
 
 def load_supported_area_codes() -> Tuple[Set[str], bool]:
-    """返回默认官方代理支持的地区编码集合，以及是否包含 all 标记。"""
+    
     global _SUPPORTED_CODES_CACHE
 
     if _SUPPORTED_CODES_CACHE is not None:
@@ -118,7 +117,7 @@ def load_supported_area_codes() -> Tuple[Set[str], bool]:
 
 
 def load_area_codes(supported_only: bool = False) -> List[Dict[str, Any]]:
-    """读取省市编码树；`supported_only=True` 时按本地 area.txt 过滤。"""
+    
     global _AREA_CODES_CACHE
 
     if _AREA_CODES_CACHE is None:
@@ -299,21 +298,21 @@ def _ensure_benefit_cache(force_refresh: bool = False) -> None:
 
 
 def load_benefit_supported_areas(force_refresh: bool = False) -> List[Dict[str, Any]]:
-    """返回 benefit 官方上游支持的地区树，仅保留具体城市。"""
+    
     _ensure_benefit_cache(force_refresh=force_refresh)
     with _BENEFIT_CACHE_LOCK:
         return copy.deepcopy(_BENEFIT_SUPPORTED_AREAS_CACHE or [])
 
 
 def build_benefit_city_code_index(force_refresh: bool = False) -> Dict[str, str]:
-    """返回 benefit 上游地区映射：`城市码 -> 请求城市名`。"""
+    
     _ensure_benefit_cache(force_refresh=force_refresh)
     with _BENEFIT_CACHE_LOCK:
         return dict(_BENEFIT_CITY_CODE_INDEX_CACHE or {})
 
 
 def resolve_proxy_area_for_source(source: str, area_code: Optional[str]) -> str:
-    """按代理源解析地区参数：default 返回地区码，benefit 返回城市名文本。"""
+    
     normalized_code = _normalize_area_code(area_code)
     if not normalized_code:
         return ""

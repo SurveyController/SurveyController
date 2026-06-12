@@ -1,5 +1,3 @@
-"""图片附件处理 - 校验、限制、缩略图与导出"""
-
 import os
 from dataclasses import dataclass
 from typing import List, Tuple
@@ -17,7 +15,7 @@ class ImageAttachment:
 
 
 class ImageAttachmentManager:
-    """管理图片附件：校验、限制、生成缩略图、导出 requests files。"""
+    
 
     def __init__(self, max_count: int = 3, max_size_bytes: int = 10 * 1024 * 1024):
         self.max_count = max_count

@@ -1,5 +1,3 @@
-"""运行参数页代理源同步。"""
-
 from __future__ import annotations
 
 import logging

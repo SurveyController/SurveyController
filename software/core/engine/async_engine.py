@@ -1,5 +1,3 @@
-"""Background asyncio runtime engine."""
-
 from __future__ import annotations
 
 import asyncio
@@ -46,7 +44,7 @@ def _format_proxy_source(source: Any) -> str:
 
 
 class AsyncRuntimeEngine:
-    """Owns the single background asyncio loop used by fill runtime."""
+    
 
     def __init__(self, *, status_bus: Optional[AsyncStatusBus] = None) -> None:
         self._status_bus = status_bus or AsyncStatusBus()
@@ -277,7 +275,7 @@ class AsyncRuntimeEngine:
 
 
 class AsyncEngineClient:
-    """Synchronous UI-facing client for AsyncRuntimeEngine."""
+    
 
     def __init__(self, engine: Optional[AsyncRuntimeEngine] = None) -> None:
         self._engine = engine or AsyncRuntimeEngine()

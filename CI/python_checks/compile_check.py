@@ -1,6 +1,3 @@
-#!/usr/bin/env python
-"""Python 编译快检。"""
-
 from __future__ import annotations
 
 from CI.python_checks.common import (

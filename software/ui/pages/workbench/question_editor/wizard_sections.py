@@ -1,5 +1,3 @@
-"""WizardSectionsMixin：各题型配置区 UI 构建方法。"""
-
 from typing import Any, Dict, List, Tuple
 
 from PySide6.QtCore import (
@@ -51,7 +49,7 @@ class WizardSectionsMixin(
     WizardSectionsTextMixin,
     WizardSectionsSliderMixin,
 ):
-    """各题型配置区 UI 构建方法。依赖 QuestionWizardDialog 的 state dict。"""
+    
 
     text_container_map: Dict[int, Any]
     text_add_btn_map: Dict[int, Any]

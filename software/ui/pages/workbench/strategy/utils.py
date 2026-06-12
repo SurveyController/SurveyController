@@ -1,5 +1,3 @@
-"""题目策略页通用辅助函数。"""
-
 from __future__ import annotations
 
 from typing import Any, Iterable, List, Optional

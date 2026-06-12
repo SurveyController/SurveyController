@@ -1,4 +1,3 @@
-"""随机 IP 会话数据模型。"""
 from __future__ import annotations
 
 from dataclasses import dataclass

@@ -1,4 +1,3 @@
-"""运行时流程控制 - 暂停、停止、重试等状态管理"""
 from __future__ import annotations
 
 import threading
@@ -17,7 +16,7 @@ def _wait_if_paused(gui_instance: Optional[Any], stop_signal: Optional[threading
 
 
 async def _sleep_with_stop(stop_signal: Optional[Any], seconds: float) -> bool:
-    """带停止信号的睡眠，返回 True 表示被中断。"""
+    
     return bool(await sleep_or_stop(stop_signal, seconds))
 
 

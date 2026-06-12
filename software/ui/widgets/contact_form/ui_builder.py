@@ -1,5 +1,3 @@
-"""联系表单界面搭建。"""
-
 from typing import Any
 
 from PySide6.QtCore import QTimer, Qt

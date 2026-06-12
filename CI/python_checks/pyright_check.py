@@ -1,6 +1,3 @@
-#!/usr/bin/env python
-"""Pyright 静态检查。"""
-
 from __future__ import annotations
 
 from CI.python_checks.common import (

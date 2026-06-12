@@ -1,5 +1,3 @@
-"""信效度题型的整批联合比例优化。"""
-
 from __future__ import annotations
 
 import logging

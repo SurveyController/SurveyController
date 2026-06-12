@@ -1,5 +1,3 @@
-"""IP 使用记录页面主体。"""
-
 from __future__ import annotations
 
 import logging

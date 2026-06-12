@@ -1,5 +1,3 @@
-"""腾讯问卷解析与标准化。"""
-
 from __future__ import annotations
 
 import logging

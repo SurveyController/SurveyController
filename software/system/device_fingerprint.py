@@ -1,4 +1,3 @@
-"""设备身份生成。"""
 from __future__ import annotations
 
 import logging
@@ -11,7 +10,7 @@ _DEVICE_SECRET_KEY = "random_ip/device_id"
 
 
 def build_stable_device_id() -> str:
-    """返回持久设备 ID。首次生成 UUID，后续从安全存储复用。"""
+    
     persisted = read_secret(_DEVICE_SECRET_KEY)
     value = str(persisted.value or "").strip()
     if value:

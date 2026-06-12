@@ -1,5 +1,3 @@
-"""HTTP 提交链路的问卷逻辑执行器。"""
-
 from __future__ import annotations
 
 from dataclasses import dataclass

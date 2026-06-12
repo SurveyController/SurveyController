@@ -1,5 +1,3 @@
-"""向导题型配置共享状态与小部件辅助。"""
-
 from html import escape
 from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple, cast
 
@@ -39,7 +37,7 @@ _TEXT_RANDOM_ID_CARD_TOKEN = "__RANDOM_ID_CARD__"
 
 
 def _apply_ai_label_state_style(label: BodyLabel) -> None:
-    """为 AI 标签补上明确的禁用态颜色，避免默认主题下发灰不明显。"""
+    
     active_color = "#f5f5f5" if isDarkTheme() else "#202020"
     disabled_color = "#7f7f7f" if isDarkTheme() else "#9a9a9a"
     label.setStyleSheet(

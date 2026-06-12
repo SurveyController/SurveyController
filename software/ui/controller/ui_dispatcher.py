@@ -1,5 +1,3 @@
-"""RunController 的 UI 回调派发辅助。"""
-
 from __future__ import annotations
 
 import logging
@@ -11,7 +9,7 @@ from PySide6.QtCore import QCoreApplication
 
 
 class UiCallbackDispatcher:
-    """把后台线程回调安全地送回 Qt 主线程。"""
+    
 
     def __init__(self, emit_signal: Callable[[], Any]) -> None:
         self._emit_signal = emit_signal

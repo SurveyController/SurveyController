@@ -1,5 +1,3 @@
-"""运行参数页 - 专属设置卡片组件。"""
-
 from __future__ import annotations
 
 from typing import Optional
@@ -39,7 +37,7 @@ from software.ui.widgets.setting_cards import set_widget_enabled_with_opacity
 
 
 class RandomUASettingCard(ExpandGroupSettingCard):
-    """随机 UA 设置卡。"""
+    
 
     def __init__(self, parent=None):
         super().__init__(
@@ -93,16 +91,16 @@ class RandomUASettingCard(ExpandGroupSettingCard):
         set_widget_enabled_with_opacity(self._groupContainer, bool(enabled))
 
     def getRatios(self) -> dict:
-        """获取当前设备占比配置。"""
+        
         return self.ratioSlider.getValues()
 
     def setRatios(self, ratios: dict):
-        """设置设备占比配置。"""
+        
         self.ratioSlider.setValues(ratios)
 
 
 class ReliabilitySettingCard(ExpandGroupSettingCard):
-    """信效度设置卡。"""
+    
 
     def __init__(self, parent=None):
         super().__init__(
@@ -152,7 +150,7 @@ class ReliabilitySettingCard(ExpandGroupSettingCard):
         self._sync_enabled(False)
 
     def _sync_enabled(self, enabled: bool) -> None:
-        """根据开关状态启用/禁用内部控件。"""
+        
 
         set_widget_enabled_with_opacity(self._groupContainer, bool(enabled))
 
@@ -163,12 +161,12 @@ class ReliabilitySettingCard(ExpandGroupSettingCard):
         self.switchButton.setChecked(bool(checked))
 
     def get_alpha(self) -> float:
-        """读取并裁剪目标 Alpha 值，落在允许范围内。"""
+        
 
         return normalize_target_alpha((self.alphaEdit.text() or "").strip())
 
     def set_alpha(self, value: float) -> None:
-        """设置目标 Alpha，并同步到输入框文本。"""
+        
         num = normalize_target_alpha(value)
         text = f"{num:.2f}".rstrip("0").rstrip(".")
         if not text:
@@ -178,7 +176,7 @@ class ReliabilitySettingCard(ExpandGroupSettingCard):
 
 
 class DurationMinuteFormatter(PickerColumnFormatter):
-    """分钟列显示。"""
+    
 
     def encode(self, value):
         text = str(value or "").strip()
@@ -191,7 +189,7 @@ class DurationMinuteFormatter(PickerColumnFormatter):
 
 
 class DurationSecondFormatter(DigitFormatter):
-    """秒列显示。"""
+    
 
     def encode(self, value):
         text = str(value or "").strip()
@@ -204,7 +202,7 @@ class DurationSecondFormatter(DigitFormatter):
 
 
 class DurationTimePicker(TimePickerBase):
-    """只显示分钟和秒的时长选择器。"""
+    
 
     def __init__(self, parent=None, max_seconds: int = 86399):
         super().__init__(parent=parent, showSeconds=True)
@@ -249,7 +247,7 @@ class DurationTimePicker(TimePickerBase):
 
 
 class ZhHourMinuteTimePicker(TimePickerBase):
-    """中文 24 小时时分选择器。"""
+    
 
     def __init__(self, parent=None):
         super().__init__(parent=parent, showSeconds=False)
@@ -290,7 +288,7 @@ class ZhHourMinuteTimePicker(TimePickerBase):
 
 
 class TimeRangeSettingCard(OptionsSettingCard):
-    """时间范围设置卡。"""
+    
 
     valueChanged = Signal(int)
     rangeChanged = Signal(tuple)
@@ -418,25 +416,25 @@ class TimeRangeSettingCard(OptionsSettingCard):
         self.endPicker.setEnabled(arg__1)
 
     def getValue(self) -> int:
-        """获取当前范围起点秒数。"""
+        
         return self.getRange()[0]
 
     def getRange(self) -> tuple[int, int]:
-        """获取当前秒数范围。"""
+        
         start = self.startPicker.getDurationSeconds()
         end = self.endPicker.getDurationSeconds()
         self._current_range = self._normalize_range(start, end)
         return self._current_range
 
     def setValue(self, value: int):
-        """设置固定秒数。"""
+        
         if isinstance(value, str):
             OptionsSettingCard.setValue(self, value)
             return
         self.setRange((value, value))
 
     def setRange(self, value_range):
-        """设置秒数范围。"""
+        
         if isinstance(value_range, (list, tuple)):
             start = value_range[0] if len(value_range) >= 1 else 0
             end = value_range[1] if len(value_range) >= 2 else start
@@ -464,7 +462,7 @@ class TimeRangeSettingCard(OptionsSettingCard):
 
 
 class AnswerDateTimeWindowSettingCard(OptionsSettingCard):
-    """见数专用的日期时间窗设置卡。"""
+    
 
     CREDAMO_BADGE_COLOR = "#1f4f99"
 

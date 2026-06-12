@@ -1,5 +1,3 @@
-"""任务模型 - 静态执行配置与运行态状态。"""
-
 from __future__ import annotations
 
 import threading
@@ -17,7 +15,7 @@ from software.providers.contracts import SurveyQuestionMeta
 
 @dataclass
 class ExecutionConfig:
-    """一次任务在启动前固定下来的静态执行配置。"""
+    
 
     url: str = ""
     survey_title: str = ""
@@ -85,7 +83,7 @@ class ExecutionState(
     DistributionRuntimeMixin,
     ReverseFillRuntimeMixin,
 ):
-    """一次任务运行中的动态状态。"""
+    
 
     config: ExecutionConfig = field(default_factory=ExecutionConfig)
 
@@ -130,7 +128,7 @@ class ExecutionState(
     _runtime_change_seq: int = field(default=0, init=False, repr=False)
 
     def __setattr__(self, name: str, value: Any) -> None:
-        """阻止把静态配置字段误写到运行态对象本身。"""
+        
         if name in _EXECUTION_STATE_FIELD_NAMES:
             object.__setattr__(self, name, value)
             return

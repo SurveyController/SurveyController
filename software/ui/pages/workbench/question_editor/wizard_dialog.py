@@ -1,5 +1,3 @@
-"""配置向导弹窗。"""
-
 import copy
 from typing import Any, Dict, List, Optional
 
@@ -54,7 +52,7 @@ _WIDGET_MAX_SIZE = 16777215
 
 
 class _CurrentPagePopUpStackedWidget(PopUpAniStackedWidget):
-    """按当前页计算尺寸，避免长题撑高所有短题。"""
+    
 
     def hasHeightForWidth(self) -> bool:
         current = self.currentWidget()
@@ -95,7 +93,7 @@ class QuestionWizardDialog(
     WizardSectionsMixin,
     QDialog,
 ):
-    """配置向导：左侧导航，右侧单题工作区。"""
+    
 
     _PREFERRED_DIALOG_SIZE = QSize(1180, 840)
     _MIN_DIALOG_SIZE = QSize(900, 620)

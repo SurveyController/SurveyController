@@ -1,5 +1,3 @@
-"""ExecutionState 的反填运行态方法。"""
-
 from __future__ import annotations
 
 import threading

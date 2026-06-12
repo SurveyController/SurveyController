@@ -1,5 +1,3 @@
-"""问卷星 Excel 反填管理页。"""
-
 from __future__ import annotations
 
 import copy
@@ -91,7 +89,7 @@ _FORMAT_CHOICES = [
 
 
 class ReverseFillPage(SurveyClipboardMixin, QWidget):
-    """独立的反填数据源页。"""
+    
 
     surveyUrlChanged = Signal(str)
     scroll_area: "ScrollArea"

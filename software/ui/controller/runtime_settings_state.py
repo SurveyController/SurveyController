@@ -1,5 +1,3 @@
-"""运行参数 UI 状态。"""
-
 from __future__ import annotations
 
 from typing import Any, Dict
@@ -12,7 +10,7 @@ MAX_ANSWER_DURATION_SECONDS = 30 * 60
 
 
 class RuntimeSettingsState:
-    """集中管理运行参数当前值。"""
+    
 
     DEFAULTS: Dict[str, Any] = {
         "target": 1,

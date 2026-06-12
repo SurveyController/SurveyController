@@ -1,4 +1,3 @@
-"""代理会话与随机 IP 账号管理。"""
 from __future__ import annotations
 
 import logging
@@ -82,7 +81,7 @@ def _endpoint_name(url: str) -> str:
     return f"{host}{path}"
 
 def _extract_request_timeout_seconds(num: int) -> float:
-    """批量提取会等待上游返回多个 IP，超时随请求数量适度放宽。"""
+    
     request_num = max(1, _to_non_negative_int(num, 1))
     timeout = _EXTRACT_REQUEST_BASE_TIMEOUT_SECONDS + (
         (request_num - 1) * _EXTRACT_REQUEST_EXTRA_TIMEOUT_PER_PROXY_SECONDS
@@ -281,7 +280,7 @@ def get_session_snapshot() -> Dict[str, Any]:
     }
 
 def has_unknown_local_quota(snapshot: Optional[Dict[str, Any]] = None) -> bool:
-    """判断本地已用/总额度缓存是否处于明显异常的未知状态。"""
+    
     payload = snapshot if isinstance(snapshot, dict) else get_session_snapshot()
     if not bool(payload.get("authenticated")):
         return False

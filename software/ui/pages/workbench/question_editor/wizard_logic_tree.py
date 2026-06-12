@@ -1,5 +1,3 @@
-"""配置向导逻辑树与摘要辅助。"""
-
 from __future__ import annotations
 
 from dataclasses import dataclass, field

@@ -1,6 +1,3 @@
-"""
-信效度生成核心逻辑
-"""
 import logging
 from dataclasses import dataclass
 from typing import Any, Dict, List, Optional
@@ -22,7 +19,7 @@ def _build_choice_key(question_index: int, row_index: Optional[int] = None) -> s
 
 
 def normalize_target_alpha(value: Any, default: float = DEFAULT_TARGET_ALPHA) -> float:
-    """规范化目标 Alpha，统一处理默认值、NaN 和上下限。"""
+    
     try:
         fallback = float(default)
     except Exception:
@@ -39,7 +36,7 @@ def normalize_target_alpha(value: Any, default: float = DEFAULT_TARGET_ALPHA) ->
 
 
 def compute_rho_from_alpha(alpha: float, k: int) -> float:
-    """根据目标 Cronbach's Alpha 计算题目间的平均相关系数"""
+    
     if not (0 < alpha < 1):
         return 0.2
     if k < 2:
@@ -54,7 +51,7 @@ def compute_rho_from_alpha(alpha: float, k: int) -> float:
 
 
 def compute_sigma_e_from_alpha(alpha: float, k: int) -> float:
-    """根据目标 Cronbach's Alpha 计算误差标准差"""
+    
     import math
     rho = compute_rho_from_alpha(alpha, k)
     return math.sqrt((1 / rho) - 1)
@@ -67,10 +64,7 @@ def generate_psycho_answer(
     sigma_e: float = 0.5,
     is_reversed: bool = False,
 ) -> int:
-    """从潜变量生成单个题目的答案。
-
-    is_reversed=True 时先取反 theta，再叠加 bias 对应的左右偏移。
-    """
+    
     bias_shift = -0.5 if bias == "left" else 0.5 if bias == "right" else 0.0
     effective_theta = -theta if is_reversed else theta
     z = effective_theta + bias_shift + sigma_e * randn()
@@ -79,13 +73,13 @@ def generate_psycho_answer(
 
 @dataclass
 class PsychometricItem:
-    """信效度题目项"""
-    kind: str  # "single", "scale", "dropdown", "matrix_row"
-    question_index: int  # 题目在列表中的索引
-    row_index: Optional[int] = None  # 矩阵题的行索引
-    option_count: int = 5  # 选项数量
-    bias: str = "center"  # 偏向
-    target_probabilities: Optional[List[float]] = None  # 最终目标配比（无则按预设补）
+    
+    kind: str  
+    question_index: int  
+    row_index: Optional[int] = None  
+    option_count: int = 5  
+    bias: str = "center"  
+    target_probabilities: Optional[List[float]] = None  
     score_by_choice_index: Optional[List[int]] = None
 
     @property
@@ -183,14 +177,14 @@ def _coerce_psychometric_item(raw_item: Any) -> Optional[PsychometricItem]:
 
 @dataclass
 class PsychometricPlan:
-    """信效度生成计划"""
-    items: List[PsychometricItem]  # 参与信效度的题目列表
-    theta: float  # 当前样本的潜变量
-    sigma_e: float  # 误差标准差
-    choices: Dict[str, int]  # 预生成的答案 {key: choice_index}
+    
+    items: List[PsychometricItem]  
+    theta: float  
+    sigma_e: float  
+    choices: Dict[str, int]  
     
     def get_choice(self, question_index: int, row_index: Optional[int] = None) -> Optional[int]:
-        """获取指定题目的预生成答案"""
+        
         key = _build_choice_key(question_index, row_index)
         return self.choices.get(key)
 
@@ -201,7 +195,7 @@ class PsychometricPlan:
 
 @dataclass
 class DimensionPsychometricPlan:
-    """按维度拆分的心理测量计划。"""
+    
 
     plans: Dict[str, PsychometricPlan]
     item_dimension_map: Dict[str, str]
@@ -227,11 +221,11 @@ def build_psychometric_plan(
     psycho_items: List[Any],
     target_alpha: float = 0.85,
 ) -> Optional[PsychometricPlan]:
-    """构建信效度生成计划"""
+    
     if not psycho_items:
         return None
     
-    # 构建题目项列表
+    
     items: List[PsychometricItem] = []
     
     for raw_item in psycho_items:
@@ -246,13 +240,13 @@ def build_psychometric_plan(
     
     target_alpha = normalize_target_alpha(target_alpha)
 
-    # 计算误差标准差
+    
     sigma_e = compute_sigma_e_from_alpha(target_alpha, k)
     
-    # 生成潜变量
+    
     theta = randn()
     
-    # 为每个题目生成答案
+    
     choices: Dict[str, int] = {}
     dimension_orientation = infer_dimension_orientation(items)
     reversed_keys = set(dimension_orientation.reversed_keys)
@@ -292,7 +286,7 @@ def build_dimension_psychometric_plan(
     grouped_items: Dict[str, List[Any]],
     target_alpha: float = 0.85,
 ) -> Optional[DimensionPsychometricPlan]:
-    """按维度分别构建心理测量计划。"""
+    
     if not grouped_items:
         return None
 

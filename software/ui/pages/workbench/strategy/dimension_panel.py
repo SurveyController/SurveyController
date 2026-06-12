@@ -1,5 +1,3 @@
-"""维度分组面板。"""
-
 from __future__ import annotations
 
 from typing import Any, Dict, List, Optional, Sequence, Tuple
@@ -42,7 +40,7 @@ from .utils import (
 
 
 class DimensionNameDialog(MessageBoxBase):
-    """输入维度名称弹窗。"""
+    
 
     def __init__(
         self,
@@ -86,7 +84,7 @@ class DimensionNameDialog(MessageBoxBase):
 
 
 class DimensionGroupingPanel(QWidget):
-    """维度分组与拖拽分配面板。"""
+    
 
     changed = Signal()
 
@@ -199,7 +197,7 @@ class DimensionGroupingPanel(QWidget):
             section.deleteRequested.connect(self._on_delete_dimension)
             section.addQuestionsRequested.connect(
                 self._on_add_questions_to_dimension
-            )  # 新增：连接添加题目信号
+            )  
 
             self.sections_layout.addWidget(section)
             self._section_widgets[group_name] = section
@@ -403,12 +401,12 @@ class DimensionGroupingPanel(QWidget):
         self._apply_entries_to_dimension(entry_indices, target_dimension)
 
     def _on_add_questions_to_dimension(self, group_name: str) -> None:
-        """处理点击"添加题目"按钮 - 弹出题目选择器。"""
+        
         target_group = str(group_name or "").strip()
         if not target_group:
             return
 
-        # 获取未分组的题目列表
+        
         ungrouped_questions = [
             row
             for row in self._build_question_rows()
@@ -419,7 +417,7 @@ class DimensionGroupingPanel(QWidget):
             self._toast("没有可添加的题目，所有题目都已分配到维度", "warning")
             return
 
-        # 弹出题目选择器对话框
+        
         dialog = QuestionSelectorDialog(
             f"添加题目到「{target_group}」",
             ungrouped_questions,
@@ -434,7 +432,7 @@ class DimensionGroupingPanel(QWidget):
             self._toast("未选择任何题目", "warning")
             return
 
-        # 应用到目标维度
+        
         target_dimension = None if target_group == DIMENSION_UNGROUPED else target_group
         if self._apply_entries_to_dimension(selected_indices, target_dimension):
             self._toast(

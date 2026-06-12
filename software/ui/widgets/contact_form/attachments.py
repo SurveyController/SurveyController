@@ -1,5 +1,3 @@
-"""联系表单附件工具。"""
-
 import os
 from typing import Callable, Optional
 

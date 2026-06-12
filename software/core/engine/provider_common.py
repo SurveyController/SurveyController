@@ -1,5 +1,3 @@
-"""Provider 运行时共享预处理与中立工具。"""
-
 from __future__ import annotations
 
 import logging
@@ -36,7 +34,7 @@ def _build_grouped_runtime_items(
 
 
 def build_psychometric_plan_for_run(config: ExecutionConfig) -> Optional[Any]:
-    """根据当前任务配置构建本轮问卷的心理测量作答计划。"""
+    
     grouped_items = _build_grouped_runtime_items(config)
 
     if not grouped_items:
@@ -70,7 +68,7 @@ def provider_run_context(
     thread_name: str = "",
     psycho_plan: Optional[Any] = None,
 ) -> Iterator[Optional[Any]]:
-    """在 provider 运行前统一初始化画像、上下文与心理测量计划。"""
+    
     persona = generate_persona()
     set_current_persona(persona)
     _reset_answer_context()

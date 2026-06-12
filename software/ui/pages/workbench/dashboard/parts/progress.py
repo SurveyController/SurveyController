@@ -1,5 +1,3 @@
-"""DashboardPage 运行状态与进度展示相关方法。"""
-
 from __future__ import annotations
 
 import time
@@ -94,7 +92,7 @@ if TYPE_CHECKING:
 
 
 class DashboardProgressMixin:
-    """任务运行状态、总进度、会话进度面板。"""
+    
 
     THREAD_VIEW_QUESTION_LIST = "question_list"
     THREAD_VIEW_PROGRESS = "thread_progress"

@@ -1,5 +1,3 @@
-"""RunController 启停、线程和收尾逻辑。"""
-
 from __future__ import annotations
 
 import logging
@@ -244,7 +242,7 @@ class RunControllerExecutionMixin:
             return None
         return result_container.get("value")
 
-    def start_run(self, config: RuntimeConfig):  # noqa: C901
+    def start_run(self, config: RuntimeConfig):  
         logging.debug("收到启动请求")
 
         if self.running or self._starting or self._initializing or self._stopping:
@@ -576,7 +574,7 @@ class RunControllerExecutionMixin:
         self.quickBugReportSuggested.emit()
 
     def resume_run(self):
-        """Resume execution after a pause (does not restart threads)."""
+        
         if not self.running:
             return
         engine_client = getattr(self, "_async_engine_client", None)

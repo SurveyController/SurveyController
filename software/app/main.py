@@ -1,4 +1,3 @@
-"""GUI 应用入口 - QApplication 初始化与主窗口启动"""
 import faulthandler
 import importlib
 import os
@@ -42,7 +41,7 @@ def _is_velopack_lifecycle_hook(args: list[str]) -> bool:
 
 
 def _run_velopack_startup() -> None:
-    """在安装版启动早期接入 Velopack 生命周期。"""
+    
     if not getattr(sys, "frozen", False):
         return
     velopack_module = _get_velopack_module()
@@ -72,7 +71,7 @@ def _run_update_test_probe() -> int:
 
 
 def _enable_fault_handler() -> None:
-    """为原生崩溃保留最基本的线程栈信息。"""
+    
     global _FAULT_HANDLER_STREAM
 
     if faulthandler.is_enabled():
@@ -110,7 +109,7 @@ def _disable_fault_handler() -> None:
 
 
 def _qt_message_handler(mode, context, message):
-    """过滤 Qt 警告消息"""
+    
     _ = context
     if "QFont::setPointSize" in message:
         return
@@ -138,21 +137,21 @@ def main():
     app = QApplication(sys.argv)
     install_qfluentwidgets_animation_guards()
 
-    # 设置默认字体
+    
     font = QFont("Microsoft YaHei UI" if sys.platform == "win32" else "Sans Serif", 9)
     app.setFont(font)
 
-    # 在主线程预热 httpx/httpcore/ssl，避免首次后台请求触发原生层崩溃
+    
     http_client.prewarm()
 
-    # 导入并创建主窗口（主窗口内部会显示 SplashScreen）
+    
     from software.ui.shell.main_window import create_window
     window = create_window()
     window.show()
 
     exit_code = int(app.exec())
 
-    # 优雅关闭：停止日志系统后台线程
+    
     from software.logging.log_utils import shutdown_logging
     shutdown_logging()
     _disable_fault_handler()

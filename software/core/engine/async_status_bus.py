@@ -1,5 +1,3 @@
-"""Status bus for async runtime to Qt boundary."""
-
 from __future__ import annotations
 
 import threading
@@ -9,7 +7,7 @@ from typing import Any, Callable, DefaultDict, Optional
 
 
 class AsyncStatusBus:
-    """Ordered status sink with lightweight throttling support."""
+    
 
     def __init__(
         self,
