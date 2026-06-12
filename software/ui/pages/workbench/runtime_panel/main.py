@@ -4,7 +4,7 @@ from typing import TYPE_CHECKING
 
 from PySide6.QtCore import QEvent, QTimer
 from PySide6.QtWidgets import QWidget
-from qfluentwidgets import ExpandGroupSettingCard, ScrollArea
+from qfluentwidgets import ExpandGroupSettingCard, ScrollArea, SettingCardGroup
 
 from software.app.config import HTTP_MAX_THREADS
 from software.ui.controller.run_controller import RunController
@@ -128,15 +128,33 @@ class RuntimePage(
         except RuntimeError:
             return
         for card in cards:
+            view = getattr(card, "view", None)
+            if view is not None and view.layout() is not None:
+                view.layout().activate()
             if getattr(card, "isExpand", False):
                 adjust_view_size = getattr(card, "_adjustViewSize", None)
                 if callable(adjust_view_size):
                     adjust_view_size()
+                if view is not None:
+                    view.adjustSize()
             card.updateGeometry()
+            card.adjustSize()
+        try:
+            groups = self.view.findChildren(SettingCardGroup)
+        except RuntimeError:
+            return
+        for group in groups:
+            group_layout = group.layout()
+            if group_layout is not None:
+                group_layout.activate()
+            group.updateGeometry()
+            group.adjustSize()
         try:
             layout = self.view.layout()
         except RuntimeError:
             return
         if layout is not None:
+            layout.invalidate()
             layout.activate()
+        self.view.adjustSize()
         self.view.updateGeometry()
