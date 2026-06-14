@@ -27,8 +27,8 @@ from software.providers.contracts import (
 from software.logging.log_utils import log_suppressed_exception
 from software.app.config import BROWSER_PREFERENCE, USER_AGENT_PRESETS
 
-CURRENT_CONFIG_SCHEMA_VERSION = 5
-_SUPPORTED_LEGACY_CONFIG_SCHEMA_VERSIONS = {3, 4}
+CURRENT_CONFIG_SCHEMA_VERSION = 6
+_SUPPORTED_LEGACY_CONFIG_SCHEMA_VERSIONS = {3, 4, 5}
 _LEGACY_CONFIG_KEYS = ("random_proxy_api", "ai_enabled")
 _TEXT_RANDOM_MODES = {"none", "name", "mobile", "id_card", "integer"}
 _DEFAULT_RANDOM_UA_RATIOS = {"wechat": 33, "mobile": 33, "pc": 34}
@@ -218,6 +218,12 @@ def _migrate_config_payload_v4_to_v5(payload: Dict[str, Any]) -> Dict[str, Any]:
         migrated["reverse_fill_threads"] = max(1, int(migrated.get("reverse_fill_threads") or migrated.get("threads") or 1))
     except Exception:
         migrated["reverse_fill_threads"] = 1
+    migrated["config_schema_version"] = 5
+    return migrated
+
+
+def _migrate_config_payload_v5_to_v6(payload: Dict[str, Any]) -> Dict[str, Any]:
+    migrated = dict(payload)
     migrated["config_schema_version"] = CURRENT_CONFIG_SCHEMA_VERSION
     return migrated
 
@@ -527,9 +533,13 @@ def _ensure_supported_config_payload(payload: Dict[str, Any], *, config_path: st
             config_path,
         )
         if schema_version == 3:
-            return _migrate_config_payload_v4_to_v5(_migrate_config_payload_v3_to_v4(payload))
+            return _migrate_config_payload_v5_to_v6(
+                _migrate_config_payload_v4_to_v5(_migrate_config_payload_v3_to_v4(payload))
+            )
         if schema_version == 4:
-            return _migrate_config_payload_v4_to_v5(payload)
+            return _migrate_config_payload_v5_to_v6(_migrate_config_payload_v4_to_v5(payload))
+        if schema_version == 5:
+            return _migrate_config_payload_v5_to_v6(payload)
     raise ValueError(
         f"配置文件版本不受支持（当前仅支持 schema v{CURRENT_CONFIG_SCHEMA_VERSION}，实际为 v{schema_version}）：{config_path}"
     )

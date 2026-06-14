@@ -30,7 +30,7 @@ class ConfigCodecTests:
         assert restored.reverse_fill_start_row == 3
         assert restored.reverse_fill_threads == 4
 
-    def test_legacy_v4_payload_is_upgraded_to_v5_with_reverse_fill_defaults(self) -> None:
+    def test_legacy_v4_payload_is_upgraded_to_current_with_reverse_fill_defaults(self) -> None:
         upgraded = _ensure_supported_config_payload({'config_schema_version': 4, 'reverse_fill_enabled': True, 'reverse_fill_source_path': 'D:/legacy.xlsx', 'reverse_fill_format': 'unknown', 'reverse_fill_start_row': 0, 'threads': 6}, config_path='legacy.json')
         assert upgraded['config_schema_version'] == CURRENT_CONFIG_SCHEMA_VERSION
         assert upgraded['reverse_fill_enabled']
@@ -38,6 +38,22 @@ class ConfigCodecTests:
         assert upgraded['reverse_fill_format'] == 'auto'
         assert upgraded['reverse_fill_start_row'] == 1
         assert upgraded['reverse_fill_threads'] == 6
+
+    def test_legacy_v5_payload_is_upgraded_to_current_schema(self) -> None:
+        upgraded = _ensure_supported_config_payload(
+            {
+                "config_schema_version": 5,
+                "url": "https://www.wjx.cn/vm/demo.aspx",
+                "browser_preference": ["edge"],
+                "timed_mode_enabled": True,
+            },
+            config_path="legacy-v5.json",
+        )
+
+        assert upgraded["config_schema_version"] == CURRENT_CONFIG_SCHEMA_VERSION
+        assert upgraded["url"] == "https://www.wjx.cn/vm/demo.aspx"
+        assert upgraded["browser_preference"] == ["edge"]
+        assert upgraded["timed_mode_enabled"] is True
 
     def test_runtime_config_roundtrip_keeps_questions_info_provider_metadata(self) -> None:
         config = RuntimeConfig(survey_provider='qq', questions_info=[SurveyQuestionMeta(num=3, title='联系方式', type_code='1', provider='qq', provider_question_id='question-3', provider_page_id='page-2', provider_type='text', option_texts=['姓名', '电话'], required=True, logic_parse_status='unknown', question_media=[{'kind': 'image', 'scope': 'title', 'index': None, 'source_url': 'https://example.com/q3.png', 'label': '题干图'}])])
