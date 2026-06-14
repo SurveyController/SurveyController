@@ -153,7 +153,7 @@ if (-not $SkipSync) {
     Write-Step "Sync Python dependencies"
     Push-Location $repoRoot
     try {
-        uv sync --locked --group build
+        uv sync --locked --no-default-groups --group build
     }
     finally {
         Pop-Location
@@ -185,8 +185,8 @@ try {
         "--python-flag=no_docstrings"
         "--noinclude-pytest-mode=nofollow"
         "--noinclude-setuptools-mode=nofollow"
-        "--noinclude-custom-mode=numpy:nofollow"
         "--playwright-include-browser=none"
+        "--nofollow-import-to=numpy"
         "--include-qt-plugins=platforms,styles,imageformats,networkinformation,tls"
         "--nofollow-import-to=qfluentwidgets.multimedia"
         "--nofollow-import-to=PySide6.QtMultimedia"
@@ -194,6 +194,8 @@ try {
         "--nofollow-import-to=PySide6.QtPdf"
         "--nofollow-import-to=PySide6.QtPdfWidgets"
         "--nofollow-import-to=playwright.sync_api"
+        "--nofollow-import-to=httpx._main"
+        "--nofollow-import-to=pygments"
         "--nofollow-import-to=pytest"
         "--nofollow-import-to=setuptools"
         "--nofollow-import-to=unittest"

@@ -157,7 +157,6 @@ class ContactForm(StatusPollingMixin, QWidget):
     payment_method_alipay_radio: Any
     request_payment_confirm_section: Any
     donated_cb: Any
-    open_donate_btn: Any
     status_spinner: Any
     status_icon: Any
     online_label: Any
@@ -495,30 +494,6 @@ class ContactForm(StatusPollingMixin, QWidget):
                 self.donated_cb.setChecked(False)
             finally:
                 self.donated_cb.blockSignals(previous_block_state)
-
-    def _open_donate_page(self) -> None:
-        widget: Optional[QWidget] = cast(QWidget, self)
-        while widget is not None:
-            if hasattr(widget, "_get_donate_page") and hasattr(widget, "_switch_to_more_page"):
-                try:
-                    host = cast(Any, widget)
-                    donate_page = host._get_donate_page()
-                    host._switch_to_more_page(donate_page)
-                    top_level = self.window()
-                    if top_level is not None and top_level is not widget:
-                        top_level.close()
-                    return
-                except Exception as exc:
-                    log_suppressed_exception("_open_donate_page", exc, level=logging.WARNING)
-                    break
-            widget = widget.parentWidget()
-        InfoBar.warning(
-            "",
-            "暂时打不开支付页，请从“更多 -> 捐助”进入",
-            parent=self,
-            position=InfoBarPosition.TOP,
-            duration=2500,
-        )
 
     def _on_amount_changed(self, text: str):
         _ = text

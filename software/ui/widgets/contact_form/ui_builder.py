@@ -324,14 +324,7 @@ def build_contact_form_ui(form: Any, *, default_type: str, show_cancel_button: b
         "我已完成支付，且确认随机ip可用",
         form.request_payment_confirm_section,
     )
-    form.open_donate_btn = PushButton(
-        FluentIcon.HEART,
-        "去支付",
-        form.request_payment_confirm_section,
-    )
-    form.open_donate_btn.setToolTip("打开支付页面")
     donated_row.addStretch(1)
-    donated_row.addWidget(form.open_donate_btn)
     donated_row.addWidget(form.donated_cb)
     form.request_payment_confirm_section.hide()
     wrapper.addWidget(form.request_payment_confirm_section)
@@ -375,8 +368,7 @@ def build_contact_form_ui(form: Any, *, default_type: str, show_cancel_button: b
     form.type_combo.currentIndexChanged.connect(lambda _: form._on_type_changed())
     form.donated_cb.installEventFilter(form)
     form.donated_cb.toggled.connect(lambda _: form._update_send_button_state())
-    form.open_donate_btn.clicked.connect(form._open_donate_page)
-    install_tooltip_filters((form.open_donate_btn, form.donated_cb, form.send_btn))
+    install_tooltip_filters((form.donated_cb, form.send_btn))
     form.send_btn.clicked.connect(form._on_send_clicked)
     form.send_verify_btn.clicked.connect(form._on_send_verify_clicked)
     form.attach_add_btn.clicked.connect(form._on_choose_files)

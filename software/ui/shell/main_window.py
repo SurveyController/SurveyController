@@ -153,8 +153,6 @@ class MainWindow(
         self._log_page = None
         self._community_page = None
         self._about_page = None
-        self._donate_page = None
-        self._ip_usage_page = None
         self._settings_page = None
         self._last_logged_page = ""
 
