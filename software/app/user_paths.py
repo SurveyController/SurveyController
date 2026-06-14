@@ -3,6 +3,13 @@ from __future__ import annotations
 
 import os
 
+from software.app.path_utils import normalize_filesystem_path
+from software.app.settings_store import (
+    CONFIG_DIRECTORY_SETTING_KEY,
+    app_settings,
+    get_str_from_qsettings,
+)
+
 _APP_NAME = "SurveyController"
 
 
@@ -32,9 +39,26 @@ def get_user_config_root() -> str:
     return os.path.join(get_roaming_app_data_root(), _APP_NAME)
 
 
+def get_default_user_config_directory() -> str:
+    """返回默认用户配置文件目录。"""
+    return os.path.join(get_user_config_root(), "configs")
+
+
+def resolve_user_config_directory(settings=None) -> str:
+    """返回当前用户配置文件目录，优先使用设置里指定的目录。"""
+    current_settings = settings or app_settings()
+    configured_path = get_str_from_qsettings(
+        current_settings.value(CONFIG_DIRECTORY_SETTING_KEY),
+        "",
+    )
+    if not configured_path:
+        return get_default_user_config_directory()
+    return normalize_filesystem_path(configured_path)
+
+
 def get_user_config_directory() -> str:
     """返回用户配置文件目录。"""
-    return os.path.join(get_user_config_root(), "configs")
+    return resolve_user_config_directory()
 
 
 def get_user_local_data_root() -> str:
@@ -96,6 +120,7 @@ def ensure_user_data_directories() -> tuple[str, ...]:
 __all__ = [
     "ensure_user_data_directories",
     "get_default_runtime_config_path",
+    "get_default_user_config_directory",
     "get_fatal_crash_log_path",
     "get_last_session_log_path",
     "get_legacy_migration_marker_path",
@@ -107,4 +132,5 @@ __all__ = [
     "get_user_local_data_root",
     "get_user_logs_directory",
     "get_user_updates_directory",
+    "resolve_user_config_directory",
 ]

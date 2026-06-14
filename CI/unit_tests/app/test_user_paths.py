@@ -5,6 +5,16 @@ import os
 import software.app.user_paths as user_paths
 
 
+class _FakeSettings:
+    def __init__(self, configured_path: str = "") -> None:
+        self._configured_path = configured_path
+
+    def value(self, key: str):
+        if key == user_paths.CONFIG_DIRECTORY_SETTING_KEY:
+            return self._configured_path
+        return None
+
+
 class UserPathsTests:
     def test_windows_user_paths_follow_expected_layout(self, monkeypatch) -> None:
         monkeypatch.setenv("APPDATA", r"C:\Users\Test\AppData\Roaming")
@@ -17,6 +27,16 @@ class UserPathsTests:
         assert user_paths.get_user_cache_directory().replace("\\", "/") == "C:/Users/Test/AppData/Local/SurveyController/cache"
         assert user_paths.get_user_updates_directory().replace("\\", "/") == "C:/Users/Test/AppData/Local/SurveyController/updates"
         assert user_paths.get_default_runtime_config_path().replace("\\", "/") == "C:/Users/Test/AppData/Roaming/SurveyController/config.json"
+
+    def test_default_user_config_directory_follows_config_root(self, monkeypatch, tmp_path) -> None:
+        monkeypatch.setattr(user_paths, "get_user_config_root", lambda: str(tmp_path / "SurveyController"))
+
+        assert user_paths.get_default_user_config_directory() == str(tmp_path / "SurveyController" / "configs")
+
+    def test_user_config_directory_can_follow_qsettings_override(self, tmp_path) -> None:
+        override_dir = tmp_path / "custom-configs"
+
+        assert user_paths.resolve_user_config_directory(_FakeSettings(str(override_dir))) == str(override_dir.resolve())
 
     def test_ensure_user_data_directories_creates_expected_tree(self, monkeypatch, tmp_path) -> None:
         monkeypatch.setenv("APPDATA", str(tmp_path / "Roaming"))

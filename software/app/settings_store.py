@@ -8,7 +8,21 @@ from PySide6.QtCore import QSettings
 
 _SETTINGS_ORG = "SurveyController"
 _SETTINGS_APP = "Settings"
+_SETTINGS_DOMAIN = "surveycontroller.app"
 _SETTINGS_FILE_ENV = "SURVEYCONTROLLER_QSETTINGS_FILE"
+CONFIG_DIRECTORY_SETTING_KEY = "config_directory"
+
+
+def configure_qt_application_metadata() -> None:
+    """确保 Qt 原生设置和标准路径使用稳定的应用元数据。"""
+    from PySide6.QtCore import QCoreApplication
+
+    if not QCoreApplication.organizationName():
+        QCoreApplication.setOrganizationName(_SETTINGS_ORG)
+    if not QCoreApplication.organizationDomain():
+        QCoreApplication.setOrganizationDomain(_SETTINGS_DOMAIN)
+    if not QCoreApplication.applicationName():
+        QCoreApplication.setApplicationName(_SETTINGS_APP)
 
 
 def app_settings() -> QSettings:
@@ -16,6 +30,7 @@ def app_settings() -> QSettings:
     isolated_settings_file = os.environ.get(_SETTINGS_FILE_ENV)
     if isolated_settings_file:
         return QSettings(isolated_settings_file, QSettings.Format.IniFormat)
+    configure_qt_application_metadata()
     return QSettings(_SETTINGS_ORG, _SETTINGS_APP)
 
 
@@ -50,4 +65,12 @@ def get_int_from_qsettings(
     if maximum is not None:
         result = min(int(maximum), result)
     return result
+
+
+def get_str_from_qsettings(value: Any, default: str = "") -> str:
+    """读取 QSettings 字符串值，空值回退默认值。"""
+    if value is None:
+        return default
+    text = str(value).strip()
+    return text or default
 
