@@ -387,6 +387,28 @@ class MainWindowUpdateLargeTests:
         assert window._startup_update_check_timer.stopped == 1
         assert window._startup_update_notification_timer.stopped == 1
 
+    def test_startup_update_check_defaults_to_disabled(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        self._patch_widget_deps(monkeypatch)
+        window = _FakeUpdateWindow()
+        monkeypatch.setattr(
+            update_module,
+            "app_settings",
+            lambda: SimpleNamespace(value=lambda _key: None),
+        )
+        monkeypatch.setattr(
+            update_module,
+            "get_bool_from_qsettings",
+            lambda value, default: default if value is None else bool(value),
+        )
+
+        window._check_update_on_startup()
+
+        assert window._startup_update_check_completed is True
+        assert window._startup_update_check_timer is None
+
     def test_suspend_timeout_and_notification_gate(self, monkeypatch: pytest.MonkeyPatch) -> None:
         self._patch_widget_deps(monkeypatch)
         window = _FakeUpdateWindow()

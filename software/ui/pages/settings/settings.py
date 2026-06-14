@@ -88,7 +88,7 @@ class SettingsPage(ScrollArea):
             TASK_RESULT_WINDOWS_NOTIFICATION_SETTING_KEY: True,
             AUTO_SAVE_LOGS_SETTING_KEY: DEFAULT_AUTO_SAVE_LOGS,
             AUTO_SAVE_LOG_RETENTION_COUNT_SETTING_KEY: DEFAULT_AUTO_SAVE_LOG_RETENTION_COUNT,
-            "auto_check_update": True,
+            "auto_check_update": False,
         }
 
     def _build_ui(self):

@@ -90,7 +90,7 @@ def test_settings_page_reset_restores_defaults(qtbot, monkeypatch) -> None:
 
     page = SettingsPage(parent=fake_window)
     page.show()
-    qtbot.waitUntil(lambda: page.auto_update_card.isChecked() is True)
+    qtbot.waitUntil(lambda: page.auto_update_card.isChecked() is False)
 
     page._on_reset_ui_settings = lambda: None
     page._reset_all_settings()
@@ -100,3 +100,4 @@ def test_settings_page_reset_restores_defaults(qtbot, monkeypatch) -> None:
     assert page.auto_save_logs_card.isChecked() is page._defaults[AUTO_SAVE_LOGS_SETTING_KEY]
     assert page.navigation_text_card.isChecked() is page._defaults[NAVIGATION_TEXT_VISIBLE_SETTING_KEY]
     assert page.task_result_notification_card.isChecked() is page._defaults[TASK_RESULT_WINDOWS_NOTIFICATION_SETTING_KEY]
+    assert page.auto_update_card.isChecked() is False

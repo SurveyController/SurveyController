@@ -64,7 +64,7 @@ class MainWindowUpdateMixin:
     def _check_update_on_startup(self):
         """根据设置在启动时检查更新（后台异步执行）"""
         settings = app_settings()
-        if not get_bool_from_qsettings(settings.value("auto_check_update"), True):
+        if not get_bool_from_qsettings(settings.value("auto_check_update"), False):
             self._startup_update_check_completed = True
             return
         self._schedule_startup_update_check(800)
