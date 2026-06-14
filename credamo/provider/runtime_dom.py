@@ -16,6 +16,7 @@ _CREDAMO_DYNAMIC_WAIT_POLL_SECONDS = 0.15
 _CREDAMO_PAGE_TRANSITION_TIMEOUT_MS = 5000
 _CREDAMO_DYNAMIC_REVEAL_TIMEOUT_MS = 800
 _CREDAMO_LOADING_SHELL_EXTRA_WAIT_TIMEOUT_MS = 4000
+_CREDAMO_PAGE_TRANSITION_STABLE_ROOTS = 2
 _QUESTION_NUMBER_RE = re.compile(r"\d+")
 _NEXT_BUTTON_MARKERS = ("下一页", "next", "继续")
 _SUBMIT_BUTTON_MARKERS = ("提交", "完成", "交卷", "submit", "finish", "done")
@@ -231,8 +232,16 @@ async def _question_kind_from_root(page: Any, root: BrowserElement) -> str:
       'textarea, input:not([readonly])[type="text"], input:not([readonly])[type="search"], input:not([readonly])[type="number"], input:not([readonly])[type="tel"], input:not([readonly])[type="email"], input:not([readonly]):not([type])'
     )
   ).filter((node) => visible(node));
+  const matrixRows = Array.from(el.querySelectorAll('tbody tr, .matrix-row, .el-table__row')).filter((row) => visible(row));
+  const matrixControls = Array.from(
+    el.querySelectorAll(
+      ".pc-matrix input[type='radio'], .pc-matrix [role='radio'], .pc-matrix .el-radio, .pc-matrix .el-radio__input, " +
+      ".matrix-row input[type='radio'], .matrix-row [role='radio'], .matrix-row .el-radio, .matrix-row .el-radio__input"
+    )
+  ).filter((node) => visible(node));
   if (el.querySelector('.multi-choice, input[type="checkbox"], [role="checkbox"]')) return 'multiple';
   if (el.querySelector('.pc-dropdown, .el-select')) return 'dropdown';
+  if (el.querySelector('.pc-matrix, .matrix-row, .el-table') || matrixRows.length > 0 || matrixControls.length >= 4) return 'matrix';
   if (el.querySelector('.scale, .nps-item, .el-rate__item')) return 'scale';
   if (el.querySelector('.rank-order')) return 'order';
   if (editableInputs.length > 1) return 'multi_text';
@@ -329,7 +338,7 @@ async def _question_answer_state(page: Any, root: BrowserElement, *, kind: str =
     el.querySelectorAll(".pc-dropdown .el-input__inner, .el-select .el-input__inner, .el-input__inner")
   ).filter((node) => visible(node));
   const filledDropdownInputs = dropdownInputs.filter((node) => String(node.value || '').trim()).length;
-  const scaleSelectedCount = el.querySelectorAll(".scale .nps-item.selected, .nps-item.selected").length;
+  const scaleSelectedCount = el.querySelectorAll(".scale .nps-item.selected, .nps-item.selected, .el-rate__item.selected, .el-rate__item.is-active").length;
   const hasVisibleError = (() => {
     if (el.classList.contains('error')) return true;
     const nodes = el.querySelectorAll('.question-error, .el-form-item__error');
@@ -659,10 +668,18 @@ async def _wait_for_page_change(
     timeout_ms: int = _CREDAMO_PAGE_TRANSITION_TIMEOUT_MS,
 ) -> bool:
     deadline = time.monotonic() + max(0.0, timeout_ms / 1000)
+    previous_non_empty = bool(previous_signature)
+    stable_root_hits = 0
     while not _abort_requested(stop_signal):
         current_signature = await _question_signature(page)
         if current_signature and current_signature != previous_signature:
             return True
+        if not previous_non_empty and current_signature:
+            stable_root_hits += 1
+            if stable_root_hits >= _CREDAMO_PAGE_TRANSITION_STABLE_ROOTS:
+                return True
+        else:
+            stable_root_hits = 0
         if time.monotonic() >= deadline:
             return False
         await sleep_or_stop(stop_signal, _CREDAMO_DYNAMIC_WAIT_POLL_SECONDS)

@@ -105,16 +105,30 @@ async def apply_answer_actions(page: Any, actions: list[AnswerAction]) -> BatchF
                     return applied > 0 && applied >= Math.min(inputs.length, textValues.length);
                 };
                 const applyScale = (root, index) => {
-                    const options = Array.from(root.querySelectorAll('.scale .nps-item, .nps-item, .el-rate__item')).filter(visible);
+                    const scaleSelectors = [
+                        '.scale .nps-item, .nps-item, .el-rate__item',
+                        '.scale .nps-item, .nps-item, .el-rate__item, .scale .scale-item',
+                        '.scale .scale-item',
+                    ];
+                    let options = [];
+                    for (const selector of scaleSelectors) {
+                        options = Array.from(root.querySelectorAll(selector)).filter(visible);
+                        if (options.length) break;
+                    }
                     const target = options[index] || null;
                     if (!target) return false;
                     try { target.scrollIntoView({ block: 'center', inline: 'nearest' }); } catch (e) {}
                     try { target.click(); } catch (e) {}
-                    try { target.classList.add('selected'); } catch (e) {}
-                    return true;
+                    const end = Date.now() + 300;
+                    while (Date.now() < end) {
+                        if (root.querySelector('.scale .nps-item.selected, .nps-item.selected, .el-rate__item.selected, .el-rate__item.is-active, .scale .scale-item.selected')) {
+                            return true;
+                        }
+                    }
+                    return false;
                 };
                 const applyMatrix = (root, indices) => {
-                    const rows = Array.from(root.querySelectorAll('tbody tr, .matrix-row, .el-table__row')).filter((row) => visible(row));
+                    const rows = Array.from(root.querySelectorAll('.pc-matrix .matrix-row, tbody tr, .matrix-row, .el-table__row')).filter((row) => visible(row));
                     let answerableRows = rows.filter((row) => row.querySelectorAll("input[type='radio'], [role='radio'], .el-radio, .el-radio__input").length >= 2);
                     if (!answerableRows.length) return false;
                     let applied = 0;

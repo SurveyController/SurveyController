@@ -18,31 +18,55 @@ from .runtime_dom import (
     _click_element,
 )
 
+_SCALE_CONFIRM_ATTEMPTS = 5
+_SCALE_CONFIRM_WAIT_SECONDS = 0.05
+
+
+async def _query_first_available(root: Any, selectors: tuple[str, ...]) -> list[Any]:
+    for selector in selectors:
+        try:
+            items = await root.query_selector_all(selector)
+        except Exception:
+            items = []
+        if items:
+            return items
+    return []
+
+
 async def _answer_scale(page: Any, root: Any, weights: Any) -> bool:
-    try:
-        options = await root.query_selector_all(".scale .nps-item, .nps-item, .el-rate__item")
-    except Exception:
-        options = []
+    options = await _query_first_available(
+        root,
+        (
+            ".scale .nps-item, .nps-item, .el-rate__item",
+            ".scale .nps-item, .nps-item, .el-rate__item, .scale .scale-item",
+            ".scale .scale-item",
+        ),
+    )
     if not options:
         return False
     probabilities = normalize_droplist_probs(weights, len(options))
     target_index = min(weighted_index(probabilities), len(options) - 1)
     if not await _click_element(page, options[target_index]):
         return False
-    try:
-        selected = await page.evaluate(
-            "el => !!el.querySelector('.scale .nps-item.selected, .nps-item.selected')",
-            root,
-        )
-    except Exception:
-        selected = None
-    if selected is None:
-        return True
-    return bool(selected)
+    for attempt in range(_SCALE_CONFIRM_ATTEMPTS):
+        try:
+            selected = await page.evaluate(
+                "el => !!el.querySelector('.scale .nps-item.selected, .nps-item.selected, .el-rate__item.selected, .el-rate__item.is-active, .scale .scale-item.selected')",
+                root,
+            )
+        except Exception:
+            selected = None
+        if selected is None:
+            return True
+        if selected:
+            return True
+        if attempt < _SCALE_CONFIRM_ATTEMPTS - 1:
+            await sleep_or_stop(None, _SCALE_CONFIRM_WAIT_SECONDS)
+    return False
 
 
 async def _matrix_rows(root: Any) -> list[tuple[Any, list[Any]]]:
-    row_selectors = ("tbody tr", ".matrix-row", ".el-table__row")
+    row_selectors = (".pc-matrix .matrix-row", "tbody tr", ".matrix-row", ".el-table__row")
     rows: list[tuple[Any, list[Any]]] = []
     for selector in row_selectors:
         try:

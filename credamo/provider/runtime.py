@@ -5,6 +5,7 @@ from __future__ import annotations
 import logging
 import random
 import time
+from dataclasses import replace
 from typing import Any, Optional
 
 from software.app.config import DEFAULT_FILL_TEXT
@@ -64,6 +65,166 @@ _DEFAULT_DOM_WAIT_FOR_PAGE_CHANGE = _runtime_dom._wait_for_page_change
 _DEFAULT_DOM_WAIT_FOR_QUESTION_ROOTS = _runtime_dom._wait_for_question_roots
 
 _CREDAMO_BATCH_ENTRY_TYPES = {"single", "multiple", "scale", "score", "matrix", "text", "multi_text"}
+
+
+async def _single_choice_option_texts_from_root(page: Any, root: Any) -> list[str]:
+    try:
+        payload = await page.evaluate(
+            r"""
+            (el) => {
+              const visible = (node, minWidth = 4, minHeight = 4) => {
+                if (!node) return false;
+                const style = window.getComputedStyle(node);
+                if (!style || style.display === 'none' || style.visibility === 'hidden') return false;
+                const rect = node.getBoundingClientRect();
+                return rect.width >= minWidth && rect.height >= minHeight;
+              };
+              const normalize = (text) => String(text || '').replace(/\s+/g, ' ').trim();
+              const selectors = ['.single-choice .choice-row', '.single-choice .choice', '.choice-row', '.choice'];
+              for (const selector of selectors) {
+                const rows = Array.from(el.querySelectorAll(selector)).filter((node) => visible(node));
+                const texts = rows.map((node) => normalize(node.innerText || node.textContent || '')).filter(Boolean);
+                if (texts.length) return texts;
+              }
+              return Array.from(el.querySelectorAll("input[type='radio'], [role='radio']"))
+                .map((node) => normalize(node.closest('label')?.innerText || node.parentElement?.innerText || node.textContent || ''))
+                .filter(Boolean);
+            }
+            """,
+            root,
+        )
+    except Exception:
+        payload = []
+    if not isinstance(payload, list):
+        return []
+    return [str(item or "").strip() for item in payload if str(item or "").strip()]
+
+
+async def _apply_forced_single_choice_to_action(page: Any, root: Any, action: Any, question_meta: Any) -> Any:
+    if str(getattr(action, "kind", "") or "").strip() != "single":
+        return action
+    option_texts = await _single_choice_option_texts_from_root(page, root)
+    if not option_texts:
+        option_texts = [str(item or "").strip() for item in list(getattr(question_meta, "option_texts", []) or [])]
+    option_texts = [item for item in option_texts if item]
+    if not option_texts:
+        return action
+
+    forced_index = getattr(question_meta, "forced_option_index", None)
+    try:
+        normalized_forced_index = int(forced_index)
+    except Exception:
+        normalized_forced_index = -1
+    if normalized_forced_index < 0 or normalized_forced_index >= len(option_texts):
+        resolved_forced_index = await _resolve_forced_choice_index(page, root, option_texts)
+        if resolved_forced_index is None:
+            return action
+        try:
+            normalized_forced_index = int(resolved_forced_index)
+        except Exception:
+            return action
+    if normalized_forced_index < 0 or normalized_forced_index >= len(option_texts):
+        return action
+    return replace(action, selected_indices=(normalized_forced_index,))
+
+
+async def _scale_option_texts_from_root(page: Any, root: Any, question_meta: Any) -> list[str]:
+    try:
+        payload = await page.evaluate(
+            r"""
+            (el) => {
+              const visible = (node, minWidth = 4, minHeight = 4) => {
+                if (!node) return false;
+                const style = window.getComputedStyle(node);
+                if (!style || style.display === 'none' || style.visibility === 'hidden') return false;
+                const rect = node.getBoundingClientRect();
+                return rect.width >= minWidth && rect.height >= minHeight;
+              };
+              const normalize = (text) => String(text || '').replace(/\s+/g, ' ').trim();
+              const selectors = ['.scale .nps-item', '.nps-item', '.el-rate__item', '.scale .scale-item'];
+              for (const selector of selectors) {
+                const items = Array.from(el.querySelectorAll(selector)).filter((node) => visible(node));
+                const texts = items.map((node, index) => normalize(node.innerText || node.textContent || '') || String(index + 1));
+                if (texts.length) return texts;
+              }
+              return [];
+            }
+            """,
+            root,
+        )
+    except Exception:
+        payload = []
+    option_texts = [str(item or "").strip() for item in payload if str(item or "").strip()] if isinstance(payload, list) else []
+    if option_texts:
+        return option_texts
+    metadata_options = [str(item or "").strip() for item in list(getattr(question_meta, "option_texts", []) or [])]
+    metadata_options = [item for item in metadata_options if item]
+    if metadata_options:
+        return metadata_options
+    try:
+        option_count = int(getattr(question_meta, "options", 0) or 0)
+    except Exception:
+        option_count = 0
+    return [str(index + 1) for index in range(max(0, option_count))]
+
+
+async def _forced_scale_index_from_root(page: Any, root: Any, question_meta: Any) -> Optional[int]:
+    option_texts = await _scale_option_texts_from_root(page, root, question_meta)
+    if not option_texts:
+        return None
+    return await _resolve_forced_choice_index(page, root, option_texts)
+
+
+async def _apply_forced_scale_to_action(page: Any, root: Any, action: Any, question_meta: Any) -> Any:
+    if str(getattr(action, "kind", "") or "").strip() != "scale":
+        return action
+    forced_index = await _forced_scale_index_from_root(page, root, question_meta)
+    if forced_index is None:
+        return action
+    try:
+        normalized_forced_index = int(forced_index)
+    except Exception:
+        return action
+    if normalized_forced_index < 0:
+        return action
+    return replace(action, selected_indices=(normalized_forced_index,))
+
+
+def _normalize_forced_text_values(forced_texts: Any, blank_count: int) -> list[str]:
+    values = [str(item or "").strip() for item in list(forced_texts or []) if str(item or "").strip()]
+    if not values:
+        return []
+    resolved_blank_count = max(1, int(blank_count or 1))
+    if len(values) < resolved_blank_count:
+        values.extend([values[-1]] * (resolved_blank_count - len(values)))
+    return values[:resolved_blank_count]
+
+
+async def _forced_text_values_from_root(page: Any, root: Any, question_meta: Any, *, blank_count: int = 1) -> list[str]:
+    metadata_values = _normalize_forced_text_values(getattr(question_meta, "forced_texts", []), blank_count)
+    if metadata_values:
+        return metadata_values
+    try:
+        from credamo.provider import parser as credamo_parser
+    except Exception:
+        return []
+    try:
+        title_text = await _question_title_text(page, root)
+        root_text = await _root_text(page, root)
+        forced_texts = credamo_parser._extract_forced_texts(title_text, extra_fragments=[root_text])
+    except Exception:
+        forced_texts = []
+    return _normalize_forced_text_values(forced_texts, blank_count)
+
+
+async def _apply_forced_text_to_action(page: Any, root: Any, action: Any, question_meta: Any) -> Any:
+    if str(getattr(action, "kind", "") or "").strip() not in {"text", "multi_text"}:
+        return action
+    blank_count = max(1, len(tuple(getattr(action, "text_values", ()) or ())))
+    forced_values = await _forced_text_values_from_root(page, root, question_meta, blank_count=blank_count)
+    if not forced_values:
+        return action
+    return replace(action, text_values=tuple(forced_values))
 
 
 async def _provider_page_id_from_root(page: Any, root: Any, fallback_page_id: Any = None) -> str:
@@ -224,10 +385,19 @@ async def _wait_for_page_change(page: Any, previous_signature: Any, stop_signal:
     timeout_ms = int(kwargs.get("timeout_ms") or getattr(_runtime_dom, "_CREDAMO_PAGE_TRANSITION_TIMEOUT_MS", 5000))
     poll_seconds = float(getattr(_runtime_dom, "_CREDAMO_DYNAMIC_WAIT_POLL_SECONDS", 0.15))
     deadline = time.monotonic() + max(0.0, timeout_ms / 1000)
+    previous_non_empty = bool(previous_signature)
+    stable_root_hits = 0
+    stable_target = int(getattr(_runtime_dom, "_CREDAMO_PAGE_TRANSITION_STABLE_ROOTS", 2) or 2)
     while not _abort_requested(stop_signal):
         current_signature = await _question_signature(page)
         if current_signature and current_signature != previous_signature:
             return True
+        if not previous_non_empty and current_signature:
+            stable_root_hits += 1
+            if stable_root_hits >= stable_target:
+                return True
+        else:
+            stable_root_hits = 0
         if time.monotonic() >= deadline:
             return False
         await sleep_or_stop(stop_signal, poll_seconds)
@@ -367,7 +537,14 @@ async def _attempt_answer_current_root(
         action_attempted = bool(await _answer_single_like(page, root, weights, 0))
     elif entry_type in {"scale", "score"}:
         plan_choice = _resolve_plan_choice(psycho_plan, resolved_question_num)
-        weights = _one_hot_weight(plan_choice, getattr(question_meta, "options", 0)) if plan_choice is not None else config.scale_prob[config_index] if config_index < len(config.scale_prob) else -1
+        forced_choice = await _forced_scale_index_from_root(page, root, question_meta)
+        weights = (
+            _one_hot_weight(forced_choice, getattr(question_meta, "options", 0))
+            if forced_choice is not None
+            else _one_hot_weight(plan_choice, getattr(question_meta, "options", 0))
+            if plan_choice is not None
+            else config.scale_prob[config_index] if config_index < len(config.scale_prob) else -1
+        )
         action_attempted = bool(await _answer_scale(page, root, weights))
     elif entry_type == "matrix":
         row_count = max(1, int(getattr(question_meta, "rows", 1) or 1))
@@ -401,6 +578,14 @@ async def _attempt_answer_current_root(
         action_attempted = bool(await _answer_order(page, root))
     elif entry_type in {"text", "multi_text"}:
         text_config = config.texts[config_index] if config_index < len(config.texts) else [DEFAULT_FILL_TEXT]
+        forced_text_values = await _forced_text_values_from_root(
+            page,
+            root,
+            question_meta,
+            blank_count=max(1, int(getattr(question_meta, "text_inputs", 1) or 1)),
+        )
+        if forced_text_values:
+            text_config = forced_text_values
         texts_prob = list(getattr(config, "texts_prob", []) or [])
         text_probabilities = texts_prob[config_index] if config_index < len(texts_prob) else [1.0]
         multi_text_blank_modes = list(getattr(config, "multi_text_blank_modes", []) or [])
@@ -469,6 +654,9 @@ async def _answer_pending_roots_batch(
         )
         if action is None:
             continue
+        action = await _apply_forced_single_choice_to_action(page, root, action, question_meta)
+        action = await _apply_forced_scale_to_action(page, root, action, question_meta)
+        action = await _apply_forced_text_to_action(page, root, action, question_meta)
         actions.append(action)
         action_key_by_num[int(resolved_question_num)] = question_key
     if not actions:

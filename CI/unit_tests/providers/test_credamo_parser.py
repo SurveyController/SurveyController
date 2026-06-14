@@ -81,6 +81,12 @@ class CredamoParserTests:
         assert parser._infer_type_code({'question_kind': 'order'}) == '11'
         assert parser._infer_type_code({'question_kind': 'multiple'}) == '4'
 
+    def test_extract_arithmetic_option_handles_simple_expression(self) -> None:
+        assert parser._extract_arithmetic_option(
+            "Q8 请问100+100等于多少",
+            ["200", "300", "600", "500"],
+        ) == (0, "200")
+
     @pytest.mark.asyncio
     async def test_detect_navigation_action_ignores_hidden_submit_button(self) -> None:
         page = self._FakePage([self._FakeButton('提交', False), self._FakeButton('下一页', True)])

@@ -6,6 +6,7 @@ from types import SimpleNamespace
 import pytest
 
 from credamo.provider import runtime
+from software.providers.answering import AnswerAction, BatchFillResult
 
 
 def _async_return(value=None):
@@ -306,6 +307,91 @@ class CredamoRuntimeTests:
 
         assert result
         assert step_updates[:2] == [0, 1]
+
+    @pytest.mark.asyncio
+    async def test_answer_pending_roots_batch_respects_forced_single_choice(self, restore_credamo_runtime_patchpoints, patch_attrs) -> None:
+        _ = restore_credamo_runtime_patchpoints
+        root = self._FakeQuestionRoot(7)
+        captured_actions: list[AnswerAction] = []
+        config = SimpleNamespace(
+            question_config_index_map={7: ("single", 0)},
+            questions_metadata={7: SimpleNamespace(option_texts=["非常不满意", "不满意", "满意", "非常满意"])},
+            provider_question_config_index_map={},
+            provider_question_metadata_map={},
+            single_prob=[[0.0, 0.0, 0.0, 100.0]],
+        )
+
+        async def _apply(_page, actions):
+            captured_actions.extend(actions)
+            return BatchFillResult(applied=(7,))
+
+        patch_attrs(
+            (runtime, "_provider_question_key_from_root", _async_return("")),
+            (runtime, "_BUILD_BATCH_ANSWER_ACTION", lambda **_kwargs: AnswerAction(root_index=0, question_num=7, kind="single", selected_indices=(3,))),
+            (runtime, "_resolve_forced_choice_index", _async_return(0)),
+            (runtime, "_APPLY_BATCH_ANSWER_ACTIONS", _apply),
+        )
+
+        answered = await runtime._answer_pending_roots_batch(
+            object(),
+            [root],
+            [(root, 7, "k7")],
+            config,
+            page_index=1,
+        )
+
+        assert answered == {"k7"}
+        assert captured_actions[0].selected_indices == (0,)
+
+    @pytest.mark.asyncio
+    async def test_answer_pending_roots_batch_respects_forced_scale_and_text(self, restore_credamo_runtime_patchpoints, patch_attrs) -> None:
+        _ = restore_credamo_runtime_patchpoints
+        root9 = self._FakeQuestionRoot(9)
+        root10 = self._FakeQuestionRoot(10)
+        captured_actions: list[AnswerAction] = []
+        config = SimpleNamespace(
+            question_config_index_map={9: ("scale", 0), 10: ("text", 0)},
+            questions_metadata={
+                9: SimpleNamespace(options=7, option_texts=[str(index) for index in range(1, 8)]),
+                10: SimpleNamespace(text_inputs=1, forced_texts=[]),
+            },
+            provider_question_config_index_map={},
+            provider_question_metadata_map={},
+            scale_prob=[[0.0, 0.0, 100.0, 0.0, 0.0, 0.0, 0.0]],
+            texts=[["无"]],
+            texts_prob=[[1.0]],
+            multi_text_blank_modes=[[]],
+            multi_text_blank_int_ranges=[[]],
+        )
+
+        async def _title(_page, root):
+            if root is root9:
+                return "Q9 本题检测是否认真作答，请选 1"
+            return "Q10 本题检测是否认真作答，请输入：“你好”"
+
+        async def _apply(_page, actions):
+            captured_actions.extend(actions)
+            return BatchFillResult(applied=(9, 10))
+
+        patch_attrs(
+            (runtime, "_provider_question_key_from_root", _async_return("")),
+            (runtime, "_question_title_text", _title),
+            (runtime, "_root_text", _title),
+            (runtime, "_resolve_forced_choice_index", _async_return(0)),
+            (runtime, "_APPLY_BATCH_ANSWER_ACTIONS", _apply),
+        )
+
+        answered = await runtime._answer_pending_roots_batch(
+            object(),
+            [root9, root10],
+            [(root9, 9, "k9"), (root10, 10, "k10")],
+            config,
+            page_index=1,
+        )
+
+        assert answered == {"k9", "k10"}
+        assert captured_actions[0].selected_indices == (0,)
+        assert captured_actions[1].text_values == ("你好",)
 
     @pytest.mark.asyncio
     async def test_patchpoint_wrappers_delegate(self, restore_credamo_runtime_patchpoints, patch_attrs) -> None:

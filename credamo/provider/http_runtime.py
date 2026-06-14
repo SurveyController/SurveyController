@@ -1,22 +1,48 @@
-"""Credamo 见数 HTTP 解析辅助。"""
-
 from __future__ import annotations
 
 import hashlib
+import json
+import logging
 import random
 import re
 import time
+import uuid
+from dataclasses import dataclass, replace
 from typing import Any, Mapping
 from urllib.parse import urlparse
 
 import httpx
-
 from software.app.config import DEFAULT_HTTP_HEADERS, DEFAULT_USER_AGENT
+from software.core.modes.duration_control import sample_answer_duration_seconds
+from software.core.persona.context import record_answer
+from software.core.questions.distribution import record_pending_distribution_choice
+from software.core.task import ExecutionConfig, ExecutionState
+from software.providers.answering import AnswerAction
+from software.providers.answering.option_fill import option_fill_text_map
+from software.providers.answering.recording import record_answer_action
+from software.providers.contracts import SurveyQuestionMeta
+from software.providers.http_logic import build_http_logic_plan
+from software.providers.http_progress import update_http_submit_step
 
-_CIPHER = "bdd048cdbf5a382d"
-_RANDOM_CHARS = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz"
+from .answering_builders import build_answer_action
+
+_CIPHER = "P96D0A7D0M8C3R2D0M1"
+_RANDOM_CHARS = "ABCDEFGHJKMNPQRSTWXYZabcdefhijkmnprstwxyz2345678"
 _DEFAULT_ORIGIN = "https://www.credamo.com"
+_RESOLUTION = "1920px*1080px"
 _CREDAMO_REQUEST_TIMEOUT_SECONDS = 30
+
+
+@dataclass(frozen=True)
+class _CredamoAnswerInit:
+    answer_token: str
+    timestamp_ms: int
+    time_code: str
+
+
+class CredamoSubmitResult:
+    SUCCESS = "success"
+    FAILED = "failed"
 
 
 class _CredamoHttpSession:
@@ -45,6 +71,9 @@ class _CredamoHttpSession:
 
     async def get(self, url: str, **kwargs: Any) -> httpx.Response:
         return await self._ensure_client().get(url, **kwargs)
+
+    async def post(self, url: str, **kwargs: Any) -> httpx.Response:
+        return await self._ensure_client().post(url, **kwargs)
 
 
 def _resolve_httpx_proxy(proxy_address: str) -> str | None:
@@ -98,6 +127,10 @@ def _random_token(length: int) -> str:
     return "".join(random.choice(_RANDOM_CHARS) for _ in range(max(1, int(length or 1))))
 
 
+def _new_time_code() -> str:
+    return uuid.uuid4().hex
+
+
 def _build_signature_headers(
     *,
     answer_token: str = "",
@@ -116,6 +149,7 @@ def _build_signature_headers(
         "nonce": nonce_value,
         "timestamp": timestamp,
         "signature": signature,
+        "Accept-Language": "zh-CN,zh;q=0.9",
     }
 
 
@@ -125,14 +159,19 @@ def _request_headers(
     short_url: str,
     user_agent: str | None = None,
     answer_token: str = "",
+    json_body: bool = False,
 ) -> dict[str, str]:
-    return {
+    headers = {
         **DEFAULT_HTTP_HEADERS,
         "User-Agent": str(user_agent or "").strip() or DEFAULT_USER_AGENT,
         "Accept": "application/json, text/plain, */*",
         "Referer": _answer_page_url(origin, short_url),
         **_build_signature_headers(answer_token=answer_token),
     }
+    if json_body:
+        headers["Origin"] = origin.rstrip("/")
+        headers["Content-Type"] = "application/json"
+    return headers
 
 
 def _json_payload(response: Any, label: str) -> Mapping[str, Any]:
@@ -154,15 +193,17 @@ def _json_payload(response: Any, label: str) -> Mapping[str, Any]:
 
 
 def _ensure_api_ok(payload: Mapping[str, Any], label: str) -> Mapping[str, Any]:
-    if payload.get("success") is False:
+    if classify_credamo_api_payload(payload) != CredamoSubmitResult.SUCCESS:
         message = str(payload.get("message") or payload.get("msg") or payload.get("code") or payload).strip()
-        raise RuntimeError(f"见数{label}失败：{message}")
-    code = payload.get("code")
-    if code not in (None, "", 0, "0", "OK", "ok", "SUCCESS", "success"):
-        message = str(payload.get("message") or payload.get("msg") or code).strip()
         raise RuntimeError(f"见数{label}失败：{message}")
     data = payload.get("data")
     return data if isinstance(data, Mapping) else payload
+
+
+def classify_credamo_api_payload(payload: Mapping[str, Any]) -> str:
+    if payload.get("success") is False:
+        return CredamoSubmitResult.FAILED
+    return CredamoSubmitResult.SUCCESS
 
 
 async def _fetch_detail(
@@ -178,6 +219,39 @@ async def _fetch_detail(
         timeout=_CREDAMO_REQUEST_TIMEOUT_SECONDS,
     )
     return _ensure_api_ok(_json_payload(response, "详情"), "详情")
+
+
+async def _init_answer(
+    session: _CredamoHttpSession,
+    *,
+    origin: str,
+    short_url: str,
+    time_code: str,
+    headers: dict[str, str],
+) -> _CredamoAnswerInit:
+    response = await session.get(
+        f"{origin.rstrip('/')}/v1/survey/answer/noauth/init/{short_url}",
+        params={
+            "timeCode": time_code,
+            "accountCode": "CDM",
+            "resolution": _RESOLUTION,
+        },
+        headers=headers,
+        timeout=_CREDAMO_REQUEST_TIMEOUT_SECONDS,
+    )
+    data = _ensure_api_ok(_json_payload(response, "初始化"), "初始化")
+    answer_token = str(data.get("answerToken") or "").strip()
+    if not answer_token:
+        raise RuntimeError("见数初始化接口未返回 answerToken")
+    try:
+        timestamp_ms = int(data.get("timestamp") or int(time.time() * 1000))
+    except Exception:
+        timestamp_ms = int(time.time() * 1000)
+    return _CredamoAnswerInit(
+        answer_token=answer_token,
+        timestamp_ms=timestamp_ms,
+        time_code=time_code,
+    )
 
 
 def _as_mapping_list(value: Any) -> list[Mapping[str, Any]]:
@@ -214,6 +288,13 @@ def _raw_question_num(raw_question: Mapping[str, Any], fallback_num: int) -> int
         if match:
             return max(1, int(match.group(0)))
     return max(1, int(fallback_num or 1))
+
+
+def _raw_questions_by_num(raw_questions: list[Mapping[str, Any]]) -> dict[int, Mapping[str, Any]]:
+    result: dict[int, Mapping[str, Any]] = {}
+    for index, raw_question in enumerate(raw_questions, start=1):
+        result[_raw_question_num(raw_question, index)] = raw_question
+    return result
 
 
 def _raw_question_type(raw_question: Mapping[str, Any]) -> int:
@@ -265,7 +346,530 @@ def _raw_row_count(raw_question: Mapping[str, Any]) -> int:
     return 1
 
 
+def _enrich_question_meta(question: SurveyQuestionMeta, raw_question: Mapping[str, Any]) -> SurveyQuestionMeta:
+    question_id = str(raw_question.get("questionId") or raw_question.get("qstId") or question.provider_question_id or "").strip()
+    return replace(
+        question,
+        options=_raw_option_count(raw_question) or int(getattr(question, "options", 0) or 0),
+        rows=_raw_row_count(raw_question) or int(getattr(question, "rows", 1) or 1),
+        provider_question_id=question_id,
+        provider_type=_raw_provider_type(raw_question) or str(getattr(question, "provider_type", "") or ""),
+    )
+
+
+def _question_items(
+    config: ExecutionConfig,
+    raw_by_num: Mapping[int, Mapping[str, Any]],
+) -> list[SurveyQuestionMeta]:
+    questions: list[SurveyQuestionMeta] = []
+    for question in sorted(
+        list((config.questions_metadata or {}).values()),
+        key=lambda item: (int(getattr(item, "page", 1) or 1), int(getattr(item, "num", 0) or 0)),
+    ):
+        question_num = int(getattr(question, "num", 0) or 0)
+        raw_question = raw_by_num.get(question_num)
+        if raw_question is None:
+            raise RuntimeError(f"见数第{question_num}题未在接口详情中找到，无法纯 HTTP 提交")
+        questions.append(_enrich_question_meta(question, raw_question))
+    return questions
+
+
+def _config_entry_for_question(config: ExecutionConfig, question: SurveyQuestionMeta) -> tuple[str, int] | None:
+    question_num = int(getattr(question, "num", 0) or 0)
+    entry = (config.question_config_index_map or {}).get(question_num)
+    if entry is not None:
+        return entry
+    provider_id = str(getattr(question, "provider_question_id", "") or "").strip()
+    if provider_id:
+        return (config.provider_question_config_index_map or {}).get(provider_id)
+    return None
+
+
+async def _build_actions(
+    config: ExecutionConfig,
+    ctx: ExecutionState,
+    *,
+    raw_by_num: Mapping[int, Mapping[str, Any]],
+    psycho_plan: Any,
+    stop_signal: Any,
+) -> list[AnswerAction]:
+    questions = _question_items(config, raw_by_num)
+    for question in questions:
+        if stop_signal is not None and stop_signal.is_set():
+            return []
+        if bool(getattr(question, "unsupported", False)):
+            raise RuntimeError(f"见数第{question.num}题暂不支持：{question.unsupported_reason or question.type_code}")
+
+    async def _build_action(question: SurveyQuestionMeta) -> AnswerAction | None:
+        if stop_signal is not None and stop_signal.is_set():
+            return None
+        entry = _config_entry_for_question(config, question)
+        if entry is None:
+            return None
+        entry_type, config_index = entry
+        return build_answer_action(
+            root_index=int(getattr(question, "num", 0) or 0) - 1,
+            question_num=int(getattr(question, "num", 0) or 0),
+            entry_type=str(entry_type or ""),
+            config_index=int(config_index or 0),
+            config=config,
+            question_meta=question,
+            psycho_plan=psycho_plan,
+        )
+
+    plan = await build_http_logic_plan(
+        questions,
+        build_action=_build_action,
+    )
+    return list(plan.actions)
+
+
+def _record_action(ctx: ExecutionState, action: AnswerAction) -> None:
+    record_answer_action(
+        ctx,
+        action,
+        record_answer_fn=record_answer,
+        record_pending_distribution_choice_fn=record_pending_distribution_choice,
+        default_fill_text="",
+    )
+
+
+def _normalize_id(value: Any) -> Any:
+    text = str(value or "").strip()
+    if not text:
+        return ""
+    try:
+        return int(text)
+    except Exception:
+        return text
+
+
+def _sort_value(value: Any, fallback: int) -> int:
+    try:
+        return int(value)
+    except Exception:
+        return int(fallback)
+
+
+def _id_from_mapping(item: Mapping[str, Any], *keys: str) -> Any:
+    for key in keys:
+        value = item.get(key)
+        if value is not None and str(value).strip():
+            return _normalize_id(value)
+    return ""
+
+
+def _selected_item(items: list[Mapping[str, Any]], index: int, *, question_num: int, label: str) -> Mapping[str, Any]:
+    selected_index = int(index)
+    if selected_index < 0 or selected_index >= len(items):
+        raise RuntimeError(f"见数第{question_num}题{label}索引越界")
+    return items[selected_index]
+
+
+def _choice_payload(raw_choice: Mapping[str, Any], *, fill_text: str = "") -> dict[str, Any]:
+    return {
+        "choiceId": _id_from_mapping(raw_choice, "choiceId", "id"),
+        "choiceContent": str(fill_text or "").strip(),
+    }
+
+
+def _normalized_choice_text(value: Any) -> str:
+    return re.sub(r"\s+", "", str(value or "")).strip()
+
+
+def _choice_index_by_text(choices: list[Mapping[str, Any]], target_text: str) -> int | None:
+    normalized_target = _normalized_choice_text(target_text)
+    if not normalized_target:
+        return None
+    for index, choice in enumerate(choices):
+        for key in ("display", "choiceContent", "choiceTitle", "content", "text"):
+            if _normalized_choice_text(choice.get(key)) == normalized_target:
+                return index
+    return None
+
+
+def _forced_index_from_config(
+    config: ExecutionConfig | None,
+    action: AnswerAction,
+    choices: list[Mapping[str, Any]],
+) -> int | None:
+    if config is None:
+        return None
+    try:
+        question = (config.questions_metadata or {}).get(int(action.question_num or 0))
+    except Exception:
+        question = None
+    if question is None:
+        return None
+    forced_text = str(getattr(question, "forced_option_text", "") or "").strip()
+    by_text = _choice_index_by_text(choices, forced_text)
+    if by_text is not None:
+        return by_text
+    forced_index = getattr(question, "forced_option_index", None)
+    if forced_index is None:
+        return None
+    try:
+        index = int(forced_index)
+    except Exception:
+        return None
+    if 0 <= index < len(choices):
+        return index
+    return None
+
+
+def _selected_choice_index(
+    choices: list[Mapping[str, Any]],
+    action: AnswerAction,
+    *,
+    config: ExecutionConfig | None = None,
+) -> int:
+    forced = _forced_index_from_config(config, action, choices)
+    if forced is not None:
+        return forced
+    return int(action.selected_indices[0] if action.selected_indices else 0)
+
+
+def _choice_answer(
+    raw_question: Mapping[str, Any],
+    action: AnswerAction,
+    *,
+    config: ExecutionConfig | None = None,
+) -> dict[str, Any]:
+    choices = _as_mapping_list(raw_question.get("choices"))
+    question_num = int(action.question_num or 0)
+    question_type = _raw_question_type(raw_question)
+    selector = _raw_selector(raw_question)
+    fill_by_index = option_fill_text_map(action.option_fill_texts)
+    item: dict[str, Any] = {
+        "qstId": _id_from_mapping(raw_question, "qstId", "id"),
+        "answerTime": 0,
+        "answerQstEeg": None,
+        "answerContent": "",
+    }
+    if selector == 2 or action.kind == "multiple":
+        item["answerQstChoiceList"] = [
+            _choice_payload(
+                _selected_item(choices, int(index), question_num=question_num, label="选项"),
+                fill_text=fill_by_index.get(int(index), ""),
+            )
+            for index in action.selected_indices
+        ]
+    else:
+        selected_index = _selected_choice_index(choices, action, config=config)
+        item["answerQstChoice"] = _choice_payload(
+            _selected_item(choices, selected_index, question_num=question_num, label="选项"),
+            fill_text=fill_by_index.get(int(selected_index), ""),
+        )
+    try:
+        sub_selector = int(raw_question.get("subSelector") or 0)
+    except Exception:
+        sub_selector = 0
+    if question_type == 2 and sub_selector > 0:
+        item["questionType"] = 2
+        item["subSelector"] = sub_selector
+    return item
+
+
+def _scale_answer(
+    raw_question: Mapping[str, Any],
+    action: AnswerAction,
+    *,
+    config: ExecutionConfig | None = None,
+) -> dict[str, Any]:
+    choices = _as_mapping_list(raw_question.get("choices"))
+    selected_index = _selected_choice_index(choices, action, config=config)
+    return {
+        "qstId": _id_from_mapping(raw_question, "qstId", "id"),
+        "answerTime": 0,
+        "answerQstEeg": None,
+        "answerQstChoice": _choice_payload(
+            _selected_item(choices, selected_index, question_num=int(action.question_num or 0), label="选项")
+        ),
+    }
+
+
+def _matrix_answer(raw_question: Mapping[str, Any], action: AnswerAction) -> dict[str, Any]:
+    rows = _as_mapping_list(raw_question.get("choices"))
+    columns = _as_mapping_list(raw_question.get("answers"))
+    question_num = int(action.question_num or 0)
+    answer_rows: list[dict[str, Any]] = []
+    for row_index, row in enumerate(rows):
+        if row_index >= len(action.matrix_indices):
+            continue
+        selected_col = int(action.matrix_indices[row_index])
+        column = _selected_item(columns, selected_col, question_num=question_num, label="矩阵列")
+        answer_rows.append(
+            {
+                "choiceId": _id_from_mapping(row, "choiceId", "id"),
+                "choiceAnswerList": [{"answerId": _id_from_mapping(column, "answerId", "id")}],
+            }
+        )
+    if not answer_rows:
+        raise RuntimeError(f"见数第{question_num}题没有生成矩阵答案")
+    return {
+        "qstId": _id_from_mapping(raw_question, "qstId", "id"),
+        "answerTime": 0,
+        "answerQstEeg": None,
+        "answerContent": "",
+        "answerQstChoiceList": answer_rows,
+    }
+
+
+def _order_answer(raw_question: Mapping[str, Any], action: AnswerAction) -> dict[str, Any]:
+    choices = _as_mapping_list(raw_question.get("choices"))
+    question_num = int(action.question_num or 0)
+    ranked: list[dict[str, Any]] = []
+    for rank, selected_index in enumerate(action.selected_indices, start=1):
+        choice = _selected_item(choices, int(selected_index), question_num=question_num, label="排序选项")
+        ranked.append(
+            {
+                "choiceId": _id_from_mapping(choice, "choiceId", "id"),
+                "choiceContent": rank,
+            }
+        )
+    if not ranked:
+        raise RuntimeError(f"见数第{question_num}题没有生成排序答案")
+    return {
+        "qstId": _id_from_mapping(raw_question, "qstId", "id"),
+        "answerTime": 0,
+        "answerQstEeg": None,
+        "answerContent": "",
+        "answerChoiceContent": ranked,
+    }
+
+
+def _text_answer(raw_question: Mapping[str, Any], action: AnswerAction) -> dict[str, Any]:
+    text_values = [str(item or "").strip() for item in action.text_values if str(item or "").strip()]
+    return {
+        "qstId": _id_from_mapping(raw_question, "qstId", "id"),
+        "answerTime": 0,
+        "answerQstEeg": None,
+        "answerContent": "\n".join(text_values),
+    }
+
+
+def _question_answer(
+    raw_question: Mapping[str, Any],
+    action: AnswerAction,
+    *,
+    config: ExecutionConfig | None = None,
+) -> dict[str, Any]:
+    question_type = _raw_question_type(raw_question)
+    if question_type == 1 or action.kind in {"text", "multi_text"}:
+        return _text_answer(raw_question, action)
+    if question_type == 2 or action.kind in {"single", "multiple", "select"}:
+        return _choice_answer(raw_question, action, config=config)
+    if question_type == 11 or action.kind == "scale":
+        return _scale_answer(raw_question, action, config=config)
+    if question_type in {4, 25} or action.kind == "matrix":
+        return _matrix_answer(raw_question, action)
+    if question_type == 6 or action.kind == "order":
+        return _order_answer(raw_question, action)
+    raise RuntimeError(f"见数第{action.question_num}题类型暂不支持纯 HTTP 提交：{question_type}")
+
+
+def _answer_payload_items(
+    raw_by_num: Mapping[int, Mapping[str, Any]],
+    actions: list[AnswerAction],
+    *,
+    config: ExecutionConfig | None = None,
+    answer_duration_seconds: float = 0.0,
+) -> list[dict[str, Any]]:
+    per_question_time = 0
+    if actions:
+        per_question_time = max(1, int(round((float(answer_duration_seconds or 0.0) * 1000) / len(actions))))
+    result: list[dict[str, Any]] = []
+    for action in actions:
+        question_num = int(action.question_num or 0)
+        raw_question = raw_by_num.get(question_num)
+        if raw_question is None:
+            raise RuntimeError(f"见数第{question_num}题缺少接口题目数据")
+        item = _question_answer(raw_question, action, config=config)
+        item["answerTime"] = per_question_time
+        item["_sortNo"] = _sort_value(raw_question.get("sortNo"), fallback=len(result) + 1)
+        result.append(item)
+    result.sort(key=lambda item: _sort_value(item.get("_sortNo"), fallback=0))
+    for item in result:
+        item.pop("_sortNo", None)
+    return result
+
+
+def _sample_duration_seconds(config: ExecutionConfig) -> float:
+    try:
+        sampled = sample_answer_duration_seconds(
+            config.answer_duration_range_seconds,
+            survey_provider="credamo",
+            default_unconfigured_seconds=90,
+        )
+    except Exception:
+        sampled = 0.0
+    sampled_seconds = max(0.0, float(sampled or 0.0))
+    if sampled_seconds > 0:
+        return sampled_seconds
+    return 90.0
+
+
+def _sample_answer_start_time_ms(
+    config: ExecutionConfig,
+    *,
+    init_started_at_ms: int,
+    duration_seconds: float,
+) -> int:
+    window_start_ms, window_end_ms = getattr(config, "answer_datetime_window_ms", (0, 0))
+    if window_start_ms <= 0 or window_end_ms <= window_start_ms:
+        return int(init_started_at_ms)
+    duration_ms = max(1, int(round(float(duration_seconds or 0.0) * 1000)))
+    latest_start_ms = int(window_end_ms - duration_ms)
+    earliest_start_ms = int(window_start_ms)
+    if latest_start_ms <= earliest_start_ms:
+        return earliest_start_ms
+    return random.randint(earliest_start_ms, latest_start_ms)
+
+
+def _build_submit_body(
+    *,
+    short_url: str,
+    raw_by_num: Mapping[int, Mapping[str, Any]],
+    actions: list[AnswerAction],
+    config: ExecutionConfig | None = None,
+    answer_started_at_ms: int | None = None,
+    duration_seconds: float,
+) -> dict[str, Any]:
+    started_at = int(answer_started_at_ms or int(time.time() * 1000))
+    duration_ms = max(1, int(round(float(duration_seconds or 0.0) * 1000)))
+    ended_at = started_at + duration_ms
+    body = {
+        "answerStartTime": started_at,
+        "answerEndTime": ended_at,
+        "status": 1,
+        "answerQstList": _answer_payload_items(
+            raw_by_num,
+            actions,
+            config=config,
+            answer_duration_seconds=duration_seconds,
+        ),
+        "shortUrl": short_url,
+        "resolution": _RESOLUTION,
+        "sourceDetail": 1,
+    }
+    for item in body["answerQstList"]:
+        if isinstance(item, dict) and item.get("answerQstEeg") is None:
+            item.pop("answerQstEeg", None)
+    return body
+
+
+async def _save_answers(
+    session: _CredamoHttpSession,
+    *,
+    origin: str,
+    short_url: str,
+    init_data: _CredamoAnswerInit,
+    body: dict[str, Any],
+    user_agent: str | None,
+) -> Mapping[str, Any]:
+    answer_token = init_data.answer_token
+    content = json.dumps(body, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
+    response = await session.post(
+        (
+            f"{origin.rstrip('/')}/v1/survey/answer/noauth/save"
+            f"?timeCode={init_data.time_code}&answerToken={answer_token}"
+        ),
+        content=content,
+        headers=_request_headers(
+            origin=origin,
+            short_url=short_url,
+            user_agent=user_agent,
+            answer_token=answer_token,
+            json_body=True,
+        ),
+        timeout=_CREDAMO_REQUEST_TIMEOUT_SECONDS,
+    )
+    return _ensure_api_ok(_json_payload(response, "保存"), "保存")
+
+
+async def brush_credamo_http(
+    config: ExecutionConfig,
+    ctx: ExecutionState,
+    *,
+    url: str,
+    stop_signal: Any,
+) -> bool:
+    raw_url = str(url or "").strip()
+    if not raw_url:
+        raise RuntimeError("见数链接为空")
+    origin = _origin_from_url(raw_url)
+    short_url = _noauth_short_url(_short_url_from_url(raw_url))
+    proxy_address = str(getattr(config, "ip", "") or "").strip() or None
+    user_agent = str(getattr(config, "user_agent", "") or "").strip() or DEFAULT_USER_AGENT
+    await update_http_submit_step(ctx, "", "准备请求")
+    async with _CredamoHttpSession(proxy_address) as session:
+        await update_http_submit_step(ctx, "", "生成答案")
+        detail_headers = _request_headers(origin=origin, short_url=short_url, user_agent=user_agent)
+        detail_data = await _fetch_detail(
+            session,
+            origin=origin,
+            short_url=short_url,
+            headers=detail_headers,
+        )
+        raw_questions = _iter_raw_questions(detail_data)
+        if not raw_questions:
+            raise RuntimeError("见数详情接口未返回可提交题目")
+        raw_by_num = _raw_questions_by_num(raw_questions)
+        psycho_plan = getattr(ctx, "psycho_plan", None)
+        actions = await _build_actions(
+            config,
+            ctx,
+            raw_by_num=raw_by_num,
+            psycho_plan=psycho_plan,
+            stop_signal=stop_signal,
+        )
+        if stop_signal is not None and stop_signal.is_set():
+            return False
+        if not actions:
+            return False
+        for action in actions:
+            _record_action(ctx, action)
+        duration_seconds = _sample_duration_seconds(config)
+        time_code = _new_time_code()
+        init_started_at_ms = int(time.time() * 1000)
+        if not bool(getattr(config, "submit_enabled", True)):
+            logging.info("见数 HTTP 单测已生成答案，未提交。")
+            return True
+        await update_http_submit_step(ctx, "", "提交问卷")
+        init_data = await _init_answer(
+            session,
+            origin=origin,
+            short_url=short_url,
+            time_code=time_code,
+            headers=detail_headers,
+        )
+        answer_started_at_ms = _sample_answer_start_time_ms(
+            config,
+            init_started_at_ms=init_started_at_ms,
+            duration_seconds=duration_seconds,
+        )
+        body = _build_submit_body(
+            short_url=short_url,
+            raw_by_num=raw_by_num,
+            actions=actions,
+            config=config,
+            answer_started_at_ms=answer_started_at_ms,
+            duration_seconds=duration_seconds,
+        )
+        await _save_answers(
+            session,
+            origin=origin,
+            short_url=short_url,
+            init_data=init_data,
+            body=body,
+            user_agent=user_agent,
+        )
+        await update_http_submit_step(ctx, "", "校验结果")
+    return True
+
+
 __all__ = [
+    "CredamoSubmitResult",
     "_CredamoHttpSession",
     "_as_mapping_list",
     "_fetch_detail",
@@ -279,4 +883,6 @@ __all__ = [
     "_raw_row_count",
     "_request_headers",
     "_short_url_from_url",
+    "brush_credamo_http",
+    "classify_credamo_api_payload",
 ]
