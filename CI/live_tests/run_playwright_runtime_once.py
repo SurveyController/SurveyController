@@ -1,5 +1,5 @@
 #!/usr/bin/env python
-"""Run one real survey submission through AsyncRuntimeEngine."""
+"""Run one real survey submission through the Playwright runtime engine."""
 
 from __future__ import annotations
 
@@ -22,8 +22,37 @@ from software.core.config.schema import RuntimeConfig  # noqa: E402
 from software.core.engine.async_engine import AsyncEngineClient  # noqa: E402
 from software.core.questions.config import build_default_question_entries  # noqa: E402
 from software.core.task import ExecutionState  # noqa: E402
+from software.network.browser.async_owner_pool import AsyncBrowserOwnerPool  # noqa: E402
+from software.network.browser.options import _build_launch_args  # noqa: E402
+from software.network.browser.pool_config import BrowserPoolConfig  # noqa: E402
 from software.providers.registry import parse_survey  # noqa: E402
 from software.ui.controller.run_controller_parts.runtime_preparation import prepare_execution_artifacts  # noqa: E402
+
+
+async def _probe_msedge_runtime(*, headless: bool) -> None:
+    launch_args = _build_launch_args(
+        browser_name="edge",
+        headless=headless,
+        window_position=None,
+        append_no_proxy=False,
+    )
+    channel = str(launch_args.get("channel", "") or "")
+    if channel != "msedge":
+        raise RuntimeError(f"Playwright 回归必须使用系统 Microsoft Edge，当前 channel={channel!r}")
+
+    pool = AsyncBrowserOwnerPool(
+        config=BrowserPoolConfig.from_concurrency(1, headless=headless, contexts_per_owner=1),
+        headless=headless,
+        prefer_browsers=["edge"],
+    )
+    try:
+        browser_name = await pool.ensure_ready()
+    finally:
+        await pool.shutdown()
+
+    if browser_name != "edge":
+        raise RuntimeError(f"Playwright 回归必须使用 Edge，当前 browser={browser_name!r}")
+    print(f"playwright_browser={browser_name} playwright_channel={channel} headless={int(headless)}")
 
 
 def _build_live_test_config(url: str, *, headless: bool) -> RuntimeConfig:
@@ -70,7 +99,9 @@ def main() -> int:
         level=logging.INFO,
         format="%(asctime)s %(levelname)s %(message)s",
     )
-    config = _build_live_test_config(args.url, headless=not bool(args.headed))
+    headless = not bool(args.headed)
+    asyncio.run(_probe_msedge_runtime(headless=headless))
+    config = _build_live_test_config(args.url, headless=headless)
 
     prepared = prepare_execution_artifacts(config, fallback_survey_title=config.survey_title)
     execution_config = prepared.execution_config_template

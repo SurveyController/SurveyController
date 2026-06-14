@@ -1,4 +1,4 @@
-"""真实运行链路回归测试。"""
+"""真实 Playwright 作答链路回归测试。"""
 
 from __future__ import annotations
 
@@ -17,24 +17,24 @@ OUTER_TIMEOUT_SECONDS = 300
 
 
 @dataclass(frozen=True)
-class LiveSurveyCase:
+class PlaywrightSurveyCase:
     name: str
     url: str
 
 
-DEFAULT_LIVE_SURVEY_CASES = (
-    LiveSurveyCase("wjx", "https://v.wjx.cn/vm/tgRSrWd.aspx"),
-    LiveSurveyCase("credamo", "https://www.credamo.com/s/A73QR3ano"),
-    LiveSurveyCase("tencent", "https://wj.qq.com/s2/26070328/fa89/"),
+DEFAULT_PLAYWRIGHT_SURVEY_CASES = (
+    PlaywrightSurveyCase("wjx", "https://v.wjx.cn/vm/ei3sVrE.aspx"),
+    PlaywrightSurveyCase("credamo", "https://www.credamo.com/s/A73QR3ano"),
+    PlaywrightSurveyCase("tencent", "https://wj.qq.com/s2/26070328/fa89/"),
 )
 
 
-def _resolve_live_survey_cases() -> list[LiveSurveyCase]:
+def _resolve_playwright_survey_cases() -> list[PlaywrightSurveyCase]:
     configured_url = str(os.environ.get(LIVE_URL_ENV, "") or "").strip()
     if not configured_url:
-        return list(DEFAULT_LIVE_SURVEY_CASES)
+        return list(DEFAULT_PLAYWRIGHT_SURVEY_CASES)
 
-    return [LiveSurveyCase("configured", configured_url)]
+    return [PlaywrightSurveyCase("configured", configured_url)]
 
 
 def _build_child_env() -> dict[str, str]:
@@ -54,13 +54,13 @@ def _format_output(stdout: str, stderr: str) -> str:
     return "\n".join(chunks)
 
 
-@pytest.mark.parametrize("survey_case", _resolve_live_survey_cases(), ids=lambda case: case.name)
-def test_live_runtime_regression(survey_case: LiveSurveyCase) -> None:
+@pytest.mark.parametrize("survey_case", _resolve_playwright_survey_cases(), ids=lambda case: case.name)
+def test_playwright_runtime_regression(survey_case: PlaywrightSurveyCase) -> None:
     result = subprocess.run(
         [
             sys.executable,
             "-m",
-            "CI.live_tests.run_async_engine_once",
+            "CI.live_tests.run_playwright_runtime_once",
             "--url",
             survey_case.url,
             "--timeout",
@@ -77,11 +77,15 @@ def test_live_runtime_regression(survey_case: LiveSurveyCase) -> None:
     output = _format_output(result.stdout, result.stderr)
 
     assert result.returncode == 0, (
-        f"Live runtime regression failed for {survey_case.name}.\n"
+        f"Playwright runtime regression failed for {survey_case.name}.\n"
         f"Exit code: {result.returncode}\n"
         f"Output:\n{output}"
     )
+    assert "playwright_browser=edge" in output and "playwright_channel=msedge" in output, (
+        f"Playwright runtime regression did not use system Microsoft Edge for {survey_case.name}.\n"
+        f"Output:\n{output}"
+    )
     assert "cur_num=1" in output, (
-        f"Live runtime regression did not report a successful submission for {survey_case.name}.\n"
+        f"Playwright runtime regression did not report a successful submission for {survey_case.name}.\n"
         f"Output:\n{output}"
     )
