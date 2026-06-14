@@ -193,6 +193,7 @@ try {
         "--nofollow-import-to=PySide6.QtMultimediaWidgets"
         "--nofollow-import-to=PySide6.QtPdf"
         "--nofollow-import-to=PySide6.QtPdfWidgets"
+        "--nofollow-import-to=PySide6.QtCharts"
         "--nofollow-import-to=playwright.sync_api"
         "--nofollow-import-to=httpx._main"
         "--nofollow-import-to=pygments"
@@ -267,8 +268,10 @@ $blockedQtFiles = @(
     "qt6multimedia.dll",
     "qt6multimediawidgets.dll",
     "qt6pdf.dll",
+    "qt6charts.dll",
     "PySide6\QtMultimedia.pyd",
     "PySide6\QtMultimediaWidgets.pyd",
+    "PySide6\QtCharts.pyd",
     "PySide6\qt-plugins\platforms\qminimal.dll",
     "PySide6\qt-plugins\platforms\qoffscreen.dll",
     "PySide6\qt-plugins\platforms\qdirect2d.dll"
