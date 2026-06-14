@@ -33,7 +33,7 @@ jobs:
           $channel = "${env:VELOPACK_CHANNEL}"
           $releaseDir = Join-Path "${{ github.workspace }}" "Releases"
           New-Item -ItemType Directory -Path $releaseDir -Force | Out-Null
-          $feedBase = "https://dl.hungrym0.top/${env:R2_FEED_PREFIX}"
+          $feedBase = "https://dl.hungrym0.com/${env:R2_FEED_PREFIX}"
           $manifestPath = Join-Path $releaseDir "releases.$channel.json"
           try {
             Invoke-WebRequest -Uri "$feedBase/releases.$channel.json" -OutFile $manifestPath -UseBasicParsing
@@ -274,10 +274,10 @@ jobs:
           Write-Host "https://github.com/${{ github.repository }}/releases/tag/${{ steps.release_meta.outputs.tag }}"
           Write-Host ""
           Write-Host "Velopack feed:"
-          Write-Host "https://dl.hungrym0.top/${env:R2_FEED_PREFIX}/releases.${env:VELOPACK_CHANNEL}.json"
+          Write-Host "https://dl.hungrym0.com/${env:R2_FEED_PREFIX}/releases.${env:VELOPACK_CHANNEL}.json"
           Write-Host ""
           Write-Host "Setup installer:"
-          Write-Host "https://dl.hungrym0.top/${env:R2_FEED_PREFIX}/${{ steps.release_meta.outputs.setup_name }}"
+          Write-Host "https://dl.hungrym0.com/${env:R2_FEED_PREFIX}/${{ steps.release_meta.outputs.setup_name }}"
           Write-Host ""
           Write-Host "Latest setup alias:"
-          Write-Host "https://dl.hungrym0.top/SurveyController_latest_setup.exe"
+          Write-Host "https://dl.hungrym0.com/SurveyController_latest_setup.exe"

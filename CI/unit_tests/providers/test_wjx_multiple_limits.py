@@ -53,3 +53,13 @@ class WjxMultipleLimitsTests:
     def test_extract_min_max_from_attributes_handles_missing_values(self) -> None:
         element = _FakeElement({"minvalue": "0", "maxvalue": ""})
         assert multiple_limits._extract_min_max_from_attributes(element) == (None, None)
+
+    def test_extract_min_max_from_attributes_with_bs4_tag(self) -> None:
+        from bs4 import BeautifulSoup
+        tag = BeautifulSoup('<div minvalue="3" maxvalue="8"></div>', "html.parser").find("div")
+        assert multiple_limits._extract_min_max_from_attributes(tag) == (3, 8)
+
+    def test_extract_min_max_from_attributes_bs4_tag_missing_attrs(self) -> None:
+        from bs4 import BeautifulSoup
+        tag = BeautifulSoup('<div></div>', "html.parser").find("div")
+        assert multiple_limits._extract_min_max_from_attributes(tag) == (None, None)

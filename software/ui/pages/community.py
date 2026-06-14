@@ -4,8 +4,8 @@ import os
 import webbrowser
 from typing import Any, cast
 
-from PySide6.QtCore import Qt, QSize
-from PySide6.QtGui import QPixmap, QPainter, QPainterPath
+from PySide6.QtCore import Qt, QSize, QUrl
+from PySide6.QtGui import QDesktopServices, QPixmap, QPainter, QPainterPath
 from PySide6.QtWidgets import (
     QWidget,
     QVBoxLayout,
@@ -42,6 +42,8 @@ class CommunityPage(ScrollArea):
         self.view = QWidget(self)
         self.content_widget = QWidget(self.view)
         self._qq_pixmap = None
+        self._qq_qr_path = ""
+        self.qq_preview_btn = None
 
         self.setWidget(self.view)
         self.setWidgetResizable(True)
@@ -198,7 +200,6 @@ class CommunityPage(ScrollArea):
         self.qq_qr_label = ImageLabel(card)
         self.qq_qr_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.qq_qr_label.setFixedSize(144, 144)
-        self._load_qr_image()
         content_row.addWidget(
             self.qq_qr_label,
             0,
@@ -212,6 +213,8 @@ class CommunityPage(ScrollArea):
         preview_btn.setIcon(FluentIcon.PHOTO)
         self._setup_card_button(preview_btn)
         preview_btn.clicked.connect(self._open_qq_qr_image)
+        self.qq_preview_btn = preview_btn
+        self._load_qr_image()
 
         action_bar = self._create_action_bar(
             card,
@@ -224,8 +227,9 @@ class CommunityPage(ScrollArea):
     def _load_qr_image(self):
         """加载QQ群二维码图片"""
         try:
-            path = os.path.join(get_assets_directory(), "community_qr.jpg")
-            if os.path.exists(path):
+            path = self._resolve_qq_qr_path()
+            self._qq_qr_path = path
+            if path:
                 pixmap = QPixmap(path)
                 if not pixmap.isNull():
                     self._qq_pixmap = pixmap
@@ -236,15 +240,32 @@ class CommunityPage(ScrollArea):
                         Qt.TransformationMode.SmoothTransformation,
                     )
                     self.qq_qr_label.setPixmap(self._round_pixmap(scaled, radius=12))
+                    if self.qq_preview_btn is not None:
+                        self.qq_preview_btn.setEnabled(True)
                 else:
-                    self.qq_qr_label.setText("二维码")
-                    self.qq_qr_label.setStyleSheet("font-size: 12px; color: #999;")
+                    self._set_missing_qr_state(disable_button=False)
             else:
-                self.qq_qr_label.setText("二维码")
-                self.qq_qr_label.setStyleSheet("font-size: 12px; color: #999;")
+                self._set_missing_qr_state()
         except Exception:
-            self.qq_qr_label.setText("二维码")
-            self.qq_qr_label.setStyleSheet("font-size: 12px; color: #999;")
+            self._set_missing_qr_state()
+
+    def _resolve_qq_qr_path(self) -> str:
+        """查找二维码图片，支持多种文件名。"""
+        assets_dir = get_assets_directory()
+        for filename in ("community_qr.png", "community_qr.jpg", "community_qr.jpeg"):
+            path = os.path.join(assets_dir, filename)
+            if os.path.exists(path):
+                return path
+        return ""
+
+    def _set_missing_qr_state(self, *, disable_button: bool = True) -> None:
+        self._qq_pixmap = None
+        if disable_button:
+            self._qq_qr_path = ""
+        self.qq_qr_label.setText("二维码")
+        self.qq_qr_label.setStyleSheet("font-size: 12px; color: #999;")
+        if self.qq_preview_btn is not None:
+            self.qq_preview_btn.setEnabled(not disable_button)
 
     def _round_pixmap(self, pixmap: QPixmap, radius: int = 8) -> QPixmap:
         """圆角处理"""
@@ -263,9 +284,10 @@ class CommunityPage(ScrollArea):
 
     def _open_qq_qr_image(self):
         """打开QQ群二维码原图"""
-        path = os.path.join(get_assets_directory(), "community_qr.jpg")
-        if os.path.exists(path):
-            os.startfile(path)
+        path = self._qq_qr_path or self._resolve_qq_qr_path()
+        if path:
+            self._qq_qr_path = path
+            QDesktopServices.openUrl(QUrl.fromLocalFile(path))
 
     # ── 联系开发者卡片 ──
 

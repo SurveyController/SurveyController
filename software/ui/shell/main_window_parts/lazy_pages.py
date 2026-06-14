@@ -263,4 +263,4 @@ class MainWindowLazyPagesMixin:
         webbrowser.open(GITHUB_RELEASES_PAGE_URL)
 
     def _open_usage_tutorial(self) -> None:
-        webbrowser.open("https://surveydoc.hungrym0.top/")
+        webbrowser.open("https://surveydoc.hungrym0.com/")

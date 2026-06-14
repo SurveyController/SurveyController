@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import re
 from typing import Any, Dict, List, Optional, Tuple
 
 import software.network.http as http_client
@@ -30,14 +29,30 @@ from wjx.provider.html_parser import (
     parse_survey_questions_from_html,
 )
 
+from software.providers.match_utils import normalize_match_text
+from wjx.provider.regexes import WJX_NOT_OPEN_TIME_RE, WJX_PAUSED_SURVEY_RE
+
 PAUSED_SURVEY_ERROR_MESSAGE = "问卷已暂停，需要前往问卷星后台重新发布"
 STOPPED_SURVEY_ERROR_MESSAGE = "问卷已停止，无法作答"
 ENTERPRISE_UNAVAILABLE_SURVEY_ERROR_MESSAGE = "问卷发布者企业标准版未购买或已到期，暂时不能填写"
 NOT_OPEN_SURVEY_ERROR_MESSAGE = "该问卷暂未开放，无法解析"
-_PAUSED_SURVEY_ID_RE = re.compile(r"此问卷[（(]\d+[）)]已暂停")
-_NOT_OPEN_TIME_RE = re.compile(
-    r"此问卷将于\s*(\d{4}[-/]\d{1,2}[-/]\d{1,2}\s+\d{1,2}:\d{2})\s*开放"
-)
+
+
+def _format_not_open_time(match) -> str:
+    try:
+        year = int(match.group("year"))
+        month = int(match.group("month"))
+        day = int(match.group("day"))
+        hour = int(match.group("hour"))
+        minute = int(match.group("minute"))
+        second_text = match.group("second")
+        if second_text:
+            second = int(second_text)
+            return f"{year:04d}-{month:02d}-{day:02d} {hour:02d}:{minute:02d}:{second:02d}"
+        return f"{year:04d}-{month:02d}-{day:02d} {hour:02d}:{minute:02d}"
+    except Exception:
+        return ""
+
 
 
 def _walk_exception_chain(exc: BaseException):
@@ -58,13 +73,13 @@ def _build_parser_failure_message(http_exc: Optional[BaseException], browser_exc
 
 
 def is_paused_survey_page(html: str) -> bool:
-    """检测页面是否为“问卷已暂停，不能填写”提示页。"""
-    text = _normalize_html_text(html)
+    """检测页面是否为"问卷已暂停，不能填写"提示页。"""
+    text = normalize_match_text(html)
     if not text or "已暂停" not in text:
         return False
     if "不能填写" in text or "问卷已暂停" in text:
         return True
-    return bool(_PAUSED_SURVEY_ID_RE.search(text))
+    return bool(WJX_PAUSED_SURVEY_RE.search(text))
 
 
 def _html_has_question_content(html: str) -> bool:
@@ -85,7 +100,7 @@ def _html_has_question_content(html: str) -> bool:
 
 def is_stopped_survey_page(html: str) -> bool:
     """检测页面是否为“问卷停止作答”提示页。"""
-    text = _normalize_html_text(html)
+    text = normalize_match_text(html)
     if not text or "停止状态" not in text or "无法作答" not in text:
         return False
 
@@ -111,7 +126,7 @@ def is_stopped_survey_page(html: str) -> bool:
 
 def is_enterprise_unavailable_survey_page(html: str) -> bool:
     """检测企业标准版未购买或到期导致的不可填写提示。"""
-    text = _normalize_html_text(html)
+    text = normalize_match_text(html)
     if not text:
         return False
     normalized = "".join(text.split())
@@ -126,7 +141,7 @@ def is_enterprise_unavailable_survey_page(html: str) -> bool:
 
 def build_not_open_survey_message(html: str) -> Optional[str]:
     """构造"问卷暂未开放"提示文案。"""
-    text = _normalize_html_text(html)
+    text = normalize_match_text(html)
     if not text:
         return None
 
@@ -148,9 +163,9 @@ def build_not_open_survey_message(html: str) -> Optional[str]:
     if not any(keyword in normalized for keyword in keywords):
         return None
 
-    match = _NOT_OPEN_TIME_RE.search(text)
+    match = WJX_NOT_OPEN_TIME_RE.search(text)
     if match:
-        open_time = str(match.group(1) or "").replace("/", "-").strip()
+        open_time = _format_not_open_time(match)
         if open_time:
             return f"{NOT_OPEN_SURVEY_ERROR_MESSAGE}，开放时间：{open_time}"
     return NOT_OPEN_SURVEY_ERROR_MESSAGE
@@ -237,5 +252,3 @@ __all__ = [
     "is_stopped_survey_page",
     "parse_wjx_survey",
 ]
-
-

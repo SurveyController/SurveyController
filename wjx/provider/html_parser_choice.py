@@ -4,24 +4,19 @@ import logging
 from typing import Any, Dict, List, Optional, Tuple
 
 from software.logging.log_utils import log_suppressed_exception
+from software.providers.match_utils import normalize_match_text
 from .html_parser_common import (
     _is_select_placeholder_option,
     _normalize_html_text,
     _text_looks_like_select_placeholder,
 )
-
-_FORCE_SELECT_COMMAND_RE = re.compile(r"请(?:务必|一定|必须|直接)?\s*选(?:择)?")
-
-_FORCE_SELECT_INDEX_RE = re.compile(r"^第?\s*(\d{1,3})\s*(?:个|项|选项|分|星)?$")
-
-_FORCE_SELECT_SENTENCE_SPLIT_RE = re.compile(r"[。；;！？!\n\r]")
-
-_FORCE_SELECT_CLEAN_RE = re.compile(r"[\s`'\"“”‘’【】\[\]\(\)（）<>《》,，、。；;:：!?！？]")
-
-_FORCE_SELECT_LABEL_TARGET_RE = re.compile(r"^([A-Za-z])(?:项|选项|答案)?$")
-
-_FORCE_SELECT_OPTION_LABEL_RE = re.compile(
-    r"^(?:第\s*)?[\(（【\[]?\s*([A-Za-z])\s*[\)）】\]]?(?=$|[\.．、:：\-\s]|[\u4e00-\u9fff])"
+from .regexes import (
+    WJX_FORCE_SELECT_CLEAN_RE,
+    WJX_FORCE_SELECT_COMMAND_RE,
+    WJX_FORCE_SELECT_INDEX_TARGET_RE,
+    WJX_FORCE_SELECT_LABEL_TARGET_RE,
+    WJX_FORCE_SELECT_OPTION_LABEL_RE,
+    WJX_FORCE_SELECT_SENTENCE_SPLIT_RE,
 )
 
 _TEXT_INPUT_ALLOWED_TYPES = {"", "text", "search", "tel", "number"}
@@ -30,19 +25,19 @@ _KNOWN_NON_TEXT_QUESTION_TYPES = {"3", "4", "5", "6", "7", "8", "11"}
 
 
 def _normalize_force_select_text(value: Any) -> str:
-    text = _normalize_html_text(str(value or ""))
+    text = normalize_match_text(value)
     if not text:
         return ""
-    return _FORCE_SELECT_CLEAN_RE.sub("", text).lower()
+    return WJX_FORCE_SELECT_CLEAN_RE.sub("", text).lower()
 
 def _extract_force_select_option_label(option_text: Any) -> Optional[str]:
-    text = _normalize_html_text(str(option_text or ""))
+    text = normalize_match_text(option_text)
     if not text:
         return None
-    match = _FORCE_SELECT_OPTION_LABEL_RE.match(text)
+    match = WJX_FORCE_SELECT_OPTION_LABEL_RE.match(text)
     if not match:
         return None
-    label = str(match.group(1) or "").strip().upper()
+    label = str(match.group("label") or "").strip().upper()
     return label or None
 
 def _collect_force_select_fragments(question_div, title_text: str) -> List[str]:
@@ -96,11 +91,11 @@ def _extract_force_select_option(
 
     fragments = _collect_force_select_fragments(question_div, title_text)
     for fragment in fragments:
-        for command_match in _FORCE_SELECT_COMMAND_RE.finditer(fragment):
+        for command_match in WJX_FORCE_SELECT_COMMAND_RE.finditer(fragment):
             tail_text = fragment[command_match.end():]
             if not tail_text:
                 continue
-            sentence = _FORCE_SELECT_SENTENCE_SPLIT_RE.split(tail_text, maxsplit=1)[0]
+            sentence = WJX_FORCE_SELECT_SENTENCE_SPLIT_RE.split(tail_text, maxsplit=1)[0]
             sentence = sentence.strip(" ：:，,、")
             if not sentence:
                 continue
@@ -108,40 +103,39 @@ def _extract_force_select_option(
             if not compact_sentence:
                 continue
 
-            best_index: Optional[int] = None
-            best_text: Optional[str] = None
-            best_length = -1
-            for option_idx, raw_text, normalized_text in normalized_options:
-                # 跳过纯数字文本，避免“第1题”之类误判；数字题走索引匹配兜底。
-                if normalized_text.isdigit():
-                    continue
-                if normalized_text in compact_sentence:
-                    text_len = len(normalized_text)
-                    if text_len > best_length:
-                        best_length = text_len
-                        best_index = option_idx
-                        best_text = raw_text
-            if best_index is not None:
-                return best_index, best_text
+            normalized_sentence = normalize_match_text(sentence)
 
-            label_match = _FORCE_SELECT_LABEL_TARGET_RE.fullmatch(compact_sentence)
+            index_match = WJX_FORCE_SELECT_INDEX_TARGET_RE.fullmatch(normalized_sentence)
+            if index_match:
+                try:
+                    target_idx = int(index_match.group("index")) - 1
+                except Exception:
+                    target_idx = -1
+                if 0 <= target_idx < len(option_texts):
+                    selected = str(option_texts[target_idx] or "").strip()
+                    return target_idx, selected or None
+
+            label_match = WJX_FORCE_SELECT_LABEL_TARGET_RE.fullmatch(compact_sentence)
             if label_match:
-                target_label = str(label_match.group(1) or "").strip().upper()
+                target_label = str(label_match.group("label") or "").strip().upper()
                 if target_label:
                     for option_idx, raw_text, _ in normalized_options:
                         option_label = _extract_force_select_option_label(raw_text)
                         if option_label == target_label:
                             return option_idx, raw_text
 
-            index_match = _FORCE_SELECT_INDEX_RE.fullmatch(sentence)
-            if index_match:
-                try:
-                    target_idx = int(index_match.group(1)) - 1
-                except Exception:
-                    target_idx = -1
-                if 0 <= target_idx < len(option_texts):
-                    selected = str(option_texts[target_idx] or "").strip()
-                    return target_idx, selected or None
+            substr_candidates = sorted(
+                (
+                    (option_idx, raw_text, normalized_text)
+                    for option_idx, raw_text, normalized_text in normalized_options
+                    if not normalized_text.isdigit() and normalized_text in compact_sentence
+                ),
+                key=lambda item: len(item[2]),
+                reverse=True,
+            )
+            if substr_candidates:
+                option_idx, raw_text, _ = substr_candidates[0]
+                return option_idx, raw_text
     return None, None
 
 def _is_text_input_element(element) -> bool:

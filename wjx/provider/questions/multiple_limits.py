@@ -19,6 +19,19 @@ from software.app.config import (
     _SELECTION_KEYWORDS_CN,
     _SELECTION_KEYWORDS_EN,
 )
+from software.providers.match_utils import get_element_attribute, normalize_match_text
+
+
+def _compile_key_value_patterns(keys) -> tuple:
+    return tuple(
+        re.compile(rf"{re.escape(str(key))}\s*[:=]\s*(\d+)", re.IGNORECASE)
+        for key in sorted(keys)
+    )
+
+
+_MULTI_MIN_VALUE_PATTERNS = _compile_key_value_patterns(_MULTI_MIN_LIMIT_VALUE_KEYSET)
+_MULTI_MAX_VALUE_PATTERNS = _compile_key_value_patterns(_MULTI_LIMIT_VALUE_KEYSET)
+
 
 def _safe_positive_int(value: Any) -> Optional[int]:
     """安全转换为正整数"""
@@ -29,10 +42,7 @@ def _safe_positive_int(value: Any) -> Optional[int]:
     if isinstance(value, (int, float)):
         int_value = int(value)
         return int_value if int_value > 0 else None
-    try:
-        text = str(value).strip()
-    except Exception:
-        return None
+    text = normalize_match_text(value)
     if not text:
         return None
     if text.isdigit():
@@ -83,7 +93,7 @@ def _extract_range_from_possible_json(text: Optional[str]) -> Tuple[Optional[int
     max_limit: Optional[int] = None
     if not text:
         return min_limit, max_limit
-    normalized = text.strip()
+    normalized = normalize_match_text(text)
     if not normalized:
         return min_limit, max_limit
     candidates = [normalized]
@@ -101,8 +111,7 @@ def _extract_range_from_possible_json(text: Optional[str]) -> Tuple[Optional[int
             max_limit = cand_max
         if min_limit is not None and max_limit is not None:
             return min_limit, max_limit
-    for key in _MULTI_MIN_LIMIT_VALUE_KEYSET:
-        pattern = re.compile(rf"{re.escape(key)}\s*[:=]\s*(\d+)", re.IGNORECASE)
+    for pattern in _MULTI_MIN_VALUE_PATTERNS:
         match = pattern.search(normalized)
         if match:
             candidate = _safe_positive_int(match.group(1))
@@ -110,8 +119,7 @@ def _extract_range_from_possible_json(text: Optional[str]) -> Tuple[Optional[int
                 min_limit = min_limit or candidate
                 if max_limit is not None:
                     return min_limit, max_limit
-    for key in _MULTI_LIMIT_VALUE_KEYSET:
-        pattern = re.compile(rf"{re.escape(key)}\s*[:=]\s*(\d+)", re.IGNORECASE)
+    for pattern in _MULTI_MAX_VALUE_PATTERNS:
         match = pattern.search(normalized)
         if match:
             candidate = _safe_positive_int(match.group(1))
@@ -126,19 +134,13 @@ def _extract_min_max_from_attributes(element) -> Tuple[Optional[int], Optional[i
     min_limit = None
     max_limit = None
     for attr in _MULTI_MIN_LIMIT_ATTRIBUTE_NAMES:
-        try:
-            raw_value = element.get_attribute(attr)
-        except Exception:
-            continue
+        raw_value = get_element_attribute(element, attr)
         candidate = _safe_positive_int(raw_value)
         if candidate:
             min_limit = candidate
             break
     for attr in _MULTI_LIMIT_ATTRIBUTE_NAMES:
-        try:
-            raw_value = element.get_attribute(attr)
-        except Exception:
-            continue
+        raw_value = get_element_attribute(element, attr)
         candidate = _safe_positive_int(raw_value)
         if candidate:
             max_limit = candidate
@@ -149,7 +151,7 @@ def _extract_multi_limit_range_from_text(text: Optional[str]) -> Tuple[Optional[
     """从文本提取多选限制范围"""
     if not text:
         return None, None
-    normalized = text.strip()
+    normalized = normalize_match_text(text)
     if not normalized:
         return None, None
     normalized_lower = normalized.lower()
