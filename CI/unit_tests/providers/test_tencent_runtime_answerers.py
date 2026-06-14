@@ -5,6 +5,7 @@ from types import SimpleNamespace
 import pytest
 
 from tencent.provider import runtime_answerers
+from software.app.config import DEFAULT_FILL_TEXT
 from software.core.questions import runtime_async
 from software.core.questions.schema import _TEXT_RANDOM_INTEGER
 
@@ -125,6 +126,60 @@ class TencentRuntimeAnswerersTests:
         await runtime_answerers._answer_qq_single(object(), question, 0, ctx, psycho_plan=object())
 
         assert selected == [2]
+
+    @pytest.mark.asyncio
+    async def test_answer_qq_single_fills_default_text_for_required_option_fill(self, monkeypatch) -> None:
+        ctx = _ctx(single_option_fill_texts=[[None, None, None]])
+        question = _question(13, option_texts=["甲", "乙", "丙"], fillable_options=[1])
+        fills: list[tuple[object, ...]] = []
+        recorded: list[tuple[tuple[object, ...], dict[str, object]]] = []
+        monkeypatch.setattr(runtime_answerers, "normalize_droplist_probs", lambda weights, count: [0.0, 1.0, 0.0][:count])
+        monkeypatch.setattr(runtime_answerers, "apply_persona_boost", lambda texts, probs: probs)
+        monkeypatch.setattr(runtime_answerers, "apply_single_like_consistency", lambda probs, _current: probs)
+        monkeypatch.setattr(runtime_answerers, "is_strict_ratio_question", lambda _ctx, _current: False)
+        monkeypatch.setattr(runtime_answerers, "weighted_index", lambda _probs: 1)
+
+        async def _click_choice_input(*_args, **_kwargs):
+            return True
+
+        async def _resolve_fill(*_args, **_kwargs):
+            return None
+
+        async def _fill_choice_option_additional_text(*args, **_kwargs):
+            fills.append(args)
+            return True
+
+        monkeypatch.setattr(runtime_answerers, "_click_choice_input", _click_choice_input)
+        monkeypatch.setattr(runtime_answerers, "resolve_runtime_option_fill_text_from_config", _resolve_fill)
+        monkeypatch.setattr(runtime_answerers, "_fill_choice_option_additional_text", _fill_choice_option_additional_text)
+        monkeypatch.setattr(runtime_answerers, "record_answer", lambda *args, **kwargs: recorded.append((args, kwargs)))
+        monkeypatch.setattr(runtime_answerers, "record_pending_distribution_choice", lambda *_args, **_kwargs: None)
+
+        await runtime_answerers._answer_qq_single(object(), question, 0, ctx)
+
+        assert fills[0][3] == DEFAULT_FILL_TEXT
+        assert recorded == [((13, "single"), {"selected_indices": [1], "selected_texts": [f"乙 / {DEFAULT_FILL_TEXT}"]})]
+
+    @pytest.mark.asyncio
+    async def test_build_qq_single_action_keeps_default_fill_for_batch(self, monkeypatch) -> None:
+        ctx = _ctx(single_option_fill_texts=[[None, None, None]])
+        question = _question(14, option_texts=["甲", "乙", "丙"], fillable_options=[1])
+        monkeypatch.setattr(runtime_answerers, "normalize_droplist_probs", lambda weights, count: [0.0, 1.0, 0.0][:count])
+        monkeypatch.setattr(runtime_answerers, "apply_persona_boost", lambda texts, probs: probs)
+        monkeypatch.setattr(runtime_answerers, "apply_single_like_consistency", lambda probs, _current: probs)
+        monkeypatch.setattr(runtime_answerers, "is_strict_ratio_question", lambda _ctx, _current: False)
+        monkeypatch.setattr(runtime_answerers, "weighted_index", lambda _probs: 1)
+
+        async def _resolve_fill(*_args, **_kwargs):
+            return None
+
+        monkeypatch.setattr(runtime_answerers, "resolve_runtime_option_fill_text_from_config", _resolve_fill)
+
+        action = await runtime_answerers._build_qq_single_action(object(), question, 0, ctx)
+
+        assert action is not None
+        assert action.option_fill_texts == ((1, DEFAULT_FILL_TEXT),)
+        assert action.selected_texts == (f"乙 / {DEFAULT_FILL_TEXT}",)
 
     @pytest.mark.asyncio
     async def test_answer_qq_single_and_score_like_skip_when_click_fails(self, monkeypatch, caplog) -> None:

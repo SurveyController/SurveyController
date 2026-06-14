@@ -99,6 +99,32 @@ def _infer_multi_text_blank_modes(q: SurveyQuestionMeta, blank_count: int) -> Li
     return modes
 
 
+def _filter_option_fill_texts_to_fillable(
+    option_fill_texts: Any,
+    option_count: int,
+    fillable_indices: List[int],
+) -> Optional[List[Optional[str]]]:
+    if not isinstance(option_fill_texts, list) or not fillable_indices:
+        return None
+    total = max(0, int(option_count or 0))
+    fillable_set: set[int] = set()
+    for raw_index in fillable_indices:
+        try:
+            option_index = int(raw_index)
+        except Exception:
+            continue
+        if 0 <= option_index < total:
+            fillable_set.add(option_index)
+    if not fillable_set:
+        return None
+    normalized: List[Optional[str]] = []
+    for option_index in range(total):
+        raw_value = option_fill_texts[option_index] if option_index < len(option_fill_texts) else None
+        text = str(raw_value or "").strip()
+        normalized.append(text if option_index in fillable_set and text else None)
+    return normalized if any(normalized) else None
+
+
 def build_default_question_entries(
     questions_info: List[SurveyQuestionMeta],
     *,
@@ -308,6 +334,15 @@ def build_default_question_entries(
             if q_type in ("single", "multiple", "dropdown")
             else []
         )
+        option_fill_texts = (
+            _filter_option_fill_texts_to_fillable(
+                option_fill_texts_from_existing,
+                option_count,
+                fillable_option_indices,
+            )
+            if q_type in ("single", "multiple", "dropdown")
+            else None
+        )
         entries.append(
             QuestionEntry(
                 question_type=q_type,
@@ -328,7 +363,7 @@ def build_default_question_entries(
                 multi_text_blank_int_ranges=multi_text_blank_int_ranges_from_existing if q_type == "multi_text" else [],
                 text_random_mode=text_random_mode_from_existing if q_type == "text" else "none",
                 text_random_int_range=text_random_int_range_from_existing if q_type == "text" else [],
-                option_fill_texts=option_fill_texts_from_existing if q_type in ("single", "multiple", "dropdown") else None,
+                option_fill_texts=option_fill_texts,
                 fillable_option_indices=fillable_option_indices,
                 attached_option_selects=(
                     normalize_attached_option_selects(

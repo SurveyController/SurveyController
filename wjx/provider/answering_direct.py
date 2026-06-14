@@ -150,6 +150,7 @@ async def _answer_wjx_single(
         driver=driver,
         question_number=current,
         option_text=selected_text,
+        ctx=ctx,
     )
     fill_value = default_missing_option_fill(question, selected_index, fill_value)
     if fill_value and await _fill_choice_option_additional_text(
@@ -243,6 +244,7 @@ async def _answer_wjx_dropdown(
         driver=driver,
         question_number=current,
         option_text=selected_text,
+        ctx=ctx,
     )
     fill_value = default_missing_option_fill(question, selected_index, fill_value)
     if fill_value and await _fill_choice_option_additional_text(
@@ -286,7 +288,7 @@ async def _answer_wjx_text(
             if description and description not in ai_prompt:
                 ai_prompt = f"{ai_prompt}\n补充说明：{description}"
             try:
-                generated = await agenerate_ai_answer(ai_prompt, question_type="fill_blank", blank_count=blank_count)
+                generated = await agenerate_ai_answer(ai_prompt, question_type="fill_blank", blank_count=blank_count, ctx=ctx)
             except AIRuntimeError as exc:
                 raise AIRuntimeError(f"问卷星第{current}题 AI 生成失败：{exc}") from exc
             if isinstance(generated, list):
@@ -439,6 +441,7 @@ async def _answer_wjx_multiple(
                 driver=driver,
                 question_number=current,
                 option_text=selected_text,
+                ctx=ctx,
             )
             fill_value = default_missing_option_fill(question, option_idx, fill_value)
             if fill_value:

@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import asyncio
-from typing import Any, Optional, Sequence
+from typing import TYPE_CHECKING, Any, Optional, Sequence
 
 from software.app.config import DEFAULT_FILL_TEXT
 from software.core.ai.runtime import AIRuntimeError, agenerate_ai_answer
@@ -27,6 +27,9 @@ from software.core.questions.schema import (
 )
 from software.core.questions.text_shared import MULTI_TEXT_DELIMITER
 from software.network.browser.runtime_async import BrowserDriver
+
+if TYPE_CHECKING:
+    from software.core.task import ExecutionState
 
 
 async def extract_text_from_runtime_element(element: Any) -> str:
@@ -102,6 +105,7 @@ async def resolve_runtime_option_fill_text_from_config(
     driver: Optional[BrowserDriver] = None,
     question_number: int = 0,
     option_text: Optional[str] = None,
+    ctx: ExecutionState | None = None,
 ) -> Optional[str]:
     raw_value = get_fill_text_from_config(fill_entries, option_index)
     if raw_value is None:
@@ -126,7 +130,7 @@ async def resolve_runtime_option_fill_text_from_config(
     ai_prompt += "\n请只输出最终要填写的内容，不要解释。"
 
     try:
-        answer = await agenerate_ai_answer(ai_prompt, question_type="fill_blank")
+        answer = await agenerate_ai_answer(ai_prompt, question_type="fill_blank", ctx=ctx)
     except AIRuntimeError as exc:
         raise AIRuntimeError(f"第{question_number}题附加填空 AI 生成失败：{exc}") from exc
     return str(answer).strip() or DEFAULT_FILL_TEXT

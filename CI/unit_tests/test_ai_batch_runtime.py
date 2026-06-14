@@ -20,7 +20,7 @@ class AiBatchRuntimeTests:
         )
 
     def test_assert_no_free_ai_placeholders_blocks_unresolved_text(self) -> None:
-        with pytest.raises(RuntimeError, match="第2题仍有 AI 占位符"):
+        with pytest.raises(RuntimeError, match="问卷存在未替换的 AI 占位符.*第2题"):
             assert_no_free_ai_placeholders_in_actions(
                 [
                     AnswerAction(
@@ -31,3 +31,27 @@ class AiBatchRuntimeTests:
                 ]
             )
 
+    def test_assert_no_free_ai_placeholders_blocks_option_fill_tuple(self) -> None:
+        with pytest.raises(RuntimeError, match="问卷星存在未替换的 AI 占位符.*第3题"):
+            assert_no_free_ai_placeholders_in_actions(
+                [
+                    AnswerAction(
+                        question_num=3,
+                        kind="single",
+                        option_fill_texts=((1, OPTION_FILL_AI_TOKEN),),
+                    )
+                ],
+                provider_label="问卷星",
+            )
+
+    def test_assert_no_free_ai_placeholders_blocks_prefixed_placeholders(self) -> None:
+        with pytest.raises(RuntimeError, match="第4题"):
+            assert_no_free_ai_placeholders_in_actions(
+                [
+                    AnswerAction(
+                        question_num=4,
+                        kind="text",
+                        text_values=("__FREE_AI_TEXT__4_0",),
+                    )
+                ]
+            )

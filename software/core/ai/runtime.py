@@ -1,13 +1,19 @@
 """AI 运行时辅助函数 - 调用 AI 模型生成答案"""
+
+from __future__ import annotations
+
 import re
 import asyncio
-from typing import Optional, Union, List
+from typing import TYPE_CHECKING, Optional, Union, List
 import logging
 from software.logging.log_utils import log_suppressed_exception
 
 from software.integrations.ai.client import agenerate_answer
 from software.integrations.ai.client import FreeAITimeoutError
 from software.app.config import _HTML_SPACE_RE
+
+if TYPE_CHECKING:
+    from software.core.task import ExecutionState
 
 
 class AIRuntimeError(RuntimeError):
@@ -76,6 +82,7 @@ async def agenerate_ai_answer(
     *,
     question_type: str = "fill_blank",
     blank_count: Optional[int] = None,
+    ctx: ExecutionState | None = None,
 ) -> Union[str, List[str]]:
     cleaned = _cleanup_question_title(question_title)
     if not cleaned:
@@ -96,6 +103,7 @@ async def agenerate_ai_answer(
                 cleaned,
                 question_type=question_type,
                 blank_count=blank_count,
+                ctx=ctx,
             )
             if question_type == "multi_fill_blank":
                 if not isinstance(answer, list):

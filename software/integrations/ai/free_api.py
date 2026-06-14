@@ -3,12 +3,15 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
+import time
 from typing import Any, Dict, List, Optional
 
 import software.network.http as http_client
 from software.app.config import AI_FREE_ENDPOINT, DEFAULT_HTTP_HEADERS
+from software.core.task import ExecutionState
 from software.integrations.ai.protocols import (
     _AI_REQUEST_TIMEOUT_SECONDS,
     _aexecute_ai_request_with_retry,
@@ -54,6 +57,8 @@ _FREE_AI_ERROR_MESSAGES = {
 
 _FREE_AI_LOG_TEXT_LIMIT = 240
 _AI_RETRYABLE_STATUS_CODES = frozenset({429, 502, 503, 504})
+_FREE_AI_MAX_REQUESTS_PER_MINUTE = 100
+_FREE_AI_RATE_WINDOW_SECONDS = 60.0
 
 __all__ = [
     "FreeAITimeoutError",
@@ -268,12 +273,46 @@ async def _ensure_free_ai_identity_async() -> tuple[int, str]:
     return user_id, device_id
 
 
+def _get_free_ai_rate_limit_lock(ctx: ExecutionState) -> asyncio.Lock:
+    loop = asyncio.get_running_loop()
+    current_lock = getattr(ctx, "_free_ai_rate_limit_async_lock", None)
+    current_loop = getattr(ctx, "_free_ai_rate_limit_async_lock_loop", None)
+    if not isinstance(current_lock, asyncio.Lock) or current_loop is not loop:
+        current_lock = asyncio.Lock()
+        setattr(ctx, "_free_ai_rate_limit_async_lock", current_lock)
+        setattr(ctx, "_free_ai_rate_limit_async_lock_loop", loop)
+    return current_lock
+
+
+def _prune_free_ai_request_timestamps(ctx: ExecutionState, now: float) -> None:
+    while ctx.free_ai_request_timestamps and (now - ctx.free_ai_request_timestamps[0]) >= _FREE_AI_RATE_WINDOW_SECONDS:
+        ctx.free_ai_request_timestamps.popleft()
+
+
+async def _await_free_ai_rate_limit_async(ctx: ExecutionState | None) -> None:
+    if ctx is None:
+        return
+    lock = _get_free_ai_rate_limit_lock(ctx)
+    while True:
+        wait_seconds = 0.0
+        async with lock:
+            now = time.monotonic()
+            _prune_free_ai_request_timestamps(ctx, now)
+            if len(ctx.free_ai_request_timestamps) < _FREE_AI_MAX_REQUESTS_PER_MINUTE:
+                ctx.free_ai_request_timestamps.append(now)
+                return
+            oldest = ctx.free_ai_request_timestamps[0]
+            wait_seconds = max(0.05, _FREE_AI_RATE_WINDOW_SECONDS - (now - oldest))
+        await asyncio.sleep(wait_seconds)
+
+
 async def call_free_ai_api_async(
     question: str,
     question_type: str,
     blank_count: Optional[int],
     system_prompt: str = "",
     timeout: int = _AI_REQUEST_TIMEOUT_SECONDS,
+    ctx: ExecutionState | None = None,
 ) -> List[str]:
     user_id, device_id = await _ensure_free_ai_identity_async()
     _log_free_ai_request_start(
@@ -301,6 +340,7 @@ async def call_free_ai_api_async(
         payload["blank_count"] = int(blank_count or 0)
 
     async def _send_request():
+        await _await_free_ai_rate_limit_async(ctx)
         response = await http_client.apost(AI_FREE_ENDPOINT, headers=headers, json=payload, timeout=timeout, proxies={})
         status_code = int(getattr(response, "status_code", 0) or 0)
         if status_code in _AI_RETRYABLE_STATUS_CODES:

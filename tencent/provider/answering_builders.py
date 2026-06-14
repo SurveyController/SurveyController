@@ -34,6 +34,7 @@ from software.core.questions.utils import (
 from software.core.task import ExecutionState
 from software.network.browser.runtime_async import BrowserDriver
 from software.providers.answering import AnswerAction
+from software.providers.answering.option_fill import default_missing_option_fill
 from software.providers.contracts import SurveyQuestionMeta
 
 from .runtime_interactions import (
@@ -96,7 +97,9 @@ async def _build_qq_single_action(
         driver=driver,
         question_number=current,
         option_text=selected_text,
+        ctx=ctx,
     )
+    fill_value = default_missing_option_fill(question, selected_index, fill_value)
     selected_texts = [f"{selected_text} / {fill_value}" if selected_text and fill_value else (fill_value or selected_text)]
     return AnswerAction(
         question_num=current,
@@ -138,7 +141,7 @@ async def _build_qq_text_action(
         if description and description not in ai_prompt:
             ai_prompt = f"{ai_prompt}\n补充说明：{description}"
         try:
-            generated = await agenerate_ai_answer(ai_prompt, question_type="fill_blank", blank_count=1)
+            generated = await agenerate_ai_answer(ai_prompt, question_type="fill_blank", blank_count=1, ctx=ctx)
         except AIRuntimeError as exc:
             raise AIRuntimeError(f"腾讯问卷第{current}题 AI 生成失败：{exc}") from exc
         text_values = (
@@ -237,7 +240,9 @@ async def _build_qq_multiple_action(
                 driver=driver,
                 question_number=current,
                 option_text=selected_text,
+                ctx=ctx,
             )
+            fill_value = default_missing_option_fill(question, option_idx, fill_value)
             if fill_value:
                 fill_texts.append((option_idx, fill_value))
                 selected_text = f"{selected_text} / {fill_value}" if selected_text else fill_value

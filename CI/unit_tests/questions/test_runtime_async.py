@@ -78,8 +78,8 @@ class RuntimeAsyncQuestionTests:
 
         monkeypatch.setattr(runtime_async, "resolve_runtime_question_title_for_ai", _question_title)
 
-        async def _ai_answer(prompt: str, *, question_type: str, blank_count=None):
-            del question_type, blank_count
+        async def _ai_answer(prompt: str, *, question_type: str, blank_count=None, ctx=None):
+            del question_type, blank_count, ctx
             assert "已选择的选项是：其他" in prompt
             return "AI填写"
 

@@ -26,3 +26,19 @@ class AiRuntimeTests:
             assert "临时故障" in str(exc)
 
         assert len(calls) == 4
+
+    @pytest.mark.asyncio
+    async def test_agenerate_ai_answer_passes_ctx_to_client(self, monkeypatch) -> None:
+        marker = object()
+        received: list[object] = []
+
+        async def _answer(*_args, **kwargs):
+            received.append(kwargs.get("ctx"))
+            return "答案"
+
+        monkeypatch.setattr(ai_runtime, "agenerate_answer", _answer)
+
+        result = await ai_runtime.agenerate_ai_answer("题目", question_type="fill_blank", ctx=marker)
+
+        assert result == "答案"
+        assert received == [marker]

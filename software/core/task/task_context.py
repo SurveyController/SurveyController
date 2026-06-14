@@ -3,8 +3,9 @@
 from __future__ import annotations
 
 import threading
+from collections import deque
 from dataclasses import dataclass, field
-from typing import Any, Dict, List, Optional, Tuple, Union
+from typing import Any, Deque, Dict, List, Optional, Tuple, Union
 
 from software.core.reverse_fill import ReverseFillRuntimeState, ReverseFillSpec
 from software.core.task.distribution_state import DistributionRuntimeMixin
@@ -100,6 +101,7 @@ class ExecutionState(
     thread_progress: Dict[str, ThreadProgressState] = field(default_factory=dict)
     distribution_runtime_stats: Dict[str, Dict[str, Any]] = field(default_factory=dict)
     distribution_pending_by_thread: Dict[str, List[Tuple[str, int, int]]] = field(default_factory=dict)
+    free_ai_request_timestamps: Deque[float] = field(default_factory=deque)
     joint_reserved_sample_by_thread: Dict[str, int] = field(default_factory=dict)
     joint_reserved_sample_started_at_by_thread: Dict[str, float] = field(default_factory=dict)
     joint_committed_sample_indexes: set[int] = field(default_factory=set)
@@ -120,6 +122,8 @@ class ExecutionState(
     _target_reached_stop_triggered: bool = False
     _target_reached_stop_lock: threading.Lock = field(default_factory=threading.Lock)
     _terminal_stop_lock: threading.Lock = field(default_factory=threading.Lock)
+    _free_ai_rate_limit_async_lock: Any = field(default=None, init=False, repr=False)
+    _free_ai_rate_limit_async_lock_loop: Any = field(default=None, init=False, repr=False)
     _runtime_condition: threading.Condition = field(default_factory=threading.Condition, repr=False)
 
     _proxy_fetch_lock: threading.Lock = field(default_factory=threading.Lock)

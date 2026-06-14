@@ -35,6 +35,7 @@ from software.core.questions.utils import (
 )
 from software.core.task import ExecutionState
 from software.network.browser.runtime_async import BrowserDriver
+from software.providers.answering.option_fill import default_missing_option_fill
 from software.providers.contracts import SurveyQuestionMeta
 
 from .runtime_interactions import (
@@ -121,7 +122,9 @@ async def _answer_qq_single(
         driver=driver,
         question_number=current,
         option_text=selected_text,
+        ctx=ctx,
     )
+    fill_value = default_missing_option_fill(question, selected_index, fill_value)
     if fill_value and await _fill_choice_option_additional_text(
             driver,
             str(question.provider_question_id or ""),
@@ -213,7 +216,9 @@ async def _answer_qq_dropdown(
         driver=driver,
         question_number=current,
         option_text=selected_text,
+        ctx=ctx,
     )
+    fill_value = default_missing_option_fill(question, selected_index, fill_value)
     if fill_value and await _fill_choice_option_additional_text(
             driver,
             question_id,
@@ -255,7 +260,7 @@ async def _answer_qq_text(
         ai_prompt = f"{ai_prompt}\n补充说明：{description}"
     if ai_enabled:
         try:
-            generated = await agenerate_ai_answer(ai_prompt, question_type="fill_blank", blank_count=1)
+            generated = await agenerate_ai_answer(ai_prompt, question_type="fill_blank", blank_count=1, ctx=ctx)
         except AIRuntimeError as exc:
             raise AIRuntimeError(f"腾讯问卷第{current}题 AI 生成失败：{exc}") from exc
         if isinstance(generated, list):
@@ -419,7 +424,9 @@ async def _answer_qq_multiple(
                     driver=driver,
                     question_number=current,
                     option_text=option_texts[option_idx] if option_idx < len(option_texts) else "",
+                    ctx=ctx,
                 )
+                fill_value = default_missing_option_fill(question, option_idx, fill_value)
                 if fill_value:
                     await _fill_choice_option_additional_text(
                         driver,

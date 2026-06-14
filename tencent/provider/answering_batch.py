@@ -47,7 +47,7 @@ async def answer_page_batch(
         actions.append(action)
     if not actions:
         return BatchFillResult(skipped=tuple(skipped))
-    assert_no_free_ai_placeholders_in_actions(actions)
+    assert_no_free_ai_placeholders_in_actions(actions, provider_label="腾讯问卷")
     result = await apply_answer_actions(driver, actions)
     action_by_num = {int(action.question_num): action for action in actions}
     for question_num in result.applied:

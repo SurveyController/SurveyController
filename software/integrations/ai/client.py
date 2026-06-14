@@ -4,7 +4,7 @@
 from __future__ import annotations
 
 import logging
-from typing import List, Optional, Union
+from typing import TYPE_CHECKING, List, Optional, Union
 
 from software.integrations.ai.free_api import FreeAITimeoutError, call_free_ai_api_async
 from software.integrations.ai.protocols import (
@@ -36,6 +36,9 @@ from software.integrations.ai.settings import (
 
 logger = logging.getLogger(__name__)
 
+if TYPE_CHECKING:
+    from software.core.task import ExecutionState
+
 __all__ = [
     "AI_MODE_FREE",
     "AI_MODE_PROVIDER",
@@ -60,6 +63,7 @@ async def agenerate_answer(
     *,
     question_type: str = FREE_QUESTION_TYPE_FILL,
     blank_count: Optional[int] = None,
+    ctx: ExecutionState | None = None,
 ) -> Union[str, List[str]]:
     """根据问题标题异步生成答案。"""
     config = get_ai_settings()
@@ -78,6 +82,7 @@ async def agenerate_answer(
             question_type=resolved_question_type,
             blank_count=resolved_blank_count,
             system_prompt=system_prompt,
+            ctx=ctx,
         )
         if resolved_question_type == FREE_QUESTION_TYPE_FILL:
             return answers[0]
