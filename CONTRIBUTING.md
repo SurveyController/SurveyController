@@ -1,15 +1,11 @@
 # 贡献指南
 
-感谢愿意改进本项目。开始前，请先阅读 [行为准则](CODE_OF_CONDUCT.md)。
-
-本文面向开发者。目标是让你能从源码跑起来、提交一份容易 review 的 Pull Request。
-
 ## 开发环境
 
-需要准备：
+`v3` 分支的开发需要准备：
 
 - Windows 10/11
-- Python 3.13.3
+- Python 3.11+
 - Git
 - Microsoft Edge 浏览器
 - uv 包管理器
@@ -45,6 +41,13 @@ https://github.com/你的用户名/SurveyController
 ```bash
 git clone https://github.com/你的用户名/SurveyController.git
 cd SurveyController
+```
+
+然后切换到 `v3` 分支：
+
+```bash
+git fetch origin v3
+git checkout v3
 ```
 
 ### 3. 安装依赖并启动项目
@@ -85,18 +88,19 @@ upstream  https://github.com/SurveyController/SurveyController.git
 **每次开始新功能前，先同步主仓库最新代码：**
 
 ```bash
-git checkout main
+git checkout v3
 git fetch upstream
-git pull upstream main
+git pull --ff-only upstream v3
 ```
 
 ### 5. 创建开发分支
 
-**不建议直接在 `main` 分支上做出改动。**
+**不要直接在 `main` 分支上做改动。当前开发基线是 `v3`。**
 
 每个修复或功能都开一个新分支：
 
 ```bash
+git checkout v3
 git checkout -b fix/short-description
 ```
 
@@ -201,7 +205,7 @@ git push
 确认方向是：
 
 ```text
-你的 Fork 分支 -> SurveyController/SurveyController 的 main 分支
+你的 Fork 分支 -> SurveyController/SurveyController 的 v3 分支
 ```
 
 PR 描述里写清楚：
@@ -262,40 +266,6 @@ git push
 - `software/app/runtime_paths.py` 只表示安装目录和只读资源目录，不要把它当可写目录。
 - 用户配置写入 `%AppData%\SurveyController\`。
 - 日志和缓存写入 `%LocalAppData%\SurveyController\`。
-
-## 本地检查
-
-快速检查：
-
-```bash
-uv run python CI/python_ci.py
-```
-
-完整检查：
-
-```bash
-uv run python CI/python_ci.py --full
-```
-
-只跑单测：
-
-```bash
-uv run pytest CI/unit_tests
-```
-
-完整检查会额外做模块导入和主窗口冒烟测试。涉及启动链路、UI、浏览器、配置迁移时，建议跑完整检查。
-
-## 测试建议
-
-改哪一块，就补哪一块测试：
-
-- 解析器、题型规则：补 `CI/unit_tests/questions/` 或 `CI/unit_tests/providers/`。
-- 配置、路径、迁移：补 `CI/unit_tests/app/`。
-- 执行引擎：补 `CI/unit_tests/engine/`。
-- 代理、网络策略：补对应已有测试文件。
-- UI 纯展示改动可不强制补单测，但要手动启动看一遍。
-
-不要在测试里访问真实问卷、真实账号、真实付费代理。
 
 ## Pull Request 要求
 
