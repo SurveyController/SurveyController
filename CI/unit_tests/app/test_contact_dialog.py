@@ -66,10 +66,10 @@ class ContactDialogTests:
     def test_dialog_initializes_form_and_polling(self, monkeypatch) -> None:
         monkeypatch.setattr(contact_dialog_module, "ContactForm", _FakeContactForm)
         parent = _FakeParent()
-        dialog = ContactDialog(parent=parent, default_type="额度申请", lock_message_type=True)
+        dialog = ContactDialog(parent=parent, default_type="新功能建议", lock_message_type=True)
         form = cast(_FakeContactForm, dialog.form)
         assert isinstance(form, _FakeContactForm)
-        assert form.kwargs["default_type"] == "额度申请"
+        assert form.kwargs["default_type"] == "新功能建议"
         assert form.kwargs["lock_message_type"] is True
         assert form.kwargs["config_snapshot_provider"]() == "cfg"
         assert dialog.widget.width() == 760

@@ -353,7 +353,7 @@ def format_random_ip_error(exc: BaseException) -> str:
     if detail == "upstream_rejected":
         return "上游代理服务拒绝了请求，请稍后重试"
     if detail == "not_authenticated":
-        return "请先领取免费试用或提交额度申请后再使用随机IP"
+        return "请先领取免费试用或兑换额度后再使用随机IP"
     if detail.startswith("network_error:"):
         return f"网络请求失败：{detail.split(':', 1)[1].strip()}"
     if detail == "invalid_response:user_id_invalid":

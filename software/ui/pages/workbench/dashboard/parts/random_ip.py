@@ -1,4 +1,4 @@
-"""DashboardPage 随机 IP 与额度申请相关方法。"""
+"""DashboardPage 随机 IP 与额度兑换相关方法。"""
 
 from __future__ import annotations
 
@@ -43,7 +43,7 @@ if TYPE_CHECKING:
 
 
 class DashboardRandomIPMixin:
-    """随机 IP、额度提示与额度申请逻辑。"""
+    """随机 IP、额度提示与额度兑换逻辑。"""
 
     if TYPE_CHECKING:
         # 以下属性由 DashboardPage 主类提供，此处仅用于 Pylance 类型检查

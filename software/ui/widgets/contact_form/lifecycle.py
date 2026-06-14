@@ -43,19 +43,15 @@ def _get_session_snapshot(form: Any) -> dict[str, Any]:
 
 
 def has_pending_async_work(form: Any) -> bool:
-    return bool(getattr(form, "_send_in_progress", False) or getattr(form, "_verify_code_sending", False))
+    return bool(getattr(form, "_send_in_progress", False))
 
 
 def show_pending_async_warning(form: Any) -> None:
-    if getattr(form, "_send_in_progress", False):
-        message = "正在发送反馈，请等待完成后再关闭"
-    elif getattr(form, "_verify_code_sending", False):
-        message = "正在发送验证码，请等待完成后再关闭"
-    else:
+    if not getattr(form, "_send_in_progress", False):
         return
     _info_bar(form).warning(
         "",
-        message,
+        "正在发送反馈，请等待完成后再关闭",
         parent=form,
         position=InfoBarPosition.TOP,
         duration=2500,
@@ -70,14 +66,9 @@ def set_send_loading(form: Any, loading: bool) -> None:
     _set_progress_ring_active(form, form.send_spinner, loading)
 
 
-def set_verify_loading(form: Any, loading: bool) -> None:
-    _set_progress_ring_active(form, form.verify_send_spinner, loading)
-
-
 def stop_activity_indicators(form: Any) -> None:
     set_status_loading(form, False)
     set_send_loading(form, False)
-    set_verify_loading(form, False)
 
 
 def refresh_random_ip_user_id_hint(form: Any) -> None:
@@ -94,7 +85,6 @@ def refresh_random_ip_user_id_hint(form: Any) -> None:
         form.random_ip_user_id_label.show()
     else:
         form.random_ip_user_id_label.hide()
-    form._sync_donation_check_state()
     form._update_send_button_state()
 
 
@@ -128,8 +118,6 @@ def close_all_infobars(form: Any) -> None:
                 pass
     except Exception as exc:
         log_suppressed_exception("_close_all_infobars", exc, level=logging.WARNING)
-    finally:
-        form.amount_rule_hint.hide()
 
 
 def find_controller_host(form: Any) -> QWidget | None:

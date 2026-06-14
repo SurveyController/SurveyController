@@ -3,9 +3,7 @@
 from typing import Any
 
 from PySide6.QtCore import QTimer, Qt
-from PySide6.QtGui import QDoubleValidator, QIntValidator
 from PySide6.QtWidgets import (
-    QButtonGroup,
     QGridLayout,
     QHBoxLayout,
     QSizePolicy,
@@ -16,25 +14,16 @@ from qfluentwidgets import (
     BodyLabel,
     CheckBox,
     ComboBox,
-    EditableComboBox,
     FluentIcon,
     IconWidget,
     IndeterminateProgressRing,
     LineEdit,
     PrimaryPushButton,
     PushButton,
-    RadioButton,
 )
 
 from software.ui.helpers.fluent_tooltip import install_tooltip_filters
 
-from .constants import (
-    DONATION_AMOUNT_BLOCK_MESSAGE,
-    DONATION_AMOUNT_OPTIONS,
-    MAX_REQUEST_QUOTA,
-    PAYMENT_METHOD_OPTIONS,
-    REQUEST_MESSAGE_TYPE,
-)
 from .input_widgets import PasteOnlyLineEdit, PasteOnlyPlainTextEdit
 
 
@@ -58,7 +47,6 @@ def build_contact_form_ui(form: Any, *, default_type: str, show_cancel_button: b
     form.type_locked_label.setFixedWidth(compact_field_width)
     form.base_options = [
         "报错反馈",
-        REQUEST_MESSAGE_TYPE,
         "新功能建议",
         "纯聊天",
     ]
@@ -80,27 +68,7 @@ def build_contact_form_ui(form: Any, *, default_type: str, show_cancel_button: b
     email_row.addWidget(form.email_label)
     email_row.addWidget(form.email_edit, 1)
 
-    form.verify_code_edit = LineEdit(form)
-    form.verify_code_edit.setPlaceholderText("6位验证码")
-    form.verify_code_edit.setMaxLength(6)
-    form.verify_code_edit.setValidator(QIntValidator(0, 999999, form))
-    form.verify_code_edit.setMaximumWidth(120)
-
-    form.send_verify_btn = PushButton("发送验证码", form)
-    form.verify_send_spinner = IndeterminateProgressRing(form, start=False)
-    form.verify_send_spinner.setFixedSize(16, 16)
-    form.verify_send_spinner.setStrokeWidth(2)
-    form.verify_send_spinner.hide()
-
-    email_row.addSpacing(4)
-    email_row.addWidget(form.send_verify_btn)
-    email_row.addWidget(form.verify_send_spinner)
-    email_row.addWidget(form.verify_code_edit)
     form_layout.addLayout(email_row)
-
-    form.verify_code_edit.hide()
-    form.send_verify_btn.hide()
-    form.verify_send_spinner.hide()
 
     title_row = QHBoxLayout()
     title_row.setSpacing(6)
@@ -118,94 +86,6 @@ def build_contact_form_ui(form: Any, *, default_type: str, show_cancel_button: b
 
     form.issue_title_label.hide()
     form.issue_title_edit.hide()
-
-    form.amount_row = QHBoxLayout()
-    form.amount_label = BodyLabel("支付金额：￥", form)
-    form.amount_edit = EditableComboBox(form)
-    form.amount_edit.setPlaceholderText("必填")
-    form.amount_edit.setMaximumWidth(100)
-    amount_validator = QDoubleValidator(0.01, 9999.99, 2, form)
-    amount_validator.setNotation(QDoubleValidator.Notation.StandardNotation)
-    for amount in DONATION_AMOUNT_OPTIONS:
-        form.amount_edit.addItem(amount)
-    form.amount_edit.setText("11.45")
-    form.amount_edit.setValidator(amount_validator)
-    form.amount_edit.currentTextChanged.connect(form._on_amount_changed)
-    form.amount_edit.editingFinished.connect(form._on_amount_editing_finished)
-    form.amount_edit.installEventFilter(form)
-
-    form.quantity_label = BodyLabel("需求额度：", form)
-    form.quantity_edit = LineEdit(form)
-    form.quantity_edit.setPlaceholderText("按需填写")
-    form.quantity_edit.setMaximumWidth(90)
-    form.quantity_edit.setMaxLength(len(str(MAX_REQUEST_QUOTA)) + 2)
-    quantity_validator = QDoubleValidator(0.0, float(MAX_REQUEST_QUOTA), 1, form)
-    quantity_validator.setNotation(QDoubleValidator.Notation.StandardNotation)
-    form.quantity_edit.setValidator(quantity_validator)
-    form.quantity_edit.textChanged.connect(form._on_quantity_changed)
-    form.quantity_edit.editingFinished.connect(form._on_quantity_editing_finished)
-
-    form.urgency_label = BodyLabel("问卷紧急程度：", form)
-    form.urgency_combo = ComboBox(form)
-    form.urgency_combo.setMaximumWidth(140)
-    for urgency in [
-        "低",
-        "中（本月内）",
-        "高（本周内）",
-        "紧急（两天内）",
-    ]:
-        form.urgency_combo.addItem(urgency, urgency)
-    urgency_default_index = form.urgency_combo.findText("中（本月内）")
-    if urgency_default_index >= 0:
-        form.urgency_combo.setCurrentIndex(urgency_default_index)
-    form.urgency_combo.currentIndexChanged.connect(lambda _: form._on_urgency_changed())
-
-    form.amount_row.addWidget(form.quantity_label)
-    form.amount_row.addWidget(form.quantity_edit)
-    form.amount_row.addSpacing(16)
-    form.amount_row.addWidget(form.amount_label)
-    form.amount_row.addWidget(form.amount_edit)
-    form.amount_row.addSpacing(16)
-    form.amount_row.addWidget(form.urgency_label)
-    form.amount_row.addWidget(form.urgency_combo)
-    form.amount_row.addStretch(1)
-    form_layout.addLayout(form.amount_row)
-
-    form.amount_rule_hint = QWidget(form)
-    form.amount_rule_hint.setObjectName("amountRuleHint")
-    form.amount_rule_hint.setSizePolicy(
-        QSizePolicy.Policy.Expanding,
-        QSizePolicy.Policy.Fixed,
-    )
-    form.amount_rule_hint.setStyleSheet(
-        "#amountRuleHint {"
-        "background-color: #FFF4CE;"
-        "border: 1px solid #F2D58A;"
-        "border-radius: 8px;"
-        "}"
-    )
-    amount_rule_hint_layout = QHBoxLayout(form.amount_rule_hint)
-    amount_rule_hint_layout.setContentsMargins(12, 8, 12, 8)
-    amount_rule_hint_layout.setSpacing(8)
-    form.amount_rule_hint_icon = IconWidget(FluentIcon.INFO, form.amount_rule_hint)
-    form.amount_rule_hint_icon.setIcon(FluentIcon.INFO)
-    form.amount_rule_hint_icon.setStyleSheet("color: #B57A00;")
-    form.amount_rule_hint_text = BodyLabel(
-        DONATION_AMOUNT_BLOCK_MESSAGE,
-        form.amount_rule_hint,
-    )
-    form.amount_rule_hint_text.setStyleSheet("color: #7A5200;")
-    amount_rule_hint_layout.addWidget(form.amount_rule_hint_icon)
-    amount_rule_hint_layout.addWidget(form.amount_rule_hint_text, 1)
-    form_layout.addWidget(form.amount_rule_hint)
-
-    form.amount_label.hide()
-    form.amount_edit.hide()
-    form.quantity_label.hide()
-    form.quantity_edit.hide()
-    form.urgency_label.hide()
-    form.urgency_combo.hide()
-    form.amount_rule_hint.hide()
 
     msg_layout = QVBoxLayout()
     msg_layout.setSpacing(6)
@@ -283,51 +163,10 @@ def build_contact_form_ui(form: Any, *, default_type: str, show_cancel_button: b
     auto_attach_layout.addWidget(form.auto_attach_log_checkbox)
     form.auto_attach_section.hide()
 
-    form.request_payment_section = QWidget(form)
-    payment_layout = QVBoxLayout(form.request_payment_section)
-    payment_layout.setContentsMargins(0, 0, 0, 0)
-    payment_layout.setSpacing(6)
-
-    payment_row = QHBoxLayout()
-    payment_row.setSpacing(12)
-    form.payment_method_label = BodyLabel("选择的支付方式：", form.request_payment_section)
-    form.payment_method_group = QButtonGroup(form.request_payment_section)
-    form.payment_method_group.setExclusive(True)
-    form.payment_method_wechat_radio = RadioButton(
-        PAYMENT_METHOD_OPTIONS[0],
-        form.request_payment_section,
-    )
-    form.payment_method_alipay_radio = RadioButton(
-        PAYMENT_METHOD_OPTIONS[1],
-        form.request_payment_section,
-    )
-    form.payment_method_group.addButton(form.payment_method_wechat_radio, 1)
-    form.payment_method_group.addButton(form.payment_method_alipay_radio, 2)
-    payment_row.addWidget(form.payment_method_label)
-    payment_row.addWidget(form.payment_method_wechat_radio)
-    payment_row.addWidget(form.payment_method_alipay_radio)
-    payment_row.addStretch(1)
-    payment_layout.addLayout(payment_row)
-    form.request_payment_section.hide()
-
     wrapper.addLayout(form_layout)
     wrapper.addLayout(msg_layout, 1)
     wrapper.addWidget(form.auto_attach_section)
     wrapper.addWidget(form.attachments_section)
-    wrapper.addWidget(form.request_payment_section)
-
-    form.request_payment_confirm_section = QWidget(form)
-    donated_row = QHBoxLayout(form.request_payment_confirm_section)
-    donated_row.setContentsMargins(0, 0, 0, 0)
-    donated_row.setSpacing(8)
-    form.donated_cb = CheckBox(
-        "我已完成支付，且确认随机ip可用",
-        form.request_payment_confirm_section,
-    )
-    donated_row.addStretch(1)
-    donated_row.addWidget(form.donated_cb)
-    form.request_payment_confirm_section.hide()
-    wrapper.addWidget(form.request_payment_confirm_section)
 
     bottom_layout = QHBoxLayout()
     bottom_layout.setContentsMargins(0, 8, 0, 0)
@@ -366,14 +205,10 @@ def build_contact_form_ui(form: Any, *, default_type: str, show_cancel_button: b
     wrapper.addLayout(bottom_layout)
 
     form.type_combo.currentIndexChanged.connect(lambda _: form._on_type_changed())
-    form.donated_cb.installEventFilter(form)
-    form.donated_cb.toggled.connect(lambda _: form._update_send_button_state())
-    install_tooltip_filters((form.donated_cb, form.send_btn))
+    install_tooltip_filters((form.send_btn,))
     form.send_btn.clicked.connect(form._on_send_clicked)
-    form.send_verify_btn.clicked.connect(form._on_send_verify_clicked)
     form.attach_add_btn.clicked.connect(form._on_choose_files)
     form.attach_clear_btn.clicked.connect(form._on_clear_attachments)
-    form.payment_method_group.buttonToggled.connect(lambda *_: form._update_send_button_state())
     if form.cancel_btn is not None:
         form.cancel_btn.clicked.connect(form.cancelRequested.emit)
 

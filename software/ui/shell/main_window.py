@@ -8,11 +8,9 @@ import sys
 from typing import List
 
 from PySide6.QtCore import QPoint, Qt, QTimer, Signal, QEvent, Slot
-from PySide6.QtGui import QIcon, QGuiApplication, QColor
+from PySide6.QtGui import QIcon, QGuiApplication
 from PySide6.QtWidgets import QDialog
 from qfluentwidgets import (
-    DotInfoBadge,
-    InfoBadgePosition,
     InfoBar,
     InfoBarPosition,
     MSFluentWindow,
@@ -95,9 +93,6 @@ class MainWindow(
         setThemeColor("#2563EB")
         qconfig.themeChanged.connect(self._on_theme_changed)
         self._skip_save_on_close = False
-        self._community_hint_setting_key = "community_card_request_badge_pending"
-        self._community_hint_pending = False
-        self._community_hint_badge = None
         self._async_dialog_refs = []
         self._contact_dialog = None
         self._contact_dialog_active = False
@@ -157,8 +152,6 @@ class MainWindow(
         self._last_logged_page = ""
 
         self._init_navigation()
-        if not self._import_check_mode:
-            self._init_community_hint_badge_state()
         self.stackedWidget.currentChanged.connect(self._on_stack_widget_changed)
         # 微软商店风格导航栏需要在事件循环后应用显示偏好，避免初始化时序抖动
         QTimer.singleShot(0, self._configure_navigation_interface)
@@ -316,53 +309,6 @@ class MainWindow(
         e.ignore()
         self._schedule_deferred_close_confirmation()
 
-    def _init_community_hint_badge_state(self):
-        settings = app_settings()
-        self._community_hint_pending = get_bool_from_qsettings(
-            settings.value(self._community_hint_setting_key),
-            False,
-        )
-        self._refresh_community_hint_badge()
-
-    def _set_community_hint_pending(self, pending: bool):
-        self._community_hint_pending = bool(pending)
-        settings = app_settings()
-        settings.setValue(self._community_hint_setting_key, self._community_hint_pending)
-        self._refresh_community_hint_badge()
-
-    def _refresh_community_hint_badge(self):
-        nav_item = self.navigationInterface.widget("community")
-        if nav_item is None:
-            return
-
-        if not self._community_hint_pending:
-            self._clear_community_hint_badge()
-            return
-
-        if self._community_hint_badge is None:
-            badge_parent = nav_item.parentWidget() or self.navigationInterface
-            self._community_hint_badge = DotInfoBadge.custom(
-                QColor("#2563EB"),
-                QColor("#60A5FA"),
-                parent=badge_parent,
-                target=nav_item,
-                position=InfoBadgePosition.NAVIGATION_ITEM,
-            )
-            self._community_hint_badge.setFixedSize(8, 8)
-
-        self._community_hint_badge.show()
-
-    def _clear_community_hint_badge(self):
-        badge = self._community_hint_badge
-        if badge is None:
-            return
-        badge.hide()
-        badge.deleteLater()
-        self._community_hint_badge = None
-
-    def _on_quota_request_sent(self):
-        self._set_community_hint_pending(True)
-
     def _start_random_ip_quota_auto_sync(self) -> None:
         try:
             self._random_ip_quota_auto_sync_timer.start()
@@ -394,8 +340,6 @@ class MainWindow(
                 result="opened",
             )
             self._last_logged_page = current_name
-        if current_widget and current_widget.objectName() == "community":
-            self._set_community_hint_pending(False)
 
     def _open_contact_dialog(self, default_type: str = "报错反馈", lock_message_type: bool = False):
         dialog = getattr(self, "_contact_dialog", None)
@@ -427,7 +371,6 @@ class MainWindow(
         self._contact_dialog_active = True
         self._set_startup_update_check_suspended(True)
         dlg.setProperty("_lock_message_type", bool(lock_message_type))
-        dlg.form.quotaRequestSucceeded.connect(self._on_quota_request_sent)
         dlg.finished.connect(self._on_contact_dialog_finished_event)
         dlg.destroyed.connect(self._on_contact_dialog_destroyed_event)
         if open_non_blocking:
