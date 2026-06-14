@@ -6,7 +6,6 @@ from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple
 
 from software.providers.common import SURVEY_PROVIDER_WJX
 from software.providers.contracts import SurveyQuestionMeta
-from software.app.config import DEFAULT_RANDOM_UA_KEYS
 
 if TYPE_CHECKING:
     from software.core.questions.config import QuestionEntry
@@ -31,7 +30,6 @@ class RuntimeConfig:
     custom_proxy_api: str = ""
     proxy_area_code: Optional[str] = None
     random_ua_enabled: bool = False
-    random_ua_keys: List[str] = field(default_factory=lambda: list(DEFAULT_RANDOM_UA_KEYS))
     random_ua_ratios: Dict[str, int] = field(default_factory=lambda: {"wechat": 33, "mobile": 33, "pc": 34})
     fail_stop_enabled: bool = True
     submit_enabled: bool = True

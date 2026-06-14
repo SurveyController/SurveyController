@@ -29,6 +29,7 @@ NAVIGATION_TEXT_VISIBLE_SETTING_KEY = "navigation_selected_text_visible"
 AUTO_SAVE_LOGS_SETTING_KEY = "auto_save_logs"
 AUTO_SAVE_LOG_RETENTION_COUNT_SETTING_KEY = "auto_save_log_retention_count"
 TASK_RESULT_WINDOWS_NOTIFICATION_SETTING_KEY = "task_result_windows_notification"
+SUBMISSION_REPORT_TELEMETRY_SETTING_KEY = "submission_report_telemetry"
 DEFAULT_AUTO_SAVE_LOGS = True
 DEFAULT_AUTO_SAVE_LOG_RETENTION_COUNT = 10
 AUTO_SAVE_LOG_RETENTION_OPTIONS = (3, 5, 10, 20, 30, 50)
@@ -152,6 +153,7 @@ _DEFAULT_IP_EXTRACT_ENDPOINT = "https://api-wjx.hungrym0.com/api/ip/extract"
 _DEFAULT_AI_FREE_ENDPOINT = "https://api-wjx.hungrym0.com/api/ai/free"
 _DEFAULT_STATUS_ENDPOINT = "https://api-wjx.hungrym0.com/api/status"
 _DEFAULT_EMAIL_VERIFY_ENDPOINT = "https://api-wjx.hungrym0.com/api/email"
+_DEFAULT_SUBMISSION_REPORT_ENDPOINT = "https://api-wjx.hungrym0.com/api/submission/report"
 
 # ==================== 浏览器配置 ====================
 # 浏览器选择优先级（固定使用系统 Microsoft Edge）
@@ -257,6 +259,7 @@ IP_EXTRACT_ENDPOINT = _resolve_env_value("IP_EXTRACT_ENDPOINT", _DEFAULT_IP_EXTR
 AI_FREE_ENDPOINT = _resolve_env_value("AI_FREE_ENDPOINT", _DEFAULT_AI_FREE_ENDPOINT)
 STATUS_ENDPOINT = _resolve_env_value("STATUS_ENDPOINT", _DEFAULT_STATUS_ENDPOINT)
 EMAIL_VERIFY_ENDPOINT = _resolve_env_value("EMAIL_VERIFY_ENDPOINT", _DEFAULT_EMAIL_VERIFY_ENDPOINT)
+SUBMISSION_REPORT_ENDPOINT = _resolve_env_value("SUBMISSION_REPORT_ENDPOINT", _DEFAULT_SUBMISSION_REPORT_ENDPOINT)
 
 
 # ==================== 时长控制配置 ====================

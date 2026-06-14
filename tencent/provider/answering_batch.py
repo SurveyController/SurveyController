@@ -5,6 +5,7 @@ from __future__ import annotations
 from typing import Any, Optional, Sequence
 
 from software.app.config import DEFAULT_FILL_TEXT
+from software.core.ai.batch_runtime import assert_no_free_ai_placeholders_in_actions
 from software.core.persona.context import record_answer
 from software.core.questions.distribution import record_pending_distribution_choice
 from software.core.task import ExecutionState
@@ -46,6 +47,7 @@ async def answer_page_batch(
         actions.append(action)
     if not actions:
         return BatchFillResult(skipped=tuple(skipped))
+    assert_no_free_ai_placeholders_in_actions(actions)
     result = await apply_answer_actions(driver, actions)
     action_by_num = {int(action.question_num): action for action in actions}
     for question_num in result.applied:

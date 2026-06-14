@@ -398,7 +398,7 @@ class LogBufferHandler(logging.Handler):
             return "OK"
 
         normalized_message = message.upper()
-        ok_markers = ("[OK]", "[SUCCESS]", "✅", "✔")
+        ok_markers = ("[OK]", "[SUCCESS]")
         ok_keywords = (
             "成功",
             "已完成",

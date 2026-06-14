@@ -85,7 +85,7 @@ class QuotaRedeemDialog(MessageBoxBase):
         store_layout.setContentsMargins(0, 0, 0, 0)
         store_layout.setSpacing(10)
         self.storeHintLabel = CaptionLabel(
-            "如果你是大学生的话，可以加入社区群聊申请优惠🥰",
+            "如果你是大学生，可以加入社区群聊申请优惠",
             store_row,
         )
         self.storeHintLabel.setWordWrap(True)

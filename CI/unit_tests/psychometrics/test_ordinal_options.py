@@ -24,6 +24,21 @@ class OrdinalOptionTests:
         assert mapping is not None
         assert mapping.score_by_choice_index == [4, 3, 2, 1, 0]
 
+    def test_attitude_options_are_supported(self) -> None:
+        mapping = infer_ordinal_option_mapping(["非常不同意", "比较不同意", "中立", "比较同意", "非常同意"])
+        assert mapping is not None
+        assert mapping.score_by_choice_index == [0, 1, 2, 3, 4]
+
+    def test_reversed_attitude_options_are_supported(self) -> None:
+        mapping = infer_ordinal_option_mapping(["非常同意", "比较同意", "中立", "比较不同意", "非常不同意"])
+        assert mapping is not None
+        assert mapping.score_by_choice_index == [4, 3, 2, 1, 0]
+
+    def test_common_neutral_attitude_word_is_supported(self) -> None:
+        mapping = infer_ordinal_option_mapping(["完全不同意", "不太同意", "不确定", "基本同意", "完全同意"])
+        assert mapping is not None
+        assert mapping.score_by_choice_index == [0, 1, 2, 3, 4]
+
     def test_nominal_options_are_not_supported(self) -> None:
         assert infer_ordinal_option_mapping(["男", "女"]) is None
         assert infer_ordinal_option_mapping(["北京", "上海", "广州"]) is None

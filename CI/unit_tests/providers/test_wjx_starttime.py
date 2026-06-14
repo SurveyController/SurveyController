@@ -59,6 +59,37 @@ class WjxStarttimeTests:
         assert waited == [42.5]
 
     @pytest.mark.asyncio
+    async def test_prepare_answer_duration_before_submit_uses_config_duration_without_wait_when_starttime_applies(self, monkeypatch) -> None:
+        applied_seconds: list[float] = []
+        waited: list[float] = []
+
+        async def _fake_try_apply(_driver, target_seconds: float) -> bool:
+            applied_seconds.append(target_seconds)
+            return True
+
+        async def _fake_wait(_stop_signal, seconds: float) -> bool:
+            waited.append(seconds)
+            return False
+
+        monkeypatch.setattr(starttime, "try_apply_submit_starttime", _fake_try_apply)
+        monkeypatch.setattr(
+            starttime,
+            "sample_answer_duration_seconds",
+            lambda _range, survey_provider=None: 66.0,
+        )
+        monkeypatch.setattr(starttime, "wait_answer_duration_seconds", _fake_wait)
+
+        interrupted = await starttime.prepare_answer_duration_before_submit(
+            _FakeDriver(None),
+            threading.Event(),
+            (60, 70),
+        )
+
+        assert interrupted is False
+        assert applied_seconds == [66.0]
+        assert waited == []
+
+    @pytest.mark.asyncio
     async def test_prepare_answer_duration_before_submit_returns_interrupt_state_from_fallback_wait(self, monkeypatch) -> None:
         async def _fake_try_apply(_driver, _target_seconds: float) -> bool:
             return False

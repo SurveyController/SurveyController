@@ -16,10 +16,10 @@ from software.ui.pages.workbench.reverse_fill import logic
 
 class ReverseFillLogicTests:
     def test_status_and_question_type_labels_cover_known_and_unknown_values(self) -> None:
-        assert logic.status_label_for_plan(SimpleNamespace(status=REVERSE_FILL_STATUS_REVERSE)) == "🟢 正常"
-        assert logic.status_label_for_plan(SimpleNamespace(status=REVERSE_FILL_STATUS_FALLBACK, fallback_resolved=True)) == "🟢 已处理"
-        assert logic.status_label_for_plan(SimpleNamespace(status=REVERSE_FILL_STATUS_FALLBACK, fallback_ready=True)) == "🟡 可回退"
-        assert logic.status_label_for_plan(SimpleNamespace(status=REVERSE_FILL_STATUS_BLOCKED)) == "🔴 不支持"
+        assert logic.status_label_for_plan(SimpleNamespace(status=REVERSE_FILL_STATUS_REVERSE)) == "正常"
+        assert logic.status_label_for_plan(SimpleNamespace(status=REVERSE_FILL_STATUS_FALLBACK, fallback_resolved=True)) == "已处理"
+        assert logic.status_label_for_plan(SimpleNamespace(status=REVERSE_FILL_STATUS_FALLBACK, fallback_ready=True)) == "可回退"
+        assert logic.status_label_for_plan(SimpleNamespace(status=REVERSE_FILL_STATUS_BLOCKED)) == "不支持"
         assert logic.status_label_for_plan(SimpleNamespace(status="custom")) == "custom"
         assert logic.question_type_label("single") == "单选题"
         assert logic.question_type_label("Custom") == "Custom"
@@ -73,9 +73,9 @@ class ReverseFillLogicTests:
 
         rows = logic.build_plan_rows(spec)
 
-        assert rows[0] == ["1", "单选题", "🟢 正常", "Q1", "已匹配\n选项缺失", "补齐选项"]
-        assert rows[1][0:3] == ["2", "填空题", "🟡 可回退"]
-        assert rows[2] == ["全局", "format", "🔴 不支持", "无", "格式不支持", "换文件"]
+        assert rows[0] == ["1", "单选题", "正常", "Q1", "已匹配\n选项缺失", "补齐选项"]
+        assert rows[1][0:3] == ["2", "填空题", "可回退"]
+        assert rows[2] == ["全局", "format", "不支持", "无", "格式不支持", "换文件"]
         assert logic.actionable_issue_question_nums(spec) == [1]
 
     def test_iter_supported_drop_paths_filters_non_excel_urls(self, tmp_path) -> None:

@@ -14,11 +14,11 @@ from software.core.reverse_fill.schema import (
 
 
 _STATUS_LABELS = {
-    "reverse": "🟢 正常",
-    "reverse_fill": "🟢 正常",
-    "fallback": "🟡 需要处理",
-    "fallback_config": "🟡 需要处理",
-    "blocked": "🔴 不支持",
+    "reverse": "正常",
+    "reverse_fill": "正常",
+    "fallback": "需要处理",
+    "fallback_config": "需要处理",
+    "blocked": "不支持",
 }
 
 _QUESTION_TYPE_LABELS = {
@@ -39,9 +39,9 @@ _NON_ACTIONABLE_ISSUE_CATEGORIES = {"auto_handled"}
 def status_label_for_plan(plan: Any) -> str:
     status = str(getattr(plan, "status", "") or "")
     if status == REVERSE_FILL_STATUS_FALLBACK and bool(getattr(plan, "fallback_resolved", False)):
-        return "🟢 已处理"
+        return "已处理"
     if status == REVERSE_FILL_STATUS_FALLBACK and bool(getattr(plan, "fallback_ready", False)):
-        return "🟡 可回退"
+        return "可回退"
     return _STATUS_LABELS.get(status, status)
 
 
@@ -104,7 +104,7 @@ def build_plan_rows(spec: ReverseFillSpec) -> list[list[str]]:
             [
                 "全局",
                 str(issue.category or "全局"),
-                "🔴 不支持",
+                "不支持",
                 "无",
                 str(issue.reason or ""),
                 str(issue.suggestion or ""),

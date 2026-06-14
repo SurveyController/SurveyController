@@ -176,7 +176,6 @@ class ConfigCodecTests:
         assert cfg.timed_mode_interval == 3.0
         assert cfg.random_ip_enabled is True
         assert cfg.proxy_source == "custom"
-        assert cfg.random_ua_keys == ["pc_web"]
         assert cfg.random_ua_ratios == {"wechat": 33, "mobile": 33, "pc": 34}
         assert cfg.headless_mode is False
         assert cfg.reverse_fill_format == "auto"
@@ -187,10 +186,25 @@ class ConfigCodecTests:
         assert cfg.questions_info == []
         assert cfg.question_entries == []
 
-    def test_select_user_agent_from_ratios_handles_empty_unknown_and_valid_devices(self, monkeypatch) -> None:
-        assert _select_user_agent_from_ratios({"wechat": 0, "mobile": 0}) == (None, None)
+    def test_select_user_agent_from_ratios_handles_unknown_and_valid_devices(self, monkeypatch) -> None:
         monkeypatch.setattr("software.core.config.codec.random.choice", lambda values: values[0])
+        monkeypatch.setattr("software.core.config.codec.random.choices", lambda values, weights, k: [values[-1]])
         ua, label = _select_user_agent_from_ratios({"pc": 1})
         assert ua
         assert label
-        assert _select_user_agent_from_ratios({"unknown": 1}) == (None, None)
+        ua, label = _select_user_agent_from_ratios({"unknown": 1})
+        assert ua
+        assert label
+
+    def test_random_ua_keys_are_ignored_and_not_serialized(self) -> None:
+        cfg = normalize_runtime_config_payload(
+            {
+                "random_ua_enabled": True,
+                "random_ua_keys": ["pc_web"],
+                "random_ua_ratios": {"wechat": 20, "mobile": 30, "pc": 50},
+            }
+        )
+
+        assert not hasattr(cfg, "random_ua_keys")
+        assert cfg.random_ua_ratios == {"wechat": 20, "mobile": 30, "pc": 50}
+        assert "random_ua_keys" not in serialize_runtime_config(cfg)

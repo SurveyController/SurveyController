@@ -447,14 +447,14 @@ class IpUsagePage(ScrollArea):
     async def _claim_bonus_task(self) -> None:
         payload: dict[str, Any] = {
             "level": "success",
-            "message": "🎉恭喜发现彩蛋",
+            "message": "恭喜发现彩蛋",
             "play_confetti": True,
         }
         try:
             if not has_authenticated_session():
                 payload = {
                     "level": "info",
-                    "message": "🎉恭喜发现彩蛋，激活随机IP后可领取隐藏福利",
+                    "message": "恭喜发现彩蛋，激活随机IP后可领取隐藏福利",
                     "play_confetti": True,
                 }
             else:
@@ -465,13 +465,13 @@ class IpUsagePage(ScrollArea):
                 if claimed and bonus_quota > 0:
                     payload = {
                         "level": "success",
-                        "message": f"🎉恭喜发现彩蛋，额度+{format_quota_value(bonus_quota)}",
+                        "message": f"恭喜发现彩蛋，额度+{format_quota_value(bonus_quota)}",
                         "play_confetti": True,
                     }
                 elif claimed:
                     payload = {
                         "level": "success",
-                        "message": "🎉恭喜发现彩蛋，隐藏福利已到账",
+                        "message": "恭喜发现彩蛋，隐藏福利已到账",
                         "play_confetti": True,
                     }
                 elif detail in {"bonus_already_claimed", "easter_egg_already_claimed"}:
@@ -537,7 +537,7 @@ class IpUsagePage(ScrollArea):
     def _show_easter_egg_infobar(self, payload: Any = None):
         data = payload if isinstance(payload, dict) else {}
         level = str(data.get("level") or "success").strip().lower()
-        message = str(data.get("message") or "🎉恭喜发现彩蛋").strip()
+        message = str(data.get("message") or "恭喜发现彩蛋").strip()
         try:
             factory = {
                 "warning": InfoBar.warning,

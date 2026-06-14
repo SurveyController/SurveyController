@@ -29,6 +29,8 @@ from software.network.browser.async_owner_pool import AsyncBrowserOwnerPool, Asy
 from software.network.browser.runtime_async import BrowserDriver as AsyncBrowserDriver
 from software.network.browser.startup import BrowserStartupRuntimeError
 from software.network.proxy.pool import is_proxy_responsive_async
+from software.network.proxy.session import get_session_snapshot
+from software.network.submission_report import report_submission_result_async
 from software.network.session_policy import (
     _discard_unresponsive_proxy,
     _mark_proxy_temporarily_bad,
@@ -80,6 +82,7 @@ class AsyncSlotRunner:
         self.stop_policy = RunStopPolicy(config, state, gui_instance)
         self.submission_service = SubmissionService(config, state, self.stop_policy)
         self.proxy_address: Optional[str] = None
+        self.proxy_provider: str = "unknown"
         self._joint_pre_answer_timed_out = False
 
     def _update_status(self, status_text: str, *, running: bool = True) -> None:
@@ -265,7 +268,46 @@ class AsyncSlotRunner:
             self.state.release_proxy_in_use(self.slot_label)
             return None, None
         ua_value, _ = _select_user_agent_for_session(self.state)
+        self.proxy_provider = self._resolve_current_proxy_provider(proxy_address)
         return proxy_address, ua_value
+
+    def _resolve_current_proxy_provider(self, proxy_address: Optional[str]) -> str:
+        normalized = str(proxy_address or "").strip()
+        if not normalized:
+            return "unknown"
+        try:
+            with self.state.lock:
+                lease = self.state.proxy_in_use_by_thread.get(self.slot_label)
+                if lease is not None:
+                    source = str(getattr(lease, "source", "") or "").strip().lower()
+                    if source:
+                        return source
+        except Exception:
+            logging.info("读取当前代理来源失败", exc_info=True)
+        return "unknown"
+
+    def _report_submission_result(self, result: str) -> None:
+        if not bool(getattr(self.config, "random_proxy_ip_enabled", False)):
+            return
+        try:
+            snapshot = get_session_snapshot()
+            user_id = int(snapshot.get("user_id") or 0)
+        except Exception:
+            logging.info("读取随机IP会话失败，跳过提交结果上报", exc_info=True)
+            return
+        if user_id <= 0:
+            return
+        try:
+            asyncio.create_task(
+                report_submission_result_async(
+                    survey_url=str(getattr(self.config, "url", "") or ""),
+                    result=result,
+                    proxy_provider=self.proxy_provider,
+                    user_id=user_id,
+                )
+            )
+        except Exception:
+            logging.info("创建提交结果上报任务失败", exc_info=True)
 
     async def _open_session(self) -> Optional[AsyncBrowserSession]:
         if self.run_context.stop_requested():
@@ -307,6 +349,7 @@ class AsyncSlotRunner:
             except Exception:
                 logging.info("释放代理占用失败", exc_info=True)
         self.proxy_address = None
+        self.proxy_provider = "unknown"
 
     async def _load_survey_or_record_failure(self, session: AsyncBrowserSession) -> bool:
         if self.run_context.stop_requested():
@@ -585,6 +628,8 @@ class AsyncSlotRunner:
                     else self._finalize_without_submit()
                 )
                 if outcome.status == "success":
+                    if bool(getattr(self.config, "submit_enabled", True)):
+                        self._report_submission_result("success")
                     keep_session_open = not bool(getattr(self.config, "submit_enabled", True))
                     if bool(getattr(outcome, "should_rotate_proxy", False)):
                         await self._close_session(session)
@@ -604,20 +649,24 @@ class AsyncSlotRunner:
                     should_requeue_dispatch = False
                     break
                 else:
+                    self._report_submission_result("failed")
                     dispatch_delay_seconds = self._resolve_dispatch_delay_seconds()
                     if dispatch_delay_seconds > 0:
                         self._update_step("等待提交间隔")
             except AIRuntimeError as exc:
+                self._report_submission_result("failed")
                 if await self._handle_ai_runtime_error(exc):
                     should_requeue_dispatch = False
                     break
                 self._release_round_resources(requeue_reverse_fill=True)
             except ProxyConnectionError:
+                self._report_submission_result("failed")
                 if self._handle_proxy_connection_error(session):
                     should_requeue_dispatch = False
                     break
                 self._release_round_resources(requeue_reverse_fill=True)
             except BrowserStartupRuntimeError as exc:
+                self._report_submission_result("failed")
                 if self._handle_browser_startup_error(exc):
                     should_requeue_dispatch = False
                     break
@@ -626,6 +675,7 @@ class AsyncSlotRunner:
                 if self.run_context.stop_requested():
                     should_requeue_dispatch = False
                     break
+                self._report_submission_result("failed")
                 logging.exception("异步会话[%s]运行异常", self.slot_label)
                 if self.stop_policy.record_failure(
                     self.stop_proxy,

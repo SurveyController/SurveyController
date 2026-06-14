@@ -41,6 +41,40 @@ _ORDINAL_GROUPS = [
     ["完全没有", "较少", "一般", "较多", "非常多"],
 ]
 
+_ATTITUDE_NEGATIVE = {
+    "非常不同意": 0,
+    "很不同意": 0,
+    "完全不同意": 0,
+    "强烈不同意": 0,
+    "比较不同意": 1,
+    "较不同意": 1,
+    "不太同意": 1,
+    "不同意": 1,
+}
+_ATTITUDE_NEUTRAL = {
+    "一般": 2,
+    "中立": 2,
+    "中等": 2,
+    "不确定": 2,
+    "说不清": 2,
+    "无所谓": 2,
+}
+_ATTITUDE_POSITIVE = {
+    "比较同意": 3,
+    "较同意": 3,
+    "基本同意": 3,
+    "同意": 3,
+    "非常同意": 4,
+    "很同意": 4,
+    "完全同意": 4,
+    "强烈同意": 4,
+}
+_ATTITUDE_SCORE_BY_TEXT = {
+    **_ATTITUDE_NEGATIVE,
+    **_ATTITUDE_NEUTRAL,
+    **_ATTITUDE_POSITIVE,
+}
+
 
 def _normalize_option_text(value: object) -> str:
     text = str(value or "").strip()
@@ -95,6 +129,24 @@ def _match_text_group(texts: List[str]) -> Optional[List[int]]:
     return None
 
 
+def _match_attitude_scale(texts: List[str]) -> Optional[List[int]]:
+    if len(texts) < 2:
+        return None
+    scores: List[int] = []
+    for text in texts:
+        score = _ATTITUDE_SCORE_BY_TEXT.get(text)
+        if score is None:
+            return None
+        scores.append(score)
+    unique_scores = sorted(set(scores))
+    if len(unique_scores) != len(scores):
+        return None
+    if unique_scores != list(range(min(unique_scores), max(unique_scores) + 1)):
+        return None
+    score_offset = min(unique_scores)
+    return [score - score_offset for score in scores]
+
+
 def infer_ordinal_option_mapping(option_texts: Iterable[object]) -> Optional[OrdinalOptionMapping]:
     texts = [_normalize_option_text(item) for item in list(option_texts or [])]
     texts = [text for text in texts if text]
@@ -105,6 +157,7 @@ def infer_ordinal_option_mapping(option_texts: Iterable[object]) -> Optional[Ord
         _parse_numeric_options(texts)
         or _parse_chinese_numeric_options(texts)
         or _match_text_group(texts)
+        or _match_attitude_scale(texts)
     )
     if score_by_choice_index is None:
         return None

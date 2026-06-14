@@ -107,17 +107,36 @@ class ProxyApiProviderTests:
 
             async def fake_get(url: str, **_kwargs):
                 calls.append(url)
-                if url.endswith("num=2"):
-                    raise RuntimeError("first candidate failed")
                 return _Response('{"items": ["4.4.4.4:8000", "5.5.5.5:8000", "4.4.4.4:8000"]}')
 
             patch_attrs((provider.http_client, "aget", fake_get))
 
             leases = asyncio.run(provider.fetch_proxy_batch_async(expected_count=2))
 
-            assert calls == ["https://proxy.example/api?num=2", "https://proxy.example/api"]
+            assert calls == ["https://proxy.example/api"]
             assert [lease.address for lease in leases] == ["http://4.4.4.4:8000", "http://5.5.5.5:8000"]
             assert all(isinstance(lease, ProxyLease) for lease in leases)
+        finally:
+            proxy_source.set_proxy_source(original_source)
+            proxy_source.set_proxy_api_override(original_override)
+
+    def test_fetch_custom_proxy_batch_replaces_num_placeholder(self, patch_attrs) -> None:
+        original_source = proxy_source.get_proxy_source()
+        original_override = proxy_source.get_custom_proxy_api_override()
+        try:
+            proxy_source.set_proxy_source(proxy_source.PROXY_SOURCE_CUSTOM)
+            proxy_source.set_proxy_api_override("https://proxy.example/api?count={num}")
+            calls: list[str] = []
+
+            async def fake_get(url: str, **_kwargs):
+                calls.append(url)
+                return _Response('{"items": ["4.4.4.4:8000", "5.5.5.5:8000"]}')
+
+            patch_attrs((provider.http_client, "aget", fake_get))
+
+            asyncio.run(provider.fetch_proxy_batch_async(expected_count=2))
+
+            assert calls == ["https://proxy.example/api?count=2"]
         finally:
             proxy_source.set_proxy_source(original_source)
             proxy_source.set_proxy_api_override(original_override)

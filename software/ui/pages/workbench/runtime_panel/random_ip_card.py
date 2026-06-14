@@ -6,6 +6,7 @@ import logging
 from typing import Optional, cast
 
 from PySide6.QtCore import QObject, QThread, Qt, QStringListModel, Signal
+from PySide6.QtGui import QColor
 from PySide6.QtWidgets import QCompleter, QGraphicsEffect, QHBoxLayout, QVBoxLayout, QWidget
 from qfluentwidgets import (
     BodyLabel,
@@ -14,6 +15,7 @@ from qfluentwidgets import (
     ExpandGroupSettingCard,
     FluentIcon,
     HyperlinkButton,
+    InfoBadge,
     IndicatorPosition,
     IndeterminateProgressRing,
     InfoBarPosition,
@@ -226,8 +228,13 @@ class RandomIPSettingCard(ExpandGroupSettingCard):
         self.testApiSpinner = IndeterminateProgressRing(self.testBtnContainer)
         self.testApiSpinner.setFixedSize(20, 20)
         self.testApiSpinner.hide()
-        self.testApiStatus = BodyLabel("", self.testBtnContainer)
-        self.testApiStatus.setFixedWidth(20)
+        self.testApiStatus = InfoBadge.custom(
+            "",
+            QColor("#6b7280"),
+            QColor("#9ca3af"),
+            parent=self.testBtnContainer,
+        )
+        self.testApiStatus.setFixedWidth(36)
         self.testApiStatus.hide()
         for widget in (self.testApiBtn, self.testApiSpinner, self.testApiStatus):
             test_layout.addWidget(widget)
@@ -515,17 +522,14 @@ class RandomIPSettingCard(ExpandGroupSettingCard):
         self.testApiStatus.show()
         if success:
             if error:
-                self.testApiStatus.setText("⚠")
-                self.testApiStatus.setStyleSheet("color: orange; font-size: 16px; font-weight: bold;")
+                self.testApiStatus.setText("警告")
                 logging.warning("API检测成功但有警告: %s", error)
                 self._toast("warning", error, duration=5000)
             else:
-                self.testApiStatus.setText("✔")
-                self.testApiStatus.setStyleSheet("color: green; font-size: 16px; font-weight: bold;")
+                self.testApiStatus.setText("通过")
                 logging.info("API检测成功，获取到 %s 个代理", len(proxies))
         else:
-            self.testApiStatus.setText("✖")
-            self.testApiStatus.setStyleSheet("color: red; font-size: 16px; font-weight: bold;")
+            self.testApiStatus.setText("失败")
             logging.error("API检测失败: %s", error)
             self._toast("error", error, duration=5000)
 
