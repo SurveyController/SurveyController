@@ -187,7 +187,7 @@ class AboutPage(ScrollArea):
 
         license_layout = QHBoxLayout()
         license_layout.addWidget(BodyLabel("License：", self))
-        license_layout.addWidget(BodyLabel("AGPL-3.0 License", self))
+        license_layout.addWidget(BodyLabel("GPL-3.0 License", self))
         license_layout.addStretch(1)
         credit_layout.addLayout(license_layout)
 
@@ -203,11 +203,13 @@ class AboutPage(ScrollArea):
             "https://github.com/dAwn-Rebirth", "@dAwn-Rebirth", self
         )
         contributor5_link = HyperlinkButton("https://github.com/Moyuin-aka", "@Moyuin-aka", self)
+        contributor6_link = HyperlinkButton("https://github.com/qintaiyang", "@qintaiyang", self)
         contributors_layout.addWidget(contributor1_link)
         contributors_layout.addWidget(contributor2_link)
         contributors_layout.addWidget(contributor3_link)
         contributors_layout.addWidget(contributor4_link)
         contributors_layout.addWidget(contributor5_link)
+        contributors_layout.addWidget(contributor6_link)
         contributors_layout.addStretch(1)
         credit_layout.addLayout(contributors_layout)
 
