@@ -1,9 +1,8 @@
 from __future__ import annotations
 
 import ast
-import logging
 import re
-from typing import Any, Dict, List, Mapping, Optional, Tuple
+from typing import Any, Dict, List, Mapping, Optional, Sequence, Tuple
 
 from software.app.config import DEFAULT_USER_AGENT
 from software.providers.common import SURVEY_PROVIDER_CREDAMO
@@ -24,10 +23,12 @@ from .http_runtime import (
     _request_headers,
     _short_url_from_url,
 )
+from . import runtime as _runtime
+from . import runtime_dom as _runtime_dom
 
 _QUESTION_NUMBER_RE = re.compile(r"^\s*(?:Q|题目?)\s*(\d+)\b", re.IGNORECASE)
 _TYPE_ONLY_TITLE_RE = re.compile(r"^\s*\[[^\]]+\]\s*$")
-_LEADING_TYPE_TAG_RE = re.compile(r"^(?:(?:\[[^\]]+\]|【[^】]+】)\s*)+")
+_LEADING_TYPE_TAG_RE = re.compile(r"^\s*(?:(?:\[[^\]]+\]|【[^】]+】)\s*)+")
 _FORCE_SELECT_COMMAND_RE = re.compile(r"请(?:务必|一定|必须|直接)?\s*选(?:择)?")
 _FORCE_SELECT_INDEX_RE = re.compile(r"^第?\s*(\d{1,3})\s*(?:个|项|选项|分|星)?$")
 _FORCE_SELECT_SENTENCE_SPLIT_RE = re.compile(r"[。；;！？!\n\r]")
@@ -347,6 +348,164 @@ def _resolve_matrix_option_texts(raw: Dict[str, Any], option_texts: List[str]) -
     if option_texts and not all(_is_generic_matrix_option_text(text) for text in option_texts):
         return option_texts
     return option_texts
+
+
+async def _detect_navigation_action(page: Any) -> Optional[str]:
+    return await _runtime_dom._navigation_action(page)
+
+
+async def _question_roots(page: Any) -> List[Any]:
+    roots = await _runtime_dom._question_roots(page)
+    if roots:
+        return list(roots)
+    try:
+        return list(await page.query_selector_all(".question"))
+    except Exception:
+        return []
+
+
+async def _page_loading_snapshot(page: Any) -> Tuple[str, str]:
+    return await _runtime_dom._page_loading_snapshot(page)
+
+
+async def _retry_initial_question_load_if_needed(page: Any) -> List[Any]:
+    roots = await _question_roots(page)
+    if roots:
+        return roots
+    title, body_text = await _page_loading_snapshot(page)
+    if not _runtime_dom._looks_like_loading_shell(title, body_text):
+        return roots
+    await page.goto(page.url, wait_until="domcontentloaded", timeout=45000)
+    await page.wait_for_load_state("domcontentloaded", timeout=45000)
+    return await _question_roots(page)
+
+
+async def _extract_questions_from_current_page(page: Any, page_number: int) -> List[Dict[str, Any]]:
+    try:
+        payload = await page.evaluate(
+            r"""
+            () => []
+            """
+        )
+    except Exception:
+        payload = []
+    questions: List[Dict[str, Any]] = []
+    if not isinstance(payload, list):
+        return questions
+    for index, item in enumerate(payload, start=1):
+        if not isinstance(item, Mapping):
+            continue
+        normalized = _normalize_question(dict(item), fallback_num=index)
+        raw_page = item.get("page")
+        try:
+            normalized_page = max(1, int(raw_page if raw_page is not None else page_number or 1))
+        except Exception:
+            normalized_page = max(1, int(page_number or 1))
+        normalized["page"] = normalized_page
+        normalized["provider_page_id"] = str(normalized_page)
+        questions.append(normalized)
+    return questions
+
+
+def _question_dedupe_key(question: Mapping[str, Any]) -> str:
+    page_id = _normalize_text(question.get("provider_page_id") or question.get("page") or "")
+    question_id = _normalize_text(question.get("provider_question_id") or "")
+    question_num = _normalize_text(question.get("num") or "")
+    title = _normalize_text(question.get("title") or "")
+    return f"page:{page_id}|id:{question_id}|num:{question_num}|title:{title}"
+
+
+def _extract_page_signature(questions: Sequence[Mapping[str, Any]]) -> Tuple[Tuple[str, str], ...]:
+    signature: List[Tuple[str, str]] = []
+    for question in questions:
+        signature.append(
+            (
+                _normalize_text(question.get("provider_question_id") or ""),
+                _normalize_text(question.get("title") or ""),
+            )
+        )
+    return tuple(signature)
+
+
+def _append_unseen_questions(
+    target: List[Dict[str, Any]],
+    seen_keys: set[str],
+    questions: List[Dict[str, Any]],
+) -> int:
+    added = 0
+    for question in questions:
+        key = _question_dedupe_key(question)
+        if key in seen_keys:
+            continue
+        seen_keys.add(key)
+        target.append(question)
+        added += 1
+    return added
+
+
+async def _wait_for_dynamic_questions(page: Any, page_number: int, current: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    _ = page_number, current
+    return await _extract_questions_from_current_page(page, page_number=page_number)
+
+
+async def _prime_page_for_next(
+    page: Any,
+    questions: List[Dict[str, Any]],
+    primed_keys: Optional[set[str]] = None,
+) -> int:
+    roots = await _runtime._question_roots(page)
+    primed = primed_keys if primed_keys is not None else set()
+    answer_count = min(len(roots), len(questions))
+    answered = 0
+    for index in range(answer_count):
+        question = questions[index]
+        question_key = _question_dedupe_key(question)
+        if question_key in primed:
+            continue
+        provider_type = str(question.get("provider_type") or "").strip().lower()
+        option_count = max(1, int(question.get("options") or 0))
+        forced_option_index = question.get("forced_option_index")
+        weights = [0.0] * option_count
+        if provider_type == "scale":
+            selected_index = 0
+            if forced_option_index is not None:
+                try:
+                    selected_index = int(forced_option_index)
+                except Exception:
+                    selected_index = 0
+            selected_index = min(max(selected_index, 0), option_count - 1)
+            weights[selected_index] = 100.0
+            if await _runtime._answer_scale(page, roots[index], weights):
+                primed.add(question_key)
+                answered += 1
+            continue
+        if provider_type == "matrix":
+            weights[0] = 100.0
+            if await _runtime._answer_matrix(page, roots[index], weights):
+                primed.add(question_key)
+                answered += 1
+    return answered
+
+
+async def _collect_current_page_until_stable(page: Any, page_number: int) -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]]]:
+    current = await _extract_questions_from_current_page(page, page_number=page_number)
+    discovered: List[Dict[str, Any]] = []
+    seen_keys: set[str] = set()
+    _append_unseen_questions(discovered, seen_keys, current)
+    primed_keys: set[str] = set()
+    previous_signature = _extract_page_signature(current)
+    while True:
+        await _prime_page_for_next(page, current, primed_keys=primed_keys)
+        revealed = await _wait_for_dynamic_questions(page, page_number, current)
+        merged = list(current)
+        _append_unseen_questions(merged, set(_question_dedupe_key(item) for item in current), revealed)
+        current = merged
+        _append_unseen_questions(discovered, seen_keys, revealed)
+        current_signature = _extract_page_signature(current)
+        if current_signature == previous_signature:
+            break
+        previous_signature = current_signature
+    return current, discovered
 
 
 def _normalize_question(raw: Dict[str, Any], fallback_num: int) -> Dict[str, Any]:

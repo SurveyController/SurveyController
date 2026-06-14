@@ -111,10 +111,13 @@ async def _apply_forced_single_choice_to_action(page: Any, root: Any, action: An
         return action
 
     forced_index = getattr(question_meta, "forced_option_index", None)
-    try:
-        normalized_forced_index = int(forced_index)
-    except Exception:
+    if forced_index is None:
         normalized_forced_index = -1
+    else:
+        try:
+            normalized_forced_index = int(forced_index)
+        except Exception:
+            normalized_forced_index = -1
     if normalized_forced_index < 0 or normalized_forced_index >= len(option_texts):
         resolved_forced_index = await _resolve_forced_choice_index(page, root, option_texts)
         if resolved_forced_index is None:

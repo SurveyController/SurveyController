@@ -699,7 +699,6 @@ def _sample_duration_seconds(config: ExecutionConfig) -> float:
         sampled = sample_answer_duration_seconds(
             config.answer_duration_range_seconds,
             survey_provider="credamo",
-            default_unconfigured_seconds=90,
         )
     except Exception:
         sampled = 0.0
