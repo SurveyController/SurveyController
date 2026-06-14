@@ -7,6 +7,7 @@
 .ruff_cache/
 .venv/
 /output/
+.uv-cache/
 .coverage
 coverage.xml
 desktop.ini
