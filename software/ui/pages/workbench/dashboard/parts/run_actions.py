@@ -3,13 +3,22 @@
 from __future__ import annotations
 
 import logging
+import math
 from typing import TYPE_CHECKING, Any
+
+from PySide6.QtGui import QColor
 
 from software.app.config import HEADLESS_MAX_THREADS, NON_HEADLESS_MAX_THREADS
 from software.logging.action_logger import log_action
 from software.logging.log_utils import log_suppressed_exception
 from software.io.config import RuntimeConfig
-from software.providers.common import detect_survey_provider
+from software.providers.common import (
+    SURVEY_PROVIDER_CREDAMO,
+    SURVEY_PROVIDER_QQ,
+    SURVEY_PROVIDER_WJX,
+    detect_survey_provider,
+    normalize_survey_provider,
+)
 from software.ui.helpers.proxy_access import apply_proxy_source_settings
 from software.ui.pages.workbench.runtime_panel.proxy_source import (
     PROXY_SOURCE_CUSTOM as _PROXY_SOURCE_CUSTOM,
@@ -34,6 +43,7 @@ class DashboardRunActionsMixin:
         progress_pct: Any
         status_label: Any
         count_label: Any
+        platform_badge: Any
         title_label: Any
         url_edit: Any
         _survey_title: str
@@ -52,6 +62,12 @@ class DashboardRunActionsMixin:
         def _refresh_ip_cost_infobar(self) -> None: ...
         def _sync_random_ip_toggle_presentation(self, enabled: bool) -> None: ...
         def window(self) -> Any: ...
+
+    _PROVIDER_BADGES = {
+        SURVEY_PROVIDER_WJX: ("问卷星", "#d18a00"),
+        SURVEY_PROVIDER_QQ: ("腾讯问卷", "#008b8b"),
+        SURVEY_PROVIDER_CREDAMO: ("见数", "#1f4f99"),
+    }
 
     def _on_start_clicked(
         self,
@@ -82,9 +98,47 @@ class DashboardRunActionsMixin:
         self.count_label.setText(f"{count} 题")
         self.title_label.setText(title or "已配置的题目")
         self._survey_title = title or ""
+        self._refresh_platform_badge()
         self._refresh_entry_table()
         self._sync_start_button_state()
         self._refresh_ip_cost_infobar()
+
+    def _current_survey_provider(self) -> str:
+        runtime_state_getter = getattr(self.controller, "get_runtime_ui_state", None)
+        raw_runtime_state = runtime_state_getter() if callable(runtime_state_getter) else {}
+        runtime_state = raw_runtime_state if isinstance(raw_runtime_state, dict) else {}
+        provider = (
+            runtime_state.get("survey_provider")
+            or getattr(self.controller, "survey_provider", "")
+            or getattr(getattr(self.controller, "config", None), "survey_provider", "")
+            or detect_survey_provider(self.url_edit.text().strip(), default=SURVEY_PROVIDER_WJX)
+        )
+        return normalize_survey_provider(provider, default=SURVEY_PROVIDER_WJX)
+
+    def _refresh_platform_badge(self) -> None:
+        badge = getattr(self, "platform_badge", None)
+        if badge is None:
+            return
+        title = str(getattr(self, "_survey_title", "") or "").strip()
+        if not title:
+            badge.hide()
+            return
+        label, background_color = self._PROVIDER_BADGES.get(
+            self._current_survey_provider(),
+            self._PROVIDER_BADGES[SURVEY_PROVIDER_WJX],
+        )
+        badge.setText(label)
+        if hasattr(badge, "setCustomBackgroundColor"):
+            badge.setCustomBackgroundColor(QColor(background_color), QColor(background_color))
+        badge.setMinimumSize(0, 0)
+        badge.setMaximumSize(16777215, 16777215)
+        badge.adjustSize()
+        native_size = badge.sizeHint()
+        badge.setFixedSize(
+            math.ceil(native_size.width() * 1.2),
+            math.ceil(native_size.height() * 1.2),
+        )
+        badge.show()
 
     @staticmethod
     def _normalize_proxy_source(source: str) -> str:

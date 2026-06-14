@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from types import SimpleNamespace
 from unittest.mock import MagicMock
+from PySide6.QtCore import QSize
 from PySide6.QtWidgets import QTableWidget
 
 import software.ui.pages.workbench.dashboard.parts.entries as entries_module
@@ -18,6 +19,40 @@ from software.ui.pages.workbench.dashboard.parts.entries import (
     question_summary,
 )
 from software.ui.pages.workbench.dashboard.parts.run_actions import DashboardRunActionsMixin
+
+
+class _FakeBadge:
+    def __init__(self) -> None:
+        self.text_value = ""
+        self.visible = False
+        self.fixed_size = QSize()
+
+    def setText(self, value: str) -> None:
+        self.text_value = str(value)
+
+    def setCustomBackgroundColor(self, *_args) -> None:
+        return None
+
+    def setMinimumSize(self, *_args) -> None:
+        return None
+
+    def setMaximumSize(self, *_args) -> None:
+        return None
+
+    def adjustSize(self) -> None:
+        return None
+
+    def sizeHint(self) -> QSize:
+        return QSize(48, 22)
+
+    def setFixedSize(self, width: int, height: int) -> None:
+        self.fixed_size = QSize(width, height)
+
+    def show(self) -> None:
+        self.visible = True
+
+    def hide(self) -> None:
+        self.visible = False
 
 
 class _EntriesPage(DashboardEntriesMixin, DashboardRunActionsMixin):
@@ -348,3 +383,19 @@ def test_run_question_wizard_and_run_actions(monkeypatch, qtbot) -> None:
     page._go_to_runtime_answer_duration()
     assert page._window.switched == "runtime"
     page.runtime_page.focus_answer_duration_setting.assert_called_once()
+
+
+def test_update_question_meta_refreshes_platform_badge(qtbot) -> None:
+    page = _EntriesPage()
+    qtbot.addWidget(page.entry_table)
+    page.platform_badge = _FakeBadge()
+
+    page.update_question_meta("", 0)
+    assert page.platform_badge.visible is False
+
+    page.controller.survey_provider = "qq"
+    page.update_question_meta("腾讯问卷标题", 3)
+
+    assert page.platform_badge.visible is True
+    assert page.platform_badge.text_value == "腾讯问卷"
+    assert page.platform_badge.fixed_size.width() > 48
