@@ -2,26 +2,17 @@
 
 from __future__ import annotations
 
+import asyncio
+import logging
 from typing import Any, Dict, List, Optional, Tuple
 
 import software.network.http as http_client
 from software.app.config import DEFAULT_HTTP_HEADERS
-from software.network.browser import (
-    describe_playwright_startup_error,
-    is_playwright_startup_environment_error,
-)
-from software.network.browser.parse_pool import acquire_parse_browser_session
 from software.providers.errors import (
     SurveyEnterpriseUnavailableError,
     SurveyNotOpenError,
     SurveyPausedError,
     SurveyStoppedError,
-)
-from software.providers.parse_flow import (
-    build_http_browser_failure_message,
-    exception_has_winerror as _exception_has_winerror_common,
-    parse_with_http_browser_fallback,
-    walk_exception_chain as _walk_exception_chain_common,
 )
 from wjx.provider.html_parser import (
     _normalize_html_text,
@@ -36,6 +27,9 @@ PAUSED_SURVEY_ERROR_MESSAGE = "问卷已暂停，需要前往问卷星后台重�
 STOPPED_SURVEY_ERROR_MESSAGE = "问卷已停止，无法作答"
 ENTERPRISE_UNAVAILABLE_SURVEY_ERROR_MESSAGE = "问卷发布者企业标准版未购买或已到期，暂时不能填写"
 NOT_OPEN_SURVEY_ERROR_MESSAGE = "该问卷暂未开放，无法解析"
+_PAGE_SUMMARY_MAX_LENGTH = 120
+_PARSE_RETRY_ATTEMPTS = 3
+_PARSE_RETRY_DELAY_SECONDS = 0.35
 
 
 def _format_not_open_time(match) -> str:
@@ -52,25 +46,6 @@ def _format_not_open_time(match) -> str:
         return f"{year:04d}-{month:02d}-{day:02d} {hour:02d}:{minute:02d}"
     except Exception:
         return ""
-
-
-
-def _walk_exception_chain(exc: BaseException):
-    return _walk_exception_chain_common(exc)
-
-
-def _exception_has_winerror_10013(exc: BaseException) -> bool:
-    return _exception_has_winerror_common(exc, winerror=10013)
-
-
-def _build_parser_failure_message(http_exc: Optional[BaseException], browser_exc: Optional[BaseException]) -> str:
-    return build_http_browser_failure_message(
-        http_exc=http_exc,
-        browser_exc=browser_exc,
-        browser_environment_error_checker=is_playwright_startup_environment_error,
-        browser_environment_error_formatter=describe_playwright_startup_error,
-    )
-
 
 def is_paused_survey_page(html: str) -> bool:
     """检测页面是否为"问卷已暂停，不能填写"提示页。"""
@@ -188,51 +163,39 @@ def _parse_wjx_html(html: str) -> Tuple[List[Dict[str, Any]], str]:
     return parse_survey_questions_from_html(html), extract_survey_title_from_html(html) or ""
 
 
-async def _load_rendered_wjx_parse_result(url: str) -> Tuple[List[Dict[str, Any]], str]:
-    async with acquire_parse_browser_session() as driver:
-        await driver.get(url, timeout=20000, wait_until="domcontentloaded")
-        page = await driver.page()
-        if page is not None:
-            selector_seen = True
-            try:
-                await page.wait_for_selector("#divQuestion, div[topic], fieldset", state="attached", timeout=6000)
-            except Exception:
-                selector_seen = False
-                try:
-                    await page.wait_for_load_state("networkidle", timeout=2000)
-                except Exception:
-                    pass
-            if selector_seen:
-                try:
-                    await page.wait_for_load_state("networkidle", timeout=1000)
-                except Exception:
-                    pass
-        page_source = await driver.page_source()
-        return _parse_wjx_html(page_source)
+def _build_unparseable_page_summary(html: str) -> str:
+    text = _normalize_html_text(html)
+    if not text:
+        return "页面为空"
+    if len(text) <= _PAGE_SUMMARY_MAX_LENGTH:
+        return text
+    return f"{text[:_PAGE_SUMMARY_MAX_LENGTH]}..."
 
 
 async def parse_wjx_survey(url: str) -> Tuple[List[Dict[str, Any]], str]:
-    async def _load_http_parse_result() -> Tuple[List[Dict[str, Any]], str]:
-        resp = await http_client.aget(url, timeout=12, headers=DEFAULT_HTTP_HEADERS, proxies={})
-        resp.raise_for_status()
-        return _parse_wjx_html(resp.text)
-
-    info, title = await parse_with_http_browser_fallback(
-        url=url,
-        http_loader=_load_http_parse_result,
-        browser_loader=lambda: _load_rendered_wjx_parse_result(url),
-        failure_message_builder=_build_parser_failure_message,
-        http_log_message="使用 httpx 获取问卷失败，url=%r",
-        browser_log_message="使用 Playwright 获取问卷失败，url=%r",
-        reraised_exceptions=(
-            SurveyPausedError,
-            SurveyStoppedError,
-            SurveyEnterpriseUnavailableError,
-            SurveyNotOpenError,
-        ),
-        should_fallback=lambda result: result is None or result[0] is None,
-        is_invalid_result=lambda result: result is None or not result[0],
-    )
+    last_empty_summary = ""
+    for attempt in range(1, _PARSE_RETRY_ATTEMPTS + 1):
+        try:
+            resp = await http_client.aget(url, timeout=12, headers=DEFAULT_HTTP_HEADERS, proxies={})
+        except Exception as exc:
+            logging.exception("使用 httpx 获取问卷失败，url=%r", url)
+            message = str(exc).strip() or exc.__class__.__name__
+            raise RuntimeError(f"无法获取问卷网页：{message}") from exc
+        try:
+            resp.raise_for_status()
+        except Exception as exc:
+            logging.exception("使用 httpx 获取问卷失败，url=%r", url)
+            message = str(exc).strip() or exc.__class__.__name__
+            raise RuntimeError(f"无法获取问卷网页：{message}") from exc
+        info, title = _parse_wjx_html(resp.text)
+        if info:
+            break
+        last_empty_summary = _build_unparseable_page_summary(resp.text)
+        if attempt < _PARSE_RETRY_ATTEMPTS:
+            logging.info("问卷星 HTTP 页面未解析到题目，准备重试：attempt=%s url=%r", attempt, url)
+            await asyncio.sleep(_PARSE_RETRY_DELAY_SECONDS)
+    else:
+        raise RuntimeError(f"无法打开问卷链接，HTTP 页面未返回可解析题目：{last_empty_summary}")
     normalized_title = _normalize_html_text(title) if title else ""
     return info, normalized_title
 

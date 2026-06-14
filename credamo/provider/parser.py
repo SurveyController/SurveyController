@@ -6,12 +6,27 @@ import ast
 import logging
 import re
 import time
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Mapping, Optional, Tuple
 
-from software.app.config import DEFAULT_FILL_TEXT
-from software.network.browser.parse_pool import acquire_parse_browser_session
+from software.app.config import DEFAULT_FILL_TEXT, DEFAULT_USER_AGENT
 from software.providers.common import SURVEY_PROVIDER_CREDAMO
-from software.providers.contracts import LOGIC_PARSE_STATUS_UNKNOWN
+from software.providers.contracts import LOGIC_PARSE_STATUS_NONE
+
+from .http_runtime import (
+    _CredamoHttpSession,
+    _as_mapping_list,
+    _fetch_detail,
+    _iter_raw_questions,
+    _noauth_short_url,
+    _origin_from_url,
+    _raw_option_count,
+    _raw_provider_type,
+    _raw_question_num,
+    _raw_question_type,
+    _raw_row_count,
+    _request_headers,
+    _short_url_from_url,
+)
 
 _QUESTION_NUMBER_RE = re.compile(r"^\s*(?:Q|题目?)\s*(\d+)\b", re.IGNORECASE)
 _TYPE_ONLY_TITLE_RE = re.compile(r"^\s*\[[^\]]+\]\s*$")
@@ -652,7 +667,7 @@ def _normalize_question(raw: Dict[str, Any], fallback_num: int) -> Dict[str, Any
         "display_conditions": [],
         "has_dependent_display_logic": False,
         "controls_display_targets": [],
-        "logic_parse_status": LOGIC_PARSE_STATUS_UNKNOWN,
+        "logic_parse_status": LOGIC_PARSE_STATUS_NONE,
         "question_media": list(raw.get("question_media") or []),
         "required": bool(raw.get("required")),
         "text_inputs": text_inputs,
@@ -1203,69 +1218,138 @@ async def _collect_current_page_until_stable(page: Any, *, page_number: int) -> 
     return current_questions, discovered_questions
 
 
+def _first_text(raw: Mapping[str, Any], *keys: str) -> str:
+    for key in keys:
+        text = _normalize_text(raw.get(key))
+        if text:
+            return text
+    return ""
+
+
+def _item_texts(items: list[Mapping[str, Any]], *keys: str) -> list[str]:
+    result: list[str] = []
+    for item in items:
+        text = _first_text(item, *keys)
+        if text:
+            result.append(text)
+    return result
+
+
+def _payload_contains_choice_fill(value: Any, *, depth: int = 0) -> bool:
+    if depth > 4 or value is None:
+        return False
+    if isinstance(value, Mapping):
+        for key, item in value.items():
+            key_text = str(key or "").strip().lower()
+            if any(marker in key_text for marker in ("fill", "blank", "input", "other")):
+                if item not in (None, "", [], {}, False):
+                    return True
+            if _payload_contains_choice_fill(item, depth=depth + 1):
+                return True
+        return False
+    if isinstance(value, (list, tuple, set)):
+        return any(_payload_contains_choice_fill(item, depth=depth + 1) for item in value)
+    return False
+
+
+def _fillable_choice_indices(choices: list[Mapping[str, Any]]) -> list[int]:
+    fillable: list[int] = []
+    for index, choice in enumerate(choices):
+        if _payload_contains_choice_fill(choice):
+            fillable.append(index)
+    return fillable
+
+
+def _raw_to_normalized_input(raw_question: Mapping[str, Any], *, fallback_num: int) -> Dict[str, Any]:
+    provider_type = _raw_provider_type(raw_question)
+    question_num = _raw_question_num(raw_question, fallback_num)
+    qst_no = _first_text(raw_question, "qstNo", "questionNo", "qstNum", "sortNo") or f"Q{question_num}"
+    title_text = _first_text(
+        raw_question,
+        "qstTitle",
+        "qstName",
+        "questionTitle",
+        "questionName",
+        "title",
+        "name",
+        "content",
+        "display",
+    )
+    full_title = _normalize_text(f"{qst_no} {title_text}") if title_text and not title_text.startswith(qst_no) else title_text or qst_no
+    choices = _as_mapping_list(raw_question.get("choices"))
+    answers = _as_mapping_list(raw_question.get("answers"))
+    question_type = _raw_question_type(raw_question)
+    option_texts = _item_texts(
+        answers if question_type == 4 else choices,
+        "display",
+        "answerContent",
+        "choiceContent",
+        "choiceTitle",
+        "answerTitle",
+        "content",
+        "text",
+        "title",
+        "name",
+    )
+    row_texts = _item_texts(
+        choices if question_type == 4 else [],
+        "display",
+        "choiceContent",
+        "choiceTitle",
+        "content",
+        "text",
+        "title",
+        "name",
+    )
+    if not option_texts:
+        option_texts = [f"选项 {index + 1}" for index in range(_raw_option_count(raw_question))]
+    if question_type == 4 and not row_texts:
+        row_texts = [f"第 {index + 1} 行" for index in range(_raw_row_count(raw_question))]
+    text_inputs = 1 if question_type == 1 else 0
+    question_id = _first_text(raw_question, "questionId", "qstId", "id") or str(question_num)
+    return {
+        "question_num": qst_no,
+        "title": full_title,
+        "title_full_text": full_title,
+        "title_text": title_text,
+        "tip_text": _first_text(raw_question, "tip", "tips", "remark", "description"),
+        "question_kind": provider_type,
+        "provider_type": provider_type,
+        "option_texts": option_texts,
+        "fillable_options": _fillable_choice_indices(choices) if question_type == 2 else [],
+        "matrix_column_texts": option_texts if question_type == 4 else [],
+        "row_texts": row_texts,
+        "text_inputs": text_inputs,
+        "page": raw_question.get("page") or raw_question.get("pageNo") or 1,
+        "question_id": question_id,
+        "required": bool(raw_question.get("required") or raw_question.get("mustAnswer")),
+    }
+
+
+def _survey_title(detail_data: Mapping[str, Any]) -> str:
+    title = _first_text(detail_data, "surveyTitle", "title", "name", "projectName")
+    if title:
+        return title
+    survey = detail_data.get("survey")
+    if isinstance(survey, Mapping):
+        title = _first_text(survey, "surveyTitle", "title", "name")
+        if title:
+            return title
+    return "Credamo 见数问卷"
+
+
 async def parse_credamo_survey(url: str) -> Tuple[List[Dict[str, Any]], str]:
-    async with acquire_parse_browser_session() as driver:
-        await driver.get(url, timeout=45000, wait_until="domcontentloaded")
-        page = await driver.page()
-        try:
-            await page.wait_for_load_state("networkidle", timeout=8000)
-        except Exception:
-            pass
-        await _retry_initial_question_load_if_needed(page)
-        questions: List[Dict[str, Any]] = []
-        seen_question_keys: set[str] = set()
-        title = _normalize_text(await page.title())
+    origin = _origin_from_url(url)
+    short_url = _noauth_short_url(_short_url_from_url(url))
+    headers = _request_headers(origin=origin, short_url=short_url, user_agent=DEFAULT_USER_AGENT)
+    async with _CredamoHttpSession() as session:
+        detail_data = await _fetch_detail(session, origin=origin, short_url=short_url, headers=headers)
 
-        for page_number in range(1, _MAX_PARSE_PAGES + 1):
-            current_questions, discovered_questions = await _collect_current_page_until_stable(page, page_number=page_number)
-            if not current_questions:
-                if page_number == 1 and not questions:
-                    recovered_questions = await _recover_initial_parse_questions(page)
-                    if recovered_questions:
-                        current_questions = list(recovered_questions)
-                        discovered_questions = list(recovered_questions)
-                if not current_questions and not questions:
-                    raise CredamoParseError("没有识别到 Credamo 题目，请确认链接已开放且无需登录")
-                if not current_questions:
-                    break
-
-            if not _page_has_answerable_questions(current_questions):
-                navigation_action = await _detect_navigation_action(page)
-                if navigation_action == "next":
-                    previous_signature = _extract_page_signature(current_questions)
-                    if await _click_navigation(page, "next") and await _wait_for_page_change(
-                        page,
-                        previous_signature,
-                        page_number=page_number + 1,
-                    ):
-                        continue
-                if not questions:
-                    raise CredamoParseError("没有识别到 Credamo 题目，请确认链接已开放且无需登录")
-                break
-
-            for question in discovered_questions:
-                question_key = _question_dedupe_key(question)
-                if question_key in seen_question_keys:
-                    continue
-                seen_question_keys.add(question_key)
-                questions.append(question)
-
-            navigation_action = await _detect_navigation_action(page)
-            if navigation_action != "next":
-                break
-
-            previous_signature = _extract_page_signature(current_questions)
-            if not await _click_navigation(page, "next"):
-                break
-            await _wait_for_page_change(page, previous_signature, page_number=page_number + 1)
-
-        if not questions:
-            raise CredamoParseError("没有识别到 Credamo 题目，请确认链接已开放且无需登录")
-        if not title:
-            try:
-                title = _normalize_text(
-                    await page.locator("h1, .title, [class*='title'], [class*='Title']").first.text_content(timeout=1000)
-                )
-            except Exception:
-                title = ""
-        return questions, title or "Credamo 见数问卷"
+    questions: List[Dict[str, Any]] = []
+    for index, raw_question in enumerate(_iter_raw_questions(detail_data), start=1):
+        normalized = _normalize_question(_raw_to_normalized_input(raw_question, fallback_num=index), fallback_num=index)
+        if _is_answerable_question(normalized):
+            questions.append(normalized)
+    if not questions:
+        raise CredamoParseError("见数详情接口未返回可解析题目，请确认链接为免登录问卷且已开放")
+    return questions, _survey_title(detail_data)
