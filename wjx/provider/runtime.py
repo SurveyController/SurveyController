@@ -249,6 +249,7 @@ async def refill_required_questions_on_current_page(
             question,
             ctx,
             psycho_plan=psycho_plan or runtime_state.psycho_plan,
+            thread_name=thread_name,
         )
         if answered:
             filled_count += 1
@@ -332,6 +333,7 @@ async def brush(
                     batch_candidates,
                     ctx,
                     psycho_plan=psycho_plan,
+                    thread_name=normalized_thread_name,
                 )
                 batch_applied = {int(item) for item in batch_result.applied}
 
@@ -367,7 +369,7 @@ async def brush(
             if question_num in batch_applied:
                 continue
 
-            await answer_question_by_meta(driver, question, ctx, psycho_plan=psycho_plan)
+            await answer_question_by_meta(driver, question, ctx, psycho_plan=psycho_plan, thread_name=normalized_thread_name)
 
             if bool(getattr(question, "has_jump", False)) or bool(getattr(question, "has_dependent_display_logic", False)):
                 snapshot = await _collect_visible_question_snapshot(driver)

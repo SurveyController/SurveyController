@@ -12,7 +12,7 @@ from .html_parser_choice import (
     _collect_select_option_texts,
     _question_div_has_shared_text_input,
 )
-from .html_parser_common import _cleanup_question_title, _normalize_html_text
+from .html_parser_common import _cleanup_question_title, _is_select_placeholder_option, _normalize_html_text
 from .html_parser_matrix import _collect_matrix_option_texts, _collect_slider_matrix_metadata, _question_div_looks_like_slider_matrix
 from .regexes import WJX_JUMP_TARGET_RE, WJX_RELATION_CHUNK_RE
 from software.providers.match_utils import normalize_match_text
@@ -180,39 +180,89 @@ def _extract_question_metadata_from_html(soup, question_div, question_number: in
         option_count = 1
     return option_texts, option_count, matrix_rows, row_texts, fillable_indices, multi_min_limit, multi_max_limit
 
+_JUMP_TERMINATE_KEYWORDS = ("结束作答", "结束答题", "结束填写", "终止作答", "停止作答")
+
+
+def _parse_jump_target(raw_value: Any) -> Optional[int]:
+    text_value = normalize_match_text(raw_value)
+    if not text_value:
+        return None
+    match = WJX_JUMP_TARGET_RE.fullmatch(text_value)
+    if not match:
+        return None
+    try:
+        return int(match.group("signed") or match.group("target") or "0")
+    except Exception:
+        return None
+
+
+def _jump_target_terminates(jumpto_num: Optional[int], option_text: Optional[str]) -> bool:
+    if jumpto_num in {1, -1}:
+        return True
+    normalized_text = _normalize_html_text(option_text or "")
+    return bool(normalized_text and any(keyword in normalized_text for keyword in _JUMP_TERMINATE_KEYWORDS))
+
+
 def _extract_jump_rules_from_html(question_div, question_number: int, option_texts: List[str]) -> Tuple[bool, List[Dict[str, Any]]]:
     """从静态 HTML 中提取跳题逻辑。"""
     _ = question_number
     has_jump_attr = str(question_div.get("hasjump") or "").strip() == "1"
     jump_rules: List[Dict[str, Any]] = []
-    option_idx = 0
-    inputs = question_div.find_all("input")
-    for input_el in inputs:
+    selectable_nodes: List[Any] = []
+    for input_el in question_div.find_all("input"):
         input_type = (input_el.get("type") or "").lower()
         if input_type not in ("radio", "checkbox"):
             continue
-        jumpto_raw = input_el.get("jumpto") or input_el.get("data-jumpto")
-        if not jumpto_raw:
-            option_idx += 1
+        selectable_nodes.append(input_el)
+    if not selectable_nodes:
+        for raw_option_idx, option_el in enumerate(question_div.find_all("option")):
+            option_text = _normalize_html_text(option_el.get_text(" ", strip=True))
+            option_value = str(option_el.get("value") or "").strip()
+            if _is_select_placeholder_option(raw_option_idx, option_value, option_text):
+                continue
+            selectable_nodes.append(option_el)
+
+    for option_idx, option_el in enumerate(selectable_nodes):
+        jumpto_raw = (
+            option_el.get("jumpto")
+            or option_el.get("data-jumpto")
+            or option_el.get("goto")
+            or option_el.get("data-goto")
+        )
+        if jumpto_raw is None:
             continue
-        text_value = normalize_match_text(jumpto_raw)
-        jumpto_num: Optional[int] = None
-        if text_value:
-            _jt_match = WJX_JUMP_TARGET_RE.fullmatch(text_value)
-            if _jt_match:
-                try:
-                    _jt = int(_jt_match.group("signed") or _jt_match.group("target") or "0")
-                    if _jt > 0:
-                        jumpto_num = _jt
-                except Exception:
-                    pass
-        if jumpto_num:
-            jump_rules.append({
-                "option_index": option_idx,
-                "jumpto": jumpto_num,
-                "option_text": option_texts[option_idx] if option_idx < len(option_texts) else None,
-            })
-        option_idx += 1
+        jumpto_num = _parse_jump_target(jumpto_raw)
+        option_text = option_texts[option_idx] if option_idx < len(option_texts) else None
+        if jumpto_num is not None and (jumpto_num > 0 or _jump_target_terminates(jumpto_num, option_text)):
+            jump_rules.append(
+                {
+                    "option_index": option_idx,
+                    "jumpto": jumpto_num,
+                    "option_text": option_text,
+                    "terminates_survey": _jump_target_terminates(jumpto_num, option_text),
+                }
+            )
+
+    if has_jump_attr and not jump_rules:
+        unconditional_target: Optional[int] = None
+        for attr_name in ("jumpto", "data-jumpto", "goto", "data-goto", "anyjump", "data-anyjump"):
+            unconditional_target = _parse_jump_target(question_div.get(attr_name))
+            if unconditional_target is not None:
+                break
+        if unconditional_target is not None and (
+            unconditional_target > 0 or _jump_target_terminates(unconditional_target, None)
+        ):
+            jump_rules.append(
+                {
+                    "option_index": -1,
+                    "jumpto": unconditional_target,
+                    "option_text": None,
+                    "terminates_survey": _jump_target_terminates(unconditional_target, None),
+                }
+            )
+    for rule in jump_rules:
+        if not bool(rule.get("terminates_survey")):
+            rule.pop("terminates_survey", None)
     return has_jump_attr or bool(jump_rules), jump_rules
 
 def _extract_display_conditions_from_html(question_div, question_number: int) -> Tuple[bool, List[Dict[str, Any]]]:

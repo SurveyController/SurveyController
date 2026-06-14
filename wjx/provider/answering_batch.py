@@ -46,6 +46,7 @@ async def answer_page_batch(
     ctx: ExecutionState,
     *,
     psycho_plan: Optional[Any],
+    thread_name: str = "",
 ) -> BatchFillResult:
     actions: list[AnswerAction] = []
     skipped: list[int] = []
@@ -64,7 +65,7 @@ async def answer_page_batch(
             if entry_type == "order":
                 order_questions.append(question)
                 continue
-        action = await build_answer_action(driver, question, ctx, psycho_plan=psycho_plan)
+        action = await build_answer_action(driver, question, ctx, psycho_plan=psycho_plan, thread_name=thread_name)
         if action is None:
             skipped.append(question_num)
             continue
@@ -82,7 +83,7 @@ async def answer_page_batch(
     for question in direct_questions:
         question_num = int(getattr(question, "num", 0) or 0)
         await _prepare_question_interaction(driver, question_num)
-        if await answer_question_by_meta(driver, question, ctx, psycho_plan=psycho_plan):
+        if await answer_question_by_meta(driver, question, ctx, psycho_plan=psycho_plan, thread_name=thread_name):
             direct_applied.append(question_num)
         else:
             direct_failed.append(question_num)
@@ -108,6 +109,7 @@ async def answer_question_by_meta(
     ctx: ExecutionState,
     *,
     psycho_plan: Optional[Any],
+    thread_name: str = "",
 ) -> bool:
     config_entry = ctx.config.question_config_index_map.get(int(question.num or 0))
     if not config_entry:
@@ -116,17 +118,17 @@ async def answer_question_by_meta(
     entry_type, config_index = config_entry
     await _prepare_question_interaction(driver, int(question.num or 0))
     if entry_type == "single":
-        return bool(await _answer_wjx_single(driver, question, config_index, ctx, psycho_plan=psycho_plan))
+        return bool(await _answer_wjx_single(driver, question, config_index, ctx, psycho_plan=psycho_plan, thread_name=thread_name))
     if entry_type == "multiple":
-        return bool(await _answer_wjx_multiple(driver, question, config_index, ctx))
+        return bool(await _answer_wjx_multiple(driver, question, config_index, ctx, thread_name=thread_name))
     if entry_type == "dropdown":
-        return bool(await _answer_wjx_dropdown(driver, question, config_index, ctx, psycho_plan=psycho_plan))
+        return bool(await _answer_wjx_dropdown(driver, question, config_index, ctx, psycho_plan=psycho_plan, thread_name=thread_name))
     if entry_type in {"text", "multi_text"}:
-        return bool(await _answer_wjx_text(driver, question, config_index, ctx))
+        return bool(await _answer_wjx_text(driver, question, config_index, ctx, thread_name=thread_name))
     if entry_type == "location":
         return bool(await _answer_wjx_location(driver, question, ctx))
     if entry_type == "matrix":
-        return bool(await _answer_wjx_matrix(driver, question, config_index, ctx, psycho_plan=psycho_plan))
+        return bool(await _answer_wjx_matrix(driver, question, config_index, ctx, psycho_plan=psycho_plan, thread_name=thread_name))
     if entry_type == "scale":
         return bool(
             await _answer_wjx_score_like(
@@ -136,6 +138,7 @@ async def answer_question_by_meta(
                 ctx,
                 psycho_plan=psycho_plan,
                 answer_type="scale",
+                thread_name=thread_name,
             )
         )
     if entry_type == "score":
@@ -147,6 +150,7 @@ async def answer_question_by_meta(
                 ctx,
                 psycho_plan=psycho_plan,
                 answer_type="score",
+                thread_name=thread_name,
             )
         )
     if entry_type == "slider":

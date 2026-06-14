@@ -23,6 +23,7 @@ from software.ui.pages.workbench.reverse_fill.logic import (
     iter_supported_drop_paths,
 )
 from software.ui.pages.workbench.shared.run_feedback import (
+    replace_feedback_progress_infobar,
     set_completion_notified,
     set_last_progress,
 )
@@ -198,6 +199,7 @@ def on_survey_parsed(page: Any, info: list, title: str) -> None:
     if not page._parse_requested_from_reverse_fill:
         return
     page._parse_requested_from_reverse_fill = False
+    replace_feedback_progress_infobar(page)
     parsed_info = ensure_survey_question_metas(info or [])
     unsupported_count = sum(1 for item in parsed_info if bool(item.unsupported))
     page._survey_title = str(title or "").strip()
@@ -227,6 +229,7 @@ def on_survey_parse_failed(page: Any, error_msg: str) -> None:
     if not page._parse_requested_from_reverse_fill:
         return
     page._parse_requested_from_reverse_fill = False
+    replace_feedback_progress_infobar(page)
     text = str(error_msg or "").strip() or "请确认链接有效且网络正常"
     if "问卷已停止" in text or "停止状态" in text:
         page._toast("问卷已停止，无法作答", "warning", duration=2200)

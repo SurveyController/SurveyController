@@ -46,6 +46,7 @@ from software.network.browser.runtime_async import BrowserDriver
 from software.providers.answering.selection import (
     coerce_positive_int as _coerce_positive_int,
 )
+from software.providers.answering.option_fill import default_missing_option_fill
 from software.providers.contracts import SurveyQuestionMeta
 from wjx.provider.questions.multiple_rules import _normalize_selected_indices
 
@@ -78,12 +79,13 @@ async def _answer_wjx_single(
     ctx: ExecutionState,
     *,
     psycho_plan: Optional[Any] = None,
+    thread_name: str = "",
 ) -> bool:
     config = ctx.config
     current = int(question.num or 0)
     option_texts = await _resolve_runtime_option_texts(driver, question)
     option_count = max(1, len(option_texts) or int(question.options or 0))
-    reverse_fill_answer = resolve_current_reverse_fill_answer(ctx, current)
+    reverse_fill_answer = resolve_current_reverse_fill_answer(ctx, current, thread_name=thread_name)
     forced_index: Optional[int] = None
     if reverse_fill_answer is not None and reverse_fill_answer.kind == REVERSE_FILL_KIND_CHOICE:
         try:
@@ -149,6 +151,7 @@ async def _answer_wjx_single(
         question_number=current,
         option_text=selected_text,
     )
+    fill_value = default_missing_option_fill(question, selected_index, fill_value)
     if fill_value and await _fill_choice_option_additional_text(
         driver,
         current,
@@ -171,12 +174,13 @@ async def _answer_wjx_dropdown(
     ctx: ExecutionState,
     *,
     psycho_plan: Optional[Any],
+    thread_name: str = "",
 ) -> bool:
     config = ctx.config
     current = int(question.num or 0)
     option_texts = await _resolve_runtime_option_texts(driver, question)
     option_count = max(1, len(option_texts) or int(question.options or 0))
-    reverse_fill_answer = resolve_current_reverse_fill_answer(ctx, current)
+    reverse_fill_answer = resolve_current_reverse_fill_answer(ctx, current, thread_name=thread_name)
     forced_index: Optional[int] = None
     if reverse_fill_answer is not None and reverse_fill_answer.kind == REVERSE_FILL_KIND_CHOICE:
         try:
@@ -240,6 +244,7 @@ async def _answer_wjx_dropdown(
         question_number=current,
         option_text=selected_text,
     )
+    fill_value = default_missing_option_fill(question, selected_index, fill_value)
     if fill_value and await _fill_choice_option_additional_text(
         driver,
         current,
@@ -260,11 +265,13 @@ async def _answer_wjx_text(
     question: SurveyQuestionMeta,
     config_index: int,
     ctx: ExecutionState,
+    *,
+    thread_name: str = "",
 ) -> bool:
     config = ctx.config
     current = int(question.num or 0)
     blank_count = max(1, int(question.text_inputs or 0))
-    reverse_fill_answer = resolve_current_reverse_fill_answer(ctx, current)
+    reverse_fill_answer = resolve_current_reverse_fill_answer(ctx, current, thread_name=thread_name)
 
     if reverse_fill_answer is not None and reverse_fill_answer.kind == REVERSE_FILL_KIND_MULTI_TEXT:
         text_values = [str(item or "").strip() or DEFAULT_FILL_TEXT for item in list(reverse_fill_answer.text_values or [])]
@@ -344,12 +351,13 @@ async def _answer_wjx_score_like(
     *,
     psycho_plan: Optional[Any],
     answer_type: str,
+    thread_name: str = "",
 ) -> bool:
     config = ctx.config
     current = int(question.num or 0)
     option_texts = await _resolve_runtime_option_texts(driver, question)
     option_count = max(2, len(option_texts) or int(question.options or 0))
-    reverse_fill_answer = resolve_current_reverse_fill_answer(ctx, current)
+    reverse_fill_answer = resolve_current_reverse_fill_answer(ctx, current, thread_name=thread_name)
     forced_index: Optional[int] = None
     if reverse_fill_answer is not None and reverse_fill_answer.kind == REVERSE_FILL_KIND_CHOICE:
         try:
@@ -402,6 +410,8 @@ async def _answer_wjx_multiple(
     question: SurveyQuestionMeta,
     config_index: int,
     ctx: ExecutionState,
+    *,
+    thread_name: str = "",
 ) -> bool:
     config = ctx.config
     current = int(question.num or 0)
@@ -422,13 +432,15 @@ async def _answer_wjx_multiple(
         for option_idx in selected_indices:
             if not await _click_choice_input(driver, current, "checkbox", option_idx):
                 continue
+            selected_text = option_texts[option_idx] if option_idx < len(option_texts) else ""
             fill_value = await resolve_runtime_option_fill_text_from_config(
                 fill_entries,
                 option_idx,
                 driver=driver,
                 question_number=current,
-                option_text=option_texts[option_idx] if option_idx < len(option_texts) else "",
+                option_text=selected_text,
             )
+            fill_value = default_missing_option_fill(question, option_idx, fill_value)
             if fill_value:
                 await _fill_choice_option_additional_text(
                     driver,
@@ -440,7 +452,7 @@ async def _answer_wjx_multiple(
             applied.append(option_idx)
         return applied
 
-    reverse_fill_answer = resolve_current_reverse_fill_answer(ctx, current)
+    reverse_fill_answer = resolve_current_reverse_fill_answer(ctx, current, thread_name=thread_name)
     if reverse_fill_answer is not None and reverse_fill_answer.kind == REVERSE_FILL_KIND_CHOICE:
         forced_index = reverse_fill_answer.choice_index
         if forced_index is not None:
@@ -561,12 +573,13 @@ async def _answer_wjx_matrix(
     ctx: ExecutionState,
     *,
     psycho_plan: Optional[Any],
+    thread_name: str = "",
 ) -> bool:
     config = ctx.config
     current = int(question.num or 0)
     row_count = max(1, int(question.rows or 1))
     option_count = max(2, len(question.option_texts or []) or int(question.options or 0))
-    reverse_fill_answer = resolve_current_reverse_fill_answer(ctx, current)
+    reverse_fill_answer = resolve_current_reverse_fill_answer(ctx, current, thread_name=thread_name)
     forced_indices: list[int] = []
     if reverse_fill_answer is not None and reverse_fill_answer.kind == REVERSE_FILL_KIND_MATRIX:
         forced_indices = [int(item) for item in list(reverse_fill_answer.matrix_choice_indexes or []) if int(item) >= 0]

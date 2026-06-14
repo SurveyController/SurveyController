@@ -4,6 +4,7 @@ from types import SimpleNamespace
 
 import pytest
 
+from software.app.config import DEFAULT_FILL_TEXT
 from wjx.provider import runtime_answerers
 from software.core.questions import runtime_async
 from software.core.questions.schema import _TEXT_RANDOM_MOBILE, _TEXT_RANDOM_INTEGER
@@ -395,6 +396,7 @@ class WjxRuntimeAnswerersTests:
 
         dispatch_ctx = _ctx(question_config_index_map={1: ("single", 0), 2: ("matrix", 0), 3: ("location", -1)})
         dispatch_record: list[str] = []
+        dispatch_threads: list[str] = []
 
         async def _prepare_question_interaction(*_args, **_kwargs):
             dispatch_record.append("prepare")
@@ -402,10 +404,12 @@ class WjxRuntimeAnswerersTests:
 
         async def _answer_single(*_args, **_kwargs):
             dispatch_record.append("single")
+            dispatch_threads.append(str(_kwargs.get("thread_name") or ""))
             return True
 
         async def _answer_matrix(*_args, **_kwargs):
             dispatch_record.append("matrix")
+            dispatch_threads.append(str(_kwargs.get("thread_name") or ""))
             return True
 
         async def _answer_location(*_args, **_kwargs):
@@ -417,11 +421,12 @@ class WjxRuntimeAnswerersTests:
         monkeypatch.setattr(runtime_answerers, "_answer_wjx_matrix", _answer_matrix)
         monkeypatch.setattr(runtime_answerers, "_answer_wjx_location", _answer_location)
 
-        assert await runtime_answerers.answer_question_by_meta(object(), _question(1), dispatch_ctx, psycho_plan=None) is True
-        assert await runtime_answerers.answer_question_by_meta(object(), _question(2), dispatch_ctx, psycho_plan=None) is True
+        assert await runtime_answerers.answer_question_by_meta(object(), _question(1), dispatch_ctx, psycho_plan=None, thread_name="Slot-3") is True
+        assert await runtime_answerers.answer_question_by_meta(object(), _question(2), dispatch_ctx, psycho_plan=None, thread_name="Slot-3") is True
         assert await runtime_answerers.answer_question_by_meta(object(), _question(3), dispatch_ctx, psycho_plan=None) is True
         assert await runtime_answerers.answer_question_by_meta(object(), _question(99), _ctx(), psycho_plan=None) is False
         assert dispatch_record == ["prepare", "single", "prepare", "matrix", "prepare", "location"]
+        assert dispatch_threads == ["Slot-3", "Slot-3"]
 
     @pytest.mark.asyncio
     async def test_answer_page_batch_records_applied_and_reports_failed(self, monkeypatch) -> None:
@@ -444,8 +449,9 @@ class WjxRuntimeAnswerersTests:
             ),
         }
 
-        async def _build(_driver, question, _ctx, *, psycho_plan):
+        async def _build(_driver, question, _ctx, *, psycho_plan, **_kwargs):
             assert psycho_plan == "plan"
+            assert _kwargs.get("thread_name") == "Slot-2"
             return actions[int(question.num)]
 
         async def _apply(_driver, answer_actions):
@@ -461,6 +467,7 @@ class WjxRuntimeAnswerersTests:
             [_question(1), _question(2)],
             ctx,
             psycho_plan="plan",
+            thread_name="Slot-2",
         )
 
         assert result.applied == (1,)
@@ -472,7 +479,7 @@ class WjxRuntimeAnswerersTests:
         ctx = _ctx(question_config_index_map={1: ("single", 0), 7: ("location", -1), 15: ("order", -1)})
         calls: list[tuple[str, object]] = []
 
-        async def _build(_driver, question, _ctx, *, psycho_plan):
+        async def _build(_driver, question, _ctx, *, psycho_plan, **_kwargs):
             del _ctx, psycho_plan
             calls.append(("build", int(question.num)))
             return runtime_answerers.AnswerAction(
@@ -492,7 +499,7 @@ class WjxRuntimeAnswerersTests:
             calls.append(("prepare", question_num))
             return True
 
-        async def _answer_by_meta(_driver, question, _ctx, *, psycho_plan):
+        async def _answer_by_meta(_driver, question, _ctx, *, psycho_plan, **_kwargs):
             del _ctx, psycho_plan
             calls.append(("direct", int(question.num)))
             return True
@@ -530,7 +537,7 @@ class WjxRuntimeAnswerersTests:
             calls.append(("prepare", question_num))
             return True
 
-        async def _answer_by_meta(_driver, question, _ctx, *, psycho_plan):
+        async def _answer_by_meta(_driver, question, _ctx, *, psycho_plan, **_kwargs):
             del _ctx, psycho_plan
             calls.append(("direct", int(question.num)))
             return False
@@ -776,6 +783,29 @@ class WjxRuntimeAnswerersTests:
             record_type="slider",
         )
         assert recorded_ai_prompts == ["标题\n补充说明：说明"]
+
+    @pytest.mark.asyncio
+    async def test_build_single_action_uses_default_fill_for_fillable_option(self, monkeypatch) -> None:
+        monkeypatch.setattr(runtime_answerers, "_resolve_runtime_option_texts", _async_result(["普通", "其他"]))
+        monkeypatch.setattr(runtime_answerers, "resolve_current_reverse_fill_answer", lambda *_args, **_kwargs: None)
+        monkeypatch.setattr(runtime_answerers, "resolve_runtime_option_fill_text_from_config", _async_result(None))
+
+        action = await runtime_answerers._build_wjx_single_action(
+            object(),
+            _question(1, forced_option_index=1, fillable_options=[1]),
+            0,
+            _ctx(),
+        )
+
+        assert action == runtime_answerers.AnswerAction(
+            question_num=1,
+            kind="choice",
+            input_type="radio",
+            selected_indices=(1,),
+            option_fill_texts=((1, DEFAULT_FILL_TEXT),),
+            selected_texts=(f"其他 / {DEFAULT_FILL_TEXT}",),
+            record_type="single",
+        )
 
 
 def _async_result(value):

@@ -68,8 +68,9 @@ class WjxRuntimeTests:
 
         monkeypatch.setattr(runtime, "_collect_visible_question_snapshot", _snapshot)
         monkeypatch.setattr(runtime, "_is_question_visible", _visible)
-        async def _answer(_driver, question, _ctx, *, psycho_plan):
+        async def _answer(_driver, question, _ctx, *, psycho_plan, **_kwargs):
             assert psycho_plan == "plan"
+            assert _kwargs.get("thread_name") == "Worker-1"
             calls.append(int(question.num))
             return int(question.num) == 1
 
@@ -118,8 +119,9 @@ class WjxRuntimeTests:
 
         monkeypatch.setattr(runtime, "_prepare_runtime_entry_gate", _gate)
         monkeypatch.setattr(runtime, "_resolve_page_snapshot", _snapshot)
-        async def _answer(_driver, question, _ctx, *, psycho_plan):
+        async def _answer(_driver, question, _ctx, *, psycho_plan, **_kwargs):
             assert psycho_plan == "plan"
+            assert _kwargs.get("thread_name") == "Worker-1"
             answered.append(int(question.num))
             return None
 

@@ -395,6 +395,32 @@ class WjxHtmlParserHelperTests:
             }
         ]
 
+    def test_jump_rules_include_dropdown_terminate_and_unconditional_jump(self) -> None:
+        dropdown_div = _soup(
+            """
+            <div hasjump="1">
+              <select>
+                <option value="">请选择</option>
+                <option jumpto="跳到第5题">继续</option>
+                <option data-jumpto="-1">结束作答</option>
+              </select>
+            </div>
+            """
+        ).div
+        unconditional_div = _soup("""<div hasjump="1" anyjump="12"></div>""").div
+
+        assert html_parser_rules._extract_jump_rules_from_html(dropdown_div, 4, ["继续", "结束作答"]) == (
+            True,
+            [
+                {"option_index": 0, "jumpto": 5, "option_text": "继续"},
+                {"option_index": 1, "jumpto": -1, "option_text": "结束作答", "terminates_survey": True},
+            ],
+        )
+        assert html_parser_rules._extract_jump_rules_from_html(unconditional_div, 5, []) == (
+            True,
+            [{"option_index": -1, "jumpto": 12, "option_text": None}],
+        )
+
     def test_attach_display_condition_metadata_dedupes_and_clears_empty_targets(self) -> None:
         questions = [
             {"num": 1, "display_conditions": [], "controls_display_targets": []},

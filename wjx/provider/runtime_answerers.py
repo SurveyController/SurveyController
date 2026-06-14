@@ -59,9 +59,10 @@ async def _answer_wjx_single(
     ctx: ExecutionState,
     *,
     psycho_plan: Optional[Any] = None,
+    thread_name: str = "",
 ) -> bool:
     _sync_patch_targets()
-    return await _direct._answer_wjx_single(driver, question, config_index, ctx, psycho_plan=psycho_plan)
+    return await _direct._answer_wjx_single(driver, question, config_index, ctx, psycho_plan=psycho_plan, thread_name=thread_name)
 
 
 async def _answer_wjx_dropdown(
@@ -71,9 +72,10 @@ async def _answer_wjx_dropdown(
     ctx: ExecutionState,
     *,
     psycho_plan: Optional[Any],
+    thread_name: str = "",
 ) -> bool:
     _sync_patch_targets()
-    return await _direct._answer_wjx_dropdown(driver, question, config_index, ctx, psycho_plan=psycho_plan)
+    return await _direct._answer_wjx_dropdown(driver, question, config_index, ctx, psycho_plan=psycho_plan, thread_name=thread_name)
 
 
 async def _answer_wjx_text(
@@ -81,9 +83,11 @@ async def _answer_wjx_text(
     question: SurveyQuestionMeta,
     config_index: int,
     ctx: ExecutionState,
+    *,
+    thread_name: str = "",
 ) -> bool:
     _sync_patch_targets()
-    return await _direct._answer_wjx_text(driver, question, config_index, ctx)
+    return await _direct._answer_wjx_text(driver, question, config_index, ctx, thread_name=thread_name)
 
 
 async def _answer_wjx_location(
@@ -103,6 +107,7 @@ async def _answer_wjx_score_like(
     *,
     psycho_plan: Optional[Any],
     answer_type: str,
+    thread_name: str = "",
 ) -> bool:
     _sync_patch_targets()
     return await _direct._answer_wjx_score_like(
@@ -112,6 +117,7 @@ async def _answer_wjx_score_like(
         ctx,
         psycho_plan=psycho_plan,
         answer_type=answer_type,
+        thread_name=thread_name,
     )
 
 
@@ -120,9 +126,11 @@ async def _answer_wjx_multiple(
     question: SurveyQuestionMeta,
     config_index: int,
     ctx: ExecutionState,
+    *,
+    thread_name: str = "",
 ) -> bool:
     _sync_patch_targets()
-    return await _direct._answer_wjx_multiple(driver, question, config_index, ctx)
+    return await _direct._answer_wjx_multiple(driver, question, config_index, ctx, thread_name=thread_name)
 
 
 async def _answer_wjx_matrix(
@@ -132,9 +140,10 @@ async def _answer_wjx_matrix(
     ctx: ExecutionState,
     *,
     psycho_plan: Optional[Any],
+    thread_name: str = "",
 ) -> bool:
     _sync_patch_targets()
-    return await _direct._answer_wjx_matrix(driver, question, config_index, ctx, psycho_plan=psycho_plan)
+    return await _direct._answer_wjx_matrix(driver, question, config_index, ctx, psycho_plan=psycho_plan, thread_name=thread_name)
 
 
 async def _answer_wjx_slider(
@@ -159,9 +168,10 @@ async def _build_wjx_single_action(
     ctx: ExecutionState,
     *,
     psycho_plan: Optional[Any] = None,
+    thread_name: str = "",
 ) -> Optional[AnswerAction]:
     _sync_patch_targets()
-    return await _builders._build_wjx_single_action(driver, question, config_index, ctx, psycho_plan=psycho_plan)
+    return await _builders._build_wjx_single_action(driver, question, config_index, ctx, psycho_plan=psycho_plan, thread_name=thread_name)
 
 
 async def _build_wjx_dropdown_action(
@@ -171,6 +181,7 @@ async def _build_wjx_dropdown_action(
     ctx: ExecutionState,
     *,
     psycho_plan: Optional[Any],
+    thread_name: str = "",
 ) -> Optional[AnswerAction]:
     _sync_patch_targets()
     return await _builders._build_wjx_dropdown_action(
@@ -179,6 +190,7 @@ async def _build_wjx_dropdown_action(
         config_index,
         ctx,
         psycho_plan=psycho_plan,
+        thread_name=thread_name,
     )
 
 
@@ -187,9 +199,11 @@ async def _build_wjx_text_action(
     question: SurveyQuestionMeta,
     config_index: int,
     ctx: ExecutionState,
+    *,
+    thread_name: str = "",
 ) -> Optional[AnswerAction]:
     _sync_patch_targets()
-    return await _builders._build_wjx_text_action(driver, question, config_index, ctx)
+    return await _builders._build_wjx_text_action(driver, question, config_index, ctx, thread_name=thread_name)
 
 
 async def _build_wjx_score_like_action(
@@ -200,6 +214,7 @@ async def _build_wjx_score_like_action(
     *,
     psycho_plan: Optional[Any],
     answer_type: str,
+    thread_name: str = "",
 ) -> Optional[AnswerAction]:
     _sync_patch_targets()
     return await _builders._build_wjx_score_like_action(
@@ -209,6 +224,7 @@ async def _build_wjx_score_like_action(
         ctx,
         psycho_plan=psycho_plan,
         answer_type=answer_type,
+        thread_name=thread_name,
     )
 
 
@@ -217,9 +233,11 @@ async def _build_wjx_multiple_action(
     question: SurveyQuestionMeta,
     config_index: int,
     ctx: ExecutionState,
+    *,
+    thread_name: str = "",
 ) -> Optional[AnswerAction]:
     _sync_patch_targets()
-    return await _builders._build_wjx_multiple_action(driver, question, config_index, ctx)
+    return await _builders._build_wjx_multiple_action(driver, question, config_index, ctx, thread_name=thread_name)
 
 
 async def _build_wjx_matrix_action(
@@ -228,6 +246,7 @@ async def _build_wjx_matrix_action(
     ctx: ExecutionState,
     *,
     psycho_plan: Optional[Any],
+    thread_name: str = "",
 ) -> Optional[AnswerAction]:
     _sync_patch_targets()
     return await _builders._build_wjx_matrix_action(
@@ -235,6 +254,7 @@ async def _build_wjx_matrix_action(
         config_index,
         ctx,
         psycho_plan=psycho_plan,
+        thread_name=thread_name,
     )
 
 
@@ -261,9 +281,10 @@ async def build_answer_action(
     ctx: ExecutionState,
     *,
     psycho_plan: Optional[Any],
+    thread_name: str = "",
 ) -> Optional[AnswerAction]:
     _sync_patch_targets()
-    return await _builders.build_answer_action(driver, question, ctx, psycho_plan=psycho_plan)
+    return await _builders.build_answer_action(driver, question, ctx, psycho_plan=psycho_plan, thread_name=thread_name)
 
 
 async def apply_answer_actions(
@@ -285,9 +306,10 @@ async def answer_page_batch(
     ctx: ExecutionState,
     *,
     psycho_plan: Optional[Any],
+    thread_name: str = "",
 ) -> BatchFillResult:
     _sync_patch_targets()
-    return await _batch.answer_page_batch(driver, questions, ctx, psycho_plan=psycho_plan)
+    return await _batch.answer_page_batch(driver, questions, ctx, psycho_plan=psycho_plan, thread_name=thread_name)
 
 
 async def answer_question_by_meta(
@@ -296,9 +318,10 @@ async def answer_question_by_meta(
     ctx: ExecutionState,
     *,
     psycho_plan: Optional[Any],
+    thread_name: str = "",
 ) -> bool:
     _sync_patch_targets()
-    return await _batch.answer_question_by_meta(driver, question, ctx, psycho_plan=psycho_plan)
+    return await _batch.answer_question_by_meta(driver, question, ctx, psycho_plan=psycho_plan, thread_name=thread_name)
 
 
 for _name in [

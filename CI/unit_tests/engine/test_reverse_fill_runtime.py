@@ -83,7 +83,13 @@ class ReverseFillRuntimeStateTests:
 
             def get_reverse_fill_answer(self, _question_num: int) -> ReverseFillAnswer:
                 raise RuntimeError('boom')
+        class _ThreadCtx:
+
+            def get_reverse_fill_answer(self, _question_num: int, thread_name: str = "") -> ReverseFillAnswer:
+                assert thread_name == "Slot-2"
+                return expected
         assert resolve_current_reverse_fill_answer(_ValidCtx(), 1) is expected
+        assert resolve_current_reverse_fill_answer(_ThreadCtx(), 1, thread_name="Slot-2") is expected
         assert resolve_current_reverse_fill_answer(_BadValueCtx(), 1) is None
         assert resolve_current_reverse_fill_answer(_ErrorCtx(), 1) is None
         assert resolve_current_reverse_fill_answer(object(), 1) is None
