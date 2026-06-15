@@ -267,7 +267,6 @@ def on_send_finished(form: Any, success: bool, error_msg: str) -> None:
     form._cleanup_pending_temp_files()
 
     if success:
-        current_type = getattr(form, "_current_message_type", "")
         msg = "消息已发送"
         if getattr(form, "_current_has_email", False):
             msg += "，开发者会优先通过邮箱联系你"

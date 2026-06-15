@@ -3,6 +3,8 @@ name: Python Runtime Gates
 on:
   pull_request:
   push:
+    branches:
+      - "**"
     tags-ignore:
       - "v*"
   workflow_dispatch:
