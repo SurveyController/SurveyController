@@ -149,7 +149,7 @@ $manifestPath = Join-Path $releaseRoot "releases.$Channel.json"
 Write-Step "Check environment"
 Assert-CommandAvailable -Name "python" -InstallHint "Install Python first and ensure python is available in PATH."
 Assert-CommandAvailable -Name "uv" -InstallHint "Install uv first: powershell -ExecutionPolicy ByPass -c ""irm https://astral.sh/uv/install.ps1 | iex"""
-Assert-UvPythonVersion -MinimumVersion "3.13.13"
+Assert-UvPythonVersion -MinimumVersion "3.13.14"
 
 Write-Host ("Repo root: {0}" -f $repoRoot)
 Write-Host ("Output dir: {0}" -f $targetRoot)
