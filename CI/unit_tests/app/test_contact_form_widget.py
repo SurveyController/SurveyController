@@ -8,7 +8,6 @@ from PySide6.QtGui import QColor, QGuiApplication, QImage
 import software.ui.widgets.contact_form.ui_behavior as behavior_module
 import software.ui.widgets.contact_form.widget as widget_module
 from software.core.config.schema import RuntimeConfig
-from software.ui.widgets.contact_form.constants import REQUEST_MESSAGE_TYPE
 from software.ui.widgets.contact_form.widget import ContactForm
 
 
@@ -48,7 +47,7 @@ def _select_message_type(form: ContactForm, text: str) -> None:
     form._on_type_changed()
 
 
-def test_contact_form_builds_and_switches_between_feedback_and_quota(monkeypatch, qtbot) -> None:
+def test_contact_form_builds_and_switches_between_feedback_and_chat(monkeypatch, qtbot) -> None:
     _patch_contact_form_dependencies(monkeypatch, user_id=0)
     form = ContactForm(default_type="报错反馈", manage_polling=False)
     qtbot.addWidget(form)
@@ -58,46 +57,28 @@ def test_contact_form_builds_and_switches_between_feedback_and_quota(monkeypatch
     assert not form.auto_attach_section.isHidden()
     assert not form.attachments_section.isHidden()
     assert form.send_btn.isEnabled()
+    options = [form.type_combo.itemText(index) for index in range(form.type_combo.count())]
+    assert options == ["报错反馈", "新功能建议", "纯聊天"]
 
-    _select_message_type(form, REQUEST_MESSAGE_TYPE)
-
-    assert form.attachments_section.isHidden()
-    assert not form.request_payment_section.isHidden()
-    assert not form.send_btn.isEnabled()
-    assert "支付方式" in form.send_btn.toolTip()
+    _select_message_type(form, "纯聊天")
 
     monkeypatch.setattr(widget_module, "get_session_snapshot", lambda: {"user_id": 42})
     form.refresh_random_ip_user_id_hint()
-    form.payment_method_wechat_radio.setChecked(True)
-    form.amount_edit.setText("11.45")
-    form.quantity_edit.setText("1500")
-    form.donated_cb.setChecked(True)
     form._update_send_button_state()
 
     assert form.send_btn.isEnabled()
+    assert not form.attachments_section.isHidden()
+    assert form.auto_attach_section.isHidden()
+    assert form.issue_title_edit.isHidden()
     assert not form.random_ip_user_id_label.isHidden()
     assert "42" in form.random_ip_user_id_label.text()
 
 
-def test_contact_form_amount_quantity_boundaries_and_status(monkeypatch, qtbot) -> None:
+def test_contact_form_status_label_updates(monkeypatch, qtbot) -> None:
     _patch_contact_form_dependencies(monkeypatch, user_id=7)
-    form = ContactForm(default_type=REQUEST_MESSAGE_TYPE, manage_polling=False)
+    form = ContactForm(default_type="新功能建议", manage_polling=False)
     qtbot.addWidget(form)
     form._on_type_changed()
-
-    form.quantity_edit.setText("25000")
-    form._on_quantity_changed("25000")
-    assert form.quantity_edit.text() == ""
-
-    form.quantity_edit.setText("2000")
-    form._on_quantity_changed("2000")
-    form.amount_edit.setText("8.88")
-    form._sync_amount_rule_warning()
-    assert not form.amount_rule_hint.isHidden()
-
-    form.amount_edit.setText("20.26")
-    form._sync_amount_rule_warning()
-    assert form.amount_rule_hint.isHidden()
 
     form._on_status_loaded("在线", "#228b22")
     assert form.online_label.text() == "在线"

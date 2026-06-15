@@ -85,7 +85,6 @@ def refresh_random_ip_user_id_hint(form: Any) -> None:
         form.random_ip_user_id_label.show()
     else:
         form.random_ip_user_id_label.hide()
-    form._sync_donation_check_state()
     form._update_send_button_state()
 
 
@@ -119,8 +118,6 @@ def close_all_infobars(form: Any) -> None:
                 pass
     except Exception as exc:
         log_suppressed_exception("_close_all_infobars", exc, level=logging.WARNING)
-    finally:
-        form.amount_rule_hint.hide()
 
 
 def find_controller_host(form: Any) -> QWidget | None:

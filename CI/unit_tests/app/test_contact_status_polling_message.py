@@ -122,42 +122,31 @@ class _Host(StatusPollingMixin, QObject):
         self.loaded.append((text, color))
 
 
-def test_contact_message_builder_feedback_and_quota_payloads() -> None:
+def test_contact_message_builder_feedback_and_request_fields() -> None:
     feedback = build_contact_message(
         version_str="1.2.3",
         message_type="报错反馈",
         issue_title="按钮坏了",
         email="a@example.com",
-        donated=False,
         random_ip_user_id=99,
         message="打不开",
-        request_payment_method="",
-        request_amount_text="",
-        request_quota_text="",
-        request_urgency_text="",
     )
     assert "来源：SurveyController v1.2.3" in feedback
     assert "反馈标题： 按钮坏了" in feedback
     assert "随机IP用户ID：99" in feedback
     assert feedback.endswith("消息：打不开")
 
-    quota = build_contact_message(
+    chat = build_contact_message(
         version_str="1.2.3",
-        message_type="额度申请",
+        message_type="纯聊天",
         issue_title="忽略",
         email="",
-        donated=True,
         random_ip_user_id=0,
-        message="",
-        request_payment_method="微信",
-        request_amount_text="11.45",
-        request_quota_text="1500",
-        request_urgency_text="",
+        message="随便聊聊",
     )
-    assert "已支付：是" in quota
-    assert "支付方式：微信" in quota
-    assert "紧急程度：中" in quota
-    assert "补充说明：未填写" in quota
+    assert "类型：纯聊天" in chat
+    assert "联系邮箱：" not in chat
+    assert chat.endswith("消息：随便聊聊")
 
     fields = build_contact_request_fields(
         message="msg",

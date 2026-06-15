@@ -372,11 +372,11 @@ class RandomIpRuntimeService:
         try:
             return bool(adapter.open_quota_request_form())
         except Exception:
-            logging.info("打开随机IP额度申请入口失败", exc_info=True)
+            logging.info("打开随机IP额度兑换入口失败", exc_info=True)
             self._show_random_ip_message(
                 adapter,
-                "需要申请额度",
-                "请在“联系开发者”中提交随机IP额度申请。",
+                "需要补充额度",
+                "请先兑换随机IP额度后再使用。",
                 level="warning",
             )
             return False

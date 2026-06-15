@@ -9,7 +9,6 @@ from PySide6.QtWidgets import QWidget
 from qfluentwidgets import InfoBarPosition
 
 from software.logging.log_utils import log_suppressed_exception
-from .constants import REQUEST_MESSAGE_TYPE
 from .send_workflow import compute_send_timeout_fallback_ms
 
 
@@ -29,12 +28,6 @@ class _TimerType(Protocol):
 
 class _ResponseLike(Protocol):
     status_code: int
-
-
-class _QuotaValidationLike(Protocol):
-    normalized_quota_text: str
-    error_message: str | None
-    amount_rule_blocked: bool
 
 
 def _widget_module():
@@ -99,16 +92,6 @@ def _build_contact_request_fields(form: Any, **kwargs):
     return _widget_module().build_contact_request_fields(**kwargs)
 
 
-def _validate_quota_request(form: Any, **kwargs):
-    validator = getattr(form, "_validate_quota_request", None)
-    if callable(validator):
-        return cast(_QuotaValidationLike, validator(**kwargs))
-    widget_module = _widget_module()
-    return cast(_QuotaValidationLike, widget_module.validate_quota_request(
-        widget_module.QuotaRequestValidationInputs(**kwargs)
-    ))
-
-
 def clear_email_selection(form: Any) -> None:
     try:
         form.email_edit.setSelection(0, 0)
@@ -156,16 +139,6 @@ def compute_send_timeout_fallback_ms_for_form(form: Any, read_timeout_seconds: i
 
 
 def _confirm_before_send(form: Any, mtype: str, email: str) -> bool:
-    if mtype == REQUEST_MESSAGE_TYPE:
-        confirm_email_box = _message_box(form)(
-            "确认邮箱地址",
-            f"当前输入的邮箱地址是：{email}\n\n请确认邮箱地址正确无误。开发者会在2小时内发放额度并通过邮件通知",
-            form.window() or form,
-        )
-        confirm_email_box.yesButton.setText("确认发送")
-        confirm_email_box.cancelButton.setText("返回检查")
-        return bool(confirm_email_box.exec())
-
     if email:
         return True
 
@@ -180,50 +153,11 @@ def _confirm_before_send(form: Any, mtype: str, email: str) -> bool:
 
 
 def _validate_send_request(form: Any, mtype: str, email: str) -> tuple[bool, dict[str, str]]:
-    request_amount_text = ""
-    request_quota_text = ""
-    request_urgency_text = ""
-    request_payment_method = ""
     issue_title = (form.issue_title_edit.text() or "").strip()
 
-    if mtype == REQUEST_MESSAGE_TYPE:
-        form._normalize_amount_if_needed()
-        form._normalize_quantity_if_needed()
-        amount_text = (form.amount_edit.currentText() or "").strip()
-        quantity_text = (form.quantity_edit.text() or "").strip()
-        request_payment_method = form._selected_payment_method()
-        request_amount_text = amount_text
-        request_urgency_text = (form.urgency_combo.currentText() or "").strip()
-        quota_validation = _validate_quota_request(
-            form,
-            email=email,
-            amount_text=amount_text,
-            quantity_text=quantity_text,
-            payment_method=request_payment_method,
-            donated=form.donated_cb.isChecked(),
-        )
-        request_quota_text = quota_validation.normalized_quota_text
-        if quota_validation.error_message:
-            if quota_validation.amount_rule_blocked:
-                form._show_amount_rule_infobar()
-            if quota_validation.error_message in {"请选择你刚刚使用的支付方式", "请先勾选“我已完成支付”后再发送申请"}:
-                form._update_send_button_state()
-            _info_bar(form).warning(
-                "",
-                quota_validation.error_message,
-                parent=form,
-                position=InfoBarPosition.TOP,
-                duration=2200,
-            )
-            return False, {}
-
     message = (form.message_edit.toPlainText() or "").strip()
-    if not message and mtype != REQUEST_MESSAGE_TYPE:
+    if not message:
         _info_bar(form).warning("", "请输入消息内容", parent=form, position=InfoBarPosition.TOP, duration=2000)
-        return False, {}
-
-    if mtype == REQUEST_MESSAGE_TYPE and not email:
-        _info_bar(form).warning("", "额度申请必须填写邮箱地址", parent=form, position=InfoBarPosition.TOP, duration=2000)
         return False, {}
 
     if email and not form._validate_email(email):
@@ -231,27 +165,9 @@ def _validate_send_request(form: Any, mtype: str, email: str) -> tuple[bool, dic
         return False, {}
 
     form.refresh_random_ip_user_id_hint()
-    if mtype == REQUEST_MESSAGE_TYPE and form._random_ip_user_id <= 0:
-        _info_bar(form).warning(
-            "",
-            "暂时还不能申请额度。请先小测试一两份，确认能正常提交成功后，再来申请额度。",
-            parent=form,
-            position=InfoBarPosition.TOP,
-            duration=3500,
-        )
-        return False, {}
-
     if not _confirm_before_send(form, mtype, email):
         return False, {}
-
-    return True, {
-        "issue_title": issue_title,
-        "message": message,
-        "request_payment_method": request_payment_method,
-        "request_amount_text": request_amount_text,
-        "request_quota_text": request_quota_text,
-        "request_urgency_text": request_urgency_text,
-    }
+    return True, {"issue_title": issue_title, "message": message}
 
 
 def on_send_clicked(form: Any) -> None:
@@ -274,20 +190,15 @@ def on_send_clicked(form: Any) -> None:
         message_type=mtype,
         issue_title=request_data["issue_title"],
         email=email,
-        donated=form.donated_cb.isChecked(),
         random_ip_user_id=form._random_ip_user_id,
         message=request_data["message"],
-        request_payment_method=request_data["request_payment_method"],
-        request_amount_text=request_data["request_amount_text"],
-        request_quota_text=request_data["request_quota_text"],
-        request_urgency_text=request_data["request_urgency_text"],
     )
 
     if not _contact_api_url(form):
         _info_bar(form).error("", "联系API未配置", parent=form, position=InfoBarPosition.TOP, duration=3000)
         return
 
-    manual_files_payload = [] if mtype == REQUEST_MESSAGE_TYPE else form._attachments.files_payload()
+    manual_files_payload = form._attachments.files_payload()
     auto_files_payload: list[tuple[str, tuple[str, bytes, str]]] = []
     if form._is_bug_report_type(mtype):
         try:
@@ -357,20 +268,11 @@ def on_send_finished(form: Any, success: bool, error_msg: str) -> None:
 
     if success:
         current_type = getattr(form, "_current_message_type", "")
-        msg = "申请已提交，请等待人工处理" if current_type == REQUEST_MESSAGE_TYPE else "消息已发送"
+        msg = "消息已发送"
         if getattr(form, "_current_has_email", False):
             msg += "，开发者会优先通过邮箱联系你"
         _info_bar(form).success("", msg, parent=form, position=InfoBarPosition.TOP, duration=2500)
-        if current_type == REQUEST_MESSAGE_TYPE:
-            form.quotaRequestSucceeded.emit()
         if form._auto_clear_on_success:
-            form._close_amount_rule_infobar()
-            form.amount_edit.setText("")
-            form.quantity_edit.clear()
-            form._clear_payment_method_selection()
-            urgency_default_index = form.urgency_combo.findText("中")
-            if urgency_default_index >= 0:
-                form.urgency_combo.setCurrentIndex(urgency_default_index)
             form.message_edit.clear()
             form.issue_title_edit.clear()
             form._attachments.clear()

@@ -139,7 +139,7 @@ class EngineGuiAdapter(RuntimeUiBridge):
             try:
                 return bool(self._dispatcher(self._quota_request_form_opener))
             except Exception:
-                logging.warning("打开额度申请表单失败", exc_info=True)
+                logging.warning("打开额度兑换入口失败", exc_info=True)
                 return False
         return False
 

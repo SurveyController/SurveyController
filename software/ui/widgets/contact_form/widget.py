@@ -3,11 +3,9 @@ import os
 import tempfile
 import threading
 from datetime import datetime
-from decimal import Decimal
 from typing import Any, Callable, Optional, cast
 
-from PySide6 import QtCore
-from PySide6.QtCore import QEvent, Qt, Signal, Slot
+from PySide6.QtCore import QEvent, QTimer, Qt, Signal, Slot
 from PySide6.QtGui import (
     QKeyEvent,
     QKeySequence,
@@ -16,7 +14,6 @@ from PySide6.QtWidgets import QWidget
 from qfluentwidgets import (
     FluentIcon,
     InfoBar,
-    InfoBarPosition,
     MessageBox,
 )
 
@@ -45,20 +42,7 @@ from .attachments import (
     renumber_files_payload,
 )
 from .message_builder import build_contact_message, build_contact_request_fields
-from .rules import (
-    clamp_quantity_text,
-    get_allowed_amount_options,
-    get_minimum_allowed_amount,
-    is_amount_allowed,
-    normalize_quantity_text,
-    parse_amount_value,
-    parse_quantity_value,
-)
-from .send_workflow import (
-    QuotaRequestValidationInputs,
-    validate_quota_request,
-    validate_email,
-)
+from .send_workflow import validate_email
 from .status_polling import StatusPollingMixin
 from .ui_behavior import (
     attachments_enabled,
@@ -73,10 +57,6 @@ from .ui_behavior import (
     update_send_button_state,
 )
 from .ui_builder import build_contact_form_ui
-from .constants import (
-    MAX_REQUEST_QUOTA,
-    REQUEST_MESSAGE_TYPE,
-)
 from .lifecycle import (
     close_all_infobars,
     find_controller_host,
@@ -99,7 +79,6 @@ from .send_actions import (
     on_send_finished,
 )
 http_post = post
-QTimer = QtCore.QTimer
 
 
 class ContactForm(StatusPollingMixin, QWidget):
@@ -113,16 +92,6 @@ class ContactForm(StatusPollingMixin, QWidget):
     email_edit: Any
     issue_title_label: Any
     issue_title_edit: Any
-    amount_row: Any
-    amount_label: Any
-    amount_edit: Any
-    quantity_label: Any
-    quantity_edit: Any
-    urgency_label: Any
-    urgency_combo: Any
-    amount_rule_hint: Any
-    amount_rule_hint_icon: Any
-    amount_rule_hint_text: Any
     message_label: Any
     message_edit: Any
     random_ip_user_id_label: Any
@@ -137,14 +106,6 @@ class ContactForm(StatusPollingMixin, QWidget):
     auto_attach_title: Any
     auto_attach_config_checkbox: Any
     auto_attach_log_checkbox: Any
-    request_payment_section: Any
-    payment_method_label: Any
-    payment_method_group: Any
-    payment_method_wechat_radio: Any
-    payment_method_alipay_radio: Any
-    request_payment_confirm_section: Any
-    donated_cb: Any
-    open_donate_btn: Any
     status_spinner: Any
     status_icon: Any
     online_label: Any
@@ -155,7 +116,6 @@ class ContactForm(StatusPollingMixin, QWidget):
     _statusLoaded = Signal(str, str)  
     _sendFinished = Signal(bool, str)  
     sendSucceeded = Signal()
-    quotaRequestSucceeded = Signal()
     cancelRequested = Signal()
 
     _SEND_TIMEOUT_GRACE_MS = 2_000
@@ -192,7 +152,6 @@ class ContactForm(StatusPollingMixin, QWidget):
         self._lock_message_type = lock_message_type
         self._config_snapshot_provider = config_snapshot_provider
         self._random_ip_user_id: int = 0
-        self._last_valid_quantity_text: str = ""
         self._pending_temp_attachment_paths: list[str] = []
         self._auto_attach_config_default = True
         self._auto_attach_log_default = True
@@ -205,7 +164,6 @@ class ContactForm(StatusPollingMixin, QWidget):
 
     def eventFilter(self, watched, event):
         message_edit = getattr(self, "message_edit", None)
-        donated_cb = getattr(self, "donated_cb", None)
         if (
             message_edit is not None
             and watched is message_edit
@@ -215,50 +173,7 @@ class ContactForm(StatusPollingMixin, QWidget):
             if key_event.matches(QKeySequence.StandardKey.Paste):
                 if self._handle_clipboard_image():
                     return True
-        if donated_cb is not None and watched is donated_cb:
-            block_reason = self._get_donation_check_block_reason()
-            if block_reason and not donated_cb.isChecked():
-                if event.type() == QEvent.Type.MouseButtonPress:
-                    InfoBar.warning(
-                        "",
-                        block_reason,
-                        parent=self,
-                        position=InfoBarPosition.TOP,
-                        duration=2600,
-                    )
-                    return True
-                if event.type() == QEvent.Type.KeyPress:
-                    key_event = cast(QKeyEvent, event)
-                    if key_event.key() in (
-                        Qt.Key.Key_Space,
-                        Qt.Key.Key_Return,
-                        Qt.Key.Key_Enter,
-                        Qt.Key.Key_Select,
-                    ):
-                        InfoBar.warning(
-                            "",
-                            block_reason,
-                            parent=self,
-                            position=InfoBarPosition.TOP,
-                            duration=2600,
-                        )
-                        return True
-        if watched is self.amount_edit and event.type() == QEvent.Type.FocusOut:
-            self._normalize_amount_if_needed()
         return super().eventFilter(watched, event)
-
-    def _selected_payment_method(self) -> str:
-        checked_button = self.payment_method_group.checkedButton()
-        return checked_button.text() if checked_button is not None else ""
-
-    def _clear_payment_method_selection(self) -> None:
-        was_exclusive = self.payment_method_group.exclusive()
-        self.payment_method_group.setExclusive(False)
-        try:
-            for button in self.payment_method_group.buttons():
-                button.setChecked(False)
-        finally:
-            self.payment_method_group.setExclusive(was_exclusive)
 
     def showEvent(self, event):
         super().showEvent(event)
@@ -304,6 +219,10 @@ class ContactForm(StatusPollingMixin, QWidget):
         return MessageBox
 
     @staticmethod
+    def _qtimer():
+        return QTimer
+
+    @staticmethod
     def _set_progress_ring_active(widget: QWidget, active: bool) -> None:
         set_indeterminate_progress_ring_active(widget, active)
 
@@ -315,7 +234,6 @@ class ContactForm(StatusPollingMixin, QWidget):
     def _contact_api_url() -> str:
         return CONTACT_API_URL
 
-    @staticmethod
     @staticmethod
     def _contact_http_post(*args, **kwargs):
         return ContactForm.http_post(*args, **kwargs)
@@ -331,25 +249,6 @@ class ContactForm(StatusPollingMixin, QWidget):
     @staticmethod
     def _build_contact_request_fields(**kwargs):
         return build_contact_request_fields(**kwargs)
-
-    @staticmethod
-    def _validate_quota_request(
-        *,
-        email: str,
-        amount_text: str,
-        quantity_text: str,
-        payment_method: str,
-        donated: bool,
-    ):
-        return validate_quota_request(
-            QuotaRequestValidationInputs(
-                email=email,
-                amount_text=amount_text,
-                quantity_text=quantity_text,
-                payment_method=payment_method,
-                donated=donated,
-            )
-        )
 
     def has_pending_async_work(self) -> bool:
         return has_pending_async_work(self)
@@ -412,125 +311,6 @@ class ContactForm(StatusPollingMixin, QWidget):
     def _on_choose_files(self):
         choose_files(self)
 
-    def _parse_quantity_value(self, text: Optional[str] = None) -> Optional[Decimal]:
-        return parse_quantity_value(self.quantity_edit.text() if text is None else text)
-
-    def _normalize_quantity_text(self, text: str) -> str:
-        return normalize_quantity_text(text)
-
-    def _normalize_quantity_if_needed(self) -> None:
-        raw_text = (self.quantity_edit.text() or "").strip()
-        if not raw_text:
-            return
-        normalized_text = clamp_quantity_text(raw_text, self._last_valid_quantity_text)
-        if normalized_text == raw_text:
-            return
-        self.quantity_edit.blockSignals(True)
-        try:
-            self.quantity_edit.setText(normalized_text)
-        finally:
-            self.quantity_edit.blockSignals(False)
-
-    def _parse_amount_value(self, text: Optional[str] = None) -> Optional[Decimal]:
-        return parse_amount_value(self.amount_edit.currentText() if text is None else text)
-
-    def _get_donation_check_block_reason(self) -> str:
-        current_type = self.type_combo.currentText() or ""
-        if current_type != REQUEST_MESSAGE_TYPE:
-            return ""
-        if not self._selected_payment_method():
-            return "请先选择你刚刚使用的支付方式（微信或支付宝）。"
-        amount_text = (self.amount_edit.currentText() or "").strip()
-        if not amount_text:
-            return "请先填写支付金额后，再勾选“我已完成支付，且确认随机ip可用”。"
-        if self._random_ip_user_id > 0:
-            return ""
-        return (
-            "你还没有成功使用过随机IP，暂时不能勾选。"
-            "请先启用并实际跑通一次随机IP，确认能正常用，再来申请。"
-        )
-
-    def _sync_donation_check_state(self) -> None:
-        if not hasattr(self, "donated_cb"):
-            return
-        if self._get_donation_check_block_reason() and self.donated_cb.isChecked():
-            previous_block_state = self.donated_cb.blockSignals(True)
-            try:
-                self.donated_cb.setChecked(False)
-            finally:
-                self.donated_cb.blockSignals(previous_block_state)
-
-    def _open_donate_page(self) -> None:
-        widget: Optional[QWidget] = cast(QWidget, self)
-        while widget is not None:
-            if hasattr(widget, "_get_donate_page") and hasattr(widget, "_switch_to_more_page"):
-                try:
-                    host = cast(Any, widget)
-                    donate_page = host._get_donate_page()
-                    host._switch_to_more_page(donate_page)
-                    top_level = self.window()
-                    if top_level is not None and top_level is not widget:
-                        top_level.close()
-                    return
-                except Exception as exc:
-                    log_suppressed_exception("_open_donate_page", exc, level=logging.WARNING)
-                    break
-            widget = widget.parentWidget()
-        InfoBar.warning(
-            "",
-            "暂时打不开支付页，请从“更多 -> 捐助”进入",
-            parent=self,
-            position=InfoBarPosition.TOP,
-            duration=2500,
-        )
-
-    def _on_amount_changed(self, text: str):
-        _ = text
-        self._sync_amount_rule_warning()
-        self._sync_donation_check_state()
-        self._update_send_button_state()
-
-    def _normalize_amount_if_needed(self) -> None:
-        text = (self.amount_edit.currentText() or "").strip()
-        if not text:
-            return
-        try:
-            value = float(text)
-        except ValueError:
-            return
-        if value == 0.0 and text != "0.01":
-            self.amount_edit.setText("0.01")
-
-    def _on_amount_editing_finished(self):
-        self._normalize_amount_if_needed()
-        self._sync_amount_rule_warning()
-
-    def _on_quantity_changed(self, text: str):
-        normalized_text = (text or "").strip()
-        if not normalized_text:
-            self._last_valid_quantity_text = ""
-        else:
-            quantity = self._parse_quantity_value(normalized_text)
-            if quantity is not None and quantity <= Decimal(str(MAX_REQUEST_QUOTA)):
-                self._last_valid_quantity_text = self._normalize_quantity_text(normalized_text)
-            elif quantity is not None and quantity > Decimal(str(MAX_REQUEST_QUOTA)):
-                self.quantity_edit.blockSignals(True)
-                try:
-                    self.quantity_edit.setText(self._last_valid_quantity_text)
-                finally:
-                    self.quantity_edit.blockSignals(False)
-                return
-        self._refresh_amount_options()
-        self._sync_amount_rule_warning()
-
-    def _on_quantity_editing_finished(self):
-        self._normalize_quantity_if_needed()
-        self._refresh_amount_options()
-        self._sync_amount_rule_warning()
-
-    def _on_urgency_changed(self):
-        return
-
     def _on_status_loaded(self, text: str, color: str):
         try:
             self._set_status_loading(False)
@@ -549,57 +329,6 @@ class ContactForm(StatusPollingMixin, QWidget):
                 exc,
                 level=logging.WARNING,
             )
-
-    def _get_minimum_allowed_amount(self, quantity: Decimal) -> Optional[Decimal]:
-        return get_minimum_allowed_amount(quantity)
-
-    def _get_allowed_amount_options(self, quantity: Decimal) -> list[str]:
-        return get_allowed_amount_options(quantity)
-
-    def _is_amount_allowed(self, amount_text: str, quantity_text: Optional[str] = None) -> bool:
-        current_quantity_text = self.quantity_edit.text() if quantity_text is None else quantity_text
-        return is_amount_allowed(amount_text, current_quantity_text)
-
-    def _refresh_amount_options(self) -> None:
-        current_text = (self.amount_edit.currentText() or "").strip()
-        allowed_amounts = self._get_allowed_amount_options(
-            self._parse_quantity_value() or Decimal("0")
-        )
-
-        previous_block_state = self.amount_edit.blockSignals(True)
-        try:
-            self.amount_edit.clear()
-            for amount in allowed_amounts:
-                self.amount_edit.addItem(amount)
-            if not current_text:
-                self.amount_edit._currentIndex = -1
-                self.amount_edit.setText("")
-            else:
-                current_index = self.amount_edit.findText(current_text)
-                if current_index >= 0:
-                    self.amount_edit.setCurrentIndex(current_index)
-                else:
-                    self.amount_edit._currentIndex = -1
-                    self.amount_edit.setText(current_text)
-        finally:
-            self.amount_edit.blockSignals(previous_block_state)
-
-    def _show_amount_rule_infobar(self) -> None:
-        self.amount_rule_hint.show()
-
-    def _close_amount_rule_infobar(self) -> None:
-        self.amount_rule_hint.hide()
-
-    def _sync_amount_rule_warning(self) -> None:
-        current_type = self.type_combo.currentText() or ""
-        amount_text = (self.amount_edit.currentText() or "").strip()
-        if current_type != REQUEST_MESSAGE_TYPE or not amount_text:
-            self._close_amount_rule_infobar()
-            return
-        if self._is_amount_allowed(amount_text):
-            self._close_amount_rule_infobar()
-            return
-        self._show_amount_rule_infobar()
 
     def _cleanup_pending_temp_files(self) -> None:
         self._pending_temp_attachment_paths = cleanup_pending_temp_files(

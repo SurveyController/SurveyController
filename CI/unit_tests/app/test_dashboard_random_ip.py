@@ -392,8 +392,8 @@ class DashboardRandomIPTests:
             _open_quota_redeem_dialog=lambda: True,
         )
         assert dashboard._open_contact_dialog("报错反馈") == ("报错反馈", False)
-        assert dashboard._open_contact_dialog("额度申请", lock_message_type=True) == (
-            "额度申请",
+        assert dashboard._open_contact_dialog("新功能建议", lock_message_type=True) == (
+            "新功能建议",
             True,
         )
         assert dashboard._open_quota_redeem_dialog() is True
