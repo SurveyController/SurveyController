@@ -1,0 +1,4 @@
+interface:
+  display_name: "Test Regression Strategy"
+  short_description: "SurveyController 测试分层与回归选择"
+  default_prompt: "Use $test-regression-strategy to choose the right tests and regression checks for this SurveyController change."

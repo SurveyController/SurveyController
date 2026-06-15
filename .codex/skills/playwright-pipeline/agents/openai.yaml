@@ -1,0 +1,4 @@
+interface:
+  display_name: "Playwright Pipeline"
+  short_description: "SurveyController v3 Playwright 异步执行层"
+  default_prompt: "Use $playwright-pipeline to fix the v3 Playwright answer execution pipeline."

@@ -1,0 +1,4 @@
+interface:
+  display_name: "App Settings Migration"
+  short_description: "SurveyController 配置路径与迁移兼容"
+  default_prompt: "Use $app-settings-migration to update SurveyController settings, user paths, or config schema compatibility safely."

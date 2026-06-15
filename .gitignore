@@ -1,7 +1,6 @@
 # 开发环境
 *.code-workspace
 .claude/
-.codex/
 .playwright-mcp/
 .local-private/
 .ruff_cache/
