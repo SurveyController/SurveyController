@@ -116,6 +116,14 @@ function Remove-ReleaseSetupIfExists {
     }
 }
 
+function Assert-LastNativeCommandSucceeded {
+    param([string]$CommandName)
+
+    if ($LASTEXITCODE -ne 0) {
+        throw ("Command failed with exit code {0}: {1}" -f $LASTEXITCODE, $CommandName)
+    }
+}
+
 $repoRoot = Resolve-RepoRoot
 $targetRoot = Join-Path $repoRoot $OutputDir
 $releaseRoot = Join-Path $repoRoot $ReleaseDir
@@ -310,15 +318,22 @@ if (-not $SkipVelopack) {
                 --channel $Channel `
                 --keep-full $KeepFullVersions `
                 --drop-version $packVersion
+            Assert-LastNativeCommandSucceeded -CommandName "uv run python CI/release_tools/trim_velopack_feed.py --drop-version"
         }
         finally {
             Pop-Location
+        }
+
+        # Velopack 仍会读取旧格式 feed 元数据，残留同版本时会直接拒绝打包。
+        foreach ($legacyFeedName in @("assets.$Channel.json", "RELEASES-$Channel")) {
+            Remove-IfExists -Path (Join-Path $releaseRoot $legacyFeedName)
         }
     }
 
     Push-Location $repoRoot
     try {
         vpk pack `
+            -y `
             --packId SurveyController `
             --packTitle "SurveyController" `
             --packVersion $packVersion `
@@ -328,6 +343,7 @@ if (-not $SkipVelopack) {
             --delta "BestSpeed" `
             --channel $Channel `
             --outputDir $releaseRoot
+        Assert-LastNativeCommandSucceeded -CommandName "vpk pack"
     }
     finally {
         Pop-Location
@@ -350,6 +366,7 @@ if (-not $SkipVelopack) {
             --release-dir $releaseRoot `
             --channel $Channel `
             --keep-full $KeepFullVersions
+        Assert-LastNativeCommandSucceeded -CommandName "uv run python CI/release_tools/trim_velopack_feed.py"
     }
     finally {
         Pop-Location

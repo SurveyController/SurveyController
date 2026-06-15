@@ -94,12 +94,39 @@ jobs:
           $releaseDir = Join-Path "${{ github.workspace }}" "Releases"
           $setupName = "SurveyController_v${packVersion}_setup.exe"
           $setupPath = Join-Path $releaseDir $setupName
+          $latestFeedVersion = ""
+          try {
+            $manifestPath = Join-Path $releaseDir "releases.$channel.json"
+            if (Test-Path $manifestPath) {
+              $manifest = Get-Content $manifestPath -Raw | ConvertFrom-Json
+              $fullAssets = @($manifest.Assets) | Where-Object { [string]$_.Type -eq "Full" }
+              if ($fullAssets.Count -gt 0) {
+                $latestFeedVersion = ($fullAssets |
+                  Sort-Object { [version]([string]$_.Version) } -Descending |
+                  Select-Object -First 1 -ExpandProperty Version)
+              }
+            }
+          } catch {
+            Write-Host "Resolve latest feed version failed: $($_.Exception.Message)"
+          }
+          $publishFeed = $true
+          if (-not [string]::IsNullOrWhiteSpace($latestFeedVersion)) {
+            try {
+              if ([version]$packVersion -lt [version]$latestFeedVersion) {
+                $publishFeed = $false
+              }
+            } catch {
+              Write-Host "Compare feed version failed: $($_.Exception.Message)"
+            }
+          }
           "tag=$tag" >> $env:GITHUB_OUTPUT
           "pack_version=$packVersion" >> $env:GITHUB_OUTPUT
           "channel=$channel" >> $env:GITHUB_OUTPUT
           "release_dir=$releaseDir" >> $env:GITHUB_OUTPUT
           "setup_name=$setupName" >> $env:GITHUB_OUTPUT
           "setup_path=$setupPath" >> $env:GITHUB_OUTPUT
+          "latest_feed_version=$latestFeedVersion" >> $env:GITHUB_OUTPUT
+          "publish_feed=$($publishFeed.ToString().ToLowerInvariant())" >> $env:GITHUB_OUTPUT
 
       - name: Verify matching draft release exists
         env:
@@ -187,6 +214,7 @@ jobs:
           aws --version
 
       - name: Upload release feed and packages to R2
+        if: steps.release_meta.outputs.publish_feed == 'true'
         shell: powershell
         env:
           AWS_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
@@ -213,6 +241,7 @@ jobs:
           }
 
       - name: Remove old R2 feed assets
+        if: steps.release_meta.outputs.publish_feed == 'true'
         shell: powershell
         env:
           AWS_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
@@ -242,6 +271,7 @@ jobs:
           }
 
       - name: Upload latest setup alias to R2 root
+        if: steps.release_meta.outputs.publish_feed == 'true'
         shell: powershell
         env:
           AWS_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
@@ -260,6 +290,19 @@ jobs:
             --content-type "application/vnd.microsoft.portable-executable" `
             --endpoint-url "${{ steps.r2_endpoint.outputs.endpoint }}"
 
+      - name: Show publish mode
+        shell: powershell
+        run: |
+          $packVersion = "${{ steps.release_meta.outputs.pack_version }}"
+          $latestFeedVersion = "${{ steps.release_meta.outputs.latest_feed_version }}"
+          $publishFeed = "${{ steps.release_meta.outputs.publish_feed }}"
+          if ($publishFeed -eq "true") {
+            Write-Host "Feed publish enabled. packVersion=$packVersion latestFeedVersion=$latestFeedVersion"
+          } else {
+            Write-Host "Feed publish skipped for old version. packVersion=$packVersion latestFeedVersion=$latestFeedVersion"
+            Write-Host "This run only publishes GitHub Release assets and keeps the current stable feed unchanged."
+          }
+
       - name: Publish GitHub Release draft
         env:
           GH_TOKEN: ${{ github.token }}
@@ -273,11 +316,15 @@ jobs:
           Write-Host "Release asset:"
           Write-Host "https://github.com/${{ github.repository }}/releases/tag/${{ steps.release_meta.outputs.tag }}"
           Write-Host ""
-          Write-Host "Velopack feed:"
-          Write-Host "https://dl.hungrym0.com/${env:R2_FEED_PREFIX}/releases.${env:VELOPACK_CHANNEL}.json"
-          Write-Host ""
-          Write-Host "Setup installer:"
-          Write-Host "https://dl.hungrym0.com/${env:R2_FEED_PREFIX}/${{ steps.release_meta.outputs.setup_name }}"
-          Write-Host ""
-          Write-Host "Latest setup alias:"
-          Write-Host "https://dl.hungrym0.com/SurveyController_latest_setup.exe"
+          if ("${{ steps.release_meta.outputs.publish_feed }}" -eq "true") {
+            Write-Host "Velopack feed:"
+            Write-Host "https://dl.hungrym0.com/${env:R2_FEED_PREFIX}/releases.${env:VELOPACK_CHANNEL}.json"
+            Write-Host ""
+            Write-Host "Setup installer:"
+            Write-Host "https://dl.hungrym0.com/${env:R2_FEED_PREFIX}/${{ steps.release_meta.outputs.setup_name }}"
+            Write-Host ""
+            Write-Host "Latest setup alias:"
+            Write-Host "https://dl.hungrym0.com/SurveyController_latest_setup.exe"
+          } else {
+            Write-Host "Stable feed unchanged for this old-version publish."
+          }
