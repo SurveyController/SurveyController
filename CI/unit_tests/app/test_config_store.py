@@ -7,7 +7,6 @@ from unittest.mock import patch
 import pytest
 
 import software.io.config.store as config_store
-from software.core.config.codec import CURRENT_CONFIG_SCHEMA_VERSION
 from software.core.config.schema import RuntimeConfig
 
 
@@ -39,7 +38,6 @@ class ConfigStoreTests:
             f"""
             {{
               // 用户手写注释
-              "config_schema_version": {CURRENT_CONFIG_SCHEMA_VERSION},
               "url": "https://www.wjx.cn/vm/demo.aspx",
               "target": "9",
               "threads": 3
@@ -89,11 +87,11 @@ class ConfigStoreTests:
         with pytest.raises(ValueError, match="JSON 顶层必须是对象"):
             config_store.load_config(str(path), strict=True)
 
-    def test_load_config_rejects_removed_legacy_keys_in_strict_mode(self, tmp_path: Path) -> None:
+    def test_load_config_rejects_unknown_keys_in_strict_mode(self, tmp_path: Path) -> None:
         path = tmp_path / "legacy.json"
-        path.write_text('{"config_schema_version": 5, "random_proxy_api": "old"}', encoding="utf-8")
+        path.write_text('{"url": "https://example.test", "random_proxy_api": "old"}', encoding="utf-8")
 
-        with pytest.raises(ValueError, match="已移除的旧字段"):
+        with pytest.raises(ValueError, match="该配置文件损坏"):
             config_store.load_config(str(path), strict=True)
 
     def test_save_config_creates_parent_directory_and_round_trips(self, tmp_path: Path) -> None:
@@ -102,6 +100,5 @@ class ConfigStoreTests:
 
         assert saved_path == str(path)
         payload = json.loads(path.read_text(encoding="utf-8"))
-        assert payload["config_schema_version"] == CURRENT_CONFIG_SCHEMA_VERSION
         assert payload["url"] == "https://example.test"
         assert config_store.load_config(str(path), strict=True).target == 12

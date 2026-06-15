@@ -150,7 +150,14 @@ def load_config(path: Optional[str] = None, *, strict: bool = False) -> RuntimeC
             raise ValueError(error_message) from exc
         logging.warning(error_message)
         return RuntimeConfig()
-    return deserialize_runtime_config(payload)
+    try:
+        return deserialize_runtime_config(payload)
+    except Exception as exc:
+        error_message = f"配置不兼容: {config_path} -> {exc}"
+        if strict:
+            raise ValueError(error_message) from exc
+        logging.warning(error_message)
+        return RuntimeConfig()
 
 
 def save_config(config: RuntimeConfig, path: Optional[str] = None) -> str:

@@ -230,16 +230,16 @@ def test_dashboard_config_load_and_save_without_workbench(monkeypatch, tmp_path)
     assert page.toasts[-1][0] == "载入失败：broken"
 
     page.controller.load_saved_config.side_effect = ValueError(
-        "配置不兼容: x -> 配置文件版本不受支持（当前仅支持 schema v6，实际为 v5）：x"
+        "配置不兼容: x -> 该配置文件损坏，请输入问卷链接/二维码重新配置：x"
     )
     page._load_config_from_path(str(config_path))
-    assert page.toasts[-1][0] == "配置加载失败：版本不兼容"
+    assert page.toasts[-1][0] == "该配置文件损坏，请输入问卷链接/二维码重新配置"
 
     page.controller.load_saved_config.side_effect = ValueError(
-        "配置不兼容: x -> 配置文件使用了已移除的旧字段（ai_enabled），请在旧版本客户端中重新保存后再导入：x"
+        "配置不兼容: x -> 该配置文件损坏，请输入问卷链接/二维码重新配置：x"
     )
     page._load_config_from_path(str(config_path))
-    assert page.toasts[-1][0] == "配置加载失败：字段已过期"
+    assert page.toasts[-1][0] == "该配置文件损坏，请输入问卷链接/二维码重新配置"
     page.controller.load_saved_config.side_effect = None
 
     monkeypatch.setattr(config_io_module.QFileDialog, "getSaveFileName", lambda *_args, **_kwargs: ("", ""))

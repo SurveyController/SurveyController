@@ -28,7 +28,7 @@ class ConfigCodecTests:
         config = RuntimeConfig(reverse_fill_enabled=True, reverse_fill_source_path='D:/demo.xlsx', reverse_fill_format=REVERSE_FILL_FORMAT_WJX_SEQUENCE, reverse_fill_start_row=3, reverse_fill_threads=4)
         payload = serialize_runtime_config(config)
         restored = deserialize_runtime_config(payload)
-        assert payload['config_schema_version'] == CURRENT_CONFIG_SCHEMA_VERSION
+        assert 'config_schema_version' not in payload
         assert restored.reverse_fill_enabled
         assert restored.reverse_fill_source_path == 'D:/demo.xlsx'
         assert restored.reverse_fill_format == REVERSE_FILL_FORMAT_WJX_SEQUENCE
@@ -81,17 +81,27 @@ class ConfigCodecTests:
         assert config.answer_rules[0]['equals'][0] == 0
         assert config.dimension_groups[0] == '情绪维度'
 
-    def test_removed_legacy_versions_and_fields_raise(self) -> None:
-        with pytest.raises(ValueError, match="已移除的旧字段"):
-            _ensure_supported_config_payload({"random_proxy_api": "old"}, config_path="bad.json")
-        with pytest.raises(ValueError, match="版本不受支持"):
-            _ensure_supported_config_payload({"config_schema_version": 2}, config_path="bad.json")
-        with pytest.raises(ValueError, match="版本不受支持"):
-            _ensure_supported_config_payload({"config_schema_version": 3}, config_path="legacy-v3.json")
-        with pytest.raises(ValueError, match="版本不受支持"):
-            _ensure_supported_config_payload({"config_schema_version": 4}, config_path="legacy-v4.json")
-        with pytest.raises(ValueError, match="版本不受支持"):
-            _ensure_supported_config_payload({"config_schema_version": 5}, config_path="legacy-v5.json")
+    def test_unknown_fields_raise_corruption_error(self) -> None:
+        with pytest.raises(ValueError, match="该配置文件损坏"):
+            normalize_runtime_config_payload({"url": "https://example.test", "unknown_field": 1})
+        with pytest.raises(ValueError, match="该配置文件损坏"):
+            normalize_runtime_config_payload(
+                {
+                    "url": "https://example.test",
+                    "question_entries": [{"question_type": "single", "unexpected": 1}],
+                }
+            )
+        with pytest.raises(ValueError, match="该配置文件损坏"):
+            normalize_runtime_config_payload(
+                {
+                    "url": "https://example.test",
+                    "questions_info": [{"num": 1, "title": "Q1", "unexpected": 1}],
+                }
+            )
+
+    def test_ensure_supported_config_payload_keeps_payload_without_schema_version(self) -> None:
+        payload = _ensure_supported_config_payload({"url": "https://example.test"}, config_path="demo.json")
+        assert payload == {"url": "https://example.test"}
 
     def test_question_entry_normalizes_text_modes_ranges_provider_and_dimensions(self) -> None:
         entry = deserialize_question_entry(
@@ -150,7 +160,6 @@ class ConfigCodecTests:
                 "proxy_source": "bad",
                 "custom_proxy_api": "https://proxy.example",
                 "random_ua_enabled": "false",
-                "random_ua_keys": ["pc_web", "bad"],
                 "random_ua_ratios": {"wechat": 20, "mobile": 20, "pc": 20},
                 "reverse_fill_format": "bad",
                 "reverse_fill_start_row": "-2",
@@ -178,7 +187,8 @@ class ConfigCodecTests:
         assert cfg.dimension_groups == ["服务"]
         assert cfg.ai_mode == "free"
         assert cfg.questions_info == []
-        assert cfg.question_entries == []
+        assert len(cfg.question_entries) == 1
+        assert cfg.question_entries[0].rows == 1
 
     def test_random_ip_enabled_survives_official_proxy_sources(self) -> None:
         for source in ("default", "benefit", "custom"):
@@ -224,16 +234,14 @@ class ConfigCodecTests:
             {"random_ua_ratios": {"wechat": 200, "mobile": -100, "pc": 0}}
         ).random_ua_ratios == {"wechat": 33, "mobile": 33, "pc": 34}
 
-    def test_random_ua_legacy_keys_are_not_serialized(self) -> None:
-        cfg = normalize_runtime_config_payload(
-            {
-                "random_ua_keys": ["pc_web"],
-                "random_ua_ratios": {"wechat": 0, "mobile": 0, "pc": 100},
-            }
-        )
-
-        assert not hasattr(cfg, "random_ua_keys")
-        assert "random_ua_keys" not in serialize_runtime_config(cfg)
+    def test_random_ua_legacy_keys_raise(self) -> None:
+        with pytest.raises(ValueError, match="该配置文件损坏"):
+            normalize_runtime_config_payload(
+                {
+                    "random_ua_keys": ["pc_web"],
+                    "random_ua_ratios": {"wechat": 0, "mobile": 0, "pc": 100},
+                }
+            )
 
     def test_select_user_agent_from_ratios_handles_empty_unknown_and_valid_devices(self) -> None:
         assert _select_user_agent_from_ratios({"wechat": 0, "mobile": 0}) == (None, None)

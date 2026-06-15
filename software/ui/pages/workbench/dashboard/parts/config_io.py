@@ -39,10 +39,8 @@ class DashboardConfigIOMixin:
     @staticmethod
     def _format_load_config_error(exc: Exception) -> str:
         text = str(exc or "").strip()
-        if "已移除的旧字段" in text:
-            return "配置加载失败：字段已过期"
-        if "配置文件版本不受支持" in text or "配置不兼容" in text:
-            return "配置加载失败：版本不兼容"
+        if "该配置文件损坏，请输入问卷链接/二维码重新配置" in text:
+            return "该配置文件损坏，请输入问卷链接/二维码重新配置"
         if "配置文件为空" in text:
             return "配置加载失败：文件为空"
         if "JSON" in text and "顶层必须是对象" in text:

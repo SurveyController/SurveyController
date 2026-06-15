@@ -3,7 +3,7 @@ from __future__ import annotations
 import copy
 import logging
 import random
-from dataclasses import asdict
+from dataclasses import asdict, fields
 from typing import Any, Dict, List, Optional, Tuple
 
 from software.core.reverse_fill import REVERSE_FILL_FORMAT_AUTO, REVERSE_FILL_FORMAT_WJX_SCORE, REVERSE_FILL_FORMAT_WJX_SEQUENCE, REVERSE_FILL_FORMAT_WJX_TEXT
@@ -27,8 +27,6 @@ from software.providers.contracts import (
 from software.logging.log_utils import log_suppressed_exception
 from software.app.config import USER_AGENT_PRESETS
 
-CURRENT_CONFIG_SCHEMA_VERSION = 6
-_LEGACY_CONFIG_KEYS = ("random_proxy_api", "ai_enabled")
 _TEXT_RANDOM_MODES = {"none", "name", "mobile", "id_card", "integer"}
 _REVERSE_FILL_FORMATS = {
     REVERSE_FILL_FORMAT_AUTO,
@@ -58,6 +56,91 @@ __all__ = [
     "deserialize_runtime_config",
     "_ensure_supported_config_payload",
 ]
+
+_CONFIG_CORRUPTED_MESSAGE = "该配置文件损坏，请输入问卷链接/二维码重新配置"
+CURRENT_CONFIG_SCHEMA_VERSION = 6
+
+_QUESTION_ENTRY_FIELDS = {
+    "question_type",
+    "probabilities",
+    "texts",
+    "rows",
+    "option_count",
+    "distribution_mode",
+    "custom_weights",
+    "question_num",
+    "question_title",
+    "survey_provider",
+    "provider_question_id",
+    "provider_page_id",
+    "ai_enabled",
+    "multi_text_blank_modes",
+    "multi_text_blank_ai_flags",
+    "multi_text_blank_int_ranges",
+    "text_random_mode",
+    "text_random_int_range",
+    "option_fill_texts",
+    "fillable_option_indices",
+    "attached_option_selects",
+    "is_location",
+    "location_parts",
+    "dimension",
+    "psycho_bias",
+}
+
+_SURVEY_QUESTION_META_FIELDS = {
+    "num",
+    "title",
+    "display_num",
+    "description",
+    "type_code",
+    "options",
+    "rows",
+    "row_texts",
+    "page",
+    "option_texts",
+    "forced_option_index",
+    "forced_option_text",
+    "forced_texts",
+    "fillable_options",
+    "attached_option_selects",
+    "has_attached_option_select",
+    "is_location",
+    "is_rating",
+    "is_description",
+    "rating_max",
+    "text_inputs",
+    "text_input_labels",
+    "is_multi_text",
+    "is_text_like",
+    "is_slider_matrix",
+    "has_jump",
+    "jump_rules",
+    "has_display_condition",
+    "display_conditions",
+    "has_dependent_display_logic",
+    "controls_display_targets",
+    "logic_parse_status",
+    "question_media",
+    "slider_min",
+    "slider_max",
+    "slider_step",
+    "multi_min_limit",
+    "multi_max_limit",
+    "provider",
+    "provider_question_id",
+    "provider_page_id",
+    "provider_type",
+    "provider_page_raw",
+    "unsupported",
+    "unsupported_reason",
+    "required",
+}
+
+_RUNTIME_CONFIG_FIELDS = {
+    field.name for field in fields(RuntimeConfig) if not field.name.startswith("_")
+}
+_RUNTIME_CONFIG_FIELDS.update({"question_entries", "questions_info"})
 
 
 def _coerce_int(value: Any, default: int = 0) -> int:
@@ -276,6 +359,15 @@ def serialize_question_entry(entry) -> Dict[str, Any]:
 def deserialize_question_entry(data: Dict[str, Any]):
     from software.core.questions.config import QuestionEntry
 
+    def _as_int(value: Any, default: int = 0) -> int:
+        try:
+            return int(value)
+        except Exception:
+            return default
+
+    unknown_keys = set(data or {}) - _QUESTION_ENTRY_FIELDS
+    if unknown_keys:
+        raise ValueError(f"{_CONFIG_CORRUPTED_MESSAGE}：题目配置包含不支持的字段（{', '.join(sorted(unknown_keys))}）")
     mode_raw = data.get("distribution_mode") or "random"
     probabilities = data.get("probabilities")
     custom_weights = data.get("custom_weights")
@@ -287,8 +379,8 @@ def deserialize_question_entry(data: Dict[str, Any]):
         question_type=data.get("question_type") or "text",
         probabilities=probabilities,
         texts=data.get("texts"),
-        rows=int(data.get("rows") or 1),
-        option_count=int(data.get("option_count") or 0),
+        rows=_as_int(data.get("rows"), 1),
+        option_count=_as_int(data.get("option_count"), 0),
         distribution_mode=mode_raw,
         custom_weights=custom_weights,
         question_num=data.get("question_num"),
@@ -395,6 +487,9 @@ def normalize_runtime_config_payload(raw: Dict[str, Any]) -> RuntimeConfig:
         return normalized if normalized in _REVERSE_FILL_FORMATS else REVERSE_FILL_FORMAT_AUTO
 
     config = RuntimeConfig()
+    unknown_keys = set(raw or {}) - _RUNTIME_CONFIG_FIELDS
+    if unknown_keys:
+        raise ValueError(f"{_CONFIG_CORRUPTED_MESSAGE}：配置包含不支持的字段（{', '.join(sorted(unknown_keys))}）")
     config.url = str(raw.get("url") or "")
     config.survey_title = str(raw.get("survey_title") or "")
     config.survey_provider = normalize_survey_provider(
@@ -463,20 +558,24 @@ def normalize_runtime_config_payload(raw: Dict[str, Any]) -> RuntimeConfig:
     entries_data = raw.get("question_entries") or []
     config.question_entries = []
     for item in entries_data:
-        try:
-            entry = deserialize_question_entry(item)
-            if (
-                config.survey_provider != SURVEY_PROVIDER_WJX
-                and getattr(entry, "provider_question_id", None)
-                and normalize_survey_provider(getattr(entry, "survey_provider", None)) == SURVEY_PROVIDER_WJX
-            ):
-                entry.survey_provider = config.survey_provider
-            config.question_entries.append(entry)
-        except Exception as exc:
-            logging.info("跳过损坏的题目配置: %s", exc)
+        entry = deserialize_question_entry(item)
+        if (
+            config.survey_provider != SURVEY_PROVIDER_WJX
+            and getattr(entry, "provider_question_id", None)
+            and normalize_survey_provider(getattr(entry, "survey_provider", None)) == SURVEY_PROVIDER_WJX
+        ):
+            entry.survey_provider = config.survey_provider
+        config.question_entries.append(entry)
 
     questions_info_data = raw.get("questions_info") or []
     if isinstance(questions_info_data, list):
+        for item in questions_info_data:
+            if isinstance(item, dict):
+                unknown_question_keys = set(item) - _SURVEY_QUESTION_META_FIELDS
+                if unknown_question_keys:
+                    raise ValueError(
+                        f"{_CONFIG_CORRUPTED_MESSAGE}：题目元数据包含不支持的字段（{', '.join(sorted(unknown_question_keys))}）"
+                    )
         normalized_questions = ensure_questions_provider_fields(
             questions_info_data,
             default_provider=config.survey_provider,
@@ -491,29 +590,9 @@ def normalize_runtime_config_payload(raw: Dict[str, Any]) -> RuntimeConfig:
     return config
 
 
-def _coerce_schema_version(raw_value: Any) -> int:
-    try:
-        version = int(raw_value)
-    except Exception:
-        return 0
-    return version if version > 0 else 0
-
-
 def _ensure_supported_config_payload(payload: Dict[str, Any], *, config_path: str) -> Dict[str, Any]:
-    legacy_keys = [key for key in _LEGACY_CONFIG_KEYS if key in payload]
-    if legacy_keys:
-        legacy_text = "、".join(legacy_keys)
-        raise ValueError(
-            f"配置文件使用了已移除的旧字段（{legacy_text}），请在旧版本客户端中重新保存后再导入：{config_path}"
-        )
-    schema_version = _coerce_schema_version(payload.get("config_schema_version"))
-    if schema_version == CURRENT_CONFIG_SCHEMA_VERSION:
-        current = dict(payload)
-        current["config_schema_version"] = schema_version
-        return current
-    raise ValueError(
-        f"配置文件版本不受支持（当前仅支持 schema v{CURRENT_CONFIG_SCHEMA_VERSION}，实际为 v{schema_version}）：{config_path}"
-    )
+    del config_path
+    return dict(payload)
 
 
 def serialize_runtime_config(config: RuntimeConfig) -> Dict[str, Any]:
@@ -522,7 +601,7 @@ def serialize_runtime_config(config: RuntimeConfig) -> Dict[str, Any]:
         serialize_question_entry(entry) for entry in list(config.question_entries or [])
     ]
     payload["questions_info"] = serialize_survey_question_metas(config.questions_info or [])
-    payload["config_schema_version"] = CURRENT_CONFIG_SCHEMA_VERSION
+    payload.pop("_ai_config_present", None)
     return payload
 
 
