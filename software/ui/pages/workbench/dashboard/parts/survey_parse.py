@@ -167,7 +167,7 @@ class DashboardSurveyParseMixin:
                 "warning",
                 duration=2200,
             )
-        elif "请改用 v3.2.1 旧版本" in text:
+        elif "请改用 v3.2.2 旧版本" in text:
             self._toast(text, "warning", duration=4500)
         elif "暂未开放" in text:
             self._toast(text, "warning", duration=2200)

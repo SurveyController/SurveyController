@@ -898,7 +898,7 @@ def _standardize_qq_questions(questions: Sequence[Mapping[str, Any]]) -> List[Di
         supported = provider_type in QQ_SUPPORTED_PROVIDER_TYPES or is_description
         blocked_runtime_label = _QQ_BLOCKED_RUNTIME_PROVIDER_TYPES.get(provider_type)
         if blocked_runtime_label:
-            unsupported_reason = f"当前版本暂不支持腾讯问卷{blocked_runtime_label}题，请改用 v3.2.1 旧版本"
+            unsupported_reason = f"当前版本暂不支持腾讯问卷{blocked_runtime_label}题，请改用 v3.2.2 旧版本"
         else:
             unsupported_reason = "" if supported else f"暂不支持腾讯题型：{provider_type or 'unknown'}"
         is_text_like = provider_type in {"text", "textarea"} and not is_description
@@ -973,7 +973,7 @@ def _raise_if_qq_contains_blocked_runtime_types(info: List[Dict[str, Any]]) -> N
     if len(blocked_questions) > 8:
         detail += f"\n其余 {len(blocked_questions) - 8} 道已省略"
     raise RuntimeError(
-        "腾讯问卷当前版本暂不支持量表、矩阵量表题，请改用 v3.2.1 旧版本：\n"
+        "腾讯问卷当前版本暂不支持量表、矩阵量表题，请改用 v3.2.2 旧版本：\n"
         f"{detail}"
     )
 

@@ -174,7 +174,7 @@ class TencentParserTests:
         assert second["option_texts"] == ["3", "4", "5", "6"]
         assert second["rating_max"] == 4
         assert second["unsupported"] is True
-        assert second["unsupported_reason"] == "当前版本暂不支持腾讯问卷量表题，请改用 v3.2.1 旧版本"
+        assert second["unsupported_reason"] == "当前版本暂不支持腾讯问卷量表题，请改用 v3.2.2 旧版本"
 
         third = normalized[2]
         assert third["unsupported"]
@@ -184,7 +184,7 @@ class TencentParserTests:
         assert third["display_num"] == 3
 
     def test_build_parse_result_blocks_tencent_score_and_matrix_star_questions(self) -> None:
-        with pytest.raises(RuntimeError, match="请改用 v3.2.1 旧版本"):
+        with pytest.raises(RuntimeError, match="请改用 v3.2.2 旧版本"):
             qq_parser._build_qq_parse_result(
                 [
                     {

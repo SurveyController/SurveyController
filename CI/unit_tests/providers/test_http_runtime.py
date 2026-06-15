@@ -1161,7 +1161,7 @@ async def test_qq_http_runtime_skips_description_metadata(monkeypatch) -> None:
             provider_type="matrix_star",
             type_code="6",
             unsupported=True,
-            unsupported_reason="当前版本暂不支持腾讯问卷矩阵量表题，请改用 v3.2.1 旧版本",
+            unsupported_reason="当前版本暂不支持腾讯问卷矩阵量表题，请改用 v3.2.2 旧版本",
             option_texts=["1", "2"],
             row_texts=["专业"],
             options=2,
@@ -1202,7 +1202,7 @@ async def test_qq_http_runtime_skips_description_metadata(monkeypatch) -> None:
     monkeypatch.setattr(qq_http, "build_answer_action", fake_build_action)
     monkeypatch.setattr(qq_http.http_client, "apost", fake_post)
 
-    with pytest.raises(RuntimeError, match="腾讯问卷第6题暂不支持：当前版本暂不支持腾讯问卷矩阵量表题，请改用 v3.2.1 旧版本"):
+    with pytest.raises(RuntimeError, match="腾讯问卷第6题暂不支持：当前版本暂不支持腾讯问卷矩阵量表题，请改用 v3.2.2 旧版本"):
         await qq_http.brush_qq_http(config, state)
 
     assert built_questions == []
@@ -1225,7 +1225,7 @@ async def test_qq_http_runtime_uses_latest_dynamic_ids_for_score_questions(monke
             type_code="5",
             is_rating=True,
             unsupported=True,
-            unsupported_reason="当前版本暂不支持腾讯问卷量表题，请改用 v3.2.1 旧版本",
+            unsupported_reason="当前版本暂不支持腾讯问卷量表题，请改用 v3.2.2 旧版本",
             options=11,
             rating_max=11,
             option_texts=[str(index) for index in range(11)],
@@ -1256,7 +1256,7 @@ async def test_qq_http_runtime_uses_latest_dynamic_ids_for_score_questions(monke
     monkeypatch.setattr(qq_http, "_fetch_submit_source", fake_fetch)
     monkeypatch.setattr(qq_http.http_client, "apost", fake_post)
 
-    with pytest.raises(RuntimeError, match="腾讯问卷第8题暂不支持：当前版本暂不支持腾讯问卷量表题，请改用 v3.2.1 旧版本"):
+    with pytest.raises(RuntimeError, match="腾讯问卷第8题暂不支持：当前版本暂不支持腾讯问卷量表题，请改用 v3.2.2 旧版本"):
         await qq_http.brush_qq_http(config, state)
 
     assert captured == {}
