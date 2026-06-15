@@ -4,6 +4,11 @@
 .playwright-mcp/
 .local-private/
 .ruff_cache/
+.agent/
+.codex/environments/
+.trellis/workspace/
+.trellis/.runtime/
+.trellis/tasks/
 .venv/
 /output/
 .coverage
