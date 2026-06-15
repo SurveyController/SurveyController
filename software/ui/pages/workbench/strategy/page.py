@@ -6,6 +6,7 @@ from typing import Any, Dict, List, Optional, Sequence
 from PySide6.QtCore import Signal
 from PySide6.QtWidgets import (
     QHBoxLayout,
+    QStackedWidget,
     QVBoxLayout,
     QWidget,
 )
@@ -15,7 +16,6 @@ from qfluentwidgets import (
     InfoBar,
     InfoBarPosition,
     MessageBox,
-    PopUpAniStackedWidget,
     PrimaryPushButton,
     PushButton,
     ScrollArea,
@@ -380,7 +380,7 @@ class QuestionStrategyPage(ScrollArea):
         self.section_separator = HorizontalSeparator(self.view)
         layout.addWidget(self.section_separator)
 
-        self.stack = PopUpAniStackedWidget(self.view)
+        self.stack = QStackedWidget(self.view)
         self.rule_panel = ConditionRulePanel(self.stack)
         self.dimension_panel = DimensionGroupingPanel(self.stack)
         self.stack.addWidget(self.rule_panel)
