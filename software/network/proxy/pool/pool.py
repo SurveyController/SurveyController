@@ -25,7 +25,7 @@ from software.providers.common import (
     SURVEY_PROVIDER_WJX,
 )
 
-HTTP_PROXY_MIN_REMAINING_TTL_SECONDS = 30
+HTTP_PROXY_MIN_REMAINING_TTL_SECONDS = 50
 
 
 

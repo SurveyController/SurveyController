@@ -58,9 +58,9 @@ class SessionPolicyTests:
         ctx.config.proxy_ip_pool = [ProxyLease(address='http://1.1.1.1:8000', poolable=True), ProxyLease(address='http://1.1.1.1:8000', poolable=True), ProxyLease(address='http://2.2.2.2:8000', poolable=False), ProxyLease(address='http://3.3.3.3:8000', poolable=True), '']
 
         def has_ttl(lease: ProxyLease | None, *, required_ttl_seconds: int) -> bool:
-            assert required_ttl_seconds == 30
+            assert required_ttl_seconds == 50
             return bool(lease and lease.address != 'http://3.3.3.3:8000')
-        with patch.object(session_policy, 'get_proxy_required_ttl_seconds', return_value=30), patch.object(session_policy, 'proxy_lease_has_sufficient_ttl', side_effect=has_ttl):
+        with patch.object(session_policy, 'get_proxy_required_ttl_seconds', return_value=50), patch.object(session_policy, 'proxy_lease_has_sufficient_ttl', side_effect=has_ttl):
             session_policy._purge_unusable_proxy_pool_locked(ctx)
         assert list(ctx.config.proxy_ip_pool) == [ProxyLease(address='http://1.1.1.1:8000', poolable=True)]
         assert isinstance(ctx.config.proxy_ip_pool, deque)
@@ -257,7 +257,7 @@ class SessionPolicyTests:
         ctx = ExecutionState(config=ExecutionConfig(random_proxy_ip_enabled=True, survey_provider='wjx'))
         fetched = [
             ProxyLease(address='http://1.1.1.1:8000', expire_ts=time.time() + 10),
-            ProxyLease(address='http://2.2.2.2:8000', expire_ts=time.time() + 45),
+            ProxyLease(address='http://2.2.2.2:8000', expire_ts=time.time() + 55),
         ]
         merged = session_policy.merge_prefetched_proxy_leases(ctx, fetched)
 
