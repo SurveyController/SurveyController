@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
+from PySide6.QtCore import QObject
 from PySide6.QtWidgets import QWidget
 from qfluentwidgets import ScrollArea
 
@@ -54,12 +55,14 @@ class RuntimePage(
     answer_card: "TimeRangeSettingCard"
     timed_card: "TimedModeSettingCard"
     ai_section: "RuntimeAISection"
+    _height_sync_filters: list[QObject]
 
     def __init__(self, controller: RunController, parent=None):
         super().__init__(parent)
         self.controller = controller
         self._suppress_headless_tip = False
         self._last_benefit_proxy_compatible = None
+        self._height_sync_filters = []
         self.view = QWidget(self)
         self.setWidget(self.view)
         self.setWidgetResizable(True)

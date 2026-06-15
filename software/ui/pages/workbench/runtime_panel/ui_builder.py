@@ -54,12 +54,12 @@ class _GroupHeightSyncFilter(QObject):
             parent.updateGeometry()
 
 
-def _install_group_height_sync(group: SettingCardGroup, *widgets: QWidget) -> None:
+def _install_group_height_sync_for_page(page, group: SettingCardGroup, *widgets: QWidget) -> None:
     sync_filter = _GroupHeightSyncFilter(group)
     group.installEventFilter(sync_filter)
     for widget in widgets:
         widget.installEventFilter(sync_filter)
-    group._height_sync_filter = sync_filter
+    page._height_sync_filters.append(sync_filter)
 
 
 def build_runtime_page_ui(page) -> None:
@@ -73,7 +73,9 @@ def build_runtime_page_ui(page) -> None:
     page.random_ua_card = RandomUASettingCard(parent=feature_group)
     feature_group.addSettingCard(page.random_ip_card)
     feature_group.addSettingCard(page.random_ua_card)
-    _install_group_height_sync(feature_group, page.random_ip_card, page.random_ua_card)
+    _install_group_height_sync_for_page(
+        page, feature_group, page.random_ip_card, page.random_ua_card
+    )
     layout.addWidget(feature_group)
 
     run_group = SettingCardGroup("作答设置", page.view)
@@ -113,7 +115,8 @@ def build_runtime_page_ui(page) -> None:
         page.headless_card,
     ):
         run_group.addSettingCard(card)
-    _install_group_height_sync(
+    _install_group_height_sync_for_page(
+        page,
         run_group,
         page.target_card,
         page.thread_card,
@@ -157,7 +160,9 @@ def build_runtime_page_ui(page) -> None:
     )
     for card in (page.interval_card, page.answer_card, page.timed_card):
         time_group.addSettingCard(card)
-    _install_group_height_sync(time_group, page.interval_card, page.answer_card, page.timed_card)
+    _install_group_height_sync_for_page(
+        page, time_group, page.interval_card, page.answer_card, page.timed_card
+    )
     layout.addWidget(time_group)
 
     page.ai_section = RuntimeAISection(page.view, page)
