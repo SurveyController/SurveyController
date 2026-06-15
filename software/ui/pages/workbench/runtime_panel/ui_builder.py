@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from PySide6.QtCore import QEvent, QObject, QTimer
 from PySide6.QtWidgets import QHBoxLayout, QVBoxLayout, QWidget
 from qfluentwidgets import BodyLabel, FluentIcon, SettingCardGroup
 
@@ -20,6 +21,47 @@ from software.ui.widgets.setting_cards import (
 )
 
 
+class _GroupHeightSyncFilter(QObject):
+    """分组高度变化后，延迟刷新外层布局。"""
+
+    def __init__(self, target_group: SettingCardGroup):
+        super().__init__(target_group)
+        self._target_group = target_group
+        self._sync_pending = False
+
+    def eventFilter(self, watched, event):
+        if event.type() == QEvent.Type.Resize:
+            self._schedule_sync()
+        return super().eventFilter(watched, event)
+
+    def _schedule_sync(self) -> None:
+        if self._sync_pending:
+            return
+        self._sync_pending = True
+        QTimer.singleShot(0, self._sync_group_height)
+
+    def _sync_group_height(self) -> None:
+        self._sync_pending = False
+        group = self._target_group
+        if group is None:
+            return
+        parent = group.parentWidget()
+        if parent is not None:
+            layout = parent.layout()
+            if layout is not None:
+                layout.invalidate()
+                layout.activate()
+            parent.updateGeometry()
+
+
+def _install_group_height_sync(group: SettingCardGroup, *widgets: QWidget) -> None:
+    sync_filter = _GroupHeightSyncFilter(group)
+    group.installEventFilter(sync_filter)
+    for widget in widgets:
+        widget.installEventFilter(sync_filter)
+    group._height_sync_filter = sync_filter
+
+
 def build_runtime_page_ui(page) -> None:
     """把运行参数页的布局一次性装好。"""
     layout = QVBoxLayout(page.view)
@@ -31,6 +73,7 @@ def build_runtime_page_ui(page) -> None:
     page.random_ua_card = RandomUASettingCard(parent=feature_group)
     feature_group.addSettingCard(page.random_ip_card)
     feature_group.addSettingCard(page.random_ua_card)
+    _install_group_height_sync(feature_group, page.random_ip_card, page.random_ua_card)
     layout.addWidget(feature_group)
 
     run_group = SettingCardGroup("作答设置", page.view)
@@ -70,6 +113,13 @@ def build_runtime_page_ui(page) -> None:
         page.headless_card,
     ):
         run_group.addSettingCard(card)
+    _install_group_height_sync(
+        run_group,
+        page.target_card,
+        page.thread_card,
+        page.reliability_card,
+        page.headless_card,
+    )
     layout.addWidget(run_group)
 
     time_group = SettingCardGroup("时间控制", page.view)
@@ -107,6 +157,7 @@ def build_runtime_page_ui(page) -> None:
     )
     for card in (page.interval_card, page.answer_card, page.timed_card):
         time_group.addSettingCard(card)
+    _install_group_height_sync(time_group, page.interval_card, page.answer_card, page.timed_card)
     layout.addWidget(time_group)
 
     page.ai_section = RuntimeAISection(page.view, page)
