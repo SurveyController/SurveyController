@@ -3,6 +3,8 @@ name: Python Fast Checks
 on:
   pull_request:
   push:
+    tags-ignore:
+      - "v*"
 
 permissions:
   contents: read
