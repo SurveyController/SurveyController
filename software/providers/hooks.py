@@ -45,6 +45,7 @@ def build_fill_http_hook(target: HookTarget):
         psycho_plan: Any = None,
         proxy_address: str | None = None,
         user_agent: str | None = None,
+        submit_proxy_lease_factory: Any = None,
     ) -> bool:
         return bool(
             await _invoke(
@@ -56,6 +57,7 @@ def build_fill_http_hook(target: HookTarget):
                 psycho_plan=psycho_plan,
                 proxy_address=proxy_address,
                 user_agent=user_agent,
+                submit_proxy_lease_factory=submit_proxy_lease_factory,
             )
         )
 

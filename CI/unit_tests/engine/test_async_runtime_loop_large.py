@@ -12,7 +12,7 @@ from software.core.ai.runtime import AIRuntimeError
 from software.core.engine.async_events import AsyncRunContext
 from software.core.engine.async_runtime_loop import AsyncSlotRunner
 from software.core.engine.failure_reason import FailureReason
-from software.core.task import ExecutionConfig, ExecutionState
+from software.core.task import ExecutionConfig, ExecutionState, ProxyLease
 from software.providers.contracts import SurveyQuestionMeta
 from software.providers.errors import SubmissionVerificationRequiredError, SurveyProviderUnavailableAtRuntimeError
 
@@ -130,32 +130,24 @@ class AsyncRuntimeLoopLargeTests:
         assert runner._resolve_dispatch_delay_seconds() == 2.5
 
     @pytest.mark.asyncio
-    async def test_select_session_proxy_and_ua_skips_proxy_precheck(self, monkeypatch) -> None:
+    async def test_select_session_proxy_and_ua_does_not_pre_acquire_proxy(self, monkeypatch) -> None:
         config = ExecutionConfig(random_proxy_ip_enabled=True, survey_provider="wjx")
         state = ExecutionState(config=config)
-        released: list[str] = []
-        state.release_proxy_in_use = lambda thread_name: released.append(thread_name)
-        health_calls: list[str] = []
+        calls: list[str] = []
 
         async def fake_select_proxy_for_session_async(*_args, **_kwargs):
+            calls.append("select")
             return "http://1.1.1.1:80"
 
-        monkeypatch.setattr(proxy_session, "_select_proxy_for_session_async", fake_select_proxy_for_session_async)
-        monkeypatch.setattr(proxy_session, "_record_bad_proxy_and_maybe_pause", lambda *_args, **_kwargs: False)
-        monkeypatch.setattr(
-            proxy_session,
-            "is_proxy_responsive_async",
-            lambda proxy: asyncio.sleep(0, result=health_calls.append(proxy) is None),
-            raising=False,
-        )
+        monkeypatch.setattr(proxy_session, "_select_proxy_for_session_async", fake_select_proxy_for_session_async, raising=False)
         monkeypatch.setattr(proxy_session, "_select_user_agent_for_session", lambda *_args, **_kwargs: ("UA", None))
         runner, _state, _ctx, _scheduler = _build_runner(config=config, state=state)
 
         proxy, ua = await runner._select_session_proxy_and_ua()
 
-        assert (proxy, ua) == ("http://1.1.1.1:80", "UA")
-        assert health_calls == []
-        assert released == []
+        assert (proxy, ua) == (None, "UA")
+        assert calls == []
+        assert state.snapshot_active_proxy_addresses() == set()
 
     @pytest.mark.asyncio
     async def test_prepare_round_context_marks_terminal_stop_when_reverse_fill_exhausted(self, monkeypatch) -> None:
@@ -241,6 +233,41 @@ class AsyncRuntimeLoopLargeTests:
         assert runner.stop_policy.failure_calls == []
 
     @pytest.mark.asyncio
+    async def test_run_random_proxy_enabled_acquires_proxy_only_at_submit(self, monkeypatch) -> None:
+        config = ExecutionConfig(
+            url="https://www.wjx.cn/vm/demo.aspx",
+            survey_provider="wjx",
+            random_proxy_ip_enabled=True,
+        )
+        config.proxy_ip_pool.append(ProxyLease(address="http://1.1.1.1:80", source="unit"))
+        runner, state, _ctx, scheduler = _build_runner(config=config)
+        scheduler.acquire_values = [6, None]
+        submit_calls: list[dict[str, object]] = []
+        pre_submit_active: list[set[str]] = []
+
+        async def fake_prepare():
+            pre_submit_active.append(state.snapshot_active_proxy_addresses())
+            return True
+
+        async def fake_submit(**kwargs):
+            factory = kwargs["submit_proxy_lease_factory"]
+            lease = await factory()
+            submit_calls.append({**kwargs, "lease": lease})
+            return True
+
+        monkeypatch.setattr(runner.http_submitter, "submit", fake_submit)
+        monkeypatch.setattr(runner, "_prepare_round_context", fake_prepare)
+        monkeypatch.setattr(runner, "_select_session_proxy_and_ua", lambda: asyncio.sleep(0, result=(None, "UA")))
+
+        await runner.run()
+
+        assert pre_submit_active == [set()]
+        assert submit_calls[0]["proxy_address"] is None
+        assert submit_calls[0]["lease"].address == "http://1.1.1.1:80"
+        assert state.snapshot_active_proxy_addresses() == set()
+        assert scheduler.release_calls[0]["requeue"] is True
+
+    @pytest.mark.asyncio
     async def test_run_random_proxy_enabled_never_submits_without_proxy(self, monkeypatch) -> None:
         config = ExecutionConfig(
             url="https://www.wjx.cn/vm/demo.aspx",
@@ -253,12 +280,21 @@ class AsyncRuntimeLoopLargeTests:
         release_flags: list[bool] = []
 
         async def fake_submit(**kwargs):
+            factory = kwargs["submit_proxy_lease_factory"]
+            lease = await factory()
+            if not getattr(lease, "address", None):
+                raise runtime_loop.SubmitProxyUnavailableError("提交前未获取到随机 IP")
             submit_calls.append(kwargs)
             return True
 
         monkeypatch.setattr(runner.http_submitter, "submit", fake_submit)
         monkeypatch.setattr(runner, "_prepare_round_context", lambda: asyncio.sleep(0, result=True))
         monkeypatch.setattr(runner, "_select_session_proxy_and_ua", lambda: asyncio.sleep(0, result=(None, "UA")))
+        monkeypatch.setattr(runtime_loop, "_record_bad_proxy_and_maybe_pause", lambda *_args, **_kwargs: False)
+        async def fake_acquire_submit_proxy(*_args, **_kwargs):
+            return SimpleNamespace(address=None, provider="unknown")
+
+        monkeypatch.setattr(runtime_loop, "acquire_submit_proxy", fake_acquire_submit_proxy)
         monkeypatch.setattr(
             runner,
             "_release_round_resources",

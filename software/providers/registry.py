@@ -140,6 +140,7 @@ async def fill_survey_http(
     provider: Optional[str] = None,
     proxy_address: str | None = None,
     user_agent: str | None = None,
+    submit_proxy_lease_factory: Any = None,
 ) -> bool:
     
     adapter = _get_provider_adapter(provider=provider, ctx=state)
@@ -162,6 +163,7 @@ async def fill_survey_http(
                 psycho_plan=resolved_plan,
                 proxy_address=proxy_address,
                 user_agent=user_agent,
+                submit_proxy_lease_factory=submit_proxy_lease_factory,
             )
         )
 

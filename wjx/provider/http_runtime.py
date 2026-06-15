@@ -17,6 +17,7 @@ from software.core.persona.context import record_answer
 from software.core.questions.distribution import record_pending_distribution_choice
 from software.core.task import ExecutionConfig, ExecutionState
 from software.network.proxy.pool import mask_proxy_for_log
+from software.network.session_policy import SubmitProxyUnavailableError, mark_submit_proxy_success, release_submit_proxy
 from software.providers.answering import AnswerAction
 from software.providers.answering.recording import record_answer_action
 from software.providers.http_logic import HttpLogicPlan, build_http_logic_plan
@@ -410,21 +411,19 @@ async def brush_wjx_http(
     psycho_plan: Any = None,
     proxy_address: str | None = None,
     user_agent: str | None = None,
+    submit_proxy_lease_factory: Any = None,
 ) -> bool:
     if stop_signal is not None and stop_signal.is_set():
         return False
     try:
         shortid = _shortid_from_url(config.url)
-        proxies = _proxy_arg(proxy_address)
-        if str(proxy_address or "").strip():
-            logging.debug("问卷星 HTTP 会话使用随机IP：%s", mask_proxy_for_log(proxy_address))
         user_agent_value = _resolve_user_agent(user_agent)
         headers = {
             **DEFAULT_HTTP_HEADERS,
             "User-Agent": user_agent_value,
             "Referer": config.url,
         }
-        page_html = await _load_wjx_page(config.url, headers=headers, proxies=proxies)
+        page_html = await _load_wjx_page(config.url, headers=headers, proxies={})
 
         await update_http_submit_step(ctx, thread_name, "生成答案")
         plan = await _build_action_plan(
@@ -484,25 +483,43 @@ async def brush_wjx_http(
             "iwx": "1",
         }
         await update_http_submit_step(ctx, thread_name, "提交问卷")
-        response = await http_client.apost(
-            submit_url,
-            params=params,
-            data={"submitdata": submitdata, "sceneId": scene_id},
-            headers={
-                **headers,
-                "Accept": "text/plain, */*; q=0.01",
-                "Content-Type": "application/x-www-form-urlencoded; charset=UTF-8",
-                "Origin": f"https://{domain}",
-                "X-Requested-With": "XMLHttpRequest",
-            },
-            timeout=_WJX_SUBMIT_TIMEOUT_SECONDS,
-            proxies=proxies,
-        )
-        response.raise_for_status()
+        submit_proxy_address = str(proxy_address or "").strip() or None
+        submit_proxy_lease = None
+        if submit_proxy_lease_factory is not None:
+            submit_proxy_lease = await submit_proxy_lease_factory()
+            submit_proxy_address = str(getattr(submit_proxy_lease, "address", "") or "").strip() or None
+        if bool(getattr(config, "random_proxy_ip_enabled", False)) and not submit_proxy_address:
+            raise SubmitProxyUnavailableError("提交前未获取到随机 IP")
+        submit_proxies = _proxy_arg(submit_proxy_address)
+        if str(submit_proxy_address or "").strip():
+            logging.debug("问卷星 HTTP 提交使用随机IP：%s", mask_proxy_for_log(submit_proxy_address))
+        try:
+            response = await http_client.apost(
+                submit_url,
+                params=params,
+                data={"submitdata": submitdata, "sceneId": scene_id},
+                headers={
+                    **headers,
+                    "Accept": "text/plain, */*; q=0.01",
+                    "Content-Type": "application/x-www-form-urlencoded; charset=UTF-8",
+                    "Origin": f"https://{domain}",
+                    "X-Requested-With": "XMLHttpRequest",
+                },
+                timeout=_WJX_SUBMIT_TIMEOUT_SECONDS,
+                proxies=submit_proxies,
+            )
+            response.raise_for_status()
+            if submit_proxy_address and thread_name:
+                release_submit_proxy(ctx, thread_name, submit_proxy_address)
+        except Exception:
+            if submit_proxy_address and thread_name:
+                release_submit_proxy(ctx, thread_name, submit_proxy_address)
+            raise
         await update_http_submit_step(ctx, thread_name, "校验结果")
         response_text = str(response.text or "").strip()
         if classify_wjx_submit_response(response_text) != WjxSubmitResult.SUCCESS:
-            _raise_submit_rejected(config, response_text, proxy_address=proxy_address)
+            _raise_submit_rejected(config, response_text, proxy_address=submit_proxy_address)
+        mark_submit_proxy_success(ctx, submit_proxy_address)
         return True
     finally:
         ctx.clear_free_ai_prefill_answers(thread_name)

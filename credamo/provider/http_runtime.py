@@ -23,6 +23,7 @@ from software.providers.answering.recording import record_answer_action
 from software.providers.contracts import SurveyQuestionMeta
 from software.providers.http_logic import build_http_logic_plan
 from software.providers.http_progress import update_http_submit_step
+from software.network.session_policy import SubmitProxyUnavailableError, mark_submit_proxy_success, release_submit_proxy
 
 from .answering_builders import build_answer_action
 
@@ -797,6 +798,7 @@ async def brush_credamo_http(
     psycho_plan: Any = None,
     proxy_address: str | None = None,
     user_agent: str | None = None,
+    submit_proxy_lease_factory: Any = None,
 ) -> bool:
     if stop_signal is not None and stop_signal.is_set():
         return False
@@ -809,9 +811,9 @@ async def brush_credamo_http(
         short_url=short_url,
         user_agent=user_agent_value,
     )
-    async with _CredamoHttpSession(proxy_address) as session:
+    async with _CredamoHttpSession() as read_session:
         detail_data = await _fetch_detail(
-            session,
+            read_session,
             origin=origin,
             short_url=short_url,
             headers=base_headers,
@@ -839,38 +841,58 @@ async def brush_credamo_http(
             logging.info("见数 HTTP 单测已生成答案，未提交。")
             return True
 
-        if stop_signal is not None and stop_signal.is_set():
-            return False
-        await update_http_submit_step(ctx, thread_name, "提交问卷")
-        time_code = _new_time_code()
+    if stop_signal is not None and stop_signal.is_set():
+        return False
+    await update_http_submit_step(ctx, thread_name, "提交问卷")
+    time_code = _new_time_code()
+    submit_headers = _request_headers(origin=origin, short_url=short_url, user_agent=user_agent_value)
+    async with _CredamoHttpSession() as init_session:
         init_data = await _init_answer(
-            session,
+            init_session,
             origin=origin,
             short_url=short_url,
             time_code=time_code,
-            headers=_request_headers(origin=origin, short_url=short_url, user_agent=user_agent_value),
+            headers=submit_headers,
         )
-        body = _build_submit_body(
-            short_url=short_url,
-            raw_by_num=raw_by_num,
-            actions=actions,
-            config=config,
-            answer_started_at_ms=_sample_answer_start_time_ms(
-                config,
-                init_started_at_ms=init_data.timestamp_ms,
-                duration_seconds=duration_seconds,
-            ),
+    if stop_signal is not None and stop_signal.is_set():
+        return False
+    body = _build_submit_body(
+        short_url=short_url,
+        raw_by_num=raw_by_num,
+        actions=actions,
+        config=config,
+        answer_started_at_ms=_sample_answer_start_time_ms(
+            config,
+            init_started_at_ms=init_data.timestamp_ms,
             duration_seconds=duration_seconds,
-        )
-        await _save_answers(
-            session,
-            origin=origin,
-            short_url=short_url,
-            init_data=init_data,
-            body=body,
-            user_agent=user_agent_value,
-        )
-        await update_http_submit_step(ctx, thread_name, "校验结果")
+        ),
+        duration_seconds=duration_seconds,
+    )
+    submit_proxy_address = str(proxy_address or "").strip() or None
+    submit_proxy_lease = None
+    if submit_proxy_lease_factory is not None:
+        submit_proxy_lease = await submit_proxy_lease_factory()
+        submit_proxy_address = str(getattr(submit_proxy_lease, "address", "") or "").strip() or None
+    if bool(getattr(config, "random_proxy_ip_enabled", False)) and not submit_proxy_address:
+        raise SubmitProxyUnavailableError("提交前未获取到随机 IP")
+    try:
+        async with _CredamoHttpSession(submit_proxy_address) as submit_session:
+            await _save_answers(
+                submit_session,
+                origin=origin,
+                short_url=short_url,
+                init_data=init_data,
+                body=body,
+                user_agent=user_agent_value,
+            )
+        if submit_proxy_address and thread_name:
+            release_submit_proxy(ctx, thread_name, submit_proxy_address)
+    except Exception:
+        if submit_proxy_address and thread_name:
+            release_submit_proxy(ctx, thread_name, submit_proxy_address)
+        raise
+    mark_submit_proxy_success(ctx, submit_proxy_address)
+    await update_http_submit_step(ctx, thread_name, "校验结果")
     return True
 
 

@@ -1,5 +1,6 @@
 import asyncio
 from collections import deque
+from dataclasses import dataclass
 from typing import Iterable, Optional, Tuple
 import logging
 
@@ -16,6 +17,15 @@ _PROXY_WAIT_POLL_SECONDS = 0.3
 _BAD_PROXY_COOLDOWN_SECONDS = 180.0
 _PROXY_PREFETCH_IDLE_SECONDS = 0.35
 
+
+@dataclass(frozen=True)
+class SubmitProxyLease:
+    address: Optional[str]
+    provider: str = "unknown"
+
+
+class SubmitProxyUnavailableError(RuntimeError):
+    pass
 
 def _ensure_proxy_pool_deque_locked(ctx: ExecutionState) -> deque:
     pool = ctx.config.proxy_ip_pool
@@ -408,6 +418,56 @@ async def _select_proxy_for_session_async(
                 return None
     finally:
         ctx.unregister_proxy_waiter()
+
+
+
+def _resolve_proxy_provider_for_thread(ctx: ExecutionState, thread_name: str) -> str:
+    if not thread_name:
+        return "unknown"
+    try:
+        with ctx.lock:
+            lease = ctx.proxy_in_use_by_thread.get(thread_name)
+            return str(getattr(lease, "source", "") or "unknown").strip() or "unknown"
+    except Exception:
+        logging.info("读取代理来源失败", exc_info=True)
+    return "unknown"
+
+
+async def acquire_submit_proxy(
+    ctx: ExecutionState,
+    thread_name: str = "",
+    *,
+    stop_signal: Optional[StopSignalLike] = None,
+    wait: bool = True,
+) -> SubmitProxyLease:
+    proxy_address = await _select_proxy_for_session_async(
+        ctx,
+        thread_name,
+        stop_signal=stop_signal,
+        wait=wait,
+    )
+    provider = _resolve_proxy_provider_for_thread(ctx, thread_name) if proxy_address else "unknown"
+    return SubmitProxyLease(address=proxy_address, provider=provider)
+
+
+def release_submit_proxy(ctx: ExecutionState, thread_name: str, proxy_address: str | None) -> None:
+    if not proxy_address or not thread_name:
+        return
+    try:
+        ctx.release_proxy_in_use(thread_name)
+    except Exception:
+        logging.info("释放提交代理占用失败", exc_info=True)
+
+
+def mark_submit_proxy_success(ctx: ExecutionState, proxy_address: str | None) -> None:
+    if not proxy_address:
+        return
+    try:
+        ctx.mark_successful_proxy_address(proxy_address)
+    except Exception:
+        logging.info("记录成功代理失败：%s", proxy_address, exc_info=True)
+
+
 
 
 def _select_user_agent_for_session(ctx: ExecutionState) -> Tuple[Optional[str], Optional[str]]:

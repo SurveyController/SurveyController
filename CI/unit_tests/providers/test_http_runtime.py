@@ -518,8 +518,10 @@ async def test_wjx_http_runtime_uses_proxy_and_posts_submitdata(monkeypatch) -> 
     }
     state = ExecutionState(config=config)
     captured: dict[str, object] = {}
+    load_kwargs: dict[str, object] = {}
 
     async def fake_load(*_args, **_kwargs):
+        load_kwargs.update(_kwargs)
         return "<html><body><input type='hidden' value='2026/5/30 1:23:18' id='starttime' name='starttime' /></body></html>"
 
     async def fake_build_action(*_args, **_kwargs):
@@ -543,6 +545,7 @@ async def test_wjx_http_runtime_uses_proxy_and_posts_submitdata(monkeypatch) -> 
     )
 
     assert ok is True
+    assert load_kwargs["proxies"] == {}
     assert captured["proxies"] == "http://1.1.1.1:80"
     assert captured["data"] == {"submitdata": "1$1", "sceneId": "q0hcfsca"}
     assert captured["params"]["starttime"] == wjx_http._format_wjx_starttime(1710000000 - 90)
@@ -1004,7 +1007,7 @@ async def test_qq_http_runtime_uses_proxy_and_answer_session(monkeypatch) -> Non
     )
 
     assert ok is True
-    assert captured.fetch_proxies == "http://1.1.1.1:80"
+    assert captured.fetch_proxies == {}
     assert captured.post_kwargs["proxies"] == "http://1.1.1.1:80"
     assert captured.post_kwargs["headers"]["X-Answer-Session"] == "sess"
     assert captured.post_kwargs["json"]["answer_survey"]["duration"] == 480
@@ -1275,14 +1278,14 @@ async def test_credamo_http_runtime_uses_proxy_and_posts_json(monkeypatch) -> No
     config.question_config_index_map = {1: ("single", 0)}
     config.single_prob = [[1.0, 0.0]]
     state = ExecutionState(config=config)
-    captured = SimpleNamespace(fetch_proxy=None, post_kwargs=None)
+    captured = SimpleNamespace(session_proxies=[], post_kwargs=None)
 
     class FakeSession:
         def __init__(self, proxy_address=None):
             self.proxy_address = proxy_address
 
         async def __aenter__(self):
-            captured.fetch_proxy = self.proxy_address
+            captured.session_proxies.append(self.proxy_address)
             return self
 
         async def __aexit__(self, *_args):
@@ -1329,7 +1332,7 @@ async def test_credamo_http_runtime_uses_proxy_and_posts_json(monkeypatch) -> No
     )
 
     assert ok is True
-    assert captured.fetch_proxy == "http://1.1.1.1:80"
+    assert captured.session_proxies == [None, None, "http://1.1.1.1:80"]
     assert captured.post_kwargs["user_agent"] == "UA"
     assert captured.post_kwargs["init_data"].answer_token == "answer-token"
     assert captured.post_kwargs["init_data"].time_code == "device-id"

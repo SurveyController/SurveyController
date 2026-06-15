@@ -20,6 +20,7 @@ from software.providers.answering.option_fill import option_fill_text_map
 from software.providers.answering.recording import record_answer_action
 from software.providers.http_logic import build_http_logic_plan
 from software.providers.http_progress import update_http_submit_step
+from software.network.session_policy import SubmitProxyUnavailableError, mark_submit_proxy_success, release_submit_proxy
 from software.providers.common import SURVEY_PROVIDER_QQ
 from software.providers.contracts import SurveyQuestionMeta, ensure_survey_question_metas
 from tencent.provider.answering_builders import build_answer_action
@@ -477,6 +478,7 @@ async def brush_qq_http(
     psycho_plan: Any = None,
     proxy_address: str | None = None,
     user_agent: str | None = None,
+    submit_proxy_lease_factory: Any = None,
 ) -> bool:
     if stop_signal is not None and stop_signal.is_set():
         return False
@@ -484,12 +486,11 @@ async def brush_qq_http(
         survey_id, hash_value = _extract_qq_identifiers(config.url)
         page_url = _build_qq_survey_page_url(survey_id, hash_value)
         headers = _headers(page_url, user_agent)
-        proxies = _proxy_arg(proxy_address)
         answer_session_id, session_data, raw_questions = await _fetch_submit_source(
             survey_id,
             hash_value,
             headers=headers,
-            proxies=proxies,
+            proxies={},
         )
 
         raw_by_id = _raw_questions_by_id(raw_questions)
@@ -611,15 +612,30 @@ async def brush_qq_http(
         if answer_session_id:
             submit_headers["X-Answer-Session"] = answer_session_id
         await update_http_submit_step(ctx, thread_name, "提交问卷")
-        response = await http_client.apost(
-            f"https://wj.qq.com/api/v2/respondent/surveys/{survey_id}/answers",
-            params={"pv_uid": str(uuid.uuid4()), "hash": hash_value, "_": str(int(time.time() * 1000))},
-            json=submit_body,
-            headers=submit_headers,
-            timeout=_QQ_SUBMIT_TIMEOUT_SECONDS,
-            proxies=proxies,
-        )
-        response.raise_for_status()
+        submit_proxy_address = str(proxy_address or "").strip() or None
+        submit_proxy_lease = None
+        if submit_proxy_lease_factory is not None:
+            submit_proxy_lease = await submit_proxy_lease_factory()
+            submit_proxy_address = str(getattr(submit_proxy_lease, "address", "") or "").strip() or None
+        if bool(getattr(config, "random_proxy_ip_enabled", False)) and not submit_proxy_address:
+            raise SubmitProxyUnavailableError("提交前未获取到随机 IP")
+        submit_proxies = _proxy_arg(submit_proxy_address)
+        try:
+            response = await http_client.apost(
+                f"https://wj.qq.com/api/v2/respondent/surveys/{survey_id}/answers",
+                params={"pv_uid": str(uuid.uuid4()), "hash": hash_value, "_": str(int(time.time() * 1000))},
+                json=submit_body,
+                headers=submit_headers,
+                timeout=_QQ_SUBMIT_TIMEOUT_SECONDS,
+                proxies=submit_proxies,
+            )
+            response.raise_for_status()
+            if submit_proxy_address and thread_name:
+                release_submit_proxy(ctx, thread_name, submit_proxy_address)
+        except Exception:
+            if submit_proxy_address and thread_name:
+                release_submit_proxy(ctx, thread_name, submit_proxy_address)
+            raise
         await update_http_submit_step(ctx, thread_name, "校验结果")
         payload = response.json()
         if not isinstance(payload, dict):
@@ -630,11 +646,12 @@ async def brush_qq_http(
             survey_id,
             hash_value,
             headers=headers,
-            proxies=proxies,
+            proxies={},
             answer_session_id=answer_session_id,
             initial_session_data=session_data,
             submit_payload=payload,
         )
+        mark_submit_proxy_success(ctx, submit_proxy_address)
         return True
     finally:
         ctx.clear_free_ai_prefill_answers(thread_name)

@@ -28,6 +28,9 @@ from software.network.session_policy import (
     _discard_unresponsive_proxy,
     _mark_proxy_temporarily_bad,
     _record_bad_proxy_and_maybe_pause,
+    SubmitProxyUnavailableError,
+    acquire_submit_proxy,
+    release_submit_proxy,
 )
 from software.network.proxy.session import get_session_snapshot
 from software.network.submission_report import report_submission_result_async
@@ -144,7 +147,7 @@ class AsyncSlotRunner:
         self.round_resources.release_round_resources(requeue_reverse_fill=requeue_reverse_fill)
 
     async def _select_session_proxy_and_ua(self) -> tuple[Optional[str], Optional[str]]:
-        return await self.proxy_session.select_proxy_and_user_agent()
+        return None, await self.proxy_session.select_user_agent()
 
     def _release_session_proxy(self) -> None:
         self.proxy_session.release_current_proxy()
@@ -248,7 +251,6 @@ class AsyncSlotRunner:
         self.run_context.stop_event.set()
 
     def _mark_http_submit_success(self) -> bool:
-        self.proxy_session.mark_successful_proxy()
         return self.stop_policy.record_success(self.stop_proxy, thread_name=self.slot_label)
 
     def _report_submission_result(self, result: str) -> None:
@@ -313,20 +315,17 @@ class AsyncSlotRunner:
                     should_requeue_dispatch = False
                     break
 
-                proxy_result = await self._run_pre_answer_step_with_joint_lease(
-                    "获取代理",
+                ua_result = await self._run_pre_answer_step_with_joint_lease(
+                    "准备会话",
                     self._select_session_proxy_and_ua,
                 )
-                if proxy_result is JOINT_PRE_ANSWER_TIMEOUT:
+                if ua_result is JOINT_PRE_ANSWER_TIMEOUT:
                     dispatch_delay_seconds = JOINT_PRE_ANSWER_ATTEMPT_REQUEUE_DELAY_SECONDS
                     continue
-                proxy_address, ua_value = proxy_result
+                _proxy_address, ua_value = ua_result
                 if self.run_context.stop_requested():
                     should_requeue_dispatch = False
                     break
-                if self.config.random_proxy_ip_enabled and not proxy_address:
-                    self._release_round_resources(requeue_reverse_fill=True)
-                    continue
 
                 try:
                     marked_answering = self.state.mark_joint_sample_answering(self.slot_label)
@@ -339,10 +338,23 @@ class AsyncSlotRunner:
                     dispatch_delay_seconds = JOINT_PRE_ANSWER_ATTEMPT_REQUEUE_DELAY_SECONDS
                     continue
 
+                async def submit_proxy_lease_factory():
+                    if self.config.random_proxy_ip_enabled:
+                        await self._update_http_step("获取提交代理")
+                    submit_proxy = await acquire_submit_proxy(
+                        self.state,
+                        self.slot_label,
+                        stop_signal=self.stop_proxy,
+                        wait=bool(self.config.random_proxy_ip_enabled),
+                    )
+                    self.proxy_session.set_current_submit_proxy(submit_proxy.address, provider=submit_proxy.provider)
+                    return submit_proxy
+
                 finished = await self.http_submitter.submit(
                     stop_signal=self.stop_proxy,
-                    proxy_address=proxy_address,
+                    proxy_address=None,
                     user_agent=ua_value,
+                    submit_proxy_lease_factory=submit_proxy_lease_factory,
                 )
                 if self.run_context.stop_requested() or not finished:
                     self._release_round_resources(requeue_reverse_fill=True)
@@ -359,6 +371,14 @@ class AsyncSlotRunner:
                 dispatch_delay_seconds = self._resolve_dispatch_delay_seconds()
                 if dispatch_delay_seconds > 0:
                     self._update_step("等待提交间隔")
+            except SubmitProxyUnavailableError as exc:
+                self._release_round_resources(requeue_reverse_fill=True)
+                if self._handle_proxy_unavailable(
+                    status_text="代理获取失败",
+                    log_message=f"提交前未获取到随机 IP，本轮跳过提交：{exc}",
+                ):
+                    should_requeue_dispatch = False
+                    break
             except AIRuntimeError as exc:
                 self._report_submission_result("failed")
                 if await self._handle_ai_runtime_error(exc):
@@ -402,6 +422,8 @@ class AsyncSlotRunner:
                     break
                 self._release_round_resources(requeue_reverse_fill=True)
             finally:
+                if self.proxy_session.proxy_address:
+                    release_submit_proxy(self.state, self.slot_label, self.proxy_session.proxy_address)
                 self._release_session_proxy()
                 await self.scheduler.release(
                     int(token_id),

@@ -83,6 +83,7 @@ class CallableProviderAdapter:
         psycho_plan: Any = None,
         proxy_address: str | None = None,
         user_agent: str | None = None,
+        submit_proxy_lease_factory: Any = None,
     ) -> bool:
         return bool(
             await self._hooks.fill_survey_http(
@@ -93,6 +94,7 @@ class CallableProviderAdapter:
                 psycho_plan=psycho_plan,
                 proxy_address=proxy_address,
                 user_agent=user_agent,
+                submit_proxy_lease_factory=submit_proxy_lease_factory,
             )
         )
 

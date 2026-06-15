@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Optional
+from typing import Any, Optional
 
 from software.core.engine.stop_signal import StopSignalLike
 from software.core.task import ExecutionConfig, ExecutionState
@@ -54,6 +54,7 @@ class AsyncHttpSubmitter:
         stop_signal: StopSignalLike,
         proxy_address: Optional[str],
         user_agent: Optional[str],
+        submit_proxy_lease_factory: Any = None,
     ) -> bool:
         return bool(
             await fill_survey_http(
@@ -64,6 +65,7 @@ class AsyncHttpSubmitter:
                 provider=self.config.survey_provider,
                 proxy_address=proxy_address,
                 user_agent=user_agent,
+                submit_proxy_lease_factory=submit_proxy_lease_factory,
             )
         )
 

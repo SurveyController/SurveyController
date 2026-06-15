@@ -1,14 +1,11 @@
 from __future__ import annotations
 
-import logging
 from typing import Callable, Optional
 
 from software.core.engine.runtime_ui_bridge import RuntimeUiBridge
 from software.core.engine.stop_signal import StopSignalLike
 from software.core.task import ExecutionConfig, ExecutionState
 from software.network.session_policy import (
-    _record_bad_proxy_and_maybe_pause,
-    _select_proxy_for_session_async,
     _select_user_agent_for_session,
 )
 
@@ -35,52 +32,27 @@ class AsyncProxySession:
         self.proxy_address: Optional[str] = None
         self.proxy_provider: str = "unknown"
 
-    async def select_proxy_and_user_agent(self) -> tuple[Optional[str], Optional[str]]:
-        should_wait_for_proxy = bool(self.config.random_proxy_ip_enabled)
-        if self.config.random_proxy_ip_enabled:
-            self.update_step("获取代理")
-        proxy_address = await _select_proxy_for_session_async(
-            self.state,
-            self.slot_label,
-            stop_signal=self.stop_signal,
-            wait=should_wait_for_proxy,
-        )
-        if self.config.random_proxy_ip_enabled and not proxy_address:
-            logging.warning("线程[%s]未获取到随机IP，本轮将跳过提交", self.slot_label)
-            if _record_bad_proxy_and_maybe_pause(self.state, self.runtime_bridge):
-                return None, None
+    async def select_user_agent(self) -> Optional[str]:
         ua_value, _ = _select_user_agent_for_session(self.state)
-        self.proxy_address = proxy_address
-        self.proxy_provider = self._resolve_current_proxy_provider()
-        return proxy_address, ua_value
+        return ua_value
 
-    def _resolve_current_proxy_provider(self) -> str:
-        if not self.proxy_address:
-            return "unknown"
-        try:
-            with self.state.lock:
-                lease = self.state.proxy_in_use_by_thread.get(self.slot_label)
-                return str(getattr(lease, "source", "") or "unknown").strip() or "unknown"
-        except Exception:
-            logging.info("读取代理来源失败", exc_info=True)
-        return "unknown"
+    async def select_proxy_and_user_agent(self) -> tuple[Optional[str], Optional[str]]:
+        ua_value = await self.select_user_agent()
+        return None, ua_value
 
-    def mark_successful_proxy(self) -> None:
-        if not self.proxy_address:
-            return
-        try:
-            self.state.mark_successful_proxy_address(self.proxy_address)
-        except Exception:
-            logging.info("记录成功代理失败：%s", self.proxy_address, exc_info=True)
+    def set_current_submit_proxy(self, proxy_address: str | None, *, provider: str = "unknown") -> None:
+        self.proxy_address = str(proxy_address or "").strip() or None
+        self.proxy_provider = str(provider or "unknown").strip() or "unknown"
 
-    def release_current_proxy(self) -> None:
-        if self.proxy_address:
-            try:
-                self.state.release_proxy_in_use(self.slot_label)
-            except Exception:
-                logging.info("释放代理占用失败", exc_info=True)
+    def clear_current_submit_proxy(self) -> None:
         self.proxy_address = None
         self.proxy_provider = "unknown"
+
+    def mark_successful_proxy(self) -> None:
+        return None
+
+    def release_current_proxy(self) -> None:
+        self.clear_current_submit_proxy()
 
 
 __all__ = ["AsyncProxySession"]
