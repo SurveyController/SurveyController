@@ -1,7 +1,7 @@
 import asyncio
 from collections import deque
 from dataclasses import dataclass
-from typing import Iterable, Optional, Tuple
+from typing import Iterable, Optional
 import logging
 
 from software.core.engine.stop_signal import StopSignalLike
@@ -11,7 +11,7 @@ from software.app.config import PROXY_MAX_PROXIES
 from software.network.proxy.pool import coerce_proxy_lease, mask_proxy_for_log
 from software.network.proxy.api import fetch_proxy_batch_async
 from software.network.proxy import get_proxy_required_ttl_seconds, proxy_lease_has_sufficient_ttl
-from software.core.config.codec import _select_user_agent_from_ratios
+from software.core.config.codec import UserAgentProfile, _select_user_agent_from_ratios
 
 _PROXY_WAIT_POLL_SECONDS = 0.3
 _BAD_PROXY_COOLDOWN_SECONDS = 180.0
@@ -470,9 +470,9 @@ def mark_submit_proxy_success(ctx: ExecutionState, proxy_address: str | None) ->
 
 
 
-def _select_user_agent_for_session(ctx: ExecutionState) -> Tuple[Optional[str], Optional[str]]:
+def _select_user_agent_for_session(ctx: ExecutionState) -> Optional[UserAgentProfile]:
     if not ctx.config.random_user_agent_enabled:
-        return None, None
+        return None
     return _select_user_agent_from_ratios(ctx.config.user_agent_ratios)
 
 

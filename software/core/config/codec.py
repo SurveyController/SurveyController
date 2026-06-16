@@ -3,7 +3,7 @@ from __future__ import annotations
 import copy
 import logging
 import random
-from dataclasses import asdict, fields
+from dataclasses import asdict, dataclass, fields
 from typing import Any, Dict, List, Optional, Tuple
 
 from software.core.reverse_fill import REVERSE_FILL_FORMAT_AUTO, REVERSE_FILL_FORMAT_WJX_SCORE, REVERSE_FILL_FORMAT_WJX_SEQUENCE, REVERSE_FILL_FORMAT_WJX_TEXT
@@ -43,8 +43,17 @@ _USER_AGENT_DEVICE_TO_PRESET_KEYS = {
     "pc": ["pc_web"],
 }
 
+
+@dataclass(frozen=True)
+class UserAgentProfile:
+    category: str
+    preset_key: str
+    ua: str
+    label: str
+
 __all__ = [
     "CURRENT_CONFIG_SCHEMA_VERSION",
+    "UserAgentProfile",
     "_select_user_agent_from_ratios",
     "serialize_question_entry",
     "deserialize_question_entry",
@@ -166,8 +175,12 @@ def _normalize_user_agent_ratios(raw_ratios: Any) -> Dict[str, int]:
     return ratios
 
 
-def _select_user_agent_from_ratios(ratios: Dict[str, int]) -> Tuple[Optional[str], Optional[str]]:
-    
+def _select_user_agent_from_ratios(
+    ratios: Dict[str, int],
+    *,
+    rng: Any = None,
+) -> Optional[UserAgentProfile]:
+    chooser = rng or random
     devices: List[str] = []
     weights: List[int] = []
     for device_type, ua_keys in _USER_AGENT_DEVICE_TO_PRESET_KEYS.items():
@@ -178,16 +191,25 @@ def _select_user_agent_from_ratios(ratios: Dict[str, int]) -> Tuple[Optional[str
             devices.append(device_type)
             weights.append(weight)
     if not devices:
-        return None, None
+        return None
 
-    device_type = random.choices(devices, weights=weights, k=1)[0]
+    device_type = chooser.choices(devices, weights=weights, k=1)[0]
     ua_keys = _USER_AGENT_DEVICE_TO_PRESET_KEYS.get(device_type, [])
     if not ua_keys:
-        return None, None
+        return None
 
-    key = random.choice(ua_keys)
+    key = chooser.choice(ua_keys)
     preset = USER_AGENT_PRESETS.get(key) or {}
-    return preset.get("ua"), preset.get("label")
+    ua = str(preset.get("ua") or "").strip()
+    label = str(preset.get("label") or "").strip()
+    if not ua:
+        return None
+    return UserAgentProfile(
+        category=str(device_type or "").strip(),
+        preset_key=str(key or "").strip(),
+        ua=ua,
+        label=label,
+    )
 
 
 def _prob_config_is_unset(value: Any) -> bool:

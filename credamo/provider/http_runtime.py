@@ -13,6 +13,7 @@ from urllib.parse import urlparse
 
 import httpx
 from software.app.config import DEFAULT_HTTP_HEADERS, DEFAULT_USER_AGENT
+from software.core.config.codec import UserAgentProfile
 from software.core.modes.duration_control import sample_answer_duration_seconds
 from software.core.persona.context import record_answer
 from software.core.questions.distribution import record_pending_distribution_choice
@@ -798,8 +799,10 @@ async def brush_credamo_http(
     psycho_plan: Any = None,
     proxy_address: str | None = None,
     user_agent: str | None = None,
+    user_agent_profile: UserAgentProfile | None = None,
     submit_proxy_lease_factory: Any = None,
 ) -> bool:
+    _ = user_agent_profile
     if stop_signal is not None and stop_signal.is_set():
         return False
 

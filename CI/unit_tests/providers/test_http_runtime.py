@@ -552,7 +552,7 @@ async def test_wjx_http_runtime_uses_proxy_and_posts_submitdata(monkeypatch) -> 
 
 
 @pytest.mark.asyncio
-async def test_wjx_http_runtime_keeps_direct_source_for_wechat_user_agent(monkeypatch) -> None:
+async def test_wjx_http_runtime_uses_wechat_channel_params_for_wechat_profile(monkeypatch) -> None:
     config = ExecutionConfig(
         url="https://www.wjx.cn/vm/demo.aspx",
         survey_provider="wjx",
@@ -581,14 +581,20 @@ async def test_wjx_http_runtime_keeps_direct_source_for_wechat_user_agent(monkey
         config,
         state,
         user_agent="Mozilla/5.0 MicroMessenger/8.0.43 WeChat/arm64",
+        user_agent_profile=SimpleNamespace(category="wechat", ua="Mozilla/5.0 MicroMessenger/8.0.43 WeChat/arm64"),
     )
 
     assert ok is True
-    assert captured["params"]["source"] == "directphone"
+    assert captured["params"]["source"] == "微信"
+    assert captured["params"]["iwx"] == "1"
+    assert captured["params"]["wxfs"] == "100"
+    assert captured["params"]["wxappid"] == "wx8fe84c5d52db247a"
+    assert "openid" in captured["params"]
+    assert "unionId" in captured["params"]
 
 
 @pytest.mark.asyncio
-async def test_wjx_http_runtime_uses_historical_default_ua_when_user_agent_is_not_explicitly_selected(monkeypatch) -> None:
+async def test_wjx_http_runtime_uses_default_pc_ua_when_user_agent_is_not_explicitly_selected(monkeypatch) -> None:
     config = ExecutionConfig(
         url="https://www.wjx.cn/vm/demo.aspx",
         survey_provider="wjx",
@@ -620,12 +626,15 @@ async def test_wjx_http_runtime_uses_historical_default_ua_when_user_agent_is_no
     )
 
     assert ok is True
-    assert captured["params"]["source"] == "directphone"
-    assert "MicroMessenger" in str(captured["headers"]["User-Agent"])
+    assert captured["params"]["source"] == "直链访问"
+    assert "MicroMessenger" not in str(captured["headers"]["User-Agent"])
+    assert "Windows NT" in str(captured["headers"]["User-Agent"])
+    assert "iwx" not in captured["params"]
+    assert "wxfs" not in captured["params"]
 
 
 @pytest.mark.asyncio
-async def test_wjx_http_runtime_keeps_direct_source_for_non_wechat_user_agent(monkeypatch) -> None:
+async def test_wjx_http_runtime_uses_mobile_channel_for_mobile_profile(monkeypatch) -> None:
     config = ExecutionConfig(
         url="https://www.wjx.cn/vm/demo.aspx",
         survey_provider="wjx",
@@ -654,10 +663,52 @@ async def test_wjx_http_runtime_keeps_direct_source_for_non_wechat_user_agent(mo
         config,
         state,
         user_agent="Mozilla/5.0 Chrome/121.0.0.0 Mobile Safari/537.36",
+        user_agent_profile=SimpleNamespace(category="mobile", ua="Mozilla/5.0 Chrome/121.0.0.0 Mobile Safari/537.36"),
     )
 
     assert ok is True
-    assert captured["params"]["source"] == "directphone"
+    assert captured["params"]["source"] == "手机访问"
+    assert "iwx" not in captured["params"]
+    assert "wxfs" not in captured["params"]
+
+
+@pytest.mark.asyncio
+async def test_wjx_http_runtime_uses_pc_channel_for_pc_profile(monkeypatch) -> None:
+    config = ExecutionConfig(
+        url="https://www.wjx.cn/vm/demo.aspx",
+        survey_provider="wjx",
+    )
+    config.questions_metadata = {
+        1: SurveyQuestionMeta(num=1, title="Q1", type_code="3", options=2, option_texts=["A", "B"]),
+    }
+    state = ExecutionState(config=config)
+    captured: dict[str, object] = {}
+
+    async def fake_load(*_args, **_kwargs):
+        return None
+
+    async def fake_build_action(*_args, **_kwargs):
+        return AnswerAction(question_num=1, kind="choice", selected_indices=(0,), record_type="single")
+
+    async def fake_post(*_args, **kwargs):
+        captured.update(kwargs)
+        return _FakeResponse(text="success")
+
+    monkeypatch.setattr(wjx_http, "_load_wjx_page", fake_load)
+    monkeypatch.setattr(wjx_http, "build_answer_action", fake_build_action)
+    monkeypatch.setattr(wjx_http.http_client, "apost", fake_post)
+
+    ok = await wjx_http.brush_wjx_http(
+        config,
+        state,
+        user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/121.0.0.0 Safari/537.36",
+        user_agent_profile=SimpleNamespace(category="pc", ua="Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/121.0.0.0 Safari/537.36"),
+    )
+
+    assert ok is True
+    assert captured["params"]["source"] == "直链访问"
+    assert "iwx" not in captured["params"]
+    assert "wxfs" not in captured["params"]
 
 
 @pytest.mark.asyncio

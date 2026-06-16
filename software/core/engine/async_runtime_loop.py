@@ -323,6 +323,7 @@ class AsyncSlotRunner:
                     dispatch_delay_seconds = JOINT_PRE_ANSWER_ATTEMPT_REQUEUE_DELAY_SECONDS
                     continue
                 _proxy_address, ua_value = ua_result
+                ua_profile = self.proxy_session.user_agent_profile
                 if self.run_context.stop_requested():
                     should_requeue_dispatch = False
                     break
@@ -354,6 +355,7 @@ class AsyncSlotRunner:
                     stop_signal=self.stop_proxy,
                     proxy_address=None,
                     user_agent=ua_value,
+                    user_agent_profile=ua_profile,
                     submit_proxy_lease_factory=submit_proxy_lease_factory,
                 )
                 if self.run_context.stop_requested() or not finished:

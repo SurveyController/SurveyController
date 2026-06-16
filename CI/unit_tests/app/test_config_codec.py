@@ -1,9 +1,11 @@
 from __future__ import annotations
+from collections import Counter
 import pytest
 
 from software.app.config import DEFAULT_USER_AGENT, USER_AGENT_PRESETS
 from software.core.config.codec import (
     CURRENT_CONFIG_SCHEMA_VERSION,
+    UserAgentProfile,
     _ensure_supported_config_payload,
     _select_user_agent_from_ratios,
     build_runtime_config_snapshot,
@@ -244,8 +246,26 @@ class ConfigCodecTests:
             )
 
     def test_select_user_agent_from_ratios_handles_empty_unknown_and_valid_devices(self) -> None:
-        assert _select_user_agent_from_ratios({"wechat": 0, "mobile": 0}) == (None, None)
-        ua, label = _select_user_agent_from_ratios({"pc": 1})
-        assert ua
-        assert label
-        assert _select_user_agent_from_ratios({"unknown": 1}) == (None, None)
+        assert _select_user_agent_from_ratios({"wechat": 0, "mobile": 0}) is None
+        profile = _select_user_agent_from_ratios({"pc": 1})
+        assert isinstance(profile, UserAgentProfile)
+        assert profile.ua
+        assert profile.label
+        assert profile.category == "pc"
+        assert _select_user_agent_from_ratios({"unknown": 1}) is None
+
+    def test_select_user_agent_from_ratios_distribution_tracks_weights(self) -> None:
+        rng = __import__("random").Random(20260616)
+        counts = Counter()
+
+        for _ in range(10000):
+            profile = _select_user_agent_from_ratios(
+                {"wechat": 55, "mobile": 34, "pc": 11},
+                rng=rng,
+            )
+            assert profile is not None
+            counts[profile.category] += 1
+
+        assert abs(counts["wechat"] / 10000 - 0.55) < 0.02
+        assert abs(counts["mobile"] / 10000 - 0.34) < 0.02
+        assert abs(counts["pc"] / 10000 - 0.11) < 0.02

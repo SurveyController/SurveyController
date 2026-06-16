@@ -267,5 +267,5 @@ class SessionPolicyTests:
     def test_select_user_agent_returns_none_when_disabled(self) -> None:
         ctx = ExecutionState(config=ExecutionConfig(random_user_agent_enabled=False))
         with patch.object(session_policy, '_select_user_agent_from_ratios') as select_user_agent:
-            assert session_policy._select_user_agent_for_session(ctx) == (None, None)
+            assert session_policy._select_user_agent_for_session(ctx) is None
         select_user_agent.assert_not_called()

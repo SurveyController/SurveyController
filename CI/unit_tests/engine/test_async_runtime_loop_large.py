@@ -140,7 +140,11 @@ class AsyncRuntimeLoopLargeTests:
             return "http://1.1.1.1:80"
 
         monkeypatch.setattr(proxy_session, "_select_proxy_for_session_async", fake_select_proxy_for_session_async, raising=False)
-        monkeypatch.setattr(proxy_session, "_select_user_agent_for_session", lambda *_args, **_kwargs: ("UA", None))
+        monkeypatch.setattr(
+            proxy_session,
+            "_select_user_agent_for_session",
+            lambda *_args, **_kwargs: SimpleNamespace(ua="UA", category="pc", label="电脑网页端"),
+        )
         runner, _state, _ctx, _scheduler = _build_runner(config=config, state=state)
 
         proxy, ua = await runner._select_session_proxy_and_ua()

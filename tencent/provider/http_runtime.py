@@ -11,6 +11,7 @@ from typing import Any, Mapping, Optional
 import software.network.http as http_client
 from software.app.config import DEFAULT_HTTP_HEADERS, DEFAULT_USER_AGENT
 from software.core.ai.batch_runtime import assert_no_free_ai_placeholders_in_actions, prefill_free_ai_answers_for_questions
+from software.core.config.codec import UserAgentProfile
 from software.core.modes.duration_control import sample_answer_duration_seconds
 from software.core.persona.context import record_answer
 from software.core.questions.distribution import record_pending_distribution_choice
@@ -478,8 +479,10 @@ async def brush_qq_http(
     psycho_plan: Any = None,
     proxy_address: str | None = None,
     user_agent: str | None = None,
+    user_agent_profile: UserAgentProfile | None = None,
     submit_proxy_lease_factory: Any = None,
 ) -> bool:
+    _ = user_agent_profile
     if stop_signal is not None and stop_signal.is_set():
         return False
     try:

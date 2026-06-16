@@ -5,6 +5,7 @@ import random
 import html as html_lib
 import time
 import uuid
+from dataclasses import dataclass
 from datetime import datetime
 from typing import Any
 from urllib.parse import urlparse
@@ -12,6 +13,7 @@ from urllib.parse import urlparse
 import software.network.http as http_client
 from software.app.config import DEFAULT_HTTP_HEADERS, DEFAULT_USER_AGENT, USER_AGENT_PRESETS
 from software.core.ai.batch_runtime import assert_no_free_ai_placeholders_in_actions, prefill_free_ai_answers_for_questions
+from software.core.config.codec import UserAgentProfile
 from software.core.modes.duration_control import sample_answer_duration_seconds
 from software.core.persona.context import record_answer
 from software.core.questions.distribution import record_pending_distribution_choice
@@ -51,6 +53,13 @@ class WjxSubmitResult:
     SUCCESS = "success"
     VERIFICATION = "verification"
     REJECTED = "rejected"
+
+
+@dataclass(frozen=True)
+class WjxChannelProfile:
+    category: str
+    source: str
+    extra_params: dict[str, str]
 
 
 _WJX_DEFAULT_SCENE_ID = "q0hcfsca"
@@ -123,7 +132,44 @@ def _resolve_user_agent(user_agent: str | None) -> str:
     text = str(user_agent or "").strip()
     if text:
         return text
-    return str(USER_AGENT_PRESETS.get("wechat_android", {}).get("ua") or DEFAULT_USER_AGENT)
+    return str(DEFAULT_USER_AGENT or USER_AGENT_PRESETS.get("pc_web", {}).get("ua") or "").strip()
+
+
+def _is_wechat_user_agent(user_agent: str | None) -> bool:
+    return "micromessenger" in str(user_agent or "").strip().lower()
+
+
+def _resolve_wjx_channel_profile(
+    user_agent: str | None,
+    user_agent_profile: UserAgentProfile | None = None,
+) -> WjxChannelProfile:
+    category = str(getattr(user_agent_profile, "category", "") or "").strip().lower()
+    if not category:
+        category = "wechat" if _is_wechat_user_agent(user_agent) else "pc"
+    if category == "wechat":
+        return WjxChannelProfile(
+            category="wechat",
+            source="微信",
+            extra_params={
+                "wxfs": "100",
+                "access_token": "1",
+                "openid": str(random.randint(100000000, 999999999)),
+                "unionId": str(random.randint(100000000, 999999999)),
+                "wxappid": "wx8fe84c5d52db247a",
+                "iwx": "1",
+            },
+        )
+    if category == "mobile":
+        return WjxChannelProfile(
+            category="mobile",
+            source="手机访问",
+            extra_params={},
+        )
+    return WjxChannelProfile(
+        category="pc",
+        source="直链访问",
+        extra_params={},
+    )
 
 
 def _build_jqsign(jqnonce: str, ktimes: int) -> str:
@@ -411,6 +457,7 @@ async def brush_wjx_http(
     psycho_plan: Any = None,
     proxy_address: str | None = None,
     user_agent: str | None = None,
+    user_agent_profile: UserAgentProfile | None = None,
     submit_proxy_lease_factory: Any = None,
 ) -> bool:
     if stop_signal is not None and stop_signal.is_set():
@@ -459,11 +506,12 @@ async def brush_wjx_http(
         jqnonce = str(uuid.uuid4())
         domain = _submit_domain(config.url)
         submit_url = f"https://{domain}/joinnew/processjq.ashx"
+        channel_profile = _resolve_wjx_channel_profile(user_agent_value, user_agent_profile)
         params = {
             "shortid": shortid,
             "starttime": _format_wjx_starttime(start_seconds),
             "cst": str(start_seconds * 1000),
-            "source": "directphone",
+            "source": channel_profile.source,
             "submittype": "1",
             "ktimes": str(ktimes),
             "rn": str(2000000000 + random.random() * 100000000),
@@ -473,15 +521,10 @@ async def brush_wjx_http(
             "jpm": "62",
             "capt": "2",
             "t": str(current_ms),
-            "wxfs": "100",
             "jqnonce": jqnonce,
             "jqsign": _build_jqsign(jqnonce, ktimes),
-            "access_token": "1",
-            "openid": str(random.randint(100000000, 999999999)),
-            "unionId": str(random.randint(100000000, 999999999)),
-            "wxappid": "wx8fe84c5d52db247a",
-            "iwx": "1",
         }
+        params.update(channel_profile.extra_params)
         await update_http_submit_step(ctx, thread_name, "提交问卷")
         submit_proxy_address = str(proxy_address or "").strip() or None
         submit_proxy_lease = None
