@@ -8,17 +8,11 @@ import (
 )
 
 func buildAnswerItems(rawQuestions []map[string]any, cfg *model.RuntimeConfig) ([]map[string]any, error) {
-	entryByQuestion := map[int]model.QuestionEntry{}
-	for _, entry := range cfg.QuestionEntries {
-		if entry.QuestionNum == nil {
-			continue
-		}
-		entryByQuestion[*entry.QuestionNum] = entry
-	}
+	entries := indexQuestionEntries(cfg.QuestionEntries)
 	items := make([]map[string]any, 0, len(rawQuestions))
 	for index, rawQuestion := range rawQuestions {
 		questionNum := rawQuestionNum(rawQuestion, index+1)
-		entry, ok := entryByQuestion[questionNum]
+		entry, ok := entries.find(rawQuestion, questionNum)
 		if !ok {
 			entry = defaultEntryForRawQuestion(rawQuestion, questionNum)
 		}
@@ -36,6 +30,37 @@ func buildAnswerItems(rawQuestions []map[string]any, cfg *model.RuntimeConfig) (
 		delete(item, "_sortNo")
 	}
 	return items, nil
+}
+
+type questionEntryIndex struct {
+	byNumber map[int]model.QuestionEntry
+	byID     map[string]model.QuestionEntry
+}
+
+func indexQuestionEntries(entries []model.QuestionEntry) questionEntryIndex {
+	result := questionEntryIndex{
+		byNumber: map[int]model.QuestionEntry{},
+		byID:     map[string]model.QuestionEntry{},
+	}
+	for _, entry := range entries {
+		if entry.QuestionNum != nil {
+			result.byNumber[*entry.QuestionNum] = entry
+		}
+		if entry.ProviderQuestionID != nil && *entry.ProviderQuestionID != "" {
+			result.byID[*entry.ProviderQuestionID] = entry
+		}
+	}
+	return result
+}
+
+func (idx questionEntryIndex) find(raw map[string]any, questionNum int) (model.QuestionEntry, bool) {
+	if id := stringValue(idFromMapping(raw, "qstId", "questionId", "id")); id != "" {
+		if entry, ok := idx.byID[id]; ok {
+			return entry, true
+		}
+	}
+	entry, ok := idx.byNumber[questionNum]
+	return entry, ok
 }
 
 func buildAnswerItem(raw map[string]any, entry model.QuestionEntry, questionNum int) (map[string]any, error) {
@@ -57,15 +82,27 @@ func buildAnswerItem(raw map[string]any, entry model.QuestionEntry, questionNum 
 
 func defaultEntryForRawQuestion(raw map[string]any, questionNum int) model.QuestionEntry {
 	providerType := rawProviderType(raw)
+	optionCount := rawOptionCount(raw)
 	return model.QuestionEntry{
 		QuestionType:     questionTypeFromProvider(providerType),
-		Probabilities:    -1,
-		OptionCount:      rawOptionCount(raw),
+		Probabilities:    defaultRawProbabilities(providerType, optionCount),
+		OptionCount:      optionCount,
 		Rows:             rawRowCount(raw),
 		QuestionNum:      &questionNum,
 		DistributionMode: "random",
 		SurveyProvider:   model.ProviderCredamo,
 	}
+}
+
+func defaultRawProbabilities(providerType string, optionCount int) any {
+	if providerType == "text" || optionCount <= 0 {
+		return []float64{1}
+	}
+	values := make([]float64, optionCount)
+	for i := range values {
+		values[i] = 1
+	}
+	return values
 }
 
 func questionTypeFromProvider(providerType string) string {

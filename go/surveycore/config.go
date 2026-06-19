@@ -80,6 +80,14 @@ func buildDefaultQuestionEntries(questions []QuestionMeta) []QuestionEntry {
 }
 
 func questionTypeName(question QuestionMeta) string {
+	if question.ProviderType != "" {
+		switch question.ProviderType {
+		case "single", "multiple", "dropdown", "scale", "matrix", "order", "text":
+			return question.ProviderType
+		case "multi_text":
+			return "text"
+		}
+	}
 	switch question.TypeCode {
 	case "3":
 		return "single"
@@ -109,14 +117,26 @@ func defaultProbabilities(question QuestionMeta) any {
 			return values
 		}
 	}
-	if question.TypeCode == "3" && question.Options > 0 {
+	switch questionTypeName(question) {
+	case "single", "dropdown", "scale":
 		values := make([]float64, question.Options)
 		for i := range values {
 			values[i] = 1
 		}
 		return values
-	}
-	if question.TypeCode == "1" || question.IsTextLike || question.TextInputs > 0 {
+	case "multiple", "order":
+		values := make([]float64, question.Options)
+		for i := range values {
+			values[i] = 1
+		}
+		return values
+	case "matrix":
+		values := make([]float64, question.Options)
+		for i := range values {
+			values[i] = 1
+		}
+		return values
+	case "text":
 		if len(question.ForcedTexts) > 0 {
 			return []float64{1}
 		}

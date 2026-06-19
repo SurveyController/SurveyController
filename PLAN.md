@@ -6,8 +6,8 @@ Agent 每次处理 Go+Wails 迁移任务前必须先读本文件。
 
 ## 总原则
 
-- Python/PySide6 代码只作为稳定基线和行为参考。
-- 不再花时间解耦 Python 旧代码，除非是紧急 bug 修复或为了提取迁移事实。
+- 旧 Python 运行链路已从当前分支移除。
+- `software/ui/`、`software/assets/`、`assets/` 只作为 UI 和资源参考。
 - 新能力优先写在 `go/`。
 - 先迁纯核心，再接 Wails，再做正式 UI。
 - Go 核心不读取 `configs/`，不接 UI，不访问真实外网普通单测。
@@ -78,7 +78,7 @@ Agent 每次处理 Go+Wails 迁移任务前必须先读本文件。
 
 ## P6 WJX 和发布
 
-- [ ] 梳理 WJX Python 行为，只提取协议事实，不重构旧代码。
+- [ ] 梳理 WJX 协议事实，可参考历史提交或外部文档，不恢复旧 Python 实现。
 - [ ] 迁移 WJX HTML 解析和题型映射。
 - [ ] 迁移 WJX 提交参数构造。
 - [ ] 增加 WJX fixture 单测。

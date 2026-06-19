@@ -3,19 +3,29 @@
 .claude/
 .playwright-mcp/
 .local-private/
-.ruff_cache/
 .agent/
 .codex/environments/
 .trellis/workspace/
 .trellis/.runtime/
 .trellis/tasks/
-.venv/
 /output/
-.coverage
-coverage.xml
 desktop.ini
 AGENTS.md
 CLAUDE.md
+
+# 旧 UI 参考代码可能产生的本地缓存
+__pycache__/
+*.pyc
+.pytest_cache/
+.pytest_tmp/
+.pytest_tmp_async_runtime_loop_large/
+.ruff_cache/
+.venv/
+.uv-cache/
+
+# Go
+*.test
+coverage.out
 
 # 编译环境
 /build/
@@ -27,12 +37,6 @@ CLAUDE.md
 /Releases/
 
 # 运行环境
-__pycache__/
-.pytest_cache/
-.pytest_tmp/
-.pytest_tmp_async_runtime_loop_large/
-.uv-cache/
-*.pyc
 %SystemDrive%/
 /assets/promo-video/
 /configs/
@@ -40,7 +44,3 @@ __pycache__/
 /worker/.dev.vars
 /worker/.env
 /worker/.wrangler/
-/CI/worker/
-/CI/worker/node_modules/
-/CI/worker/.wrangler/
-/CI/worker/tsconfig.tsbuildinfo
