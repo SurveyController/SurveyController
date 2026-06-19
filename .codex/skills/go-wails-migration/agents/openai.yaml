@@ -1,0 +1,4 @@
+interface:
+  display_name: "Go Wails Migration"
+  short_description: "Go+Wails migration with strict structure"
+  default_prompt: "Use $go-wails-migration when migrating SurveyController from Python/PySide to Go+Wails with clean file and package boundaries."

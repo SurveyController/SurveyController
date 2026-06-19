@@ -10,6 +10,7 @@
 
 - Windows 10/11
 - Python 3.13.14
+- Go 1.26 或更新版本（仅开发 `go/` 原型模块时需要）
 - Git
 - uv 包管理器
 
@@ -232,6 +233,7 @@ git push
 | 问卷星解析、提交、题型处理 | `wjx/provider/` |
 | 腾讯问卷适配 | `tencent/provider/` |
 | Credamo 见数适配 | `credamo/provider/` |
+| Go 原型核心 | `go/` |
 | 通用执行引擎、任务调度 | `software/core/` |
 | UI 页面、弹窗、组件 | `software/ui/` |
 | 配置读写、表格、二维码、报告 | `software/io/` |
@@ -275,6 +277,13 @@ uv run python CI/python_ci.py --full
 
 ```bash
 uv run pytest CI/unit_tests
+```
+
+Go 原型检查：
+
+```bash
+cd go/proxycore
+go test ./...
 ```
 
 完整检查会额外做模块导入和主窗口冒烟测试。涉及启动链路、UI、HTTP 提交链路、配置迁移时，建议跑完整检查。
@@ -328,6 +337,7 @@ Fixes #123
 ├── assets/                  # README、图标等仓库资源
 ├── CI/                      # 检查脚本、单测、live tests
 ├── credamo/                 # Credamo 见数平台适配
+├── go/                      # Go 原型模块
 ├── Setup/                   # 安装包相关资源
 ├── software/                # 桌面应用主体
 │   ├── app/                 # 启动、路径、配置、版本、迁移
