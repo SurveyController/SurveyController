@@ -284,6 +284,9 @@ Go 原型检查：
 ```bash
 cd go/proxycore
 go test ./...
+
+cd go/surveycore
+go test ./...
 ```
 
 完整检查会额外做模块导入和主窗口冒烟测试。涉及启动链路、UI、HTTP 提交链路、配置迁移时，建议跑完整检查。
