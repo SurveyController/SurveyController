@@ -1,0 +1,15 @@
+{
+	"fixed": {
+		"file_version": "0.1.0"
+	},
+	"info": {
+		"0000": {
+			"ProductVersion": "0.1.0",
+			"CompanyName": "HungryM0",
+			"FileDescription": "SurveyController Desktop UI",
+			"LegalCopyright": "© 2026, My Company",
+			"ProductName": "SurveyController",
+			"Comments": "This is a comment"
+		}
+	}
+}

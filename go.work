@@ -1,6 +1,7 @@
 go 1.26
 
 use (
+	./go/desktopui
 	./go/proxycore
 	./go/surveycore
 )
