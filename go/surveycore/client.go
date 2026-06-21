@@ -8,6 +8,7 @@ import (
 	"surveycontroller/surveycore/credamo"
 	"surveycontroller/surveycore/internal/httpjson"
 	"surveycontroller/surveycore/internal/model"
+	"surveycontroller/surveycore/tencent"
 )
 
 type Client struct {
@@ -56,10 +57,14 @@ func Run(ctx context.Context, cfg *RuntimeConfig) (*RunResult, error) {
 }
 
 func (c *Client) parserFor(url string) (Parser, error) {
-	if detectProvider(url) != model.ProviderCredamo {
+	switch detectProvider(url) {
+	case model.ProviderCredamo:
+		return credamo.Parser{HTTP: httpClientOrDefault(c.httpClient)}, nil
+	case model.ProviderQQ:
+		return tencent.Parser{HTTP: httpClientOrDefault(c.httpClient)}, nil
+	default:
 		return nil, ErrUnsupportedOperation
 	}
-	return credamo.Parser{HTTP: httpClientOrDefault(c.httpClient)}, nil
 }
 
 func httpClientOrDefault(client HTTPClient) httpjson.Client {

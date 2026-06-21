@@ -29,9 +29,22 @@ func newDefaultRuntimeConfig() RuntimeConfig {
 		SurveyProvider:         model.ProviderWJX,
 		Target:                 1,
 		Threads:                1,
+		SubmitInterval:         [2]int{0, 0},
 		AnswerDuration:         [2]int{60, 120},
+		ProxySource:            "default",
+		RandomUARatios:         map[string]int{"wechat": 33, "mobile": 33, "pc": 34},
+		FailStopEnabled:        true,
+		PauseOnAliyunCaptcha:   true,
 		ReliabilityModeEnabled: true,
 		PsychoTargetAlpha:      0.85,
+		AIMode:                 "free",
+		AIProvider:             "deepseek",
+		AIAPIProtocol:          "auto",
+		ReverseFillFormat:      "auto",
+		ReverseFillStartRow:    1,
+		ReverseFillThreads:     1,
+		AnswerRules:            []map[string]any{},
+		DimensionGroups:        []string{},
 	}
 }
 

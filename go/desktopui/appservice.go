@@ -1,5 +1,16 @@
 package main
 
+import (
+	"context"
+	"fmt"
+	"strings"
+
+	"surveycontroller/proxycore"
+	"surveycontroller/surveycore"
+	"surveycontroller/surveycore/configio"
+	"surveycontroller/surveycore/reversefill"
+)
+
 type NavItem struct {
 	ID       string `json:"id"`
 	Label    string `json:"label"`
@@ -23,10 +34,10 @@ type QuickAction struct {
 }
 
 type QuestionRow struct {
-	Index    int    `json:"index"`
-	Type     string `json:"type"`
+	Index     int    `json:"index"`
+	Type      string `json:"type"`
 	Dimension string `json:"dimension"`
-	Strategy string `json:"strategy"`
+	Strategy  string `json:"strategy"`
 }
 
 type SessionRow struct {
@@ -35,27 +46,60 @@ type SessionRow struct {
 	Progress int    `json:"progress"`
 }
 
+type ParseSurveyRequest struct {
+	URL string `json:"url"`
+}
+
+type RunSurveyRequest struct {
+	Config surveycore.RuntimeConfig `json:"config"`
+}
+
+type ReverseFillPreviewRequest struct {
+	Path      string                    `json:"path"`
+	Format    string                    `json:"format"`
+	StartRow  int                       `json:"startRow"`
+	Questions []surveycore.QuestionMeta `json:"questions"`
+}
+
+type SurveyCoreState struct {
+	Definition *surveycore.SurveyDefinition `json:"definition,omitempty"`
+	Config     *surveycore.RuntimeConfig    `json:"config,omitempty"`
+	Result     *surveycore.RunResult        `json:"result,omitempty"`
+	Events     []surveycore.Event           `json:"events,omitempty"`
+}
+
+type ProxyStatus struct {
+	Available       int                     `json:"available"`
+	InUse           int                     `json:"inUse"`
+	RemainingQuota  string                  `json:"remainingQuota"`
+	TotalQuota      string                  `json:"totalQuota"`
+	QuotaKnown      bool                    `json:"quotaKnown"`
+	RandomIPEnabled bool                    `json:"randomIpEnabled"`
+	Source          string                  `json:"source"`
+	Quota           proxycore.QuotaSnapshot `json:"quota"`
+}
+
 type DashboardState struct {
-	SurveyTitle         string         `json:"surveyTitle"`
-	SurveyURL           string         `json:"surveyUrl"`
-	TargetCount         int            `json:"targetCount"`
-	ThreadCount         int            `json:"threadCount"`
-	RandomIPEnabled     bool           `json:"randomIpEnabled"`
-	RandomIPQuota       int            `json:"randomIpQuota"`
-	RandomIPQuotaLabel  string         `json:"randomIpQuotaLabel"`
-	RandomIPStatus      string         `json:"randomIpStatus"`
-	RandomIPStatusTone  string         `json:"randomIpStatusTone"`
-	ProxySource         string         `json:"proxySource"`
-	QuestionCount       int            `json:"questionCount"`
-	ProgressCurrent     int            `json:"progressCurrent"`
-	ProgressTarget      int            `json:"progressTarget"`
-	ProgressPercent     int            `json:"progressPercent"`
-	StatusText          string         `json:"statusText"`
-	PlatformLabel       string         `json:"platformLabel"`
-	Metrics             []PageMetric   `json:"metrics"`
-	QuickActions        []QuickAction  `json:"quickActions"`
-	QuestionRows        []QuestionRow  `json:"questionRows"`
-	SessionRows         []SessionRow   `json:"sessionRows"`
+	SurveyTitle        string        `json:"surveyTitle"`
+	SurveyURL          string        `json:"surveyUrl"`
+	TargetCount        int           `json:"targetCount"`
+	ThreadCount        int           `json:"threadCount"`
+	RandomIPEnabled    bool          `json:"randomIpEnabled"`
+	RandomIPQuota      int           `json:"randomIpQuota"`
+	RandomIPQuotaLabel string        `json:"randomIpQuotaLabel"`
+	RandomIPStatus     string        `json:"randomIpStatus"`
+	RandomIPStatusTone string        `json:"randomIpStatusTone"`
+	ProxySource        string        `json:"proxySource"`
+	QuestionCount      int           `json:"questionCount"`
+	ProgressCurrent    int           `json:"progressCurrent"`
+	ProgressTarget     int           `json:"progressTarget"`
+	ProgressPercent    int           `json:"progressPercent"`
+	StatusText         string        `json:"statusText"`
+	PlatformLabel      string        `json:"platformLabel"`
+	Metrics            []PageMetric  `json:"metrics"`
+	QuickActions       []QuickAction `json:"quickActions"`
+	QuestionRows       []QuestionRow `json:"questionRows"`
+	SessionRows        []SessionRow  `json:"sessionRows"`
 }
 
 type SettingField struct {
@@ -85,23 +129,23 @@ type ReverseFillRow struct {
 }
 
 type ShellState struct {
-	AppTitle        string          `json:"appTitle"`
-	AppVersion      string          `json:"appVersion"`
-	ThemeMode       string          `json:"themeMode"`
-	CurrentPage     string          `json:"currentPage"`
-	TopNav          []NavItem       `json:"topNav"`
-	BottomNav       []NavItem       `json:"bottomNav"`
-	Dashboard       DashboardState  `json:"dashboard"`
-	RuntimeGroups   []SettingsGroup `json:"runtimeGroups"`
-	StrategyRules   []StrategyRule  `json:"strategyRules"`
-	DimensionGroups []string        `json:"dimensionGroups"`
+	AppTitle        string           `json:"appTitle"`
+	AppVersion      string           `json:"appVersion"`
+	ThemeMode       string           `json:"themeMode"`
+	CurrentPage     string           `json:"currentPage"`
+	TopNav          []NavItem        `json:"topNav"`
+	BottomNav       []NavItem        `json:"bottomNav"`
+	Dashboard       DashboardState   `json:"dashboard"`
+	RuntimeGroups   []SettingsGroup  `json:"runtimeGroups"`
+	StrategyRules   []StrategyRule   `json:"strategyRules"`
+	DimensionGroups []string         `json:"dimensionGroups"`
 	ReverseFillPlan []ReverseFillRow `json:"reverseFillPlan"`
-	LogLines        []string        `json:"logLines"`
-	CommunityItems  []string        `json:"communityItems"`
-	AboutItems      []PageMetric    `json:"aboutItems"`
-	DonateItems     []PageMetric    `json:"donateItems"`
-	IPUsageItems    []PageMetric    `json:"ipUsageItems"`
-	SettingsGroups  []SettingsGroup `json:"settingsGroups"`
+	LogLines        []string         `json:"logLines"`
+	CommunityItems  []string         `json:"communityItems"`
+	AboutItems      []PageMetric     `json:"aboutItems"`
+	DonateItems     []PageMetric     `json:"donateItems"`
+	IPUsageItems    []PageMetric     `json:"ipUsageItems"`
+	SettingsGroups  []SettingsGroup  `json:"settingsGroups"`
 }
 
 type AppService struct{}
@@ -256,4 +300,101 @@ func (s *AppService) GetShellState() ShellState {
 			},
 		},
 	}
+}
+
+func (s *AppService) GetProxyStatus() ProxyStatus {
+	quota := proxycore.QuotaSnapshot{}
+	return ProxyStatus{
+		Available:       0,
+		InUse:           0,
+		RemainingQuota:  proxycore.FormatQuotaValue(quota.RemainingQuota),
+		TotalQuota:      proxycore.FormatQuotaValue(quota.TotalQuota),
+		QuotaKnown:      quota.QuotaKnown,
+		RandomIPEnabled: false,
+		Source:          proxycore.OfficialSourceDefault,
+		Quota:           quota,
+	}
+}
+
+func (s *AppService) GetAppSettings() (AppSettings, error) {
+	return loadAppSettings()
+}
+
+func (s *AppService) SaveAppSettings(_ context.Context, request SaveSettingsRequest) (AppSettings, error) {
+	return saveAppSettings(request.Settings)
+}
+
+func (s *AppService) LoadConfig(_ context.Context, request LoadConfigRequest) (ConfigFileState, error) {
+	settings, err := loadAppSettings()
+	if err != nil {
+		return ConfigFileState{}, err
+	}
+	path := configPathFromRequest(request.Path, settings)
+	cfg, err := configio.Load(path, true)
+	if err != nil {
+		return ConfigFileState{}, err
+	}
+	return ConfigFileState{Path: path, Config: &cfg}, nil
+}
+
+func (s *AppService) SaveConfig(_ context.Context, request SaveConfigRequest) (ConfigFileState, error) {
+	settings, err := loadAppSettings()
+	if err != nil {
+		return ConfigFileState{}, err
+	}
+	path := strings.TrimSpace(request.Path)
+	if path == "" {
+		path = defaultSavePath(request.Config, settings)
+	}
+	savedPath, err := configio.Save(request.Config, path)
+	if err != nil {
+		return ConfigFileState{}, err
+	}
+	cfg := request.Config
+	return ConfigFileState{Path: savedPath, Config: &cfg}, nil
+}
+
+func (s *AppService) PreviewReverseFill(_ context.Context, request ReverseFillPreviewRequest) (reversefill.Preview, error) {
+	return reversefill.PreviewExcel(reversefill.PreviewOptions{
+		Path:          request.Path,
+		Format:        request.Format,
+		StartRow:      request.StartRow,
+		Questions:     request.Questions,
+		MaxSampleRows: 20,
+	})
+}
+
+func (s *AppService) ParseSurvey(ctx context.Context, request ParseSurveyRequest) (SurveyCoreState, error) {
+	url := strings.TrimSpace(request.URL)
+	if url == "" {
+		return SurveyCoreState{}, fmt.Errorf("问卷链接不能为空")
+	}
+	definition, err := surveycore.Parse(ctx, url)
+	if err != nil {
+		return SurveyCoreState{}, err
+	}
+	return SurveyCoreState{Definition: definition}, nil
+}
+
+func (s *AppService) BuildDefaultConfig(ctx context.Context, request ParseSurveyRequest) (SurveyCoreState, error) {
+	url := strings.TrimSpace(request.URL)
+	if url == "" {
+		return SurveyCoreState{}, fmt.Errorf("问卷链接不能为空")
+	}
+	config, err := surveycore.DefaultConfig(ctx, url)
+	if err != nil {
+		return SurveyCoreState{}, err
+	}
+	return SurveyCoreState{Config: config}, nil
+}
+
+func (s *AppService) RunSurvey(ctx context.Context, request RunSurveyRequest) (SurveyCoreState, error) {
+	var events []surveycore.Event
+	result, err := surveycore.New().RunWithEvents(ctx, &request.Config, func(event surveycore.Event) {
+		events = append(events, event)
+	})
+	if err != nil {
+		return SurveyCoreState{Result: result, Events: events}, err
+	}
+	return SurveyCoreState{Result: result, Events: events}, nil
 }

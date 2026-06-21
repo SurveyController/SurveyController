@@ -8,6 +8,7 @@ import (
 
 	"surveycontroller/surveycore/credamo"
 	"surveycontroller/surveycore/internal/model"
+	"surveycontroller/surveycore/tencent"
 )
 
 type EventHandler func(Event)
@@ -23,10 +24,29 @@ func (c *Client) RunWithEvents(ctx context.Context, cfg *RuntimeConfig, handler 
 	if strings.TrimSpace(cfg.URL) == "" {
 		return nil, fmt.Errorf("%w: 必须提供问卷链接", ErrInvalidConfig)
 	}
-	if detectProvider(cfg.URL) != model.ProviderCredamo {
-		return nil, fmt.Errorf("%w: only credamo run is supported", ErrUnsupportedOperation)
+	provider := detectProvider(cfg.URL)
+	if cfg.SurveyProvider != "" {
+		provider = cfg.SurveyProvider
 	}
-	if cfg.SurveyProvider != "" && cfg.SurveyProvider != model.ProviderCredamo {
+	if provider == model.ProviderQQ {
+		runner := tencent.Runner{}
+		result, err := runner.Run(ctx, cfg, func(event tencent.Event) {
+			if handler == nil {
+				return
+			}
+			handler(Event{
+				Worker:  event.Worker,
+				Message: event.Message,
+				Success: event.Success,
+				Fail:    event.Fail,
+				Current: event.Current,
+				Total:   event.Total,
+				Time:    event.Time,
+			})
+		})
+		return resultFromTencent(result), fmt.Errorf("%w: %v", ErrUnsupportedOperation, err)
+	}
+	if provider != model.ProviderCredamo {
 		return nil, fmt.Errorf("%w: only credamo run is supported", ErrUnsupportedOperation)
 	}
 	runner := credamo.Runner{HTTP: httpClientOrDefault(c.httpClient)}
@@ -48,6 +68,26 @@ func (c *Client) RunWithEvents(ctx context.Context, cfg *RuntimeConfig, handler 
 		return resultFromCredamo(result), wrapRunError(err)
 	}
 	return resultFromCredamo(result), nil
+}
+
+func resultFromTencent(result tencent.Result) *RunResult {
+	progress := ThreadProgress{
+		ThreadName:   "Worker-1",
+		ThreadIndex:  0,
+		SuccessCount: result.Success,
+		FailCount:    result.Fail,
+		StepCurrent:  result.Success + result.Fail,
+		StepTotal:    result.Target,
+		StatusText:   result.Status,
+		Running:      false,
+		LastUpdate:   time.Now(),
+	}
+	return &RunResult{
+		Success:        result.Success,
+		Fail:           result.Fail,
+		Stopped:        result.Status == "stopped",
+		ThreadProgress: []ThreadProgress{progress},
+	}
 }
 
 func resultFromCredamo(result credamo.Result) *RunResult {

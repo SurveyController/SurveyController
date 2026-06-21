@@ -1,0 +1,57 @@
+[
+  {
+    "id": "q1",
+    "type": "radio",
+    "title": "单选题",
+    "page_id": "p1",
+    "page": 1,
+    "options": [
+      { "id": "a", "text": "A" },
+      { "id": "b", "text": "B" }
+    ],
+    "required": true
+  },
+  {
+    "id": "q2",
+    "type": "checkbox",
+    "title": "多选题",
+    "page_id": "p1",
+    "page": 1,
+    "min_length": 1,
+    "max_length": 2,
+    "options": [
+      { "id": "a", "text": "A" },
+      { "id": "b", "text": "其他 {fillblank-1}" }
+    ]
+  },
+  {
+    "id": "q3",
+    "type": "text",
+    "title": "文本题",
+    "page_id": "p1",
+    "page": 1
+  },
+  {
+    "id": "q4",
+    "type": "description",
+    "title": "说明文字",
+    "description": "请认真阅读",
+    "page_id": "p2",
+    "page": 2
+  },
+  {
+    "id": "q5",
+    "type": "matrix_radio",
+    "title": "请评分",
+    "page_id": "p2",
+    "page": 2,
+    "options": [
+      { "id": "a", "text": "满意" },
+      { "id": "b", "text": "一般" }
+    ],
+    "sub_titles": [
+      { "id": "r1", "text": "服务" },
+      { "id": "r2", "text": "价格" }
+    ]
+  }
+]

@@ -6,6 +6,7 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 )
 
@@ -33,6 +34,50 @@ func TestParseAndDefaultConfig(t *testing.T) {
 	}
 }
 
+func TestParseAndDefaultConfigTencent(t *testing.T) {
+	server := newTencentCoreTestServer(t)
+	client := New(WithHTTPClient(rewriteTencentHTTPClient(server.URL)))
+
+	definition, err := client.Parse(context.Background(), "https://wj.qq.com/s2/123/hashvalue/")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if definition.Provider != ProviderQQ || len(definition.Questions) != 2 {
+		t.Fatalf("definition = %#v", definition)
+	}
+
+	cfg, err := client.DefaultConfig(context.Background(), "https://wj.qq.com/s2/123/hashvalue/")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.SurveyProvider != ProviderQQ || cfg.SurveyTitle != "腾讯测试" {
+		t.Fatalf("cfg = %#v", cfg)
+	}
+	if len(cfg.QuestionEntries) != 2 {
+		t.Fatalf("entry count = %d", len(cfg.QuestionEntries))
+	}
+}
+
+func TestRunTencentReturnsUnsupportedWithEvents(t *testing.T) {
+	var events []Event
+	result, err := New().RunWithEvents(context.Background(), &RuntimeConfig{
+		URL:            "https://wj.qq.com/s2/123/hashvalue/",
+		SurveyProvider: ProviderQQ,
+		Target:         1,
+	}, func(event Event) {
+		events = append(events, event)
+	})
+	if !errors.Is(err, ErrUnsupportedOperation) {
+		t.Fatalf("err = %v", err)
+	}
+	if result == nil || result.ThreadProgress[0].StatusText != "unsupported" {
+		t.Fatalf("result = %#v", result)
+	}
+	if len(events) != 1 || !events[0].Fail {
+		t.Fatalf("events = %#v", events)
+	}
+}
+
 func TestRunWithEventsSubmitsCredamo(t *testing.T) {
 	server := newCredamoTestServer(t, true)
 	cfg, err := New().DefaultConfig(context.Background(), server.URL+"/s/demo_")
@@ -54,6 +99,56 @@ func TestRunWithEventsSubmitsCredamo(t *testing.T) {
 	if len(events) == 0 {
 		t.Fatal("expected events")
 	}
+}
+
+func newTencentCoreTestServer(t *testing.T) *httptest.Server {
+	t.Helper()
+	return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/api/v2/respondent/surveys/123/session":
+			writeTestJSON(t, w, map[string]any{"code": "OK", "data": map[string]any{}})
+		case "/api/v2/respondent/surveys/123/meta":
+			writeTestJSON(t, w, map[string]any{"code": "OK", "data": map[string]any{"title": "腾讯测试 - 腾讯问卷"}})
+		case "/api/v2/respondent/surveys/123/questions":
+			writeTestJSON(t, w, map[string]any{
+				"code": "OK",
+				"data": map[string]any{
+					"questions": []map[string]any{
+						{"id": "q1", "type": "radio", "title": "单选", "page_id": "p1", "page": 1, "options": []map[string]any{{"id": "a", "text": "A"}, {"id": "b", "text": "B"}}},
+						{"id": "q2", "type": "textarea", "title": "文本", "page_id": "p1", "page": 1},
+					},
+				},
+			})
+		default:
+			t.Fatalf("unexpected path: %s", r.URL.Path)
+		}
+	}))
+}
+
+func rewriteTencentHTTPClient(baseURL string) *http.Client {
+	return &http.Client{
+		Transport: rewriteTencentTransport{
+			baseURL: baseURL,
+			next:    http.DefaultTransport,
+		},
+	}
+}
+
+type rewriteTencentTransport struct {
+	baseURL string
+	next    http.RoundTripper
+}
+
+func (t rewriteTencentTransport) RoundTrip(req *http.Request) (*http.Response, error) {
+	if req.URL.Host == "wj.qq.com" {
+		rewritten, err := http.NewRequestWithContext(req.Context(), req.Method, strings.Replace(req.URL.String(), "https://wj.qq.com", t.baseURL, 1), req.Body)
+		if err != nil {
+			return nil, err
+		}
+		rewritten.Header = req.Header.Clone()
+		req = rewritten
+	}
+	return t.next.RoundTrip(req)
 }
 
 func TestRunErrors(t *testing.T) {

@@ -33,10 +33,10 @@ func main() {
 
 	window := app.Window.NewWithOptions(application.WebviewWindowOptions{
 		Title:     "SurveyController",
-		Width:     1440,
-		Height:    920,
-		MinWidth:  1180,
-		MinHeight: 760,
+		Width:     1180,
+		Height:    720,
+		MinWidth:  900,
+		MinHeight: 560,
 		Frameless: true,
 		BackgroundColour: application.NewRGBA(0, 0, 0, 0),
 		URL:              "/",

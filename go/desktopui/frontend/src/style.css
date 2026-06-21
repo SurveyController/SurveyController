@@ -11,7 +11,7 @@
 :root {
   font-family: "SCInter", "Microsoft YaHei UI", "Segoe UI", sans-serif;
   color-scheme: light;
-  background: #f1f5f9;
+  background: #f4f8fc;
 }
 
 @media (prefers-color-scheme: dark) {
@@ -55,12 +55,16 @@ select {
     @apply rounded-lg border border-slate-200 bg-white shadow-sm shadow-slate-200/60 dark:border-slate-800 dark:bg-slate-950 dark:shadow-none;
   }
 
+  .work-panel {
+    @apply rounded-lg border border-slate-200 bg-white shadow-sm shadow-slate-200/50 dark:border-slate-800 dark:bg-slate-950 dark:shadow-none;
+  }
+
   .section-title {
-    @apply border-b border-slate-100 px-4 py-3 text-sm font-semibold text-slate-900 dark:border-slate-800 dark:text-slate-100;
+    @apply border-b border-slate-100 px-3 py-2 text-sm font-semibold text-slate-900 dark:border-slate-800 dark:text-slate-100;
   }
 
   .control {
-    @apply h-10 rounded-md border border-slate-200 bg-white px-3 text-sm text-slate-900 outline-none transition focus:border-teal-600 focus:ring-2 focus:ring-teal-600/15 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-100;
+    @apply h-8 rounded-md border border-slate-200 bg-white px-2.5 text-xs text-slate-900 outline-none transition focus:border-teal-600 focus:ring-2 focus:ring-teal-600/15 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-100;
   }
 
   .nav-item {
@@ -72,6 +76,522 @@ select {
   }
 
   .titlebar-button {
-    @apply grid h-11 w-12 place-items-center text-slate-500 transition hover:bg-slate-200 hover:text-slate-900 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-slate-50;
+    @apply grid place-items-center text-neutral-800 transition hover:bg-slate-200 hover:text-slate-950 dark:text-slate-300 dark:hover:bg-slate-800 dark:hover:text-slate-50;
+    height: var(--app-titlebar-h);
+    width: clamp(2.7rem, 3.2vw, 3.7rem);
+  }
+
+  .side-nav-item {
+    @apply relative flex w-full flex-col items-center justify-center rounded-lg text-neutral-500 transition hover:bg-white hover:text-blue-600 dark:text-slate-400 dark:hover:bg-slate-900 dark:hover:text-blue-300;
+    min-height: var(--side-nav-item-h);
+    gap: clamp(0.22rem, 0.45vw, 0.42rem);
+  }
+
+  .side-nav-active {
+    @apply bg-white text-blue-600 shadow-sm shadow-slate-200/60 dark:bg-slate-900 dark:text-blue-300 dark:shadow-none;
+  }
+
+  .side-nav-active::before {
+    @apply absolute left-0 w-1 rounded-full bg-blue-600 content-[''];
+    top: 27%;
+    height: 42%;
+  }
+
+  .toolbar-command {
+    @apply inline-flex shrink-0 items-center rounded-md font-medium text-neutral-900 transition hover:bg-slate-100 dark:text-slate-100 dark:hover:bg-slate-800;
+    min-height: var(--control-h);
+    gap: clamp(0.25rem, 0.45vw, 0.45rem);
+    padding-inline: clamp(0.2rem, 0.5vw, 0.45rem);
+    font-size: var(--text-command);
+  }
+
+  .setting-label {
+    @apply font-semibold text-neutral-950 dark:text-slate-50;
+    min-width: clamp(4.4rem, 5.4vw, 5.4rem);
+    font-size: var(--text-control);
+  }
+
+  .number-stepper {
+    @apply flex items-center overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm dark:border-slate-700 dark:bg-slate-900;
+    height: var(--control-h);
+    min-width: clamp(7.5rem, 10vw, 9.5rem);
+  }
+
+  .toggle-shell {
+    @apply relative rounded-full border border-neutral-400 bg-white transition dark:border-slate-600 dark:bg-slate-900;
+    height: clamp(1.6rem, 1.9vw, 1.85rem);
+    width: clamp(3.1rem, 3.7vw, 3.55rem);
+  }
+
+  .toggle-shell-on {
+    @apply border-blue-600 bg-blue-600;
+  }
+
+  .toggle-dot {
+    @apply absolute rounded-full bg-neutral-500 transition;
+    height: calc(clamp(1.6rem, 1.9vw, 1.85rem) - 0.42rem);
+    width: calc(clamp(1.6rem, 1.9vw, 1.85rem) - 0.42rem);
+    left: 0.18rem;
+    top: 0.18rem;
+  }
+
+  .toggle-shell-on .toggle-dot {
+    transform: translateX(calc(clamp(3.1rem, 3.7vw, 3.55rem) - clamp(1.6rem, 1.9vw, 1.85rem)));
+    @apply bg-white;
+  }
+
+  .select-button {
+    @apply flex items-center justify-between rounded-md border border-slate-200 bg-white shadow-sm hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-900 dark:hover:bg-slate-800;
+    height: var(--control-h);
+    min-width: clamp(7.5rem, 10vw, 10rem);
+    padding-inline: clamp(0.7rem, 1vw, 1rem);
+    font-size: var(--text-control);
+  }
+
+  .tab-button {
+    @apply relative rounded-lg border border-slate-200 bg-white font-semibold shadow-sm dark:border-slate-800 dark:bg-slate-950;
+    height: clamp(2.2rem, 2.6vw, 2.55rem);
+    padding-inline: clamp(0.85rem, 1.2vw, 1.2rem);
+    font-size: var(--text-control);
+  }
+
+  .tab-active::after {
+    @apply absolute bottom-0 left-1/2 h-0.5 w-6 -translate-x-1/2 rounded-full bg-blue-600 content-[''];
+  }
+
+  .table-action {
+    @apply inline-flex items-center text-neutral-900 hover:text-blue-600 dark:text-slate-100 dark:hover:text-blue-300;
+    gap: clamp(0.35rem, 0.65vw, 0.75rem);
+    font-size: var(--text-table-action);
+  }
+
+  .table-head {
+    @apply border-r border-slate-200 text-center last:border-r-0 dark:border-slate-800;
+    padding: clamp(0.38rem, 0.55vw, 0.55rem) clamp(0.45rem, 0.75vw, 0.75rem);
+  }
+
+  .table-cell {
+    @apply truncate text-center text-neutral-700 dark:text-slate-300;
+    padding: clamp(0.38rem, 0.55vw, 0.55rem) clamp(0.45rem, 0.75vw, 0.75rem);
+  }
+}
+
+:root {
+  --app-titlebar-h: clamp(3rem, 3.6vw, 3.8rem);
+  --side-nav-w: clamp(4.3rem, 5vw, 5.4rem);
+  --side-nav-item-h: clamp(3.75rem, 5.7vh, 4.65rem);
+  --page-pad: clamp(0.6rem, 0.85vw, 0.9rem);
+  --panel-pad: clamp(0.75rem, 1vw, 1rem);
+  --panel-gap: clamp(0.55rem, 0.75vw, 0.8rem);
+  --control-h: clamp(2.35rem, 2.65vw, 2.75rem);
+  --text-title: clamp(1.2rem, 1.32vw, 1.4rem);
+  --text-section: clamp(1.12rem, 1.2vw, 1.25rem);
+  --text-control: clamp(0.9rem, 0.96vw, 1rem);
+  --text-command: clamp(0.86rem, 0.92vw, 0.96rem);
+  --text-table-action: clamp(0.86rem, 0.92vw, 0.96rem);
+}
+
+.app-titlebar {
+  @apply flex shrink-0 items-center justify-between border-b border-slate-200 bg-[#edf5fb]/95 backdrop-blur-xl dark:border-slate-800 dark:bg-slate-950/90;
+  height: var(--app-titlebar-h);
+  padding-left: clamp(0.8rem, 1.1vw, 1.25rem);
+}
+
+.app-logo {
+  @apply grid place-items-center rounded-md bg-blue-600 font-semibold text-white shadow-sm shadow-blue-900/20;
+  height: clamp(1.75rem, 2vw, 2rem);
+  width: clamp(1.75rem, 2vw, 2rem);
+  font-size: clamp(0.68rem, 0.75vw, 0.78rem);
+}
+
+.app-title {
+  @apply font-semibold tracking-normal text-neutral-950 dark:text-slate-50;
+  font-size: clamp(0.96rem, 1.08vw, 1.1rem);
+}
+
+.app-build {
+  @apply text-neutral-500;
+  font-size: clamp(0.82rem, 0.9vw, 0.94rem);
+}
+
+.app-badge {
+  @apply rounded-full bg-emerald-500 font-medium text-white;
+  padding: clamp(0.12rem, 0.2vw, 0.18rem) clamp(0.38rem, 0.55vw, 0.5rem);
+  font-size: clamp(0.68rem, 0.72vw, 0.76rem);
+}
+
+.side-nav {
+  @apply flex h-full shrink-0 flex-col border-r border-slate-200 bg-[#edf5fb] dark:border-slate-800 dark:bg-slate-950;
+  width: var(--side-nav-w);
+}
+
+.side-nav-icon {
+  width: clamp(1.35rem, 1.55vw, 1.65rem);
+  height: clamp(1.35rem, 1.55vw, 1.65rem);
+}
+
+.side-nav-label {
+  font-size: clamp(0.72rem, 0.78vw, 0.84rem);
+  line-height: 1.18;
+}
+
+.dashboard-root {
+  @apply flex min-h-0 flex-1 flex-col overflow-hidden bg-[#f7fbff] dark:bg-slate-950;
+  padding: var(--page-pad);
+}
+
+.survey-entry-panel,
+.quick-panel,
+.question-panel {
+  padding: var(--panel-pad);
+}
+
+.survey-entry-layout {
+  @apply flex items-start;
+  gap: clamp(0.45rem, 0.75vw, 0.8rem);
+}
+
+.qr-button {
+  @apply grid shrink-0 place-items-center rounded-lg border border-slate-200 bg-white text-neutral-900 shadow-sm dark:border-slate-800 dark:bg-slate-900 dark:text-slate-100;
+  height: var(--control-h);
+  width: var(--control-h);
+}
+
+.qr-icon,
+.toolbar-icon,
+.auto-config-icon,
+.runtime-icon,
+.table-action-icon,
+.stepper-icon,
+.select-icon {
+  width: clamp(1rem, 1.18vw, 1.25rem);
+  height: clamp(1rem, 1.18vw, 1.25rem);
+}
+
+.survey-toolbar {
+  @apply flex min-w-0 items-center;
+  gap: clamp(0.45rem, 0.75vw, 0.9rem);
+}
+
+.survey-url-input {
+  @apply min-w-0 flex-1 rounded-lg border border-slate-200 bg-white text-neutral-500 shadow-inner outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-500/15 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-300;
+  height: var(--control-h);
+  padding-inline: clamp(0.75rem, 1vw, 1rem);
+  font-size: clamp(0.9rem, 0.96vw, 1rem);
+}
+
+.auto-config-button {
+  @apply inline-flex items-center rounded-md bg-blue-600 font-medium text-white shadow-sm shadow-blue-900/20 hover:bg-blue-500;
+  margin-top: clamp(0.38rem, 0.55vw, 0.6rem);
+  height: clamp(2.25rem, 2.55vw, 2.65rem);
+  gap: clamp(0.35rem, 0.6vw, 0.65rem);
+  padding-inline: clamp(0.9rem, 1.2vw, 1.2rem);
+  font-size: var(--text-command);
+}
+
+.quick-panel {
+  margin-top: var(--panel-gap);
+}
+
+.quick-title {
+  @apply font-semibold tracking-normal text-neutral-950 dark:text-slate-50;
+  margin-bottom: clamp(0.4rem, 0.6vw, 0.65rem);
+  font-size: var(--text-title);
+}
+
+.quick-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(13rem, clamp(13.5rem, 17vw, 15.5rem));
+  gap: clamp(0.55rem, 0.85vw, 0.9rem);
+}
+
+.settings-line {
+  @apply flex flex-wrap items-center;
+  gap: clamp(0.42rem, 0.7vw, 0.9rem);
+}
+
+.settings-line-primary {
+  column-gap: clamp(0.45rem, 0.7vw, 0.9rem);
+  row-gap: clamp(0.38rem, 0.55vw, 0.6rem);
+}
+
+.number-stepper-value {
+  padding-inline: clamp(0.65rem, 1vw, 0.9rem);
+  font-size: var(--text-control);
+}
+
+.number-stepper-input {
+  @apply min-w-0 flex-1 bg-transparent outline-none;
+  padding-inline: clamp(0.65rem, 1vw, 0.9rem);
+  font-size: var(--text-control);
+}
+
+.stepper-button {
+  @apply grid h-full place-items-center text-neutral-500;
+  width: clamp(1.7rem, 2.1vw, 2.05rem);
+}
+
+.thread-slider {
+  width: clamp(8rem, 12vw, 10.5rem);
+  accent-color: #2563eb;
+}
+
+.thread-value,
+.setting-value {
+  font-size: var(--text-control);
+  font-weight: 500;
+}
+
+.runtime-card {
+  @apply flex items-center rounded-lg border border-slate-200 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-900;
+  gap: clamp(0.42rem, 0.6vw, 0.6rem);
+  padding: clamp(0.5rem, 0.65vw, 0.65rem);
+}
+
+.runtime-icon-box {
+  @apply grid place-items-center rounded-lg bg-blue-50 text-neutral-900 dark:bg-slate-800 dark:text-slate-100;
+  height: clamp(2.2rem, 2.55vw, 2.65rem);
+  width: clamp(2.2rem, 2.55vw, 2.65rem);
+}
+
+.runtime-title {
+  @apply font-semibold;
+  font-size: var(--text-control);
+}
+
+.runtime-desc {
+  @apply text-neutral-500;
+  margin-top: 0.15rem;
+  font-size: clamp(0.78rem, 0.84vw, 0.9rem);
+}
+
+.runtime-open-button {
+  @apply rounded-md border border-slate-200 bg-white shadow-sm hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-950 dark:hover:bg-slate-900;
+  height: clamp(2.2rem, 2.5vw, 2.55rem);
+  padding-inline: clamp(1rem, 1.35vw, 1.35rem);
+  font-size: var(--text-control);
+}
+
+.quota-card {
+  @apply rounded-xl border border-slate-200 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-900;
+  padding: clamp(0.55rem, 0.8vw, 0.8rem);
+}
+
+.quota-title {
+  @apply text-center font-semibold;
+  font-size: var(--text-control);
+}
+
+.quota-status {
+  @apply flex items-center justify-center text-neutral-500;
+  margin-top: clamp(0.4rem, 0.6vw, 0.6rem);
+  gap: 0.3rem;
+  font-size: clamp(0.78rem, 0.84vw, 0.9rem);
+}
+
+.quota-dot {
+  @apply rounded-full bg-emerald-500;
+  height: clamp(0.45rem, 0.52vw, 0.56rem);
+  width: clamp(0.45rem, 0.52vw, 0.56rem);
+}
+
+.quota-ring {
+  @apply relative mx-auto grid place-items-center rounded-full border-blue-600;
+  margin-top: clamp(0.5rem, 0.75vw, 0.75rem);
+  height: clamp(5.5rem, 6.5vw, 6.5rem);
+  width: clamp(5.5rem, 6.5vw, 6.5rem);
+  border-width: clamp(0.34rem, 0.45vw, 0.45rem);
+}
+
+.quota-value {
+  @apply text-neutral-900 dark:text-slate-100;
+  font-size: clamp(0.9rem, 1vw, 1.05rem);
+}
+
+.quota-button {
+  @apply mx-auto flex items-center rounded-md border border-slate-200 bg-white font-semibold shadow-sm hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-950 dark:hover:bg-slate-900;
+  margin-top: clamp(0.5rem, 0.7vw, 0.7rem);
+  height: clamp(2.2rem, 2.5vw, 2.55rem);
+  gap: clamp(0.35rem, 0.55vw, 0.55rem);
+  padding-inline: clamp(0.9rem, 1.2vw, 1.2rem);
+  font-size: var(--text-command);
+}
+
+.dashboard-tabs {
+  @apply flex;
+  margin-top: var(--panel-gap);
+}
+
+.question-panel {
+  @apply rounded-tl-none;
+}
+
+.question-title {
+  @apply font-semibold tracking-normal;
+  font-size: var(--text-section);
+}
+
+.question-count {
+  @apply text-neutral-500;
+  font-size: var(--text-control);
+}
+
+.table-actions {
+  @apply flex flex-wrap items-center;
+  margin-top: clamp(0.48rem, 0.7vw, 0.7rem);
+  gap: clamp(0.55rem, 1vw, 1rem);
+}
+
+.question-table {
+  @apply overflow-hidden border-t border-slate-200 dark:border-slate-800;
+  margin-top: clamp(0.5rem, 0.75vw, 0.75rem);
+  min-height: clamp(4.5rem, 8vh, 6rem);
+}
+
+.question-table-row {
+  display: grid;
+  grid-template-columns: minmax(3.5rem, 0.45fr) minmax(6rem, 1fr) minmax(6rem, 1fr) minmax(10rem, 2.4fr);
+}
+
+.question-table-head {
+  @apply border-b border-slate-200 text-neutral-500 dark:border-slate-800;
+  font-size: var(--text-control);
+}
+
+.question-table-body {
+  @apply border-b border-slate-100 dark:border-slate-800;
+  font-size: clamp(0.84rem, 0.9vw, 0.95rem);
+}
+
+.run-footer {
+  @apply flex shrink-0 items-center rounded-lg border border-slate-200 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-900;
+  margin-top: clamp(0.4rem, 0.55vw, 0.55rem);
+  height: clamp(3rem, 4vh, 3.5rem);
+  gap: clamp(0.45rem, 0.8vw, 0.8rem);
+  padding-inline: clamp(0.55rem, 0.75vw, 0.75rem);
+}
+
+.run-status {
+  @apply font-semibold;
+  width: clamp(5rem, 6vw, 5.8rem);
+  font-size: var(--text-control);
+}
+
+.run-progress-track {
+  @apply flex-1 bg-neutral-400;
+  height: 2px;
+}
+
+.run-progress-value {
+  @apply text-center font-semibold;
+  width: clamp(2.4rem, 3vw, 3rem);
+  font-size: var(--text-control);
+}
+
+.run-button-primary,
+.run-button-secondary {
+  @apply rounded-md;
+  height: clamp(2.2rem, 2.6vw, 2.55rem);
+  padding-inline: clamp(1rem, 1.45vw, 1.35rem);
+  font-size: var(--text-control);
+}
+
+.run-button-primary {
+  @apply bg-neutral-300 font-medium text-white;
+}
+
+.run-button-secondary {
+  @apply border border-slate-200 bg-white text-neutral-400 dark:border-slate-700 dark:bg-slate-950;
+}
+
+@media (max-width: 1500px) {
+  :root {
+    --app-titlebar-h: 3.25rem;
+    --side-nav-w: 4.65rem;
+    --side-nav-item-h: 3.9rem;
+    --text-title: 1.2rem;
+    --text-section: 1.12rem;
+    --text-control: 0.92rem;
+    --text-command: 0.88rem;
+    --text-table-action: 0.88rem;
+    --control-h: 2.4rem;
+    --panel-pad: 0.75rem;
+    --panel-gap: 0.6rem;
+  }
+
+  .survey-toolbar {
+    gap: 0.55rem;
+  }
+
+  .toolbar-command {
+    min-width: auto;
+  }
+
+  .quick-layout {
+    grid-template-columns: minmax(0, 1fr) minmax(13rem, 15rem);
+  }
+
+  .thread-slider {
+    width: clamp(8rem, 10vw, 10rem);
+  }
+}
+
+@media (max-width: 980px) {
+  .survey-entry-layout {
+    align-items: stretch;
+  }
+
+  .survey-toolbar {
+    flex-wrap: wrap;
+  }
+
+  .survey-url-input {
+    flex-basis: 100%;
+  }
+
+  .quick-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .quota-card {
+    display: grid;
+    grid-template-columns: minmax(10rem, 1fr) auto auto;
+    align-items: center;
+    gap: 1rem;
+  }
+
+  .quota-status,
+  .quota-ring,
+  .quota-button {
+    margin-top: 0;
+  }
+}
+
+@media (max-height: 820px) {
+  :root {
+    --app-titlebar-h: 3rem;
+    --side-nav-item-h: 3.65rem;
+    --page-pad: 0.55rem;
+    --panel-pad: 0.7rem;
+    --panel-gap: 0.55rem;
+    --control-h: 2.3rem;
+  }
+
+  .quick-title {
+    margin-bottom: 0.55rem;
+  }
+
+  .settings-line,
+  .settings-line-primary {
+    gap: 0.65rem;
+  }
+
+  .quota-ring {
+    height: 5.4rem;
+    width: 5.4rem;
+  }
+
+  .question-table {
+    min-height: 4.5rem;
   }
 }

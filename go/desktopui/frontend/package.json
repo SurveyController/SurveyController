@@ -8,11 +8,12 @@
     "build:dev": "vue-tsc --noEmit && vite build --minify false --mode development",
     "build": "vue-tsc --noEmit && vite build --mode production",
     "preview": "vite preview",
-    "check": "vue-tsc --noEmit"
+    "check": "vue-tsc --noEmit",
+    "test": "vitest run"
   },
   "dependencies": {
-    "@wailsio/runtime": "latest",
     "@lucide/vue": "latest",
+    "@wailsio/runtime": "latest",
     "vue": "latest"
   },
   "devDependencies": {
@@ -21,6 +22,7 @@
     "tailwindcss": "latest",
     "typescript": "latest",
     "vite": "latest",
+    "vitest": "^4.1.9",
     "vue-tsc": "latest"
   }
 }
