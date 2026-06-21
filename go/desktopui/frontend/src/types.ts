@@ -19,7 +19,7 @@ export interface QuickAction {
   id: string
   label: string
   icon: string
-  emphasis?: 'primary' | ''
+  emphasis?: 'primary' | string
 }
 
 export interface QuestionRow {
@@ -62,7 +62,7 @@ export interface SettingField {
   id: string
   label: string
   description: string
-  kind: 'number' | 'slider' | 'range' | 'toggle' | 'select'
+  kind: 'number' | 'slider' | 'range' | 'toggle' | 'select' | string
   value: string
   options?: string[]
 }

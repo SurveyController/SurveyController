@@ -12,6 +12,7 @@
 - Go 1.26 或更新版本
 - Git
 - Wails v3（只在开发 Wails 应用壳时需要）
+- Node.js 与 npm（只在开发 Wails 前端时需要）
 
 ## 常用命令
 
@@ -44,6 +45,7 @@ wails3 generate bindings
 | 目标 | 目录 |
 | --- | --- |
 | 代理核心 | `go/proxycore/` |
+| Go 原生桌面 UI 前端壳 | `go/desktopui/` |
 | 问卷核心和公开门面 API | `go/surveycore/` |
 | Credamo Go 实现 | `go/surveycore/credamo/` |
 | 手动验证命令 | `go/surveycore/cmd/` |
@@ -90,6 +92,7 @@ docs: 更新 Go 迁移说明
 ├── assets/                  # README、图标、图片资源
 ├── go/                      # Go 核心模块和后续 Wails 模块
 │   ├── proxycore/
+│   ├── desktopui/
 │   └── surveycore/
 ├── software/                # 旧 UI 与资源参考
 │   ├── assets/

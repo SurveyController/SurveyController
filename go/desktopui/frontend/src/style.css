@@ -1,0 +1,77 @@
+@import "tailwindcss";
+
+@font-face {
+  font-family: "SCInter";
+  src: url("/Inter-Medium.ttf") format("truetype");
+  font-weight: 500;
+  font-style: normal;
+  font-display: swap;
+}
+
+:root {
+  font-family: "SCInter", "Microsoft YaHei UI", "Segoe UI", sans-serif;
+  color-scheme: light;
+  background: #f1f5f9;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    color-scheme: dark;
+    background: #020617;
+  }
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#app {
+  height: 100%;
+  margin: 0;
+}
+
+button,
+input,
+select {
+  font: inherit;
+}
+
+.drag-region {
+  --wails-draggable: drag;
+  -webkit-app-region: drag;
+}
+
+.drag-region button,
+.drag-region input,
+.drag-region select {
+  --wails-draggable: no-drag;
+  -webkit-app-region: no-drag;
+}
+
+@layer components {
+  .panel {
+    @apply rounded-lg border border-slate-200 bg-white shadow-sm shadow-slate-200/60 dark:border-slate-800 dark:bg-slate-950 dark:shadow-none;
+  }
+
+  .section-title {
+    @apply border-b border-slate-100 px-4 py-3 text-sm font-semibold text-slate-900 dark:border-slate-800 dark:text-slate-100;
+  }
+
+  .control {
+    @apply h-10 rounded-md border border-slate-200 bg-white px-3 text-sm text-slate-900 outline-none transition focus:border-teal-600 focus:ring-2 focus:ring-teal-600/15 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-100;
+  }
+
+  .nav-item {
+    @apply flex h-10 w-full items-center gap-3 rounded-md px-3 text-left text-sm font-medium text-slate-600 transition hover:bg-slate-100 hover:text-slate-950 dark:text-slate-400 dark:hover:bg-slate-900 dark:hover:text-slate-100;
+  }
+
+  .nav-item-active {
+    @apply bg-teal-50 text-teal-700 shadow-sm shadow-teal-900/5 dark:bg-teal-950/70 dark:text-teal-200;
+  }
+
+  .titlebar-button {
+    @apply grid h-11 w-12 place-items-center text-slate-500 transition hover:bg-slate-200 hover:text-slate-900 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-slate-50;
+  }
+}

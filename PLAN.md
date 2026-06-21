@@ -50,7 +50,7 @@ Agent 每次处理 Go+Wails 迁移任务前必须先读本文件。
 ## P3 Wails 调试壳
 
 - [x] 用 Wails v3 初始化独立应用模块。
-- [x] 确认本机模板：先跑 `wails3 init -l`，再选择 Svelte/TypeScript 模板。
+- [x] 确认本机模板：套用 SuiDemo 的 Wails v3 + Vue 3 + TypeScript + TailwindCSS 结构。
 - [ ] 接入 Go 核心模块，不把核心代码塞进 Wails 服务文件。
 - [ ] 暴露最小服务方法：代理状态、平台解析、测试提交。
 - [x] 跑 `wails3 generate bindings`。
@@ -68,7 +68,7 @@ Agent 每次处理 Go+Wails 迁移任务前必须先读本文件。
 
 ## P5 UI alpha
 
-- [x] 确定前端组件栈：Svelte + TailwindCSS。
+- [x] 确定前端组件栈：Vue 3 + TypeScript + TailwindCSS。
 - [ ] 先做工作台主流程，不做营销页。
 - [ ] 迁移配置输入、问卷 URL、运行按钮、日志、进度、结果。
 - [ ] 做代理状态面板。

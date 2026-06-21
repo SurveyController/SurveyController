@@ -226,8 +226,8 @@ func (s *AppService) GetShellState() ShellState {
 		},
 		AboutItems: []PageMetric{
 			{Label: "版本", Value: "0.1.0-alpha"},
-			{Label: "前端栈", Value: "Svelte 5 + Wails v3"},
-			{Label: "设计基底", Value: "Fluent Design / WinUI 3"},
+			{Label: "前端栈", Value: "Vue 3 + TailwindCSS + Wails v3"},
+			{Label: "桌面壳", Value: "Wails v3"},
 		},
 		DonateItems: []PageMetric{
 			{Label: "支持方向", Value: "代理额度与平台适配"},

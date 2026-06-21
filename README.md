@@ -10,6 +10,7 @@
 当前仓库以 `go/` 为主。
 
 - `go/proxycore`：代理核心，包含代理租约、TTL、脱敏、并发池、官方随机 IP session。
+- `go/desktopui`：Wails v3 桌面壳，前端使用 Vue 3、TypeScript、TailwindCSS。
 - `go/surveycore`：问卷核心，包含公开门面 API、通用模型、Credamo 解析与提交闭环。
 - `software/ui`：旧 PySide6/QFluentWidgets 界面参考，不再作为可运行入口。
 - `software/assets`、`assets`：旧 UI 和 README 资源参考。
@@ -38,6 +39,7 @@ go test ./...
 .
 ├── go/
 │   ├── proxycore/           # Go 代理核心
+│   ├── desktopui/           # Wails 桌面 UI 壳
 │   └── surveycore/          # Go 问卷核心
 ├── software/
 │   ├── assets/              # 旧应用资源参考
