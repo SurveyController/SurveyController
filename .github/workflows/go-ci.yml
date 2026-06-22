@@ -36,10 +36,24 @@ jobs:
         if: runner.os == 'Linux'
         run: |
           sudo apt-get update
-          sudo apt-get install -y libgtk-3-dev libwebkit2gtk-4.1-dev
+          sudo apt-get install -y libgtk-4-dev libwebkitgtk-6.0-dev
 
       - name: Test core modules
         run: go test ./packages/proxycore/... ./packages/surveycore/...
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: apps/desktop/frontend/package-lock.json
+
+      - name: Install frontend dependencies
+        working-directory: apps/desktop/frontend
+        run: npm ci
+
+      - name: Build frontend
+        working-directory: apps/desktop/frontend
+        run: npm run build
 
       - name: Test desktop module
         working-directory: apps/desktop
@@ -91,6 +105,11 @@ jobs:
           java-version: "21"
 
       - uses: android-actions/setup-android@v3
+
+      - name: Install Linux desktop dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libgtk-4-dev libwebkitgtk-6.0-dev
 
       - name: Install Android SDK packages
         shell: bash
