@@ -25,11 +25,24 @@ function Write-Step {
 function Assert-CommandAvailable {
     param(
         [string]$Name,
-        [string]$InstallHint
+        [string]$InstallHint,
+        [string[]]$CommonPaths = @()
     )
 
     $command = Get-Command $Name -ErrorAction SilentlyContinue
-    if (-not $command) {
+    if ($command) {
+        return
+    }
+
+    foreach ($path in $CommonPaths) {
+        if (Test-Path -LiteralPath $path) {
+            $commandDir = Split-Path -Parent $path
+            $env:Path = "$commandDir$([IO.Path]::PathSeparator)$env:Path"
+            return
+        }
+    }
+
+    if (-not (Get-Command $Name -ErrorAction SilentlyContinue)) {
         throw ("Missing command: {0}. {1}" -f $Name, $InstallHint)
     }
 }
@@ -116,7 +129,10 @@ Assert-CommandAvailable -Name "go" -InstallHint "Install Go 1.26+ and ensure go 
 Assert-CommandAvailable -Name "node" -InstallHint "Install Node.js and ensure node is available in PATH."
 Assert-CommandAvailable -Name "npm" -InstallHint "Install npm and ensure npm is available in PATH."
 Assert-CommandAvailable -Name "wails3" -InstallHint "Install Wails v3: go install github.com/wailsapp/wails/v3/cmd/wails3@v3.0.0-alpha2.104"
-Assert-CommandAvailable -Name "makensis" -InstallHint "Install NSIS and ensure makensis is available in PATH."
+Assert-CommandAvailable -Name "makensis" -InstallHint "Install NSIS and ensure makensis is available in PATH." -CommonPaths @(
+    "C:\Program Files\NSIS\makensis.exe",
+    "C:\Program Files (x86)\NSIS\makensis.exe"
+)
 
 Write-Host ("Repo root: {0}" -f $repoRoot)
 Write-Host ("Desktop root: {0}" -f $desktopRoot)
@@ -138,6 +154,9 @@ Write-Step "Build Windows installer"
 Push-Location $desktopRoot
 try {
     wails3 task windows:package ARCH=$Arch INSTALL_SCOPE=user
+    if ($LASTEXITCODE -ne 0) {
+        throw ("Windows package task failed with exit code {0}." -f $LASTEXITCODE)
+    }
 }
 finally {
     Pop-Location

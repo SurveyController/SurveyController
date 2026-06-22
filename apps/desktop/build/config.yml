@@ -1,5 +1,5 @@
 # 桌面端构建配置
-# 修改 `info` 或 `fileAssociations` 后，运行 `wails3 task common:generate:icons` 同步构建资源。
+# 修改 `info` 或 `fileAssociations` 后运行 `wails3 task common:generate:icons` 同步构建资源。
 version: '3'
 
 # 这些信息用于生成构建资源。
