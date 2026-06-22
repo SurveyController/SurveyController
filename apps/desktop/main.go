@@ -32,12 +32,12 @@ func main() {
 	})
 
 	window := app.Window.NewWithOptions(application.WebviewWindowOptions{
-		Title:     "SurveyController",
-		Width:     1180,
-		Height:    720,
-		MinWidth:  900,
-		MinHeight: 560,
-		Frameless: true,
+		Title:            "SurveyController",
+		Width:            1180,
+		Height:           720,
+		MinWidth:         900,
+		MinHeight:        560,
+		Frameless:        true,
 		BackgroundColour: application.NewRGBA(0, 0, 0, 0),
 		URL:              "/",
 		Mac: application.MacWindow{

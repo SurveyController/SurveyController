@@ -5,13 +5,120 @@ on:
     branches: [main, refactor/go]
   pull_request:
 
+env:
+  GO_VERSION: "1.26.4"
+  NODE_VERSION: "22"
+  WAILS_VERSION: "v3.0.0-alpha2.104"
+  ANDROID_API_LEVEL: "34"
+  ANDROID_BUILD_TOOLS: "34.0.0"
+  ANDROID_NDK_VERSION: "26.3.11579264"
+
 jobs:
-  test:
-    runs-on: windows-latest
+  go-test:
+    name: Go tests (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, ubuntu-latest, macos-latest]
     steps:
       - uses: actions/checkout@v4
+
       - uses: actions/setup-go@v5
         with:
-          go-version: "1.26"
-      - name: Test Go modules
+          go-version: ${{ env.GO_VERSION }}
+          cache-dependency-path: |
+            packages/proxycore/go.sum
+            packages/surveycore/go.sum
+            apps/desktop/go.sum
+
+      - name: Install Linux desktop dependencies
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libgtk-3-dev libwebkit2gtk-4.1-dev
+
+      - name: Test core modules
         run: go test ./packages/proxycore/... ./packages/surveycore/...
+
+      - name: Test desktop module
+        working-directory: apps/desktop
+        run: go test ./...
+
+  frontend-test:
+    name: Frontend tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: apps/desktop/frontend/package-lock.json
+
+      - name: Install frontend dependencies
+        working-directory: apps/desktop/frontend
+        run: npm ci
+
+      - name: Test frontend
+        working-directory: apps/desktop/frontend
+        run: npm test -- --run
+
+  android-build:
+    name: Android build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          cache-dependency-path: |
+            packages/proxycore/go.sum
+            packages/surveycore/go.sum
+            apps/desktop/go.sum
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: apps/desktop/frontend/package-lock.json
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+
+      - uses: android-actions/setup-android@v3
+
+      - name: Install Android SDK packages
+        shell: bash
+        run: |
+          sdkmanager --install \
+            "platform-tools" \
+            "platforms;android-${ANDROID_API_LEVEL}" \
+            "build-tools;${ANDROID_BUILD_TOOLS}" \
+            "ndk;${ANDROID_NDK_VERSION}"
+          echo "ANDROID_NDK_HOME=${ANDROID_HOME}/ndk/${ANDROID_NDK_VERSION}" >> "$GITHUB_ENV"
+
+      - name: Install Wails CLI
+        run: go install github.com/wailsapp/wails/v3/cmd/wails3@${{ env.WAILS_VERSION }}
+
+      - name: Install Task
+        run: go install github.com/go-task/task/v3/cmd/task@latest
+
+      - name: Check tool versions
+        shell: bash
+        run: |
+          go version
+          node --version
+          npm --version
+          java -version
+          wails3 version
+          task --version
+
+      - name: Build Android debug APK
+        working-directory: apps/desktop
+        shell: bash
+        run: task android:build ARCH=amd64
