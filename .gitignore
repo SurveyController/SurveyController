@@ -30,7 +30,6 @@ coverage.out
 # 编译环境
 /build/
 /dist/
-Setup/
 /Releases/
 
 # 运行环境
