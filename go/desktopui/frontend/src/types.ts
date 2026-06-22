@@ -46,6 +46,8 @@ export interface DashboardState {
   randomIpStatus: string
   randomIpStatusTone: Tone
   proxySource: string
+  proxyAvailable?: number
+  proxyInUse?: number
   questionCount: number
   progressCurrent: number
   progressTarget: number
@@ -192,6 +194,7 @@ export interface ProxyStatus {
   quotaKnown: boolean
   randomIpEnabled: boolean
   source: string
+  message?: string
 }
 
 export interface RunEvent {
@@ -201,12 +204,26 @@ export interface RunEvent {
   fail: boolean
   current: number
   total: number
+  time?: string
+}
+
+export interface ThreadProgress {
+  thread_name: string
+  thread_index: number
+  success_count: number
+  fail_count: number
+  step_current: number
+  step_total: number
+  status_text: string
+  running: boolean
+  last_update?: string
 }
 
 export interface RunResult {
   success: number
   fail: number
   stopped: boolean
+  thread_progress?: ThreadProgress[]
 }
 
 export interface SurveyCoreState {
@@ -214,6 +231,17 @@ export interface SurveyCoreState {
   config?: RuntimeConfig | null
   result?: RunResult | null
   events?: RunEvent[]
+}
+
+export interface RunTaskState {
+  running: boolean
+  canceling: boolean
+  result?: RunResult | null
+  events?: RunEvent[]
+  error?: string
+  startedAt?: string
+  endedAt?: string
+  config?: RuntimeConfig | null
 }
 
 export interface ReverseFillPreview {

@@ -7,9 +7,9 @@
 			"ProductVersion": "0.1.0",
 			"CompanyName": "HungryM0",
 			"FileDescription": "SurveyController Desktop UI",
-			"LegalCopyright": "© 2026, My Company",
+			"LegalCopyright": "(c) 2026, HungryM0",
 			"ProductName": "SurveyController",
-			"Comments": "This is a comment"
+			"Comments": "Stable update feed: https://dl.hungrym0.com/surveycontroller/win/stable/"
 		}
 	}
 }

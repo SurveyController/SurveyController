@@ -242,7 +242,8 @@ select {
 
 .survey-entry-panel,
 .quick-panel,
-.question-panel {
+.question-panel,
+.session-panel {
   padding: var(--panel-pad);
 }
 
@@ -417,6 +418,11 @@ select {
   font-size: var(--text-command);
 }
 
+.quota-meta {
+  @apply mt-2 text-center text-neutral-500;
+  font-size: clamp(0.74rem, 0.8vw, 0.86rem);
+}
+
 .dashboard-tabs {
   @apply flex;
   margin-top: var(--panel-gap);
@@ -424,6 +430,44 @@ select {
 
 .question-panel {
   @apply rounded-tl-none;
+}
+
+.session-panel {
+  margin-top: var(--panel-gap);
+}
+
+.session-grid {
+  @apply mt-2 grid gap-2;
+  grid-template-columns: repeat(auto-fit, minmax(15rem, 1fr));
+}
+
+.session-row {
+  @apply grid items-center gap-2 rounded-md border border-slate-200 bg-slate-50 px-3 py-2 dark:border-slate-800 dark:bg-slate-900;
+  grid-template-columns: minmax(7rem, 1fr) minmax(6rem, 0.9fr) 3rem;
+}
+
+.session-name {
+  @apply truncate font-semibold text-slate-900 dark:text-slate-100;
+  font-size: clamp(0.84rem, 0.9vw, 0.95rem);
+}
+
+.session-status {
+  @apply truncate text-neutral-500;
+  margin-top: 0.1rem;
+  font-size: clamp(0.74rem, 0.8vw, 0.86rem);
+}
+
+.session-progress {
+  @apply h-1.5 overflow-hidden rounded-full bg-slate-200 dark:bg-slate-800;
+}
+
+.session-progress span {
+  @apply block h-full rounded-full bg-blue-600;
+}
+
+.session-percent {
+  @apply text-right font-semibold text-neutral-700 dark:text-slate-200;
+  font-size: clamp(0.78rem, 0.84vw, 0.9rem);
 }
 
 .question-title {
@@ -490,18 +534,18 @@ select {
 
 .run-button-primary,
 .run-button-secondary {
-  @apply rounded-md;
+  @apply inline-flex items-center justify-center gap-1.5 rounded-md;
   height: clamp(2.2rem, 2.6vw, 2.55rem);
   padding-inline: clamp(1rem, 1.45vw, 1.35rem);
   font-size: var(--text-control);
 }
 
 .run-button-primary {
-  @apply bg-neutral-300 font-medium text-white;
+  @apply bg-blue-600 font-medium text-white hover:bg-blue-500 disabled:bg-neutral-300 disabled:text-white;
 }
 
 .run-button-secondary {
-  @apply border border-slate-200 bg-white text-neutral-400 dark:border-slate-700 dark:bg-slate-950;
+  @apply border border-slate-200 bg-white text-neutral-700 hover:bg-slate-50 disabled:text-neutral-400 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-200 dark:hover:bg-slate-900 dark:disabled:text-slate-600;
 }
 
 @media (max-width: 1500px) {

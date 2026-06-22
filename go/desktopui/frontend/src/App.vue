@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
+import { computed, onMounted, onUnmounted, ref } from 'vue'
 import { AlertCircle } from '@lucide/vue'
 import { Dialogs } from '@wailsio/runtime'
 import NavRail from './components/NavRail.vue'
@@ -11,15 +11,18 @@ import RuntimeView from './pages/RuntimeView.vue'
 import StrategyView from './pages/StrategyView.vue'
 import {
   buildDefaultConfig,
+  cancelRuntimeConfig,
   loadAppModel,
+  loadProxyStatus,
+  loadRunTaskState,
   loadRuntimeConfig,
   previewReverseFill,
-  runRuntimeConfig,
   saveRuntimeConfig,
   saveSettings,
+  startRuntimeConfig,
 } from './services/shell'
 import { applyConfigToShell, updateAppSettingsField, updateRuntimeConfigField, type AppModel } from './services/stateMapper'
-import type { RuntimeConfig, ShellState } from './types'
+import type { ProxyStatus, RunTaskState, RuntimeConfig, ShellState } from './types'
 
 const shell = ref<ShellState | null>(null)
 const model = ref<AppModel | null>(null)
@@ -28,8 +31,12 @@ const loading = ref(true)
 const busy = ref(false)
 const error = ref('')
 const notice = ref('')
+const runState = ref<RunTaskState | null>(null)
+const proxyStatus = ref<ProxyStatus | null>(null)
+let runPollTimer: ReturnType<typeof setInterval> | null = null
 
 const config = computed(() => model.value?.config ?? null)
+const runBusy = computed(() => busy.value || Boolean(runState.value?.running || runState.value?.canceling))
 
 onMounted(async () => {
   try {
@@ -37,6 +44,7 @@ onMounted(async () => {
     model.value = loaded
     shell.value = loaded.shell
     currentPage.value = loaded.shell.currentPage || 'dashboard'
+    await refreshRemoteStatus()
   } catch (err) {
     error.value = err instanceof Error ? err.message : String(err)
   } finally {
@@ -44,12 +52,16 @@ onMounted(async () => {
   }
 })
 
+onUnmounted(() => {
+  stopRunPolling()
+})
+
 function setConfig(next: RuntimeConfig) {
   if (!model.value || !shell.value) {
     return
   }
   model.value.config = next
-  shell.value = applyConfigToShell(shell.value, model.value.settings, model.value.config, model.value.reverseFillPreview)
+  syncShell()
 }
 
 function setNotice(message: string) {
@@ -68,6 +80,34 @@ async function withBusy(action: () => Promise<void>) {
   }
 }
 
+function syncShell() {
+  if (!model.value || !shell.value) {
+    return
+  }
+  shell.value = applyConfigToShell(
+    shell.value,
+    model.value.settings,
+    model.value.config,
+    model.value.reverseFillPreview,
+    runState.value,
+    proxyStatus.value,
+  )
+}
+
+async function refreshRemoteStatus() {
+  const [proxy, run] = await Promise.allSettled([loadProxyStatus(), loadRunTaskState()])
+  if (proxy.status === 'fulfilled') {
+    proxyStatus.value = proxy.value
+  }
+  if (run.status === 'fulfilled') {
+    runState.value = run.value
+    if (run.value.running) {
+      startRunPolling()
+    }
+  }
+  syncShell()
+}
+
 function updateConfigField(id: string, value: string | boolean) {
   if (!config.value) {
     return
@@ -80,7 +120,7 @@ function updateSettingsField(id: string, value: string | boolean) {
     return
   }
   model.value.settings = updateAppSettingsField(model.value.settings, id, value)
-  shell.value = applyConfigToShell(shell.value, model.value.settings, model.value.config, model.value.reverseFillPreview)
+  syncShell()
 }
 
 function updateURL(value: string) {
@@ -173,7 +213,7 @@ async function previewReverseFillFile() {
       return
     }
     model.value.reverseFillPreview = preview
-    shell.value = applyConfigToShell(shell.value, model.value.settings, model.value.config, preview)
+    syncShell()
     setNotice(`已预览 ${preview.total_data_rows} 行`)
   })
 }
@@ -184,7 +224,7 @@ async function saveAppSettings() {
       return
     }
     model.value.settings = await saveSettings(model.value.settings)
-    shell.value = applyConfigToShell(shell.value, model.value.settings, model.value.config, model.value.reverseFillPreview)
+    syncShell()
     setNotice('设置已保存')
   })
 }
@@ -194,27 +234,64 @@ async function runSurvey() {
     if (!config.value) {
       return
     }
-    const state = await runRuntimeConfig(config.value)
-    if (!shell.value) {
-      return
-    }
-    shell.value = {
-      ...shell.value,
-      dashboard: {
-        ...shell.value.dashboard,
-        progressCurrent: state.result?.success ?? 0,
-        progressPercent: state.result && shell.value.dashboard.progressTarget > 0
-          ? Math.round((state.result.success / shell.value.dashboard.progressTarget) * 100)
-          : shell.value.dashboard.progressPercent,
-        statusText: state.result ? `成功 ${state.result.success}，失败 ${state.result.fail}` : '运行结束',
-      },
-      logLines: [
-        ...(state.events ?? []).map((event) => `[${event.worker || 'core'}] ${event.message}`),
-        ...shell.value.logLines,
-      ].slice(0, 200),
-    }
-    setNotice('任务已返回结果')
+    runState.value = await startRuntimeConfig(config.value)
+    proxyStatus.value = await loadProxyStatus()
+    syncShell()
+    startRunPolling()
+    setNotice('任务已启动')
   })
+}
+
+async function cancelRun() {
+  await withBusy(async () => {
+    runState.value = await cancelRuntimeConfig()
+    proxyStatus.value = await loadProxyStatus()
+    syncShell()
+    startRunPolling()
+    setNotice('正在停止任务')
+  })
+}
+
+function startRunPolling() {
+  if (runPollTimer) {
+    return
+  }
+  runPollTimer = setInterval(() => {
+    void pollRunState()
+  }, 500)
+  void pollRunState()
+}
+
+function stopRunPolling() {
+  if (!runPollTimer) {
+    return
+  }
+  clearInterval(runPollTimer)
+  runPollTimer = null
+}
+
+async function pollRunState() {
+  try {
+    const [nextRun, nextProxy] = await Promise.all([loadRunTaskState(), loadProxyStatus()])
+    runState.value = nextRun
+    proxyStatus.value = nextProxy
+    syncShell()
+    if (!runState.value.running && !runState.value.canceling) {
+      stopRunPolling()
+      if (runState.value.events?.length && shell.value) {
+        shell.value = {
+          ...shell.value,
+          logLines: [
+            ...runState.value.events.map((event) => `[${event.worker || 'core'}] ${event.message}`),
+            ...shell.value.logLines,
+          ].slice(0, 200),
+        }
+      }
+    }
+  } catch (err) {
+    stopRunPolling()
+    error.value = err instanceof Error ? err.message : String(err)
+  }
 }
 </script>
 
@@ -268,7 +345,7 @@ async function runSurvey() {
             v-if="currentPage === 'dashboard'"
             :dashboard="shell.dashboard"
             :logs="shell.logLines"
-            :busy="busy"
+            :busy="runBusy"
             @update-url="updateURL"
             @auto-config="autoConfig"
             @load-config="loadConfigFromDialog"
@@ -279,6 +356,7 @@ async function runSurvey() {
             @random-ip-change="updateConfigField('random-ip', $event)"
             @proxy-source-change="updateConfigField('proxy-source', $event)"
             @run="runSurvey"
+            @cancel-run="cancelRun"
           />
           <RuntimeView v-else-if="currentPage === 'runtime'" :groups="shell.runtimeGroups" @field-change="updateConfigField" />
           <StrategyView v-else-if="currentPage === 'strategy'" :rules="shell.strategyRules" :dimensions="shell.dimensionGroups" />

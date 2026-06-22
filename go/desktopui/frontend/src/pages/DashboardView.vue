@@ -9,6 +9,7 @@ import {
   QrCode,
   Save,
   SlidersHorizontal,
+  Square,
   Trash2,
 } from '@lucide/vue'
 import type { DashboardState } from '../types'
@@ -30,6 +31,7 @@ const emit = defineEmits<{
   randomIpChange: [value: boolean]
   proxySourceChange: [value: string]
   run: []
+  cancelRun: []
 }>()
 
 function emitTarget(event: Event) {
@@ -159,10 +161,13 @@ function emitURL(event: Event) {
             <div class="quota-title">剩余随机IP额度</div>
             <div class="quota-status">
               <span class="quota-dot"></span>
-              {{ dashboard.randomIpStatus }} 1118 ms
+              {{ dashboard.randomIpStatus }}
             </div>
             <div class="quota-ring">
               <span class="quota-value">{{ dashboard.randomIpQuotaLabel }}</span>
+            </div>
+            <div class="quota-meta">
+              可用 {{ dashboard.proxyAvailable ?? 0 }} / 占用 {{ dashboard.proxyInUse ?? 0 }}
             </div>
             <button class="quota-button">
               <span class="text-orange-600">LD</span>
@@ -209,14 +214,37 @@ function emitURL(event: Event) {
           </div>
         </div>
       </div>
+
+      <div v-if="dashboard.sessionRows.length" class="work-panel session-panel">
+        <div class="flex items-center justify-between">
+          <h2 class="question-title">会话进度</h2>
+          <span class="question-count">{{ dashboard.sessionRows.length }} 路</span>
+        </div>
+        <div class="session-grid">
+          <div v-for="row in dashboard.sessionRows" :key="row.thread" class="session-row">
+            <div class="min-w-0">
+              <div class="session-name">{{ row.thread }}</div>
+              <div class="session-status">{{ row.status }}</div>
+            </div>
+            <div class="session-progress">
+              <span :style="{ width: `${row.progress}%` }"></span>
+            </div>
+            <div class="session-percent">{{ row.progress }}%</div>
+          </div>
+        </div>
+      </div>
     </div>
 
     <footer class="run-footer">
       <div class="run-status">{{ dashboard.statusText }}</div>
       <div class="run-progress-track"></div>
       <div class="run-progress-value">{{ dashboard.progressPercent }}%</div>
-      <button class="run-button-primary" :disabled="busy || !dashboard.surveyUrl" @click="emit('run')">开始执行</button>
-      <button class="run-button-secondary" disabled>
+      <button class="run-button-primary" :disabled="busy || !dashboard.surveyUrl" @click="emit('run')">
+        <Play class="auto-config-icon" />
+        开始执行
+      </button>
+      <button class="run-button-secondary" :disabled="!busy" @click="emit('cancelRun')">
+        <Square class="auto-config-icon" />
         停止
       </button>
     </footer>

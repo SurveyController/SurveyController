@@ -1,13 +1,16 @@
 import type {
   AppSettings,
   DashboardState,
+  ProxyStatus,
   QuestionMeta,
   QuestionRow,
   ReverseFillPreview,
   ReverseFillRow,
+  RunTaskState,
   RuntimeConfig,
   SettingsGroup,
   ShellState,
+  ThreadProgress,
 } from '../types'
 
 export interface AppModel {
@@ -57,12 +60,14 @@ export function applyConfigToShell(
   settings: AppSettings,
   config: RuntimeConfig,
   preview: ReverseFillPreview | null,
+  runState: RunTaskState | null = null,
+  proxyStatus: ProxyStatus | null = null,
 ): ShellState {
   const normalized = normalizeRuntimeConfig(config)
   return {
     ...shell,
     themeMode: settings.themeMode || shell.themeMode,
-    dashboard: mapDashboard(shell.dashboard, normalized),
+    dashboard: mapDashboard(shell.dashboard, normalized, runState, proxyStatus),
     runtimeGroups: mapRuntimeGroups(normalized),
     settingsGroups: mapSettingsGroups(settings),
     strategyRules: mapStrategyRules(normalized),
@@ -84,6 +89,7 @@ export function normalizeRuntimeConfig(config: RuntimeConfig): RuntimeConfig {
     answer_duration: normalizePair(config.answer_duration, [60, 120]),
     random_ip_enabled: Boolean(config.random_ip_enabled),
     proxy_source: config.proxy_source || 'default',
+    custom_proxy_api: config.custom_proxy_api ?? '',
     random_ua_enabled: Boolean(config.random_ua_enabled),
     random_ua_ratios: config.random_ua_ratios ?? { wechat: 33, mobile: 33, pc: 34 },
     fail_stop_enabled: config.fail_stop_enabled ?? true,
@@ -120,6 +126,9 @@ export function updateRuntimeConfigField(config: RuntimeConfig, fieldId: string,
       break
     case 'proxy-source':
       next.proxy_source = proxyValues[text] ?? text
+      break
+    case 'custom-proxy-api':
+      next.custom_proxy_api = text
       break
     case 'random-ua':
       next.random_ua_enabled = Boolean(rawValue)
@@ -215,9 +224,21 @@ export function questionTypeLabel(question: QuestionMeta): string {
   }
 }
 
-function mapDashboard(base: DashboardState, config: RuntimeConfig): DashboardState {
+function mapDashboard(base: DashboardState, config: RuntimeConfig, runState: RunTaskState | null, proxyStatus: ProxyStatus | null): DashboardState {
   const questions = config.questions_info ?? []
   const target = config.target ?? 1
+  const current = runState?.result
+    ? runState.result.success + runState.result.fail
+    : clampInt(base.progressCurrent, 0, target, 0)
+  const runningText = runState?.canceling ? '正在停止' : runState?.running ? '运行中' : ''
+  const resultText = runState?.result
+    ? `成功 ${runState.result.success}，失败 ${runState.result.fail}`
+    : ''
+  const proxyKnown = proxyStatus?.quotaKnown ?? false
+  const proxyMessage = proxyStatus?.message ?? ''
+  const quotaLabel = proxyMessage || (proxyKnown
+    ? `${proxyStatus?.remainingQuota || '0'} / ${proxyStatus?.totalQuota || '0'}`
+    : '未同步')
   return {
     ...base,
     surveyTitle: config.survey_title || '未命名问卷',
@@ -226,10 +247,17 @@ function mapDashboard(base: DashboardState, config: RuntimeConfig): DashboardSta
     threadCount: config.threads ?? 1,
     randomIpEnabled: Boolean(config.random_ip_enabled),
     proxySource: proxyLabels[config.proxy_source ?? 'default'] ?? config.proxy_source ?? '默认',
+    randomIpQuota: proxyKnown ? 100 : 0,
+    randomIpQuotaLabel: quotaLabel,
+    randomIpStatus: proxyMessage || (proxyKnown ? '额度已同步' : '未连接代理服务'),
+    randomIpStatusTone: proxyMessage || proxyKnown ? 'success' : '',
+    proxyAvailable: proxyStatus?.available ?? 0,
+    proxyInUse: proxyStatus?.inUse ?? 0,
     questionCount: questions.length,
+    progressCurrent: current,
     progressTarget: target,
-    progressPercent: clampInt(base.progressPercent, 0, 100, 0),
-    statusText: config.url ? '等待启动' : '等待配置',
+    progressPercent: target > 0 ? clampInt(Math.round((current / target) * 100), 0, 100, 0) : 0,
+    statusText: runningText || runState?.error || resultText || (config.url ? '等待启动' : '等待配置'),
     platformLabel: providerLabels[config.survey_provider ?? 'wjx'] ?? '问卷星',
     metrics: [
       { label: '已解析题目', value: String(questions.length) },
@@ -238,7 +266,19 @@ function mapDashboard(base: DashboardState, config: RuntimeConfig): DashboardSta
       { label: '反填', value: config.reverse_fill_enabled ? '已启用' : '未启用', tone: config.reverse_fill_enabled ? 'success' : '' },
     ],
     questionRows: mapQuestionRows(config),
+    sessionRows: mapSessionRows(runState?.result?.thread_progress ?? []),
   }
+}
+
+function mapSessionRows(progress: ThreadProgress[]): Array<{ thread: string, status: string, progress: number }> {
+  return progress.map((item, index) => {
+    const total = item.step_total || 1
+    return {
+      thread: item.thread_name || `Worker-${index + 1}`,
+      status: item.status_text || (item.running ? '运行中' : '空闲'),
+      progress: clampInt(Math.round(((item.step_current || 0) / total) * 100), 0, 100, 0),
+    }
+  })
 }
 
 function mapRuntimeGroups(config: RuntimeConfig): SettingsGroup[] {
@@ -259,6 +299,7 @@ function mapRuntimeGroups(config: RuntimeConfig): SettingsGroup[] {
       fields: [
         field('random-ip', '随机 IP', '启用后按会话申请代理', 'toggle', String(Boolean(config.random_ip_enabled))),
         field('proxy-source', '代理源', '默认 / 福利 / 自定义', 'select', proxyLabels[config.proxy_source ?? 'default'] ?? '默认', ['默认', '限时福利', '自定义']),
+        field('custom-proxy-api', '自定义代理 API', '', 'text', config.custom_proxy_api ?? ''),
         field('random-ua', '随机 UA', '拆散重复指纹', 'toggle', String(Boolean(config.random_ua_enabled))),
         field('fail-stop', '失败停止', '失败过多时停止任务', 'toggle', String(config.fail_stop_enabled ?? true)),
       ],

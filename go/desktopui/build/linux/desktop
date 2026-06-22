@@ -3,11 +3,11 @@ Version=1.0
 Name=SurveyController
 Comment=SurveyController Desktop UI
 # The Exec line includes %u to pass the URL to the application
-Exec=/usr/local/bin/desktopui.exe %u
+Exec=/usr/local/bin/SurveyController %u
 Terminal=false
 Type=Application
-Icon=desktopui.exe
+Icon=SurveyController
 Categories=Utility;
-StartupWMClass=desktopui.exe
+StartupWMClass=SurveyController
 
  

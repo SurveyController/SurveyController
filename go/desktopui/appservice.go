@@ -2,8 +2,12 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"os"
 	"strings"
+	"sync"
+	"time"
 
 	"surveycontroller/proxycore"
 	"surveycontroller/surveycore"
@@ -54,6 +58,17 @@ type RunSurveyRequest struct {
 	Config surveycore.RuntimeConfig `json:"config"`
 }
 
+type RunTaskState struct {
+	Running   bool                      `json:"running"`
+	Canceling bool                      `json:"canceling"`
+	Result    *surveycore.RunResult     `json:"result,omitempty"`
+	Events    []surveycore.Event        `json:"events,omitempty"`
+	Error     string                    `json:"error,omitempty"`
+	StartedAt time.Time                 `json:"startedAt,omitempty"`
+	EndedAt   time.Time                 `json:"endedAt,omitempty"`
+	Config    *surveycore.RuntimeConfig `json:"config,omitempty"`
+}
+
 type ReverseFillPreviewRequest struct {
 	Path      string                    `json:"path"`
 	Format    string                    `json:"format"`
@@ -76,6 +91,7 @@ type ProxyStatus struct {
 	QuotaKnown      bool                    `json:"quotaKnown"`
 	RandomIPEnabled bool                    `json:"randomIpEnabled"`
 	Source          string                  `json:"source"`
+	Message         string                  `json:"message"`
 	Quota           proxycore.QuotaSnapshot `json:"quota"`
 }
 
@@ -149,11 +165,16 @@ type ShellState struct {
 }
 
 type AppService struct {
-	survey *surveycore.Client
+	survey    *surveycore.Client
+	runMu     sync.Mutex
+	proxyMu   sync.Mutex
+	run       RunTaskState
+	cancel    context.CancelFunc
+	proxy     *proxyRuntime
 }
 
 func NewAppService() *AppService {
-	return &AppService{survey: surveycore.New()}
+	return &AppService{survey: surveycore.New(), proxy: newProxyRuntime()}
 }
 
 func (s *AppService) surveyClient() *surveycore.Client {
@@ -161,6 +182,15 @@ func (s *AppService) surveyClient() *surveycore.Client {
 		return s.survey
 	}
 	return surveycore.New()
+}
+
+func (s *AppService) proxyRuntime() *proxyRuntime {
+	s.proxyMu.Lock()
+	defer s.proxyMu.Unlock()
+	if s.proxy == nil {
+		s.proxy = newProxyRuntime()
+	}
+	return s.proxy
 }
 
 func (s *AppService) GetShellState() ShellState {
@@ -195,7 +225,7 @@ func (s *AppService) GetShellState() ShellState {
 			QuestionCount:      18,
 			ProgressCurrent:    96,
 			ProgressTarget:     240,
-			ProgressPercent:    40,
+			ProgressPercent:    0,
 			StatusText:         "等待启动",
 			PlatformLabel:      "问卷星",
 			Metrics: []PageMetric{
@@ -216,12 +246,7 @@ func (s *AppService) GetShellState() ShellState {
 				{Index: 3, Type: "量表题", Dimension: "品牌偏好", Strategy: "轻度正向偏置"},
 				{Index: 4, Type: "填空题", Dimension: "意见反馈", Strategy: "AI 改写"},
 			},
-			SessionRows: []SessionRow{
-				{Thread: "会话 01", Status: "等待代理", Progress: 22},
-				{Thread: "会话 02", Status: "准备提交", Progress: 54},
-				{Thread: "会话 03", Status: "写入答案", Progress: 71},
-				{Thread: "会话 04", Status: "空闲", Progress: 0},
-			},
+			SessionRows: []SessionRow{},
 		},
 		RuntimeGroups: []SettingsGroup{
 			{
@@ -312,17 +337,7 @@ func (s *AppService) GetShellState() ShellState {
 }
 
 func (s *AppService) GetProxyStatus() ProxyStatus {
-	quota := proxycore.QuotaSnapshot{}
-	return ProxyStatus{
-		Available:       0,
-		InUse:           0,
-		RemainingQuota:  proxycore.FormatQuotaValue(quota.RemainingQuota),
-		TotalQuota:      proxycore.FormatQuotaValue(quota.TotalQuota),
-		QuotaKnown:      quota.QuotaKnown,
-		RandomIPEnabled: false,
-		Source:          proxycore.OfficialSourceDefault,
-		Quota:           quota,
-	}
+	return s.proxyRuntime().statusSnapshot()
 }
 
 func (s *AppService) GetAppSettings() (AppSettings, error) {
@@ -341,6 +356,10 @@ func (s *AppService) LoadConfig(_ context.Context, request LoadConfigRequest) (C
 	path := configPathFromRequest(request.Path, settings)
 	cfg, err := configio.Load(path, true)
 	if err != nil {
+		if strings.TrimSpace(request.Path) == "" && errors.Is(err, os.ErrNotExist) {
+			empty := surveycore.RuntimeConfig{}
+			return ConfigFileState{Path: path, Config: &empty}, nil
+		}
 		return ConfigFileState{}, err
 	}
 	return ConfigFileState{Path: path, Config: &cfg}, nil
@@ -398,12 +417,97 @@ func (s *AppService) BuildDefaultConfig(ctx context.Context, request ParseSurvey
 }
 
 func (s *AppService) RunSurvey(ctx context.Context, request RunSurveyRequest) (SurveyCoreState, error) {
-	var events []surveycore.Event
-	result, err := surveycore.New().RunWithEvents(ctx, &request.Config, func(event surveycore.Event) {
+	var (
+		events   []surveycore.Event
+		eventsMu sync.Mutex
+	)
+	options, err := s.proxyRuntime().executionOptions(ctx, request.Config)
+	if err != nil {
+		return SurveyCoreState{}, err
+	}
+	result, err := s.surveyClient().RunWithExecutionOptions(ctx, &request.Config, func(event surveycore.Event) {
+		eventsMu.Lock()
 		events = append(events, event)
-	})
+		eventsMu.Unlock()
+	}, options)
 	if err != nil {
 		return SurveyCoreState{Result: result, Events: events}, err
 	}
 	return SurveyCoreState{Result: result, Events: events}, nil
+}
+
+func (s *AppService) StartRun(ctx context.Context, request RunSurveyRequest) (RunTaskState, error) {
+	s.runMu.Lock()
+	if s.run.Running {
+		state := s.cloneRunStateLocked()
+		s.runMu.Unlock()
+		return state, fmt.Errorf("任务正在运行")
+	}
+	cfg := request.Config
+	options, err := s.proxyRuntime().executionOptions(ctx, cfg)
+	if err != nil {
+		state := s.cloneRunStateLocked()
+		s.runMu.Unlock()
+		return state, err
+	}
+	runCtx, cancel := context.WithCancel(context.Background())
+	s.cancel = cancel
+	s.run = RunTaskState{
+		Running:   true,
+		StartedAt: time.Now(),
+		Config:    &cfg,
+		Events:    []surveycore.Event{},
+	}
+	state := s.cloneRunStateLocked()
+	s.runMu.Unlock()
+
+	go s.runSurveyTask(runCtx, cfg, options)
+	return state, nil
+}
+
+func (s *AppService) GetRunTaskState() RunTaskState {
+	s.runMu.Lock()
+	defer s.runMu.Unlock()
+	return s.cloneRunStateLocked()
+}
+
+func (s *AppService) CancelRun(_ context.Context) (RunTaskState, error) {
+	s.runMu.Lock()
+	if s.cancel != nil && s.run.Running {
+		s.run.Canceling = true
+		s.cancel()
+	}
+	state := s.cloneRunStateLocked()
+	s.runMu.Unlock()
+	return state, nil
+}
+
+func (s *AppService) runSurveyTask(ctx context.Context, cfg surveycore.RuntimeConfig, options surveycore.ExecutionOptions) {
+	result, err := s.surveyClient().RunWithExecutionOptions(ctx, &cfg, func(event surveycore.Event) {
+		s.runMu.Lock()
+		s.run.Events = append(s.run.Events, event)
+		s.runMu.Unlock()
+	}, options)
+	s.runMu.Lock()
+	defer s.runMu.Unlock()
+	s.run.Running = false
+	s.run.Canceling = false
+	s.run.Result = result
+	s.run.EndedAt = time.Now()
+	if err != nil {
+		s.run.Error = err.Error()
+	} else {
+		s.run.Error = ""
+	}
+	s.cancel = nil
+}
+
+func (s *AppService) cloneRunStateLocked() RunTaskState {
+	state := s.run
+	state.Events = append([]surveycore.Event(nil), s.run.Events...)
+	if s.run.Config != nil {
+		cfg := *s.run.Config
+		state.Config = &cfg
+	}
+	return state
 }

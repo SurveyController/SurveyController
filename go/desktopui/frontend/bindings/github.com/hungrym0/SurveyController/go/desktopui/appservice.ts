@@ -17,12 +17,20 @@ export function BuildDefaultConfig(request: $models.ParseSurveyRequest): $Cancel
     return $Call.ByID(1281628077, request);
 }
 
+export function CancelRun(): $CancellablePromise<$models.RunTaskState> {
+    return $Call.ByID(56584525);
+}
+
 export function GetAppSettings(): $CancellablePromise<$models.AppSettings> {
     return $Call.ByID(120288048);
 }
 
 export function GetProxyStatus(): $CancellablePromise<$models.ProxyStatus> {
     return $Call.ByID(3425455756);
+}
+
+export function GetRunTaskState(): $CancellablePromise<$models.RunTaskState> {
+    return $Call.ByID(2123585291);
 }
 
 export function GetShellState(): $CancellablePromise<$models.ShellState> {
@@ -51,4 +59,8 @@ export function SaveAppSettings(request: $models.SaveSettingsRequest): $Cancella
 
 export function SaveConfig(request: $models.SaveConfigRequest): $CancellablePromise<$models.ConfigFileState> {
     return $Call.ByID(2775748437, request);
+}
+
+export function StartRun(request: $models.RunSurveyRequest): $CancellablePromise<$models.RunTaskState> {
+    return $Call.ByID(1211922163, request);
 }

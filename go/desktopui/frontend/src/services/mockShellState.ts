@@ -28,6 +28,8 @@ export const mockShellState: ShellState = {
     randomIpStatus: '服务正常',
     randomIpStatusTone: 'success',
     proxySource: '默认',
+    proxyAvailable: 0,
+    proxyInUse: 0,
     questionCount: 0,
     progressCurrent: 0,
     progressTarget: 1,

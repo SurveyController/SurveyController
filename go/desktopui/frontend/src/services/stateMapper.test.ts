@@ -29,6 +29,7 @@ describe('stateMapper', () => {
       threads: 3,
       random_ip_enabled: true,
       proxy_source: 'custom',
+      custom_proxy_api: 'https://proxy.example/api',
       reverse_fill_enabled: true,
       questions_info: [
         {
@@ -56,6 +57,7 @@ describe('stateMapper', () => {
     expect(shell.dashboard.platformLabel).toBe('腾讯问卷')
     expect(shell.dashboard.targetCount).toBe(8)
     expect(shell.dashboard.questionRows).toEqual([{ index: 1, type: '单选题', dimension: '', strategy: 'random' }])
+    expect(shell.runtimeGroups.some((group) => group.fields.some((field) => field.id === 'custom-proxy-api'))).toBe(true)
     expect(shell.runtimeGroups.some((group) => group.fields.some((field) => field.id === 'reverse-fill-enabled'))).toBe(true)
   })
 
@@ -75,11 +77,13 @@ describe('stateMapper', () => {
     config = updateRuntimeConfigField(config, 'threads', '4')
     config = updateRuntimeConfigField(config, 'random-ip', true)
     config = updateRuntimeConfigField(config, 'proxy-source', '自定义')
+    config = updateRuntimeConfigField(config, 'custom-proxy-api', 'https://proxy.example/api')
 
     expect(config.target).toBe(12)
     expect(config.threads).toBe(4)
     expect(config.random_ip_enabled).toBe(true)
     expect(config.proxy_source).toBe('custom')
+    expect(config.custom_proxy_api).toBe('https://proxy.example/api')
   })
 
   it('updates persisted app settings fields', () => {

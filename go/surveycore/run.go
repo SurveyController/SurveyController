@@ -19,6 +19,10 @@ func (c *Client) Run(ctx context.Context, cfg *RuntimeConfig) (*RunResult, error
 }
 
 func (c *Client) RunWithEvents(ctx context.Context, cfg *RuntimeConfig, handler EventHandler) (*RunResult, error) {
+	return c.RunWithExecutionOptions(ctx, cfg, handler, ExecutionOptionsFromConfig(cfg))
+}
+
+func (c *Client) RunWithExecutionOptions(ctx context.Context, cfg *RuntimeConfig, handler EventHandler, options ExecutionOptions) (*RunResult, error) {
 	if cfg == nil {
 		return nil, fmt.Errorf("%w: 配置为空", ErrInvalidConfig)
 	}
@@ -49,11 +53,38 @@ func (c *Client) RunWithEvents(ctx context.Context, cfg *RuntimeConfig, handler 
 	}
 	if provider == model.ProviderWJX {
 		runner := wjx.Runner{Client: c.httpClient.Client}
-		result, err := runner.Run(ctx, cfg, func(event wjx.Event) {
-			if handler == nil {
+		result, err := RunExecution(ctx, cfg, func(runCtx context.Context, local *RuntimeConfig, localHandler EventHandler) (*RunResult, error) {
+			runResult, runErr := runner.Run(runCtx, local, func(event wjx.Event) {
+				if localHandler == nil {
+					return
+				}
+				localHandler(Event{
+					Worker:  event.Worker,
+					Message: event.Message,
+					Success: event.Success,
+					Fail:    event.Fail,
+					Current: event.Current,
+					Total:   event.Total,
+					Time:    event.Time,
+				})
+			})
+			return resultFromWJX(runResult), runErr
+		}, handler, options)
+		if err != nil {
+			return result, wrapRunError(err)
+		}
+		return result, nil
+	}
+	if provider != model.ProviderCredamo {
+		return nil, fmt.Errorf("%w: only credamo run is supported", ErrUnsupportedOperation)
+	}
+	runner := credamo.Runner{HTTP: httpClientOrDefault(c.httpClient)}
+	result, err := RunExecution(ctx, cfg, func(runCtx context.Context, local *RuntimeConfig, localHandler EventHandler) (*RunResult, error) {
+		runResult, runErr := runner.Run(runCtx, local, func(event credamo.Event) {
+			if localHandler == nil {
 				return
 			}
-			handler(Event{
+			localHandler(Event{
 				Worker:  event.Worker,
 				Message: event.Message,
 				Success: event.Success,
@@ -63,33 +94,37 @@ func (c *Client) RunWithEvents(ctx context.Context, cfg *RuntimeConfig, handler 
 				Time:    event.Time,
 			})
 		})
-		if err != nil {
-			return resultFromWJX(result), wrapRunError(err)
-		}
-		return resultFromWJX(result), nil
-	}
-	if provider != model.ProviderCredamo {
-		return nil, fmt.Errorf("%w: only credamo run is supported", ErrUnsupportedOperation)
-	}
-	runner := credamo.Runner{HTTP: httpClientOrDefault(c.httpClient)}
-	result, err := runner.Run(ctx, cfg, func(event credamo.Event) {
-		if handler == nil {
-			return
-		}
-		handler(Event{
-			Worker:  event.Worker,
-			Message: event.Message,
-			Success: event.Success,
-			Fail:    event.Fail,
-			Current: event.Current,
-			Total:   event.Total,
-			Time:    event.Time,
-		})
-	})
+		return resultFromCredamo(runResult), runErr
+	}, handler, options)
 	if err != nil {
-		return resultFromCredamo(result), wrapRunError(err)
+		return result, wrapRunError(err)
 	}
-	return resultFromCredamo(result), nil
+	return result, nil
+}
+
+func ExecutionOptionsFromConfig(cfg *RuntimeConfig) ExecutionOptions {
+	if cfg == nil {
+		return ExecutionOptions{}
+	}
+	target := cfg.Target
+	if target <= 0 {
+		target = 1
+	}
+	threads := cfg.Threads
+	if threads <= 0 {
+		threads = 1
+	}
+	maxRetries := 0
+	if cfg.ReliabilityModeEnabled {
+		maxRetries = 1
+	}
+	return ExecutionOptions{
+		Target:          target,
+		Threads:         threads,
+		MaxRetries:      maxRetries,
+		FailStop:        cfg.FailStopEnabled,
+		CooldownOnError: 30 * time.Second,
+	}
 }
 
 func resultFromTencent(result tencent.Result) *RunResult {

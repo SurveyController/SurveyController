@@ -15,7 +15,7 @@ var ErrNoProxyAddress = errors.New("proxy payload contains no valid proxy addres
 func ParseProxyPayload(payload []byte) ([]string, error) {
 	var decoded any
 	if err := json.Unmarshal(payload, &decoded); err != nil {
-		return nil, fmt.Errorf("parse proxy payload JSON: %w", err)
+		return parseProxyTextPayload(payload)
 	}
 	candidates := make([]string, 0)
 	recursiveFindProxies(decoded, &candidates, 0)
@@ -30,6 +30,41 @@ func ParseProxyPayload(payload []byte) ([]string, error) {
 		}
 		seen[candidate] = struct{}{}
 		unique = append(unique, candidate)
+	}
+	return unique, nil
+}
+
+func parseProxyTextPayload(payload []byte) ([]string, error) {
+	text := strings.TrimSpace(string(payload))
+	if text == "" {
+		return nil, ErrNoProxyAddress
+	}
+	matches := proxyAddressRE.FindAllStringSubmatch(text, -1)
+	if len(matches) == 0 {
+		return nil, ErrNoProxyAddress
+	}
+	seen := make(map[string]struct{}, len(matches))
+	unique := make([]string, 0, len(matches))
+	for _, match := range matches {
+		if len(match) < 5 {
+			continue
+		}
+		user := match[1]
+		password := match[2]
+		ip := match[3]
+		port := match[4]
+		candidate := ip + ":" + port
+		if user != "" && password != "" {
+			candidate = user + ":" + password + "@" + candidate
+		}
+		if _, exists := seen[candidate]; exists {
+			continue
+		}
+		seen[candidate] = struct{}{}
+		unique = append(unique, candidate)
+	}
+	if len(unique) == 0 {
+		return nil, ErrNoProxyAddress
 	}
 	return unique, nil
 }

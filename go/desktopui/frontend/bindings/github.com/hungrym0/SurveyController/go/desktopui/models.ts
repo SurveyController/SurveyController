@@ -7,6 +7,9 @@ import * as proxycore$0 from "../../../../../surveycontroller/proxycore/models.j
 // eslint-disable-next-line @typescript-eslint/ban-ts-comment
 // @ts-ignore: Unused imports
 import * as surveycore$0 from "../../../../../surveycontroller/surveycore/models.js";
+// eslint-disable-next-line @typescript-eslint/ban-ts-comment
+// @ts-ignore: Unused imports
+import * as time$0 from "../../../../../time/models.js";
 
 export interface AppSettings {
     "configDirectory": string;
@@ -78,6 +81,7 @@ export interface ProxyStatus {
     "quotaKnown": boolean;
     "randomIpEnabled": boolean;
     "source": string;
+    "message": string;
     "quota": proxycore$0.QuotaSnapshot;
 }
 
@@ -110,6 +114,17 @@ export interface ReverseFillRow {
 
 export interface RunSurveyRequest {
     "config": surveycore$0.RuntimeConfig;
+}
+
+export interface RunTaskState {
+    "running": boolean;
+    "canceling": boolean;
+    "result"?: surveycore$0.RunResult | null;
+    "events"?: surveycore$0.Event[] | null;
+    "error"?: string;
+    "startedAt"?: time$0.Time;
+    "endedAt"?: time$0.Time;
+    "config"?: surveycore$0.RuntimeConfig | null;
 }
 
 export interface SaveConfigRequest {

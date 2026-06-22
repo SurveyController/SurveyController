@@ -1,6 +1,9 @@
-import type { AppSettings, ReverseFillPreview, RuntimeConfig, ShellState, SurveyCoreState } from '../types'
+import type { AppSettings, ProxyStatus, ReverseFillPreview, RunTaskState, RuntimeConfig, ShellState, SurveyCoreState } from '../types'
 import {
   BuildDefaultConfig,
+  CancelRun,
+  GetProxyStatus,
+  GetRunTaskState,
   GetAppSettings,
   GetShellState,
   LoadConfig,
@@ -8,6 +11,7 @@ import {
   RunSurvey,
   SaveAppSettings,
   SaveConfig,
+  StartRun,
 } from '../../bindings/github.com/hungrym0/SurveyController/go/desktopui/appservice'
 import { mockShellState } from './mockShellState'
 import { buildAppModel, type AppModel } from './stateMapper'
@@ -75,6 +79,22 @@ export async function previewReverseFill(config: RuntimeConfig): Promise<Reverse
 
 export async function runRuntimeConfig(config: RuntimeConfig): Promise<SurveyCoreState> {
   return await RunSurvey({ config: config as any }) as SurveyCoreState
+}
+
+export async function startRuntimeConfig(config: RuntimeConfig): Promise<RunTaskState> {
+  return await StartRun({ config: config as any }) as RunTaskState
+}
+
+export async function loadRunTaskState(): Promise<RunTaskState> {
+  return await GetRunTaskState() as RunTaskState
+}
+
+export async function cancelRuntimeConfig(): Promise<RunTaskState> {
+  return await CancelRun() as RunTaskState
+}
+
+export async function loadProxyStatus(): Promise<ProxyStatus> {
+  return await GetProxyStatus() as ProxyStatus
 }
 
 function mockAppSettings(): AppSettings {

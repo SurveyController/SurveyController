@@ -24,7 +24,7 @@ function onToggle(event: Event) {
   <div class="flex items-center justify-between gap-3 border-b border-slate-100 py-2.5 last:border-b-0 dark:border-slate-800">
     <div class="min-w-0">
       <div class="text-xs font-medium text-slate-900 dark:text-slate-100">{{ field.label }}</div>
-      <div class="mt-0.5 text-[11px] text-slate-500 dark:text-slate-400">{{ field.description }}</div>
+      <div v-if="field.description" class="mt-0.5 text-[11px] text-slate-500 dark:text-slate-400">{{ field.description }}</div>
     </div>
 
     <label v-if="field.kind === 'toggle'" class="relative inline-flex cursor-pointer items-center">

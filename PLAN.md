@@ -32,9 +32,9 @@ Agent 每次处理 Go+Wails 迁移任务前必须先读本文件。
 - [x] 实现 `ProxyLease`、payload 解析、地址归一化、脱敏、TTL 判断。
 - [x] 实现代理池去重、占用、成功用过、冷却和并发 fetch。
 - [x] 为 `go/proxycore` 补 mock 单测并跑通 `go test ./...`。
-- [ ] 增加自定义代理 API fetcher，使用 `net/http`，支持超时和 context 取消。
-- [ ] 增加代理健康检查，默认目标用可配置 URL，不写死真实业务页面。
-- [ ] 增加 live test：仅在 `SC_PROXY_API_URL` 存在时访问真实代理 API。
+- [x] 增加自定义代理 API fetcher，使用 `net/http`，支持超时和 context 取消。
+- [x] 增加代理健康检查，默认目标用可配置 URL，不写死真实业务页面。
+- [x] 增加 live test：仅在 `SC_PROXY_API_URL` 存在时访问真实代理 API。
 - [x] 重新设计官方随机 IP session：账号、额度、设备 ID、持久化都走接口，不照搬 Python 全局状态。
 - [x] 为官方随机 IP session 增加 mock 单测。
 
@@ -45,7 +45,7 @@ Agent 每次处理 Go+Wails 迁移任务前必须先读本文件。
 - [x] 实现 HTTP 获取、参数提取、题目解析。
 - [x] 实现答案构造和提交。
 - [x] 增加 fixture 单测：HTML/JSON 样本来自本地文件，不访问真实平台。
-- [ ] 增加 live test：仅在显式环境变量存在时提交测试问卷。
+- [x] 增加 live test：仅在显式环境变量存在时提交测试问卷。
 
 ## P3 Wails 调试壳
 
@@ -56,37 +56,37 @@ Agent 每次处理 Go+Wails 迁移任务前必须先读本文件。
 - [x] 暴露配置载入导出、设置保存和 Excel 反填预览服务。
 - [x] 跑 `wails3 generate bindings`。
 - [x] 做最小调试 UI：URL 输入、按钮、日志区、结果区。
-- [ ] 跑 `wails3 dev` 验证前后端通信。
+- [x] 跑 `wails3 dev` 验证前后端通信。
 
 ## P4 Go 执行引擎
 
-- [ ] 设计任务上下文：context 取消、并发数、限流、重试、代理租约、日志事件。
-- [ ] 实现 worker 调度，不照搬 Python 线程/async 锁。
-- [ ] 实现结构化日志事件流，供 Wails 前端订阅。
-- [ ] 实现失败重试和错误分类。
-- [ ] 实现任务停止、资源释放、代理归还。
-- [ ] 增加并发和取消单测。
+- [x] 设计任务上下文：context 取消、并发数、限流、重试、代理租约、日志事件。
+- [x] 实现 worker 调度，不照搬 Python 线程/async 锁。
+- [x] 实现结构化日志事件流，供 Wails 前端订阅。
+- [x] 实现失败重试和错误分类。
+- [x] 实现任务停止、资源释放、代理归还。
+- [x] 增加并发和取消单测。
 
 ## P5 UI alpha
 
 - [x] 确定前端组件栈：Vue 3 + TypeScript + TailwindCSS。
 - [x] 先做工作台主流程，不做营销页。
 - [x] 迁移配置输入、问卷 URL、运行按钮、日志、进度、结果。
-- [ ] 做代理状态面板。
+- [x] 做代理状态面板。
 - [x] 做平台解析预览。
-- [ ] 做任务运行态和取消态。
-- [ ] 用 Wails dev 手动验证 UI 不遮挡、不溢出、状态清晰。
+- [x] 做任务运行态和取消态。
+- [x] 用 Wails dev 手动验证 UI 不遮挡、不溢出、状态清晰。
 
 ## P6 WJX 和发布
 
-- [ ] 梳理 WJX 协议事实，可参考历史提交或外部文档，不恢复旧 Python 实现。
+- [x] 梳理 WJX 协议事实，可参考历史提交或外部文档，不恢复旧 Python 实现。
 - [x] 迁移 WJX HTML 解析和题型映射。
 - [x] 迁移 WJX 提交参数构造。
 - [x] 增加 WJX fixture 单测。
-- [ ] 增加 WJX live test，显式环境变量开启。
-- [ ] 设计 Wails 打包产物目录。
-- [ ] 迁移更新链路，保持主 feed 为 `https://dl.hungrym0.com/surveycontroller/win/stable/`。
-- [ ] 验证 Windows 安装包和升级流程。
+- [x] 增加 WJX live test，显式环境变量开启。
+- [x] 设计 Wails 打包产物目录。
+- [x] 迁移更新链路，保持主 feed 为 `https://dl.hungrym0.com/surveycontroller/win/stable/`。
+- [x] 验证 Windows 安装包和升级流程。
 
 ## 每次任务的收尾要求
 

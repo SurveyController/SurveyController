@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/xuri/excelize/v2"
 	"surveycontroller/surveycore"
@@ -31,6 +32,59 @@ func TestAppServiceProxyStatusUsesCoreTypes(t *testing.T) {
 	service := NewAppService()
 	status := service.GetProxyStatus()
 	if status.Available != 0 || status.InUse != 0 || status.RemainingQuota != "0" {
+		t.Fatalf("status = %#v", status)
+	}
+}
+
+func TestAppServiceProxyRuntimeUsesCustomAPI(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		writeAppJSON(t, w, map[string]any{"data": []string{"1.2.3.4:9000"}})
+	}))
+	defer server.Close()
+
+	service := NewAppService()
+	options, err := service.proxyRuntime().executionOptions(context.Background(), surveycore.RuntimeConfig{
+		RandomIPEnabled: true,
+		ProxySource:     "custom",
+		CustomProxyAPI:  server.URL,
+		Threads:         2,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if options.LeaseManager == nil {
+		t.Fatal("lease manager is nil")
+	}
+	lease, err := options.LeaseManager.Acquire(context.Background(), "worker-1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if lease.Address != "http://1.2.3.4:9000" || lease.Source != "custom" {
+		t.Fatalf("lease = %#v", lease)
+	}
+	status := service.GetProxyStatus()
+	if status.Source != "custom" || status.InUse != 1 || status.Message != "自定义代理已连接" {
+		t.Fatalf("status = %#v", status)
+	}
+	if _, ok := options.LeaseManager.Release("worker-1"); !ok {
+		t.Fatal("lease was not released")
+	}
+	if status = service.GetProxyStatus(); status.InUse != 0 {
+		t.Fatalf("status after release = %#v", status)
+	}
+}
+
+func TestAppServiceProxyRuntimeRejectsUnsupportedOfficialSource(t *testing.T) {
+	service := NewAppService()
+	_, err := service.proxyRuntime().executionOptions(context.Background(), surveycore.RuntimeConfig{
+		RandomIPEnabled: true,
+		ProxySource:     "default",
+	})
+	if !errors.Is(err, surveycore.ErrUnsupportedOperation) {
+		t.Fatalf("err = %v", err)
+	}
+	status := service.GetProxyStatus()
+	if status.Message != "官方代理源未接入" {
 		t.Fatalf("status = %#v", status)
 	}
 }
@@ -96,6 +150,51 @@ func TestAppServiceRunSurveyReturnsCoreErrorAndEvents(t *testing.T) {
 	}
 }
 
+func TestAppServiceStartRunStoresTaskState(t *testing.T) {
+	server := newAppCredamoRunServer(t)
+	defer server.Close()
+	service := NewAppService()
+	configState, err := service.BuildDefaultConfig(context.Background(), ParseSurveyRequest{URL: server.URL + "/s/demo_"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	configState.Config.Target = 1
+
+	state, err := service.StartRun(context.Background(), RunSurveyRequest{Config: *configState.Config})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !state.Running || state.StartedAt.IsZero() {
+		t.Fatalf("initial state = %#v", state)
+	}
+	final := waitAppRun(t, service)
+	if final.Running || final.Result == nil || final.Result.Success != 1 || len(final.Events) == 0 {
+		t.Fatalf("final state = %#v", final)
+	}
+}
+
+func TestAppServiceCancelRunMarksCanceling(t *testing.T) {
+	service := NewAppService()
+	state, err := service.StartRun(context.Background(), RunSurveyRequest{Config: surveycore.RuntimeConfig{
+		URL:            "https://wj.qq.com/s2/123/hashvalue/",
+		SurveyProvider: surveycore.ProviderQQ,
+		Target:         1,
+	}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !state.Running {
+		t.Fatalf("initial state = %#v", state)
+	}
+	state, err = service.CancelRun(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !state.Canceling && state.Running {
+		t.Fatalf("cancel state = %#v", state)
+	}
+}
+
 func TestAppServiceSettingsRoundTripUsesConfigHome(t *testing.T) {
 	t.Setenv("SURVEYCONTROLLER_CONFIG_HOME", t.TempDir())
 	service := NewAppService()
@@ -150,6 +249,19 @@ func TestAppServiceConfigRoundTrip(t *testing.T) {
 	}
 	if loaded.Config == nil || loaded.Config.Target != 6 || !loaded.Config.RandomIPEnabled || !loaded.Config.ReverseFillEnabled {
 		t.Fatalf("loaded = %#v", loaded)
+	}
+}
+
+func TestAppServiceLoadDefaultConfigMissingReturnsEmpty(t *testing.T) {
+	t.Setenv("SURVEYCONTROLLER_CONFIG_HOME", t.TempDir())
+	service := NewAppService()
+
+	state, err := service.LoadConfig(context.Background(), LoadConfigRequest{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if state.Config == nil || state.Path == "" {
+		t.Fatalf("state = %#v", state)
 	}
 }
 
@@ -225,6 +337,50 @@ func newAppCredamoServer(t *testing.T) *httptest.Server {
 			},
 		})
 	}))
+}
+
+func newAppCredamoRunServer(t *testing.T) *httptest.Server {
+	t.Helper()
+	return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/v1/survey/noauth/detail/get/demoano":
+			writeAppJSON(t, w, map[string]any{
+				"success": true,
+				"data": map[string]any{
+					"surveyTitle": "见数标题",
+					"questions": []map[string]any{
+						{"qstNo": "Q1", "qstTitle": "单选", "questionType": 2, "selector": 1, "qstId": 101, "choices": []map[string]any{{"choiceId": 1, "display": "A"}, {"choiceId": 2, "display": "B"}}},
+					},
+				},
+			})
+		case "/v1/survey/answer/noauth/init/demoano":
+			writeAppJSON(t, w, map[string]any{
+				"success": true,
+				"data": map[string]any{
+					"answerToken": "token-1",
+					"timestamp":   1700000000000,
+				},
+			})
+		case "/v1/survey/answer/noauth/save":
+			writeAppJSON(t, w, map[string]any{"success": true, "data": map[string]any{"ok": true}})
+		default:
+			t.Fatalf("unexpected path: %s", r.URL.Path)
+		}
+	}))
+}
+
+func waitAppRun(t *testing.T, service *AppService) RunTaskState {
+	t.Helper()
+	deadline := time.Now().Add(2 * time.Second)
+	for time.Now().Before(deadline) {
+		state := service.GetRunTaskState()
+		if !state.Running {
+			return state
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	t.Fatal("run did not finish")
+	return RunTaskState{}
 }
 
 func rewriteTencentClient(baseURL string) *http.Client {

@@ -20,6 +20,7 @@ export type {
     ReverseFillPreviewRequest,
     ReverseFillRow,
     RunSurveyRequest,
+    RunTaskState,
     SaveConfigRequest,
     SaveSettingsRequest,
     SessionRow,

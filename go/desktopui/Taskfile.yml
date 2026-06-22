@@ -1,10 +1,12 @@
 version: '3'
 
 vars:
-  APP_NAME: "desktopui"
+  APP_NAME: "SurveyController"
   BIN_DIR: "bin"
   PACKAGE_MANAGER: '{{.PACKAGE_MANAGER | default "npm"}}'
   VITE_PORT: '{{.WAILS_VITE_PORT | default 9245}}'
+  WINDOWS_STABLE_RELEASE_DIR: "../../Releases/win/stable"
+  WINDOWS_STABLE_UPDATE_FEED: "https://dl.hungrym0.com/surveycontroller/win/stable/"
 
 includes:
   common: ./build/Taskfile.yml
@@ -24,6 +26,12 @@ tasks:
     summary: Packages a production build of the application
     cmds:
       - task: "{{OS}}:package"
+
+  release:windows:
+    summary: Builds the Windows stable release artifacts
+    cmds:
+      - task: windows:package
+      - powershell -NoProfile -Command "New-Item -ItemType Directory -Force -Path '{{.WINDOWS_STABLE_RELEASE_DIR}}' | Out-Null; Copy-Item -Force '{{.BIN_DIR}}/{{.APP_NAME}}.exe' '{{.WINDOWS_STABLE_RELEASE_DIR}}/{{.APP_NAME}}.exe'; Copy-Item -Force '{{.BIN_DIR}}/{{.APP_NAME}}-{{.ARCH | default ARCH}}-installer.exe' '{{.WINDOWS_STABLE_RELEASE_DIR}}/{{.APP_NAME}}-{{.ARCH | default ARCH}}-installer.exe'"
 
   run:
     summary: Runs the application
