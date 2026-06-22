@@ -13,7 +13,7 @@ desktop.ini
 AGENTS.md
 CLAUDE.md
 
-# 旧 UI 参考代码可能产生的本地缓存
+# 本地缓存
 __pycache__/
 *.pyc
 .pytest_cache/

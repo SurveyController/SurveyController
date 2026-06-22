@@ -2,7 +2,7 @@
 
 开始前请先阅读 [行为准则](CODE_OF_CONDUCT.md)。
 
-本分支以 Go+Wails 重构为主线。旧 Python 运行链路已移除，`software/ui/` 只保留为界面参考。
+本分支以 Go+Wails 重构为主线。旧 Python 运行链路已移除。
 
 ## 开发环境
 
@@ -19,16 +19,16 @@
 根目录已提供 `go.work`。
 
 ```bash
-go test ./go/proxycore/... ./go/surveycore/...
+go test ./packages/proxycore/... ./packages/surveycore/...
 ```
 
 分别检查模块：
 
 ```bash
-cd go/proxycore
+cd packages/proxycore
 go test ./...
 
-cd ../surveycore
+cd ../../packages/surveycore
 go test ./...
 ```
 
@@ -44,13 +44,13 @@ wails3 generate bindings
 
 | 目标 | 目录 |
 | --- | --- |
-| 代理核心 | `go/proxycore/` |
-| Go 原生桌面 UI 前端壳 | `go/desktopui/` |
-| 问卷核心和公开门面 API | `go/surveycore/` |
-| Credamo Go 实现 | `go/surveycore/credamo/` |
-| 手动验证命令 | `go/surveycore/cmd/` |
-| 旧 UI 参考 | `software/ui/` |
-| 旧应用资源参考 | `software/assets/` |
+| 代理核心 | `packages/proxycore/` |
+| Go 原生桌面 UI 前端壳 | `apps/desktop/` |
+| 问卷核心和公开门面 API | `packages/surveycore/` |
+| Credamo Go 实现 | `packages/surveycore/credamo/` |
+| 腾讯问卷 Go 实现 | `packages/surveycore/tencent/` |
+| 问卷星 Go 实现 | `packages/surveycore/wjx/` |
+| 手动验证命令 | `packages/surveycore/cmd/` |
 | README 和图片资源 | `assets/` |
 
 不要把平台实现塞进通用根包。
@@ -75,7 +75,7 @@ PR 描述写清楚：
 - 跑过哪些检查。
 - 是否有用户可见变化。
 
-提交信息使用中文 Conventional Commits：
+提交信息使遵循 Conventional Commits 规范：
 
 ```text
 feat: 增加 Credamo 提交事件
@@ -90,14 +90,11 @@ docs: 更新 Go 迁移说明
 .
 ├── .github/                 # GitHub Actions
 ├── assets/                  # README、图标、图片资源
-├── go/                      # Go 核心模块和后续 Wails 模块
+├── apps/                    # 应用入口
+│   └── desktop/
+├── packages/                # 可复用核心包
 │   ├── proxycore/
-│   ├── desktopui/
 │   └── surveycore/
-├── software/                # 旧 UI 与资源参考
-│   ├── assets/
-│   └── ui/
 ├── go.work
-├── PLAN.md
 └── README.md
 ```
