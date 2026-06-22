@@ -167,6 +167,12 @@ export interface QuestionMeta {
   text_inputs: number
 }
 
+export interface SurveyDefinition {
+  provider: string
+  title: string
+  questions: QuestionMeta[]
+}
+
 export interface AppSettings {
   configDirectory: string
   themeMode: string
@@ -204,6 +210,7 @@ export interface RunResult {
 }
 
 export interface SurveyCoreState {
+  definition?: SurveyDefinition | null
   config?: RuntimeConfig | null
   result?: RunResult | null
   events?: RunEvent[]

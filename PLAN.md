@@ -55,7 +55,7 @@ Agent 每次处理 Go+Wails 迁移任务前必须先读本文件。
 - [x] 暴露最小服务方法：代理状态、平台解析、测试提交。
 - [x] 暴露配置载入导出、设置保存和 Excel 反填预览服务。
 - [x] 跑 `wails3 generate bindings`。
-- [ ] 做最小调试 UI：URL 输入、按钮、日志区、结果区。
+- [x] 做最小调试 UI：URL 输入、按钮、日志区、结果区。
 - [ ] 跑 `wails3 dev` 验证前后端通信。
 
 ## P4 Go 执行引擎
@@ -70,7 +70,7 @@ Agent 每次处理 Go+Wails 迁移任务前必须先读本文件。
 ## P5 UI alpha
 
 - [x] 确定前端组件栈：Vue 3 + TypeScript + TailwindCSS。
-- [ ] 先做工作台主流程，不做营销页。
+- [x] 先做工作台主流程，不做营销页。
 - [x] 迁移配置输入、问卷 URL、运行按钮、日志、进度、结果。
 - [ ] 做代理状态面板。
 - [x] 做平台解析预览。
@@ -80,9 +80,9 @@ Agent 每次处理 Go+Wails 迁移任务前必须先读本文件。
 ## P6 WJX 和发布
 
 - [ ] 梳理 WJX 协议事实，可参考历史提交或外部文档，不恢复旧 Python 实现。
-- [ ] 迁移 WJX HTML 解析和题型映射。
-- [ ] 迁移 WJX 提交参数构造。
-- [ ] 增加 WJX fixture 单测。
+- [x] 迁移 WJX HTML 解析和题型映射。
+- [x] 迁移 WJX 提交参数构造。
+- [x] 增加 WJX fixture 单测。
 - [ ] 增加 WJX live test，显式环境变量开启。
 - [ ] 设计 Wails 打包产物目录。
 - [ ] 迁移更新链路，保持主 feed 为 `https://dl.hungrym0.com/surveycontroller/win/stable/`。

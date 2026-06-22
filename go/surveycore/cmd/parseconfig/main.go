@@ -8,7 +8,7 @@ import (
 	"os"
 	"time"
 
-	"surveycontroller/surveycore/credamo"
+	"surveycontroller/surveycore"
 )
 
 type configFile struct {
@@ -46,7 +46,7 @@ func main() {
 	ctx, cancel := context.WithTimeout(context.Background(), *timeout)
 	defer cancel()
 
-	definition, err := (credamo.Parser{}).Parse(ctx, cfg.URL)
+	definition, err := surveycore.Parse(ctx, cfg.URL)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)

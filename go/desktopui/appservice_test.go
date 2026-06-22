@@ -2,7 +2,10 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
+	"net/http"
+	"net/http/httptest"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -29,6 +32,50 @@ func TestAppServiceProxyStatusUsesCoreTypes(t *testing.T) {
 	status := service.GetProxyStatus()
 	if status.Available != 0 || status.InUse != 0 || status.RemainingQuota != "0" {
 		t.Fatalf("status = %#v", status)
+	}
+}
+
+func TestAppServiceParsesTencentViaCoreClient(t *testing.T) {
+	server := newAppTencentServer(t)
+	defer server.Close()
+	service := &AppService{survey: surveycore.New(surveycore.WithHTTPClient(rewriteTencentClient(server.URL)))}
+
+	state, err := service.ParseSurvey(context.Background(), ParseSurveyRequest{URL: "https://wj.qq.com/s2/123/hashvalue/"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if state.Definition == nil || state.Definition.Provider != surveycore.ProviderQQ || len(state.Definition.Questions) != 2 {
+		t.Fatalf("state = %#v", state)
+	}
+
+	configState, err := service.BuildDefaultConfig(context.Background(), ParseSurveyRequest{URL: "https://wj.qq.com/s2/123/hashvalue/"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if configState.Config == nil || configState.Config.SurveyProvider != surveycore.ProviderQQ || len(configState.Config.QuestionsInfo) != 2 {
+		t.Fatalf("configState = %#v", configState)
+	}
+}
+
+func TestAppServiceParsesCredamoViaCoreClient(t *testing.T) {
+	server := newAppCredamoServer(t)
+	defer server.Close()
+	service := NewAppService()
+
+	state, err := service.ParseSurvey(context.Background(), ParseSurveyRequest{URL: server.URL + "/s/demo_"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if state.Definition == nil || state.Definition.Provider != surveycore.ProviderCredamo || len(state.Definition.Questions) != 2 {
+		t.Fatalf("state = %#v", state)
+	}
+
+	configState, err := service.BuildDefaultConfig(context.Background(), ParseSurveyRequest{URL: server.URL + "/s/demo_"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if configState.Config == nil || configState.Config.SurveyProvider != surveycore.ProviderCredamo || len(configState.Config.QuestionEntries) != 2 {
+		t.Fatalf("configState = %#v", configState)
 	}
 }
 
@@ -134,5 +181,79 @@ func TestAppServicePreviewReverseFill(t *testing.T) {
 	}
 	if len(preview.SampleRows) != 1 || len(preview.SampleRows[0].Answers) != 2 {
 		t.Fatalf("preview = %#v", preview)
+	}
+}
+
+func newAppTencentServer(t *testing.T) *httptest.Server {
+	t.Helper()
+	return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/api/v2/respondent/surveys/123/session":
+			writeAppJSON(t, w, map[string]any{"code": "OK", "data": map[string]any{}})
+		case "/api/v2/respondent/surveys/123/meta":
+			writeAppJSON(t, w, map[string]any{"code": "OK", "data": map[string]any{"title": "腾讯标题 - 腾讯问卷"}})
+		case "/api/v2/respondent/surveys/123/questions":
+			writeAppJSON(t, w, map[string]any{
+				"code": "OK",
+				"data": map[string]any{
+					"questions": []map[string]any{
+						{"id": "q1", "type": "radio", "title": "单选", "page_id": "p1", "page": 1, "options": []map[string]any{{"id": "a", "text": "A"}, {"id": "b", "text": "B"}}},
+						{"id": "q2", "type": "textarea", "title": "文本", "page_id": "p1", "page": 1},
+					},
+				},
+			})
+		default:
+			t.Fatalf("unexpected path: %s", r.URL.Path)
+		}
+	}))
+}
+
+func newAppCredamoServer(t *testing.T) *httptest.Server {
+	t.Helper()
+	return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/v1/survey/noauth/detail/get/demoano" {
+			t.Fatalf("unexpected path: %s", r.URL.Path)
+		}
+		writeAppJSON(t, w, map[string]any{
+			"success": true,
+			"data": map[string]any{
+				"surveyTitle": "见数标题",
+				"questions": []map[string]any{
+					{"qstNo": "Q1", "qstTitle": "单选", "questionType": 2, "selector": 1, "questionId": "q1", "choices": []map[string]any{{"display": "A"}, {"display": "B"}}},
+					{"qstNo": "Q2", "qstTitle": "文本", "questionType": 1, "questionId": "q2"},
+				},
+			},
+		})
+	}))
+}
+
+func rewriteTencentClient(baseURL string) *http.Client {
+	return &http.Client{
+		Transport: rewriteTencentTransport{baseURL: baseURL, next: http.DefaultTransport},
+	}
+}
+
+type rewriteTencentTransport struct {
+	baseURL string
+	next    http.RoundTripper
+}
+
+func (t rewriteTencentTransport) RoundTrip(req *http.Request) (*http.Response, error) {
+	if req.URL.Host == "wj.qq.com" {
+		rewritten, err := http.NewRequestWithContext(req.Context(), req.Method, strings.Replace(req.URL.String(), "https://wj.qq.com", t.baseURL, 1), req.Body)
+		if err != nil {
+			return nil, err
+		}
+		rewritten.Header = req.Header.Clone()
+		req = rewritten
+	}
+	return t.next.RoundTrip(req)
+}
+
+func writeAppJSON(t *testing.T, w http.ResponseWriter, value any) {
+	t.Helper()
+	w.Header().Set("Content-Type", "application/json")
+	if err := json.NewEncoder(w).Encode(value); err != nil {
+		t.Fatal(err)
 	}
 }

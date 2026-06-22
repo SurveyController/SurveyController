@@ -9,6 +9,7 @@ import (
 	"surveycontroller/surveycore/internal/httpjson"
 	"surveycontroller/surveycore/internal/model"
 	"surveycontroller/surveycore/tencent"
+	"surveycontroller/surveycore/wjx"
 )
 
 type Client struct {
@@ -62,6 +63,8 @@ func (c *Client) parserFor(url string) (Parser, error) {
 		return credamo.Parser{HTTP: httpClientOrDefault(c.httpClient)}, nil
 	case model.ProviderQQ:
 		return tencent.Parser{HTTP: httpClientOrDefault(c.httpClient)}, nil
+	case model.ProviderWJX:
+		return wjx.Parser{Client: c.httpClient.Client}, nil
 	default:
 		return nil, ErrUnsupportedOperation
 	}

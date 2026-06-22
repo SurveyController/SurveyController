@@ -148,10 +148,19 @@ type ShellState struct {
 	SettingsGroups  []SettingsGroup  `json:"settingsGroups"`
 }
 
-type AppService struct{}
+type AppService struct {
+	survey *surveycore.Client
+}
 
 func NewAppService() *AppService {
-	return &AppService{}
+	return &AppService{survey: surveycore.New()}
+}
+
+func (s *AppService) surveyClient() *surveycore.Client {
+	if s.survey != nil {
+		return s.survey
+	}
+	return surveycore.New()
 }
 
 func (s *AppService) GetShellState() ShellState {
@@ -369,7 +378,7 @@ func (s *AppService) ParseSurvey(ctx context.Context, request ParseSurveyRequest
 	if url == "" {
 		return SurveyCoreState{}, fmt.Errorf("问卷链接不能为空")
 	}
-	definition, err := surveycore.Parse(ctx, url)
+	definition, err := s.surveyClient().Parse(ctx, url)
 	if err != nil {
 		return SurveyCoreState{}, err
 	}
@@ -381,7 +390,7 @@ func (s *AppService) BuildDefaultConfig(ctx context.Context, request ParseSurvey
 	if url == "" {
 		return SurveyCoreState{}, fmt.Errorf("问卷链接不能为空")
 	}
-	config, err := surveycore.DefaultConfig(ctx, url)
+	config, err := s.surveyClient().DefaultConfig(ctx, url)
 	if err != nil {
 		return SurveyCoreState{}, err
 	}

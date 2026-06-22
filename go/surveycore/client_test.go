@@ -58,6 +58,36 @@ func TestParseAndDefaultConfigTencent(t *testing.T) {
 	}
 }
 
+func TestParseDefaultConfigAndRunWJX(t *testing.T) {
+	server := newWJXCoreTestServer(t, true)
+	defer server.Close()
+	client := New(WithHTTPClient(rewriteWJXHTTPClient(server.URL)))
+
+	definition, err := client.Parse(context.Background(), "https://www.wjx.cn/vm/demo.aspx")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if definition.Provider != ProviderWJX || len(definition.Questions) != 1 {
+		t.Fatalf("definition = %#v", definition)
+	}
+
+	cfg, err := client.DefaultConfig(context.Background(), "https://www.wjx.cn/vm/demo.aspx")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.SurveyProvider != ProviderWJX || cfg.SurveyTitle != "WJX 测试" || len(cfg.QuestionEntries) != 1 {
+		t.Fatalf("cfg = %#v", cfg)
+	}
+	cfg.Target = 1
+	result, err := client.Run(context.Background(), cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.Success != 1 || result.Fail != 0 {
+		t.Fatalf("result = %#v", result)
+	}
+}
+
 func TestRunTencentReturnsUnsupportedWithEvents(t *testing.T) {
 	var events []Event
 	result, err := New().RunWithEvents(context.Background(), &RuntimeConfig{
@@ -125,6 +155,36 @@ func newTencentCoreTestServer(t *testing.T) *httptest.Server {
 	}))
 }
 
+func newWJXCoreTestServer(t *testing.T, submitOK bool) *httptest.Server {
+	t.Helper()
+	return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/vm/demo.aspx":
+			w.Header().Set("Content-Type", "text/html; charset=utf-8")
+			_, _ = w.Write([]byte(`
+<html><head><title>WJX 测试 - 问卷星</title></head><body>
+<div id="divQuestion"><fieldset>
+<div topic="1" id="div1" type="3"><div class="topichtml">1. 单选</div><div class="ui-controlgroup"><div><span class="label">A</span></div><div><span class="label">B</span></div></div></div>
+</fieldset></div>
+</body></html>`))
+		case "/joinnew/processjq.ashx":
+			if err := r.ParseForm(); err != nil {
+				t.Fatal(err)
+			}
+			if !strings.Contains(r.Form.Get("submitdata"), "1$") {
+				t.Fatalf("submitdata = %q", r.Form.Get("submitdata"))
+			}
+			if submitOK {
+				_, _ = w.Write([]byte("10"))
+			} else {
+				_, _ = w.Write([]byte("1〒1〒失败"))
+			}
+		default:
+			t.Fatalf("unexpected path: %s", r.URL.Path)
+		}
+	}))
+}
+
 func rewriteTencentHTTPClient(baseURL string) *http.Client {
 	return &http.Client{
 		Transport: rewriteTencentTransport{
@@ -137,6 +197,32 @@ func rewriteTencentHTTPClient(baseURL string) *http.Client {
 type rewriteTencentTransport struct {
 	baseURL string
 	next    http.RoundTripper
+}
+
+func rewriteWJXHTTPClient(baseURL string) *http.Client {
+	return &http.Client{
+		Transport: rewriteWJXTransport{
+			baseURL: baseURL,
+			next:    http.DefaultTransport,
+		},
+	}
+}
+
+type rewriteWJXTransport struct {
+	baseURL string
+	next    http.RoundTripper
+}
+
+func (t rewriteWJXTransport) RoundTrip(req *http.Request) (*http.Response, error) {
+	if strings.Contains(req.URL.Host, "wjx.cn") || strings.Contains(req.URL.Host, "wjx.com") {
+		rewritten, err := http.NewRequestWithContext(req.Context(), req.Method, strings.Replace(req.URL.String(), req.URL.Scheme+"://"+req.URL.Host, t.baseURL, 1), req.Body)
+		if err != nil {
+			return nil, err
+		}
+		rewritten.Header = req.Header.Clone()
+		req = rewritten
+	}
+	return t.next.RoundTrip(req)
 }
 
 func (t rewriteTencentTransport) RoundTrip(req *http.Request) (*http.Response, error) {

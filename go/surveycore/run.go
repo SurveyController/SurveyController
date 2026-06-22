@@ -9,6 +9,7 @@ import (
 	"surveycontroller/surveycore/credamo"
 	"surveycontroller/surveycore/internal/model"
 	"surveycontroller/surveycore/tencent"
+	"surveycontroller/surveycore/wjx"
 )
 
 type EventHandler func(Event)
@@ -46,6 +47,27 @@ func (c *Client) RunWithEvents(ctx context.Context, cfg *RuntimeConfig, handler 
 		})
 		return resultFromTencent(result), fmt.Errorf("%w: %v", ErrUnsupportedOperation, err)
 	}
+	if provider == model.ProviderWJX {
+		runner := wjx.Runner{Client: c.httpClient.Client}
+		result, err := runner.Run(ctx, cfg, func(event wjx.Event) {
+			if handler == nil {
+				return
+			}
+			handler(Event{
+				Worker:  event.Worker,
+				Message: event.Message,
+				Success: event.Success,
+				Fail:    event.Fail,
+				Current: event.Current,
+				Total:   event.Total,
+				Time:    event.Time,
+			})
+		})
+		if err != nil {
+			return resultFromWJX(result), wrapRunError(err)
+		}
+		return resultFromWJX(result), nil
+	}
 	if provider != model.ProviderCredamo {
 		return nil, fmt.Errorf("%w: only credamo run is supported", ErrUnsupportedOperation)
 	}
@@ -71,6 +93,26 @@ func (c *Client) RunWithEvents(ctx context.Context, cfg *RuntimeConfig, handler 
 }
 
 func resultFromTencent(result tencent.Result) *RunResult {
+	progress := ThreadProgress{
+		ThreadName:   "Worker-1",
+		ThreadIndex:  0,
+		SuccessCount: result.Success,
+		FailCount:    result.Fail,
+		StepCurrent:  result.Success + result.Fail,
+		StepTotal:    result.Target,
+		StatusText:   result.Status,
+		Running:      false,
+		LastUpdate:   time.Now(),
+	}
+	return &RunResult{
+		Success:        result.Success,
+		Fail:           result.Fail,
+		Stopped:        result.Status == "stopped",
+		ThreadProgress: []ThreadProgress{progress},
+	}
+}
+
+func resultFromWJX(result wjx.Result) *RunResult {
 	progress := ThreadProgress{
 		ThreadName:   "Worker-1",
 		ThreadIndex:  0,
