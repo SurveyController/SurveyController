@@ -1,15 +1,15 @@
 import type { ShellState } from '../types'
 
-export const mockShellState: ShellState = {
+export const emptyShellState: ShellState = {
   appTitle: 'SurveyController',
-  appVersion: 'unknown',
+  appVersion: 'test',
   themeMode: 'system',
   currentPage: 'dashboard',
   topNav: [
     { id: 'dashboard', label: '概览', icon: 'home', section: 'top', selected: true },
     { id: 'runtime', label: '运行参数', icon: 'settings', section: 'top' },
     { id: 'strategy', label: '题目策略', icon: 'flow', section: 'top' },
-    { id: 'reverse-fill', label: '反填', icon: 'refresh', section: 'top', badge: '预览' },
+    { id: 'reverse-fill', label: '反填', icon: 'refresh', section: 'top' },
     { id: 'logs', label: '日志', icon: 'document', section: 'top' },
   ],
   bottomNav: [
@@ -18,15 +18,15 @@ export const mockShellState: ShellState = {
     { id: 'more', label: '更多', icon: 'grid', section: 'bottom' },
   ],
   dashboard: {
-    surveyTitle: '大学生消费观问卷',
+    surveyTitle: '未命名问卷',
     surveyUrl: '',
     targetCount: 1,
     threadCount: 1,
     randomIpEnabled: false,
-    randomIpQuota: 97,
-    randomIpQuotaLabel: '10241/10530',
-    randomIpStatus: '服务正常',
-    randomIpStatusTone: 'success',
+    randomIpQuota: 0,
+    randomIpQuotaLabel: '未同步',
+    randomIpStatus: '未连接代理服务',
+    randomIpStatusTone: '',
     proxySource: '默认',
     proxyAvailable: 0,
     proxyInUse: 0,

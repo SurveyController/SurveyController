@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { mockShellState } from './mockShellState'
+import { emptyShellState } from './shellFixture'
 import {
   applyConfigToShell,
   normalizeRuntimeConfig,
@@ -51,7 +51,7 @@ describe('stateMapper', () => {
       question_entries: [{ question_type: 'single', probabilities: [1, 1], question_num: 1, distribution_mode: 'random' }],
     }
 
-    const shell = applyConfigToShell(mockShellState, settings, config, null)
+    const shell = applyConfigToShell(emptyShellState, settings, config, null)
 
     expect(shell.dashboard.surveyTitle).toBe('腾讯测试')
     expect(shell.dashboard.platformLabel).toBe('腾讯问卷')

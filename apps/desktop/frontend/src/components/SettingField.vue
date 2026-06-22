@@ -33,12 +33,14 @@ function onToggle(event: Event) {
       <span class="absolute left-0.5 h-4 w-4 rounded-full bg-white transition peer-checked:translate-x-4"></span>
     </label>
 
-    <select v-else-if="field.kind === 'select'" class="control w-32" :value="field.value" @change="onInput">
+    <select v-else-if="field.kind === 'select'" class="control fluent-select w-32" :value="field.value" @change="onInput">
       <option>{{ field.value }}</option>
       <option v-for="option in field.options?.filter((item) => item !== field.value)" :key="option">
         {{ option }}
       </option>
     </select>
+
+    <input v-else-if="field.kind === 'time'" class="control fluent-time w-32" type="time" :value="field.value" @change="onInput" />
 
     <input v-else-if="field.kind === 'number'" class="control w-24" type="number" :value="field.value" @change="onInput" />
 

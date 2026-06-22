@@ -316,8 +316,7 @@ async function pollRunState() {
             SC
           </div>
           <div class="flex min-w-0 items-baseline gap-1.5">
-            <span class="app-title truncate">{{ shell.appTitle }} v4.0.6</span>
-            <span class="app-build">(84563)</span>
+            <span class="app-title truncate">{{ shell.appTitle }} {{ shell.appVersion }}</span>
           </div>
           <span class="app-badge">最新</span>
         </div>
@@ -341,45 +340,47 @@ async function pollRunState() {
           <div v-if="notice" class="mx-3 mt-2 rounded-md border border-blue-100 bg-blue-50 px-3 py-1.5 text-xs text-blue-700 dark:border-blue-950 dark:bg-blue-950 dark:text-blue-200">
             {{ notice }}
           </div>
-          <DashboardView
-            v-if="currentPage === 'dashboard'"
-            :dashboard="shell.dashboard"
-            :logs="shell.logLines"
-            :busy="runBusy"
-            @update-url="updateURL"
-            @auto-config="autoConfig"
-            @load-config="loadConfigFromDialog"
-            @save-config="saveConfigToDialog"
-            @open-runtime="currentPage = 'runtime'"
-            @target-change="updateConfigField('target', String($event))"
-            @threads-change="updateConfigField('threads', String($event))"
-            @random-ip-change="updateConfigField('random-ip', $event)"
-            @proxy-source-change="updateConfigField('proxy-source', $event)"
-            @run="runSurvey"
-            @cancel-run="cancelRun"
-          />
-          <RuntimeView v-else-if="currentPage === 'runtime'" :groups="shell.runtimeGroups" @field-change="updateConfigField" />
-          <StrategyView v-else-if="currentPage === 'strategy'" :rules="shell.strategyRules" :dimensions="shell.dimensionGroups" />
-          <InfoView
-            v-else-if="currentPage === 'reverse-fill'"
-            title="反填"
-            :reverse-fill="shell.reverseFillPlan"
-            :reverse-fill-path="config?.reverse_fill_source_path"
-            :busy="busy"
-            @choose-reverse-fill="chooseReverseFillFile"
-            @preview-reverse-fill="previewReverseFillFile"
-          />
-          <LogsView v-else-if="currentPage === 'logs'" :logs="shell.logLines" />
-          <InfoView v-else-if="currentPage === 'community'" title="社区" :items="shell.communityItems" />
-          <InfoView
-            v-else-if="currentPage === 'settings'"
-            title="设置"
-            :settings="shell.settingsGroups"
-            :busy="busy"
-            @setting-change="updateSettingsField"
-            @save-settings="saveAppSettings"
-          />
-          <InfoView v-else title="更多" :metrics="[...shell.aboutItems, ...shell.donateItems, ...shell.ipUsageItems]" />
+          <Transition name="fluent-page" mode="out-in">
+            <DashboardView
+              v-if="currentPage === 'dashboard'"
+              :dashboard="shell.dashboard"
+              :logs="shell.logLines"
+              :busy="runBusy"
+              @update-url="updateURL"
+              @auto-config="autoConfig"
+              @load-config="loadConfigFromDialog"
+              @save-config="saveConfigToDialog"
+              @open-runtime="currentPage = 'runtime'"
+              @target-change="updateConfigField('target', String($event))"
+              @threads-change="updateConfigField('threads', String($event))"
+              @random-ip-change="updateConfigField('random-ip', $event)"
+              @proxy-source-change="updateConfigField('proxy-source', $event)"
+              @run="runSurvey"
+              @cancel-run="cancelRun"
+            />
+            <RuntimeView v-else-if="currentPage === 'runtime'" :groups="shell.runtimeGroups" @field-change="updateConfigField" />
+            <StrategyView v-else-if="currentPage === 'strategy'" :rules="shell.strategyRules" :dimensions="shell.dimensionGroups" />
+            <InfoView
+              v-else-if="currentPage === 'reverse-fill'"
+              title="反填"
+              :reverse-fill="shell.reverseFillPlan"
+              :reverse-fill-path="config?.reverse_fill_source_path"
+              :busy="busy"
+              @choose-reverse-fill="chooseReverseFillFile"
+              @preview-reverse-fill="previewReverseFillFile"
+            />
+            <LogsView v-else-if="currentPage === 'logs'" :logs="shell.logLines" />
+            <InfoView v-else-if="currentPage === 'community'" title="社区" :items="shell.communityItems" />
+            <InfoView
+              v-else-if="currentPage === 'settings'"
+              title="设置"
+              :settings="shell.settingsGroups"
+              :busy="busy"
+              @setting-change="updateSettingsField"
+              @save-settings="saveAppSettings"
+            />
+            <InfoView v-else title="更多" :metrics="[...shell.aboutItems, ...shell.donateItems, ...shell.ipUsageItems]" />
+          </Transition>
         </main>
       </div>
     </div>

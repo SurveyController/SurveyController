@@ -13,15 +13,14 @@ import {
   SaveConfig,
   StartRun,
 } from '../../bindings/github.com/hungrym0/SurveyController/apps/desktop/appservice'
-import { mockShellState } from './mockShellState'
 import { buildAppModel, type AppModel } from './stateMapper'
 
 export async function loadShellState(): Promise<ShellState> {
   try {
     return (await GetShellState()) as ShellState
   } catch (err) {
-    if (import.meta.env.DEV) {
-      return mockShellState
+    if (canUsePreviewState()) {
+      return previewShellState()
     }
     throw err
   }
@@ -36,8 +35,8 @@ export async function loadAppModel(): Promise<AppModel> {
     const loaded = await LoadConfig({ path: '' }).catch(() => null)
     return buildAppModel(shell, settings, (loaded?.config ?? null) as RuntimeConfig | null)
   } catch (err) {
-    if (import.meta.env.DEV) {
-      return buildAppModel(mockShellState, mockAppSettings(), null)
+    if (canUsePreviewState()) {
+      return buildAppModel(previewShellState(), previewAppSettings(), null)
     }
     throw err
   }
@@ -97,7 +96,24 @@ export async function loadProxyStatus(): Promise<ProxyStatus> {
   return await GetProxyStatus() as ProxyStatus
 }
 
-function mockAppSettings(): AppSettings {
+function canUsePreviewState(): boolean {
+  return import.meta.env.DEV && !hasNativeWailsBridge()
+}
+
+function hasNativeWailsBridge(): boolean {
+  const win = globalThis as typeof globalThis & {
+    chrome?: { webview?: { postMessage?: unknown } }
+    webkit?: { messageHandlers?: { external?: { postMessage?: unknown } } }
+    wails?: { invoke?: unknown }
+  }
+  return Boolean(
+    win.chrome?.webview?.postMessage ||
+    win.webkit?.messageHandlers?.external?.postMessage ||
+    win.wails?.invoke,
+  )
+}
+
+function previewAppSettings(): AppSettings {
   return {
     configDirectory: '',
     themeMode: 'system',
@@ -107,5 +123,60 @@ function mockAppSettings(): AppSettings {
     notifications: true,
     autosaveLogCount: 5,
     runtimeDefaults: {},
+  }
+}
+
+function previewShellState(): ShellState {
+  return {
+    appTitle: 'SurveyController',
+    appVersion: 'preview',
+    themeMode: 'system',
+    currentPage: 'dashboard',
+    topNav: [
+      { id: 'dashboard', label: '概览', icon: 'home', section: 'top', selected: true },
+      { id: 'runtime', label: '运行参数', icon: 'settings', section: 'top' },
+      { id: 'strategy', label: '题目策略', icon: 'flow', section: 'top' },
+      { id: 'reverse-fill', label: '反填', icon: 'refresh', section: 'top' },
+      { id: 'logs', label: '日志', icon: 'document', section: 'top' },
+    ],
+    bottomNav: [
+      { id: 'community', label: '社区', icon: 'chat', section: 'bottom' },
+      { id: 'settings', label: '设置', icon: 'sliders', section: 'bottom' },
+      { id: 'more', label: '更多', icon: 'grid', section: 'bottom' },
+    ],
+    dashboard: {
+      surveyTitle: '未命名问卷',
+      surveyUrl: '',
+      targetCount: 1,
+      threadCount: 1,
+      randomIpEnabled: false,
+      randomIpQuota: 0,
+      randomIpQuotaLabel: '未同步',
+      randomIpStatus: '未连接代理服务',
+      randomIpStatusTone: '',
+      proxySource: '默认',
+      proxyAvailable: 0,
+      proxyInUse: 0,
+      questionCount: 0,
+      progressCurrent: 0,
+      progressTarget: 1,
+      progressPercent: 0,
+      statusText: '等待配置',
+      platformLabel: '问卷星',
+      metrics: [],
+      quickActions: [],
+      questionRows: [],
+      sessionRows: [],
+    },
+    runtimeGroups: [],
+    strategyRules: [],
+    dimensionGroups: [],
+    reverseFillPlan: [],
+    logLines: [],
+    communityItems: [],
+    aboutItems: [],
+    donateItems: [],
+    ipUsageItems: [],
+    settingsGroups: [],
   }
 }

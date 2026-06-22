@@ -64,7 +64,7 @@ select {
   }
 
   .control {
-    @apply h-8 rounded-md border border-slate-200 bg-white px-2.5 text-xs text-slate-900 outline-none transition focus:border-blue-500 focus:ring-1 focus:ring-blue-500 dark:border-white/10 dark:bg-white/[0.06] dark:text-slate-100;
+    @apply appearance-none h-8 rounded-[5px] border border-slate-200 border-b-slate-300 bg-[#fdfdfd] px-2.5 text-xs text-slate-900 outline-none transition focus:border-slate-200 focus:border-b-blue-500 focus:border-b-[2px] focus:ring-0 dark:border-white/10 dark:border-b-white/20 dark:bg-white/[0.04] dark:text-slate-100 dark:focus:border-white/10 dark:focus:border-b-[#60cdff] shadow-sm;
   }
 
   .nav-item {
@@ -141,7 +141,7 @@ select {
   }
 
   .select-button {
-    @apply flex items-center justify-between rounded-md border border-slate-200 bg-white shadow-sm hover:bg-slate-50 dark:border-white/10 dark:bg-white/[0.06] dark:hover:bg-white/[0.08];
+    @apply appearance-none flex items-center justify-between rounded-[5px] border border-slate-200 border-b-slate-300 bg-[#fdfdfd] shadow-sm hover:bg-slate-50 dark:border-white/10 dark:border-b-white/20 dark:bg-white/[0.04] dark:hover:bg-white/[0.06];
     height: var(--control-h);
     min-width: clamp(7.5rem, 10vw, 10rem);
     padding-inline: clamp(0.7rem, 1vw, 1rem);
@@ -173,6 +173,44 @@ select {
   .table-cell {
     @apply truncate text-center text-neutral-700 dark:text-slate-300;
     padding: clamp(0.38rem, 0.55vw, 0.55rem) clamp(0.45rem, 0.75vw, 0.75rem);
+  }
+
+  .fluent-select {
+    @apply bg-no-repeat;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%2364748b' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E");
+    background-position: right 0.5rem center;
+    background-size: 1rem;
+    padding-right: 2rem;
+  }
+
+  :root[color-scheme="dark"] .fluent-select,
+  @media (prefers-color-scheme: dark) {
+    .fluent-select {
+      background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%2394a3b8' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E");
+    }
+  }
+
+  .fluent-time::-webkit-calendar-picker-indicator {
+    filter: invert(0.5);
+    cursor: pointer;
+  }
+  @media (prefers-color-scheme: dark) {
+    .fluent-time::-webkit-calendar-picker-indicator {
+      filter: invert(0.8);
+    }
+  }
+
+  .fluent-page-enter-active,
+  .fluent-page-leave-active {
+    transition: opacity 0.15s ease-out, transform 0.25s cubic-bezier(0, 0, 0, 1);
+  }
+  .fluent-page-enter-from {
+    opacity: 0;
+    transform: translateY(15px);
+  }
+  .fluent-page-leave-to {
+    opacity: 0;
+    transform: translateY(5px);
   }
 }
 
@@ -275,7 +313,7 @@ select {
 }
 
 .survey-url-input {
-  @apply min-w-0 flex-1 rounded-lg border border-slate-200 bg-white text-neutral-500 shadow-inner outline-none transition focus:border-blue-500 focus:ring-1 focus:ring-blue-500 dark:border-white/10 dark:bg-white/[0.06] dark:text-slate-300;
+  @apply min-w-0 flex-1 rounded-[5px] border border-slate-200 border-b-slate-300 bg-[#fdfdfd] text-neutral-500 shadow-inner outline-none transition focus:border-slate-200 focus:border-b-blue-500 focus:border-b-[2px] focus:ring-0 dark:border-white/10 dark:border-b-white/20 dark:bg-white/[0.04] dark:text-slate-300 dark:focus:border-white/10 dark:focus:border-b-[#60cdff];
   height: var(--control-h);
   padding-inline: clamp(0.75rem, 1vw, 1rem);
   font-size: clamp(0.9rem, 0.96vw, 1rem);

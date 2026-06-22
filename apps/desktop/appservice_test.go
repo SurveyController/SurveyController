@@ -36,6 +36,22 @@ func TestAppServiceProxyStatusUsesCoreTypes(t *testing.T) {
 	}
 }
 
+func TestAppServiceShellStateStartsFromRealEmptyState(t *testing.T) {
+	service := NewAppService()
+	state := service.GetShellState()
+	if state.Dashboard.SurveyURL != "" || state.Dashboard.QuestionCount != 0 || state.Dashboard.ProgressCurrent != 0 {
+		t.Fatalf("dashboard = %#v", state.Dashboard)
+	}
+	if state.Dashboard.SurveyTitle == "大学生消费观问卷" {
+		t.Fatalf("shell state still contains demo survey: %#v", state.Dashboard)
+	}
+	for _, line := range state.LogLines {
+		if strings.Contains(line, "假数据") || strings.Contains(line, "未接入") {
+			t.Fatalf("shell state contains mock log line: %q", line)
+		}
+	}
+}
+
 func TestConfigVersionFromTextReadsInfoVersion(t *testing.T) {
 	version := configVersionFromText(`
 version: '3'

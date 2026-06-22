@@ -136,7 +136,7 @@ function emitURL(event: Event) {
 
             <div class="settings-line">
               <label class="setting-label">代理源:</label>
-              <select class="select-button" :value="dashboard.proxySource" @change="(event) => emit('proxySourceChange', (event.target as HTMLSelectElement).value)">
+              <select class="select-button fluent-select" :value="dashboard.proxySource" @change="(event) => emit('proxySourceChange', (event.target as HTMLSelectElement).value)">
                 <option>默认</option>
                 <option>限时福利</option>
                 <option>自定义</option>
