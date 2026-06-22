@@ -15,11 +15,15 @@ import (
 //go:embed all:frontend/dist
 var assets embed.FS
 
+//go:embed build/appicon.png
+var appIcon []byte
+
 func main() {
 	service := NewAppService()
 	app := application.New(application.Options{
 		Name:        "SurveyController",
 		Description: "SurveyController Desktop UI",
+		Icon:        appIcon,
 		Services: []application.Service{
 			application.NewService(service),
 		},
@@ -51,6 +55,9 @@ func main() {
 		},
 		Windows: application.WindowsWindow{
 			DisableFramelessWindowDecorations: false,
+		},
+		Linux: application.LinuxWindow{
+			Icon: appIcon,
 		},
 	})
 	window.Center()

@@ -19,7 +19,7 @@ release: "1"
 contents:
   - src: "./bin/SurveyController"
     dst: "/usr/local/bin/SurveyController"
-  - src: "./build/appicon.png"
+  - src: "./assets/icon.png"
     dst: "/usr/share/icons/hicolor/128x128/apps/SurveyController.png"
   - src: "./build/linux/SurveyController.desktop"
     dst: "/usr/share/applications/SurveyController.desktop"
