@@ -196,14 +196,18 @@ tasks:
       - "../../../assets/icon.png"
       - "../../../assets/icon.ico"
       - "../../../assets/icon.svg"
-      - "scripts/sync_icons.go"
+      - "scripts/sync_icons/main.go"
+      - "scripts/sync_version/main.go"
+      - "config.yml"
     generates:
       - "darwin/icons.icns"
       - "windows/icon.ico"
     cmds:
-      - go run scripts/sync_icons.go -root ..
+      - go run ./scripts/sync_version -root ..
+      - go run ./scripts/sync_icons -root ..
       - wails3 generate icons -input appicon.png -macfilename darwin/icons.icns -windowsfilename windows/icon.ico -iconcomposerinput appicon.icon -macassetdir darwin
-      - go run scripts/sync_icons.go -root ..
+      - go run ./scripts/sync_icons -root ..
+      - go run ./scripts/sync_version -root ..
 
   dev:frontend:
     summary: Runs the frontend in development mode

@@ -36,6 +36,19 @@ func TestAppServiceProxyStatusUsesCoreTypes(t *testing.T) {
 	}
 }
 
+func TestConfigVersionFromTextReadsInfoVersion(t *testing.T) {
+	version := configVersionFromText(`
+version: '3'
+
+info:
+  productName: "SurveyController"
+  version: "9.8.7" # The application version
+`)
+	if version != "9.8.7" {
+		t.Fatalf("version = %q", version)
+	}
+}
+
 func TestAppServiceProxyRuntimeUsesCustomAPI(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		writeAppJSON(t, w, map[string]any{"data": []string{"1.2.3.4:9000"}})

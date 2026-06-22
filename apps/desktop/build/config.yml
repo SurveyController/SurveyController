@@ -11,7 +11,7 @@ info:
   description: "SurveyController Desktop UI" # The application description
   copyright: "(c) 2026, HungryM0" # Copyright text
   comments: "Stable update feed: https://dl.hungrym0.com/surveycontroller/win/stable/" # Comments
-  version: "0.1.0" # The application version
+  version: "5.0.0" # The application version
   # cfBundleIconName: "appicon" # The macOS icon name in Assets.car icon bundles (optional)
   #                               # Should match the name of your .icon file without the extension
   #                               # If not set and Assets.car exists, defaults to "appicon"

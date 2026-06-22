@@ -17,7 +17,7 @@
         PackageDisplayName="SurveyController"
         PublisherName="CN=HungryM0"
         PublisherDisplayName="HungryM0"
-        Version="0.1.0.0"
+        Version="5.0.0.0"
         PackageDescription="SurveyController Desktop UI">
         <Capabilities>
             <Capability Name="runFullTrust" />

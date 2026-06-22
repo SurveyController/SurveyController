@@ -165,12 +165,12 @@ type ShellState struct {
 }
 
 type AppService struct {
-	survey    *surveycore.Client
-	runMu     sync.Mutex
-	proxyMu   sync.Mutex
-	run       RunTaskState
-	cancel    context.CancelFunc
-	proxy     *proxyRuntime
+	survey  *surveycore.Client
+	runMu   sync.Mutex
+	proxyMu sync.Mutex
+	run     RunTaskState
+	cancel  context.CancelFunc
+	proxy   *proxyRuntime
 }
 
 func NewAppService() *AppService {
@@ -196,7 +196,7 @@ func (s *AppService) proxyRuntime() *proxyRuntime {
 func (s *AppService) GetShellState() ShellState {
 	return ShellState{
 		AppTitle:    "SurveyController",
-		AppVersion:  "0.1.0-alpha",
+		AppVersion:  displayAppVersion(),
 		ThemeMode:   "system",
 		CurrentPage: "dashboard",
 		TopNav: []NavItem{
@@ -303,7 +303,7 @@ func (s *AppService) GetShellState() ShellState {
 			"整理 Fluent 组件替换清单",
 		},
 		AboutItems: []PageMetric{
-			{Label: "版本", Value: "0.1.0-alpha"},
+			{Label: "版本", Value: displayAppVersion()},
 			{Label: "前端栈", Value: "Vue 3 + TailwindCSS + Wails v3"},
 			{Label: "桌面壳", Value: "Wails v3"},
 		},

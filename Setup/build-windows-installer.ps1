@@ -69,7 +69,40 @@ function Resolve-Version {
     return "v$version"
 }
 
+function Set-DesktopVersion {
+    param(
+        [string]$RepoRoot,
+        [string]$Version
+    )
+
+    if ([string]::IsNullOrWhiteSpace($Version)) {
+        return
+    }
+
+    $rawVersion = $Version.Trim()
+    if ($rawVersion.StartsWith("v")) {
+        $rawVersion = $rawVersion.Substring(1)
+    }
+    if ([string]::IsNullOrWhiteSpace($rawVersion)) {
+        throw "Version cannot be empty."
+    }
+
+    $configPath = Join-Path $RepoRoot "apps\desktop\build\config.yml"
+    $configText = Get-Content -LiteralPath $configPath -Raw
+    $nextText = [regex]::Replace(
+        $configText,
+        '(?m)^(\s*version:\s*")[^"]+(".*)$',
+        ('${1}' + $rawVersion + '${2}'),
+        1
+    )
+    if ($nextText -eq $configText) {
+        throw ("Failed to update version in: {0}" -f $configPath)
+    }
+    Set-Content -LiteralPath $configPath -Value $nextText -NoNewline
+}
+
 $repoRoot = Resolve-RepoRoot
+Set-DesktopVersion -RepoRoot $repoRoot -Version $Version
 $desktopRoot = Join-Path $repoRoot "apps\desktop"
 $binRoot = Join-Path $desktopRoot "bin"
 $releaseRoot = Join-Path $repoRoot $ReleaseDir
@@ -83,7 +116,6 @@ Assert-CommandAvailable -Name "go" -InstallHint "Install Go 1.26+ and ensure go 
 Assert-CommandAvailable -Name "node" -InstallHint "Install Node.js and ensure node is available in PATH."
 Assert-CommandAvailable -Name "npm" -InstallHint "Install npm and ensure npm is available in PATH."
 Assert-CommandAvailable -Name "wails3" -InstallHint "Install Wails v3: go install github.com/wailsapp/wails/v3/cmd/wails3@v3.0.0-alpha2.104"
-Assert-CommandAvailable -Name "task" -InstallHint "Install go-task: go install github.com/go-task/task/v3/cmd/task@latest"
 Assert-CommandAvailable -Name "makensis" -InstallHint "Install NSIS and ensure makensis is available in PATH."
 
 Write-Host ("Repo root: {0}" -f $repoRoot)
@@ -105,7 +137,7 @@ if (-not $SkipClean) {
 Write-Step "Build Windows installer"
 Push-Location $desktopRoot
 try {
-    task windows:package ARCH=$Arch INSTALL_SCOPE=user
+    wails3 task windows:package ARCH=$Arch INSTALL_SCOPE=user
 }
 finally {
     Pop-Location
@@ -120,7 +152,10 @@ if (-not (Test-Path $installerPath)) {
     throw ("Installer not found: {0}" -f $installerPath)
 }
 
-Copy-Item -Force $installerPath (Join-Path $releaseRoot $installerName)
+$archInstallerPath = Join-Path $releaseRoot $installerName
+if (Test-Path $archInstallerPath) {
+    Remove-Item -LiteralPath $archInstallerPath -Force
+}
 Copy-Item -Force $installerPath (Join-Path $releaseRoot $versionedInstallerName)
 
 Write-Step "Build finished"

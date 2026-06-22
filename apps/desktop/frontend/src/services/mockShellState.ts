@@ -2,7 +2,7 @@ import type { ShellState } from '../types'
 
 export const mockShellState: ShellState = {
   appTitle: 'SurveyController',
-  appVersion: '0.1.0-alpha',
+  appVersion: 'unknown',
   themeMode: 'system',
   currentPage: 'dashboard',
   topNav: [
