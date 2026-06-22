@@ -21,7 +21,7 @@
         PackageDescription="SurveyController Desktop UI">
         <Capabilities>
             <Capability Name="runFullTrust" />
-            
+
         </Capabilities>
         <Applications>
             <Application
@@ -30,7 +30,7 @@
                 DisplayName="SurveyController"
                 ExecutableName="desktopui.exe"
                 EntryPoint="Windows.FullTrustApplication">
-                
+
             </Application>
         </Applications>
         <Resources>

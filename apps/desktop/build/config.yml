@@ -1,22 +1,17 @@
-# This file contains the configuration for this project.
-# When you update `info` or `fileAssociations`, run `wails3 task common:update:build-assets` to update the assets.
-# Note that this will overwrite any changes you have made to the assets.
+# 桌面端构建配置
+# 修改 `info` 或 `fileAssociations` 后，运行 `wails3 task common:generate:icons` 同步构建资源。
 version: '3'
 
-# This information is used to generate the build assets.
+# 这些信息用于生成构建资源。
 info:
-  companyName: "HungryM0" # The name of the company
-  productName: "SurveyController" # The name of the application
-  productIdentifier: "com.hungrym0.surveycontroller" # The unique product identifier
-  description: "SurveyController Desktop UI" # The application description
-  copyright: "(c) 2026, HungryM0" # Copyright text
-  comments: "Stable update feed: https://dl.hungrym0.com/surveycontroller/win/stable/" # Comments
-  version: "5.0.0" # The application version
-  # cfBundleIconName: "appicon" # The macOS icon name in Assets.car icon bundles (optional)
-  #                               # Should match the name of your .icon file without the extension
-  #                               # If not set and Assets.car exists, defaults to "appicon"
+  companyName: "HUNGRY_M0" # 公司名
+  productName: "SurveyController" # 应用名
+  productIdentifier: "com.hungrym0.surveycontroller" # 唯一产品标识
+  description: "SurveyController" # 应用描述
+  copyright: "(c) 2026, HUNGRY_M0" # 版权文本
+  comments: "适用于问卷星、腾讯问卷、见数平台的高并发提交程序" # 备注
+  version: "5.0.0" # 应用版本号
 
-# Dev mode configuration
 dev_mode:
   root_path: .
   log_level: warn
@@ -34,8 +29,8 @@ dev_mode:
       - "*_test.go"
     watched_extension:
       - "*.go"
-      - "*.js" # Watch for changes to JS/TS files included using the //wails:include directive.
-      - "*.ts" # The frontend directory will be excluded entirely by the setting above.
+      - "*.js"
+      - "*.ts"
     git_ignore: true
   executes:
     - cmd: wails3 build DEV=true
@@ -45,21 +40,21 @@ dev_mode:
     - cmd: wails3 task run
       type: primary
 
-# File Associations
-# More information at: https://v3.wails.io/noit/done/yet
+# 文件关联
+# 详情见：https://v3.wails.io/noit/done/yet
 fileAssociations:
 #  - ext: wails
 #    name: Wails
-#    description: Wails Application File
+#    description: Wails 应用文件
 #    iconName: wailsFileIcon
 #    role: Editor
 #  - ext: jpg
 #    name: JPEG
-#    description: Image File
+#    description: 图片文件
 #    iconName: jpegFileIcon
 #    role: Editor
-#    mimeType: image/jpeg  # (optional)
+#    mimeType: image/jpeg  # 可选
 
-# Other data
+# 其他数据
 other:
   - name: My Other Data

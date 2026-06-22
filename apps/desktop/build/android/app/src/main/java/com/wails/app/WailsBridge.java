@@ -62,21 +62,13 @@ import org.json.JSONObject;
 import java.util.Locale;
 import java.util.concurrent.Executor;
 
-/**
- * WailsBridge manages the connection between the Java/Android side and the Go
- * native library. It handles:
- * - Loading and initializing the native Go library
- * - Serving asset requests from Go
- * - Passing messages between JavaScript and Go
- * - Native facilities the Go side calls via JNI (dialogs, clipboard,
- *   screen/device info, toasts, vibration, main-thread dispatch)
- */
+
 public class WailsBridge {
     private static final String TAG = "WailsBridge";
     private static final boolean DEBUG = BuildConfig.DEBUG;
 
     static {
-        // Load the native Go library
+
         System.loadLibrary("wails");
     }
 
@@ -85,20 +77,18 @@ public class WailsBridge {
     private WebView webView;
     private volatile boolean initialized = false;
 
-    // Phase D state: sensor listeners, speech engine and keyboard watcher are
-    // retained so they can be registered and torn down on demand.
+
     private SensorEventListener accelListener;
     private SensorEventListener proximityListener;
     private long lastMotionEmit = 0;
     private TextToSpeech tts;
     private View.OnApplyWindowInsetsListener keyboardListener;
-    // Battery: remember the user's intent so sensors paused while the app is
-    // backgrounded can be restored on foreground; the torch is switched off.
+
     private boolean motionWanted = false;
     private boolean proximityWanted = false;
     private boolean torchOn = false;
 
-    // Native methods - implemented in Go
+
     private static native void nativeInit(WailsBridge bridge);
     private static native void nativeShutdown();
     private static native void nativeOnStart();
@@ -122,9 +112,8 @@ public class WailsBridge {
         this.activity = activity;
     }
 
-    /**
-     * Initialize the native Go library
-     */
+
+
     public void initialize() {
         if (initialized) {
             return;
@@ -138,9 +127,8 @@ public class WailsBridge {
         }
     }
 
-    /**
-     * Shutdown the native Go library
-     */
+
+
     public void shutdown() {
         if (!initialized) {
             return;
@@ -153,15 +141,13 @@ public class WailsBridge {
         }
     }
 
-    /**
-     * The WebView used for JavaScript execution. Must be set before the page
-     * loads.
-     */
+
+
     public void setWebView(WebView webView) {
         this.webView = webView;
     }
 
-    // Lifecycle forwarding
+
 
     public void onStart() {
         if (initialized) nativeOnStart();
@@ -185,32 +171,26 @@ public class WailsBridge {
         if (initialized) nativeOnLowMemory();
     }
 
-    /**
-     * Notify Go that the page finished loading.
-     */
+
+
     public void onPageFinished(String url) {
         if (initialized) nativeOnPageFinished(url);
     }
 
-    /**
-     * Emit a "system:*" event (battery, network, lock, theme, lifecycle) to JS.
-     * Called from the system-event receivers registered by MainActivity.
-     */
+
+
     public void emitSystemEvent(String name, String json) {
         if (initialized) nativeEmitSystemEvent(name, json);
     }
 
-    /**
-     * Emit an arbitrary custom event with a JSON payload to JS. Used by the
-     * mobile-feature bridges to deliver asynchronous results.
-     */
+
+
     public void emitEvent(String name, String json) {
         if (initialized) nativeEmitEvent(name, json);
     }
 
-    /**
-     * Serve an asset from the Go asset server
-     */
+
+
     public byte[] serveAsset(String path, String method, String headers) {
         if (!initialized) {
             Log.w(TAG, "Bridge not initialized, cannot serve asset: " + path);
@@ -225,9 +205,8 @@ public class WailsBridge {
         }
     }
 
-    /**
-     * Get the MIME type for an asset
-     */
+
+
     public String getAssetMimeType(String path) {
         if (!initialized) {
             return "application/octet-stream";
@@ -240,9 +219,8 @@ public class WailsBridge {
         }
     }
 
-    /**
-     * Handle a message from JavaScript
-     */
+
+
     public String handleMessage(String message) {
         if (!initialized) {
             Log.w(TAG, "Bridge not initialized, cannot handle message");
@@ -257,10 +235,8 @@ public class WailsBridge {
         }
     }
 
-    /**
-     * Handle a runtime call from JavaScript (the Android transport).
-     * The payload and response are JSON strings.
-     */
+
+
     public String handleRuntimeCall(String payload) {
         if (!initialized) {
             return "{\"ok\":false,\"error\":\"Bridge not initialized\"}";
@@ -274,9 +250,8 @@ public class WailsBridge {
         }
     }
 
-    /**
-     * Execute JavaScript in the WebView. Called from Go via JNI (any thread).
-     */
+
+
     public void executeJavaScript(final String js) {
         final WebView view = webView;
         if (view == null) {
@@ -286,11 +261,10 @@ public class WailsBridge {
         mainHandler.post(() -> view.evaluateJavascript(js, null));
     }
 
-    // Facilities called from Go via JNI
 
-    /**
-     * Screen metrics as JSON: hardware pixels, density and system bar insets.
-     */
+
+
+
     public String getScreenInfoJson() {
         try {
             JSONObject result = new JSONObject();
@@ -333,9 +307,8 @@ public class WailsBridge {
         }
     }
 
-    /**
-     * Device information as JSON.
-     */
+
+
     public String getDeviceInfoJson() {
         try {
             JSONObject result = new JSONObject();
@@ -361,17 +334,16 @@ public class WailsBridge {
         return Looper.myLooper() == Looper.getMainLooper();
     }
 
-    /**
-     * Post a Go callback onto the Android main thread.
-     */
+
+
     public void runOnMainThread(final int callbackID) {
-        // Guard against the callback firing after shutdown() tore down the Go side
+
         mainHandler.post(() -> {
             if (initialized) nativeMainThreadCallback(callbackID);
         });
     }
 
-    // Clipboard (note: reads on Android 10+ require input focus)
+
 
     public void setClipboardText(String text) {
         try {
@@ -416,11 +388,10 @@ public class WailsBridge {
         }
     }
 
-    // MARK: - Mobile features (Phase A)
 
-    /**
-     * Present the Android share chooser. json: {"text": "...", "url": "..."}.
-     */
+
+
+
     public void share(final String json) {
         mainHandler.post(() -> {
             try {
@@ -446,9 +417,8 @@ public class WailsBridge {
         });
     }
 
-    /**
-     * Open a URL in the system browser.
-     */
+
+
     public void openURL(final String url) {
         mainHandler.post(() -> {
             try {
@@ -461,9 +431,8 @@ public class WailsBridge {
         });
     }
 
-    /**
-     * Keep the screen on (1) or release the hold (0) via FLAG_KEEP_SCREEN_ON.
-     */
+
+
     public void setKeepAwake(final int enabled) {
         mainHandler.post(() -> {
             if (enabled != 0) {
@@ -474,10 +443,8 @@ public class WailsBridge {
         });
     }
 
-    /**
-     * Toggle the camera flash (torch). Emits "common:torch" with the resulting
-     * state and availability.
-     */
+
+
     public void setTorch(final int enabled) {
         mainHandler.post(() -> {
             try {
@@ -507,11 +474,10 @@ public class WailsBridge {
         });
     }
 
-    // MARK: - Mobile features (Phase B)
 
-    /**
-     * System-bar insets as JSON {"top","bottom","left","right"} in px.
-     */
+
+
+
     public String getSafeAreaJson() {
         try {
             int top = 0, bottom = 0, left = 0, right = 0;
@@ -529,9 +495,8 @@ public class WailsBridge {
         }
     }
 
-    /**
-     * Set window brightness, 0-100. A negative value restores the system default.
-     */
+
+
     public void setBrightness(final int pct) {
         mainHandler.post(() -> {
             try {
@@ -545,10 +510,8 @@ public class WailsBridge {
         });
     }
 
-    /**
-     * Current brightness as {"value": 0.0-1.0}. Falls back to the system
-     * brightness setting when the window has not overridden it.
-     */
+
+
     public String getBrightnessJson() {
         try {
             float v = activity.getWindow().getAttributes().screenBrightness;
@@ -563,9 +526,8 @@ public class WailsBridge {
         }
     }
 
-    /**
-     * App info as JSON {"name","version","build","bundleId"}.
-     */
+
+
     public String getAppInfoJson() {
         try {
             PackageInfo pi = activity.getPackageManager()
@@ -586,9 +548,8 @@ public class WailsBridge {
         }
     }
 
-    /**
-     * Lock orientation to "portrait", "landscape" or "auto".
-     */
+
+
     public void setOrientation(final String mode) {
         mainHandler.post(() -> {
             int o = ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED;
@@ -598,9 +559,8 @@ public class WailsBridge {
         });
     }
 
-    /**
-     * Current orientation as {"orientation":"portrait"|"landscape"}.
-     */
+
+
     public String getOrientationJson() {
         int o = activity.getResources().getConfiguration().orientation;
         String s = o == Configuration.ORIENTATION_LANDSCAPE ? "landscape" : "portrait";
@@ -611,10 +571,8 @@ public class WailsBridge {
         }
     }
 
-    /**
-     * Set status-bar appearance. json: {"style":"light|dark|default","hidden":bool}.
-     * "light" = light (white) icons; "dark" = dark icons.
-     */
+
+
     public void setStatusBar(final String json) {
         mainHandler.post(() -> {
             try {
@@ -649,7 +607,7 @@ public class WailsBridge {
         });
     }
 
-    // MARK: - Mobile features (Phase C)
+
 
     private void emitBiometric(boolean ok, String error) {
         try {
@@ -660,10 +618,8 @@ public class WailsBridge {
         }
     }
 
-    /**
-     * Show the BiometricPrompt (biometric or device credential). The outcome is
-     * emitted as "common:biometric" {ok, error}.
-     */
+
+
     public void authenticate(final String reason) {
         mainHandler.post(() -> {
             try {
@@ -685,7 +641,7 @@ public class WailsBridge {
                             public void onAuthenticationError(int code, CharSequence err) {
                                 emitBiometric(false, err != null ? err.toString() : "error " + code);
                             }
-                            // onAuthenticationFailed = a single non-match; prompt stays up, no terminal event.
+
                         });
                 BiometricPrompt.PromptInfo info = new BiometricPrompt.PromptInfo.Builder()
                         .setTitle("Authenticate")
@@ -700,10 +656,8 @@ public class WailsBridge {
         });
     }
 
-    /**
-     * Post a local notification. json: {"title","body"}. Requests the
-     * POST_NOTIFICATIONS runtime permission on Android 13+.
-     */
+
+
     public void postNotification(final String json) {
         mainHandler.post(() -> {
             try {
@@ -738,10 +692,8 @@ public class WailsBridge {
         });
     }
 
-    /**
-     * Backing store for secure storage. Uses EncryptedSharedPreferences (AES via
-     * the Android Keystore) on API 23+, falling back to plain prefs below that.
-     */
+
+
     private SharedPreferences securePrefs() {
         try {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
@@ -758,7 +710,7 @@ public class WailsBridge {
         return activity.getSharedPreferences("wails_secure_plain", Context.MODE_PRIVATE);
     }
 
-    /** Store a value in secure storage. json: {"key","value"}. */
+
     public void secureSet(final String json) {
         try {
             JSONObject o = new JSONObject(json);
@@ -768,7 +720,7 @@ public class WailsBridge {
         }
     }
 
-    /** Read a value from secure storage (empty if absent). */
+
     public String secureGet(final String key) {
         try {
             return securePrefs().getString(key, "");
@@ -777,7 +729,7 @@ public class WailsBridge {
         }
     }
 
-    /** Remove a value from secure storage. */
+
     public void secureDelete(final String key) {
         try {
             securePrefs().edit().remove(key).apply();
@@ -786,12 +738,10 @@ public class WailsBridge {
         }
     }
 
-    // MARK: - Mobile features (Phase D: sensors & hardware)
 
-    /**
-     * Play a haptic pattern via the Vibrator. type: impact-light|impact-medium|
-     * impact-heavy|success|warning|error|selection.
-     */
+
+
+
     public void haptic(final String type) {
         try {
             Vibrator vibrator = (Vibrator) activity.getSystemService(Context.VIBRATOR_SERVICE);
@@ -826,10 +776,8 @@ public class WailsBridge {
         }
     }
 
-    /**
-     * Request a one-shot location fix. Emits "common:location"
-     * {lat,lng,accuracy} or {error}. Requests ACCESS_FINE_LOCATION on first use.
-     */
+
+
     public void getLocation() {
         mainHandler.post(() -> {
             try {
@@ -856,7 +804,7 @@ public class WailsBridge {
                     emitLocation(best);
                     return;
                 }
-                // No cached fix: request a single update from whichever provider is enabled.
+
                 String provider = lm.isProviderEnabled(LocationManager.GPS_PROVIDER)
                         ? LocationManager.GPS_PROVIDER
                         : lm.isProviderEnabled(LocationManager.NETWORK_PROVIDER)
@@ -885,7 +833,7 @@ public class WailsBridge {
         }
     }
 
-    /** Start (1) / stop (0) accelerometer updates, streamed as "common:motion". */
+
     public void setMotion(final int enabled) {
         motionWanted = enabled != 0;
         mainHandler.post(() -> {
@@ -898,7 +846,7 @@ public class WailsBridge {
                 accelListener = new SensorEventListener() {
                     @Override public void onSensorChanged(SensorEvent e) {
                         long now = System.currentTimeMillis();
-                        if (now - lastMotionEmit < 100) return; // throttle to ~10 Hz
+                        if (now - lastMotionEmit < 100) return;
                         lastMotionEmit = now;
                         try {
                             emitEvent("common:motion", new JSONObject()
@@ -917,7 +865,7 @@ public class WailsBridge {
         });
     }
 
-    /** Enable (1) / disable (0) the proximity sensor, reported as "common:proximity". */
+
     public void setProximity(final int enabled) {
         proximityWanted = enabled != 0;
         mainHandler.post(() -> {
@@ -943,12 +891,8 @@ public class WailsBridge {
         });
     }
 
-    /**
-     * Called when the activity leaves the foreground (onStop): stop the
-     * accelerometer and proximity sensor and switch the torch off so none of
-     * them drain the battery while the app isn't visible. The "wanted" flags are
-     * kept so foregrounding can restore the sensors.
-     */
+
+
     private void pauseFeaturesForBackground() {
         mainHandler.post(() -> {
             SensorManager sm = (SensorManager) activity.getSystemService(Context.SENSOR_SERVICE);
@@ -957,18 +901,18 @@ public class WailsBridge {
                 if (proximityListener != null) { sm.unregisterListener(proximityListener); proximityListener = null; }
             }
             if (torchOn) {
-                setTorch(0); // turns the torch off, emits common:torch and clears torchOn
+                setTorch(0);
             }
         });
     }
 
-    /** Re-enable on foreground (onStart) any sensors the user had switched on. */
+
     private void resumeFeaturesForForeground() {
         if (motionWanted && accelListener == null) setMotion(1);
         if (proximityWanted && proximityListener == null) setProximity(1);
     }
 
-    /** Speak text via TextToSpeech (lazily initialised). */
+
     public void speak(final String text) {
         mainHandler.post(() -> {
             if (text == null || text.isEmpty()) return;
@@ -985,14 +929,14 @@ public class WailsBridge {
         });
     }
 
-    /** Stop any in-progress speech. */
+
     public void stopSpeak() {
         mainHandler.post(() -> {
             if (tts != null) tts.stop();
         });
     }
 
-    /** Disk space as {"free":bytes,"total":bytes}. */
+
     public String getStorageJson() {
         try {
             StatFs stat = new StatFs(activity.getFilesDir().getAbsolutePath());
@@ -1004,7 +948,7 @@ public class WailsBridge {
         }
     }
 
-    /** Battery/power state as {"level":0-1,"charging":bool,"lowPower":bool}. */
+
     public String getPowerJson() {
         try {
             IntentFilter filter = new IntentFilter(Intent.ACTION_BATTERY_CHANGED);
@@ -1031,7 +975,7 @@ public class WailsBridge {
         }
     }
 
-    /** Network status as {"connected":bool,"type":"wifi|cellular|ethernet|none"}. */
+
     public String getNetworkJson() {
         try {
             ConnectivityManager cm =
@@ -1054,10 +998,8 @@ public class WailsBridge {
         }
     }
 
-    /**
-     * Watch (1) / unwatch (0) the soft keyboard, emitting "common:keyboard"
-     * {visible,height} (height in px) via an inset listener on the content view.
-     */
+
+
     public void setKeyboardWatch(final int enabled) {
         mainHandler.post(() -> {
             final View content = activity.getWindow().getDecorView();
@@ -1093,10 +1035,8 @@ public class WailsBridge {
         }
     }
 
-    /**
-     * Toggle FLAG_SECURE (blocks screenshots & screen recording). Reports the new
-     * state as "common:screenCapture" {protected}.
-     */
+
+
     public void setScreenProtect(final int enabled) {
         mainHandler.post(() -> {
             if (enabled != 0) {
@@ -1109,9 +1049,9 @@ public class WailsBridge {
         });
     }
 
-    // MARK: - Mobile features (Phase E: camera & background)
 
-    /** Capture a photo with the system camera. Result → "common:capture" event. */
+
+
     public void capturePhoto(final String json) {
         mainHandler.post(() -> {
             if (activity instanceof MainActivity) {
@@ -1122,7 +1062,7 @@ public class WailsBridge {
         });
     }
 
-    /** Capture a video with the system camera. Result → "common:capture" event. */
+
     public void captureVideo(final String json) {
         mainHandler.post(() -> {
             if (activity instanceof MainActivity) {
@@ -1133,10 +1073,8 @@ public class WailsBridge {
         });
     }
 
-    /**
-     * Start a foreground service that keeps the process alive for long-running
-     * background work (with an ongoing notification). json: {"title","text"}.
-     */
+
+
     public void startForegroundService(final String json) {
         mainHandler.post(() -> {
             try {
@@ -1164,7 +1102,7 @@ public class WailsBridge {
         });
     }
 
-    /** Stop the foreground service. */
+
     public void stopForegroundService() {
         mainHandler.post(() -> {
             try {
@@ -1176,13 +1114,8 @@ public class WailsBridge {
         });
     }
 
-    /**
-     * Show a message dialog. optionsJson:
-     * {"title": "...", "message": "...",
-     *  "buttons": [{"label": "...", "isCancel": bool, "isDefault": bool}]}
-     * Calls nativeDialogCallback with the index of the pressed button in the
-     * original buttons array, or -1 when dismissed without a matching button.
-     */
+
+
     public void showMessageDialog(final int callbackID, final String optionsJson) {
         mainHandler.post(() -> {
             try {
@@ -1210,9 +1143,7 @@ public class WailsBridge {
                     builder.setPositiveButton(android.R.string.ok,
                             (d, w) -> dialogCallback(callbackID, -1));
                 } else if (count <= 3) {
-                    // Map buttons to AlertDialog slots: the default (or last)
-                    // button is positive, the cancel button negative, any
-                    // remaining button neutral.
+
                     int positive = -1;
                     for (int i = 0; i < count; i++) {
                         if (buttons.getJSONObject(i).optBoolean("isDefault", false)) {
@@ -1255,7 +1186,7 @@ public class WailsBridge {
                                 (d, w) -> dialogCallback(callbackID, neutralIdx));
                     }
                 } else {
-                    // More than three buttons: show as a list
+
                     String[] labels = new String[count];
                     for (int i = 0; i < count; i++) {
                         labels[i] = buttons.getJSONObject(i).optString("label", "");
@@ -1271,10 +1202,8 @@ public class WailsBridge {
         });
     }
 
-    /**
-     * Show the system document picker. optionsJson: {"multiple": bool}.
-     * Results flow back through filePickerResult/filePickerDone.
-     */
+
+
     public void showFilePicker(final int callbackID, final String optionsJson) {
         boolean multiple = false;
         try {
@@ -1292,18 +1221,18 @@ public class WailsBridge {
         });
     }
 
-    /** Forward a picked file path to Go (package-private, used by MainActivity). */
+
     void filePickerResult(int callbackID, String path) {
-        // The picker completes on a background thread that may outlive shutdown()
+
         if (initialized) nativeFilePickerResult(callbackID, path);
     }
 
-    /** Signal the end of a file picking session (package-private). */
+
     void filePickerDone(int callbackID) {
         if (initialized) nativeFilePickerDone(callbackID);
     }
 
-    /** Dialog button callback that no-ops once the Go side is gone. */
+
     private void dialogCallback(int callbackID, int buttonIndex) {
         if (initialized) nativeDialogCallback(callbackID, buttonIndex);
     }

@@ -17,7 +17,7 @@ android {
         versionCode 50000
         versionName "5.0.0"
 
-        // Configure supported ABIs
+
         ndk {
             abiFilters 'arm64-v8a', 'x86_64'
         }
@@ -27,9 +27,7 @@ android {
     def hasKeystore = keystoreFile != null && !keystoreFile.trim().isEmpty()
 
     signingConfigs {
-        // A real keystore can be provided via environment variables; without
-        // one, release builds are signed with the debug keystore so they can
-        // be installed for testing (not suitable for Play Store uploads).
+
         release {
             if (hasKeystore) {
                 storeFile file(keystoreFile)
@@ -56,19 +54,19 @@ android {
         targetCompatibility JavaVersion.VERSION_11
     }
 
-    // Source sets configuration
+
     sourceSets {
         main {
-            // JNI libraries are in jniLibs folder
+
             jniLibs.srcDirs = ['src/main/jniLibs']
-            // Assets for the WebView
+
             assets.srcDirs = ['src/main/assets']
         }
     }
 
-    // Packaging options
+
     packagingOptions {
-        // Don't strip Go symbols in debug builds
+
         doNotStrip '*/arm64-v8a/libwails.so'
         doNotStrip '*/x86_64/libwails.so'
     }

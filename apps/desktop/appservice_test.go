@@ -42,7 +42,7 @@ version: '3'
 
 info:
   productName: "SurveyController"
-  version: "9.8.7" # The application version
+  version: "9.8.7" # 应用版本号
 `)
 	if version != "9.8.7" {
 		t.Fatalf("version = %q", version)

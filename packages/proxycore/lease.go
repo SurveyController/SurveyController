@@ -9,7 +9,6 @@ import (
 
 const defaultProxySource = "custom"
 
-// ProxyLease mirrors the Python proxy lease shape without importing app state.
 type ProxyLease struct {
 	Address  string
 	ExpireAt string

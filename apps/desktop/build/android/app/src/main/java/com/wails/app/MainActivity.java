@@ -43,11 +43,7 @@ import java.io.OutputStream;
 import java.util.ArrayList;
 import java.util.List;
 
-/**
- * MainActivity hosts the WebView and manages the Wails application lifecycle.
- * It uses WebViewAssetLoader to serve assets from the Go library without
- * requiring a network server.
- */
+
 public class MainActivity extends AppCompatActivity {
     private static final String TAG = "WailsActivity";
     private static final boolean DEBUG = BuildConfig.DEBUG;
@@ -57,13 +53,11 @@ public class MainActivity extends AppCompatActivity {
 
     private WebView webView;
     private WailsBridge bridge;
-    // Battery: system-event receivers are registered only while the activity is
-    // in the foreground (onStart) and torn down in onStop, so background battery/
-    // network/screen broadcasts don't wake the app.
+
     private boolean systemReceiversRegistered = false;
     private WebViewAssetLoader assetLoader;
 
-    // The Go-side dialog ID of the in-flight file picker (-1 when idle)
+
     private int pendingFilePickerCallbackID = -1;
     private static final int PHOTO_CAPTURE_REQUEST = 7002;
     private static final int VIDEO_CAPTURE_REQUEST = 7003;
@@ -71,9 +65,7 @@ public class MainActivity extends AppCompatActivity {
     private File pendingCaptureFile;
     private boolean pendingCaptureIsVideo;
 
-    // System-event sources (battery/power, screen lock, network). Registered in
-    // onCreate, torn down in onDestroy. Each forwards a "system:*" event to JS
-    // via the bridge.
+
     private BroadcastReceiver batteryReceiver;
     private BroadcastReceiver screenReceiver;
     private BroadcastReceiver powerSaveReceiver;
@@ -85,14 +77,14 @@ public class MainActivity extends AppCompatActivity {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
 
-        // Initialize the native Go library
+
         bridge = new WailsBridge(this);
         bridge.initialize();
 
-        // Set up WebView
+
         setupWebView();
 
-        // Load the application
+
         loadApplication();
     }
 
@@ -101,7 +93,7 @@ public class MainActivity extends AppCompatActivity {
         webView = findViewById(R.id.webview);
         bridge.setWebView(webView);
 
-        // Configure WebView settings
+
         WebSettings settings = webView.getSettings();
         settings.setJavaScriptEnabled(true);
         settings.setDomStorageEnabled(true);
@@ -111,29 +103,27 @@ public class MainActivity extends AppCompatActivity {
         settings.setMediaPlaybackRequiresUserGesture(false);
         settings.setMixedContentMode(WebSettings.MIXED_CONTENT_NEVER_ALLOW);
 
-        // Enable debugging in debug builds
+
         if (DEBUG) {
             WebView.setWebContentsDebuggingEnabled(true);
         }
 
-        // Set up asset loader for serving local assets
+
         assetLoader = new WebViewAssetLoader.Builder()
                 .setDomain(WAILS_HOST)
                 .addPathHandler("/", new WailsPathHandler(bridge))
                 .build();
 
-        // Set up WebView client to intercept requests
+
         webView.setWebViewClient(new WebViewClient() {
             @Nullable
             @Override
             public WebResourceResponse shouldInterceptRequest(WebView view, WebResourceRequest request) {
-                // Handle wails.localhost requests
+
                 if (request.getUrl().getHost() != null &&
                         request.getUrl().getHost().equals(WAILS_HOST)) {
 
-                    // For wails API calls (runtime, capabilities, etc.) pass the
-                    // full URL including the query string, because
-                    // WebViewAssetLoader.PathHandler strips query params
+
                     String path = request.getUrl().getPath();
                     if (path != null && path.startsWith("/wails/")) {
                         String fullPath = path;
@@ -160,7 +150,7 @@ public class MainActivity extends AppCompatActivity {
                                 inputStream
                             );
                         }
-                        // Return error response if data is null
+
                         return new WebResourceResponse(
                             "application/json",
                             "UTF-8",
@@ -171,13 +161,12 @@ public class MainActivity extends AppCompatActivity {
                         );
                     }
 
-                    // Stream captured photos/videos from the cache with HTTP Range
-                    // support so <video> can seek/stream a clip of any length.
+
                     if (path != null && path.startsWith("/__capture__/")) {
                         return serveCaptureFile(path.substring("/__capture__/".length()), request);
                     }
 
-                    // For regular assets, use the asset loader
+
                     return assetLoader.shouldInterceptRequest(request.getUrl());
                 }
 
@@ -189,13 +178,12 @@ public class MainActivity extends AppCompatActivity {
                 super.onPageFinished(view, url);
                 if (DEBUG) Log.d(TAG, "Page loaded: " + url);
                 bridge.onPageFinished(url);
-                // Now that JS listeners are mounted, push a snapshot of the
-                // current battery / network / theme so the UI starts populated.
+
                 emitSystemSnapshot();
             }
         });
 
-        // Add JavaScript interface for Go communication
+
         webView.addJavascriptInterface(new WailsJSBridge(bridge, webView), "wails");
     }
 
@@ -205,11 +193,8 @@ public class MainActivity extends AppCompatActivity {
         webView.loadUrl(url);
     }
 
-    /**
-     * Launch the system camera to capture a photo (video=false) or a video
-     * (video=true). The capture is written to a FileProvider URI in the cache and
-     * the result is delivered to JS as a "common:capture" event.
-     */
+
+
     public void launchCameraCapture(boolean video) {
         if (checkSelfPermission("android.permission.CAMERA") != PackageManager.PERMISSION_GRANTED) {
             requestPermissions(new String[]{"android.permission.CAMERA"}, CAMERA_PERMISSION_REQUEST);
@@ -226,9 +211,7 @@ public class MainActivity extends AppCompatActivity {
             Intent intent = new Intent(video ? MediaStore.ACTION_VIDEO_CAPTURE : MediaStore.ACTION_IMAGE_CAPTURE);
             intent.putExtra(MediaStore.EXTRA_OUTPUT, uri);
             intent.addFlags(Intent.FLAG_GRANT_WRITE_URI_PERMISSION);
-            // Don't pre-check with resolveActivity(): Android 11+ package visibility
-            // hides other apps' intents unless declared in <queries>, so it can
-            // return null even when a camera app exists. Just launch and handle a miss.
+
             startActivityForResult(intent, video ? VIDEO_CAPTURE_REQUEST : PHOTO_CAPTURE_REQUEST);
         } catch (android.content.ActivityNotFoundException e) {
             bridge.emitEvent("common:capture", "{\"error\":\"no camera app available\"}");
@@ -246,8 +229,7 @@ public class MainActivity extends AppCompatActivity {
             bridge.emitEvent("common:capture", "{\"cancelled\":true}");
             return;
         }
-        // Some camera apps (commonly for video) ignore EXTRA_OUTPUT and instead
-        // return a content URI in the result data; copy that into our cache.
+
         if ((file == null || !file.exists() || file.length() == 0)
                 && data != null && data.getData() != null) {
             String copied = copyUriToCache(data.getData());
@@ -268,8 +250,7 @@ public class MainActivity extends AppCompatActivity {
                     String thumb = makePhotoThumbnail(f);
                     if (thumb != null) o.put("thumb", thumb);
                 }
-                // Stream URL works for both: <video>/<img> load it from the cache
-                // via shouldInterceptRequest (Range-enabled), no size limit.
+
                 o.put("streamUrl", captureStreamUrl(f));
                 bridge.emitEvent("common:capture", o.toString());
             } catch (Exception e) {
@@ -279,7 +260,7 @@ public class MainActivity extends AppCompatActivity {
         }).start();
     }
 
-    /** Downscale a captured photo into a base64 JPEG data URL for display in the webview. */
+
     @Nullable
     private String makePhotoThumbnail(File file) {
         try {
@@ -301,12 +282,8 @@ public class MainActivity extends AppCompatActivity {
         }
     }
 
-    /**
-     * Build a same-origin URL the webview can stream a capture from. Served by
-     * serveCaptureFile (via shouldInterceptRequest); the path is relative to the
-     * cache dir so both camera files (captures/) and copied content URIs
-     * (wails-picker/) resolve.
-     */
+
+
     private String captureStreamUrl(File file) {
         String base = getCacheDir().getAbsolutePath() + File.separator;
         String abs = file.getAbsolutePath();
@@ -314,16 +291,13 @@ public class MainActivity extends AppCompatActivity {
         return "/__capture__/" + Uri.encode(rel, "/");
     }
 
-    /**
-     * Serve a captured file (under the app cache) to the webview with HTTP Range
-     * support, so &lt;video&gt; can stream and seek a clip of any length without
-     * inlining it as a data URL.
-     */
+
+
     private WebResourceResponse serveCaptureFile(String relPath, WebResourceRequest request) {
         try {
             File cache = getCacheDir();
             File file = new File(cache, Uri.decode(relPath));
-            // Path-traversal guard: only ever serve files under the cache dir.
+
             if (!file.getCanonicalPath().startsWith(cache.getCanonicalPath() + File.separator)
                     || !file.exists() || !file.isFile()) {
                 return new WebResourceResponse("text/plain", "UTF-8", 404, "Not Found",
@@ -380,7 +354,7 @@ public class MainActivity extends AppCompatActivity {
         }
     }
 
-    /** Wraps a stream to yield at most a fixed number of bytes (for Range responses). */
+
     private static final class LimitedInputStream extends java.io.FilterInputStream {
         private long remaining;
         LimitedInputStream(java.io.InputStream in, long limit) {
@@ -401,15 +375,12 @@ public class MainActivity extends AppCompatActivity {
         }
     }
 
-    /**
-     * Launch the system document picker. Results are copied into the app's
-     * cache directory so Go receives real filesystem paths. Called by
-     * WailsBridge on the main thread.
-     */
+
+
     public void launchFilePicker(int callbackID, boolean multiple) {
         synchronized (this) {
             if (pendingFilePickerCallbackID != -1) {
-                // Only one picker can be in flight
+
                 bridge.filePickerDone(callbackID);
                 return;
             }
@@ -456,7 +427,7 @@ public class MainActivity extends AppCompatActivity {
             }
         }
 
-        // Copy the documents off the main thread, then notify Go
+
         new Thread(() -> {
             for (Uri uri : uris) {
                 String path = copyUriToCache(uri);
@@ -468,9 +439,8 @@ public class MainActivity extends AppCompatActivity {
         }).start();
     }
 
-    /**
-     * Copy a content URI into the app cache and return its filesystem path.
-     */
+
+
     @Nullable
     private String copyUriToCache(Uri uri) {
         String name = "document";
@@ -508,9 +478,8 @@ public class MainActivity extends AppCompatActivity {
         }
     }
 
-    /**
-     * Execute JavaScript in the WebView from the Go side
-     */
+
+
     public void executeJavaScript(final String js) {
         runOnUiThread(() -> {
             if (webView != null) {
@@ -519,15 +488,10 @@ public class MainActivity extends AppCompatActivity {
         });
     }
 
-    // ---- System events ---------------------------------------------------
-    // Battery/power, screen lock and network connectivity are surfaced to JS as
-    // "system:*" events. The OS broadcasts used here (ACTION_BATTERY_CHANGED,
-    // SCREEN_OFF, USER_PRESENT, POWER_SAVE_MODE_CHANGED) are protected system
-    // broadcasts, so dynamic registration needs no RECEIVER_* export flag.
+
 
     private void registerSystemEventReceivers() {
-        // Battery + charging state (sticky broadcast: the current value is
-        // delivered to the receiver immediately on registration).
+
         batteryReceiver = new BroadcastReceiver() {
             @Override public void onReceive(Context context, Intent intent) {
                 emitBattery(intent);
@@ -535,7 +499,7 @@ public class MainActivity extends AppCompatActivity {
         };
         registerReceiver(batteryReceiver, new IntentFilter(Intent.ACTION_BATTERY_CHANGED));
 
-        // Low-power (battery saver) mode toggles → re-emit battery with the flag.
+
         powerSaveReceiver = new BroadcastReceiver() {
             @Override public void onReceive(Context context, Intent intent) {
                 emitBattery(registerSticky(Intent.ACTION_BATTERY_CHANGED));
@@ -544,7 +508,7 @@ public class MainActivity extends AppCompatActivity {
         registerReceiver(powerSaveReceiver,
                 new IntentFilter(PowerManager.ACTION_POWER_SAVE_MODE_CHANGED));
 
-        // Screen lock / unlock. SCREEN_OFF ≈ locked; USER_PRESENT = unlocked.
+
         screenReceiver = new BroadcastReceiver() {
             @Override public void onReceive(Context context, Intent intent) {
                 String action = intent.getAction();
@@ -560,7 +524,7 @@ public class MainActivity extends AppCompatActivity {
         screenFilter.addAction(Intent.ACTION_USER_PRESENT);
         registerReceiver(screenReceiver, screenFilter);
 
-        // Network connectivity / transport type / cellular signal strength.
+
         connectivityManager = (ConnectivityManager) getSystemService(Context.CONNECTIVITY_SERVICE);
         if (connectivityManager != null) {
             networkCallback = new ConnectivityManager.NetworkCallback() {
@@ -603,13 +567,13 @@ public class MainActivity extends AppCompatActivity {
         }
     }
 
-    /** Read the current sticky value for an action without a standing receiver. */
+
     @Nullable
     private Intent registerSticky(String action) {
         return registerReceiver(null, new IntentFilter(action));
     }
 
-    /** Push current battery / network / theme so a freshly-loaded UI is populated. */
+
     private void emitSystemSnapshot() {
         emitBattery(registerSticky(Intent.ACTION_BATTERY_CHANGED));
         if (connectivityManager != null) {
@@ -679,7 +643,7 @@ public class MainActivity extends AppCompatActivity {
                     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
                         int s = caps.getSignalStrength();
                         if (s != Integer.MIN_VALUE) {
-                            signal = s; // dBm; closer to 0 is a stronger signal
+                            signal = s;
                         }
                     }
                 }
@@ -709,7 +673,7 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private void emitLock(boolean locked) {
-        // Lock/unlock are signals (no payload); name carries the state.
+
         if (bridge != null) {
             bridge.emitSystemEvent(locked ? "android:ScreenLocked" : "android:ScreenUnlocked", "{}");
         }
@@ -719,7 +683,7 @@ public class MainActivity extends AppCompatActivity {
         try {
             int mode = getResources().getConfiguration().uiMode & Configuration.UI_MODE_NIGHT_MASK;
             JSONObject o = new JSONObject();
-            // "isDarkMode" matches the context key the desktop platforms use.
+
             o.put("isDarkMode", mode == Configuration.UI_MODE_NIGHT_YES);
             if (bridge != null) bridge.emitSystemEvent("android:ThemeChanged", o.toString());
         } catch (Exception ignored) {
@@ -729,15 +693,14 @@ public class MainActivity extends AppCompatActivity {
     @Override
     public void onConfigurationChanged(Configuration newConfig) {
         super.onConfigurationChanged(newConfig);
-        // Fires for light/dark switches because the manifest lists uiMode in
-        // android:configChanges (otherwise the activity would be recreated).
+
         emitTheme();
     }
 
     @Override
     protected void onStart() {
         super.onStart();
-        // Battery: only monitor system events while the app is visible.
+
         if (!systemReceiversRegistered) {
             registerSystemEventReceivers();
             systemReceiversRegistered = true;

@@ -2,7 +2,6 @@
 Version=1.0
 Name=SurveyController
 Comment=SurveyController Desktop UI
-# The Exec line includes %u to pass the URL to the application
 Exec=/usr/local/bin/SurveyController %u
 Terminal=false
 Type=Application
@@ -10,4 +9,3 @@ Icon=SurveyController
 Categories=Utility;
 StartupWMClass=SurveyController
 
- 

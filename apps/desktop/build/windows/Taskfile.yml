@@ -75,7 +75,6 @@ tasks:
       - sh: '[ "{{.INSTALL_SCOPE}}" = "user" ]'
         msg: "Only user install scope is supported"
     cmds:
-      # Create the Microsoft WebView2 bootstrapper if it doesn't exist
       - wails3 generate webview2bootstrapper -dir "{{.ROOT_DIR}}/build/windows/nsis"
       - |
         {{if eq OS "windows"}}

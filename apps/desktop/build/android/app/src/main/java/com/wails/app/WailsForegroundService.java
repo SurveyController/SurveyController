@@ -12,18 +12,11 @@ import android.os.IBinder;
 import androidx.annotation.Nullable;
 import androidx.core.app.NotificationCompat;
 
-/**
- * A minimal started foreground service. It does no work of its own — its purpose
- * is to keep the app's process alive (with the required ongoing notification) so
- * the developer's Go goroutines keep running while the app is backgrounded,
- * which Android would otherwise be free to kill. Start it from
- * {@link WailsBridge#startForegroundService(String)} and stop it with
- * {@link WailsBridge#stopForegroundService()}.
- */
+
 public class WailsForegroundService extends android.app.Service {
     public static final String ACTION_START = "com.wails.app.FGS_START";
     private static final String CHANNEL_ID = "wails_foreground";
-    private static final int NOTIFICATION_ID = 0x57A1; // "WAI"
+    private static final int NOTIFICATION_ID = 0x57A1;
 
     @Override
     public int onStartCommand(Intent intent, int flags, int startId) {
@@ -62,7 +55,7 @@ public class WailsForegroundService extends android.app.Service {
         } else {
             startForeground(NOTIFICATION_ID, n);
         }
-        // Restart if the OS kills us while still wanted.
+
         return START_STICKY;
     }
 

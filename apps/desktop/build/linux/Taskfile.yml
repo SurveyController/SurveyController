@@ -4,11 +4,6 @@ includes:
   common: ../Taskfile.yml
 
 vars:
-  # Signing configuration - edit these values for your project
-  # PGP_KEY: "path/to/signing-key.asc"
-  # SIGN_ROLE: "builder"  # Options: origin, maint, archive, builder
-  #
-  # Password is stored securely in system keychain. Run: wails3 setup signing
 
 tasks:
   build:

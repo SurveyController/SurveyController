@@ -7,14 +7,10 @@ vars:
   APP_ID: '{{.APP_ID | default "com.wails.app"}}'
   MIN_SDK: '21'
   TARGET_SDK: '34'
-  # The emulator runs the host architecture; physical devices are arm64
   HOST_ARCH:
     sh: '[ "$(uname -m)" = "x86_64" ] && echo "amd64" || echo "arm64"'
-  # System-image ABI for the host, used in the "create an AVD" hint below.
   ANDROID_ABI:
     sh: '[ "$(uname -m)" = "arm64" ] && echo "arm64-v8a" || echo "x86_64"'
-  # SDK location: $ANDROID_HOME / $ANDROID_SDK_ROOT, else the per-OS default
-  # (macOS: ~/Library/Android/sdk, Linux/other: ~/Android/Sdk)
   SDK_ROOT:
     sh: 'echo "${ANDROID_HOME:-${ANDROID_SDK_ROOT:-$([ -d "$HOME/Library/Android/sdk" ] && echo "$HOME/Library/Android/sdk" || echo "$HOME/Android/Sdk")}}"'
   ADB:
@@ -56,7 +52,6 @@ tasks:
     summary: Compile Go code to shared library (.so)
     cmds:
       - |
-        # Locate the NDK: $ANDROID_NDK_HOME, or the newest installed NDK
         NDK_ROOT="$ANDROID_NDK_HOME"
         if [ -z "$NDK_ROOT" ]; then
           SDK_ROOT="{{.SDK_ROOT}}"
@@ -68,7 +63,6 @@ tasks:
           exit 1
         fi
 
-        # Determine toolchain based on host OS
         case "$(uname -s)" in
           Darwin) HOST_TAG="darwin-x86_64" ;;
           Linux)  HOST_TAG="linux-x86_64" ;;
@@ -77,7 +71,6 @@ tasks:
 
         TOOLCHAIN="$NDK_ROOT/toolchains/llvm/prebuilt/$HOST_TAG"
 
-        # Set compiler based on architecture
         case "{{.ARCH}}" in
           arm64)
             export CC="$TOOLCHAIN/bin/aarch64-linux-android{{.MIN_SDK}}-clang"
@@ -150,8 +143,6 @@ tasks:
     cmds:
       - |
         cd build/android
-        # The exec bit is lost when gradlew is extracted from the embedded
-        # build assets, so restore it before invoking the wrapper.
         chmod +x ./gradlew
         ./gradlew assembleDebug
         cp app/build/outputs/apk/debug/app-debug.apk "../../{{.BIN_DIR}}/{{.APP_NAME}}.apk"
@@ -165,8 +156,6 @@ tasks:
     cmds:
       - |
         cd build/android
-        # The exec bit is lost when gradlew is extracted from the embedded
-        # build assets, so restore it before invoking the wrapper.
         chmod +x ./gradlew
         ./gradlew assembleRelease
         cp app/build/outputs/apk/release/app-release.apk "../../{{.BIN_DIR}}/{{.APP_NAME}}.apk"
@@ -193,8 +182,6 @@ tasks:
     generates:
       - frontend/bindings/**/*
     cmds:
-      # Bindings are generated from the Go AST; CGO is disabled so the NDK
-      # is not required for this step
       - wails3 generate bindings -f '-tags android' -clean=true
     env:
       GOOS: android
@@ -206,13 +193,11 @@ tasks:
     silent: true
     cmds:
       - |
-        # Check if an emulator is already running
         if "{{.ADB}}" devices | grep -q "emulator"; then
           echo "Emulator already running"
           exit 0
         fi
 
-        # Get first available AVD
         AVD_NAME=$("{{.EMULATOR}}" -list-avds | tail -1)
         if [ -z "$AVD_NAME" ]; then
           echo "No Android Virtual Devices found. Create one with:"
@@ -221,16 +206,8 @@ tasks:
         fi
 
         echo "Starting emulator: $AVD_NAME"
-        # Start the emulator daemonized so it outlives this task step. go-task's
-        # shell tracks background jobs by PID and reaps them when the command's
-        # interpreter finishes (which nohup/setsid alone don't prevent — the kill
-        # is direct), so a bare `emulator &` is gone before the later
-        # install/launch steps run. Launch it from a short-lived child shell that
-        # backgrounds the emulator and exits immediately: the emulator is then
-        # reparented to init/launchd and go-task's shell has no handle to reap it.
         nohup sh -c "'{{.EMULATOR}}' -avd '$AVD_NAME' -no-snapshot-load </dev/null >/dev/null 2>&1 &" >/dev/null 2>&1
 
-        # Wait for emulator to boot (max 120 seconds)
         echo "Waiting for emulator to boot..."
         "{{.ADB}}" wait-for-device
 
