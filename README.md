@@ -41,6 +41,9 @@
 
 **环境要求：** Go 1.26+，Git，Node.js，npm，Wails v3
 
+当前只发布 Windows 安装包。
+macOS 可从源码启动，不提供打包分发。
+
 <details>
 <summary>Windows 使用</summary>
 

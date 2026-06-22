@@ -1,0 +1,174 @@
+name: Release Windows
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+env:
+  GO_VERSION: "1.26.4"
+  NODE_VERSION: "22"
+  WAILS_VERSION: "v3.0.0-alpha2.104"
+  R2_RELEASE_PREFIX: "surveycontroller/win/stable"
+
+concurrency:
+  group: release-windows-${{ github.ref_name }}
+  cancel-in-progress: false
+
+jobs:
+  build-package-upload:
+    name: Build, Package, Upload
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          cache-dependency-path: |
+            packages/proxycore/go.sum
+            packages/surveycore/go.sum
+            apps/desktop/go.sum
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: apps/desktop/frontend/package-lock.json
+
+      - name: Install Wails CLI
+        run: go install github.com/wailsapp/wails/v3/cmd/wails3@${{ env.WAILS_VERSION }}
+
+      - name: Install Task
+        shell: powershell
+        run: |
+          go install github.com/go-task/task/v3/cmd/task@latest
+          "$(go env GOPATH)\bin" >> $env:GITHUB_PATH
+
+      - name: Install NSIS
+        shell: powershell
+        run: |
+          choco install nsis --yes --no-progress
+          $nsisPath = "${env:ProgramFiles(x86)}\NSIS"
+          if (Test-Path $nsisPath) {
+            $nsisPath >> $env:GITHUB_PATH
+          }
+
+      - name: Build Windows package
+        working-directory: apps/desktop
+        shell: powershell
+        run: task windows:package ARCH=amd64 INSTALL_SCOPE=user
+
+      - name: Resolve release metadata
+        id: release_meta
+        shell: powershell
+        run: |
+          $tag = "${{ github.ref_name }}"
+          $version = $tag
+          $releaseDir = Join-Path "${{ runner.temp }}" "release"
+          New-Item -ItemType Directory -Force -Path $releaseDir | Out-Null
+
+          $installerName = "SurveyController $version.exe"
+
+          Copy-Item -Force "apps/desktop/bin/SurveyController-amd64-installer.exe" (Join-Path $releaseDir $installerName)
+
+          "tag=$tag" >> $env:GITHUB_OUTPUT
+          "version=$version" >> $env:GITHUB_OUTPUT
+          "release_dir=$releaseDir" >> $env:GITHUB_OUTPUT
+          "installer_name=$installerName" >> $env:GITHUB_OUTPUT
+
+      - name: Create or keep draft release
+        shell: powershell
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $tag = "${{ steps.release_meta.outputs.tag }}"
+          $releaseJson = gh release view $tag --json isDraft --repo "${{ github.repository }}" 2>$null
+          if ($LASTEXITCODE -eq 0) {
+            $release = $releaseJson | ConvertFrom-Json
+            if (-not $release.isDraft) {
+              throw "Release $tag already exists and is not a draft."
+            }
+            exit 0
+          }
+
+          gh release create $tag `
+            --repo "${{ github.repository }}" `
+            --draft `
+            --verify-tag `
+            --notes "Windows release draft for $tag."
+
+      - name: Upload assets to GitHub Release draft
+        shell: powershell
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $releaseDir = "${{ steps.release_meta.outputs.release_dir }}"
+          gh release upload "${{ steps.release_meta.outputs.tag }}" `
+            (Join-Path $releaseDir "${{ steps.release_meta.outputs.installer_name }}") `
+            --clobber `
+            --repo "${{ github.repository }}"
+
+      - name: Upload workflow artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-release-${{ steps.release_meta.outputs.version }}
+          path: ${{ steps.release_meta.outputs.release_dir }}
+          if-no-files-found: error
+
+      - name: Normalize R2 endpoint
+        id: r2_endpoint
+        shell: powershell
+        env:
+          R2_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID }}
+        run: |
+          $raw = "${env:R2_ACCOUNT_ID}"
+          $raw = $raw -replace '^https?://', ''
+          $raw = $raw.Split('/')[0]
+          $raw = $raw -replace '\.r2\.cloudflarestorage\.com$', ''
+          if ([string]::IsNullOrWhiteSpace($raw)) {
+            throw "R2_ACCOUNT_ID is empty or invalid"
+          }
+          "endpoint=https://$raw.r2.cloudflarestorage.com" >> $env:GITHUB_OUTPUT
+
+      - name: Upload Windows artifacts to R2
+        shell: powershell
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          AWS_DEFAULT_REGION: auto
+          AWS_RETRY_MODE: standard
+          AWS_MAX_ATTEMPTS: "3"
+          R2_BUCKET: ${{ secrets.R2_BUCKET }}
+        run: |
+          if ([string]::IsNullOrWhiteSpace($env:AWS_ACCESS_KEY_ID) -or
+              [string]::IsNullOrWhiteSpace($env:AWS_SECRET_ACCESS_KEY) -or
+              [string]::IsNullOrWhiteSpace($env:R2_BUCKET)) {
+            throw "R2 upload secrets are not configured"
+          }
+
+          $aws = Get-Command aws -ErrorAction SilentlyContinue
+          if (-not $aws) {
+            choco install awscli --yes --no-progress
+          }
+
+          $releaseDir = "${{ steps.release_meta.outputs.release_dir }}"
+          foreach ($file in Get-ChildItem $releaseDir -File) {
+            aws s3 cp $file.FullName "s3://${env:R2_BUCKET}/${env:R2_RELEASE_PREFIX}/$($file.Name)" `
+              --cache-control "public, max-age=31536000, immutable" `
+              --content-type "application/vnd.microsoft.portable-executable" `
+              --endpoint-url "${{ steps.r2_endpoint.outputs.endpoint }}"
+          }
+
+          $installerPath = Join-Path $releaseDir "${{ steps.release_meta.outputs.installer_name }}"
+          aws s3 cp $installerPath "s3://${env:R2_BUCKET}/SurveyController_latest_setup.exe" `
+            --cache-control "no-cache, no-store, must-revalidate" `
+            --content-type "application/vnd.microsoft.portable-executable" `
+            --endpoint-url "${{ steps.r2_endpoint.outputs.endpoint }}"

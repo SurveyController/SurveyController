@@ -72,7 +72,7 @@ tasks:
   build:frontend:
     label: build:frontend (DEV={{.DEV}} RUNNER={{.PACKAGE_MANAGER}})
     summary: Build the frontend project
-    # macOS universal builds invoke this through parallel deps.
+    # Platform builds may invoke this through parallel deps.
     run: once
     dir: frontend
     sources:
@@ -187,7 +187,7 @@ tasks:
       - wails3 generate bindings -f '{{.BUILD_FLAGS}}' -clean=true{{if eq .OBFUSCATED "true"}} -obfuscated{{end}} -ts -i
 
   generate:icons:
-    summary: Generates Windows `.ico` and macOS `.icns` from an image.
+    summary: Generates platform icon assets from an image.
     run: once
     dir: build
     sources:
