@@ -296,7 +296,7 @@ async function pollRunState() {
 </script>
 
 <template>
-  <div class="h-screen overflow-hidden bg-[#f4f8fc] text-neutral-950 dark:bg-slate-950 dark:text-slate-100">
+  <div class="h-screen overflow-hidden bg-transparent text-neutral-950 dark:text-slate-100">
     <div v-if="loading" class="grid h-full place-items-center text-sm text-neutral-500">载入中</div>
 
     <div v-else-if="error && !shell" class="grid h-full place-items-center">
@@ -334,7 +334,7 @@ async function pollRunState() {
           @change="currentPage = $event"
         />
 
-        <main class="flex min-w-0 flex-1 flex-col">
+        <main class="flex min-w-0 flex-1 flex-col rounded-tl-xl border-l border-t border-slate-200 bg-white shadow-sm dark:border-white/10 dark:bg-[#272727] dark:shadow-none overflow-hidden relative">
           <div v-if="error" class="mx-3 mt-2 rounded-md border border-red-100 bg-red-50 px-3 py-1.5 text-xs text-red-700 dark:border-red-950 dark:bg-red-950 dark:text-red-200">
             {{ error }}
           </div>

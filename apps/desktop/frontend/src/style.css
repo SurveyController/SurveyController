@@ -11,13 +11,13 @@
 :root {
   font-family: "SCInter", "Microsoft YaHei UI", "Segoe UI", sans-serif;
   color-scheme: light;
-  background: #f4f8fc;
+  background: #f3f3f3;
 }
 
 @media (prefers-color-scheme: dark) {
   :root {
     color-scheme: dark;
-    background: #020617;
+    background: #202020;
   }
 }
 
@@ -52,23 +52,23 @@ select {
 
 @layer components {
   .panel {
-    @apply rounded-lg border border-slate-200 bg-white shadow-sm shadow-slate-200/60 dark:border-slate-800 dark:bg-slate-950 dark:shadow-none;
+    @apply rounded-lg border border-slate-200 bg-white shadow-sm shadow-slate-200/60 dark:border-white/10 dark:bg-white/[0.04] dark:shadow-none;
   }
 
   .work-panel {
-    @apply rounded-lg border border-slate-200 bg-white shadow-sm shadow-slate-200/50 dark:border-slate-800 dark:bg-slate-950 dark:shadow-none;
+    @apply rounded-lg border border-slate-200 bg-white shadow-sm shadow-slate-200/50 dark:border-white/10 dark:bg-white/[0.04] dark:shadow-none;
   }
 
   .section-title {
-    @apply border-b border-slate-100 px-3 py-2 text-sm font-semibold text-slate-900 dark:border-slate-800 dark:text-slate-100;
+    @apply border-b border-slate-100 px-3 py-2 text-sm font-semibold text-slate-900 dark:border-white/10 dark:text-slate-100;
   }
 
   .control {
-    @apply h-8 rounded-md border border-slate-200 bg-white px-2.5 text-xs text-slate-900 outline-none transition focus:border-teal-600 focus:ring-2 focus:ring-teal-600/15 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-100;
+    @apply h-8 rounded-md border border-slate-200 bg-white px-2.5 text-xs text-slate-900 outline-none transition focus:border-blue-500 focus:ring-1 focus:ring-blue-500 dark:border-white/10 dark:bg-white/[0.06] dark:text-slate-100;
   }
 
   .nav-item {
-    @apply flex h-10 w-full items-center gap-3 rounded-md px-3 text-left text-sm font-medium text-slate-600 transition hover:bg-slate-100 hover:text-slate-950 dark:text-slate-400 dark:hover:bg-slate-900 dark:hover:text-slate-100;
+    @apply flex h-10 w-full items-center gap-3 rounded-md px-3 text-left text-sm font-medium text-slate-600 transition hover:bg-slate-100 hover:text-slate-950 dark:text-slate-400 dark:hover:bg-white/[0.06] dark:hover:text-slate-100;
   }
 
   .nav-item-active {
@@ -82,19 +82,19 @@ select {
   }
 
   .side-nav-item {
-    @apply relative flex w-full flex-col items-center justify-center rounded-lg text-neutral-500 transition hover:bg-white hover:text-blue-600 dark:text-slate-400 dark:hover:bg-slate-900 dark:hover:text-blue-300;
+    @apply relative flex w-full flex-col items-center justify-center rounded-lg text-neutral-600 transition hover:bg-black/5 dark:text-neutral-400 dark:hover:bg-white/5;
     min-height: var(--side-nav-item-h);
     gap: clamp(0.22rem, 0.45vw, 0.42rem);
   }
 
   .side-nav-active {
-    @apply bg-white text-blue-600 shadow-sm shadow-slate-200/60 dark:bg-slate-900 dark:text-blue-300 dark:shadow-none;
+    @apply text-black bg-black/[0.03] dark:bg-white/[0.03] dark:text-white shadow-none;
   }
 
   .side-nav-active::before {
-    @apply absolute left-0 w-1 rounded-full bg-blue-600 content-[''];
-    top: 27%;
-    height: 42%;
+    @apply absolute left-0 w-[3px] rounded-full bg-[#005fb8] dark:bg-[#60cdff] content-[''];
+    top: 25%;
+    height: 50%;
   }
 
   .toolbar-command {
@@ -112,13 +112,13 @@ select {
   }
 
   .number-stepper {
-    @apply flex items-center overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm dark:border-slate-700 dark:bg-slate-900;
+    @apply flex items-center overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm dark:border-white/10 dark:bg-white/[0.06];
     height: var(--control-h);
     min-width: clamp(7.5rem, 10vw, 9.5rem);
   }
 
   .toggle-shell {
-    @apply relative rounded-full border border-neutral-400 bg-white transition dark:border-slate-600 dark:bg-slate-900;
+    @apply relative rounded-full border border-neutral-400 bg-white transition dark:border-white/20 dark:bg-white/10;
     height: clamp(1.6rem, 1.9vw, 1.85rem);
     width: clamp(3.1rem, 3.7vw, 3.55rem);
   }
@@ -141,7 +141,7 @@ select {
   }
 
   .select-button {
-    @apply flex items-center justify-between rounded-md border border-slate-200 bg-white shadow-sm hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-900 dark:hover:bg-slate-800;
+    @apply flex items-center justify-between rounded-md border border-slate-200 bg-white shadow-sm hover:bg-slate-50 dark:border-white/10 dark:bg-white/[0.06] dark:hover:bg-white/[0.08];
     height: var(--control-h);
     min-width: clamp(7.5rem, 10vw, 10rem);
     padding-inline: clamp(0.7rem, 1vw, 1rem);
@@ -149,7 +149,7 @@ select {
   }
 
   .tab-button {
-    @apply relative rounded-lg border border-slate-200 bg-white font-semibold shadow-sm dark:border-slate-800 dark:bg-slate-950;
+    @apply relative rounded-lg border border-slate-200 bg-white font-semibold shadow-sm dark:border-white/10 dark:bg-white/[0.06];
     height: clamp(2.2rem, 2.6vw, 2.55rem);
     padding-inline: clamp(0.85rem, 1.2vw, 1.2rem);
     font-size: var(--text-control);
@@ -192,7 +192,7 @@ select {
 }
 
 .app-titlebar {
-  @apply flex shrink-0 items-center justify-between border-b border-slate-200 bg-[#edf5fb]/95 backdrop-blur-xl dark:border-slate-800 dark:bg-slate-950/90;
+  @apply flex shrink-0 items-center justify-between;
   height: var(--app-titlebar-h);
   padding-left: clamp(0.8rem, 1.1vw, 1.25rem);
 }
@@ -221,7 +221,7 @@ select {
 }
 
 .side-nav {
-  @apply flex h-full shrink-0 flex-col border-r border-slate-200 bg-[#edf5fb] dark:border-slate-800 dark:bg-slate-950;
+  @apply flex h-full shrink-0 flex-col;
   width: var(--side-nav-w);
 }
 
@@ -236,7 +236,7 @@ select {
 }
 
 .dashboard-root {
-  @apply flex min-h-0 flex-1 flex-col overflow-hidden bg-[#f7fbff] dark:bg-slate-950;
+  @apply flex min-h-0 flex-1 flex-col overflow-hidden bg-transparent dark:bg-transparent;
   padding: var(--page-pad);
 }
 
@@ -253,7 +253,7 @@ select {
 }
 
 .qr-button {
-  @apply grid shrink-0 place-items-center rounded-lg border border-slate-200 bg-white text-neutral-900 shadow-sm dark:border-slate-800 dark:bg-slate-900 dark:text-slate-100;
+  @apply grid shrink-0 place-items-center rounded-lg border border-slate-200 bg-white text-neutral-900 shadow-sm dark:border-white/10 dark:bg-white/[0.06] dark:text-slate-100;
   height: var(--control-h);
   width: var(--control-h);
 }
@@ -275,7 +275,7 @@ select {
 }
 
 .survey-url-input {
-  @apply min-w-0 flex-1 rounded-lg border border-slate-200 bg-white text-neutral-500 shadow-inner outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-500/15 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-300;
+  @apply min-w-0 flex-1 rounded-lg border border-slate-200 bg-white text-neutral-500 shadow-inner outline-none transition focus:border-blue-500 focus:ring-1 focus:ring-blue-500 dark:border-white/10 dark:bg-white/[0.06] dark:text-slate-300;
   height: var(--control-h);
   padding-inline: clamp(0.75rem, 1vw, 1rem);
   font-size: clamp(0.9rem, 0.96vw, 1rem);
@@ -344,7 +344,7 @@ select {
 }
 
 .runtime-card {
-  @apply flex items-center rounded-lg border border-slate-200 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-900;
+  @apply flex items-center rounded-lg border border-slate-200 bg-white shadow-sm dark:border-white/10 dark:bg-white/[0.04];
   gap: clamp(0.42rem, 0.6vw, 0.6rem);
   padding: clamp(0.5rem, 0.65vw, 0.65rem);
 }
@@ -374,7 +374,7 @@ select {
 }
 
 .quota-card {
-  @apply rounded-xl border border-slate-200 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-900;
+  @apply rounded-xl border border-slate-200 bg-white shadow-sm dark:border-white/10 dark:bg-white/[0.04];
   padding: clamp(0.55rem, 0.8vw, 0.8rem);
 }
 
@@ -442,7 +442,7 @@ select {
 }
 
 .session-row {
-  @apply grid items-center gap-2 rounded-md border border-slate-200 bg-slate-50 px-3 py-2 dark:border-slate-800 dark:bg-slate-900;
+  @apply grid items-center gap-2 rounded-md border border-slate-200 bg-slate-50 px-3 py-2 dark:border-white/10 dark:bg-white/[0.04];
   grid-template-columns: minmax(7rem, 1fr) minmax(6rem, 0.9fr) 3rem;
 }
 
@@ -508,7 +508,7 @@ select {
 }
 
 .run-footer {
-  @apply flex shrink-0 items-center rounded-lg border border-slate-200 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-900;
+  @apply flex shrink-0 items-center rounded-lg border border-slate-200 bg-white shadow-sm dark:border-white/10 dark:bg-white/[0.04];
   margin-top: clamp(0.4rem, 0.55vw, 0.55rem);
   height: clamp(3rem, 4vh, 3.5rem);
   gap: clamp(0.45rem, 0.8vw, 0.8rem);
@@ -545,7 +545,7 @@ select {
 }
 
 .run-button-secondary {
-  @apply border border-slate-200 bg-white text-neutral-700 hover:bg-slate-50 disabled:text-neutral-400 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-200 dark:hover:bg-slate-900 dark:disabled:text-slate-600;
+  @apply border border-slate-200 bg-white text-neutral-700 hover:bg-slate-50 disabled:text-neutral-400 dark:border-white/10 dark:bg-white/[0.06] dark:text-slate-200 dark:hover:bg-white/[0.08] dark:disabled:text-slate-500;
 }
 
 @media (max-width: 1500px) {
