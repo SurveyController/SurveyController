@@ -77,7 +77,7 @@ func standardizeQuestions(rawQuestions []map[string]any) []model.QuestionMeta {
 		}
 		result = append(result, question)
 	}
-	return result
+	return attachLogicMetadata(rawQuestions, result)
 }
 
 func normalizeQuestion(raw map[string]any, fallbackNum int, pageMap map[string]int) model.QuestionMeta {
@@ -102,31 +102,35 @@ func normalizeQuestion(raw map[string]any, fallbackNum int, pageMap map[string]i
 	}
 
 	return model.QuestionMeta{
-		Num:             fallbackNum,
-		Title:           normalizeText(raw["title"]),
-		Description:     normalizeText(raw["description"]),
-		TypeCode:        typeCode,
-		Options:         optionCount,
-		Rows:            maxInt(1, len(rowTexts)),
-		RowTexts:        rowTexts,
-		Page:            page,
-		OptionTexts:     optionTexts,
-		Provider:        model.ProviderQQ,
-		ProviderID:      strings.TrimSpace(stringValue(raw["id"])),
-		ProviderPageID:  strings.TrimSpace(stringValue(raw["page_id"])),
-		ProviderType:    providerType,
-		Required:        boolValue(raw["required"]),
-		IsDescription:   isDescription,
-		IsRating:        providerType == "nps" || providerType == "star",
-		RatingMax:       ratingMax(providerType, optionCount),
-		TextInputs:      textInputs(providerType),
-		IsTextLike:      providerType == "text" || providerType == "textarea",
-		IsMultiText:     false,
-		LogicStatus:     model.LogicParseStatusUnknown,
-		MultiMinLimit:   multiMin,
-		MultiMaxLimit:   multiMax,
-		ForcedTexts:     []string{},
-		FillableOptions: buildFillableOptionIndices(raw, providerType),
+		Num:               fallbackNum,
+		Title:             normalizeText(raw["title"]),
+		Description:       normalizeText(raw["description"]),
+		TypeCode:          typeCode,
+		Options:           optionCount,
+		Rows:              maxInt(1, len(rowTexts)),
+		RowTexts:          rowTexts,
+		Page:              page,
+		OptionTexts:       optionTexts,
+		Provider:          model.ProviderQQ,
+		ProviderID:        strings.TrimSpace(stringValue(raw["id"])),
+		ProviderPageID:    strings.TrimSpace(stringValue(raw["page_id"])),
+		ProviderType:      providerType,
+		ProviderPageRaw:   raw["page"],
+		Required:          boolValue(raw["required"]),
+		IsDescription:     isDescription,
+		IsRating:          providerType == "nps" || providerType == "star",
+		RatingMax:         ratingMax(providerType, optionCount),
+		TextInputs:        textInputs(providerType),
+		IsTextLike:        providerType == "text" || providerType == "textarea",
+		IsMultiText:       false,
+		LogicStatus:       model.LogicParseStatusNone,
+		MultiMinLimit:     multiMin,
+		MultiMaxLimit:     multiMax,
+		ForcedTexts:       []string{},
+		FillableOptions:   buildFillableOptionIndices(raw, providerType),
+		QuestionMedia:     questionMedia(raw, providerType),
+		Unsupported:       !supportedProviderTypes[providerType] && !isDescription,
+		UnsupportedReason: unsupportedReason(providerType),
 	}
 }
 
@@ -263,6 +267,16 @@ func textInputs(providerType string) int {
 		return 1
 	}
 	return 0
+}
+
+func unsupportedReason(providerType string) string {
+	if label := blockedRuntimeProviderTypes[providerType]; label != "" {
+		return "当前版本暂不支持腾讯问卷" + label + "题"
+	}
+	if providerType == "" || supportedProviderTypes[providerType] {
+		return ""
+	}
+	return "暂不支持腾讯题型：" + providerType
 }
 
 func mergeDescriptions(question model.QuestionMeta, descriptions []model.QuestionMeta) model.QuestionMeta {

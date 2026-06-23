@@ -12,8 +12,10 @@ import (
 var (
 	htmlTagRE         = regexp.MustCompile(`<[^>]+>`)
 	spaceRE           = regexp.MustCompile(`\s+`)
-	fillBlankTokenRE  = regexp.MustCompile(`(?i)\{fillblank-[^{}]+\}`)
+	fillBlankTokenRE  = regexp.MustCompile(`(?i)\{(fillblank-[^{}]+)\}`)
 	fillBlankSuffixRE = regexp.MustCompile(`(?i)\s*[_＿]*\s*\{fillblank-[^{}]+\}`)
+	questionIDTokenRE = regexp.MustCompile(`(?i)\bq-[A-Za-z0-9_-]+\b`)
+	pageIDTokenRE     = regexp.MustCompile(`(?i)\bp-[A-Za-z0-9_-]+\b`)
 )
 
 func firstAny(values ...any) any {

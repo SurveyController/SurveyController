@@ -21,7 +21,7 @@
     "max_length": 2,
     "options": [
       { "id": "a", "text": "A" },
-      { "id": "b", "text": "其他 {fillblank-1}" }
+      { "id": "b", "text": "其他 {fillblank-1}", "image_url": "//img.test/other.png" }
     ]
   },
   {

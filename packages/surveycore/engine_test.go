@@ -89,7 +89,10 @@ func TestRunExecutionLeaseLifecycle(t *testing.T) {
 		Target:          2,
 		Threads:         1,
 		RandomIPEnabled: true,
-	}, func(_ context.Context, _ *RuntimeConfig, _ EventHandler) (*RunResult, error) {
+	}, func(_ context.Context, cfg *RuntimeConfig, _ EventHandler) (*RunResult, error) {
+		if cfg.ActiveProxyAddress == "" {
+			t.Fatal("missing active proxy address")
+		}
 		return &RunResult{Success: 1}, nil
 	}, nil, ExecutionOptions{LeaseManager: leases})
 	if err != nil {

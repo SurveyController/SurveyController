@@ -34,22 +34,28 @@ func (c *Client) RunWithExecutionOptions(ctx context.Context, cfg *RuntimeConfig
 		provider = cfg.SurveyProvider
 	}
 	if provider == model.ProviderQQ {
-		runner := tencent.Runner{}
-		result, err := runner.Run(ctx, cfg, func(event tencent.Event) {
-			if handler == nil {
-				return
-			}
-			handler(Event{
-				Worker:  event.Worker,
-				Message: event.Message,
-				Success: event.Success,
-				Fail:    event.Fail,
-				Current: event.Current,
-				Total:   event.Total,
-				Time:    event.Time,
+		runner := tencent.Runner{HTTP: httpClientOrDefault(c.httpClient)}
+		result, err := RunExecution(ctx, cfg, func(runCtx context.Context, local *RuntimeConfig, localHandler EventHandler) (*RunResult, error) {
+			runResult, runErr := runner.Run(runCtx, local, func(event tencent.Event) {
+				if localHandler == nil {
+					return
+				}
+				localHandler(Event{
+					Worker:  event.Worker,
+					Message: event.Message,
+					Success: event.Success,
+					Fail:    event.Fail,
+					Current: event.Current,
+					Total:   event.Total,
+					Time:    event.Time,
+				})
 			})
-		})
-		return resultFromTencent(result), fmt.Errorf("%w: %v", ErrUnsupportedOperation, err)
+			return resultFromTencent(runResult), runErr
+		}, handler, options)
+		if err != nil {
+			return result, wrapRunError(err)
+		}
+		return result, nil
 	}
 	if provider == model.ProviderWJX {
 		runner := wjx.Runner{Client: c.httpClient.Client}

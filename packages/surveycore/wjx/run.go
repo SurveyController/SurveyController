@@ -97,7 +97,7 @@ func (r Runner) submit(ctx context.Context, cfg *model.RuntimeConfig, submitData
 	form := url.Values{}
 	form.Set("submitdata", submitData)
 	form.Set("sceneId", "q0hcfsca")
-	responseText, err := r.postForm(ctx, submitEndpoint(cfg.URL), cfg.URL, query, form)
+	responseText, err := r.postForm(ctx, submitEndpoint(cfg.URL), cfg.URL, query, form, cfg.ActiveProxyAddress)
 	if err != nil {
 		return err
 	}

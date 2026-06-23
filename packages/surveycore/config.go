@@ -54,8 +54,14 @@ func cloneQuestions(src []QuestionMeta) []QuestionMeta {
 	for i := range cloned {
 		cloned[i].RowTexts = append([]string(nil), src[i].RowTexts...)
 		cloned[i].OptionTexts = append([]string(nil), src[i].OptionTexts...)
+		cloned[i].TextInputLabels = append([]string(nil), src[i].TextInputLabels...)
+		cloned[i].JumpRules = cloneMapList(src[i].JumpRules)
+		cloned[i].DisplayConditions = cloneMapList(src[i].DisplayConditions)
+		cloned[i].ControlsDisplayTargets = cloneMapList(src[i].ControlsDisplayTargets)
+		cloned[i].QuestionMedia = cloneMapList(src[i].QuestionMedia)
 		cloned[i].ForcedTexts = append([]string(nil), src[i].ForcedTexts...)
 		cloned[i].FillableOptions = append([]int(nil), src[i].FillableOptions...)
+		cloned[i].AttachedOptionSelects = cloneMapList(src[i].AttachedOptionSelects)
 	}
 	return cloned
 }
@@ -82,6 +88,8 @@ func buildDefaultQuestionEntries(questions []QuestionMeta) []QuestionEntry {
 			ProviderQuestionID:    &providerID,
 			ProviderPageID:        &pageID,
 			FillableOptionIndices: append([]int(nil), question.FillableOptions...),
+			AttachedOptionSelects: cloneMapList(question.AttachedOptionSelects),
+			IsLocation:            question.IsLocation,
 			PsychoBias:            "custom",
 		}
 		if len(question.ForcedTexts) > 0 {

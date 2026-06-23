@@ -7,7 +7,9 @@ import (
 	"strings"
 	"time"
 
+	"surveycontroller/surveycore/internal/httpjson"
 	"surveycontroller/surveycore/internal/model"
+	"surveycontroller/surveycore/internal/proxyhttp"
 )
 
 const resolution = "1920px*1080px"
@@ -44,7 +46,7 @@ func (r Runner) Run(ctx context.Context, cfg *model.RuntimeConfig, handler Event
 			result.Status = "stopped"
 			return result, err
 		}
-		initData, err := r.initAnswer(ctx, origin, shortURL)
+		initData, err := r.initAnswer(ctx, origin, shortURL, cfg.ActiveProxyAddress)
 		if err != nil {
 			result.Fail++
 			emit(handler, "初始化失败", false, true, result.Success+result.Fail, target)
@@ -65,7 +67,7 @@ func (r Runner) Run(ctx context.Context, cfg *model.RuntimeConfig, handler Event
 			"resolution":      resolution,
 			"sourceDetail":    1,
 		}
-		if err := r.saveAnswers(ctx, origin, shortURL, initData, body); err != nil {
+		if err := r.saveAnswers(ctx, origin, shortURL, initData, body, cfg.ActiveProxyAddress); err != nil {
 			result.Fail++
 			emit(handler, "提交失败", false, true, result.Success+result.Fail, target)
 			return result, fmt.Errorf("提交失败: %w", err)
@@ -77,12 +79,16 @@ func (r Runner) Run(ctx context.Context, cfg *model.RuntimeConfig, handler Event
 	return result, nil
 }
 
-func (r Runner) initAnswer(ctx context.Context, origin string, shortURL string) (answerInit, error) {
+func (r Runner) initAnswer(ctx context.Context, origin string, shortURL string, proxyAddress string) (answerInit, error) {
 	timeCode := fmt.Sprintf("%d", time.Now().UnixNano())
 	headers := requestHeaders(origin, shortURL, r.UserAgent, "")
 	endpoint := fmt.Sprintf("%s/v1/survey/answer/noauth/init/%s?timeCode=%s&accountCode=CDM&resolution=%s", strings.TrimRight(origin, "/"), shortURL, timeCode, resolution)
 	var payload apiEnvelope
-	if err := httpDoerOrDefault(r.HTTP).DoJSON(ctx, http.MethodGet, endpoint, headers, nil, &payload); err != nil {
+	doer, err := r.httpDoer(proxyAddress)
+	if err != nil {
+		return answerInit{}, err
+	}
+	if err := doer.DoJSON(ctx, http.MethodGet, endpoint, headers, nil, &payload); err != nil {
 		return answerInit{}, err
 	}
 	data, err := ensureAPIOK(payload, "初始化")
@@ -100,17 +106,34 @@ func (r Runner) initAnswer(ctx context.Context, origin string, shortURL string) 
 	return answerInit{AnswerToken: token, TimestampMS: timestamp, TimeCode: timeCode}, nil
 }
 
-func (r Runner) saveAnswers(ctx context.Context, origin string, shortURL string, initData answerInit, body map[string]any) error {
+func (r Runner) saveAnswers(ctx context.Context, origin string, shortURL string, initData answerInit, body map[string]any, proxyAddress string) error {
 	headers := requestHeaders(origin, shortURL, r.UserAgent, initData.AnswerToken)
 	headers["Origin"] = strings.TrimRight(origin, "/")
 	headers["Content-Type"] = "application/json"
 	endpoint := fmt.Sprintf("%s/v1/survey/answer/noauth/save?timeCode=%s&answerToken=%s", strings.TrimRight(origin, "/"), initData.TimeCode, initData.AnswerToken)
 	var payload apiEnvelope
-	if err := httpDoerOrDefault(r.HTTP).DoJSON(ctx, http.MethodPost, endpoint, headers, body, &payload); err != nil {
+	doer, err := r.httpDoer(proxyAddress)
+	if err != nil {
 		return err
 	}
-	_, err := ensureAPIOK(payload, "提交")
+	if err := doer.DoJSON(ctx, http.MethodPost, endpoint, headers, body, &payload); err != nil {
+		return err
+	}
+	_, err = ensureAPIOK(payload, "提交")
 	return err
+}
+
+func (r Runner) httpDoer(proxyAddress string) (interface {
+	DoJSON(ctx context.Context, method string, url string, headers map[string]string, body any, out any) error
+}, error) {
+	if strings.TrimSpace(proxyAddress) == "" {
+		return httpDoerOrDefault(r.HTTP), nil
+	}
+	client, err := proxyhttp.Client(nil, proxyAddress)
+	if err != nil {
+		return nil, err
+	}
+	return httpjson.Client{Client: client}, nil
 }
 
 func defaultDurationSeconds(cfg *model.RuntimeConfig) int {

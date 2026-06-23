@@ -124,6 +124,9 @@ func runOneJob(ctx context.Context, cfg *RuntimeConfig, submit SubmitFunc, optio
 
 		local := cloneRuntimeConfig(cfg)
 		local.Target = 1
+		if leased {
+			local.ActiveProxyAddress = lease.Address
+		}
 		state.setProgress(workerIndex, workerName, "提交中", true)
 		result, err := submit(ctx, &local, func(event Event) {
 			state.forward(workerIndex, workerName, event)

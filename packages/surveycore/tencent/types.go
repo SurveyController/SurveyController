@@ -48,7 +48,12 @@ type Result struct {
 
 type EventHandler func(Event)
 
-type Runner struct{}
+type Runner struct {
+	HTTP interface {
+		DoJSON(ctx context.Context, method string, url string, headers map[string]string, body any, out any) error
+	}
+	UserAgent string
+}
 
 func httpDoerOrDefault(client interface {
 	DoJSON(ctx context.Context, method string, url string, headers map[string]string, body any, out any) error

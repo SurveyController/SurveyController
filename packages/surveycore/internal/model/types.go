@@ -7,8 +7,9 @@ const (
 	ProviderQQ      = "qq"
 	ProviderCredamo = "credamo"
 
-	LogicParseStatusNone    = "none"
-	LogicParseStatusUnknown = "unknown"
+	LogicParseStatusComplete = "complete"
+	LogicParseStatusNone     = "none"
+	LogicParseStatusUnknown  = "unknown"
 )
 
 type SurveyDefinition struct {
@@ -18,33 +19,52 @@ type SurveyDefinition struct {
 }
 
 type QuestionMeta struct {
-	Num             int      `json:"num"`
-	Title           string   `json:"title"`
-	Description     string   `json:"description"`
-	TypeCode        string   `json:"type_code"`
-	Options         int      `json:"options"`
-	Rows            int      `json:"rows"`
-	RowTexts        []string `json:"row_texts"`
-	Page            int      `json:"page"`
-	OptionTexts     []string `json:"option_texts"`
-	Provider        string   `json:"provider"`
-	ProviderID      string   `json:"provider_question_id"`
-	ProviderPageID  string   `json:"provider_page_id"`
-	ProviderType    string   `json:"provider_type"`
-	Required        bool     `json:"required"`
-	IsDescription   bool     `json:"is_description"`
-	IsRating        bool     `json:"is_rating"`
-	RatingMax       int      `json:"rating_max"`
-	TextInputs      int      `json:"text_inputs"`
-	IsTextLike      bool     `json:"is_text_like"`
-	IsMultiText     bool     `json:"is_multi_text"`
-	LogicStatus     string   `json:"logic_parse_status"`
-	MultiMinLimit   *int     `json:"multi_min_limit,omitempty"`
-	MultiMaxLimit   *int     `json:"multi_max_limit,omitempty"`
-	ForcedOptionIdx *int     `json:"forced_option_index,omitempty"`
-	ForcedOption    string   `json:"forced_option_text"`
-	ForcedTexts     []string `json:"forced_texts"`
-	FillableOptions []int    `json:"fillable_options"`
+	Num                      int              `json:"num"`
+	Title                    string           `json:"title"`
+	DisplayNum               *int             `json:"display_num,omitempty"`
+	Description              string           `json:"description"`
+	TypeCode                 string           `json:"type_code"`
+	Options                  int              `json:"options"`
+	Rows                     int              `json:"rows"`
+	RowTexts                 []string         `json:"row_texts"`
+	Page                     int              `json:"page"`
+	OptionTexts              []string         `json:"option_texts"`
+	Provider                 string           `json:"provider"`
+	ProviderID               string           `json:"provider_question_id"`
+	ProviderPageID           string           `json:"provider_page_id"`
+	ProviderType             string           `json:"provider_type"`
+	ProviderPageRaw          any              `json:"provider_page_raw,omitempty"`
+	Required                 bool             `json:"required"`
+	IsDescription            bool             `json:"is_description"`
+	IsLocation               bool             `json:"is_location"`
+	IsRating                 bool             `json:"is_rating"`
+	RatingMax                int              `json:"rating_max"`
+	TextInputs               int              `json:"text_inputs"`
+	TextInputLabels          []string         `json:"text_input_labels"`
+	IsTextLike               bool             `json:"is_text_like"`
+	IsMultiText              bool             `json:"is_multi_text"`
+	IsSliderMatrix           bool             `json:"is_slider_matrix"`
+	LogicStatus              string           `json:"logic_parse_status"`
+	HasJump                  bool             `json:"has_jump"`
+	JumpRules                []map[string]any `json:"jump_rules"`
+	HasDisplayCondition      bool             `json:"has_display_condition"`
+	DisplayConditions        []map[string]any `json:"display_conditions"`
+	HasDependentDisplayLogic bool             `json:"has_dependent_display_logic"`
+	ControlsDisplayTargets   []map[string]any `json:"controls_display_targets"`
+	QuestionMedia            []map[string]any `json:"question_media"`
+	SliderMin                any              `json:"slider_min,omitempty"`
+	SliderMax                any              `json:"slider_max,omitempty"`
+	SliderStep               any              `json:"slider_step,omitempty"`
+	MultiMinLimit            *int             `json:"multi_min_limit,omitempty"`
+	MultiMaxLimit            *int             `json:"multi_max_limit,omitempty"`
+	ForcedOptionIdx          *int             `json:"forced_option_index,omitempty"`
+	ForcedOption             string           `json:"forced_option_text"`
+	ForcedTexts              []string         `json:"forced_texts"`
+	FillableOptions          []int            `json:"fillable_options"`
+	AttachedOptionSelects    []map[string]any `json:"attached_option_selects"`
+	HasAttachedOptionSelect  bool             `json:"has_attached_option_select"`
+	Unsupported              bool             `json:"unsupported"`
+	UnsupportedReason        string           `json:"unsupported_reason"`
 }
 
 type RuntimeConfig struct {
@@ -60,6 +80,7 @@ type RuntimeConfig struct {
 	ProxySource            string           `json:"proxy_source,omitempty"`
 	CustomProxyAPI         string           `json:"custom_proxy_api,omitempty"`
 	ProxyAreaCode          *string          `json:"proxy_area_code,omitempty"`
+	ActiveProxyAddress     string           `json:"-"`
 	RandomUAEnabled        bool             `json:"random_ua_enabled,omitempty"`
 	RandomUARatios         map[string]int   `json:"random_ua_ratios,omitempty"`
 	FailStopEnabled        bool             `json:"fail_stop_enabled,omitempty"`
@@ -85,22 +106,31 @@ type RuntimeConfig struct {
 }
 
 type QuestionEntry struct {
-	QuestionType          string    `json:"question_type"`
-	Probabilities         any       `json:"probabilities"`
-	Texts                 []string  `json:"texts,omitempty"`
-	Rows                  int       `json:"rows,omitempty"`
-	OptionCount           int       `json:"option_count,omitempty"`
-	DistributionMode      string    `json:"distribution_mode,omitempty"`
-	CustomWeights         any       `json:"custom_weights,omitempty"`
-	QuestionNum           *int      `json:"question_num,omitempty"`
-	QuestionTitle         *string   `json:"question_title,omitempty"`
-	SurveyProvider        string    `json:"survey_provider,omitempty"`
-	ProviderQuestionID    *string   `json:"provider_question_id,omitempty"`
-	ProviderPageID        *string   `json:"provider_page_id,omitempty"`
-	AIEnabled             bool      `json:"ai_enabled,omitempty"`
-	OptionFillTexts       []*string `json:"option_fill_texts,omitempty"`
-	FillableOptionIndices []int     `json:"fillable_option_indices,omitempty"`
-	PsychoBias            string    `json:"psycho_bias,omitempty"`
+	QuestionType            string           `json:"question_type"`
+	Probabilities           any              `json:"probabilities"`
+	Texts                   []string         `json:"texts,omitempty"`
+	Rows                    int              `json:"rows,omitempty"`
+	OptionCount             int              `json:"option_count,omitempty"`
+	DistributionMode        string           `json:"distribution_mode,omitempty"`
+	CustomWeights           any              `json:"custom_weights,omitempty"`
+	QuestionNum             *int             `json:"question_num,omitempty"`
+	QuestionTitle           *string          `json:"question_title,omitempty"`
+	SurveyProvider          string           `json:"survey_provider,omitempty"`
+	ProviderQuestionID      *string          `json:"provider_question_id,omitempty"`
+	ProviderPageID          *string          `json:"provider_page_id,omitempty"`
+	AIEnabled               bool             `json:"ai_enabled,omitempty"`
+	OptionFillTexts         []*string        `json:"option_fill_texts,omitempty"`
+	FillableOptionIndices   []int            `json:"fillable_option_indices,omitempty"`
+	AttachedOptionSelects   []map[string]any `json:"attached_option_selects,omitempty"`
+	IsLocation              bool             `json:"is_location,omitempty"`
+	LocationParts           []string         `json:"location_parts,omitempty"`
+	MultiTextBlankModes     []string         `json:"multi_text_blank_modes,omitempty"`
+	MultiTextBlankAIFlags   []bool           `json:"multi_text_blank_ai_flags,omitempty"`
+	MultiTextBlankIntRanges [][]int          `json:"multi_text_blank_int_ranges,omitempty"`
+	TextRandomMode          string           `json:"text_random_mode,omitempty"`
+	TextRandomIntRange      []int            `json:"text_random_int_range,omitempty"`
+	Dimension               string           `json:"dimension,omitempty"`
+	PsychoBias              string           `json:"psycho_bias,omitempty"`
 }
 
 type RunResult struct {

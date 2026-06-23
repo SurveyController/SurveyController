@@ -55,6 +55,8 @@ func ParseDefinitionFromHTML(htmlText string) (model.SurveyDefinition, error) {
 				if question.Num != visible {
 					question.Page = pageIndex + 1
 				}
+				display := visible
+				question.DisplayNum = &display
 			}
 			questions = append(questions, question)
 		}
@@ -130,37 +132,56 @@ func normalizeQuestion(div *nethtml.Node, page int) model.QuestionMeta {
 	multiMin, multiMax := multiLimits(div, typeCode)
 	forcedIdx, forcedText := forceSelectOption(title, optionTexts)
 	providerType := providerType(typeCode, textInputs, len(optionTexts), isSliderMatrix)
+	textLabels := textInputLabels(div)
+	attachedSelects := attachedOptionSelects(div, optionTexts)
+	sliderMin, sliderMax, sliderStep := sliderRange(div)
+	hasJump, jumpRules, hasDisplay, displayConditions, hasDependentDisplay, controlsDisplayTargets, logicStatus := logicMetadata(div, num, optionTexts)
 	if isDescription {
 		typeCode = "0"
 		providerType = "description"
 	}
 	return model.QuestionMeta{
-		Num:             num,
-		Title:           title,
-		Description:     "",
-		TypeCode:        typeCode,
-		Options:         len(optionTexts),
-		Rows:            maxInt(1, len(rowTexts)),
-		RowTexts:        rowTexts,
-		Page:            page,
-		OptionTexts:     optionTexts,
-		Provider:        model.ProviderWJX,
-		ProviderID:      strconv.Itoa(num),
-		ProviderPageID:  strconv.Itoa(page),
-		ProviderType:    providerType,
-		Required:        required(div),
-		IsDescription:   isDescription,
-		IsRating:        rating,
-		RatingMax:       ratingMax(rating, len(optionTexts)),
-		TextInputs:      textInputs,
-		IsTextLike:      isTextLike(typeCode, textInputs, len(optionTexts), isLocation),
-		IsMultiText:     textInputs > 1,
-		LogicStatus:     model.LogicParseStatusUnknown,
-		MultiMinLimit:   multiMin,
-		MultiMaxLimit:   multiMax,
-		ForcedOptionIdx: forcedIdx,
-		ForcedOption:    forcedText,
-		ForcedTexts:     []string{},
-		FillableOptions: fillable,
+		Num:                      num,
+		Title:                    title,
+		Description:              "",
+		TypeCode:                 typeCode,
+		Options:                  len(optionTexts),
+		Rows:                     maxInt(1, len(rowTexts)),
+		RowTexts:                 rowTexts,
+		Page:                     page,
+		OptionTexts:              optionTexts,
+		Provider:                 model.ProviderWJX,
+		ProviderID:               strconv.Itoa(num),
+		ProviderPageID:           strconv.Itoa(page),
+		ProviderType:             providerType,
+		Required:                 required(div),
+		IsDescription:            isDescription,
+		IsLocation:               isLocation,
+		IsRating:                 rating,
+		RatingMax:                ratingMax(rating, len(optionTexts)),
+		TextInputs:               textInputs,
+		TextInputLabels:          textLabels,
+		IsTextLike:               isTextLike(typeCode, textInputs, len(optionTexts), isLocation),
+		IsMultiText:              textInputs > 1,
+		IsSliderMatrix:           isSliderMatrix,
+		LogicStatus:              logicStatus,
+		HasJump:                  hasJump,
+		JumpRules:                jumpRules,
+		HasDisplayCondition:      hasDisplay,
+		DisplayConditions:        displayConditions,
+		HasDependentDisplayLogic: hasDependentDisplay,
+		ControlsDisplayTargets:   controlsDisplayTargets,
+		QuestionMedia:            questionMedia(div, rowTexts, optionTexts),
+		SliderMin:                sliderMin,
+		SliderMax:                sliderMax,
+		SliderStep:               sliderStep,
+		MultiMinLimit:            multiMin,
+		MultiMaxLimit:            multiMax,
+		ForcedOptionIdx:          forcedIdx,
+		ForcedOption:             forcedText,
+		ForcedTexts:              []string{},
+		FillableOptions:          fillable,
+		AttachedOptionSelects:    attachedSelects,
+		HasAttachedOptionSelect:  len(attachedSelects) > 0,
 	}
 }

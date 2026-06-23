@@ -9,7 +9,7 @@ import (
 	nethtml "golang.org/x/net/html"
 )
 
-var forceSelectRE = regexp.MustCompile(`(?:请选择|请务必选|请直接选)\s*(?:第\s*(\d+)\s*项|([A-ZＡ-Ｚ])\s*项?|(.+?))(?:[。；;，,、\s]|$)`)
+var forceSelectRE = regexp.MustCompile(`请(?:务必|一定|必须|直接)?\s*选(?:择)?\s*(?:第\s*(\d+)\s*(?:个|项|选项)?|([A-ZＡ-Ｚ])\s*(?:项|选项)?|(.+?))(?:[。；;，,、\s]|$)`)
 
 func surveyTitle(root *nethtml.Node) string {
 	for _, candidate := range findAll(root, func(node *nethtml.Node) bool {

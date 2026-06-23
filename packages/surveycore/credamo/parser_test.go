@@ -105,3 +105,46 @@ func TestNormalizeQuestionKinds(t *testing.T) {
 		}
 	}
 }
+
+func TestNormalizeQuestionRulesFromText(t *testing.T) {
+	question := normalizeQuestion(map[string]any{
+		"question_num":  "Q1",
+		"title":         "Q1 请务必选择B项，至少选择1个，最多选择2个",
+		"question_kind": "multiple",
+		"provider_type": "multiple",
+		"option_texts":  []any{"A. 错误", "B. 正确", "C. 其他"},
+		"text_inputs":   0,
+		"page":          1,
+		"question_id":   "q1",
+	}, 1)
+	if question.ForcedOptionIdx == nil || *question.ForcedOptionIdx != 1 || question.MultiMinLimit == nil || *question.MultiMinLimit != 1 || question.MultiMaxLimit == nil || *question.MultiMaxLimit != 2 {
+		t.Fatalf("question = %#v", question)
+	}
+
+	arithmetic := normalizeQuestion(map[string]any{
+		"question_num":  "Q2",
+		"title":         "2+3 等于多少",
+		"question_kind": "single",
+		"provider_type": "single",
+		"option_texts":  []any{"4", "5", "6"},
+		"text_inputs":   0,
+		"page":          1,
+		"question_id":   "q2",
+	}, 2)
+	if arithmetic.ForcedOptionIdx == nil || *arithmetic.ForcedOptionIdx != 1 {
+		t.Fatalf("arithmetic = %#v", arithmetic)
+	}
+
+	text := normalizeQuestion(map[string]any{
+		"question_num":  "Q3",
+		"title":         "请填写：测试文本",
+		"question_kind": "text",
+		"provider_type": "text",
+		"text_inputs":   1,
+		"page":          1,
+		"question_id":   "q3",
+	}, 3)
+	if len(text.ForcedTexts) != 1 || text.ForcedTexts[0] != "测试文本" {
+		t.Fatalf("text = %#v", text)
+	}
+}

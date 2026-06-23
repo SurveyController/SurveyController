@@ -8,6 +8,8 @@ import (
 	"net/url"
 	"strings"
 	"time"
+
+	"surveycontroller/surveycore/internal/proxyhttp"
 )
 
 const defaultUserAgent = "Mozilla/5.0 (Linux; Android 12; SurveyController) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126 Mobile Safari/537.36 MicroMessenger/8.0"
@@ -55,7 +57,7 @@ func requestHeaders(referer string, userAgent string) map[string]string {
 	}
 }
 
-func (r Runner) postForm(ctx context.Context, endpoint string, referer string, query url.Values, form url.Values) (string, error) {
+func (r Runner) postForm(ctx context.Context, endpoint string, referer string, query url.Values, form url.Values, proxyAddress string) (string, error) {
 	target := endpoint
 	if encoded := query.Encode(); encoded != "" {
 		target += "?" + encoded
@@ -71,7 +73,11 @@ func (r Runner) postForm(ctx context.Context, endpoint string, referer string, q
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded; charset=UTF-8")
 	req.Header.Set("Origin", "https://"+submitDomain(referer))
 	req.Header.Set("X-Requested-With", "XMLHttpRequest")
-	resp, err := httpClientOrDefault(r.Client).Do(req)
+	client, err := proxyhttp.Client(r.Client, proxyAddress)
+	if err != nil {
+		return "", err
+	}
+	resp, err := httpClientOrDefault(client).Do(req)
 	if err != nil {
 		return "", err
 	}

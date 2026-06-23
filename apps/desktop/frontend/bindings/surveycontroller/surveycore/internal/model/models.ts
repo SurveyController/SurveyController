@@ -31,12 +31,22 @@ export interface QuestionEntry {
     "ai_enabled"?: boolean;
     "option_fill_texts"?: (string | null)[] | null;
     "fillable_option_indices"?: number[] | null;
+    "attached_option_selects"?: ({ [_ in string]?: any } | null)[] | null;
+    "is_location"?: boolean;
+    "location_parts"?: string[] | null;
+    "multi_text_blank_modes"?: string[] | null;
+    "multi_text_blank_ai_flags"?: boolean[] | null;
+    "multi_text_blank_int_ranges"?: (number[] | null)[] | null;
+    "text_random_mode"?: string;
+    "text_random_int_range"?: number[] | null;
+    "dimension"?: string;
     "psycho_bias"?: string;
 }
 
 export interface QuestionMeta {
     "num": number;
     "title": string;
+    "display_num"?: number | null;
     "description": string;
     "type_code": string;
     "options": number;
@@ -48,20 +58,38 @@ export interface QuestionMeta {
     "provider_question_id": string;
     "provider_page_id": string;
     "provider_type": string;
+    "provider_page_raw"?: any;
     "required": boolean;
     "is_description": boolean;
+    "is_location": boolean;
     "is_rating": boolean;
     "rating_max": number;
     "text_inputs": number;
+    "text_input_labels": string[] | null;
     "is_text_like": boolean;
     "is_multi_text": boolean;
+    "is_slider_matrix": boolean;
     "logic_parse_status": string;
+    "has_jump": boolean;
+    "jump_rules": ({ [_ in string]?: any } | null)[] | null;
+    "has_display_condition": boolean;
+    "display_conditions": ({ [_ in string]?: any } | null)[] | null;
+    "has_dependent_display_logic": boolean;
+    "controls_display_targets": ({ [_ in string]?: any } | null)[] | null;
+    "question_media": ({ [_ in string]?: any } | null)[] | null;
+    "slider_min"?: any;
+    "slider_max"?: any;
+    "slider_step"?: any;
     "multi_min_limit"?: number | null;
     "multi_max_limit"?: number | null;
     "forced_option_index"?: number | null;
     "forced_option_text": string;
     "forced_texts": string[] | null;
     "fillable_options": number[] | null;
+    "attached_option_selects": ({ [_ in string]?: any } | null)[] | null;
+    "has_attached_option_select": boolean;
+    "unsupported": boolean;
+    "unsupported_reason": string;
 }
 
 export interface RunResult {

@@ -162,8 +162,10 @@ func TestAppServiceParsesCredamoViaCoreClient(t *testing.T) {
 	}
 }
 
-func TestAppServiceRunSurveyReturnsCoreErrorAndEvents(t *testing.T) {
-	service := NewAppService()
+func TestAppServiceRunSurveySubmitsTencentAndEvents(t *testing.T) {
+	server := newAppTencentServer(t)
+	defer server.Close()
+	service := &AppService{survey: surveycore.New(surveycore.WithHTTPClient(rewriteTencentClient(server.URL)))}
 	state, err := service.RunSurvey(context.Background(), RunSurveyRequest{
 		Config: surveycore.RuntimeConfig{
 			URL:            "https://wj.qq.com/s2/123/hashvalue/",
@@ -171,10 +173,10 @@ func TestAppServiceRunSurveyReturnsCoreErrorAndEvents(t *testing.T) {
 			Target:         1,
 		},
 	})
-	if !errors.Is(err, surveycore.ErrUnsupportedOperation) {
+	if err != nil {
 		t.Fatalf("err = %v", err)
 	}
-	if state.Result == nil || len(state.Events) != 1 {
+	if state.Result == nil || state.Result.Success != 1 || len(state.Events) == 0 {
 		t.Fatalf("state = %#v", state)
 	}
 }
@@ -343,6 +345,18 @@ func newAppTencentServer(t *testing.T) *httptest.Server {
 					},
 				},
 			})
+		case "/api/v2/respondent/surveys/123/answers":
+			if r.Method != http.MethodPost {
+				t.Fatalf("method = %s", r.Method)
+			}
+			var body map[string]any
+			if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+				t.Fatalf("decode tencent submit body: %v", err)
+			}
+			if _, ok := body["answer_survey"].(map[string]any); !ok {
+				t.Fatalf("answer_survey = %#v", body["answer_survey"])
+			}
+			writeAppJSON(t, w, map[string]any{"code": "OK", "data": map[string]any{"ok": true}})
 		default:
 			t.Fatalf("unexpected path: %s", r.URL.Path)
 		}

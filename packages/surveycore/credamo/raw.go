@@ -175,6 +175,7 @@ func rawToNormalizedInput(raw map[string]any, fallbackNum int) map[string]any {
 		"question_kind":       providerType,
 		"provider_type":       providerType,
 		"option_texts":        optionTexts,
+		"fillable_options":    fillableChoiceIndices(choices),
 		"matrix_column_texts": optionTexts,
 		"row_texts":           rowTexts,
 		"text_inputs":         textInputs,
@@ -182,6 +183,43 @@ func rawToNormalizedInput(raw map[string]any, fallbackNum int) map[string]any {
 		"question_id":         firstString(raw["questionId"], raw["qstId"], raw["id"], strconv.Itoa(questionNum)),
 		"required":            boolValue(firstAny(raw["required"], raw["mustAnswer"])),
 	}
+}
+
+func fillableChoiceIndices(choices []map[string]any) []int {
+	result := make([]int, 0)
+	for index, choice := range choices {
+		if payloadContainsChoiceFill(choice, 0) {
+			result = append(result, index)
+		}
+	}
+	return result
+}
+
+func payloadContainsChoiceFill(value any, depth int) bool {
+	if depth > 4 || value == nil {
+		return false
+	}
+	switch typed := value.(type) {
+	case map[string]any:
+		for key, item := range typed {
+			keyText := strings.ToLower(strings.TrimSpace(key))
+			if strings.Contains(keyText, "fill") || strings.Contains(keyText, "blank") || strings.Contains(keyText, "input") || strings.Contains(keyText, "other") {
+				if item != nil && stringValue(item) != "" {
+					return true
+				}
+			}
+			if payloadContainsChoiceFill(item, depth+1) {
+				return true
+			}
+		}
+	case []any:
+		for _, item := range typed {
+			if payloadContainsChoiceFill(item, depth+1) {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 func surveyTitle(detail map[string]any) string {

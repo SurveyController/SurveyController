@@ -88,22 +88,23 @@ func TestParseDefaultConfigAndRunWJX(t *testing.T) {
 	}
 }
 
-func TestRunTencentReturnsUnsupportedWithEvents(t *testing.T) {
+func TestRunTencentSubmitsWithEvents(t *testing.T) {
+	server := newTencentCoreTestServer(t)
 	var events []Event
-	result, err := New().RunWithEvents(context.Background(), &RuntimeConfig{
+	result, err := New(WithHTTPClient(rewriteTencentHTTPClient(server.URL))).RunWithEvents(context.Background(), &RuntimeConfig{
 		URL:            "https://wj.qq.com/s2/123/hashvalue/",
 		SurveyProvider: ProviderQQ,
 		Target:         1,
 	}, func(event Event) {
 		events = append(events, event)
 	})
-	if !errors.Is(err, ErrUnsupportedOperation) {
+	if err != nil {
 		t.Fatalf("err = %v", err)
 	}
-	if result == nil || result.ThreadProgress[0].StatusText != "unsupported" {
+	if result == nil || result.Success != 1 || result.Fail != 0 {
 		t.Fatalf("result = %#v", result)
 	}
-	if len(events) != 1 || !events[0].Fail {
+	if len(events) == 0 || !events[len(events)-1].Success {
 		t.Fatalf("events = %#v", events)
 	}
 }
@@ -149,6 +150,23 @@ func newTencentCoreTestServer(t *testing.T) *httptest.Server {
 					},
 				},
 			})
+		case "/api/v2/respondent/surveys/123/answers":
+			if r.Method != http.MethodPost {
+				t.Fatalf("method = %s", r.Method)
+			}
+			var body map[string]any
+			if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+				t.Fatalf("decode tencent submit body: %v", err)
+			}
+			answerSurvey, ok := body["answer_survey"].(map[string]any)
+			if !ok {
+				t.Fatalf("answer_survey = %#v", body["answer_survey"])
+			}
+			pages, ok := answerSurvey["pages"].([]any)
+			if !ok || len(pages) != 1 {
+				t.Fatalf("pages = %#v", answerSurvey["pages"])
+			}
+			writeTestJSON(t, w, map[string]any{"code": "OK", "data": map[string]any{"ok": true}})
 		default:
 			t.Fatalf("unexpected path: %s", r.URL.Path)
 		}
@@ -243,7 +261,7 @@ func TestRunErrors(t *testing.T) {
 		t.Fatalf("nil config error = %v", err)
 	}
 
-	_, err = Run(context.Background(), &RuntimeConfig{URL: "https://wj.qq.com/s2/1/hash/"})
+	_, err = Run(context.Background(), &RuntimeConfig{URL: "https://example.com/s/1", SurveyProvider: "unknown"})
 	if !errors.Is(err, ErrUnsupportedOperation) {
 		t.Fatalf("unsupported error = %v", err)
 	}

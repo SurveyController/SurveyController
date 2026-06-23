@@ -40,12 +40,33 @@ func TestParserParsesTencentQuestions(t *testing.T) {
 	if second.MultiMinLimit == nil || *second.MultiMinLimit != 1 || second.MultiMaxLimit == nil || *second.MultiMaxLimit != 2 {
 		t.Fatalf("multiple limits = %#v %#v", second.MultiMinLimit, second.MultiMaxLimit)
 	}
+	if len(second.QuestionMedia) == 0 {
+		t.Fatalf("media = %#v", second.QuestionMedia)
+	}
 	matrix := definition.Questions[3]
 	if matrix.Title != "说明文字 请评分" || matrix.Description != "请认真阅读" {
 		t.Fatalf("merged matrix = %#v", matrix)
 	}
 	if matrix.ProviderType != "matrix_radio" || matrix.Rows != 2 || matrix.Options != 2 {
 		t.Fatalf("matrix = %#v", matrix)
+	}
+}
+
+func TestTencentAttachLogicMetadata(t *testing.T) {
+	raw := []map[string]any{
+		{"id": "q-1", "type": "radio", "title": "单选", "page_id": "p-1", "page": 1, "options": []any{map[string]any{"id": "o-1", "text": "A", "display": "q-2"}}},
+		{"id": "q-2", "type": "text", "title": "文本", "page_id": "p-2", "page": 2, "hidden": true},
+		{"id": "q-3", "type": "radio", "title": "跳转", "page_id": "p-2", "page": 2, "goto": map[string]any{"target": "q-2"}, "options": []any{map[string]any{"id": "o-2", "text": "B"}}},
+	}
+	questions := standardizeQuestions(raw)
+	if len(questions) != 3 {
+		t.Fatalf("questions = %#v", questions)
+	}
+	if !questions[1].HasDisplayCondition || questions[1].LogicStatus != model.LogicParseStatusComplete {
+		t.Fatalf("display logic = %#v", questions[1])
+	}
+	if !questions[2].HasJump || len(questions[2].JumpRules) == 0 {
+		t.Fatalf("jump logic = %#v", questions[2])
 	}
 }
 
@@ -72,6 +93,9 @@ func TestTencentHelpers(t *testing.T) {
 	}
 	if cleanOptionText("其他 _{fillblank-1}") != "其他" {
 		t.Fatalf("clean option failed")
+	}
+	if match := fillBlankTokenRE.FindStringSubmatch("{fillblank-1}"); len(match) < 2 || match[1] != "fillblank-1" {
+		t.Fatalf("fillblank match = %#v", match)
 	}
 }
 

@@ -56,6 +56,41 @@ func cloneQuestionEntries(src []QuestionEntry) []QuestionEntry {
 		dst[i].Texts = append([]string(nil), src[i].Texts...)
 		dst[i].FillableOptionIndices = append([]int(nil), src[i].FillableOptionIndices...)
 		dst[i].OptionFillTexts = append([]*string(nil), src[i].OptionFillTexts...)
+		dst[i].AttachedOptionSelects = cloneMapList(src[i].AttachedOptionSelects)
+		dst[i].LocationParts = append([]string(nil), src[i].LocationParts...)
+		dst[i].MultiTextBlankModes = append([]string(nil), src[i].MultiTextBlankModes...)
+		dst[i].MultiTextBlankAIFlags = append([]bool(nil), src[i].MultiTextBlankAIFlags...)
+		dst[i].MultiTextBlankIntRanges = cloneIntRanges(src[i].MultiTextBlankIntRanges)
+		dst[i].TextRandomIntRange = append([]int(nil), src[i].TextRandomIntRange...)
+	}
+	return dst
+}
+
+func cloneMapList(src []map[string]any) []map[string]any {
+	if len(src) == 0 {
+		return nil
+	}
+	dst := make([]map[string]any, len(src))
+	for i, item := range src {
+		if item == nil {
+			continue
+		}
+		cloned := make(map[string]any, len(item))
+		for key, value := range item {
+			cloned[key] = value
+		}
+		dst[i] = cloned
+	}
+	return dst
+}
+
+func cloneIntRanges(src [][]int) [][]int {
+	if len(src) == 0 {
+		return nil
+	}
+	dst := make([][]int, len(src))
+	for i, item := range src {
+		dst[i] = append([]int(nil), item...)
 	}
 	return dst
 }
