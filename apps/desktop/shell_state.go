@@ -51,7 +51,7 @@ func initialShellState(version string) ShellState {
 		CommunityItems:  []string{},
 		AboutItems: []PageMetric{
 			{Label: "版本", Value: version},
-			{Label: "前端栈", Value: "Vue 3 + TypeScript + Wails v3"},
+			{Label: "前端栈", Value: "React + react-windows-ui + Wails v3"},
 			{Label: "桌面壳", Value: "Wails v3"},
 		},
 		DonateItems:  []PageMetric{},

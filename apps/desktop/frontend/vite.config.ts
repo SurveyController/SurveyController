@@ -1,6 +1,5 @@
 import { defineConfig } from "vite";
-import vue from "@vitejs/plugin-vue";
-import tailwindcss from "@tailwindcss/vite";
+import react from "@vitejs/plugin-react";
 import wails from "@wailsio/runtime/plugins/vite";
 
 
@@ -10,5 +9,5 @@ export default defineConfig({
     port: Number(process.env.WAILS_VITE_PORT) || 9245,
     strictPort: true,
   },
-  plugins: [vue(), tailwindcss(), wails("./bindings")],
+  plugins: [react(), wails("./bindings")],
 });

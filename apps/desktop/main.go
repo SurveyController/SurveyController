@@ -37,6 +37,7 @@ func main() {
 		MinWidth:         900,
 		MinHeight:        560,
 		Frameless:        true,
+		BackgroundType:   application.BackgroundTypeTranslucent,
 		BackgroundColour: application.NewRGBA(0, 0, 0, 0),
 		URL:              "/",
 		Mac: application.MacWindow{
@@ -49,10 +50,12 @@ func main() {
 			InvisibleTitleBarHeight: 44,
 		},
 		Windows: application.WindowsWindow{
+			BackdropType:                      application.Mica,
 			DisableFramelessWindowDecorations: false,
 		},
 		Linux: application.LinuxWindow{
-			Icon: appIcon,
+			Icon:                appIcon,
+			WindowIsTranslucent: true,
 		},
 	})
 	window.Center()

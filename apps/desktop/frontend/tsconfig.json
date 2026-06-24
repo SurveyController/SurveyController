@@ -13,7 +13,7 @@
     "isolatedModules": true,
     "strict": true,
     "skipLibCheck": true,
-    "jsx": "preserve"
+    "jsx": "react-jsx"
   },
-  "include": ["src/**/*.ts", "src/**/*.d.ts", "src/**/*.vue", "bindings/**/*.js"]
+  "include": ["src/**/*.ts", "src/**/*.tsx", "src/**/*.d.ts", "bindings/**/*.js", "bindings/**/*.ts"]
 }

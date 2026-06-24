@@ -5,24 +5,27 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build:dev": "vue-tsc --noEmit && vite build --minify false --mode development",
-    "build": "vue-tsc --noEmit && vite build --mode production",
+    "build:dev": "tsc --noEmit && vite build --minify false --mode development",
+    "build": "tsc --noEmit && vite build --mode production",
     "preview": "vite preview",
-    "check": "vue-tsc --noEmit",
+    "check": "tsc --noEmit",
     "test": "vitest run"
   },
   "dependencies": {
-    "@lucide/vue": "latest",
     "@wailsio/runtime": "latest",
-    "vue": "latest"
+    "core-js": "latest",
+    "lucide-react": "latest",
+    "react": "18.2.0",
+    "react-dom": "18.2.0",
+    "react-router-dom": "6.30.4",
+    "react-windows-ui": "4.2.4"
   },
   "devDependencies": {
-    "@tailwindcss/vite": "latest",
-    "@vitejs/plugin-vue": "latest",
-    "tailwindcss": "latest",
+    "@types/react": "latest",
+    "@types/react-dom": "latest",
+    "@vitejs/plugin-react": "latest",
     "typescript": "latest",
     "vite": "latest",
-    "vitest": "^4.1.9",
-    "vue-tsc": "latest"
+    "vitest": "^4.1.9"
   }
 }
