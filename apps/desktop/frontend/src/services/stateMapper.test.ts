@@ -48,7 +48,15 @@ describe('stateMapper', () => {
           text_inputs: 0,
         },
       ],
-      question_entries: [{ question_type: 'single', probabilities: [1, 1], question_num: 1, distribution_mode: 'random' }],
+      question_entries: [{ question_type: 'single', probabilities: [1, 1], question_num: 1, distribution_mode: 'random', dimension: '服务' }],
+      answer_rules: [{
+        condition_question_num: 1,
+        condition_mode: 'selected',
+        condition_option_indices: [0],
+        target_question_num: 1,
+        action_mode: 'must_select',
+        target_option_indices: [1],
+      }],
     }
 
     const shell = applyConfigToShell(emptyShellState, settings, config, null)
@@ -56,9 +64,17 @@ describe('stateMapper', () => {
     expect(shell.dashboard.surveyTitle).toBe('腾讯测试')
     expect(shell.dashboard.platformLabel).toBe('腾讯问卷')
     expect(shell.dashboard.targetCount).toBe(8)
-    expect(shell.dashboard.questionRows).toEqual([{ index: 1, type: '单选题', dimension: '', strategy: 'random' }])
+    expect(shell.dashboard.questionRows).toEqual([{ index: 1, type: '单选题', dimension: '服务', strategy: 'random' }])
+    expect(shell.dimensionGroups).toEqual(['服务'])
+    expect(shell.strategyRules[0]).toEqual({
+      condition: '第 1 题 选中 1',
+      action: '必须选择',
+      target: '第 1 题 2',
+    })
     expect(shell.runtimeGroups.some((group) => group.fields.some((field) => field.id === 'custom-proxy-api'))).toBe(true)
     expect(shell.runtimeGroups.some((group) => group.fields.some((field) => field.id === 'reverse-fill-enabled'))).toBe(true)
+    expect(shell.runtimeGroups.some((group) => group.fields.some((field) => field.id === 'ai-api-key'))).toBe(true)
+    expect(shell.runtimeGroups.some((group) => group.fields.some((field) => field.id === 'ai-api-protocol'))).toBe(true)
   })
 
   it('normalizes missing runtime values', () => {
@@ -78,12 +94,24 @@ describe('stateMapper', () => {
     config = updateRuntimeConfigField(config, 'random-ip', true)
     config = updateRuntimeConfigField(config, 'proxy-source', '自定义')
     config = updateRuntimeConfigField(config, 'custom-proxy-api', 'https://proxy.example/api')
+    config = updateRuntimeConfigField(config, 'interval', '2-5')
+    config = updateRuntimeConfigField(config, 'answer-duration', '45-90')
+    config = updateRuntimeConfigField(config, 'ai-api-key', 'sk-test')
+    config = updateRuntimeConfigField(config, 'ai-api-protocol', 'responses')
+    config = updateRuntimeConfigField(config, 'reliability-mode', false)
+    config = updateRuntimeConfigField(config, 'psycho-target-alpha', '0.9')
 
     expect(config.target).toBe(12)
     expect(config.threads).toBe(4)
     expect(config.random_ip_enabled).toBe(true)
     expect(config.proxy_source).toBe('custom')
     expect(config.custom_proxy_api).toBe('https://proxy.example/api')
+    expect(config.submit_interval).toEqual([2, 5])
+    expect(config.answer_duration).toEqual([45, 90])
+    expect(config.ai_api_key).toBe('sk-test')
+    expect(config.ai_api_protocol).toBe('responses')
+    expect(config.reliability_mode_enabled).toBe(false)
+    expect(config.psycho_target_alpha).toBe(0.9)
   })
 
   it('updates persisted app settings fields', () => {

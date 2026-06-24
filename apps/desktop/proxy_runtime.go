@@ -12,10 +12,11 @@ import (
 )
 
 type proxyRuntime struct {
-	mu     sync.Mutex
-	key    string
-	pool   *proxycore.Pool
-	status ProxyStatus
+	mu             sync.Mutex
+	key            string
+	pool           *proxycore.Pool
+	status         ProxyStatus
+	officialClient *proxycore.OfficialClient
 }
 
 func newProxyRuntime() *proxyRuntime {
@@ -60,12 +61,12 @@ func (r *proxyRuntime) executionOptions(ctx context.Context, cfg surveycore.Runt
 		options.LeaseManager = manager
 		return options, nil
 	case proxycore.OfficialSourceDefault, proxycore.OfficialSourceBenefit:
-		r.updateStatus(proxyRuntimeKey(source, ""), nil, ProxyStatus{
-			RandomIPEnabled: true,
-			Source:          source,
-			Message:         "官方代理源未接入",
-		})
-		return options, fmt.Errorf("%w: 官方随机 IP 源尚未接入桌面端", surveycore.ErrUnsupportedOperation)
+		manager, err := r.officialLeaseManager(ctx, cfg, source, options)
+		if err != nil {
+			return options, err
+		}
+		options.LeaseManager = manager
+		return options, nil
 	default:
 		r.updateStatus(proxyRuntimeKey(source, ""), nil, ProxyStatus{
 			RandomIPEnabled: true,
@@ -119,6 +120,117 @@ func (r *proxyRuntime) customLeaseManager(_ context.Context, cfg surveycore.Runt
 	return proxyLeaseManager{pool: r.pool}, nil
 }
 
+func (r *proxyRuntime) officialLeaseManager(ctx context.Context, cfg surveycore.RuntimeConfig, source string, options surveycore.ExecutionOptions) (surveycore.LeaseManager, error) {
+	client := r.officialProxyClient()
+	session, err := client.SessionManager().Snapshot(ctx)
+	if err != nil {
+		r.updateStatus(proxyRuntimeKey(source, ""), nil, ProxyStatus{
+			RandomIPEnabled: true,
+			Source:          source,
+			Message:         "官方代理会话读取失败",
+		})
+		return nil, err
+	}
+	if !session.Authenticated() {
+		session, err = client.ActivateTrial(ctx)
+		if err != nil {
+			r.updateStatus(proxyRuntimeKey(source, ""), nil, ProxyStatus{
+				RandomIPEnabled: true,
+				Source:          source,
+				Message:         "官方代理试用领取失败",
+			})
+			return nil, fmt.Errorf("%w: 官方随机 IP 试用领取失败: %v", surveycore.ErrPrepareConfigFailed, err)
+		}
+	}
+	if session.QuotaExhausted() {
+		quota, _ := client.SessionManager().QuotaSnapshot(ctx)
+		r.updateStatus(proxyRuntimeKey(source, ""), nil, ProxyStatus{
+			RandomIPEnabled: true,
+			Source:          source,
+			Message:         "官方代理额度已用完",
+			Quota:           quota,
+		})
+		return nil, fmt.Errorf("%w: 官方随机 IP 额度已用完", surveycore.ErrPrepareConfigFailed)
+	}
+
+	maxFetch := maxInt(1, options.Threads)
+	area := ""
+	if cfg.ProxyAreaCode != nil {
+		area = strings.TrimSpace(*cfg.ProxyAreaCode)
+	}
+	upstream := officialUpstreamFromSource(source)
+	key := proxyRuntimeKey(source, fmt.Sprintf("%s|%s|%d", area, upstream, maxFetch))
+	r.mu.Lock()
+	if r.pool == nil || r.key != key {
+		fetcher := proxycore.NewOfficialFetcher(proxycore.OfficialFetcherOptions{
+			Client:   client,
+			Minute:   1,
+			Pool:     proxycore.OfficialPoolQuality,
+			Area:     area,
+			Upstream: upstream,
+			Source:   source,
+			MaxFetch: maxFetch,
+		})
+		r.pool = proxycore.NewPool(proxycore.PoolOptions{
+			Fetcher:  fetcher,
+			MaxFetch: maxFetch,
+		})
+		r.key = key
+	}
+	pool := r.pool
+	r.mu.Unlock()
+
+	r.refreshOfficialStatus(ctx, key, pool, source, "官方代理已连接")
+	return proxyLeaseManager{
+		pool: pool,
+		afterAcquire: func(acquireCtx context.Context) {
+			r.refreshOfficialStatus(acquireCtx, key, pool, source, "官方代理已连接")
+		},
+	}, nil
+}
+
+func (r *proxyRuntime) officialProxyClient() *proxycore.OfficialClient {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if r.officialClient == nil {
+		manager := proxycore.NewOfficialSessionManager(proxycore.OfficialSessionManagerOptions{
+			Store: newOfficialSessionFileStore(),
+		})
+		r.officialClient = proxycore.NewOfficialClient(proxycore.OfficialClientOptions{
+			SessionManager: manager,
+		})
+	}
+	return r.officialClient
+}
+
+func (r *proxyRuntime) FreeAIIdentity(ctx context.Context) (int, string, error) {
+	client := r.officialProxyClient()
+	session, err := client.SessionManager().Snapshot(ctx)
+	if err != nil {
+		return 0, "", err
+	}
+	if !session.Authenticated() {
+		session, err = client.ActivateTrial(ctx)
+		if err != nil {
+			return 0, "", err
+		}
+	}
+	return session.UserID, session.DeviceID, nil
+}
+
+func (r *proxyRuntime) refreshOfficialStatus(ctx context.Context, key string, pool *proxycore.Pool, source string, message string) {
+	quota, err := r.officialProxyClient().SessionManager().QuotaSnapshot(ctx)
+	if err != nil {
+		quota = proxycore.QuotaSnapshot{}
+	}
+	r.updateStatus(key, pool, ProxyStatus{
+		RandomIPEnabled: true,
+		Source:          source,
+		Message:         message,
+		Quota:           quota,
+	})
+}
+
 func (r *proxyRuntime) updateStatus(key string, pool *proxycore.Pool, status ProxyStatus) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -128,7 +240,8 @@ func (r *proxyRuntime) updateStatus(key string, pool *proxycore.Pool, status Pro
 }
 
 type proxyLeaseManager struct {
-	pool *proxycore.Pool
+	pool         *proxycore.Pool
+	afterAcquire func(context.Context)
 }
 
 func (m proxyLeaseManager) Acquire(ctx context.Context, owner string) (surveycore.ExecutionLease, error) {
@@ -138,6 +251,9 @@ func (m proxyLeaseManager) Acquire(ctx context.Context, owner string) (surveycor
 	lease, err := m.pool.Acquire(ctx, owner)
 	if err != nil {
 		return surveycore.ExecutionLease{}, err
+	}
+	if m.afterAcquire != nil {
+		m.afterAcquire(ctx)
 	}
 	return surveycore.ExecutionLease{Address: lease.Address, Source: lease.Source}, nil
 }
@@ -175,6 +291,13 @@ func normalizeDesktopProxySource(source string) string {
 	default:
 		return strings.ToLower(strings.TrimSpace(source))
 	}
+}
+
+func officialUpstreamFromSource(source string) string {
+	if source == proxycore.OfficialSourceBenefit {
+		return proxycore.OfficialUpstreamBenefit
+	}
+	return proxycore.OfficialUpstreamDefault
 }
 
 func proxyRuntimeKey(source string, endpoint string) string {

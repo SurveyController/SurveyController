@@ -3,7 +3,6 @@ package main
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
@@ -12,6 +11,7 @@ import (
 	"time"
 
 	"github.com/xuri/excelize/v2"
+	"surveycontroller/proxycore"
 	"surveycontroller/surveycore"
 )
 
@@ -103,17 +103,73 @@ func TestAppServiceProxyRuntimeUsesCustomAPI(t *testing.T) {
 	}
 }
 
-func TestAppServiceProxyRuntimeRejectsUnsupportedOfficialSource(t *testing.T) {
-	service := NewAppService()
-	_, err := service.proxyRuntime().executionOptions(context.Background(), surveycore.RuntimeConfig{
+func TestAppServiceProxyRuntimeUsesOfficialSource(t *testing.T) {
+	var extractBody map[string]any
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/trial":
+			writeAppJSON(t, w, map[string]any{
+				"user_id":         77,
+				"remaining_quota": 5,
+				"total_quota":     5,
+				"used_quota":      0,
+			})
+		case "/extract":
+			if err := json.NewDecoder(r.Body).Decode(&extractBody); err != nil {
+				t.Fatalf("decode extract body: %v", err)
+			}
+			writeAppJSON(t, w, map[string]any{
+				"provider":        "default",
+				"remaining_quota": 4,
+				"total_quota":     5,
+				"used_quota":      1,
+				"items": []map[string]any{
+					{
+						"host":      "1.2.3.4",
+						"port":      9000,
+						"account":   "u",
+						"password":  "p",
+						"expire_at": "2099-01-01T00:00:00+00:00",
+					},
+				},
+			})
+		default:
+			t.Fatalf("unexpected path: %s", r.URL.Path)
+		}
+	}))
+	defer server.Close()
+
+	manager := proxycore.NewOfficialSessionManager(proxycore.OfficialSessionManagerOptions{
+		InitialSession: proxycore.RandomIPSession{DeviceID: "desktop-test"},
+	})
+	service := &AppService{proxy: &proxyRuntime{officialClient: proxycore.NewOfficialClient(proxycore.OfficialClientOptions{
+		TrialEndpoint:   server.URL + "/trial",
+		ExtractEndpoint: server.URL + "/extract",
+		SessionManager:  manager,
+	})}}
+	options, err := service.proxyRuntime().executionOptions(context.Background(), surveycore.RuntimeConfig{
 		RandomIPEnabled: true,
 		ProxySource:     "default",
+		Threads:         2,
 	})
-	if !errors.Is(err, surveycore.ErrUnsupportedOperation) {
-		t.Fatalf("err = %v", err)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if options.LeaseManager == nil {
+		t.Fatal("lease manager is nil")
+	}
+	lease, err := options.LeaseManager.Acquire(context.Background(), "worker-1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if lease.Address != "http://u:p@1.2.3.4:9000" || lease.Source != "default" {
+		t.Fatalf("lease = %#v", lease)
+	}
+	if extractBody["user_id"] != float64(77) || extractBody["upstream"] != "default" {
+		t.Fatalf("extract body = %#v", extractBody)
 	}
 	status := service.GetProxyStatus()
-	if status.Message != "官方代理源未接入" {
+	if status.Source != "default" || status.RemainingQuota != "4" || status.TotalQuota != "5" || status.Message != "官方代理已连接" {
 		t.Fatalf("status = %#v", status)
 	}
 }

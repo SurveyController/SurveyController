@@ -43,7 +43,7 @@ func TestBuildAnswerItemsMatchesEntryByProviderQuestionID(t *testing.T) {
 
 func TestBuildAnswerItemsUsesJSONProbabilityValues(t *testing.T) {
 	var entry model.QuestionEntry
-	if err := json.Unmarshal([]byte(`{"question_type":"multiple","probabilities":[1,0,1]}`), &entry); err != nil {
+	if err := json.Unmarshal([]byte(`{"question_type":"multiple","probabilities":[100,0,100]}`), &entry); err != nil {
 		t.Fatal(err)
 	}
 	questionNum := 1
@@ -108,5 +108,77 @@ func TestBuildAnswerItemsCoversOrderAndMatrixDefaults(t *testing.T) {
 	orderRows := items[1]["answerChoiceContent"].([]map[string]any)
 	if len(orderRows) != 2 || orderRows[0]["choiceId"] != 1 || orderRows[1]["choiceId"] != 2 {
 		t.Fatalf("order rows = %#v", orderRows)
+	}
+}
+
+func TestBuildAnswerItemsUsesMatrixRowProbabilities(t *testing.T) {
+	questionNum := 1
+	cfg := &model.RuntimeConfig{QuestionEntries: []model.QuestionEntry{{
+		QuestionType:  "matrix",
+		QuestionNum:   &questionNum,
+		Probabilities: [][]float64{{0, 1}, {1, 0}},
+	}}}
+	items, err := buildAnswerItems([]map[string]any{
+		{
+			"qstNo":        "Q1",
+			"qstId":        102,
+			"questionType": 4,
+			"choices":      []any{map[string]any{"choiceId": 3}, map[string]any{"choiceId": 4}},
+			"answers":      []any{map[string]any{"answerId": 5}, map[string]any{"answerId": 6}},
+		},
+	}, cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	rows := items[0]["answerQstChoiceList"].([]map[string]any)
+	first := rows[0]["choiceAnswerList"].([]map[string]any)[0]
+	second := rows[1]["choiceAnswerList"].([]map[string]any)[0]
+	if first["answerId"] != 6 || second["answerId"] != 5 {
+		t.Fatalf("matrix rows = %#v", rows)
+	}
+}
+
+func TestBuildAnswerItemsAppliesAnswerRules(t *testing.T) {
+	q1 := 1
+	q2 := 2
+	cfg := &model.RuntimeConfig{
+		QuestionEntries: []model.QuestionEntry{
+			{QuestionType: "single", QuestionNum: &q1, Probabilities: []float64{0, 1}},
+			{QuestionType: "single", QuestionNum: &q2, Probabilities: []float64{1, 1, 1}},
+		},
+		AnswerRules: []map[string]any{{
+			"condition_question_num":   1,
+			"condition_mode":           "selected",
+			"condition_option_indices": []any{1},
+			"target_question_num":      2,
+			"action_mode":              "must_select",
+			"target_option_indices":    []any{2},
+		}},
+	}
+	items, err := buildAnswerItems([]map[string]any{
+		{
+			"qstNo":        "Q1",
+			"qstId":        101,
+			"sortNo":       1,
+			"questionType": 2,
+			"selector":     1,
+			"choices":      []any{map[string]any{"choiceId": 1}, map[string]any{"choiceId": 2}},
+		},
+		{
+			"qstNo":        "Q2",
+			"qstId":        102,
+			"sortNo":       2,
+			"questionType": 2,
+			"selector":     1,
+			"choices":      []any{map[string]any{"choiceId": 3}, map[string]any{"choiceId": 4}, map[string]any{"choiceId": 5}},
+		},
+	}, cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	first := items[0]["answerQstChoice"].(map[string]any)
+	second := items[1]["answerQstChoice"].(map[string]any)
+	if first["choiceId"] != 2 || second["choiceId"] != 5 {
+		t.Fatalf("items = %#v", items)
 	}
 }

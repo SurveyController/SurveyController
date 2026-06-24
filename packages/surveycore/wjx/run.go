@@ -105,8 +105,10 @@ func (r Runner) submit(ctx context.Context, cfg *model.RuntimeConfig, submitData
 }
 
 func sampleKTimes(cfg *model.RuntimeConfig) int {
-	if cfg.AnswerDuration[0] > 0 {
-		return maxInt(1, cfg.AnswerDuration[0])
+	if cfg != nil {
+		if seconds := model.SampleAnswerDurationSeconds(cfg.AnswerDuration, 0); seconds > 0 {
+			return maxInt(1, seconds)
+		}
 	}
 	return 10 + rand.Intn(11)
 }

@@ -3,6 +3,7 @@ package credamo
 import (
 	"context"
 	"fmt"
+	"math/rand"
 	"net/http"
 	"strings"
 	"time"
@@ -58,9 +59,11 @@ func (r Runner) Run(ctx context.Context, cfg *model.RuntimeConfig, handler Event
 			emit(handler, "生成答案失败", false, true, result.Success+result.Fail, target)
 			return result, fmt.Errorf("生成答案失败: %w", err)
 		}
+		durationSeconds := defaultDurationSeconds(cfg)
+		answerStartedAt := sampleAnswerStartTimeMS(cfg, initData.TimestampMS, durationSeconds)
 		body := map[string]any{
-			"answerStartTime": initData.TimestampMS,
-			"answerEndTime":   initData.TimestampMS + int64(defaultDurationSeconds(cfg))*1000,
+			"answerStartTime": answerStartedAt,
+			"answerEndTime":   answerStartedAt + int64(durationSeconds)*1000,
 			"status":          1,
 			"answerQstList":   answers,
 			"shortUrl":        shortURL,
@@ -137,10 +140,31 @@ func (r Runner) httpDoer(proxyAddress string) (interface {
 }
 
 func defaultDurationSeconds(cfg *model.RuntimeConfig) int {
-	if cfg.AnswerDuration[0] > 0 {
-		return cfg.AnswerDuration[0]
+	if cfg != nil {
+		if seconds := model.SampleAnswerDurationSeconds(cfg.AnswerDuration, 90); seconds > 0 {
+			return seconds
+		}
 	}
-	return 60
+	return 90
+}
+
+func sampleAnswerStartTimeMS(cfg *model.RuntimeConfig, fallbackMS int64, durationSeconds int) int64 {
+	if cfg == nil {
+		return fallbackMS
+	}
+	startMS, endMS := model.AnswerDatetimeWindowToEpochMS(cfg.AnswerDatetimeWindow)
+	if startMS <= 0 || endMS <= startMS {
+		return fallbackMS
+	}
+	durationMS := int64(durationSeconds) * 1000
+	if durationMS <= 0 {
+		durationMS = 1
+	}
+	latestStartMS := endMS - durationMS
+	if latestStartMS <= startMS {
+		return startMS
+	}
+	return startMS + rand.Int63n(latestStartMS-startMS+1)
 }
 
 func emit(handler EventHandler, message string, success bool, fail bool, current int, total int) {

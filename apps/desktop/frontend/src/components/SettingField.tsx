@@ -19,6 +19,7 @@ function SettingField({ field, onChange }: SettingFieldProps) {
     () => (field.options?.length ? field.options : [field.value]).map((option) => ({ label: option, value: option })),
     [field.options, field.value],
   )
+  const [rangeStart, rangeEnd] = useMemo(() => splitRangeValue(field.value), [field.value])
 
   return (
     <div className="setting-row">
@@ -54,6 +55,22 @@ function SettingField({ field, onChange }: SettingFieldProps) {
         />
       ) : null}
 
+      {field.kind === 'range' ? (
+        <div className="range-field">
+          <InputText
+            value={rangeStart}
+            width="6.5rem"
+            onChange={(event: ChangeEvent<HTMLInputElement>) => onChange(field.id, `${event.target.value}-${rangeEnd}`)}
+          />
+          <span>至</span>
+          <InputText
+            value={rangeEnd}
+            width="6.5rem"
+            onChange={(event: ChangeEvent<HTMLInputElement>) => onChange(field.id, `${rangeStart}-${event.target.value}`)}
+          />
+        </div>
+      ) : null}
+
       {field.kind === 'text' ? (
         <InputText
           value={field.value}
@@ -62,11 +79,16 @@ function SettingField({ field, onChange }: SettingFieldProps) {
         />
       ) : null}
 
-      {!['toggle', 'select', 'number', 'text'].includes(field.kind) ? (
+      {!['toggle', 'select', 'number', 'range', 'text'].includes(field.kind) ? (
         <span className="readonly-value">{field.value}</span>
       ) : null}
     </div>
   )
+}
+
+function splitRangeValue(value: string): [string, string] {
+  const parts = String(value || '').match(/\d+/g) ?? []
+  return [parts[0] ?? '0', parts[1] ?? parts[0] ?? '0']
 }
 
 export default SettingField

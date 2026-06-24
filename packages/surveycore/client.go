@@ -13,10 +13,12 @@ import (
 )
 
 type Client struct {
-	httpClient HTTPClient
-	aiAPIKey   string
-	aiBaseURL  string
-	aiModel    string
+	httpClient             HTTPClient
+	aiAPIKey               string
+	aiBaseURL              string
+	aiModel                string
+	aiTextResolver         AITextResolver
+	freeAIIdentityProvider FreeAIIdentityProvider
 }
 
 type Option func(*Client)
@@ -42,6 +44,18 @@ func WithAI(apiKey string, baseURL string, modelName string) Option {
 		c.aiAPIKey = strings.TrimSpace(apiKey)
 		c.aiBaseURL = strings.TrimSpace(baseURL)
 		c.aiModel = strings.TrimSpace(modelName)
+	}
+}
+
+func WithAITextResolver(resolver AITextResolver) Option {
+	return func(c *Client) {
+		c.aiTextResolver = resolver
+	}
+}
+
+func WithFreeAIIdentityProvider(provider FreeAIIdentityProvider) Option {
+	return func(c *Client) {
+		c.freeAIIdentityProvider = provider
 	}
 }
 

@@ -18,6 +18,7 @@ func TestConfigRoundTripKeepsRuntimeAndReverseFillFields(t *testing.T) {
 		Threads:               4,
 		SubmitInterval:        [2]int{1, 3},
 		AnswerDuration:        [2]int{80, 120},
+		AnswerDatetimeWindow:  [2]string{"2024-03-10 09:00:00", "2024-03-10 10:00:00"},
 		RandomIPEnabled:       true,
 		ProxySource:           "custom",
 		CustomProxyAPI:        "https://proxy.example",
@@ -41,6 +42,9 @@ func TestConfigRoundTripKeepsRuntimeAndReverseFillFields(t *testing.T) {
 	if !restored.ReverseFillEnabled || restored.ReverseFillFormat != ReverseFillFormatWJXSequence || restored.ReverseFillStartRow != 3 {
 		t.Fatalf("reverse fill = %#v", restored)
 	}
+	if restored.AnswerDatetimeWindow != cfg.AnswerDatetimeWindow {
+		t.Fatalf("answer datetime window = %#v", restored.AnswerDatetimeWindow)
+	}
 	if restored.RandomUARatios["wechat"] != 50 || len(restored.DimensionGroups) != 2 {
 		t.Fatalf("settings = %#v", restored)
 	}
@@ -53,6 +57,7 @@ func TestNormalizeRuntimeConfigPayloadBoundaries(t *testing.T) {
 		"threads":                "4",
 		"submit_interval":        []any{"1", "3"},
 		"answer_duration":        []any{"90", "90"},
+		"answer_datetime_window": []any{" 2024-03-10 09:00:00 ", "bad"},
 		"random_ip_enabled":      "yes",
 		"proxy_source":           "bad",
 		"random_ua_ratios":       map[string]any{"wechat": 20, "mobile": 20, "pc": 20},
@@ -69,6 +74,9 @@ func TestNormalizeRuntimeConfigPayloadBoundaries(t *testing.T) {
 	}
 	if cfg.AnswerDuration != [2]int{81, 99} {
 		t.Fatalf("duration = %#v", cfg.AnswerDuration)
+	}
+	if cfg.AnswerDatetimeWindow != [2]string{"2024-03-10 09:00:00", ""} {
+		t.Fatalf("answer datetime window = %#v", cfg.AnswerDatetimeWindow)
 	}
 	if cfg.ProxySource != "default" || cfg.RandomUARatios["pc"] != 34 {
 		t.Fatalf("proxy/ua = %#v", cfg)

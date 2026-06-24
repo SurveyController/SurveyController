@@ -106,6 +106,39 @@ func TestRunExecutionLeaseLifecycle(t *testing.T) {
 	}
 }
 
+func TestRunExecutionCommitsAnswerRuntimeOnlyOnSuccess(t *testing.T) {
+	runtime := newAnswerRuntimeState()
+	cfg := &RuntimeConfig{URL: "https://example.test", Target: 1, Threads: 1, AnswerRuntime: runtime}
+	result, err := RunExecution(context.Background(), cfg, func(_ context.Context, local *RuntimeConfig, _ EventHandler) (*RunResult, error) {
+		if local.AnswerRuntimeOwner == "" {
+			t.Fatal("missing answer runtime owner")
+		}
+		local.AnswerRuntime.AppendPendingDistributionChoice(local.AnswerRuntimeOwner, "q:1", 1, 2)
+		return &RunResult{Success: 1}, nil
+	}, nil, ExecutionOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.Success != 1 {
+		t.Fatalf("result = %#v", result)
+	}
+	total, counts := runtime.SnapshotDistributionStats("q:1", 2)
+	if total != 1 || counts[1] != 1 {
+		t.Fatalf("total=%d counts=%#v", total, counts)
+	}
+
+	runtime = newAnswerRuntimeState()
+	cfg = &RuntimeConfig{URL: "https://example.test", Target: 1, Threads: 1, AnswerRuntime: runtime}
+	_, _ = RunExecution(context.Background(), cfg, func(_ context.Context, local *RuntimeConfig, _ EventHandler) (*RunResult, error) {
+		local.AnswerRuntime.AppendPendingDistributionChoice(local.AnswerRuntimeOwner, "q:1", 1, 2)
+		return &RunResult{Fail: 1}, errors.New("temporary network failure")
+	}, nil, ExecutionOptions{})
+	total, counts = runtime.SnapshotDistributionStats("q:1", 2)
+	if total != 0 || counts[1] != 0 {
+		t.Fatalf("failed submit polluted stats: total=%d counts=%#v", total, counts)
+	}
+}
+
 func TestRunExecutionClassifiesUnsupportedWithoutRetry(t *testing.T) {
 	var attempts int
 	result, err := RunExecution(context.Background(), &RuntimeConfig{URL: "https://example.test", Target: 1, Threads: 1}, func(_ context.Context, _ *RuntimeConfig, _ EventHandler) (*RunResult, error) {

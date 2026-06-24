@@ -30,6 +30,31 @@ import {
 import type { ProxyStatus, RunTaskState, RuntimeConfig, ShellState } from './types'
 
 function App() {
+  const [platform, setPlatform] = useState<'windows' | 'macos' | 'linux' | 'unknown'>('unknown')
+
+  useEffect(() => {
+    const ua = navigator.userAgent.toLowerCase()
+    let currentPlatform: 'windows' | 'macos' | 'linux' | 'unknown' = 'unknown'
+    let platformClass = 'platform-unknown'
+
+    if (ua.includes('windows')) {
+      currentPlatform = 'windows'
+      platformClass = 'platform-windows'
+    } else if (ua.includes('macintosh') || ua.includes('mac os x')) {
+      currentPlatform = 'macos'
+      platformClass = 'platform-macos'
+    } else if (ua.includes('linux')) {
+      currentPlatform = 'linux'
+      platformClass = 'platform-linux'
+    }
+
+    setPlatform(currentPlatform)
+    document.documentElement.classList.add(platformClass)
+    return () => {
+      document.documentElement.classList.remove(platformClass)
+    }
+  }, [])
+
   const [model, setModel] = useState<AppModel | null>(null)
   const [currentPage, setCurrentPage] = useState('dashboard')
   const [loading, setLoading] = useState(true)
@@ -340,7 +365,7 @@ function App() {
             <small>{shell.appVersion}</small>
           </div>
         </div>
-        <WindowControls />
+        {platform !== 'macos' && <WindowControls />}
       </header>
 
       <div className="app-frame">

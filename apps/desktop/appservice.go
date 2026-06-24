@@ -174,14 +174,18 @@ type AppService struct {
 }
 
 func NewAppService() *AppService {
-	return &AppService{survey: surveycore.New(), proxy: newProxyRuntime()}
+	proxy := newProxyRuntime()
+	return &AppService{
+		survey: surveycore.New(surveycore.WithFreeAIIdentityProvider(proxy)),
+		proxy:  proxy,
+	}
 }
 
 func (s *AppService) surveyClient() *surveycore.Client {
 	if s.survey != nil {
 		return s.survey
 	}
-	return surveycore.New()
+	return surveycore.New(surveycore.WithFreeAIIdentityProvider(s.proxyRuntime()))
 }
 
 func (s *AppService) proxyRuntime() *proxyRuntime {

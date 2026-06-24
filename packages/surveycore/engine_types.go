@@ -38,6 +38,7 @@ type ExecutionOptions struct {
 	CooldownOnError time.Duration
 	LeaseManager    LeaseManager
 	Now             func() time.Time
+	ConfigureRun    func(ctx context.Context, jobIndex int, attempt int, cfg *RuntimeConfig) error
 }
 
 type SubmitFunc func(ctx context.Context, cfg *RuntimeConfig, handler EventHandler) (*RunResult, error)

@@ -5,15 +5,15 @@ import (
 	"strings"
 
 	"github.com/xuri/excelize/v2"
-	"surveycontroller/surveycore"
+	"surveycontroller/surveycore/internal/model"
 )
 
 type PreviewOptions struct {
 	Path            string
 	Format          string
 	StartRow        int
-	Questions       []surveycore.QuestionMeta
-	QuestionEntries []surveycore.QuestionEntry
+	Questions       []model.QuestionMeta
+	QuestionEntries []model.QuestionEntry
 	MaxSampleRows   int
 }
 
@@ -66,7 +66,7 @@ func PreviewExcel(options PreviewOptions) (Preview, error) {
 		QuestionColumns: columns,
 		SampleRows:      []SampleRow{},
 	}
-	questionByNum := map[int]surveycore.QuestionMeta{}
+	questionByNum := map[int]model.QuestionMeta{}
 	for _, question := range options.Questions {
 		questionByNum[question.Num] = question
 	}
@@ -102,7 +102,7 @@ func PreviewExcel(options PreviewOptions) (Preview, error) {
 	return preview, nil
 }
 
-func parseQuestionAnswer(question surveycore.QuestionMeta, columns []Column, row RawRow, format string) (*Answer, error) {
+func parseQuestionAnswer(question model.QuestionMeta, columns []Column, row RawRow, format string) (*Answer, error) {
 	questionType := inferQuestionType(question)
 	orderedColumns := ResolveOrderedColumns(columns, question.RowTexts)
 	switch questionType {
@@ -126,7 +126,7 @@ func parseQuestionAnswer(question surveycore.QuestionMeta, columns []Column, row
 	}
 }
 
-func inferQuestionType(question surveycore.QuestionMeta) string {
+func inferQuestionType(question model.QuestionMeta) string {
 	if question.ProviderType != "" {
 		switch question.ProviderType {
 		case "radio", "single":

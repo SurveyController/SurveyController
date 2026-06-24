@@ -1,6 +1,7 @@
 import type {
   AppSettings,
   DashboardState,
+  QuestionEntry,
   ProxyStatus,
   QuestionMeta,
   QuestionRow,
@@ -37,6 +38,8 @@ const proxyValues: Record<string, string> = Object.fromEntries(
   Object.entries(proxyLabels).map(([value, label]) => [label, value]),
 )
 
+const aiProtocols = ['auto', 'chat_completions', 'responses']
+
 export function buildAppModel(shell: ShellState, settings: AppSettings, config?: RuntimeConfig | null): AppModel {
   const runtimeConfig = normalizeRuntimeConfig(config ?? {
     url: shell.dashboard.surveyUrl,
@@ -71,7 +74,7 @@ export function applyConfigToShell(
     runtimeGroups: mapRuntimeGroups(normalized),
     settingsGroups: mapSettingsGroups(settings),
     strategyRules: mapStrategyRules(normalized),
-    dimensionGroups: normalized.dimension_groups ?? [],
+    dimensionGroups: mapDimensionGroups(normalized),
     reverseFillPlan: mapReverseFillRows(normalized, preview),
   }
 }
@@ -98,7 +101,7 @@ export function normalizeRuntimeConfig(config: RuntimeConfig): RuntimeConfig {
     psycho_target_alpha: config.psycho_target_alpha ?? 0.85,
     ai_mode: config.ai_mode || 'free',
     ai_provider: config.ai_provider || 'deepseek',
-    ai_api_protocol: config.ai_api_protocol || 'auto',
+    ai_api_protocol: normalizeAIProtocol(config.ai_api_protocol),
     reverse_fill_enabled: Boolean(config.reverse_fill_enabled),
     reverse_fill_format: config.reverse_fill_format || 'auto',
     reverse_fill_start_row: clampInt(config.reverse_fill_start_row, 1, 999999, 1),
@@ -120,6 +123,12 @@ export function updateRuntimeConfigField(config: RuntimeConfig, fieldId: string,
     case 'threads':
       next.threads = clampInt(Number(text), 1, 128, 1)
       next.reverse_fill_threads = Math.max(1, next.reverse_fill_threads ?? next.threads)
+      break
+    case 'interval':
+      next.submit_interval = parseRangePair(text, [0, 0])
+      break
+    case 'answer-duration':
+      next.answer_duration = parseRangePair(text, [60, 120])
       break
     case 'random-ip':
       next.random_ip_enabled = Boolean(rawValue)
@@ -160,11 +169,26 @@ export function updateRuntimeConfigField(config: RuntimeConfig, fieldId: string,
     case 'ai-provider':
       next.ai_provider = text
       break
+    case 'ai-api-key':
+      next.ai_api_key = text
+      break
     case 'ai-model':
       next.ai_model = text
       break
     case 'ai-base-url':
       next.ai_base_url = text
+      break
+    case 'ai-api-protocol':
+      next.ai_api_protocol = normalizeAIProtocol(text)
+      break
+    case 'ai-system-prompt':
+      next.ai_system_prompt = text
+      break
+    case 'reliability-mode':
+      next.reliability_mode_enabled = Boolean(rawValue)
+      break
+    case 'psycho-target-alpha':
+      next.psycho_target_alpha = clampFloat(Number(text), 0.6, 0.95, 0.85)
       break
   }
   return normalizeRuntimeConfig(next)
@@ -290,8 +314,8 @@ function mapRuntimeGroups(config: RuntimeConfig): SettingsGroup[] {
       fields: [
         field('target', '目标份数', '限制本次任务的目标提交量', 'number', String(config.target ?? 1)),
         field('threads', '并发数', '纯 HTTP 并发，不走浏览器兜底', 'number', String(config.threads ?? 1)),
-        field('interval', '提交间隔', '每份提交之间的等待范围', 'range', `${submitInterval[0]}s - ${submitInterval[1]}s`),
-        field('answer-duration', '作答时长', '控制整卷耗时分布', 'range', `${answerDuration[0]}s - ${answerDuration[1]}s`),
+        field('interval', '提交间隔（秒）', '每份提交之间的等待范围', 'range', `${submitInterval[0]} - ${submitInterval[1]}`),
+        field('answer-duration', '作答时长（秒）', '控制整卷耗时分布', 'range', `${answerDuration[0]} - ${answerDuration[1]}`),
       ],
     },
     {
@@ -309,7 +333,13 @@ function mapRuntimeGroups(config: RuntimeConfig): SettingsGroup[] {
       fields: [
         field('ai-mode', 'AI 模式', '免费模式或自定义服务商', 'select', config.ai_mode ?? 'free', ['free', 'provider']),
         field('ai-provider', 'AI 服务商', 'DeepSeek / OpenAI 兼容服务', 'text', config.ai_provider ?? 'deepseek'),
+        field('ai-api-key', 'AI API Key', '', 'text', config.ai_api_key ?? ''),
+        field('ai-base-url', 'AI Base URL', '', 'text', config.ai_base_url ?? ''),
+        field('ai-api-protocol', 'AI 协议', '', 'select', config.ai_api_protocol ?? 'auto', aiProtocols),
         field('ai-model', 'AI 模型', '用于文本题生成和改写', 'text', config.ai_model ?? ''),
+        field('ai-system-prompt', 'AI 系统提示词', '', 'text', config.ai_system_prompt ?? ''),
+        field('reliability-mode', '信效度计划', '', 'toggle', String(config.reliability_mode_enabled ?? true)),
+        field('psycho-target-alpha', '目标 Alpha', '', 'number', String(config.psycho_target_alpha ?? 0.85)),
         field('reverse-fill-enabled', 'Excel 反填', '按导出的 Excel 回放答案', 'toggle', String(Boolean(config.reverse_fill_enabled))),
         field('reverse-fill-path', '反填文件', 'xlsx 文件路径', 'text', config.reverse_fill_source_path ?? ''),
         field('reverse-fill-format', '反填格式', '问卷星导出格式', 'select', config.reverse_fill_format ?? 'auto', ['auto', 'wjx_text', 'wjx_score', 'wjx_sequence']),
@@ -349,18 +379,93 @@ function mapQuestionRows(config: RuntimeConfig): QuestionRow[] {
     return {
       index: question.num,
       type: questionTypeLabel(question),
-      dimension: (config.dimension_groups ?? [])[question.num - 1] ?? '',
-      strategy: String(entry?.distribution_mode || entry?.psycho_bias || '随机'),
+      dimension: entry?.dimension ?? '',
+      strategy: strategyLabel(entry),
     }
   })
 }
 
 function mapStrategyRules(config: RuntimeConfig) {
   return (config.answer_rules ?? []).map((rule, index) => ({
-    condition: String(rule.condition ?? `规则 ${index + 1}`),
-    action: String(rule.action ?? '约束'),
-    target: String(rule.target ?? ''),
+    condition: ruleConditionLabel(rule, index),
+    action: ruleActionLabel(rule),
+    target: ruleTargetLabel(rule),
   }))
+}
+
+function strategyLabel(entry: QuestionEntry | undefined): string {
+  if (!entry) {
+    return '随机'
+  }
+  if (entry.ai_enabled) {
+    return 'AI'
+  }
+  return String(entry.distribution_mode || entry.psycho_bias || '随机')
+}
+
+export function mapDimensionGroups(config: RuntimeConfig): string[] {
+  const groups = new Set<string>()
+  for (const item of config.dimension_groups ?? []) {
+    const text = String(item || '').trim()
+    if (text) {
+      groups.add(text)
+    }
+  }
+  for (const entry of config.question_entries ?? []) {
+    const text = String(entry.dimension || '').trim()
+    if (text) {
+      groups.add(text)
+    }
+  }
+  return [...groups]
+}
+
+function ruleConditionLabel(rule: Record<string, unknown>, index: number): string {
+  const questionNum = Number(rule.condition_question_num)
+  const mode = String(rule.condition_mode || '')
+  const options = optionIndicesLabel(rule.condition_option_indices)
+  const row = rowLabel(rule.condition_row_index)
+  if (!Number.isFinite(questionNum) || questionNum <= 0) {
+    return `规则 ${index + 1}`
+  }
+  return `第 ${questionNum} 题${row} ${conditionModeLabel(mode)} ${options}`
+}
+
+function ruleActionLabel(rule: Record<string, unknown>): string {
+  return String(rule.action_mode) === 'must_not_select' ? '不得选择' : '必须选择'
+}
+
+function ruleTargetLabel(rule: Record<string, unknown>): string {
+  const questionNum = Number(rule.target_question_num)
+  const row = rowLabel(rule.target_row_index)
+  const options = optionIndicesLabel(rule.target_option_indices)
+  if (!Number.isFinite(questionNum) || questionNum <= 0) {
+    return options
+  }
+  return `第 ${questionNum} 题${row} ${options}`
+}
+
+function conditionModeLabel(mode: string): string {
+  return mode === 'not_selected' ? '未选中' : '选中'
+}
+
+function optionIndicesLabel(raw: unknown): string {
+  if (!Array.isArray(raw) || !raw.length) {
+    return '-'
+  }
+  return raw
+    .map((item) => Number(item))
+    .filter((item) => Number.isFinite(item) && item >= 0)
+    .map((item) => String(item + 1))
+    .join('、') || '-'
+}
+
+function rowLabel(raw: unknown): string {
+  const value = Number(raw)
+  if (!Number.isFinite(value) || value < 0) {
+    return ''
+  }
+  return `第 ${value + 1} 行`
 }
 
 function mapReverseFillRows(config: RuntimeConfig, preview: ReverseFillPreview | null): ReverseFillRow[] {
@@ -379,8 +484,8 @@ function mapReverseFillRows(config: RuntimeConfig, preview: ReverseFillPreview |
   })
 }
 
-function field(id: string, label: string, description: string, kind: string, value: string, options?: string[]) {
-  return { id, label, description, kind, value, options }
+function field(id: string, label: string, _description: string, kind: string, value: string, options?: string[]) {
+  return { id, label, description: '', kind, value, options }
 }
 
 function inferProvider(url: string): string {
@@ -403,10 +508,33 @@ function normalizePair(value: number[] | undefined, fallback: [number, number]):
   return [left, right]
 }
 
+function parseRangePair(value: string, fallback: [number, number]): [number, number] {
+  const parts = String(value || '').match(/\d+/g) ?? []
+  if (!parts.length) {
+    return fallback
+  }
+  const left = clampInt(Number(parts[0]), 0, 999999, fallback[0])
+  const right = clampInt(Number(parts[1] ?? parts[0]), left, 999999, fallback[1])
+  return [left, right]
+}
+
 function clampInt(value: unknown, min: number, max: number, fallback: number): number {
   const parsed = Number(value)
   if (!Number.isFinite(parsed)) {
     return fallback
   }
   return Math.max(min, Math.min(max, Math.trunc(parsed)))
+}
+
+function clampFloat(value: unknown, min: number, max: number, fallback: number): number {
+  const parsed = Number(value)
+  if (!Number.isFinite(parsed)) {
+    return fallback
+  }
+  return Math.max(min, Math.min(max, parsed))
+}
+
+function normalizeAIProtocol(value?: string): string {
+  const text = String(value ?? 'auto').trim().toLowerCase()
+  return aiProtocols.includes(text) ? text : 'auto'
 }

@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"sync"
 	"time"
+
+	"surveycontroller/surveycore/internal/model"
 )
 
 func RunExecution(ctx context.Context, cfg *RuntimeConfig, submit SubmitFunc, handler EventHandler, options ExecutionOptions) (*RunResult, error) {
@@ -64,12 +66,21 @@ func RunExecution(ctx context.Context, cfg *RuntimeConfig, submit SubmitFunc, ha
 			defer wg.Done()
 			state.setProgress(workerIndex, workerName, "等待任务", true)
 			defer state.setProgress(workerIndex, workerName, "空闲", false)
+			hasSubmitted := false
 			for job := range jobs {
+				if hasSubmitted {
+					waitSubmitInterval(runCtx, cfg, state, workerIndex, workerName)
+				}
+				if runCtx.Err() != nil {
+					return
+				}
 				if err := runOneJob(runCtx, cfg, submit, options, state, workerIndex, workerName, job); err != nil {
 					recordErr(err)
 					if options.FailStop || !isRetryableRunError(err) {
 						cancel()
 					}
+				} else {
+					hasSubmitted = true
 				}
 				if runCtx.Err() != nil {
 					return
@@ -127,11 +138,22 @@ func runOneJob(ctx context.Context, cfg *RuntimeConfig, submit SubmitFunc, optio
 		if leased {
 			local.ActiveProxyAddress = lease.Address
 		}
+		local.AnswerRuntimeOwner = owner
+		resetPendingAnswerRuntime(&local)
+		if options.ConfigureRun != nil {
+			if err := options.ConfigureRun(ctx, jobIndex, attempt, &local); err != nil {
+				releaseExecutionLease(options, owner, lease, leased, err)
+				resetPendingAnswerRuntime(&local)
+				state.addFail(workerIndex, workerName, "配置失败")
+				return err
+			}
+		}
 		state.setProgress(workerIndex, workerName, "提交中", true)
 		result, err := submit(ctx, &local, func(event Event) {
 			state.forward(workerIndex, workerName, event)
 		})
 		releaseExecutionLease(options, owner, lease, leased, err)
+		finalizeAnswerRuntime(&local, err == nil)
 
 		if err == nil {
 			state.addSuccess(workerIndex, workerName, "提交成功")
@@ -148,6 +170,18 @@ func runOneJob(ctx context.Context, cfg *RuntimeConfig, submit SubmitFunc, optio
 		return err
 	}
 	return ErrRunFailed
+}
+
+func waitSubmitInterval(ctx context.Context, cfg *RuntimeConfig, state *executionState, workerIndex int, workerName string) {
+	if cfg == nil {
+		return
+	}
+	seconds := model.SampleSubmitIntervalSeconds(cfg.SubmitInterval)
+	if seconds <= 0 {
+		return
+	}
+	state.setProgress(workerIndex, workerName, "等待提交间隔", true)
+	sleepRetry(ctx, time.Duration(seconds)*time.Second)
 }
 
 func acquireExecutionLease(ctx context.Context, cfg *RuntimeConfig, options ExecutionOptions, state *executionState, workerIndex int, workerName string, owner string) (ExecutionLease, bool, error) {

@@ -7,7 +7,9 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync"
 	"testing"
+	"time"
 )
 
 func TestParseAndDefaultConfig(t *testing.T) {
@@ -88,6 +90,57 @@ func TestParseDefaultConfigAndRunWJX(t *testing.T) {
 	}
 }
 
+func TestRunWJXRandomUserAgent(t *testing.T) {
+	var (
+		mu  sync.Mutex
+		uas []string
+	)
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		mu.Lock()
+		uas = append(uas, r.UserAgent())
+		mu.Unlock()
+		switch r.URL.Path {
+		case "/vm/demo.aspx":
+			w.Header().Set("Content-Type", "text/html; charset=utf-8")
+			_, _ = w.Write([]byte(`
+<html><head><title>WJX 测试 - 问卷星</title></head><body>
+<div id="divQuestion"><fieldset>
+<div topic="1" id="div1" type="3"><div class="topichtml">1. 单选</div><div class="ui-controlgroup"><div><span class="label">A</span></div><div><span class="label">B</span></div></div></div>
+</fieldset></div>
+</body></html>`))
+		case "/joinnew/processjq.ashx":
+			_, _ = w.Write([]byte("10"))
+		default:
+			t.Fatalf("unexpected path: %s", r.URL.Path)
+		}
+	}))
+	defer server.Close()
+
+	result, err := New(WithHTTPClient(rewriteWJXHTTPClient(server.URL))).Run(context.Background(), &RuntimeConfig{
+		URL:             "https://www.wjx.cn/vm/demo.aspx",
+		SurveyProvider:  ProviderWJX,
+		Target:          1,
+		RandomUAEnabled: true,
+		RandomUARatios:  map[string]int{"wechat": 0, "mobile": 0, "pc": 100},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.Success != 1 || result.Fail != 0 {
+		t.Fatalf("result = %#v", result)
+	}
+	mu.Lock()
+	defer mu.Unlock()
+	if len(uas) < 2 {
+		t.Fatalf("uas = %#v", uas)
+	}
+	for _, ua := range uas {
+		if !strings.Contains(ua, "Windows NT 10.0") || !strings.Contains(ua, "Chrome/121") {
+			t.Fatalf("unexpected ua = %q", ua)
+		}
+	}
+}
+
 func TestRunTencentSubmitsWithEvents(t *testing.T) {
 	server := newTencentCoreTestServer(t)
 	var events []Event
@@ -130,6 +183,44 @@ func TestRunWithEventsSubmitsCredamo(t *testing.T) {
 	if len(events) == 0 {
 		t.Fatal("expected events")
 	}
+}
+
+func TestRunCredamoUsesAnswerDatetimeWindow(t *testing.T) {
+	var submitted map[string]any
+	server := newCredamoTestServerWithSubmitBody(t, true, func(body map[string]any) {
+		submitted = body
+	})
+	cfg, err := New().DefaultConfig(context.Background(), server.URL+"/s/demo_")
+	if err != nil {
+		t.Fatal(err)
+	}
+	cfg.Target = 1
+	cfg.AnswerDuration = [2]int{20, 30}
+	cfg.AnswerDatetimeWindow = [2]string{"2024-03-10 09:00:00", "2024-03-10 09:10:00"}
+
+	result, err := New().Run(context.Background(), cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.Success != 1 || submitted == nil {
+		t.Fatalf("result=%#v submitted=%#v", result, submitted)
+	}
+	windowStart := mustLocalUnixMilli(t, "2024-03-10 09:00:00")
+	windowEnd := mustLocalUnixMilli(t, "2024-03-10 09:10:00")
+	answerStart := int64(submitted["answerStartTime"].(float64))
+	answerEnd := int64(submitted["answerEndTime"].(float64))
+	if answerStart < windowStart || answerEnd > windowEnd || answerEnd <= answerStart {
+		t.Fatalf("answer time out of window: start=%d end=%d window=[%d,%d]", answerStart, answerEnd, windowStart, windowEnd)
+	}
+}
+
+func mustLocalUnixMilli(t *testing.T, value string) int64 {
+	t.Helper()
+	parsed, err := time.ParseInLocation("2006-01-02 15:04:05", value, time.Local)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return parsed.UnixMilli()
 }
 
 func newTencentCoreTestServer(t *testing.T) *httptest.Server {
@@ -276,6 +367,11 @@ func TestRunErrors(t *testing.T) {
 
 func newCredamoTestServer(t *testing.T, submitOK bool) *httptest.Server {
 	t.Helper()
+	return newCredamoTestServerWithSubmitBody(t, submitOK, nil)
+}
+
+func newCredamoTestServerWithSubmitBody(t *testing.T, submitOK bool, onSubmit func(map[string]any)) *httptest.Server {
+	t.Helper()
 	return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case "/v1/survey/noauth/detail/get/demoano":
@@ -306,6 +402,9 @@ func newCredamoTestServer(t *testing.T, submitOK bool) *httptest.Server {
 			var body map[string]any
 			if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 				t.Fatalf("decode submit body: %v", err)
+			}
+			if onSubmit != nil {
+				onSubmit(body)
 			}
 			items, ok := body["answerQstList"].([]any)
 			if !ok || len(items) != 7 {

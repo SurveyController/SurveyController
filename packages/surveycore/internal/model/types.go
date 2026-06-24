@@ -103,6 +103,9 @@ type RuntimeConfig struct {
 	DimensionGroups        []string         `json:"dimension_groups,omitempty"`
 	QuestionEntries        []QuestionEntry  `json:"question_entries,omitempty"`
 	QuestionsInfo          []QuestionMeta   `json:"questions_info,omitempty"`
+	AnswerRuntime          AnswerRuntime    `json:"-"`
+	AnswerRuntimeOwner     string           `json:"-"`
+	Persona                *Persona         `json:"-"`
 }
 
 type QuestionEntry struct {

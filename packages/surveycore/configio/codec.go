@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"surveycontroller/surveycore"
+	"surveycontroller/surveycore/internal/model"
 )
 
 const (
@@ -95,7 +96,7 @@ func NormalizeRuntimeConfigPayload(raw map[string]any) map[string]any {
 	out["threads"] = positiveInt(raw["threads"], 1)
 	out["submit_interval"] = intPair(raw["submit_interval"], [2]int{0, 0})
 	out["answer_duration"] = normalizeAnswerDuration(raw["answer_duration"])
-	out["answer_datetime_window"] = stringPair(raw["answer_datetime_window"])
+	out["answer_datetime_window"] = model.NormalizeAnswerDatetimeWindow(stringPair(raw["answer_datetime_window"]))
 	out["random_ip_enabled"] = boolValue(raw["random_ip_enabled"], false)
 	out["proxy_source"] = normalizeProxySource(raw["proxy_source"])
 	out["custom_proxy_api"] = strings.TrimSpace(stringValue(raw["custom_proxy_api"]))

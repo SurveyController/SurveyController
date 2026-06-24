@@ -1,3 +1,4 @@
+import { Eye, FolderOpen, Save } from 'lucide-react'
 import { Button } from 'react-windows-ui'
 import SettingField from '../components/SettingField'
 import type { PageMetric, ReverseFillRow, SettingsGroup } from '../types'
@@ -39,8 +40,8 @@ function InfoView({
 
           {reverseFill ? (
             <div className="toolbar-row">
-              <Button value="选择 Excel" onClick={onChooseReverseFill} />
-              <Button value="预览反填" disabled={busy || !reverseFillPath} onClick={onPreviewReverseFill} />
+              <Button value="选择 Excel" icon={<FolderOpen size={15} />} onClick={onChooseReverseFill} />
+              <Button value="预览反填" icon={<Eye size={15} />} disabled={busy || !reverseFillPath} onClick={onPreviewReverseFill} />
               <span>{reverseFillPath || '未选择文件'}</span>
             </div>
           ) : null}
@@ -92,7 +93,7 @@ function InfoView({
 
         {settings?.length ? (
           <div className="footer-actions">
-            <Button type="primary" value="保存设置" disabled={busy} onClick={onSaveSettings} />
+            <Button type="primary" value="保存设置" icon={<Save size={15} />} disabled={busy} onClick={onSaveSettings} />
           </div>
         ) : null}
       </div>

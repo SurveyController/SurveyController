@@ -86,7 +86,10 @@ func (r Runner) fetchSubmitSource(ctx context.Context, surveyID string, hashValu
 
 func buildSubmitBody(cfg *model.RuntimeConfig, surveyID string, hashValue string, rawQuestions []map[string]any, userAgent string) (map[string]any, error) {
 	questions := submitQuestions(rawQuestions)
-	index := answerplan.NewEntryIndex(cfg.QuestionEntries)
+	actions, err := answerplan.BuildActionsWithLogic(questions, cfg.QuestionEntries, answerplan.OptionsFromRuntimeConfig(cfg))
+	if err != nil {
+		return nil, err
+	}
 	actionByID := map[string]answerplan.Action{}
 	for _, question := range questions {
 		if question.IsDescription {
@@ -98,15 +101,11 @@ func buildSubmitBody(cfg *model.RuntimeConfig, surveyID string, hashValue string
 		if !supportedProviderTypes[question.ProviderType] {
 			return nil, fmt.Errorf("腾讯问卷第%d题暂不支持：%s", question.Num, firstString(question.ProviderType, question.TypeCode, "unknown"))
 		}
-		entry, ok := index.Find(question)
-		if !ok {
-			entry = defaultEntry(question)
+	}
+	for _, action := range actions {
+		if action.QuestionID != "" {
+			actionByID[action.QuestionID] = action
 		}
-		action, err := answerplan.BuildAction(question, entry)
-		if err != nil {
-			return nil, err
-		}
-		actionByID[question.ProviderID] = action
 	}
 
 	pages := make([]map[string]any, 0)
@@ -375,8 +374,10 @@ func defaultProbabilities(question model.QuestionMeta) []float64 {
 }
 
 func defaultDurationSeconds(cfg *model.RuntimeConfig) int {
-	if cfg != nil && len(cfg.AnswerDuration) > 0 && cfg.AnswerDuration[0] > 0 {
-		return cfg.AnswerDuration[0]
+	if cfg != nil {
+		if seconds := model.SampleAnswerDurationSeconds(cfg.AnswerDuration, 60); seconds > 0 {
+			return seconds
+		}
 	}
 	return 60
 }

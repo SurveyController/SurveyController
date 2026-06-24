@@ -7,7 +7,7 @@ import (
 	"strconv"
 	"strings"
 
-	"surveycontroller/surveycore"
+	"surveycontroller/surveycore/internal/model"
 )
 
 var (
@@ -15,7 +15,7 @@ var (
 	numberTextRE   = regexp.MustCompile(`^\d+(?:\.0+)?$`)
 )
 
-func SupportsRuntime(questionType string, info surveycore.QuestionMeta) bool {
+func SupportsRuntime(questionType string, info model.QuestionMeta) bool {
 	normalized := strings.ToLower(strings.TrimSpace(questionType))
 	switch normalized {
 	case "single", "dropdown", "scale", "score", "text", "multi_text", "matrix":

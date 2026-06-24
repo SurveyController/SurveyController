@@ -148,7 +148,11 @@ func defaultProbabilities(question QuestionMeta) any {
 	case "multiple", "order":
 		values := make([]float64, question.Options)
 		for i := range values {
-			values[i] = 1
+			if questionTypeName(question) == "multiple" {
+				values[i] = 50
+			} else {
+				values[i] = 1
+			}
 		}
 		return values
 	case "matrix":

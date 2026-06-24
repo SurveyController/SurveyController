@@ -33,9 +33,25 @@ func (c *Client) RunWithExecutionOptions(ctx context.Context, cfg *RuntimeConfig
 	if cfg.SurveyProvider != "" {
 		provider = cfg.SurveyProvider
 	}
+	runCfg, runOptions, err := c.prepareReverseFillExecution(ctx, cfg, provider, options)
+	if err != nil {
+		return nil, err
+	}
+	if err := prepareAnswerDatetimeWindowExecution(runCfg, provider); err != nil {
+		return nil, err
+	}
+	runCfg, runOptions = c.prepareAnswerRuntimeExecution(runCfg, runOptions)
+	runCfg, runOptions, err = c.prepareAIExecution(ctx, runCfg, runOptions)
+	if err != nil {
+		return nil, err
+	}
+	runCfg, runOptions, err = c.preparePsychometricExecution(ctx, runCfg, runOptions)
+	if err != nil {
+		return nil, err
+	}
 	if provider == model.ProviderQQ {
-		runner := tencent.Runner{HTTP: httpClientOrDefault(c.httpClient)}
-		result, err := RunExecution(ctx, cfg, func(runCtx context.Context, local *RuntimeConfig, localHandler EventHandler) (*RunResult, error) {
+		result, err := RunExecution(ctx, runCfg, func(runCtx context.Context, local *RuntimeConfig, localHandler EventHandler) (*RunResult, error) {
+			runner := tencent.Runner{HTTP: httpClientOrDefault(c.httpClient), UserAgent: model.RuntimeUserAgent(local)}
 			runResult, runErr := runner.Run(runCtx, local, func(event tencent.Event) {
 				if localHandler == nil {
 					return
@@ -51,15 +67,15 @@ func (c *Client) RunWithExecutionOptions(ctx context.Context, cfg *RuntimeConfig
 				})
 			})
 			return resultFromTencent(runResult), runErr
-		}, handler, options)
+		}, handler, runOptions)
 		if err != nil {
 			return result, wrapRunError(err)
 		}
 		return result, nil
 	}
 	if provider == model.ProviderWJX {
-		runner := wjx.Runner{Client: c.httpClient.Client}
-		result, err := RunExecution(ctx, cfg, func(runCtx context.Context, local *RuntimeConfig, localHandler EventHandler) (*RunResult, error) {
+		result, err := RunExecution(ctx, runCfg, func(runCtx context.Context, local *RuntimeConfig, localHandler EventHandler) (*RunResult, error) {
+			runner := wjx.Runner{Client: c.httpClient.Client, UserAgent: model.RuntimeUserAgent(local)}
 			runResult, runErr := runner.Run(runCtx, local, func(event wjx.Event) {
 				if localHandler == nil {
 					return
@@ -75,17 +91,17 @@ func (c *Client) RunWithExecutionOptions(ctx context.Context, cfg *RuntimeConfig
 				})
 			})
 			return resultFromWJX(runResult), runErr
-		}, handler, options)
+		}, handler, runOptions)
 		if err != nil {
 			return result, wrapRunError(err)
 		}
 		return result, nil
 	}
 	if provider != model.ProviderCredamo {
-		return nil, fmt.Errorf("%w: only credamo run is supported", ErrUnsupportedOperation)
+		return nil, fmt.Errorf("%w: unsupported provider %q", ErrUnsupportedOperation, provider)
 	}
-	runner := credamo.Runner{HTTP: httpClientOrDefault(c.httpClient)}
-	result, err := RunExecution(ctx, cfg, func(runCtx context.Context, local *RuntimeConfig, localHandler EventHandler) (*RunResult, error) {
+	result, err := RunExecution(ctx, runCfg, func(runCtx context.Context, local *RuntimeConfig, localHandler EventHandler) (*RunResult, error) {
+		runner := credamo.Runner{HTTP: httpClientOrDefault(c.httpClient), UserAgent: model.RuntimeUserAgent(local)}
 		runResult, runErr := runner.Run(runCtx, local, func(event credamo.Event) {
 			if localHandler == nil {
 				return
@@ -101,7 +117,7 @@ func (c *Client) RunWithExecutionOptions(ctx context.Context, cfg *RuntimeConfig
 			})
 		})
 		return resultFromCredamo(runResult), runErr
-	}, handler, options)
+	}, handler, runOptions)
 	if err != nil {
 		return result, wrapRunError(err)
 	}
@@ -117,6 +133,9 @@ func ExecutionOptionsFromConfig(cfg *RuntimeConfig) ExecutionOptions {
 		target = 1
 	}
 	threads := cfg.Threads
+	if cfg.ReverseFillEnabled && cfg.ReverseFillThreads > 0 {
+		threads = cfg.ReverseFillThreads
+	}
 	if threads <= 0 {
 		threads = 1
 	}

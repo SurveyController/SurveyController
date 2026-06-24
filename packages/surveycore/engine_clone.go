@@ -1,5 +1,7 @@
 package surveycore
 
+import "surveycontroller/surveycore/internal/model"
+
 func cloneRuntimeConfig(cfg *RuntimeConfig) RuntimeConfig {
 	if cfg == nil {
 		return RuntimeConfig{}
@@ -14,7 +16,16 @@ func cloneRuntimeConfig(cfg *RuntimeConfig) RuntimeConfig {
 	cloned.DimensionGroups = append([]string(nil), cfg.DimensionGroups...)
 	cloned.QuestionEntries = cloneQuestionEntries(cfg.QuestionEntries)
 	cloned.QuestionsInfo = cloneQuestions(cfg.QuestionsInfo)
+	cloned.Persona = clonePersona(cfg.Persona)
 	return cloned
+}
+
+func clonePersona(src *model.Persona) *model.Persona {
+	if src == nil {
+		return nil
+	}
+	cloned := *src
+	return &cloned
 }
 
 func cloneIntMap(src map[string]int) map[string]int {
@@ -53,6 +64,7 @@ func cloneQuestionEntries(src []QuestionEntry) []QuestionEntry {
 	dst := make([]QuestionEntry, len(src))
 	copy(dst, src)
 	for i := range dst {
+		dst[i].Probabilities = cloneAnySlice(src[i].Probabilities)
 		dst[i].Texts = append([]string(nil), src[i].Texts...)
 		dst[i].FillableOptionIndices = append([]int(nil), src[i].FillableOptionIndices...)
 		dst[i].OptionFillTexts = append([]*string(nil), src[i].OptionFillTexts...)
@@ -64,6 +76,35 @@ func cloneQuestionEntries(src []QuestionEntry) []QuestionEntry {
 		dst[i].TextRandomIntRange = append([]int(nil), src[i].TextRandomIntRange...)
 	}
 	return dst
+}
+
+func cloneAnySlice(value any) any {
+	switch typed := value.(type) {
+	case []float64:
+		return append([]float64(nil), typed...)
+	case [][]float64:
+		cloned := make([][]float64, len(typed))
+		for i := range typed {
+			cloned[i] = append([]float64(nil), typed[i]...)
+		}
+		return cloned
+	case []int:
+		return append([]int(nil), typed...)
+	case [][]int:
+		cloned := make([][]int, len(typed))
+		for i := range typed {
+			cloned[i] = append([]int(nil), typed[i]...)
+		}
+		return cloned
+	case []any:
+		cloned := make([]any, len(typed))
+		for i := range typed {
+			cloned[i] = cloneAnySlice(typed[i])
+		}
+		return cloned
+	default:
+		return value
+	}
 }
 
 func cloneMapList(src []map[string]any) []map[string]any {

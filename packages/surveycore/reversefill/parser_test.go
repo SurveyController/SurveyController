@@ -5,7 +5,7 @@ import (
 	"testing"
 
 	"github.com/xuri/excelize/v2"
-	"surveycontroller/surveycore"
+	"surveycontroller/surveycore/internal/model"
 )
 
 func TestResolveOrderedColumnsReordersBySuffix(t *testing.T) {
@@ -55,7 +55,7 @@ func TestPreviewExcelParsesRows(t *testing.T) {
 		Path:     path,
 		Format:   FormatWJXText,
 		StartRow: 1,
-		Questions: []surveycore.QuestionMeta{
+		Questions: []model.QuestionMeta{
 			{Num: 1, Title: "单选题", TypeCode: "3", OptionTexts: []string{"A", "B"}},
 			{Num: 2, Title: "文本题", TypeCode: "1", TextInputs: 1},
 			{Num: 3, Title: "矩阵题", TypeCode: "6", OptionTexts: []string{"差", "好"}, RowTexts: []string{"外观", "功能"}},
