@@ -32,6 +32,29 @@ if (-not $msbuild) {
 # an older Visual Studio installation before invoking it.
 $env:LIB = ''
 
+function Stop-PreviewProcess {
+    param([Parameter(Mandatory = $true)][string]$ExecutablePath)
+
+    $targetPath = [IO.Path]::GetFullPath($ExecutablePath)
+    $matchingProcesses = @()
+    foreach ($process in Get-Process -Name 'SurveyController' -ErrorAction SilentlyContinue) {
+        try {
+            if ($process.Path -and [IO.Path]::GetFullPath($process.Path) -ieq $targetPath) {
+                $matchingProcesses += $process
+            }
+        } catch {
+            # Some foreign or protected processes do not expose their image path.
+        }
+    }
+
+    foreach ($process in $matchingProcesses) {
+        Stop-Process -Id $process.Id -Force -ErrorAction Stop
+        if (-not $process.WaitForExit(5000)) {
+            throw "预览进程未能在 5 秒内退出：$targetPath"
+        }
+    }
+}
+
 if ($Action -eq 'restore') {
     & $msbuild $solution /t:Restore /m
     exit $LASTEXITCODE
@@ -55,6 +78,9 @@ if ($Action -eq 'package') {
 
 if ($Action -in @('build', 'rebuild', 'package', 'preview')) {
     $backendOutput = Join-Path $desktopRoot "native\x64\$Configuration\SurveyController.App\SurveyController.Backend.exe"
+    if ($Action -eq 'preview') {
+        Stop-PreviewProcess -ExecutablePath (Join-Path $desktopRoot "native\x64\$Configuration\SurveyController.App\SurveyController.exe")
+    }
     New-Item -ItemType Directory -Path (Split-Path -Parent $backendOutput) -Force | Out-Null
     $goArguments = @('build', '-buildvcs=false', '-o', $backendOutput)
     if ($Configuration -eq 'Release') {
