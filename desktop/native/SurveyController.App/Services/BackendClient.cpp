@@ -161,7 +161,12 @@ namespace winrt::SurveyController::App::Services
         {
             session->stdinWrite.close();
             if (session->process && WaitForSingleObject(session->process.get(), 0) == WAIT_TIMEOUT)
+            {
                 TerminateProcess(session->process.get(), ERROR_PROCESS_ABORTED);
+                // TerminateProcess is asynchronous; wait before releasing the
+                // handle so the next preview can safely replace the backend exe.
+                WaitForSingleObject(session->process.get(), 2000);
+            }
 
             std::unique_lock lock(session->inFlightMutex);
             session->inFlightChanged.wait_for(lock, std::chrono::seconds{ 2 }, [&] { return session->inFlight == 0; });
