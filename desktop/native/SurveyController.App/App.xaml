@@ -60,25 +60,25 @@
                     <SolidColorBrush x:Key="QuestionMatrixBadgeForegroundBrush" Color="#C65D00" />
                     <SolidColorBrush x:Key="QuestionSortBadgeForegroundBrush" Color="#9A6700" />
                     <SolidColorBrush x:Key="QuestionUnknownBadgeForegroundBrush" Color="#5D5D5D" />
-                    <SolidColorBrush x:Key="WizardBadgeBackgroundBrush" Color="#14005FB8" />
+                    <SolidColorBrush x:Key="WizardBadgeBackgroundBrush" Color="#0C005FB8" />
                     <SolidColorBrush x:Key="WizardBadgeForegroundBrush" Color="#005FB8" />
-                    <SolidColorBrush x:Key="QuestionChoiceBadgeBackgroundBrush" Color="#14005FB8" />
-                    <SolidColorBrush x:Key="QuestionTextBadgeBackgroundBrush" Color="#14007C91" />
-                    <SolidColorBrush x:Key="QuestionScaleBadgeBackgroundBrush" Color="#14107C10" />
-                    <SolidColorBrush x:Key="QuestionMatrixBadgeBackgroundBrush" Color="#14C65D00" />
-                    <SolidColorBrush x:Key="QuestionSortBadgeBackgroundBrush" Color="#149A6700" />
-                    <SolidColorBrush x:Key="QuestionUnknownBadgeBackgroundBrush" Color="#145D5D5D" />
-                    <SolidColorBrush x:Key="RequiredBadgeBackgroundBrush" Color="#148A3FFC" />
+                    <SolidColorBrush x:Key="QuestionChoiceBadgeBackgroundBrush" Color="#0C005FB8" />
+                    <SolidColorBrush x:Key="QuestionTextBadgeBackgroundBrush" Color="#0C007C91" />
+                    <SolidColorBrush x:Key="QuestionScaleBadgeBackgroundBrush" Color="#0C107C10" />
+                    <SolidColorBrush x:Key="QuestionMatrixBadgeBackgroundBrush" Color="#0CC65D00" />
+                    <SolidColorBrush x:Key="QuestionSortBadgeBackgroundBrush" Color="#0C9A6700" />
+                    <SolidColorBrush x:Key="QuestionUnknownBadgeBackgroundBrush" Color="#0C5D5D5D" />
+                    <SolidColorBrush x:Key="RequiredBadgeBackgroundBrush" Color="#0C8A3FFC" />
                     <SolidColorBrush x:Key="RequiredBadgeForegroundBrush" Color="#8A3FFC" />
-                    <SolidColorBrush x:Key="MediaBadgeBackgroundBrush" Color="#140F766E" />
+                    <SolidColorBrush x:Key="MediaBadgeBackgroundBrush" Color="#0C0F766E" />
                     <SolidColorBrush x:Key="MediaBadgeForegroundBrush" Color="#0F766E" />
-                    <SolidColorBrush x:Key="ConditionalDisplayBadgeBackgroundBrush" Color="#14166534" />
+                    <SolidColorBrush x:Key="ConditionalDisplayBadgeBackgroundBrush" Color="#0C166534" />
                     <SolidColorBrush x:Key="ConditionalDisplayBadgeForegroundBrush" Color="#166534" />
-                    <SolidColorBrush x:Key="ControlsDisplayBadgeBackgroundBrush" Color="#140F766E" />
+                    <SolidColorBrush x:Key="ControlsDisplayBadgeBackgroundBrush" Color="#0C0F766E" />
                     <SolidColorBrush x:Key="ControlsDisplayBadgeForegroundBrush" Color="#0F766E" />
-                    <SolidColorBrush x:Key="JumpBadgeBackgroundBrush" Color="#14B45309" />
+                    <SolidColorBrush x:Key="JumpBadgeBackgroundBrush" Color="#0CB45309" />
                     <SolidColorBrush x:Key="JumpBadgeForegroundBrush" Color="#B45309" />
-                    <SolidColorBrush x:Key="UnsupportedBadgeBackgroundBrush" Color="#145D5D5D" />
+                    <SolidColorBrush x:Key="UnsupportedBadgeBackgroundBrush" Color="#0C5D5D5D" />
                     <SolidColorBrush x:Key="UnsupportedBadgeForegroundBrush" Color="#5D5D5D" />
                 </ResourceDictionary>
                 <ResourceDictionary x:Key="Dark">
@@ -94,25 +94,25 @@
                     <SolidColorBrush x:Key="QuestionMatrixBadgeForegroundBrush" Color="#FFE0C2" />
                     <SolidColorBrush x:Key="QuestionSortBadgeForegroundBrush" Color="#FFE3A8" />
                     <SolidColorBrush x:Key="QuestionUnknownBadgeForegroundBrush" Color="#E6E6E6" />
-                    <SolidColorBrush x:Key="WizardBadgeBackgroundBrush" Color="#2462B0FF" />
+                    <SolidColorBrush x:Key="WizardBadgeBackgroundBrush" Color="#1262B0FF" />
                     <SolidColorBrush x:Key="WizardBadgeForegroundBrush" Color="#B8DEFF" />
-                    <SolidColorBrush x:Key="QuestionChoiceBadgeBackgroundBrush" Color="#2462B0FF" />
-                    <SolidColorBrush x:Key="QuestionTextBadgeBackgroundBrush" Color="#2462D9E8" />
-                    <SolidColorBrush x:Key="QuestionScaleBadgeBackgroundBrush" Color="#246BCB6B" />
-                    <SolidColorBrush x:Key="QuestionMatrixBadgeBackgroundBrush" Color="#24FFB36B" />
-                    <SolidColorBrush x:Key="QuestionSortBadgeBackgroundBrush" Color="#24F2C66D" />
-                    <SolidColorBrush x:Key="QuestionUnknownBadgeBackgroundBrush" Color="#24C8C8C8" />
-                    <SolidColorBrush x:Key="RequiredBadgeBackgroundBrush" Color="#24C7A8FF" />
+                    <SolidColorBrush x:Key="QuestionChoiceBadgeBackgroundBrush" Color="#1262B0FF" />
+                    <SolidColorBrush x:Key="QuestionTextBadgeBackgroundBrush" Color="#1262D9E8" />
+                    <SolidColorBrush x:Key="QuestionScaleBadgeBackgroundBrush" Color="#126BCB6B" />
+                    <SolidColorBrush x:Key="QuestionMatrixBadgeBackgroundBrush" Color="#12FFB36B" />
+                    <SolidColorBrush x:Key="QuestionSortBadgeBackgroundBrush" Color="#12F2C66D" />
+                    <SolidColorBrush x:Key="QuestionUnknownBadgeBackgroundBrush" Color="#12C8C8C8" />
+                    <SolidColorBrush x:Key="RequiredBadgeBackgroundBrush" Color="#12C7A8FF" />
                     <SolidColorBrush x:Key="RequiredBadgeForegroundBrush" Color="#C7A8FF" />
-                    <SolidColorBrush x:Key="MediaBadgeBackgroundBrush" Color="#244FD1C5" />
+                    <SolidColorBrush x:Key="MediaBadgeBackgroundBrush" Color="#124FD1C5" />
                     <SolidColorBrush x:Key="MediaBadgeForegroundBrush" Color="#4FD1C5" />
-                    <SolidColorBrush x:Key="ConditionalDisplayBadgeBackgroundBrush" Color="#244ADE80" />
+                    <SolidColorBrush x:Key="ConditionalDisplayBadgeBackgroundBrush" Color="#124ADE80" />
                     <SolidColorBrush x:Key="ConditionalDisplayBadgeForegroundBrush" Color="#4ADE80" />
-                    <SolidColorBrush x:Key="ControlsDisplayBadgeBackgroundBrush" Color="#2467E8F9" />
+                    <SolidColorBrush x:Key="ControlsDisplayBadgeBackgroundBrush" Color="#1267E8F9" />
                     <SolidColorBrush x:Key="ControlsDisplayBadgeForegroundBrush" Color="#67E8F9" />
-                    <SolidColorBrush x:Key="JumpBadgeBackgroundBrush" Color="#24FBBF24" />
+                    <SolidColorBrush x:Key="JumpBadgeBackgroundBrush" Color="#12FBBF24" />
                     <SolidColorBrush x:Key="JumpBadgeForegroundBrush" Color="#FBBF24" />
-                    <SolidColorBrush x:Key="UnsupportedBadgeBackgroundBrush" Color="#24C8C8C8" />
+                    <SolidColorBrush x:Key="UnsupportedBadgeBackgroundBrush" Color="#12C8C8C8" />
                     <SolidColorBrush x:Key="UnsupportedBadgeForegroundBrush" Color="#C8C8C8" />
                 </ResourceDictionary>
                 <ResourceDictionary x:Key="HighContrast">
@@ -152,4 +152,4 @@
             </ResourceDictionary.ThemeDictionaries>
         </ResourceDictionary>
     </Application.Resources>
-</Application>
+</Application>`r`n

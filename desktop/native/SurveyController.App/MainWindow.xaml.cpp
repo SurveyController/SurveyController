@@ -119,7 +119,7 @@ namespace winrt::SurveyController::App::implementation
         if (IsWindows11OrGreater())
         {
             auto mica = MicaBackdrop{};
-            mica.Kind(Microsoft::UI::Composition::SystemBackdrops::MicaKind::BaseAlt);
+            mica.Kind(Microsoft::UI::Composition::SystemBackdrops::MicaKind::Base);
             SystemBackdrop(mica);
             return;
         }
