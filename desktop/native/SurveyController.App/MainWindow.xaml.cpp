@@ -162,7 +162,9 @@ namespace winrt::SurveyController::App::implementation
         Microsoft::UI::Windowing::AppWindow const&,
         Microsoft::UI::Windowing::AppWindowClosingEventArgs const& args)
     {
-        if (m_closeConfirmed || !m_askSaveOnClose) return;
+        if (m_closeConfirmed) return;
+        m_closing = true;
+        if (!m_askSaveOnClose) return;
         args.Cancel(true);
         if (!m_confirmingClose) ConfirmCloseAsync();
     }
@@ -211,12 +213,17 @@ namespace winrt::SurveyController::App::implementation
                 failure.CloseButtonText(L"返回");
                 co_await failure.ShowAsync();
                 m_confirmingClose = false;
+                m_closing = false;
                 co_return;
             }
         }
 
         m_confirmingClose = false;
-        if (result == Microsoft::UI::Xaml::Controls::ContentDialogResult::None) co_return;
+        if (result == Microsoft::UI::Xaml::Controls::ContentDialogResult::None)
+        {
+            m_closing = false;
+            co_return;
+        }
         m_closeConfirmed = true;
         if (auto taskPage = ContentFrame().Content().try_as<SurveyController::App::TaskPage>())
         {
