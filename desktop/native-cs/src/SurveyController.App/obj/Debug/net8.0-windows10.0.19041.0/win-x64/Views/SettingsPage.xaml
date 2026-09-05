@@ -1,0 +1,267 @@
+﻿<Page x:ConnectionId='1'
+    x:Class="SurveyController.App.Views.SettingsPage"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    NavigationCacheMode="Required">
+
+    <Page.Resources>
+        <Style x:Key="SettingsCardStyle" TargetType="Grid">
+            <Setter Property="Background" Value="{ThemeResource CardBackgroundFillColorDefaultBrush}" />
+            <Setter Property="BorderBrush" Value="{ThemeResource CardStrokeColorDefaultBrush}" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="CornerRadius" Value="12" />
+            <Setter Property="Padding" Value="16,14" />
+            <Setter Property="ColumnSpacing" Value="16" />
+            <Setter Property="MinHeight" Value="72" />
+        </Style>
+
+        <Style x:Key="SettingsSectionHeaderStyle" TargetType="TextBlock">
+            <Setter Property="Margin" Value="1,24,0,4" />
+            <Setter Property="FontSize" Value="18" />
+            <Setter Property="FontWeight" Value="SemiBold" />
+        </Style>
+    </Page.Resources>
+
+    <ScrollViewer x:ConnectionId='2' x:Name="SettingsScrollViewer" HorizontalContentAlignment="Left" HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Auto">
+        <StackPanel x:ConnectionId='3'                                                                  Padding="24,24,24,32" HorizontalAlignment="Left" Spacing="4">
+            <TextBlock Margin="0,0,0,16" FontSize="28" FontWeight="SemiBold" Text="设置" />
+
+            <TextBlock Style="{StaticResource SettingsSectionHeaderStyle}" Text="界面外观" />
+            <Grid Style="{StaticResource SettingsCardStyle}">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="40" />
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+                <SymbolIcon VerticalAlignment="Center" Symbol="Setting" />
+                <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="2">
+                    <TextBlock FontSize="16" Text="主题" />
+                    <TextBlock Style="{StaticResource CaptionTextBlockStyle}" Text="选择应用使用的颜色模式" />
+                </StackPanel>
+                <ComboBox x:ConnectionId='16'
+                    x:Name="ThemeMode"
+                    Grid.Column="2" Width="180" HorizontalAlignment="Right" VerticalAlignment="Center"
+                    AutomationProperties.Name="主题"
+                    AutomationProperties.AutomationId="SettingsThemeModeComboBox"
+                                                                                  
+                                                                >
+                    <ComboBoxItem Content="跟随系统" Tag="system" />
+                    <ComboBoxItem Content="浅色" Tag="light" />
+                    <ComboBoxItem Content="深色" Tag="dark" />
+                </ComboBox>
+            </Grid>
+            <Grid Style="{StaticResource SettingsCardStyle}">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="40" />
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+                <SymbolIcon VerticalAlignment="Center" Symbol="GlobalNavigationButton" />
+                <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="2">
+                    <TextBlock FontSize="16" Text="显示选中导航名称" />
+                    <TextBlock Style="{StaticResource CaptionTextBlockStyle}" Text="开启后左侧导航会显示当前选中项的文字标签" TextWrapping="Wrap" />
+                </StackPanel>
+                <ToggleSwitch x:ConnectionId='15'
+                    x:Name="ShowNavigationText"
+                    Grid.Column="2" MinWidth="0" HorizontalAlignment="Right" VerticalAlignment="Center"
+                    AutomationProperties.Name="显示选中导航名称"
+                    AutomationProperties.AutomationId="SettingsShowNavigationTextToggle"
+                                                                             
+                                               />
+            </Grid>
+            <Grid Style="{StaticResource SettingsCardStyle}">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="40" />
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+                <SymbolIcon VerticalAlignment="Center" Symbol="Pin" />
+                <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="2">
+                    <TextBlock FontSize="16" Text="窗口置顶" />
+                    <TextBlock Style="{StaticResource CaptionTextBlockStyle}" Text="开启后程序窗口始终保持在最上层" TextWrapping="Wrap" />
+                </StackPanel>
+                <ToggleSwitch x:ConnectionId='14'
+                    x:Name="Topmost"
+                    Grid.Column="2" MinWidth="0" HorizontalAlignment="Right" VerticalAlignment="Center"
+                    AutomationProperties.Name="窗口置顶"
+                    AutomationProperties.AutomationId="SettingsTopmostToggle"
+                                                                  
+                                               />
+            </Grid>
+
+            <TextBlock Style="{StaticResource SettingsSectionHeaderStyle}" Text="行为设置" />
+            <Grid Style="{StaticResource SettingsCardStyle}">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="40" />
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+                <SymbolIcon VerticalAlignment="Center" Symbol="Save" />
+                <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="2">
+                    <TextBlock FontSize="16" Text="关闭前询问是否保存" />
+                    <TextBlock Style="{StaticResource CaptionTextBlockStyle}" Text="关闭窗口时提示是否保存当前配置" TextWrapping="Wrap" />
+                </StackPanel>
+                <ToggleSwitch x:ConnectionId='13'
+                    x:Name="AskSaveOnClose"
+                    Grid.Column="2" MinWidth="0" HorizontalAlignment="Right" VerticalAlignment="Center"
+                    AutomationProperties.Name="关闭前询问是否保存"
+                    AutomationProperties.AutomationId="SettingsAskSaveOnCloseToggle"
+                                                                         
+                                               />
+            </Grid>
+            <Grid Style="{StaticResource SettingsCardStyle}">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="40" />
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+                <SymbolIcon VerticalAlignment="Center" Symbol="View" />
+                <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="2">
+                    <TextBlock FontSize="16" Text="执行期间阻止自动休眠" />
+                    <TextBlock Style="{StaticResource CaptionTextBlockStyle}" Text="任务运行时阻止电脑因长时间无操作而休眠，任务结束后自动恢复" TextWrapping="Wrap" />
+                </StackPanel>
+                <ToggleSwitch x:ConnectionId='12'
+                    x:Name="PreventSleep"
+                    Grid.Column="2" MinWidth="0" HorizontalAlignment="Right" VerticalAlignment="Center"
+                    AutomationProperties.Name="执行期间阻止自动休眠"
+                    AutomationProperties.AutomationId="SettingsPreventSleepToggle"
+                                                                       
+                                               />
+            </Grid>
+            <Grid Style="{StaticResource SettingsCardStyle}">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="40" />
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+                <SymbolIcon VerticalAlignment="Center" Symbol="Help" />
+                <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="2">
+                    <TextBlock FontSize="16" Text="后台任务完成/失败时通知" />
+                    <TextBlock Style="{StaticResource CaptionTextBlockStyle}" Text="程序不在前台时，任务完成或失败会弹出系统通知" TextWrapping="Wrap" />
+                </StackPanel>
+                <ToggleSwitch x:ConnectionId='11'
+                    x:Name="TaskNotification"
+                    Grid.Column="2" MinWidth="0" HorizontalAlignment="Right" VerticalAlignment="Center"
+                    AutomationProperties.Name="后台任务完成/失败时通知"
+                    AutomationProperties.AutomationId="SettingsTaskNotificationToggle"
+                                                                                 
+                                               />
+            </Grid>
+            <Grid Style="{StaticResource SettingsCardStyle}">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="40" />
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+                <SymbolIcon VerticalAlignment="Center" Symbol="Send" />
+                <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="2">
+                    <TextBlock FontSize="16" Text="提交结果遥测" />
+                    <TextBlock Style="{StaticResource CaptionTextBlockStyle}" Text="启用随机 IP 时，将提交结果同步上报服务端做统计，便于排查问题" TextWrapping="Wrap" />
+                </StackPanel>
+                <ToggleSwitch x:ConnectionId='10'
+                    x:Name="Telemetry"
+                    Grid.Column="2" MinWidth="0" HorizontalAlignment="Right" VerticalAlignment="Center"
+                    AutomationProperties.Name="提交结果遥测"
+                    AutomationProperties.AutomationId="SettingsTelemetryToggle"
+                                                                                    
+                                               />
+            </Grid>
+            <Grid Style="{StaticResource SettingsCardStyle}">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="40" />
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+                <SymbolIcon VerticalAlignment="Center" Symbol="Document" />
+                <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="2">
+                    <TextBlock FontSize="16" Text="日志保留数量" />
+                    <TextBlock Style="{StaticResource CaptionTextBlockStyle}" Text="自动保存运行日志，只保留最近几份历史记录" TextWrapping="Wrap" />
+                </StackPanel>
+                <ComboBox x:ConnectionId='9'
+                    x:Name="LogCount"
+                    Grid.Column="2" Width="124" HorizontalAlignment="Right" VerticalAlignment="Center"
+                    AutomationProperties.Name="日志保留数量"
+                    AutomationProperties.AutomationId="SettingsLogCountComboBox"
+                                                                                 
+                                                                >
+                    <ComboBoxItem Content="3 份" Tag="3" />
+                    <ComboBoxItem Content="5 份" Tag="5" />
+                    <ComboBoxItem Content="10 份" Tag="10" />
+                    <ComboBoxItem Content="20 份" Tag="20" />
+                    <ComboBoxItem Content="30 份" Tag="30" />
+                    <ComboBoxItem Content="50 份" Tag="50" />
+                </ComboBox>
+            </Grid>
+
+            <TextBlock Style="{StaticResource SettingsSectionHeaderStyle}" Text="软件更新" />
+            <Grid Style="{StaticResource SettingsCardStyle}">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="40" />
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+                <SymbolIcon VerticalAlignment="Center" Symbol="Sync" />
+                <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="2">
+                    <TextBlock FontSize="16" Text="启动时检查更新" />
+                    <TextBlock Style="{StaticResource CaptionTextBlockStyle}" Text="发现新版本时提示下载" />
+                </StackPanel>
+                <ToggleSwitch x:ConnectionId='8'
+                    x:Name="AutoCheckUpdate"
+                    Grid.Column="2" MinWidth="0" HorizontalAlignment="Right" VerticalAlignment="Center"
+                    AutomationProperties.Name="启动时检查更新"
+                    AutomationProperties.AutomationId="SettingsAutoCheckUpdateToggle"
+                                                                          
+                                               />
+            </Grid>
+
+            <TextBlock Style="{StaticResource SettingsSectionHeaderStyle}" Text="系统工具" />
+            <Grid Style="{StaticResource SettingsCardStyle}">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="40" />
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+                <SymbolIcon VerticalAlignment="Center" Symbol="Refresh" />
+                <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="2">
+                    <TextBlock FontSize="16" Text="恢复默认设置" />
+                    <TextBlock Style="{StaticResource CaptionTextBlockStyle}" Text="恢复所有设置项的默认值" />
+                </StackPanel>
+                <Button x:ConnectionId='7'
+                    x:Name="ResetAction"
+                    Grid.Column="2" MinWidth="96" HorizontalAlignment="Right" VerticalAlignment="Center"
+                    AutomationProperties.AutomationId="SettingsResetButton"
+                    Content="恢复默认"                 />
+            </Grid>
+            <Grid Style="{StaticResource SettingsCardStyle}">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="40" />
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+                <SymbolIcon VerticalAlignment="Center" Symbol="Folder" />
+                <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="2">
+                    <TextBlock FontSize="16" Text="配置目录" />
+                    <TextBlock x:ConnectionId='6'
+                        x:Name="ConfigDirectory"
+                        Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                        TextTrimming="CharacterEllipsis"
+                                                                               />
+                </StackPanel>
+                <Button x:ConnectionId='5'
+                    x:Name="ConfigDirectoryAction"
+                    Grid.Column="2" MinWidth="96" HorizontalAlignment="Right" VerticalAlignment="Center"
+                    AutomationProperties.AutomationId="SettingsChooseDirectoryButton"
+                    Content="选择目录"                           />
+            </Grid>
+
+            <TextBlock x:ConnectionId='4'
+                x:Name="StatusText"
+                Margin="0,12,0,0" HorizontalAlignment="Right"
+                AutomationProperties.LiveSetting="Polite"
+                AutomationProperties.AutomationId="SettingsStatusText"
+                Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                                                  />
+        </StackPanel>
+    </ScrollViewer>
+</Page>
+

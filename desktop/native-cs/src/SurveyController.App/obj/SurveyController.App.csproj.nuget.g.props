@@ -1,0 +1,38 @@
+﻿<?xml version="1.0" encoding="utf-8" standalone="no"?>
+<Project ToolsVersion="14.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <PropertyGroup Condition=" '$(ExcludeRestorePackageImports)' != 'true' ">
+    <RestoreSuccess Condition=" '$(RestoreSuccess)' == '' ">True</RestoreSuccess>
+    <RestoreTool Condition=" '$(RestoreTool)' == '' ">NuGet</RestoreTool>
+    <ProjectAssetsFile Condition=" '$(ProjectAssetsFile)' == '' ">$(MSBuildThisFileDirectory)project.assets.json</ProjectAssetsFile>
+    <NuGetPackageRoot Condition=" '$(NuGetPackageRoot)' == '' ">$(UserProfile)\.nuget\packages\</NuGetPackageRoot>
+    <NuGetPackageFolders Condition=" '$(NuGetPackageFolders)' == '' ">C:\Users\test\.nuget\packages\;C:\Program Files (x86)\Microsoft Visual Studio\Shared\NuGetPackages</NuGetPackageFolders>
+    <NuGetProjectStyle Condition=" '$(NuGetProjectStyle)' == '' ">PackageReference</NuGetProjectStyle>
+    <NuGetToolVersion Condition=" '$(NuGetToolVersion)' == '' ">7.0.0</NuGetToolVersion>
+  </PropertyGroup>
+  <ItemGroup Condition=" '$(ExcludeRestorePackageImports)' != 'true' ">
+    <SourceRoot Include="C:\Users\test\.nuget\packages\" />
+    <SourceRoot Include="C:\Program Files (x86)\Microsoft Visual Studio\Shared\NuGetPackages\" />
+  </ItemGroup>
+  <ImportGroup Condition=" '$(ExcludeRestorePackageImports)' != 'true' ">
+    <Import Project="$(NuGetPackageRoot)microsoft.windows.sdk.buildtools.msix\1.7.251221100\buildTransitive\Microsoft.Windows.SDK.BuildTools.MSIX.props" Condition="Exists('$(NuGetPackageRoot)microsoft.windows.sdk.buildtools.msix\1.7.251221100\buildTransitive\Microsoft.Windows.SDK.BuildTools.MSIX.props')" />
+    <Import Project="$(NuGetPackageRoot)microsoft.windows.sdk.buildtools\10.0.28000.2526\buildTransitive\Microsoft.Windows.SDK.BuildTools.props" Condition="Exists('$(NuGetPackageRoot)microsoft.windows.sdk.buildtools\10.0.28000.2526\buildTransitive\Microsoft.Windows.SDK.BuildTools.props')" />
+    <Import Project="$(NuGetPackageRoot)microsoft.windowsappsdk.base\2.0.4\buildTransitive\Microsoft.WindowsAppSDK.Base.props" Condition="Exists('$(NuGetPackageRoot)microsoft.windowsappsdk.base\2.0.4\buildTransitive\Microsoft.WindowsAppSDK.Base.props')" />
+    <Import Project="$(NuGetPackageRoot)microsoft.windowsappsdk.interactiveexperiences\2.1.6\buildTransitive\Microsoft.WindowsAppSDK.InteractiveExperiences.props" Condition="Exists('$(NuGetPackageRoot)microsoft.windowsappsdk.interactiveexperiences\2.1.6\buildTransitive\Microsoft.WindowsAppSDK.InteractiveExperiences.props')" />
+    <Import Project="$(NuGetPackageRoot)microsoft.windowsappsdk.foundation\2.3.9\buildTransitive\Microsoft.WindowsAppSDK.Foundation.props" Condition="Exists('$(NuGetPackageRoot)microsoft.windowsappsdk.foundation\2.3.9\buildTransitive\Microsoft.WindowsAppSDK.Foundation.props')" />
+    <Import Project="$(NuGetPackageRoot)microsoft.windowsappsdk.winui\2.3.6\buildTransitive\Microsoft.WindowsAppSDK.WinUI.props" Condition="Exists('$(NuGetPackageRoot)microsoft.windowsappsdk.winui\2.3.6\buildTransitive\Microsoft.WindowsAppSDK.WinUI.props')" />
+    <Import Project="$(NuGetPackageRoot)microsoft.windowsappsdk.widgets\2.0.5\buildTransitive\Microsoft.WindowsAppSDK.Widgets.props" Condition="Exists('$(NuGetPackageRoot)microsoft.windowsappsdk.widgets\2.0.5\buildTransitive\Microsoft.WindowsAppSDK.Widgets.props')" />
+    <Import Project="$(NuGetPackageRoot)microsoft.windowsappsdk.ai\2.4.4\buildTransitive\Microsoft.WindowsAppSDK.AI.props" Condition="Exists('$(NuGetPackageRoot)microsoft.windowsappsdk.ai\2.4.4\buildTransitive\Microsoft.WindowsAppSDK.AI.props')" />
+    <Import Project="$(NuGetPackageRoot)microsoft.windowsappsdk.search\2.4.4\buildTransitive\Microsoft.WindowsAppSDK.Search.props" Condition="Exists('$(NuGetPackageRoot)microsoft.windowsappsdk.search\2.4.4\buildTransitive\Microsoft.WindowsAppSDK.Search.props')" />
+    <Import Project="$(NuGetPackageRoot)microsoft.windowsappsdk.runtime\2.4.0\buildTransitive\Microsoft.WindowsAppSDK.Runtime.props" Condition="Exists('$(NuGetPackageRoot)microsoft.windowsappsdk.runtime\2.4.0\buildTransitive\Microsoft.WindowsAppSDK.Runtime.props')" />
+    <Import Project="$(NuGetPackageRoot)microsoft.windows.ai.machinelearning\2.1.74\buildTransitive\Microsoft.Windows.AI.MachineLearning.props" Condition="Exists('$(NuGetPackageRoot)microsoft.windows.ai.machinelearning\2.1.74\buildTransitive\Microsoft.Windows.AI.MachineLearning.props')" />
+    <Import Project="$(NuGetPackageRoot)microsoft.windowsappsdk.ml\2.1.74\buildTransitive\Microsoft.WindowsAppSDK.ML.props" Condition="Exists('$(NuGetPackageRoot)microsoft.windowsappsdk.ml\2.1.74\buildTransitive\Microsoft.WindowsAppSDK.ML.props')" />
+    <Import Project="$(NuGetPackageRoot)microsoft.windowsappsdk.dwrite\2.1.0\buildTransitive\Microsoft.WindowsAppSDK.DWrite.props" Condition="Exists('$(NuGetPackageRoot)microsoft.windowsappsdk.dwrite\2.1.0\buildTransitive\Microsoft.WindowsAppSDK.DWrite.props')" />
+    <Import Project="$(NuGetPackageRoot)microsoft.windowsappsdk\2.4.0\buildTransitive\Microsoft.WindowsAppSDK.props" Condition="Exists('$(NuGetPackageRoot)microsoft.windowsappsdk\2.4.0\buildTransitive\Microsoft.WindowsAppSDK.props')" />
+  </ImportGroup>
+  <PropertyGroup Condition=" '$(ExcludeRestorePackageImports)' != 'true' ">
+    <PkgMicrosoft_Windows_SDK_BuildTools_MSIX Condition=" '$(PkgMicrosoft_Windows_SDK_BuildTools_MSIX)' == '' ">C:\Users\test\.nuget\packages\microsoft.windows.sdk.buildtools.msix\1.7.251221100</PkgMicrosoft_Windows_SDK_BuildTools_MSIX>
+    <PkgMicrosoft_Web_WebView2 Condition=" '$(PkgMicrosoft_Web_WebView2)' == '' ">C:\Users\test\.nuget\packages\microsoft.web.webview2\1.0.3719.77</PkgMicrosoft_Web_WebView2>
+    <PkgMicrosoft_WindowsAppSDK_WinUI Condition=" '$(PkgMicrosoft_WindowsAppSDK_WinUI)' == '' ">C:\Users\test\.nuget\packages\microsoft.windowsappsdk.winui\2.3.6</PkgMicrosoft_WindowsAppSDK_WinUI>
+    <PkgMicrosoft_WindowsAppSDK_Runtime Condition=" '$(PkgMicrosoft_WindowsAppSDK_Runtime)' == '' ">C:\Users\test\.nuget\packages\microsoft.windowsappsdk.runtime\2.4.0</PkgMicrosoft_WindowsAppSDK_Runtime>
+  </PropertyGroup>
+</Project>

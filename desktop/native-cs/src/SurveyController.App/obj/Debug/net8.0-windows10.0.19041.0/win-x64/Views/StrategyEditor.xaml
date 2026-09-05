@@ -1,0 +1,214 @@
+﻿<UserControl x:ConnectionId='1'
+    x:Class="SurveyController.App.Views.StrategyEditor"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:local="using:SurveyController.App.ViewModels"
+                     >
+    <Grid MinHeight="520" RowSpacing="12">
+        <VisualStateManager.VisualStateGroups>
+            <VisualStateGroup>
+                <VisualState x:ConnectionId='2' x:Name="CompactQuestionEditor">
+                    <VisualState.StateTriggers><AdaptiveTrigger MinWindowWidth="0" /></VisualState.StateTriggers>
+                    <VisualState.Setters>
+                        <Setter Target="EditorSearchRow.Height" Value="Auto" />
+                        <Setter Target="EditorSearchColumn.Width" Value="0" />
+                        <Setter Target="QuestionSearch.(Grid.Row)" Value="1" />
+                        <Setter Target="QuestionSearch.(Grid.Column)" Value="0" />
+                        <Setter Target="QuestionSearch.(Grid.ColumnSpan)" Value="3" />
+                        <Setter Target="QuestionTreeColumn.Width" Value="*" />
+                        <Setter Target="QuestionDetailColumn.Width" Value="0" />
+                        <Setter Target="QuestionTreeRow.Height" Value="250" />
+                        <Setter Target="QuestionDetailRow.Height" Value="*" />
+                        <Setter Target="QuestionDetailScroll.(Grid.Row)" Value="1" />
+                        <Setter Target="QuestionDetailScroll.(Grid.Column)" Value="0" />
+                        <Setter Target="LocationCityColumn.Width" Value="0" />
+                        <Setter Target="LocationDistrictColumn.Width" Value="0" />
+                        <Setter Target="LocationCityRow.Height" Value="Auto" />
+                        <Setter Target="LocationDistrictRow.Height" Value="Auto" />
+                        <Setter Target="LocationCity.(Grid.Row)" Value="1" />
+                        <Setter Target="LocationCity.(Grid.Column)" Value="0" />
+                        <Setter Target="LocationDistrict.(Grid.Row)" Value="2" />
+                        <Setter Target="LocationDistrict.(Grid.Column)" Value="0" />
+                    </VisualState.Setters>
+                </VisualState>
+                <VisualState x:ConnectionId='3' x:Name="WideQuestionEditor">
+                    <VisualState.StateTriggers><AdaptiveTrigger MinWindowWidth="800" /></VisualState.StateTriggers>
+                    <VisualState.Setters>
+                        <Setter Target="EditorSearchRow.Height" Value="0" />
+                        <Setter Target="EditorSearchColumn.Width" Value="280" />
+                        <Setter Target="QuestionSearch.(Grid.Row)" Value="0" />
+                        <Setter Target="QuestionSearch.(Grid.Column)" Value="2" />
+                        <Setter Target="QuestionSearch.(Grid.ColumnSpan)" Value="1" />
+                        <Setter Target="QuestionTreeColumn.Width" Value="300" />
+                        <Setter Target="QuestionDetailColumn.Width" Value="*" />
+                        <Setter Target="QuestionTreeRow.Height" Value="*" />
+                        <Setter Target="QuestionDetailRow.Height" Value="0" />
+                        <Setter Target="QuestionDetailScroll.(Grid.Row)" Value="0" />
+                        <Setter Target="QuestionDetailScroll.(Grid.Column)" Value="1" />
+                        <Setter Target="LocationCityColumn.Width" Value="*" />
+                        <Setter Target="LocationDistrictColumn.Width" Value="*" />
+                        <Setter Target="LocationCityRow.Height" Value="0" />
+                        <Setter Target="LocationDistrictRow.Height" Value="0" />
+                        <Setter Target="LocationCity.(Grid.Row)" Value="0" />
+                        <Setter Target="LocationCity.(Grid.Column)" Value="1" />
+                        <Setter Target="LocationDistrict.(Grid.Row)" Value="0" />
+                        <Setter Target="LocationDistrict.(Grid.Column)" Value="2" />
+                    </VisualState.Setters>
+                </VisualState>
+            </VisualStateGroup>
+        </VisualStateManager.VisualStateGroups>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+            <RowDefinition Height="Auto" />
+        </Grid.RowDefinitions>
+
+        <Grid ColumnSpacing="12" RowSpacing="8">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="Auto" />
+                <ColumnDefinition x:ConnectionId='63' x:Name="EditorSearchColumn" Width="280" />
+            </Grid.ColumnDefinitions>
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto" />
+                <RowDefinition x:ConnectionId='64' x:Name="EditorSearchRow" Height="0" />
+            </Grid.RowDefinitions>
+            <StackPanel Orientation="Horizontal" Spacing="10" VerticalAlignment="Center">
+                <SymbolIcon Symbol="Edit" />
+                <TextBlock FontSize="18" FontWeight="SemiBold" Text="逐题答案" />
+                <TextBlock x:ConnectionId='68' x:Name="QuestionCountSummary" VerticalAlignment="Center" AutomationProperties.AutomationId="StrategyCountSummaryText" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+            </StackPanel>
+            <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="4">
+                <Button x:ConnectionId='66' x:Name="PreviousQuestionButton" Width="36" Height="36"                            AutomationProperties.Name="上一题" AutomationProperties.AutomationId="StrategyPreviousButton" ToolTipService.ToolTip="上一题"><SymbolIcon Symbol="Back" /></Button>
+                <Button x:ConnectionId='67' x:Name="NextQuestionButton" Width="36" Height="36"                        AutomationProperties.Name="下一题" AutomationProperties.AutomationId="StrategyNextButton" ToolTipService.ToolTip="下一题"><SymbolIcon Symbol="Forward" /></Button>
+            </StackPanel>
+            <AutoSuggestBox x:ConnectionId='65' x:Name="QuestionSearch" Grid.Column="2" PlaceholderText="查找题号、题干或选项" QueryIcon="Find"                                                                                                                               AutomationProperties.Name="搜索题目" AutomationProperties.AutomationId="StrategySearchBox" />
+        </Grid>
+
+        <Grid x:ConnectionId='4' x:Name="QuestionEditorPanel" Grid.Row="1" ColumnSpacing="16" RowSpacing="16">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition x:ConnectionId='7' x:Name="QuestionTreeColumn" Width="300" />
+                <ColumnDefinition x:ConnectionId='8' x:Name="QuestionDetailColumn" Width="*" />
+            </Grid.ColumnDefinitions>
+            <Grid.RowDefinitions>
+                <RowDefinition x:ConnectionId='9' x:Name="QuestionTreeRow" Height="*" />
+                <RowDefinition x:ConnectionId='10' x:Name="QuestionDetailRow" Height="0" />
+            </Grid.RowDefinitions>
+            <Border Background="{ThemeResource CardBackgroundFillColorDefaultBrush}" BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}" BorderThickness="1" CornerRadius="{StaticResource WizardCardCornerRadius}" Padding="8">
+                <TreeView x:ConnectionId='61' x:Name="QuestionTree" SelectionMode="Single"                                                                       ScrollViewer.VerticalScrollBarVisibility="Visible" ScrollViewer.HorizontalScrollBarVisibility="Disabled" AutomationProperties.Name="问卷题目结构" AutomationProperties.AutomationId="StrategyQuestionTree">
+                    <TreeView.ItemTemplate>
+                        <DataTemplate>
+                            <ContentPresenter Content="{Binding Content}" HorizontalContentAlignment="Stretch" />
+                        </DataTemplate>
+                    </TreeView.ItemTemplate>
+                </TreeView>
+            </Border>
+
+            <ScrollViewer x:ConnectionId='11' x:Name="QuestionDetailScroll" Grid.Column="1" HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Visible">
+                <StackPanel Padding="4,0,8,20" Spacing="16">
+                    <Border Padding="16" Background="{ThemeResource CardBackgroundFillColorDefaultBrush}" BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}" BorderThickness="1" CornerRadius="{StaticResource WizardCardCornerRadius}">
+                        <StackPanel Spacing="8">
+                            <StackPanel Orientation="Horizontal" Spacing="10">
+                                <FontIcon x:ConnectionId='59' x:Name="QuestionTypeIcon" FontSize="18" />
+                                <TextBlock x:ConnectionId='60' x:Name="QuestionTitle" FontSize="21" FontWeight="SemiBold" AutomationProperties.AutomationId="StrategyQuestionTitleText" Text="选择题目" TextWrapping="Wrap" />
+                            </StackPanel>
+                            <StackPanel Orientation="Horizontal" Spacing="12">
+                                <StackPanel Orientation="Horizontal" Spacing="5">
+                                    <InfoBadge x:ConnectionId='56' x:Name="QuestionTypeInfoBadge" Width="8" Height="8" VerticalAlignment="Center" />
+                                    <FontIcon x:ConnectionId='57' x:Name="QuestionBadgeIcon" FontSize="12" />
+                                    <TextBlock x:ConnectionId='58' x:Name="QuestionTypeBadge" Style="{StaticResource WizardBadgeTextStyle}" AutomationProperties.AutomationId="StrategyTypeBadgeText" Text="题型" />
+                                </StackPanel>
+                                <StackPanel x:ConnectionId='47' x:Name="RequiredBadgeBorder" Orientation="Horizontal" Spacing="5" Visibility="Collapsed">
+                                    <InfoBadge x:ConnectionId='54' x:Name="RequiredBadgeInfo" Width="8" Height="8" VerticalAlignment="Center" Background="{ThemeResource RequiredBadgeForegroundBrush}" />
+                                    <TextBlock x:ConnectionId='55' x:Name="RequiredBadge" Style="{StaticResource WizardBadgeTextStyle}" Foreground="{ThemeResource RequiredBadgeForegroundBrush}" Text="必答" />
+                                </StackPanel>
+                                <StackPanel x:ConnectionId='48' x:Name="LogicBadgeBorder" Orientation="Horizontal" Spacing="5" Visibility="Collapsed">
+                                    <InfoBadge x:ConnectionId='52' x:Name="LogicBadgeInfo" Width="8" Height="8" VerticalAlignment="Center" Background="{ThemeResource LogicBadgeForegroundBrush}" />
+                                    <TextBlock x:ConnectionId='53' x:Name="LogicBadge" Style="{StaticResource WizardBadgeTextStyle}" Foreground="{ThemeResource LogicBadgeForegroundBrush}" Text="逻辑" />
+                                </StackPanel>
+                                <StackPanel x:ConnectionId='49' x:Name="UnsupportedBadgeBorder" Orientation="Horizontal" Spacing="5" Visibility="Collapsed">
+                                    <InfoBadge x:ConnectionId='50' x:Name="UnsupportedBadgeInfo" Width="8" Height="8" VerticalAlignment="Center" Background="{ThemeResource UnsupportedBadgeForegroundBrush}" />
+                                    <TextBlock x:ConnectionId='51' x:Name="UnsupportedBadge" Style="{StaticResource WizardBadgeTextStyle}" Foreground="{ThemeResource UnsupportedBadgeForegroundBrush}" Text="暂不支持" />
+                                </StackPanel>
+                            </StackPanel>
+                            <TextBlock x:ConnectionId='46' x:Name="QuestionMeta" Foreground="{ThemeResource TextFillColorSecondaryBrush}" AutomationProperties.AutomationId="StrategyQuestionMetaText" TextWrapping="Wrap" />
+                        </StackPanel>
+                    </Border>
+
+                    <StackPanel x:ConnectionId='12' x:Name="WeightSettingsSection" Spacing="12">
+                        <TextBlock FontSize="16" FontWeight="SemiBold" Text="基础策略" />
+                        <ComboBox x:ConnectionId='36' x:Name="Bias" Width="220" Header="倾向预设" SelectedIndex="0"                                  AutomationProperties.Name="选项倾向" AutomationProperties.AutomationId="StrategyBiasComboBox">
+                            <ComboBoxItem Content="自定义" Tag="custom" />
+                            <ComboBoxItem Content="偏左" Tag="left" />
+                            <ComboBoxItem Content="居中" Tag="center" />
+                            <ComboBoxItem Content="偏右" Tag="right" />
+                        </ComboBox>
+                        <StackPanel x:ConnectionId='37' x:Name="OptionWeightsSection" Spacing="8">
+                            <Grid><TextBlock FontWeight="SemiBold" Text="选项比例" /><TextBlock HorizontalAlignment="Right" Foreground="{ThemeResource TextFillColorSecondaryBrush}" Text="拖动滑块调整" /></Grid>
+                            <ItemsRepeater x:ConnectionId='39' x:Name="OptionWeightRows" AutomationProperties.AutomationId="StrategyWeightRows">
+                                <ItemsRepeater.Layout><StackLayout Spacing="4" /></ItemsRepeater.Layout>
+                                <ItemsRepeater.ItemTemplate>
+                                    <DataTemplate                                >
+                                        <Grid x:ConnectionId='42' ColumnSpacing="12" Margin="0,2">
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="180" />
+                                                <ColumnDefinition Width="*" />
+                                                <ColumnDefinition Width="80" />
+                                            </Grid.ColumnDefinitions>
+                                            <TextBlock x:ConnectionId='43' VerticalAlignment="Center"                       TextTrimming="CharacterEllipsis"                                         />
+                                            <Slider x:ConnectionId='44' Grid.Column="1" VerticalAlignment="Center"                                                                                                                         AutomationProperties.Name="选项比例滑块" />
+                                            <NumberBox x:ConnectionId='45' Grid.Column="2"                                                                                   SpinButtonPlacementMode="Compact"                                     AutomationProperties.Name="选项比例" />
+                                        </Grid>
+                                    </DataTemplate>
+                                </ItemsRepeater.ItemTemplate>
+                            </ItemsRepeater>
+                            <TextBlock x:ConnectionId='40' x:Name="RatioPreview" Foreground="{ThemeResource AccentFillColorDefaultBrush}" AutomationProperties.AutomationId="StrategyRatioPreviewText" TextWrapping="Wrap" />
+                        </StackPanel>
+                        <TextBlock x:ConnectionId='38' x:Name="OptionWeightEmpty" Visibility="Collapsed" Foreground="{ThemeResource TextFillColorSecondaryBrush}" Text="此题无需设置选项比例" />
+                    </StackPanel>
+
+                    <Border Background="{ThemeResource CardBackgroundFillColorDefaultBrush}" BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}" BorderThickness="1" CornerRadius="{StaticResource WizardCardCornerRadius}">
+                        <StackPanel Padding="16,14,16,16" Spacing="12">
+                            <TextBlock FontWeight="SemiBold" Text="题型专属设置" />
+                            <StackPanel x:ConnectionId='14' x:Name="TextQuestionSection" Spacing="12">
+                                <RadioButtons x:ConnectionId='30' x:Name="TextRandomMode" Header="填空模式" MaxColumns="3"                                      AutomationProperties.Name="填空模式" AutomationProperties.AutomationId="StrategyTextModeButtons">
+                                    <RadioButton Content="答案文本" Tag="none" />
+                                    <RadioButton Content="随机姓名" Tag="name" />
+                                    <RadioButton Content="随机手机号" Tag="mobile" />
+                                    <RadioButton Content="随机身份证" Tag="id_card" />
+                                    <RadioButton Content="随机整数" Tag="integer" />
+                                </RadioButtons>
+                                <TextBox x:ConnectionId='31' x:Name="TextAnswers" Header="答案文本" PlaceholderText="每行一个候选答案" AcceptsReturn="True" MinHeight="84" TextWrapping="Wrap"                                     AutomationProperties.Name="填空答案文本" AutomationProperties.AutomationId="StrategyTextAnswersInput" />
+                                <Grid x:ConnectionId='32' x:Name="TextRangeRow" Visibility="Collapsed" ColumnSpacing="12">
+                                    <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="*" /></Grid.ColumnDefinitions>
+                                    <NumberBox x:ConnectionId='34' x:Name="TextRangeMin" Header="整数最小值" AutomationProperties.AutomationId="StrategyTextRangeMinBox" SpinButtonPlacementMode="Compact"                                        />
+                                    <NumberBox x:ConnectionId='35' x:Name="TextRangeMax" Grid.Column="1" Header="整数最大值" AutomationProperties.AutomationId="StrategyTextRangeMaxBox" SpinButtonPlacementMode="Compact"                                        />
+                                </Grid>
+                                <ToggleSwitch x:ConnectionId='33' x:Name="AIEnabled" Header="允许 AI 填空" OffContent="关" OnContent="开"                              AutomationProperties.Name="允许 AI 填空" AutomationProperties.AutomationId="StrategyAiEnabledToggle" />
+                            </StackPanel>
+                            <StackPanel x:ConnectionId='15' x:Name="FillableOptionsSection" Spacing="8">
+                                <TextBlock FontWeight="SemiBold" Text="可填写选项" />
+                                <StackPanel x:ConnectionId='29' x:Name="FillableOptionList" Spacing="8" AutomationProperties.Name="可填写选项列表" />
+                            </StackPanel>
+                            <Grid x:ConnectionId='16' x:Name="LocationSection" ColumnSpacing="8" RowSpacing="8">
+                                <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition x:ConnectionId='22' x:Name="LocationCityColumn" Width="*" /><ColumnDefinition x:ConnectionId='23' x:Name="LocationDistrictColumn" Width="*" /></Grid.ColumnDefinitions>
+                                <Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition x:ConnectionId='24' x:Name="LocationCityRow" Height="0" /><RowDefinition x:ConnectionId='25' x:Name="LocationDistrictRow" Height="0" /></Grid.RowDefinitions>
+                                <TextBox x:ConnectionId='26' x:Name="LocationProvince" Header="省" AutomationProperties.AutomationId="StrategyLocationProvinceInput"                                     />
+                                <TextBox x:ConnectionId='27' x:Name="LocationCity" Grid.Column="1" Header="市" AutomationProperties.AutomationId="StrategyLocationCityInput"                                     />
+                                <TextBox x:ConnectionId='28' x:Name="LocationDistrict" Grid.Column="2" Header="区县" AutomationProperties.AutomationId="StrategyLocationDistrictInput"                                     />
+                            </Grid>
+                            <StackPanel x:ConnectionId='17' x:Name="MultiTextSection" Spacing="8"><TextBlock FontWeight="SemiBold" Text="多项填空" /><TextBox x:ConnectionId='20' x:Name="MultiTextAnswers" Header="答案文本组合" PlaceholderText="每行一组，各空用 || 分隔" AcceptsReturn="True" MinHeight="84" TextWrapping="Wrap"                                     AutomationProperties.Name="多项填空答案文本" AutomationProperties.AutomationId="StrategyMultiTextInput" /><StackPanel x:ConnectionId='21' x:Name="MultiTextRows" Spacing="8" /></StackPanel>
+                            <StackPanel x:ConnectionId='18' x:Name="AttachedOptionSection" Spacing="8"><TextBlock FontWeight="SemiBold" Text="嵌入式下拉" /><StackPanel x:ConnectionId='19' x:Name="AttachedOptionSelectList" Spacing="8" AutomationProperties.Name="嵌入式下拉选项" /></StackPanel>
+                        </StackPanel>
+                    </Border>
+                    <Button x:ConnectionId='13' HorizontalAlignment="Right" Style="{StaticResource AccentButtonStyle}"                        AutomationProperties.Name="保存本题答案" AutomationProperties.AutomationId="StrategySaveQuestionButton"><StackPanel Orientation="Horizontal" Spacing="8"><SymbolIcon Symbol="Save" /><TextBlock Text="保存本题答案" /></StackPanel></Button>
+                </StackPanel>
+            </ScrollViewer>
+        </Grid>
+
+        <StackPanel x:ConnectionId='5' x:Name="StatusPanel" Grid.Row="2" Spacing="8">
+            <InfoBar x:ConnectionId='6' x:Name="QuestionStatus" IsOpen="False" IsClosable="False" MaxWidth="720" AutomationProperties.AutomationId="StrategyQuestionStatus" />
+        </StackPanel>
+    </Grid>
+</UserControl>
+

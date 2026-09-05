@@ -1,0 +1,24 @@
+{
+  "version": 2,
+  "dgSpecHash": "sw0/7kuS1eA=",
+  "success": true,
+  "projectFilePath": "D:\\Projects\\SurveyController\\desktop\\native-cs\\tests\\SurveyController.Core.Tests\\SurveyController.Core.Tests.csproj",
+  "expectedPackageFiles": [
+    "C:\\Users\\test\\.nuget\\packages\\microsoft.codecoverage\\18.9.0\\microsoft.codecoverage.18.9.0.nupkg.sha512",
+    "C:\\Users\\test\\.nuget\\packages\\microsoft.net.test.sdk\\18.9.0\\microsoft.net.test.sdk.18.9.0.nupkg.sha512",
+    "C:\\Users\\test\\.nuget\\packages\\microsoft.testplatform.objectmodel\\18.9.0\\microsoft.testplatform.objectmodel.18.9.0.nupkg.sha512",
+    "C:\\Users\\test\\.nuget\\packages\\microsoft.testplatform.testhost\\18.9.0\\microsoft.testplatform.testhost.18.9.0.nupkg.sha512",
+    "C:\\Users\\test\\.nuget\\packages\\xunit\\2.9.3\\xunit.2.9.3.nupkg.sha512",
+    "C:\\Users\\test\\.nuget\\packages\\xunit.abstractions\\2.0.3\\xunit.abstractions.2.0.3.nupkg.sha512",
+    "C:\\Users\\test\\.nuget\\packages\\xunit.analyzers\\1.18.0\\xunit.analyzers.1.18.0.nupkg.sha512",
+    "C:\\Users\\test\\.nuget\\packages\\xunit.assert\\2.9.3\\xunit.assert.2.9.3.nupkg.sha512",
+    "C:\\Users\\test\\.nuget\\packages\\xunit.core\\2.9.3\\xunit.core.2.9.3.nupkg.sha512",
+    "C:\\Users\\test\\.nuget\\packages\\xunit.extensibility.core\\2.9.3\\xunit.extensibility.core.2.9.3.nupkg.sha512",
+    "C:\\Users\\test\\.nuget\\packages\\xunit.extensibility.execution\\2.9.3\\xunit.extensibility.execution.2.9.3.nupkg.sha512",
+    "C:\\Users\\test\\.nuget\\packages\\xunit.runner.visualstudio\\3.1.5\\xunit.runner.visualstudio.3.1.5.nupkg.sha512",
+    "C:\\Users\\test\\.nuget\\packages\\microsoft.netcore.app.ref\\8.0.30\\microsoft.netcore.app.ref.8.0.30.nupkg.sha512",
+    "C:\\Users\\test\\.nuget\\packages\\microsoft.windowsdesktop.app.ref\\8.0.30\\microsoft.windowsdesktop.app.ref.8.0.30.nupkg.sha512",
+    "C:\\Users\\test\\.nuget\\packages\\microsoft.aspnetcore.app.ref\\8.0.30\\microsoft.aspnetcore.app.ref.8.0.30.nupkg.sha512"
+  ],
+  "logs": []
+}

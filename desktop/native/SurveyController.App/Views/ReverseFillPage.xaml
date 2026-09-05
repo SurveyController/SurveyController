@@ -16,8 +16,8 @@
     </Page.Resources>
 
     <ScrollViewer x:Name="ReverseFillScrollViewer" HorizontalContentAlignment="Left" HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Auto">
-        <StackPanel Width="{x:Bind ReverseFillScrollViewer.ViewportWidth, Mode=OneWay}" MaxWidth="760" Padding="24,24,24,32" HorizontalAlignment="Left" Spacing="16">
-            <TextBlock FontSize="28" FontWeight="SemiBold" Text="Excel 反填" />
+            <StackPanel Width="{x:Bind ReverseFillScrollViewer.ViewportWidth, Mode=OneWay}" MaxWidth="{StaticResource PageContentMaxWidth}" Padding="28,28,28,40" HorizontalAlignment="Left" Spacing="20">
+            <TextBlock FontSize="32" FontWeight="SemiBold" Text="Excel 反填" />
 
             <InfoBar
                 x:Name="ReverseFillStatus"
@@ -30,7 +30,8 @@
                 AutomationProperties.AutomationId="ReverseFillStatusInfoBar" />
 
             <!-- 配置 -->
-            <Border Style="{StaticResource SectionCardBorder}">
+            <TextBlock Style="{StaticResource PageSectionTitleStyle}" Text="表格来源" />
+            <Border Style="{StaticResource PageCardStyle}">
                 <StackPanel Spacing="12">
                     <StackPanel Orientation="Horizontal" Spacing="10">
                         <SymbolIcon Symbol="OpenFile" />
@@ -74,7 +75,8 @@
             </Border>
 
             <!-- 说明 -->
-            <Border Style="{StaticResource SectionCardBorder}">
+            <TextBlock Style="{StaticResource PageSectionTitleStyle}" Text="使用步骤" />
+            <Border Style="{StaticResource PageCardStyle}">
                 <StackPanel Spacing="8">
                     <TextBlock FontWeight="SemiBold" Text="使用说明" />
                     <TextBlock Foreground="{ThemeResource TextFillColorSecondaryBrush}" TextWrapping="Wrap" Text="1. 先在「任务」页解析问卷，确认题目结构无误。&#x0a;2. 选择包含答案的 Excel 表格并打开上方开关。&#x0a;3. 到「任务」页检查并启动任务，作答时将按表格内容覆盖对应答案。" />

@@ -1,0 +1,12 @@
+{
+  "version": 2,
+  "dgSpecHash": "7DEj5Q5Ka78=",
+  "success": true,
+  "projectFilePath": "D:\\Projects\\SurveyController\\desktop\\native-cs\\src\\SurveyController.Core\\SurveyController.Core.csproj",
+  "expectedPackageFiles": [
+    "C:\\Users\\test\\.nuget\\packages\\microsoft.netcore.app.ref\\8.0.30\\microsoft.netcore.app.ref.8.0.30.nupkg.sha512",
+    "C:\\Users\\test\\.nuget\\packages\\microsoft.windowsdesktop.app.ref\\8.0.30\\microsoft.windowsdesktop.app.ref.8.0.30.nupkg.sha512",
+    "C:\\Users\\test\\.nuget\\packages\\microsoft.aspnetcore.app.ref\\8.0.30\\microsoft.aspnetcore.app.ref.8.0.30.nupkg.sha512"
+  ],
+  "logs": []
+}

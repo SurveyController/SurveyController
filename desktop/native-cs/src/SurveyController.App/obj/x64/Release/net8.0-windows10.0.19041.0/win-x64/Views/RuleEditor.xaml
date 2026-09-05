@@ -1,0 +1,84 @@
+﻿<UserControl x:ConnectionId='1'
+    x:Class="SurveyController.App.Views.RuleEditor"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+                     >
+    <Grid MinHeight="460" ColumnSpacing="16" RowSpacing="16">
+        <VisualStateManager.VisualStateGroups>
+            <VisualStateGroup>
+                <VisualState x:ConnectionId='2' x:Name="CompactRuleEditor">
+                    <VisualState.StateTriggers><AdaptiveTrigger MinWindowWidth="0" /></VisualState.StateTriggers>
+                    <VisualState.Setters>
+                        <Setter Target="RuleListColumn.Width" Value="*" />
+                        <Setter Target="RuleDetailColumn.Width" Value="0" />
+                        <Setter Target="RuleListRow.Height" Value="260" />
+                        <Setter Target="RuleDetailRow.Height" Value="*" />
+                        <Setter Target="RuleDetailScroll.(Grid.Row)" Value="1" />
+                        <Setter Target="RuleDetailScroll.(Grid.Column)" Value="0" />
+                    </VisualState.Setters>
+                </VisualState>
+                <VisualState x:ConnectionId='3' x:Name="WideRuleEditor">
+                    <VisualState.StateTriggers><AdaptiveTrigger MinWindowWidth="840" /></VisualState.StateTriggers>
+                    <VisualState.Setters>
+                        <Setter Target="RuleListColumn.Width" Value="300" />
+                        <Setter Target="RuleDetailColumn.Width" Value="*" />
+                        <Setter Target="RuleListRow.Height" Value="*" />
+                        <Setter Target="RuleDetailRow.Height" Value="0" />
+                        <Setter Target="RuleDetailScroll.(Grid.Row)" Value="0" />
+                        <Setter Target="RuleDetailScroll.(Grid.Column)" Value="1" />
+                    </VisualState.Setters>
+                </VisualState>
+            </VisualStateGroup>
+        </VisualStateManager.VisualStateGroups>
+        <Grid.ColumnDefinitions>
+            <ColumnDefinition x:ConnectionId='4' x:Name="RuleListColumn" Width="300" />
+            <ColumnDefinition x:ConnectionId='5' x:Name="RuleDetailColumn" Width="*" />
+        </Grid.ColumnDefinitions>
+        <Grid.RowDefinitions>
+            <RowDefinition x:ConnectionId='6' x:Name="RuleListRow" Height="*" />
+            <RowDefinition x:ConnectionId='7' x:Name="RuleDetailRow" Height="0" />
+        </Grid.RowDefinitions>
+        <Border Background="{ThemeResource CardBackgroundFillColorDefaultBrush}" BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}" BorderThickness="1" CornerRadius="{StaticResource WizardCardCornerRadius}" Padding="12">
+            <Grid RowSpacing="10">
+                <Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="*" /></Grid.RowDefinitions>
+                <CommandBar DefaultLabelPosition="Right" IsOpen="False">
+                    <AppBarButton x:ConnectionId='20' x:Name="NewRuleButton" Label="新增"                   AutomationProperties.Name="新增规则" AutomationProperties.AutomationId="RuleNewButton"><SymbolIcon Symbol="Add" /></AppBarButton>
+                    <AppBarButton x:ConnectionId='21' x:Name="DeleteRuleButton" Label="删除"                      AutomationProperties.Name="删除规则" AutomationProperties.AutomationId="RuleDeleteButton"><SymbolIcon Symbol="Delete" /></AppBarButton>
+                    <AppBarSeparator />
+                    <AppBarButton x:ConnectionId='22' x:Name="MoveRuleUpButton" Label="上移"                      AutomationProperties.Name="上移规则" AutomationProperties.AutomationId="RuleMoveUpButton"><FontIcon Glyph="&#xE74A;" /></AppBarButton>
+                    <AppBarButton x:ConnectionId='23' x:Name="MoveRuleDownButton" Label="下移"                        AutomationProperties.Name="下移规则" AutomationProperties.AutomationId="RuleMoveDownButton"><FontIcon Glyph="&#xE74B;" /></AppBarButton>
+                </CommandBar>
+                <ListView x:ConnectionId='19' x:Name="RuleList" Grid.Row="1"                                   AutomationProperties.Name="条件规则列表" AutomationProperties.AutomationId="RuleListView" />
+            </Grid>
+        </Border>
+
+        <ScrollViewer x:ConnectionId='8' x:Name="RuleDetailScroll" Grid.Column="1" HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Auto">
+            <StackPanel Padding="4,0,8,20" Spacing="16">
+                <StackPanel Spacing="4">
+                    <TextBlock FontSize="20" FontWeight="SemiBold" Text="当…则…" />
+                    <TextBlock Foreground="{ThemeResource TextFillColorSecondaryBrush}" Text="规则从上到下判断；多条规则命中时，靠后的规则优先。" TextWrapping="Wrap" />
+                </StackPanel>
+                <AutoSuggestBox x:ConnectionId='9' x:Name="ConditionQuestion" Header="当：条件题" QueryIcon="Find"                                                                                                                                         AutomationProperties.Name="搜索条件题" AutomationProperties.AutomationId="RuleConditionQuestionBox" />
+                <RadioButtons x:ConnectionId='10' x:Name="ConditionMode" Header="状态" SelectedIndex="0" AutomationProperties.Name="条件状态" AutomationProperties.AutomationId="RuleConditionModeButtons">
+                    <RadioButton Content="已选中" Tag="selected" />
+                    <RadioButton Content="未选中" Tag="not_selected" />
+                </RadioButtons>
+                <ListView x:ConnectionId='11' x:Name="ConditionOptions" Header="条件选项" SelectionMode="Multiple" AutomationProperties.Name="条件选项" AutomationProperties.AutomationId="RuleConditionOptionsList" />
+                <ComboBox x:ConnectionId='12' x:Name="ConditionRow" Header="条件矩阵行" Visibility="Collapsed" AutomationProperties.Name="条件矩阵行" AutomationProperties.AutomationId="RuleConditionRowComboBox" />
+                <Rectangle Height="1" Fill="{ThemeResource DividerStrokeColorDefaultBrush}" />
+                <AutoSuggestBox x:ConnectionId='13' x:Name="TargetQuestion" Header="则：目标题" QueryIcon="Find"                                                                                                                                AutomationProperties.Name="搜索目标题" AutomationProperties.AutomationId="RuleTargetQuestionBox" />
+                <RadioButtons x:ConnectionId='14' x:Name="ActionMode" Header="动作" SelectedIndex="0" AutomationProperties.Name="规则动作" AutomationProperties.AutomationId="RuleActionModeButtons">
+                    <RadioButton Content="必须选择" Tag="must_select" />
+                    <RadioButton Content="不得选择" Tag="must_not_select" />
+                </RadioButtons>
+                <ListView x:ConnectionId='15' x:Name="TargetOptions" Header="目标选项" SelectionMode="Multiple" AutomationProperties.Name="目标选项" AutomationProperties.AutomationId="RuleTargetOptionsList" />
+                <ComboBox x:ConnectionId='16' x:Name="TargetRow" Header="目标矩阵行" Visibility="Collapsed" AutomationProperties.Name="目标矩阵行" AutomationProperties.AutomationId="RuleTargetRowComboBox" />
+                <Button x:ConnectionId='17' HorizontalAlignment="Right" Style="{StaticResource AccentButtonStyle}"                    AutomationProperties.Name="保存规则" AutomationProperties.AutomationId="RuleSaveButton">
+                    <StackPanel Orientation="Horizontal" Spacing="8"><SymbolIcon Symbol="Save" /><TextBlock Text="保存规则" /></StackPanel>
+                </Button>
+                <InfoBar x:ConnectionId='18' x:Name="RuleStatus" IsOpen="False" IsClosable="False" AutomationProperties.LiveSetting="Assertive" AutomationProperties.AutomationId="RuleStatusInfoBar" />
+            </StackPanel>
+        </ScrollViewer>
+    </Grid>
+</UserControl>
+

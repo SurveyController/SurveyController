@@ -1,0 +1,101 @@
+﻿<Window
+    x:Class="SurveyController.App.MainWindow"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:local="using:SurveyController.App">
+
+    <Grid x:ConnectionId='2' x:Name="RootLayout" Background="Transparent">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="{StaticResource ShellTitleBarHeight}" />
+            <RowDefinition Height="*" />
+        </Grid.RowDefinitions>
+
+        <TitleBar x:ConnectionId='3'
+            x:Name="AppTitleBar"
+            Grid.Row="0"
+            AutomationProperties.AutomationId="ShellTitleBar"
+            Subtitle="5.0.0"
+            Title="SurveyController">
+            <TitleBar.IconSource>
+                <ImageIconSource ImageSource="/Assets/appicon.png" />
+            </TitleBar.IconSource>
+        </TitleBar>
+
+        <NavigationView x:ConnectionId='4'
+            x:Name="ShellNavigation"
+            Grid.Row="1"
+            AutomationProperties.AutomationId="ShellNavigation"
+            Background="Transparent"
+            CompactModeThresholdWidth="641"
+            CompactPaneLength="56"
+            ExpandedModeThresholdWidth="1008"
+            IsBackButtonVisible="Collapsed"
+            IsPaneToggleButtonVisible="True"
+            IsSettingsVisible="False"
+            OpenPaneLength="192"
+            PaneDisplayMode="Auto">
+            <NavigationView.MenuItems>
+                <NavigationViewItem x:ConnectionId='6'
+                    x:Name="TaskNavigationItem"
+                    AutomationProperties.AutomationId="NavTaskItem"
+                    Content="任务"
+                    IsSelected="True"
+                    Tag="task">
+                    <NavigationViewItem.Icon>
+                        <SymbolIcon Symbol="Home" />
+                    </NavigationViewItem.Icon>
+                </NavigationViewItem>
+            </NavigationView.MenuItems>
+            <NavigationView.FooterMenuItems>
+                <NavigationViewItem
+                    AutomationProperties.AutomationId="NavSettingsItem"
+                    Content="设置"
+                    Tag="settings">
+                    <NavigationViewItem.Icon>
+                        <SymbolIcon Symbol="Setting" />
+                    </NavigationViewItem.Icon>
+                </NavigationViewItem>
+                <NavigationViewItem
+                    AutomationProperties.AutomationId="NavCommunityItem"
+                    Content="社区"
+                    Tag="community">
+                    <NavigationViewItem.Icon>
+                        <SymbolIcon Symbol="Message" />
+                    </NavigationViewItem.Icon>
+                </NavigationViewItem>
+                <NavigationViewItem
+                    AutomationProperties.AutomationId="NavMoreItem"
+                    Content="更多"
+                    Tag="more">
+                    <NavigationViewItem.Icon>
+                        <SymbolIcon Symbol="More" />
+                    </NavigationViewItem.Icon>
+                </NavigationViewItem>
+            </NavigationView.FooterMenuItems>
+            <Frame x:ConnectionId='7' x:Name="ContentFrame" Background="Transparent">
+                <Frame.ContentTransitions>
+                    <TransitionCollection>
+                        <NavigationThemeTransition>
+                            <NavigationThemeTransition.DefaultNavigationTransitionInfo>
+                                <EntranceNavigationTransitionInfo />
+                            </NavigationThemeTransition.DefaultNavigationTransitionInfo>
+                        </NavigationThemeTransition>
+                    </TransitionCollection>
+                </Frame.ContentTransitions>
+            </Frame>
+        </NavigationView>
+
+        <InfoBar x:ConnectionId='5'
+            x:Name="StartupStatus"
+            Grid.Row="1"
+            Margin="16"
+            MaxWidth="720"
+            HorizontalAlignment="Center"
+            VerticalAlignment="Top"
+            AutomationProperties.AutomationId="ShellStartupStatus"
+            AutomationProperties.LiveSetting="Assertive"
+            IsClosable="True"
+            IsOpen="False" />
+    </Grid>
+</Window>
+

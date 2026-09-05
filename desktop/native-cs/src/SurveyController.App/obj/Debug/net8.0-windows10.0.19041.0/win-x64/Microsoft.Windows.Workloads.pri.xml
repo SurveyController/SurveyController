@@ -1,0 +1,57 @@
+<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<PriInfo>
+	<ResourceMap name="Microsoft.Windows.Workloads" version="1.0" primary="true">
+		<Qualifiers>
+			<Language>EN-US</Language>
+		</Qualifiers>
+		<ResourceMapSubtree name="Microsoft.Windows.Workloads">
+			<ResourceMapSubtree name="Resources">
+				<NamedResource name="Windows_Workload_Analysis" uri="ms-resource://Microsoft.Windows.Workloads/Microsoft.Windows.Workloads/Resources/Windows_Workload_Analysis">
+					<Candidate qualifiers="Language-EN-US" isDefault="true" type="String">
+						<Value>AI Semantic Analysis</Value>
+					</Candidate>
+				</NamedResource>
+				<NamedResource name="Windows_Workload_ContentExtraction" uri="ms-resource://Microsoft.Windows.Workloads/Microsoft.Windows.Workloads/Resources/Windows_Workload_ContentExtraction">
+					<Candidate qualifiers="Language-EN-US" isDefault="true" type="String">
+						<Value>AI Image Extraction</Value>
+					</Candidate>
+				</NamedResource>
+				<NamedResource name="Windows_Workload_ImageCreation" uri="ms-resource://Microsoft.Windows.Workloads/Microsoft.Windows.Workloads/Resources/Windows_Workload_ImageCreation">
+					<Candidate qualifiers="Language-EN-US" isDefault="true" type="String">
+						<Value>AI Image Creation</Value>
+					</Candidate>
+				</NamedResource>
+				<NamedResource name="Windows_Workload_ImageProcessing" uri="ms-resource://Microsoft.Windows.Workloads/Microsoft.Windows.Workloads/Resources/Windows_Workload_ImageProcessing">
+					<Candidate qualifiers="Language-EN-US" isDefault="true" type="String">
+						<Value>AI Image Processing</Value>
+					</Candidate>
+				</NamedResource>
+				<NamedResource name="Windows_Workload_ImageSearch" uri="ms-resource://Microsoft.Windows.Workloads/Microsoft.Windows.Workloads/Resources/Windows_Workload_ImageSearch">
+					<Candidate qualifiers="Language-EN-US" isDefault="true" type="String">
+						<Value>AI Image Search</Value>
+					</Candidate>
+				</NamedResource>
+				<NamedResource name="Windows_Workload_ImageTransform" uri="ms-resource://Microsoft.Windows.Workloads/Microsoft.Windows.Workloads/Resources/Windows_Workload_ImageTransform">
+					<Candidate qualifiers="Language-EN-US" isDefault="true" type="String">
+						<Value>AI Image Transform</Value>
+					</Candidate>
+				</NamedResource>
+				<NamedResource name="Windows_Workload_PhiSilica" uri="ms-resource://Microsoft.Windows.Workloads/Microsoft.Windows.Workloads/Resources/Windows_Workload_PhiSilica">
+					<Candidate qualifiers="Language-EN-US" isDefault="true" type="String">
+						<Value>AI Phi Silica</Value>
+					</Candidate>
+				</NamedResource>
+				<NamedResource name="Windows_Workload_SettingsModel" uri="ms-resource://Microsoft.Windows.Workloads/Microsoft.Windows.Workloads/Resources/Windows_Workload_SettingsModel">
+					<Candidate qualifiers="Language-EN-US" isDefault="true" type="String">
+						<Value>AI Settings Model</Value>
+					</Candidate>
+				</NamedResource>
+				<NamedResource name="Windows_Workload_WCRInternal" uri="ms-resource://Microsoft.Windows.Workloads/Microsoft.Windows.Workloads/Resources/Windows_Workload_WCRInternal">
+					<Candidate qualifiers="Language-EN-US" isDefault="true" type="String">
+						<Value>AI WCR Internal</Value>
+					</Candidate>
+				</NamedResource>
+			</ResourceMapSubtree>
+		</ResourceMapSubtree>
+	</ResourceMap>
+</PriInfo>

@@ -5,7 +5,7 @@
     >
 
     <ScrollViewer x:Name="CommunityScrollViewer" HorizontalContentAlignment="Left" HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Auto">
-        <StackPanel Width="{x:Bind CommunityScrollViewer.ViewportWidth, Mode=OneWay}" MaxWidth="720" Padding="24,24,24,32" HorizontalAlignment="Left" Spacing="16">
+        <StackPanel Width="{x:Bind CommunityScrollViewer.ViewportWidth, Mode=OneWay}" MaxWidth="{StaticResource PageContentMaxWidth}" Padding="28,28,28,40" HorizontalAlignment="Left" Spacing="20">
             <StackPanel.ChildrenTransitions>
                 <TransitionCollection>
                     <EntranceThemeTransition FromVerticalOffset="8" />
@@ -13,10 +13,11 @@
                 </TransitionCollection>
             </StackPanel.ChildrenTransitions>
 
-            <TextBlock FontSize="28" FontWeight="SemiBold" Text="社区" />
+            <TextBlock FontSize="32" FontWeight="SemiBold" Text="社区与帮助" />
             <TextBlock Style="{StaticResource CaptionTextBlockStyle}" Text="获取帮助、反馈问题并参与项目建设" />
 
-            <Border Padding="20" Background="{ThemeResource CardBackgroundFillColorDefaultBrush}" BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}" BorderThickness="1" CornerRadius="12">
+            <TextBlock Style="{StaticResource PageSectionTitleStyle}" Text="获取帮助" />
+            <Border Style="{StaticResource PageCardStyle}">
                 <Grid ColumnSpacing="20">
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="Auto" />
@@ -33,7 +34,8 @@
                 </Grid>
             </Border>
 
-            <Border Padding="20" Background="{ThemeResource CardBackgroundFillColorDefaultBrush}" BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}" BorderThickness="1" CornerRadius="12">
+            <TextBlock Style="{StaticResource PageSectionTitleStyle}" Text="参与项目" />
+            <Border Style="{StaticResource PageCardStyle}">
                 <Grid ColumnSpacing="20">
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="Auto" />
@@ -48,7 +50,8 @@
                 </Grid>
             </Border>
 
-            <Border Padding="20" Background="{ThemeResource CardBackgroundFillColorDefaultBrush}" BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}" BorderThickness="1" CornerRadius="12">
+            <TextBlock Style="{StaticResource PageSectionTitleStyle}" Text="许可与使用" />
+            <Border Style="{StaticResource PageCardStyle}">
                 <Grid ColumnSpacing="20">
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="Auto" />

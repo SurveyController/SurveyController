@@ -29,8 +29,8 @@
             IsSettingsVisible="False"
             CompactModeThresholdWidth="641"
             ExpandedModeThresholdWidth="1008"
-            CompactPaneLength="56"
-            OpenPaneLength="192"
+            CompactPaneLength="64"
+            OpenPaneLength="224"
             PaneDisplayMode="Auto">
             <NavigationView.MenuItems>
                 <NavigationViewItem x:Name="TaskNavigationItem" Content="任务" IsSelected="True" Tag="task">
