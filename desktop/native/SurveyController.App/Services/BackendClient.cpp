@@ -135,7 +135,7 @@ namespace winrt::SurveyController::App::Services
 
     void BackendClient::MarkSessionFailed(std::shared_ptr<RpcSession> const& session) noexcept
     {
-        session->accepting.store(false);
+        session->accepting.store(false, std::memory_order_release);
         if (session->process) TerminateProcess(session->process.get(), ERROR_PROCESS_ABORTED);
         std::scoped_lock lock(m_stateMutex);
         if (m_session == session && m_state == BackendState::Running)
@@ -189,31 +189,35 @@ namespace winrt::SurveyController::App::Services
         auto session = AcquireSession();
         InFlightGuard inFlight{ session };
         std::scoped_lock ioLock(session->ioMutex);
-        if (!session->accepting.load())
+        if (!session->accepting.load(std::memory_order_acquire))
             throw winrt::hresult_error(HRESULT_FROM_WIN32(ERROR_SHUTDOWN_IN_PROGRESS), L"后端正在关闭");
 
         auto const requestId = m_nextRequestId.fetch_add(1);
         auto const payload = BuildRequestPayload(requestId, method, params);
         auto const requestSize = static_cast<std::uint32_t>(payload.size());
 
-        std::mutex timerMutex;
-        std::condition_variable timerChanged;
-        bool completed = false;
-        std::atomic_bool timedOut = false;
-        std::thread watchdog([session, timeout, &timerMutex, &timerChanged, &completed, &timedOut]
+        struct WatchdogState
         {
-            std::unique_lock lock(timerMutex);
-            if (!timerChanged.wait_for(lock, timeout, [&] { return completed; }))
+            std::mutex mutex;
+            std::condition_variable cv;
+            bool completed = false;
+            std::atomic_bool timedOut = false;
+        };
+        auto state = std::make_shared<WatchdogState>();
+        std::thread watchdog([session, timeout, state]
+        {
+            std::unique_lock lock(state->mutex);
+            if (!state->cv.wait_for(lock, timeout, [&] { return state->completed; }))
             {
-                timedOut.store(true);
-                session->accepting.store(false);
+                state->timedOut.store(true, std::memory_order_release);
+                session->accepting.store(false, std::memory_order_release);
                 if (session->process) TerminateProcess(session->process.get(), ERROR_TIMEOUT);
             }
         });
-        auto finishWatchdog = [&]
+        auto finishWatchdog = [&state, &watchdog]
         {
-            { std::scoped_lock lock(timerMutex); completed = true; }
-            timerChanged.notify_one();
+            { std::scoped_lock lock(state->mutex); state->completed = true; }
+            state->cv.notify_one();
             watchdog.join();
         };
 
@@ -228,7 +232,7 @@ namespace winrt::SurveyController::App::Services
             std::string responsePayload(responseSize, '\0');
             ReadExact(session->stdoutRead.get(), responsePayload.data(), responseSize);
             finishWatchdog();
-            if (timedOut.load())
+            if (state->timedOut.load(std::memory_order_acquire))
             {
                 MarkSessionFailed(session);
                 throw winrt::hresult_error(HRESULT_FROM_WIN32(ERROR_TIMEOUT), L"后端响应超时");
@@ -239,7 +243,7 @@ namespace winrt::SurveyController::App::Services
         {
             finishWatchdog();
             MarkSessionFailed(session);
-            if (timedOut.load())
+            if (state->timedOut.load(std::memory_order_acquire))
                 throw winrt::hresult_error(HRESULT_FROM_WIN32(ERROR_TIMEOUT), L"后端响应超时");
             throw;
         }

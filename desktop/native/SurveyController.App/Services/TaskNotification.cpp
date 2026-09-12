@@ -54,11 +54,18 @@ namespace winrt::SurveyController::App::Services
     bool TaskNotification::EnsureRegistered()
     {
         if (m_registered) return true;
-        auto manager = Microsoft::Windows::AppNotifications::AppNotificationManager::Default();
-        m_invokedToken = manager.NotificationInvoked([](auto const&, auto const&) {});
-        manager.Register();
-        m_registered = true;
-        return true;
+        try
+        {
+            auto manager = Microsoft::Windows::AppNotifications::AppNotificationManager::Default();
+            m_invokedToken = manager.NotificationInvoked([](auto const&, auto const&) {});
+            manager.Register();
+            m_registered = true;
+            return true;
+        }
+        catch (...)
+        {
+            return false;
+        }
     }
 
     TaskNotification::~TaskNotification()

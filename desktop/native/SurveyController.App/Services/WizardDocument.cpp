@@ -61,7 +61,11 @@ namespace winrt::SurveyController::App::Services
             {
                 return { first, second };
             }
-            return { static_cast<int32_t>(value.GetNumberAt(0)), static_cast<int32_t>(value.GetNumberAt(1)) };
+            auto num0 = value.GetNumberAt(0);
+            auto num1 = value.GetNumberAt(1);
+            first = (num0 >= INT32_MIN && num0 <= INT32_MAX) ? static_cast<int32_t>(num0) : first;
+            second = (num1 >= INT32_MIN && num1 <= INT32_MAX) ? static_cast<int32_t>(num1) : second;
+            return { first, second };
         }
 
         std::array<hstring, 2> ReadStringPair(JsonObject const& object, wchar_t const* name)
@@ -306,8 +310,10 @@ namespace winrt::SurveyController::App::Services
         if (!m_config || !changes) return;
         auto question = QuestionAt(index);
         if (!question) return;
-        auto questionNumber = static_cast<int32_t>(question.GetNamedNumber(L"num", 0));
-        if (questionNumber <= 0) return;
+        auto num = question.GetNamedNumber(L"num", 0);
+        if (num < 1.0 || num > static_cast<double>(INT32_MAX))
+            return;
+        auto questionNumber = static_cast<int32_t>(num);
         auto answers = Answers();
         auto strategies = Strategies();
         JsonObject strategy;

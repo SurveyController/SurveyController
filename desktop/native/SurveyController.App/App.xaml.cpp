@@ -21,8 +21,7 @@ namespace winrt::SurveyController::App::implementation
     void App::OnLaunched(Microsoft::UI::Xaml::LaunchActivatedEventArgs const&)
     {
         m_window = make<MainWindow>();
-        // Release the app-level window reference after the main window closes
-        // so the desktop process can finish its shutdown promptly.
+        // WinUI 生命周期保证窗口关闭先于 App 析构，此处捕获 this 安全
         m_window.Closed([this](IInspectable const&, Microsoft::UI::Xaml::WindowEventArgs const&)
         {
             m_window = nullptr;

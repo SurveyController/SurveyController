@@ -227,7 +227,10 @@ namespace winrt::SurveyController::App::implementation
         m_closeConfirmed = true;
         if (auto taskPage = ContentFrame().Content().try_as<SurveyController::App::TaskPage>())
         {
-            winrt::get_self<SurveyController::App::implementation::TaskPage>(taskPage)->PrepareForShutdown();
+            if (auto impl = winrt::get_self<SurveyController::App::implementation::TaskPage>(taskPage))
+            {
+                impl->PrepareForShutdown();
+            }
         }
         Close();
     }
