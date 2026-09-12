@@ -27,7 +27,9 @@ namespace winrt::SurveyController::App::implementation
         bool m_saving{};
         std::function<void(bool)> m_closedHandler;
         void ConfigureWindow(Microsoft::UI::WindowId owner);
+        void ConfigureBackdrop();
         void CloseEditor(bool commit);
+        static bool IsWindows11OrGreater();
         winrt::fire_and_forget ConfirmCloseAsync();
         winrt::fire_and_forget ShowAISettingsAsync();
         winrt::fire_and_forget SaveAndCloseAsync();

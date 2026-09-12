@@ -23,6 +23,7 @@ namespace winrt::SurveyController::App::implementation
         Title(L"配置向导");
         ExtendsContentIntoTitleBar(true);
         SetTitleBar(AppTitleBar());
+        ConfigureBackdrop();
         auto titleBar = AppWindow().TitleBar();
         if (titleBar.IsCustomizationSupported())
         {
@@ -212,5 +213,27 @@ namespace winrt::SurveyController::App::implementation
         m_closing = true;
         m_committed = commit;
         Close();
+    }
+
+    void AnswerEditorWindow::ConfigureBackdrop()
+    {
+        using namespace Microsoft::UI::Xaml::Media;
+        if (IsWindows11OrGreater())
+        {
+            auto mica = MicaBackdrop{};
+            mica.Kind(Microsoft::UI::Composition::SystemBackdrops::MicaKind::Base);
+            SystemBackdrop(mica);
+            return;
+        }
+        SystemBackdrop(DesktopAcrylicBackdrop{});
+    }
+
+    bool AnswerEditorWindow::IsWindows11OrGreater()
+    {
+        OSVERSIONINFOEXW version{};
+        version.dwOSVersionInfoSize = sizeof(version);
+        version.dwBuildNumber = 22000;
+        auto mask = VerSetConditionMask(0, VER_BUILDNUMBER, VER_GREATER_EQUAL);
+        return VerifyVersionInfoW(&version, VER_BUILDNUMBER, mask) != FALSE;
     }
 }

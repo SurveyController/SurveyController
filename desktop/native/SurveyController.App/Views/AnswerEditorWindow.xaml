@@ -3,7 +3,7 @@
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:local="using:SurveyController.App">
-    <Grid Background="{ThemeResource LayerFillColorDefaultBrush}" KeyDown="OnKeyDown">
+    <Grid Background="Transparent" KeyDown="OnKeyDown">
         <Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="*" /><RowDefinition Height="Auto" /></Grid.RowDefinitions>
         <TitleBar x:Name="AppTitleBar" Title="配置向导">
             <TitleBar.IconSource>
