@@ -94,13 +94,13 @@
                                             <ContentThemeTransition />
                                         </TransitionCollection>
                                     </Button.ContentTransitions>
-                                    <StackPanel Orientation="Horizontal" Spacing="8"><SymbolIcon x:Name="SurveyPrimaryIcon" Symbol="Refresh" /><TextBlock x:Name="SurveyPrimaryLabel" Text="解析并继续" /></StackPanel>
+                                    <StackPanel Orientation="Horizontal" Spacing="8"><SymbolIcon x:Name="SurveyPrimaryIcon" Symbol="Accept" /><TextBlock x:Name="SurveyPrimaryLabel" Text="解析并继续" /></StackPanel>
                                 </Button>
                             </Grid>
 
                             <StackPanel Orientation="Horizontal" Spacing="8">
-                                <Button Click="OnChooseQRCode" AutomationProperties.Name="识别二维码图片"><StackPanel Orientation="Horizontal" Spacing="8"><SymbolIcon Symbol="View" /><TextBlock Text="识别二维码" /></StackPanel></Button>
-                                <Button Click="OnImportConfig" AutomationProperties.Name="导入配置文件"><StackPanel Orientation="Horizontal" Spacing="8"><SymbolIcon Symbol="Document" /><TextBlock Text="导入配置" /></StackPanel></Button>
+                                <Button Click="OnChooseQRCode" AutomationProperties.Name="识别二维码图片"><StackPanel Orientation="Horizontal" Spacing="8"><SymbolIcon Symbol="Scan" /><TextBlock Text="识别二维码" /></StackPanel></Button>
+                                <Button Click="OnImportConfig" AutomationProperties.Name="导入配置文件"><StackPanel Orientation="Horizontal" Spacing="8"><SymbolIcon Symbol="OpenLocal" /><TextBlock Text="导入配置" /></StackPanel></Button>
                             </StackPanel>
                         </StackPanel>
                     </ScrollViewer>
@@ -115,7 +115,7 @@
                                     <ColumnDefinition Width="40" />
                                     <ColumnDefinition Width="*" />
                                 </Grid.ColumnDefinitions>
-                                <SymbolIcon VerticalAlignment="Center" Symbol="Calculator" />
+                                <SymbolIcon VerticalAlignment="Center" Symbol="ViewAll" />
                                 <Grid Grid.Column="1" ColumnSpacing="24" RowSpacing="12">
                                     <Grid.ColumnDefinitions>
                                         <ColumnDefinition Width="*" />
@@ -161,7 +161,7 @@
                     <!-- 第 3 步：条件规则 -->
                     <ScrollViewer x:Name="RulesPanel" Visibility="Collapsed" HorizontalContentAlignment="Stretch" HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Auto">
                         <StackPanel Width="{x:Bind RulesPanel.ViewportWidth, Mode=OneWay}" Padding="32,24" HorizontalAlignment="Stretch" Spacing="16">
-                            <StackPanel Orientation="Horizontal" Spacing="10"><SymbolIcon Symbol="Important" /><TextBlock FontSize="20" FontWeight="SemiBold" Text="条件规则" /></StackPanel>
+                            <StackPanel Orientation="Horizontal" Spacing="10"><FontIcon Glyph="&#xF0AD;" FontFamily="{ThemeResource SymbolThemeFontFamily}" /><TextBlock FontSize="20" FontWeight="SemiBold" Text="条件规则" /></StackPanel>
                             <local:RuleEditor x:Name="RuleEditorView" />
                         </StackPanel>
                     </ScrollViewer>
@@ -206,7 +206,7 @@
                                     <ColumnDefinition Width="*" />
                                     <ColumnDefinition Width="Auto" />
                                 </Grid.ColumnDefinitions>
-                                <SymbolIcon VerticalAlignment="Center" Symbol="Globe" />
+                                <FontIcon VerticalAlignment="Center" Glyph="&#xE72E;" FontFamily="{ThemeResource SymbolThemeFontFamily}" />
                                 <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="2">
                                     <TextBlock FontSize="16" Text="访问方式" />
                                     <TextBlock Style="{StaticResource CaptionTextBlockStyle}" Text="选择问卷访问时使用的网络路径" />
@@ -292,7 +292,7 @@
                                     <ColumnDefinition Width="*" />
                                     <ColumnDefinition Width="Auto" />
                                 </Grid.ColumnDefinitions>
-                                <SymbolIcon VerticalAlignment="Center" Symbol="Contact" />
+                                <SymbolIcon VerticalAlignment="Center" Symbol="ContactInfo" />
                                 <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="2">
                                     <TextBlock FontSize="16" Text="随机 User-Agent 身份" />
                                     <TextBlock Style="{StaticResource CaptionTextBlockStyle}" Text="每次访问时随机生成浏览器标识" />
@@ -306,7 +306,7 @@
                                     <ColumnDefinition Width="*" />
                                     <ColumnDefinition Width="Auto" />
                                 </Grid.ColumnDefinitions>
-                                <SymbolIcon VerticalAlignment="Center" Symbol="Calculator" />
+                                <FontIcon VerticalAlignment="Center" Glyph="&#xE8BC;" FontFamily="{ThemeResource SymbolThemeFontFamily}" />
                                 <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="2">
                                     <TextBlock FontSize="16" Text="量表信度拟真 (Cronbach's α)" />
                                     <TextBlock Style="{StaticResource CaptionTextBlockStyle}" Text="启用心理学信度控制，提高量表数据质量" />
@@ -360,7 +360,7 @@
                                     <ColumnDefinition Width="40" />
                                     <ColumnDefinition Width="*" />
                                 </Grid.ColumnDefinitions>
-                                <SymbolIcon VerticalAlignment="Center" Symbol="Sort" />
+                                <SymbolIcon VerticalAlignment="Center" Symbol="RepeatAll" />
                                 <StackPanel Grid.Column="1" Spacing="8">
                                     <TextBlock FontSize="16" Text="提交间隔冷却（秒）" />
                                     <Grid ColumnSpacing="12">
@@ -420,10 +420,10 @@
                                     <ColumnDefinition Width="*" />
                                     <ColumnDefinition Width="Auto" />
                                 </Grid.ColumnDefinitions>
-                                <SymbolIcon VerticalAlignment="Center" Symbol="Cancel" />
+                                <SymbolIcon VerticalAlignment="Center" Symbol="Important" />
                                 <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="2">
                                     <TextBlock FontSize="16" Text="连续失败时自动停止" />
-                                    <TextBlock Style="{StaticResource CaptionTextBlockStyle}" Text="多次提交失败后停止任务，避免无效消耗" />
+                                    <TextBlock Style="{StaticResource CaptionTextBlockStyle}" Text="多次提交失败后停止任务,避免无效消耗" />
                                 </StackPanel>
                                 <ToggleSwitch x:Name="FailStop" Grid.Column="2" MinWidth="0" HorizontalAlignment="Right" VerticalAlignment="Center" AutomationProperties.Name="连续失败时停止" OffContent="关" OnContent="开" />
                             </Grid>
@@ -449,7 +449,7 @@
                                     <ColumnDefinition Width="*" />
                                     <ColumnDefinition Width="Auto" />
                                 </Grid.ColumnDefinitions>
-                                <SymbolIcon VerticalAlignment="Center" Symbol="OpenFile" />
+                                <SymbolIcon VerticalAlignment="Center" Symbol="Page" />
                                 <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="2">
                                     <TextBlock FontSize="16" Text="按表格内容覆盖答案" />
                                     <TextBlock Style="{StaticResource CaptionTextBlockStyle}" Text="从 Excel 文件读取答案数据并替换对应题目" />
@@ -457,7 +457,7 @@
                                 <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="8">
                                     <Button x:Name="ReverseFillButton" Click="OnChooseReverseFill" AutomationProperties.Name="选择 Excel 反填文件">
                                         <StackPanel Orientation="Horizontal" Spacing="6">
-                                            <SymbolIcon Symbol="OpenFile" />
+                                            <SymbolIcon Symbol="Page" />
                                             <TextBlock x:Name="ReverseFillButtonLabel" Text="选择 Excel" />
                                         </StackPanel>
                                     </Button>
@@ -478,7 +478,7 @@
                                     <ColumnDefinition Width="40" />
                                     <ColumnDefinition Width="*" />
                                 </Grid.ColumnDefinitions>
-                                <SymbolIcon VerticalAlignment="Center" Symbol="Calculator" />
+                                <SymbolIcon VerticalAlignment="Center" Symbol="AllApps" />
                                 <StackPanel Grid.Column="1" Spacing="8">
                                     <TextBlock FontSize="16" Text="任务规模" />
                                     <Grid ColumnSpacing="12">
@@ -512,7 +512,7 @@
                                     <ColumnDefinition Width="*" />
                                     <ColumnDefinition Width="Auto" />
                                 </Grid.ColumnDefinitions>
-                                <SymbolIcon VerticalAlignment="Center" Symbol="List" />
+                                <FontIcon VerticalAlignment="Center" Glyph="&#xE8FD;" FontFamily="{ThemeResource SymbolThemeFontFamily}" />
                                 <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="2">
                                     <TextBlock FontSize="16" Text="平台与题目" />
                                 </StackPanel>
@@ -528,7 +528,7 @@
                                     <ColumnDefinition Width="*" />
                                     <ColumnDefinition Width="Auto" />
                                 </Grid.ColumnDefinitions>
-                                <SymbolIcon VerticalAlignment="Center" Symbol="Send" />
+                                <SymbolIcon VerticalAlignment="Center" Symbol="Play" />
                                 <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="2">
                                     <TextBlock FontSize="16" Text="规模与并发" />
                                 </StackPanel>
@@ -591,7 +591,7 @@
                                     <RepositionThemeTransition />
                                 </TransitionCollection>
                             </StackPanel.ChildrenTransitions>
-                            <StackPanel Orientation="Horizontal" Spacing="10"><SymbolIcon Symbol="Send" /><TextBlock FontSize="20" FontWeight="SemiBold" Text="任务运行" /></StackPanel>
+                            <StackPanel Orientation="Horizontal" Spacing="10"><SymbolIcon Symbol="Play" /><TextBlock FontSize="20" FontWeight="SemiBold" Text="任务运行" /></StackPanel>
 
                             <Grid ColumnSpacing="16">
                                 <Grid.ColumnDefinitions>
@@ -651,14 +651,14 @@
                 <Grid x:Name="FooterBar" Grid.Row="4" Padding="32,0">
                     <TextBlock x:Name="FooterStatus" VerticalAlignment="Center" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
                     <StackPanel HorizontalAlignment="Right" Orientation="Horizontal" Spacing="12">
-                        <Button x:Name="BackButton" Click="OnBack" AutomationProperties.Name="返回上一步"><StackPanel Orientation="Horizontal" Spacing="8"><SymbolIcon Symbol="Back" /><TextBlock Text="返回上一步" /></StackPanel></Button>
+                        <Button x:Name="BackButton" Click="OnBack" AutomationProperties.Name="返回上一步"><StackPanel Orientation="Horizontal" Spacing="8"><SymbolIcon Symbol="Previous" /><TextBlock Text="返回上一步" /></StackPanel></Button>
                         <Button x:Name="PrimaryButton" Style="{StaticResource AccentButtonStyle}" Click="OnPrimary" AutomationProperties.Name="继续">
                             <Button.ContentTransitions>
                                 <TransitionCollection>
                                     <ContentThemeTransition />
                                 </TransitionCollection>
                             </Button.ContentTransitions>
-                            <StackPanel Orientation="Horizontal" Spacing="8"><SymbolIcon x:Name="PrimaryButtonIcon" Symbol="Forward" /><TextBlock x:Name="PrimaryButtonLabel" Text="继续" /></StackPanel>
+                            <StackPanel Orientation="Horizontal" Spacing="8"><SymbolIcon x:Name="PrimaryButtonIcon" Symbol="Next" /><TextBlock x:Name="PrimaryButtonLabel" Text="继续" /></StackPanel>
                         </Button>
                     </StackPanel>
                 </Grid>
