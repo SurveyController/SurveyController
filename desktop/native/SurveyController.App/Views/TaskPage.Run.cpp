@@ -262,7 +262,7 @@ namespace winrt::SurveyController::App::implementation
                 SetFooterError(L"后端连接已中断,请重新进入任务页后重试：" + error);
                 co_return;
             }
-            auto backoff = std::min(1 << m_pollFailures, 8);
+            auto backoff = (std::min)(1 << m_pollFailures, 8);
             m_pollTimer.Interval(std::chrono::milliseconds(700 * backoff));
             co_return;
         }
