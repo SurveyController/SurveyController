@@ -22,8 +22,8 @@
         </Style>
     </Page.Resources>
 
-    <ScrollViewer x:Name="SettingsScrollViewer" HorizontalContentAlignment="Left" HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Auto">
-        <StackPanel Width="{x:Bind SettingsScrollViewer.ViewportWidth, Mode=OneWay}" MaxWidth="720" Padding="24,24,24,32" HorizontalAlignment="Left" Spacing="4">
+    <ScrollViewer x:Name="SettingsScrollViewer" HorizontalContentAlignment="Stretch" HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Auto">
+        <StackPanel Width="{x:Bind SettingsScrollViewer.ViewportWidth, Mode=OneWay}" Padding="24,24,24,32" HorizontalAlignment="Stretch" Spacing="4">
             <TextBlock Margin="0,0,0,16" FontSize="28" FontWeight="SemiBold" Text="设置" />
 
             <TextBlock Style="{StaticResource SettingsSectionHeaderStyle}" Text="界面外观" />

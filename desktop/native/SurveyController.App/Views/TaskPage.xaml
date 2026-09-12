@@ -79,8 +79,8 @@
                 <!-- 主工作区：6 个向导步骤 + 1 个任务运行面板 -->
                 <Grid Grid.Row="2">
                     <!-- 第 1 步：导入问卷 -->
-                    <ScrollViewer x:Name="SurveyPanel" HorizontalContentAlignment="Left" HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Auto">
-                        <StackPanel Width="{x:Bind SurveyPanel.ViewportWidth, Mode=OneWay}" MaxWidth="{StaticResource PageContentMaxWidth}" Padding="28,24,28,40" HorizontalAlignment="Left" Spacing="20">
+                    <ScrollViewer x:Name="SurveyPanel" HorizontalContentAlignment="Stretch" HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Auto">
+                        <StackPanel Width="{x:Bind SurveyPanel.ViewportWidth, Mode=OneWay}" Padding="28,24,28,40" HorizontalAlignment="Stretch" Spacing="20">
                             <StackPanel Orientation="Horizontal" Spacing="10"><SymbolIcon Symbol="Document" /><TextBlock FontSize="20" FontWeight="SemiBold" Text="导入问卷" /></StackPanel>
 
                             <Grid ColumnSpacing="12" RowSpacing="8">
@@ -108,8 +108,8 @@
                     </ScrollViewer>
 
                     <!-- 第 2 步：自定义答案 -->
-                    <ScrollViewer x:Name="AnswersPanel" Visibility="Collapsed" HorizontalContentAlignment="Left" HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Auto">
-                        <StackPanel Width="{x:Bind AnswersPanel.ViewportWidth, Mode=OneWay}" MaxWidth="720" Padding="28,24,28,32" HorizontalAlignment="Left" Spacing="4">
+                    <ScrollViewer x:Name="AnswersPanel" Visibility="Collapsed" HorizontalContentAlignment="Stretch" HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Auto">
+                        <StackPanel Width="{x:Bind AnswersPanel.ViewportWidth, Mode=OneWay}" Padding="28,24,28,32" HorizontalAlignment="Stretch" Spacing="4">
                             <TextBlock Margin="0,0,0,16" FontSize="28" FontWeight="SemiBold" Text="答案策略" />
 
                             <Grid Style="{StaticResource SettingsCardStyle}">
@@ -161,16 +161,16 @@
                     </ScrollViewer>
 
                     <!-- 第 3 步：条件规则 -->
-                    <ScrollViewer x:Name="RulesPanel" Visibility="Collapsed" HorizontalContentAlignment="Left" HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Auto">
-                        <StackPanel Width="{x:Bind RulesPanel.ViewportWidth, Mode=OneWay}" Padding="32,24" HorizontalAlignment="Left" Spacing="16">
+                    <ScrollViewer x:Name="RulesPanel" Visibility="Collapsed" HorizontalContentAlignment="Stretch" HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Auto">
+                        <StackPanel Width="{x:Bind RulesPanel.ViewportWidth, Mode=OneWay}" Padding="32,24" HorizontalAlignment="Stretch" Spacing="16">
                             <StackPanel Orientation="Horizontal" Spacing="10"><SymbolIcon Symbol="Important" /><TextBlock FontSize="20" FontWeight="SemiBold" Text="条件规则" /></StackPanel>
                             <local:RuleEditor x:Name="RuleEditorView" />
                         </StackPanel>
                     </ScrollViewer>
 
                     <!-- 第 4 步：随机 IP / UA / 指定信度 -->
-                    <ScrollViewer x:Name="NetworkPanel" Visibility="Collapsed" HorizontalContentAlignment="Left" HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Auto">
-                        <StackPanel Width="{x:Bind NetworkPanel.ViewportWidth, Mode=OneWay}" MaxWidth="720" Padding="28,24,28,32" HorizontalAlignment="Left" Spacing="4">
+                    <ScrollViewer x:Name="NetworkPanel" Visibility="Collapsed" HorizontalContentAlignment="Stretch" HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Auto">
+                        <StackPanel Width="{x:Bind NetworkPanel.ViewportWidth, Mode=OneWay}" Padding="28,24,28,32" HorizontalAlignment="Stretch" Spacing="4">
                             <TextBlock Margin="0,0,0,16" FontSize="28" FontWeight="SemiBold" Text="网络与信度" />
 
                             <TextBlock Style="{StaticResource SettingsSectionHeaderStyle}" Text="代理状态" />
@@ -333,8 +333,8 @@
                     </ScrollViewer>
 
                     <!-- 第 5 步：作答时长 / 间隔时长 / 作答时间 -->
-                    <ScrollViewer x:Name="TimingPanel" Visibility="Collapsed" HorizontalContentAlignment="Left" HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Auto">
-                        <StackPanel Width="{x:Bind TimingPanel.ViewportWidth, Mode=OneWay}" MaxWidth="720" Padding="28,24,28,32" HorizontalAlignment="Left" Spacing="4">
+                    <ScrollViewer x:Name="TimingPanel" Visibility="Collapsed" HorizontalContentAlignment="Stretch" HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Auto">
+                        <StackPanel Width="{x:Bind TimingPanel.ViewportWidth, Mode=OneWay}" Padding="28,24,28,32" HorizontalAlignment="Stretch" Spacing="4">
                             <TextBlock Margin="0,0,0,16" FontSize="28" FontWeight="SemiBold" Text="时间与节奏" />
 
                             <TextBlock Style="{StaticResource SettingsSectionHeaderStyle}" Text="作答时长" />
@@ -470,8 +470,8 @@
                     </ScrollViewer>
 
                     <!-- 第 6 步：目标份数 / 并发数 / 开始作答 -->
-                    <ScrollViewer x:Name="LaunchPanel" Visibility="Collapsed" HorizontalContentAlignment="Left" HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Auto">
-                        <StackPanel Width="{x:Bind LaunchPanel.ViewportWidth, Mode=OneWay}" MaxWidth="720" Padding="28,24,28,32" HorizontalAlignment="Left" Spacing="4">
+                    <ScrollViewer x:Name="LaunchPanel" Visibility="Collapsed" HorizontalContentAlignment="Stretch" HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Auto">
+                        <StackPanel Width="{x:Bind LaunchPanel.ViewportWidth, Mode=OneWay}" Padding="28,24,28,32" HorizontalAlignment="Stretch" Spacing="4">
                             <TextBlock Margin="0,0,0,16" FontSize="28" FontWeight="SemiBold" Text="规模与启动" />
 
                             <TextBlock Style="{StaticResource SettingsSectionHeaderStyle}" Text="运行参数" />
@@ -586,8 +586,8 @@
                     </ScrollViewer>
 
                     <!-- 运行态：任务运行与实时监控 -->
-                    <ScrollViewer x:Name="RunPanel" Visibility="Collapsed" HorizontalContentAlignment="Left" HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Auto">
-                        <StackPanel Width="{x:Bind RunPanel.ViewportWidth, Mode=OneWay}" MaxWidth="800" Padding="32,24" HorizontalAlignment="Left" Spacing="16">
+                    <ScrollViewer x:Name="RunPanel" Visibility="Collapsed" HorizontalContentAlignment="Stretch" HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Auto">
+                        <StackPanel Width="{x:Bind RunPanel.ViewportWidth, Mode=OneWay}" Padding="32,24" HorizontalAlignment="Stretch" Spacing="16">
                             <StackPanel.ChildrenTransitions>
                                 <TransitionCollection>
                                     <RepositionThemeTransition />

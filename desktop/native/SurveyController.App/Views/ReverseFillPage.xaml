@@ -15,15 +15,14 @@
         </Style>
     </Page.Resources>
 
-    <ScrollViewer x:Name="ReverseFillScrollViewer" HorizontalContentAlignment="Left" HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Auto">
-            <StackPanel Width="{x:Bind ReverseFillScrollViewer.ViewportWidth, Mode=OneWay}" MaxWidth="{StaticResource PageContentMaxWidth}" Padding="28,28,28,40" HorizontalAlignment="Left" Spacing="20">
+    <ScrollViewer x:Name="ReverseFillScrollViewer" HorizontalContentAlignment="Stretch" HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Auto">
+            <StackPanel Width="{x:Bind ReverseFillScrollViewer.ViewportWidth, Mode=OneWay}" Padding="28,28,28,40" HorizontalAlignment="Stretch" Spacing="20">
             <TextBlock FontSize="32" FontWeight="SemiBold" Text="Excel 反填" />
 
             <InfoBar
                 x:Name="ReverseFillStatus"
                 IsOpen="True"
                 IsClosable="False"
-                MaxWidth="720"
                 Severity="Informational"
                 Title="用表格覆盖答案"
                 Message="选择 .xlsx / .xls 表格后，作答时会按表格内容逐题覆盖对应答案；开关随任务配置一起保存。"

@@ -4,8 +4,8 @@
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     >
 
-    <ScrollViewer x:Name="CommunityScrollViewer" HorizontalContentAlignment="Left" HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Auto">
-        <StackPanel Width="{x:Bind CommunityScrollViewer.ViewportWidth, Mode=OneWay}" MaxWidth="{StaticResource PageContentMaxWidth}" Padding="28,28,28,40" HorizontalAlignment="Left" Spacing="20">
+    <ScrollViewer x:Name="CommunityScrollViewer" HorizontalContentAlignment="Stretch" HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Auto">
+        <StackPanel Width="{x:Bind CommunityScrollViewer.ViewportWidth, Mode=OneWay}" Padding="28,28,28,40" HorizontalAlignment="Stretch" Spacing="20">
             <StackPanel.ChildrenTransitions>
                 <TransitionCollection>
                     <EntranceThemeTransition FromVerticalOffset="8" />
