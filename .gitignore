@@ -14,3 +14,6 @@ CLAUDE.md
 # Go 测试产物
 *.test
 coverage.out
+
+# 已停用的 C# 迁移目录及其构建产物
+/desktop/native-cs/
