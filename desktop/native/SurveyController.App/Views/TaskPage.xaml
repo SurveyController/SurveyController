@@ -7,6 +7,24 @@
     Unloaded="OnUnloaded"
     NavigationCacheMode="Required">
 
+    <Page.Resources>
+        <Style x:Key="SettingsCardStyle" TargetType="Grid">
+            <Setter Property="Background" Value="{ThemeResource CardBackgroundFillColorDefaultBrush}" />
+            <Setter Property="BorderBrush" Value="{ThemeResource CardStrokeColorDefaultBrush}" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="CornerRadius" Value="12" />
+            <Setter Property="Padding" Value="16,14" />
+            <Setter Property="ColumnSpacing" Value="16" />
+            <Setter Property="MinHeight" Value="72" />
+        </Style>
+
+        <Style x:Key="SettingsSectionHeaderStyle" TargetType="TextBlock">
+            <Setter Property="Margin" Value="1,24,0,4" />
+            <Setter Property="FontSize" Value="18" />
+            <Setter Property="FontWeight" Value="SemiBold" />
+        </Style>
+    </Page.Resources>
+
     <Grid>
         <Grid.RowDefinitions>
             <RowDefinition Height="*" />
@@ -22,25 +40,6 @@
                             <Setter Target="ImportActionRow.Height" Value="Auto" />
                             <Setter Target="SurveyPrimaryButton.(Grid.Row)" Value="1" />
                             <Setter Target="SurveyPrimaryButton.(Grid.Column)" Value="0" />
-                            <Setter Target="AnswerStatsThirdColumn.Width" Value="0" />
-                            <Setter Target="AnswerStatsFourthColumn.Width" Value="0" />
-                            <Setter Target="AnswerStatsSecondRow.Height" Value="Auto" />
-                            <Setter Target="AnswerAIPanel.(Grid.Row)" Value="1" />
-                            <Setter Target="AnswerAIPanel.(Grid.Column)" Value="0" />
-                            <Setter Target="AnswerProblemPanel.(Grid.Row)" Value="1" />
-                            <Setter Target="AnswerProblemPanel.(Grid.Column)" Value="1" />
-                            <Setter Target="TimingSecondColumn.Width" Value="0" />
-                            <Setter Target="TimingSecondRow.Height" Value="Auto" />
-                            <Setter Target="SubmitIntervalPanel.(Grid.Row)" Value="1" />
-                            <Setter Target="SubmitIntervalPanel.(Grid.Column)" Value="0" />
-                            <Setter Target="WindowSecondColumn.Width" Value="0" />
-                            <Setter Target="WindowSecondRow.Height" Value="Auto" />
-                            <Setter Target="WindowEndPanel.(Grid.Row)" Value="1" />
-                            <Setter Target="WindowEndPanel.(Grid.Column)" Value="0" />
-                            <Setter Target="LaunchSecondColumn.Width" Value="0" />
-                            <Setter Target="LaunchSecondRow.Height" Value="Auto" />
-                            <Setter Target="ThreadCount.(Grid.Row)" Value="1" />
-                            <Setter Target="ThreadCount.(Grid.Column)" Value="0" />
                         </VisualState.Setters>
                     </VisualState>
                     <VisualState x:Name="WideWizardForms">
@@ -50,25 +49,6 @@
                             <Setter Target="ImportActionRow.Height" Value="0" />
                             <Setter Target="SurveyPrimaryButton.(Grid.Row)" Value="0" />
                             <Setter Target="SurveyPrimaryButton.(Grid.Column)" Value="1" />
-                            <Setter Target="AnswerStatsThirdColumn.Width" Value="*" />
-                            <Setter Target="AnswerStatsFourthColumn.Width" Value="*" />
-                            <Setter Target="AnswerStatsSecondRow.Height" Value="0" />
-                            <Setter Target="AnswerAIPanel.(Grid.Row)" Value="0" />
-                            <Setter Target="AnswerAIPanel.(Grid.Column)" Value="2" />
-                            <Setter Target="AnswerProblemPanel.(Grid.Row)" Value="0" />
-                            <Setter Target="AnswerProblemPanel.(Grid.Column)" Value="3" />
-                            <Setter Target="TimingSecondColumn.Width" Value="*" />
-                            <Setter Target="TimingSecondRow.Height" Value="0" />
-                            <Setter Target="SubmitIntervalPanel.(Grid.Row)" Value="0" />
-                            <Setter Target="SubmitIntervalPanel.(Grid.Column)" Value="1" />
-                            <Setter Target="WindowSecondColumn.Width" Value="*" />
-                            <Setter Target="WindowSecondRow.Height" Value="0" />
-                            <Setter Target="WindowEndPanel.(Grid.Row)" Value="0" />
-                            <Setter Target="WindowEndPanel.(Grid.Column)" Value="1" />
-                            <Setter Target="LaunchSecondColumn.Width" Value="*" />
-                            <Setter Target="LaunchSecondRow.Height" Value="0" />
-                            <Setter Target="ThreadCount.(Grid.Row)" Value="0" />
-                            <Setter Target="ThreadCount.(Grid.Column)" Value="1" />
                         </VisualState.Setters>
                     </VisualState>
                 </VisualStateGroup>
@@ -129,45 +109,54 @@
 
                     <!-- 第 2 步：自定义答案 -->
                     <ScrollViewer x:Name="AnswersPanel" Visibility="Collapsed" HorizontalContentAlignment="Left" HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Auto">
-                        <StackPanel Width="{x:Bind AnswersPanel.ViewportWidth, Mode=OneWay}" MaxWidth="720" Padding="32,24" HorizontalAlignment="Left" Spacing="16">
-                            <StackPanel.ChildrenTransitions>
-                                <TransitionCollection>
-                                    <RepositionThemeTransition />
-                                </TransitionCollection>
-                            </StackPanel.ChildrenTransitions>
-                            <StackPanel Orientation="Horizontal" Spacing="10"><SymbolIcon Symbol="Edit" /><TextBlock FontSize="20" FontWeight="SemiBold" Text="答案策略" /></StackPanel>
-                            <Border Padding="16" Background="{ThemeResource CardBackgroundFillColorDefaultBrush}" BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}" BorderThickness="1" CornerRadius="{StaticResource WizardCardCornerRadius}">
-                                <StackPanel Spacing="16">
-                                    <Grid ColumnSpacing="12" RowSpacing="12">
-                                        <Grid.ColumnDefinitions>
-                                            <ColumnDefinition Width="*" />
-                                            <ColumnDefinition Width="*" />
-                                            <ColumnDefinition x:Name="AnswerStatsThirdColumn" Width="*" />
-                                            <ColumnDefinition x:Name="AnswerStatsFourthColumn" Width="*" />
-                                        </Grid.ColumnDefinitions>
-                                        <Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition x:Name="AnswerStatsSecondRow" Height="0" /></Grid.RowDefinitions>
-                                        <StackPanel Spacing="2">
-                                            <TextBlock Foreground="{ThemeResource TextFillColorSecondaryBrush}" Text="总题数" />
-                                            <TextBlock x:Name="AnswerTotalCount" FontSize="24" FontWeight="SemiBold" Text="0" />
-                                        </StackPanel>
-                                        <StackPanel Grid.Column="1" Spacing="2">
-                                            <TextBlock Foreground="{ThemeResource TextFillColorSecondaryBrush}" Text="已配置" />
-                                            <TextBlock x:Name="AnswerConfiguredCount" FontSize="24" FontWeight="SemiBold" Text="0" />
-                                        </StackPanel>
-                                        <StackPanel x:Name="AnswerAIPanel" Grid.Column="2" Spacing="2">
-                                            <TextBlock Foreground="{ThemeResource TextFillColorSecondaryBrush}" Text="AI 题" />
-                                            <TextBlock x:Name="AnswerAICount" FontSize="24" FontWeight="SemiBold" Text="0" />
-                                        </StackPanel>
-                                        <StackPanel x:Name="AnswerProblemPanel" Grid.Column="3" Spacing="2">
-                                            <TextBlock Foreground="{ThemeResource TextFillColorSecondaryBrush}" Text="异常" />
-                                            <TextBlock x:Name="AnswerProblemCount" FontSize="24" FontWeight="SemiBold" Text="0" />
-                                        </StackPanel>
-                                    </Grid>
-                                    <Button x:Name="EditAnswersButton" HorizontalAlignment="Left" Style="{StaticResource AccentButtonStyle}" Click="OnEditAnswers" AutomationProperties.AutomationId="Task.EditAnswers" AutomationProperties.Name="编辑逐题答案">
-                                        <StackPanel Orientation="Horizontal" Spacing="8"><SymbolIcon Symbol="Edit" /><TextBlock Text="编辑逐题答案" /></StackPanel>
-                                    </Button>
+                        <StackPanel Width="{x:Bind AnswersPanel.ViewportWidth, Mode=OneWay}" MaxWidth="720" Padding="28,24,28,32" HorizontalAlignment="Left" Spacing="4">
+                            <TextBlock Margin="0,0,0,16" FontSize="28" FontWeight="SemiBold" Text="答案策略" />
+
+                            <Grid Style="{StaticResource SettingsCardStyle}">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="40" />
+                                    <ColumnDefinition Width="*" />
+                                </Grid.ColumnDefinitions>
+                                <SymbolIcon VerticalAlignment="Center" Symbol="Calculator" />
+                                <Grid Grid.Column="1" ColumnSpacing="24" RowSpacing="12">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="*" />
+                                    </Grid.ColumnDefinitions>
+                                    <StackPanel Spacing="2">
+                                        <TextBlock Style="{StaticResource CaptionTextBlockStyle}" Text="总题数" />
+                                        <TextBlock x:Name="AnswerTotalCount" FontSize="24" FontWeight="SemiBold" Text="0" />
+                                    </StackPanel>
+                                    <StackPanel Grid.Column="1" Spacing="2">
+                                        <TextBlock Style="{StaticResource CaptionTextBlockStyle}" Text="已配置" />
+                                        <TextBlock x:Name="AnswerConfiguredCount" FontSize="24" FontWeight="SemiBold" Text="0" />
+                                    </StackPanel>
+                                    <StackPanel Grid.Column="2" Spacing="2">
+                                        <TextBlock Style="{StaticResource CaptionTextBlockStyle}" Text="AI 题" />
+                                        <TextBlock x:Name="AnswerAICount" FontSize="24" FontWeight="SemiBold" Text="0" />
+                                    </StackPanel>
+                                    <StackPanel Grid.Column="3" Spacing="2">
+                                        <TextBlock Style="{StaticResource CaptionTextBlockStyle}" Text="异常" />
+                                        <TextBlock x:Name="AnswerProblemCount" FontSize="24" FontWeight="SemiBold" Text="0" />
+                                    </StackPanel>
+                                </Grid>
+                            </Grid>
+
+                            <Grid Style="{StaticResource SettingsCardStyle}">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="40" />
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <SymbolIcon VerticalAlignment="Center" Symbol="Edit" />
+                                <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="2">
+                                    <TextBlock FontSize="16" Text="逐题答案编辑" />
+                                    <TextBlock Style="{StaticResource CaptionTextBlockStyle}" Text="为每道题配置答案策略、选项比例和填空内容" />
                                 </StackPanel>
-                            </Border>
+                                <Button x:Name="EditAnswersButton" Grid.Column="2" MinWidth="96" HorizontalAlignment="Right" VerticalAlignment="Center" Style="{StaticResource AccentButtonStyle}" Content="编辑答案" Click="OnEditAnswers" AutomationProperties.AutomationId="Task.EditAnswers" />
+                            </Grid>
                         </StackPanel>
                     </ScrollViewer>
 
@@ -181,129 +170,183 @@
 
                     <!-- 第 4 步：随机 IP / UA / 指定信度 -->
                     <ScrollViewer x:Name="NetworkPanel" Visibility="Collapsed" HorizontalContentAlignment="Left" HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Auto">
-                        <StackPanel Width="{x:Bind NetworkPanel.ViewportWidth, Mode=OneWay}" MaxWidth="720" Padding="32,24" HorizontalAlignment="Left" Spacing="16">
-                            <StackPanel.ChildrenTransitions>
-                                <TransitionCollection>
-                                    <RepositionThemeTransition />
-                                </TransitionCollection>
-                            </StackPanel.ChildrenTransitions>
-                            <StackPanel Orientation="Horizontal" Spacing="10"><SymbolIcon Symbol="Sync" /><TextBlock FontSize="20" FontWeight="SemiBold" Text="网络与信度" /></StackPanel>
+                        <StackPanel Width="{x:Bind NetworkPanel.ViewportWidth, Mode=OneWay}" MaxWidth="720" Padding="28,24,28,32" HorizontalAlignment="Left" Spacing="4">
+                            <TextBlock Margin="0,0,0,16" FontSize="28" FontWeight="SemiBold" Text="网络与信度" />
 
-                            <!-- 代理状态摘要 -->
-                            <Grid Padding="12,8" Background="{ThemeResource ControlFillColorDefaultBrush}" CornerRadius="6" ColumnSpacing="16">
+                            <TextBlock Style="{StaticResource SettingsSectionHeaderStyle}" Text="代理状态" />
+                            <Grid Style="{StaticResource SettingsCardStyle}">
                                 <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="*" />
-                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="40" />
                                     <ColumnDefinition Width="*" />
                                 </Grid.ColumnDefinitions>
-                                <StackPanel Spacing="2">
-                                    <TextBlock FontSize="11" Foreground="{ThemeResource TextFillColorSecondaryBrush}" Text="代理来源" />
-                                    <TextBlock x:Name="ProxyStatusSource" FontWeight="SemiBold" Text="直连" />
-                                </StackPanel>
-                                <StackPanel Grid.Column="1" Spacing="2">
-                                    <TextBlock FontSize="11" Foreground="{ThemeResource TextFillColorSecondaryBrush}" Text="可用额度" />
-                                    <TextBlock x:Name="ProxyStatusQuota" FontWeight="SemiBold" Text="不适用" />
-                                </StackPanel>
-                                <StackPanel Grid.Column="2" Spacing="2">
-                                    <TextBlock FontSize="11" Foreground="{ThemeResource TextFillColorSecondaryBrush}" Text="IP 池状态" />
-                                    <TextBlock x:Name="ProxyStatusPool" FontWeight="SemiBold" Text="不适用" />
-                                </StackPanel>
+                                <SymbolIcon VerticalAlignment="Center" Symbol="World" />
+                                <Grid Grid.Column="1" ColumnSpacing="24">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="*" />
+                                    </Grid.ColumnDefinitions>
+                                    <StackPanel Spacing="2">
+                                        <TextBlock Style="{StaticResource CaptionTextBlockStyle}" Text="代理来源" />
+                                        <TextBlock x:Name="ProxyStatusSource" FontWeight="SemiBold" Text="直连" />
+                                    </StackPanel>
+                                    <StackPanel Grid.Column="1" Spacing="2">
+                                        <TextBlock Style="{StaticResource CaptionTextBlockStyle}" Text="可用额度" />
+                                        <TextBlock x:Name="ProxyStatusQuota" FontWeight="SemiBold" Text="不适用" />
+                                    </StackPanel>
+                                    <StackPanel Grid.Column="2" Spacing="2">
+                                        <TextBlock Style="{StaticResource CaptionTextBlockStyle}" Text="IP 池状态" />
+                                        <TextBlock x:Name="ProxyStatusPool" FontWeight="SemiBold" Text="不适用" />
+                                    </StackPanel>
+                                </Grid>
                             </Grid>
 
-                            <!-- 访问方式与代理配置 -->
-                            <Grid ColumnSpacing="12">
+                            <TextBlock Style="{StaticResource SettingsSectionHeaderStyle}" Text="访问配置" />
+                            <Grid Style="{StaticResource SettingsCardStyle}">
                                 <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="40" />
                                     <ColumnDefinition Width="*" />
                                     <ColumnDefinition Width="Auto" />
                                 </Grid.ColumnDefinitions>
-                                <ComboBox x:Name="ProxyMode" Header="访问方式" HorizontalAlignment="Stretch" AutomationProperties.Name="访问方式" SelectedIndex="0" SelectionChanged="OnProxyModeChanged">
+                                <SymbolIcon VerticalAlignment="Center" Symbol="Globe" />
+                                <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="2">
+                                    <TextBlock FontSize="16" Text="访问方式" />
+                                    <TextBlock Style="{StaticResource CaptionTextBlockStyle}" Text="选择问卷访问时使用的网络路径" />
+                                </StackPanel>
+                                <ComboBox x:Name="ProxyMode" Grid.Column="2" Width="180" HorizontalAlignment="Right" VerticalAlignment="Center" AutomationProperties.Name="访问方式" SelectedIndex="0" SelectionChanged="OnProxyModeChanged">
                                     <ComboBoxItem Content="直连" Tag="direct" />
                                     <ComboBoxItem Content="固定代理" Tag="fixed" />
                                     <ComboBoxItem Content="随机 IP" Tag="random" />
                                 </ComboBox>
-                                <Border x:Name="ProxySourceRow" Grid.Column="1" Visibility="Collapsed">
-                                    <ComboBox x:Name="ProxySource" Header="代理来源" Width="200" AutomationProperties.Name="代理来源" SelectedIndex="0" SelectionChanged="OnProxySourceChanged">
-                                        <ComboBoxItem Content="默认代理" Tag="default" />
-                                        <ComboBoxItem Content="限时福利" Tag="benefit" />
-                                        <ComboBoxItem Content="自定义代理" Tag="custom" />
-                                    </ComboBox>
-                                </Border>
                             </Grid>
 
-                            <Border x:Name="FixedProxyRow" Visibility="Collapsed">
-                                <Grid ColumnSpacing="8">
-                                    <Grid.ColumnDefinitions>
-                                        <ColumnDefinition Width="*" />
-                                        <ColumnDefinition Width="Auto" />
-                                    </Grid.ColumnDefinitions>
-                                    <TextBox x:Name="FixedProxyAddress" Header="固定代理地址" AutomationProperties.Name="固定代理地址" PlaceholderText="http://127.0.0.1:8080" />
-                                    <Button Grid.Column="1" VerticalAlignment="Bottom" Click="OnTestFixedProxy" AutomationProperties.Name="测试固定代理连接"><StackPanel Orientation="Horizontal" Spacing="8"><SymbolIcon Symbol="Refresh" /><TextBlock Text="测试连接" /></StackPanel></Button>
-                                </Grid>
-                            </Border>
-
-                            <Border x:Name="CustomProxyRow" Visibility="Collapsed">
-                                <Grid ColumnSpacing="8">
-                                    <Grid.ColumnDefinitions>
-                                        <ColumnDefinition Width="*" />
-                                        <ColumnDefinition Width="Auto" />
-                                    </Grid.ColumnDefinitions>
-                                    <TextBox x:Name="CustomProxyApi" Header="代理 API 地址" AutomationProperties.Name="代理 API" PlaceholderText="https://..." />
-                                    <Button Grid.Column="1" VerticalAlignment="Bottom" Click="OnTestCustomProxy" AutomationProperties.Name="测试自定义代理连接"><StackPanel Orientation="Horizontal" Spacing="8"><SymbolIcon Symbol="Refresh" /><TextBlock Text="测试连接" /></StackPanel></Button>
-                                </Grid>
-                            </Border>
-
-                            <Border x:Name="ProxyAreaRow" Visibility="Collapsed">
-                                <Grid ColumnSpacing="12">
-                                    <Grid.ColumnDefinitions>
-                                        <ColumnDefinition Width="*" />
-                                        <ColumnDefinition Width="*" />
-                                        <ColumnDefinition Width="Auto" />
-                                    </Grid.ColumnDefinitions>
-                                    <ComboBox x:Name="ProxyProvince" Header="省份" HorizontalAlignment="Stretch" AutomationProperties.Name="代理省份" PlaceholderText="不限制" SelectionChanged="OnProxyProvinceChanged" />
-                                    <ComboBox x:Name="ProxyCity" Grid.Column="1" Header="城市" HorizontalAlignment="Stretch" AutomationProperties.Name="代理城市" PlaceholderText="不限制" SelectionChanged="OnProxyCityChanged" />
-                                    <Button x:Name="SyncProxyButton" Grid.Column="2" VerticalAlignment="Bottom" Click="OnSyncProxy" AutomationProperties.Name="同步代理额度"><StackPanel Orientation="Horizontal" Spacing="8"><SymbolIcon Symbol="Sync" /><TextBlock Text="同步额度" /></StackPanel></Button>
-                                </Grid>
-                            </Border>
-
-                            <Rectangle Height="1" Fill="{ThemeResource DividerStrokeColorDefaultBrush}" Margin="0,4" />
-
-                            <!-- 极简控制行 -->
-                            <Grid MinHeight="36">
-                                <TextBlock VerticalAlignment="Center" FontWeight="SemiBold" Text="随机 User-Agent 身份" />
-                                <ToggleSwitch x:Name="RandomUA" HorizontalAlignment="Right" AutomationProperties.Name="随机访问身份" OffContent="关" OnContent="开" />
+                            <Grid x:Name="ProxySourceRow" Style="{StaticResource SettingsCardStyle}" Visibility="Collapsed">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="40" />
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <SymbolIcon VerticalAlignment="Center" Symbol="Link" />
+                                <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="2">
+                                    <TextBlock FontSize="16" Text="代理来源" />
+                                    <TextBlock Style="{StaticResource CaptionTextBlockStyle}" Text="选择随机 IP 的提供源" />
+                                </StackPanel>
+                                <ComboBox x:Name="ProxySource" Grid.Column="2" Width="180" HorizontalAlignment="Right" VerticalAlignment="Center" AutomationProperties.Name="代理来源" SelectedIndex="0" SelectionChanged="OnProxySourceChanged">
+                                    <ComboBoxItem Content="默认代理" Tag="default" />
+                                    <ComboBoxItem Content="限时福利" Tag="benefit" />
+                                    <ComboBoxItem Content="自定义代理" Tag="custom" />
+                                </ComboBox>
                             </Grid>
 
-                            <Grid MinHeight="36">
-                                <TextBlock VerticalAlignment="Center" FontWeight="SemiBold" Text="量表信度拟真 (Cronbach's α)" />
-                                <ToggleSwitch x:Name="PsychometricsEnabled" HorizontalAlignment="Right" AutomationProperties.Name="启用心理学信度拟真" OffContent="关" OnContent="开" Toggled="OnPsychometricsToggled" />
+                            <Grid x:Name="FixedProxyRow" Style="{StaticResource SettingsCardStyle}" Visibility="Collapsed">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="40" />
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <SymbolIcon VerticalAlignment="Center" Symbol="Link" />
+                                <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="8">
+                                    <TextBlock FontSize="16" Text="固定代理地址" />
+                                    <TextBox x:Name="FixedProxyAddress" AutomationProperties.Name="固定代理地址" PlaceholderText="http://127.0.0.1:8080" />
+                                </StackPanel>
+                                <Button Grid.Column="2" MinWidth="96" HorizontalAlignment="Right" VerticalAlignment="Center" Content="测试连接" Click="OnTestFixedProxy" AutomationProperties.Name="测试固定代理连接" />
                             </Grid>
 
-                            <Border x:Name="PsychometricsRow" Visibility="Collapsed">
-                                <NumberBox x:Name="TargetAlpha" Header="目标信度 α (推荐 0.75 ~ 0.90)" Width="220" HorizontalAlignment="Left"
-                                           AutomationProperties.Name="目标信度系数" Minimum="0.5" Maximum="0.99" SmallChange="0.01" LargeChange="0.05" SpinButtonPlacementMode="Compact" />
-                            </Border>
+                            <Grid x:Name="CustomProxyRow" Style="{StaticResource SettingsCardStyle}" Visibility="Collapsed">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="40" />
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <SymbolIcon VerticalAlignment="Center" Symbol="Link" />
+                                <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="8">
+                                    <TextBlock FontSize="16" Text="代理 API 地址" />
+                                    <TextBox x:Name="CustomProxyApi" AutomationProperties.Name="代理 API" PlaceholderText="https://..." />
+                                </StackPanel>
+                                <Button Grid.Column="2" MinWidth="96" HorizontalAlignment="Right" VerticalAlignment="Center" Content="测试连接" Click="OnTestCustomProxy" AutomationProperties.Name="测试自定义代理连接" />
+                            </Grid>
+
+                            <Grid x:Name="ProxyAreaRow" Style="{StaticResource SettingsCardStyle}" Visibility="Collapsed">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="40" />
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <SymbolIcon VerticalAlignment="Center" Symbol="MapPin" />
+                                <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="8">
+                                    <TextBlock FontSize="16" Text="代理地域限制" />
+                                    <Grid ColumnSpacing="8">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*" />
+                                            <ColumnDefinition Width="*" />
+                                        </Grid.ColumnDefinitions>
+                                        <ComboBox x:Name="ProxyProvince" HorizontalAlignment="Stretch" AutomationProperties.Name="代理省份" PlaceholderText="不限制" SelectionChanged="OnProxyProvinceChanged" />
+                                        <ComboBox x:Name="ProxyCity" Grid.Column="1" HorizontalAlignment="Stretch" AutomationProperties.Name="代理城市" PlaceholderText="不限制" SelectionChanged="OnProxyCityChanged" />
+                                    </Grid>
+                                </StackPanel>
+                                <Button x:Name="SyncProxyButton" Grid.Column="2" MinWidth="96" HorizontalAlignment="Right" VerticalAlignment="Center" Content="同步额度" Click="OnSyncProxy" AutomationProperties.Name="同步代理额度" />
+                            </Grid>
+
+                            <TextBlock Style="{StaticResource SettingsSectionHeaderStyle}" Text="高级选项" />
+                            <Grid Style="{StaticResource SettingsCardStyle}">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="40" />
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <SymbolIcon VerticalAlignment="Center" Symbol="Contact" />
+                                <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="2">
+                                    <TextBlock FontSize="16" Text="随机 User-Agent 身份" />
+                                    <TextBlock Style="{StaticResource CaptionTextBlockStyle}" Text="每次访问时随机生成浏览器标识" />
+                                </StackPanel>
+                                <ToggleSwitch x:Name="RandomUA" Grid.Column="2" MinWidth="0" HorizontalAlignment="Right" VerticalAlignment="Center" AutomationProperties.Name="随机访问身份" OffContent="关" OnContent="开" />
+                            </Grid>
+
+                            <Grid Style="{StaticResource SettingsCardStyle}">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="40" />
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <SymbolIcon VerticalAlignment="Center" Symbol="Calculator" />
+                                <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="2">
+                                    <TextBlock FontSize="16" Text="量表信度拟真 (Cronbach's α)" />
+                                    <TextBlock Style="{StaticResource CaptionTextBlockStyle}" Text="启用心理学信度控制，提高量表数据质量" />
+                                </StackPanel>
+                                <ToggleSwitch x:Name="PsychometricsEnabled" Grid.Column="2" MinWidth="0" HorizontalAlignment="Right" VerticalAlignment="Center" AutomationProperties.Name="启用心理学信度拟真" OffContent="关" OnContent="开" Toggled="OnPsychometricsToggled" />
+                            </Grid>
+
+                            <Grid x:Name="PsychometricsRow" Style="{StaticResource SettingsCardStyle}" Visibility="Collapsed">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="40" />
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <SymbolIcon VerticalAlignment="Center" Symbol="Target" />
+                                <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="2">
+                                    <TextBlock FontSize="16" Text="目标信度系数" />
+                                    <TextBlock Style="{StaticResource CaptionTextBlockStyle}" Text="推荐范围 0.75 ~ 0.90" />
+                                </StackPanel>
+                                <NumberBox x:Name="TargetAlpha" Grid.Column="2" Width="140" HorizontalAlignment="Right" VerticalAlignment="Center" AutomationProperties.Name="目标信度系数" Minimum="0.5" Maximum="0.99" SmallChange="0.01" LargeChange="0.05" SpinButtonPlacementMode="Compact" />
+                            </Grid>
                         </StackPanel>
                     </ScrollViewer>
 
                     <!-- 第 5 步：作答时长 / 间隔时长 / 作答时间 -->
                     <ScrollViewer x:Name="TimingPanel" Visibility="Collapsed" HorizontalContentAlignment="Left" HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Auto">
-                        <StackPanel Width="{x:Bind TimingPanel.ViewportWidth, Mode=OneWay}" MaxWidth="720" Padding="32,24" HorizontalAlignment="Left" Spacing="16">
-                            <StackPanel.ChildrenTransitions>
-                                <TransitionCollection>
-                                    <RepositionThemeTransition />
-                                </TransitionCollection>
-                            </StackPanel.ChildrenTransitions>
-                            <StackPanel Orientation="Horizontal" Spacing="10"><SymbolIcon Symbol="Refresh" /><TextBlock FontSize="20" FontWeight="SemiBold" Text="时间与节奏" /></StackPanel>
+                        <StackPanel Width="{x:Bind TimingPanel.ViewportWidth, Mode=OneWay}" MaxWidth="720" Padding="28,24,28,32" HorizontalAlignment="Left" Spacing="4">
+                            <TextBlock Margin="0,0,0,16" FontSize="28" FontWeight="SemiBold" Text="时间与节奏" />
 
-                            <Grid ColumnSpacing="16" RowSpacing="16">
+                            <TextBlock Style="{StaticResource SettingsSectionHeaderStyle}" Text="作答时长" />
+                            <Grid Style="{StaticResource SettingsCardStyle}">
                                 <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="40" />
                                     <ColumnDefinition Width="*" />
-                                    <ColumnDefinition x:Name="TimingSecondColumn" Width="*" />
                                 </Grid.ColumnDefinitions>
-                                <Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition x:Name="TimingSecondRow" Height="0" /></Grid.RowDefinitions>
-                                <StackPanel Spacing="12">
-                                    <TextBlock FontWeight="SemiBold" Text="单份作答时长（秒）" />
-                                    <Grid ColumnSpacing="8">
+                                <SymbolIcon VerticalAlignment="Center" Symbol="Clock" />
+                                <StackPanel Grid.Column="1" Spacing="8">
+                                    <TextBlock FontSize="16" Text="单份作答时长（秒）" />
+                                    <Grid ColumnSpacing="12">
                                         <Grid.ColumnDefinitions>
                                             <ColumnDefinition Width="*" />
                                             <ColumnDefinition Width="*" />
@@ -312,10 +355,17 @@
                                         <NumberBox x:Name="AnswerDurationMax" Grid.Column="1" Header="最长" Minimum="1" Maximum="3600" SpinButtonPlacementMode="Compact" />
                                     </Grid>
                                 </StackPanel>
+                            </Grid>
 
-                                <StackPanel x:Name="SubmitIntervalPanel" Grid.Column="1" Spacing="12">
-                                    <TextBlock FontWeight="SemiBold" Text="提交间隔冷却（秒）" />
-                                    <Grid ColumnSpacing="8">
+                            <Grid Style="{StaticResource SettingsCardStyle}">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="40" />
+                                    <ColumnDefinition Width="*" />
+                                </Grid.ColumnDefinitions>
+                                <SymbolIcon VerticalAlignment="Center" Symbol="Sort" />
+                                <StackPanel Grid.Column="1" Spacing="8">
+                                    <TextBlock FontSize="16" Text="提交间隔冷却（秒）" />
+                                    <Grid ColumnSpacing="12">
                                         <Grid.ColumnDefinitions>
                                             <ColumnDefinition Width="*" />
                                             <ColumnDefinition Width="*" />
@@ -326,47 +376,94 @@
                                 </StackPanel>
                             </Grid>
 
-                            <Rectangle Height="1" Fill="{ThemeResource DividerStrokeColorDefaultBrush}" Margin="0,4" />
-
-                            <TextBlock FontWeight="SemiBold" Text="有效作答时间窗口" />
-                            <Grid ColumnSpacing="16" RowSpacing="12">
+                            <TextBlock Style="{StaticResource SettingsSectionHeaderStyle}" Text="有效作答时间窗口" />
+                            <Grid Style="{StaticResource SettingsCardStyle}">
                                 <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="40" />
                                     <ColumnDefinition Width="*" />
-                                    <ColumnDefinition x:Name="WindowSecondColumn" Width="*" />
                                 </Grid.ColumnDefinitions>
-                                <Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition x:Name="WindowSecondRow" Height="0" /></Grid.RowDefinitions>
-                                <StackPanel Spacing="8">
-                                    <CalendarDatePicker x:Name="WindowStartDate" Header="开始日期" HorizontalAlignment="Stretch" />
-                                    <TimePicker x:Name="WindowStartTime" Header="开始时间" HorizontalAlignment="Stretch" />
-                                </StackPanel>
-                                <StackPanel x:Name="WindowEndPanel" Grid.Column="1" Spacing="8">
-                                    <CalendarDatePicker x:Name="WindowEndDate" Header="结束日期" HorizontalAlignment="Stretch" />
-                                    <TimePicker x:Name="WindowEndTime" Header="结束时间" HorizontalAlignment="Stretch" />
+                                <SymbolIcon VerticalAlignment="Center" Symbol="Calendar" />
+                                <StackPanel Grid.Column="1" Spacing="8">
+                                    <TextBlock FontSize="16" Text="开始时间" />
+                                    <Grid ColumnSpacing="12">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*" />
+                                            <ColumnDefinition Width="*" />
+                                        </Grid.ColumnDefinitions>
+                                        <CalendarDatePicker x:Name="WindowStartDate" HorizontalAlignment="Stretch" />
+                                        <TimePicker x:Name="WindowStartTime" HorizontalAlignment="Stretch" />
+                                    </Grid>
                                 </StackPanel>
                             </Grid>
 
-                            <Rectangle Height="1" Fill="{ThemeResource DividerStrokeColorDefaultBrush}" Margin="0,4" />
-
-                            <Grid MinHeight="36">
-                                <TextBlock VerticalAlignment="Center" FontWeight="SemiBold" Text="连续失败时自动停止" />
-                                <ToggleSwitch x:Name="FailStop" HorizontalAlignment="Right" AutomationProperties.Name="连续失败时停止" OffContent="关" OnContent="开" />
-                            </Grid>
-
-                            <Grid MinHeight="36">
-                                <TextBlock VerticalAlignment="Center" FontWeight="SemiBold" Text="遇到验证码时自动暂停" />
-                                <ToggleSwitch x:Name="PauseCaptcha" HorizontalAlignment="Right" AutomationProperties.Name="遇到验证码时暂停" OffContent="关" OnContent="开" />
-                            </Grid>
-
-                            <Rectangle Height="1" Fill="{ThemeResource DividerStrokeColorDefaultBrush}" Margin="0,4" />
-
-                            <Grid MinHeight="36">
-                                <StackPanel VerticalAlignment="Center" Spacing="2">
-                                    <TextBlock FontWeight="SemiBold" Text="Excel 反填" />
-                                    <TextBlock Foreground="{ThemeResource TextFillColorSecondaryBrush}" Text="按表格内容覆盖对应答案" />
+                            <Grid Style="{StaticResource SettingsCardStyle}">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="40" />
+                                    <ColumnDefinition Width="*" />
+                                </Grid.ColumnDefinitions>
+                                <SymbolIcon VerticalAlignment="Center" Symbol="Calendar" />
+                                <StackPanel Grid.Column="1" Spacing="8">
+                                    <TextBlock FontSize="16" Text="结束时间" />
+                                    <Grid ColumnSpacing="12">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*" />
+                                            <ColumnDefinition Width="*" />
+                                        </Grid.ColumnDefinitions>
+                                        <CalendarDatePicker x:Name="WindowEndDate" HorizontalAlignment="Stretch" />
+                                        <TimePicker x:Name="WindowEndTime" HorizontalAlignment="Stretch" />
+                                    </Grid>
                                 </StackPanel>
-                                <StackPanel HorizontalAlignment="Right" Orientation="Horizontal" Spacing="8">
-                                    <Button x:Name="ReverseFillButton" Click="OnChooseReverseFill" AutomationProperties.Name="选择 Excel 反填文件"><StackPanel Orientation="Horizontal" Spacing="8"><SymbolIcon Symbol="OpenFile" /><TextBlock x:Name="ReverseFillButtonLabel" Text="选择 Excel" /></StackPanel></Button>
-                                    <ToggleSwitch x:Name="ReverseFillEnabled" AutomationProperties.Name="启用 Excel 反填" OffContent="关" OnContent="开" />
+                            </Grid>
+
+                            <TextBlock Style="{StaticResource SettingsSectionHeaderStyle}" Text="异常处理" />
+                            <Grid Style="{StaticResource SettingsCardStyle}">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="40" />
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <SymbolIcon VerticalAlignment="Center" Symbol="Cancel" />
+                                <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="2">
+                                    <TextBlock FontSize="16" Text="连续失败时自动停止" />
+                                    <TextBlock Style="{StaticResource CaptionTextBlockStyle}" Text="多次提交失败后停止任务，避免无效消耗" />
+                                </StackPanel>
+                                <ToggleSwitch x:Name="FailStop" Grid.Column="2" MinWidth="0" HorizontalAlignment="Right" VerticalAlignment="Center" AutomationProperties.Name="连续失败时停止" OffContent="关" OnContent="开" />
+                            </Grid>
+
+                            <Grid Style="{StaticResource SettingsCardStyle}">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="40" />
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <SymbolIcon VerticalAlignment="Center" Symbol="Pause" />
+                                <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="2">
+                                    <TextBlock FontSize="16" Text="遇到验证码时自动暂停" />
+                                    <TextBlock Style="{StaticResource CaptionTextBlockStyle}" Text="检测到验证码挑战时暂停运行" />
+                                </StackPanel>
+                                <ToggleSwitch x:Name="PauseCaptcha" Grid.Column="2" MinWidth="0" HorizontalAlignment="Right" VerticalAlignment="Center" AutomationProperties.Name="遇到验证码时暂停" OffContent="关" OnContent="开" />
+                            </Grid>
+
+                            <TextBlock Style="{StaticResource SettingsSectionHeaderStyle}" Text="Excel 反填" />
+                            <Grid Style="{StaticResource SettingsCardStyle}">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="40" />
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <SymbolIcon VerticalAlignment="Center" Symbol="OpenFile" />
+                                <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="2">
+                                    <TextBlock FontSize="16" Text="按表格内容覆盖答案" />
+                                    <TextBlock Style="{StaticResource CaptionTextBlockStyle}" Text="从 Excel 文件读取答案数据并替换对应题目" />
+                                </StackPanel>
+                                <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="8">
+                                    <Button x:Name="ReverseFillButton" Click="OnChooseReverseFill" AutomationProperties.Name="选择 Excel 反填文件">
+                                        <StackPanel Orientation="Horizontal" Spacing="6">
+                                            <SymbolIcon Symbol="OpenFile" />
+                                            <TextBlock x:Name="ReverseFillButtonLabel" Text="选择 Excel" />
+                                        </StackPanel>
+                                    </Button>
+                                    <ToggleSwitch x:Name="ReverseFillEnabled" MinWidth="0" AutomationProperties.Name="启用 Excel 反填" OffContent="关" OnContent="开" />
                                 </StackPanel>
                             </Grid>
                         </StackPanel>
@@ -374,67 +471,117 @@
 
                     <!-- 第 6 步：目标份数 / 并发数 / 开始作答 -->
                     <ScrollViewer x:Name="LaunchPanel" Visibility="Collapsed" HorizontalContentAlignment="Left" HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Auto">
-                        <StackPanel Width="{x:Bind LaunchPanel.ViewportWidth, Mode=OneWay}" MaxWidth="720" Padding="32,24" HorizontalAlignment="Left" Spacing="16">
-                            <StackPanel.ChildrenTransitions>
-                                <TransitionCollection>
-                                    <RepositionThemeTransition />
-                                </TransitionCollection>
-                            </StackPanel.ChildrenTransitions>
-                            <StackPanel Orientation="Horizontal" Spacing="10"><SymbolIcon Symbol="Send" /><TextBlock FontSize="20" FontWeight="SemiBold" Text="规模与启动" /></StackPanel>
+                        <StackPanel Width="{x:Bind LaunchPanel.ViewportWidth, Mode=OneWay}" MaxWidth="720" Padding="28,24,28,32" HorizontalAlignment="Left" Spacing="4">
+                            <TextBlock Margin="0,0,0,16" FontSize="28" FontWeight="SemiBold" Text="规模与启动" />
 
-                            <Grid ColumnSpacing="16" RowSpacing="12">
+                            <TextBlock Style="{StaticResource SettingsSectionHeaderStyle}" Text="运行参数" />
+                            <Grid Style="{StaticResource SettingsCardStyle}">
                                 <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="40" />
                                     <ColumnDefinition Width="*" />
-                                    <ColumnDefinition x:Name="LaunchSecondColumn" Width="*" />
                                 </Grid.ColumnDefinitions>
-                                <Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition x:Name="LaunchSecondRow" Height="0" /></Grid.RowDefinitions>
-                                <NumberBox x:Name="TargetCount" Header="目标提交份数" AutomationProperties.Name="目标份数" Minimum="1" Maximum="999999" SpinButtonPlacementMode="Compact" />
-                                <NumberBox x:Name="ThreadCount" Grid.Column="1" Header="并发线程数" AutomationProperties.Name="并发数" Minimum="1" Maximum="128" SpinButtonPlacementMode="Compact" />
+                                <SymbolIcon VerticalAlignment="Center" Symbol="Calculator" />
+                                <StackPanel Grid.Column="1" Spacing="8">
+                                    <TextBlock FontSize="16" Text="任务规模" />
+                                    <Grid ColumnSpacing="12">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*" />
+                                            <ColumnDefinition Width="*" />
+                                        </Grid.ColumnDefinitions>
+                                        <NumberBox x:Name="TargetCount" Header="目标提交份数" AutomationProperties.Name="目标份数" Minimum="1" Maximum="999999" SpinButtonPlacementMode="Compact" />
+                                        <NumberBox x:Name="ThreadCount" Header="并发线程数" AutomationProperties.Name="并发数" Minimum="1" Maximum="128" SpinButtonPlacementMode="Compact" />
+                                    </Grid>
+                                </StackPanel>
                             </Grid>
 
-                            <TextBlock FontWeight="SemiBold" Text="任务配置摘要" Margin="0,4,0,0" />
-                            <StackPanel Spacing="0">
-                                <Grid MinHeight="36">
-                                    <TextBlock VerticalAlignment="Center" Foreground="{ThemeResource TextFillColorSecondaryBrush}" Text="问卷标题" />
-                                    <TextBlock x:Name="ReviewSurvey" HorizontalAlignment="Right" VerticalAlignment="Center" FontWeight="SemiBold" TextWrapping="Wrap" />
-                                </Grid>
-                                <Rectangle Height="1" Fill="{ThemeResource DividerStrokeColorDefaultBrush}" />
-                                <Grid MinHeight="36">
-                                    <TextBlock VerticalAlignment="Center" Foreground="{ThemeResource TextFillColorSecondaryBrush}" Text="平台与题目" />
-                                    <StackPanel HorizontalAlignment="Right" Orientation="Horizontal" Spacing="8">
-                                        <TextBlock x:Name="ReviewProvider" VerticalAlignment="Center" FontWeight="SemiBold" />
-                                        <TextBlock x:Name="ReviewQuestions" VerticalAlignment="Center" FontWeight="SemiBold" />
-                                    </StackPanel>
-                                </Grid>
-                                <Rectangle Height="1" Fill="{ThemeResource DividerStrokeColorDefaultBrush}" />
-                                <Grid MinHeight="36">
-                                    <TextBlock VerticalAlignment="Center" Foreground="{ThemeResource TextFillColorSecondaryBrush}" Text="规模与并发" />
-                                    <StackPanel HorizontalAlignment="Right" Orientation="Horizontal" Spacing="8">
-                                        <TextBlock x:Name="ReviewTarget" VerticalAlignment="Center" FontWeight="SemiBold" />
-                                        <TextBlock x:Name="ReviewThreads" VerticalAlignment="Center" FontWeight="SemiBold" />
-                                    </StackPanel>
-                                </Grid>
-                                <Rectangle Height="1" Fill="{ThemeResource DividerStrokeColorDefaultBrush}" />
-                                <Grid MinHeight="36">
-                                    <TextBlock VerticalAlignment="Center" Foreground="{ThemeResource TextFillColorSecondaryBrush}" Text="网络与信度" />
-                                    <StackPanel HorizontalAlignment="Right" Orientation="Horizontal" Spacing="12">
-                                        <TextBlock x:Name="ReviewNetwork" VerticalAlignment="Center" FontWeight="SemiBold" />
-                                        <TextBlock x:Name="ReviewReliability" VerticalAlignment="Center" FontWeight="SemiBold" />
-                                    </StackPanel>
-                                </Grid>
-                                <Rectangle Height="1" Fill="{ThemeResource DividerStrokeColorDefaultBrush}" />
-                                <Grid MinHeight="36">
-                                    <TextBlock VerticalAlignment="Center" Foreground="{ThemeResource TextFillColorSecondaryBrush}" Text="作答时长" />
-                                    <TextBlock x:Name="ReviewDuration" HorizontalAlignment="Right" VerticalAlignment="Center" FontWeight="SemiBold" />
-                                </Grid>
-                                <Rectangle Height="1" Fill="{ThemeResource DividerStrokeColorDefaultBrush}" />
-                                <Grid MinHeight="36">
-                                    <TextBlock VerticalAlignment="Center" Foreground="{ThemeResource TextFillColorSecondaryBrush}" Text="问卷地址" />
-                                    <TextBlock x:Name="ReviewUrl" HorizontalAlignment="Right" VerticalAlignment="Center" TextWrapping="Wrap" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
-                                </Grid>
-                            </StackPanel>
+                            <TextBlock Style="{StaticResource SettingsSectionHeaderStyle}" Text="配置摘要" />
+                            <Grid Style="{StaticResource SettingsCardStyle}">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="40" />
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <SymbolIcon VerticalAlignment="Center" Symbol="Document" />
+                                <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="2">
+                                    <TextBlock FontSize="16" Text="问卷标题" />
+                                    <TextBlock x:Name="ReviewSurvey" Style="{StaticResource CaptionTextBlockStyle}" TextWrapping="Wrap" />
+                                </StackPanel>
+                            </Grid>
 
-                            <ListView x:Name="CheckProblems" SelectionMode="None" Margin="0,4,0,0" />
+                            <Grid Style="{StaticResource SettingsCardStyle}">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="40" />
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <SymbolIcon VerticalAlignment="Center" Symbol="List" />
+                                <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="2">
+                                    <TextBlock FontSize="16" Text="平台与题目" />
+                                </StackPanel>
+                                <StackPanel Grid.Column="2" HorizontalAlignment="Right" Orientation="Horizontal" Spacing="12">
+                                    <TextBlock x:Name="ReviewProvider" VerticalAlignment="Center" FontWeight="SemiBold" />
+                                    <TextBlock x:Name="ReviewQuestions" VerticalAlignment="Center" FontWeight="SemiBold" />
+                                </StackPanel>
+                            </Grid>
+
+                            <Grid Style="{StaticResource SettingsCardStyle}">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="40" />
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <SymbolIcon VerticalAlignment="Center" Symbol="Send" />
+                                <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="2">
+                                    <TextBlock FontSize="16" Text="规模与并发" />
+                                </StackPanel>
+                                <StackPanel Grid.Column="2" HorizontalAlignment="Right" Orientation="Horizontal" Spacing="12">
+                                    <TextBlock x:Name="ReviewTarget" VerticalAlignment="Center" FontWeight="SemiBold" />
+                                    <TextBlock x:Name="ReviewThreads" VerticalAlignment="Center" FontWeight="SemiBold" />
+                                </StackPanel>
+                            </Grid>
+
+                            <Grid Style="{StaticResource SettingsCardStyle}">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="40" />
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <SymbolIcon VerticalAlignment="Center" Symbol="World" />
+                                <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="2">
+                                    <TextBlock FontSize="16" Text="网络与信度" />
+                                </StackPanel>
+                                <StackPanel Grid.Column="2" HorizontalAlignment="Right" Orientation="Horizontal" Spacing="12">
+                                    <TextBlock x:Name="ReviewNetwork" VerticalAlignment="Center" FontWeight="SemiBold" />
+                                    <TextBlock x:Name="ReviewReliability" VerticalAlignment="Center" FontWeight="SemiBold" />
+                                </StackPanel>
+                            </Grid>
+
+                            <Grid Style="{StaticResource SettingsCardStyle}">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="40" />
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <SymbolIcon VerticalAlignment="Center" Symbol="Clock" />
+                                <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="2">
+                                    <TextBlock FontSize="16" Text="作答时长" />
+                                </StackPanel>
+                                <TextBlock x:Name="ReviewDuration" Grid.Column="2" HorizontalAlignment="Right" VerticalAlignment="Center" FontWeight="SemiBold" />
+                            </Grid>
+
+                            <Grid Style="{StaticResource SettingsCardStyle}">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="40" />
+                                    <ColumnDefinition Width="*" />
+                                </Grid.ColumnDefinitions>
+                                <SymbolIcon VerticalAlignment="Center" Symbol="Link" />
+                                <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="2">
+                                    <TextBlock FontSize="16" Text="问卷地址" />
+                                    <TextBlock x:Name="ReviewUrl" Style="{StaticResource CaptionTextBlockStyle}" TextWrapping="Wrap" />
+                                </StackPanel>
+                            </Grid>
+
+                            <ListView x:Name="CheckProblems" SelectionMode="None" Margin="0,8,0,0" />
                         </StackPanel>
                     </ScrollViewer>
 
