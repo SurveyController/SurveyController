@@ -96,8 +96,6 @@ uv run python SurveyController.py
 
 ## 技术架构
 
-题目模型、纯解析与答案策略复用 `surveycore-py`；依赖提交由 `pyproject.toml` 和 `uv.lock` 固定。桌面应用保留配置兼容、成功份数调度、暂停恢复、代理租约与 HTTP 会话、AI 服务接入和运行状态展示。
-
 ```mermaid
 flowchart TB
   link["问卷链接"]

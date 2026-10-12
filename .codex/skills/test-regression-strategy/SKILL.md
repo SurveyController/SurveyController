@@ -77,10 +77,9 @@ description: 面向 SurveyController 仓库的测试分层与回归选择技能�
   - `uv run pytest CI/unit_tests/questions`
   - `uv run pytest CI/unit_tests/providers`
   - `uv run pytest CI/unit_tests/engine/test_reverse_fill_parser.py`
-- 更新、发布、Velopack：
+- 版本检查、发布与独立包：
   - `uv run pytest CI/unit_tests/app/test_main_window_update_large.py`
-  - `uv run pytest CI/unit_tests/test_velopack_e2e_runner.py`
-  - 需要时再看 `CI/live_tests/test_velopack_e2e.py`
+  - `uv run pytest CI/unit_tests/test_updater.py`
 
 ## project_conventions
 

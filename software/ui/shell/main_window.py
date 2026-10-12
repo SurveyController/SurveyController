@@ -6,7 +6,7 @@ import sys
 from types import SimpleNamespace
 from typing import List, cast
 
-from PySide6.QtCore import QPoint, Qt, QTimer, Signal, QEvent, Slot
+from PySide6.QtCore import QPoint, Qt, QTimer, QEvent, Slot
 from PySide6.QtGui import QIcon, QGuiApplication
 from PySide6.QtWidgets import QDialog, QStackedWidget, QWidget
 from qfluentwidgets import (
@@ -97,14 +97,6 @@ class MainWindow(
     _IMPORT_CHECK_ENV = "WJX_IMPORT_CHECK"
 
     
-    downloadStarted = Signal()
-    
-    downloadProgress = Signal(int, int, float)  
-    
-    downloadFinished = Signal(object)  
-    
-    downloadFailed = Signal(str)  
-
     def __init__(self, parent=None):
         self._boot_splash = None
         self._import_check_mode = (
@@ -194,20 +186,11 @@ class MainWindow(
             QTimer.singleShot(0, self._run_post_init_tasks)
 
         
-        self.downloadStarted.connect(self._on_download_started)
-        
-        self.downloadProgress.connect(self._update_download_progress)
-        
-        self.downloadFinished.connect(self._on_download_finished)
-        self.downloadFailed.connect(self._on_download_failed)
         self._latest_badge = None
         self._outdated_badge = None
         self._preview_badge = None
         self._unknown_badge = None
         self._update_checking_spinner = None
-        self._download_infobar = None
-        self._download_progress_bar = None
-        self._download_cancelled = False
 
     def _apply_theme_mode(self, theme_mode: Theme):
         

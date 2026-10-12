@@ -310,10 +310,3 @@ _ENGLISH_MULTI_EXACT_PATTERNS = (
 _ENGLISH_MULTI_MIN_PATTERNS = (
     re.compile(r"(?:at\s+least|min(?:imum)?\s*)\s*(\d+)", re.IGNORECASE),
 )
-
-
-VELOPACK_FEED_URL = _resolve_env_value(
-    "SURVEYCONTROLLER_VELOPACK_FEED_URL",
-    "https://dl.hungrym0.com/surveycontroller/win/stable/" if sys.platform == "win32" else "",
-)
-VELOPACK_CHANNEL = _resolve_env_value("SURVEYCONTROLLER_VELOPACK_CHANNEL", "stable" if sys.platform == "win32" else "")

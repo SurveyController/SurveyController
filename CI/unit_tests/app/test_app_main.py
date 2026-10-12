@@ -31,9 +31,6 @@ def test_main_returns_exit_code_and_avoids_hard_exit(monkeypatch) -> None:
     events: list[str] = []
     fake_window = _FakeWindow()
 
-    monkeypatch.setattr(main_module, "_run_velopack_startup", lambda: events.append("velopack"))
-    monkeypatch.setattr(main_module, "_is_velopack_lifecycle_hook", lambda _argv: False)
-    monkeypatch.setattr(main_module, "_should_run_update_test_probe", lambda: False)
     monkeypatch.setattr(
         main_module,
         "configure_qt_application_metadata",
@@ -84,7 +81,6 @@ def test_main_returns_exit_code_and_avoids_hard_exit(monkeypatch) -> None:
     assert fake_app.exec_calls == 1
     assert fake_window.shown == 1
     assert events == [
-        "velopack",
         "metadata",
         "dirs",
         "fault_on",
@@ -95,10 +91,3 @@ def test_main_returns_exit_code_and_avoids_hard_exit(monkeypatch) -> None:
         "logging_off",
         "fault_off",
     ]
-
-
-def test_main_returns_zero_for_velopack_hook(monkeypatch) -> None:
-    monkeypatch.setattr(main_module, "_run_velopack_startup", lambda: None)
-    monkeypatch.setattr(main_module, "_is_velopack_lifecycle_hook", lambda _argv: True)
-
-    assert main_module.main() == 0

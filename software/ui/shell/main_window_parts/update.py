@@ -6,21 +6,14 @@ from typing import TYPE_CHECKING, cast
 
 from PySide6.QtCore import QObject, QThread, QTimer, Qt
 from PySide6.QtGui import QColor
-from PySide6.QtWidgets import QHBoxLayout, QVBoxLayout, QWidget
+from PySide6.QtWidgets import QHBoxLayout, QWidget
 from qfluentwidgets import (
-    CaptionLabel,
-    IndeterminateProgressBar,
     IndeterminateProgressRing,
     InfoBadge,
-    InfoBar,
-    InfoBarIcon,
-    InfoBarPosition,
-    ProgressBar,
 )
 
 from software.app.config import app_settings, get_bool_from_qsettings
 from software.app.version import __VERSION__
-from software.logging.action_logger import log_action
 from software.ui.helpers.qfluent_compat import (
     set_indeterminate_progress_ring_active,
 )
@@ -33,7 +26,6 @@ class MainWindowUpdateMixin:
         from typing import Any
 
         titleBar: Any
-        downloadProgress: Any
         _toast: Any
         show_confirm_dialog: Any
         show_message_dialog: Any
@@ -466,219 +458,3 @@ class MainWindowUpdateMixin:
                 self._preview_badge = None
         except Exception:
             logging.info("显示预览版徽章失败", exc_info=True)
-
-    def _show_download_toast(self, total_size: int = 0, show_spinner: bool = False):
-        
-        if self._download_infobar:
-            return
-
-        self._download_indeterminate = show_spinner or total_size == 0
-
-        
-        self._download_infobar = InfoBar(
-            icon=InfoBarIcon.INFORMATION,
-            title="",
-            content="正在下载文件中，请稍候...",
-            orient=Qt.Orientation.Vertical,
-            isClosable=True,
-            position=InfoBarPosition.BOTTOM_RIGHT,
-            duration=-1,
-            parent=self,
-        )
-        self._download_infobar.closeButton.clicked.connect(self._cancel_download)
-
-        
-        self._download_container = QWidget()
-        self._download_layout = QVBoxLayout(self._download_container)
-        self._download_layout.setContentsMargins(0, 4, 0, 0)
-        self._download_layout.setSpacing(4)
-
-        
-        self._download_detail_label = CaptionLabel("正在连接服务器...")
-        self._download_detail_label.setStyleSheet("color: gray;")
-        self._download_layout.addWidget(self._download_detail_label)
-
-        if self._download_indeterminate:
-            
-            self._download_indeterminate_bar = IndeterminateProgressBar()
-            self._download_indeterminate_bar.setFixedSize(220, 4)
-            self._download_layout.addWidget(self._download_indeterminate_bar)
-            self._download_progress_bar = None
-        else:
-            
-            self._download_indeterminate_bar = None
-            self._download_progress_bar = ProgressBar()
-            self._download_progress_bar.setFixedSize(220, 4)
-            self._download_progress_bar.setRange(0, 100)
-            self._download_progress_bar.setValue(0)
-            self._download_progress_bar.setTextVisible(False)
-            self._download_layout.addWidget(self._download_progress_bar)
-
-        self._download_infobar.addWidget(self._download_container)
-        self._download_infobar.show()
-
-    def _format_size(self, size: int) -> str:
-        
-        if size < 1024:
-            return f"{size} B"
-        if size < 1024 * 1024:
-            return f"{size / 1024:.1f} KB"
-        return f"{size / (1024 * 1024):.1f} MB"
-
-    def _format_speed(self, speed: float) -> str:
-        
-        if speed < 1024:
-            return f"{speed:.0f} B/s"
-        if speed < 1024 * 1024:
-            return f"{speed / 1024:.1f} KB/s"
-        return f"{speed / (1024 * 1024):.1f} MB/s"
-
-    def _update_download_progress(self, downloaded: int, total: int, speed: float = 0):
-        
-        if not self._download_infobar:
-            self._show_download_toast(total)
-
-        
-        if total > 0 and getattr(self, "_download_indeterminate", False):
-            self._switch_to_determinate_progress()
-
-        if total > 0 and self._download_progress_bar:
-            percent = int((downloaded / total) * 100)
-            self._download_progress_bar.setValue(percent)
-
-        
-        if hasattr(self, "_download_detail_label") and self._download_detail_label:
-            if total == 100 and speed <= 0:
-                detail = f"{max(0, min(100, int(downloaded or 0)))}%"
-            else:
-                downloaded_text = self._format_size(downloaded)
-                total_text = self._format_size(total)
-                detail = f"{downloaded_text} / {total_text}"
-            if speed > 0 and total != 100:
-                detail += f" | {self._format_speed(speed)}"
-            self._download_detail_label.setText(detail)
-
-        
-        if downloaded >= total and total > 0:
-            QTimer.singleShot(100, self._on_download_complete)
-
-    def _on_download_complete(self):
-        
-        self._close_download_toast()
-        self._toast("下载完成", "success")
-
-    def _switch_to_determinate_progress(self):
-        
-        self._download_indeterminate = False
-
-        
-        if hasattr(self, "_download_indeterminate_bar") and self._download_indeterminate_bar:
-            self._download_layout.removeWidget(self._download_indeterminate_bar)
-            self._download_indeterminate_bar.deleteLater()
-            self._download_indeterminate_bar = None
-
-        
-        self._download_progress_bar = ProgressBar()
-        self._download_progress_bar.setFixedSize(220, 4)
-        self._download_progress_bar.setRange(0, 100)
-        self._download_progress_bar.setValue(0)
-        self._download_progress_bar.setTextVisible(False)
-        self._download_layout.addWidget(self._download_progress_bar)
-
-    def _on_download_started(self):
-        
-        self._show_download_toast(0, show_spinner=True)
-
-    def _cancel_download(self):
-        
-        self._download_cancelled = True
-        log_action(
-            "UPDATE",
-            "download_update",
-            "download_toast",
-            "main_window",
-            result="cancelled",
-        )
-        self._close_download_toast()
-        self._toast("已停止本次自动更新", "warning")
-
-    def _close_download_toast(self):
-        
-        if self._download_infobar:
-            try:
-                self._download_infobar.close()
-            except Exception:
-                logging.info("关闭下载进度提示失败", exc_info=True)
-            self._download_infobar = None
-            self._download_progress_bar = None
-            self._download_detail_label = None
-            self._download_indeterminate_bar = None
-            self._download_indeterminate = False
-
-    def _emit_download_progress(self, downloaded: int, total: int, speed: float = 0):
-        
-        self.downloadProgress.emit(downloaded, total, speed)
-
-    def _on_download_finished(self, update_payload: object):
-        
-        from software.update.updater import UpdateManager
-
-        payload = update_payload if isinstance(update_payload, dict) else {}
-        version = str(payload.get("version", "") or "").strip()
-        velopack_update = payload.get("_velopack_update")
-        if velopack_update is None:
-            self.show_message_dialog("更新失败", "更新包信息无效，请稍后重试", level="error")
-            return
-
-        should_launch = self.show_confirm_dialog(
-            "更新完成",
-            (f"新版本 v{version or '未知'} 已下载完成。\n\n是否立即退出并安装更新？"),
-        )
-        if should_launch:
-            log_action(
-                "UPDATE",
-                "apply_downloaded_update",
-                "velopack_update",
-                "main_window",
-                result="confirmed",
-                payload={"version": version or "unknown"},
-            )
-            try:
-                self._skip_save_on_close = True
-                UpdateManager.apply_downloaded_update(velopack_update)
-                log_action(
-                    "UPDATE",
-                    "apply_downloaded_update",
-                    "velopack_update",
-                    "main_window",
-                    result="started",
-                    payload={"version": version or "unknown"},
-                )
-                self.close()
-            except Exception as exc:
-                logging.error("[UPDATE] failed to apply downloaded update")
-                log_action(
-                    "UPDATE",
-                    "apply_downloaded_update",
-                    "velopack_update",
-                    "main_window",
-                    result="failed",
-                    level=logging.ERROR,
-                    payload={"version": version or "unknown"},
-                    detail=exc,
-                )
-                self.show_message_dialog("安装失败", f"无法应用更新：{exc}", level="error")
-        else:
-            log_action(
-                "UPDATE",
-                "apply_downloaded_update",
-                "velopack_update",
-                "main_window",
-                result="deferred",
-                payload={"version": version or "unknown"},
-            )
-
-    def _on_download_failed(self, error_msg: str):
-        
-        if not getattr(self, "_download_cancelled", False):
-            self.show_message_dialog("更新失败", error_msg, level="error")

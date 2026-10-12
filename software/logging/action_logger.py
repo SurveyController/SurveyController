@@ -16,9 +16,7 @@ _IMPORTANT_INFO_EVENTS = frozenset(
         ("RUN", "resume_run"),
         ("RUN", "start_run"),
         ("UI", "parse_survey"),
-        ("UPDATE", "apply_downloaded_update"),
         ("UPDATE", "check_updates"),
-        ("UPDATE", "download_update"),
     }
 )
 

@@ -176,62 +176,6 @@ class _FakeSpinner(_FakeWidget):
         self.stopped += 1
 
 
-class _FakeProgressBarWidget(_FakeWidget):
-    def __init__(self, *args, **kwargs) -> None:
-        super().__init__(*args, **kwargs)
-        self.fixed_size = None
-        self.range = None
-        self.value = 0
-        self.text_visible = True
-
-    def setFixedSize(self, width: int, height: int) -> None:
-        self.fixed_size = (width, height)
-
-    def setRange(self, minimum: int, maximum: int) -> None:
-        self.range = (minimum, maximum)
-
-    def setValue(self, value: int) -> None:
-        self.value = int(value)
-
-    def setTextVisible(self, visible: bool) -> None:
-        self.text_visible = bool(visible)
-
-
-class _FakeButton:
-    def __init__(self) -> None:
-        self.enabled = True
-        self.text = ""
-        self.clicked = _FakeSignal()
-        self.focused = 0
-
-    def setEnabled(self, enabled: bool) -> None:
-        self.enabled = bool(enabled)
-
-    def setText(self, text: str) -> None:
-        self.text = str(text)
-
-    def setFocus(self) -> None:
-        self.focused += 1
-
-
-class _FakeInfoBar:
-    def __init__(self, **kwargs) -> None:
-        self.kwargs = kwargs
-        self.closeButton = _FakeButton()
-        self.widgets: list[Any] = []
-        self.shown = 0
-        self.closed = 0
-
-    def addWidget(self, widget) -> None:
-        self.widgets.append(widget)
-
-    def show(self) -> None:
-        self.shown += 1
-
-    def close(self) -> None:
-        self.closed += 1
-
-
 class _FakeThread:
     def __init__(self, *_args, **_kwargs) -> None:
         self.started = _FakeSignal()
@@ -300,16 +244,6 @@ class _FakeUpdateWindow(MainWindowUpdateMixin):
         self._title_bar_status_container = None
         self._title_bar_status_layout = None
         self.update_info: Any = None
-        self._download_infobar = None
-        self._download_container = None
-        self._download_layout = None
-        self._download_progress_bar = None
-        self._download_detail_label = None
-        self._download_indeterminate_bar = None
-        self._download_indeterminate = False
-        self._download_cancelled = False
-        self.downloadProgress = SimpleNamespace(emit=lambda *args: self.download_events.append(args))
-        self.download_events: list[Any] = []
         self.toast_calls: list[tuple[str, str]] = []
         self.confirm_calls: list[tuple[str, str]] = []
         self.message_calls: list[tuple[str, str, str]] = []
@@ -348,13 +282,8 @@ class MainWindowUpdateLargeTests:
         monkeypatch.setattr(update_module, "QTimer", _FakeTimer)
         monkeypatch.setattr(update_module, "QWidget", _FakeWidget)
         monkeypatch.setattr(update_module, "QHBoxLayout", _FakeLayout)
-        monkeypatch.setattr(update_module, "QVBoxLayout", _FakeLayout)
         monkeypatch.setattr(update_module, "InfoBadge", _FakeBadge)
         monkeypatch.setattr(update_module, "IndeterminateProgressRing", _FakeSpinner)
-        monkeypatch.setattr(update_module, "IndeterminateProgressBar", _FakeProgressBarWidget)
-        monkeypatch.setattr(update_module, "ProgressBar", _FakeProgressBarWidget)
-        monkeypatch.setattr(update_module, "CaptionLabel", _FakeLabel)
-        monkeypatch.setattr(update_module, "InfoBar", _FakeInfoBar)
         monkeypatch.setattr(
             update_module,
             "set_indeterminate_progress_ring_active",
@@ -496,56 +425,14 @@ class MainWindowUpdateLargeTests:
         assert thread_instances[0].quitted == 1
         assert thread_instances[0].wait_calls == [2500]
 
-    def test_download_toast_progress_and_cancel_flow(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        self._patch_widget_deps(monkeypatch)
+    def test_update_notification_delegates_to_release_prompt(self, monkeypatch: pytest.MonkeyPatch) -> None:
         window = _FakeUpdateWindow()
-        actions: list[Any] = []
-        monkeypatch.setattr(update_module, "log_action", lambda *args, **kwargs: actions.append((args, kwargs)))
+        from software.update import updater
 
-        window._show_download_toast(0, show_spinner=True)
-        assert window._download_indeterminate is True
-        assert window._download_infobar is not None
-
-        window._update_download_progress(50, 100, speed=2048)
-        assert window._download_progress_bar is not None
-        assert window._download_progress_bar.value == 50
-        assert window._download_detail_label is not None
-        assert window._download_detail_label._text == "50 B / 100 B"
-
-        window._update_download_progress(100, 100, speed=0)
-        assert ("下载完成", "success") in window.toast_calls
-
-        window._cancel_download()
-        assert window._download_cancelled is True
-        assert ("已停止本次自动更新", "warning") in window.toast_calls
-        assert actions
-
-    def test_formatters_emit_progress_and_download_finished(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        self._patch_widget_deps(monkeypatch)
-        window = _FakeUpdateWindow()
-
-        assert window._format_size(512) == "512 B"
-        assert window._format_size(2048).endswith("KB")
-        assert window._format_speed(512) == "512 B/s"
-        assert window._format_speed(2048).endswith("KB/s")
-
-        window._emit_download_progress(1, 2, 3.0)
-        assert window.download_events == [(1, 2, 3.0)]
-
-        updater_module = __import__("software.update.updater", fromlist=["show_update_notification", "UpdateManager"])
-        monkeypatch.setattr(updater_module, "show_update_notification", lambda self: self.toast_calls.append(("notify", "info")))
-        monkeypatch.setattr(updater_module.UpdateManager, "apply_downloaded_update", lambda payload: payload.update({"applied": True}))
+        notices = []
+        monkeypatch.setattr(updater, "show_update_notification", notices.append)
+        window._do_show_update_notification()
+        assert notices == []
         window.update_info = {"version": "3.3.0"}
         window._do_show_update_notification()
-        assert ("notify", "info") in window.toast_calls
-
-        payload = {"version": "3.3.0", "_velopack_update": {}}
-        window._on_download_finished(payload)
-        assert window.closed == 1
-
-        window._on_download_finished({})
-        assert window.message_calls[-1][0] == "更新失败"
-
-        window._download_cancelled = False
-        window._on_download_failed("网络炸了")
-        assert window.message_calls[-1] == ("更新失败", "网络炸了", "error")
+        assert notices == [window]

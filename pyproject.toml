@@ -13,7 +13,6 @@ dependencies = [
     "PySide6==6.11.1",
     "PySide6-Fluent-Widgets==1.11.2",
     "surveycore-py",
-    "velopack>=1.2.0; sys_platform == 'win32'",
     "zxing-cpp",
 ]
 
