@@ -28,7 +28,7 @@
 4. **定制答案比例** - 支持自定义各选项权重与多选题命中概率分布
 5. **指定ip地区** - 支持随机IP或指定特定地区IP提交
 6. **配置导入导出** - 保存配置文件便于后续复用，跨设备同步
-7. **AI 主观题作答** - 填空题自动生成作答内容（限时免费），由 [@dAwn-Rebirth](https://github.com/dAwn-Rebirth) 和 [@LING71671](https://github.com/LING71671) 贡献
+7. **AI 主观题作答** - 填空题自动生成作答内容，需自行配置服务商与 API Key，由 [@dAwn-Rebirth](https://github.com/dAwn-Rebirth) 和 [@LING71671](https://github.com/LING71671) 贡献
 
 ## 开始使用
 

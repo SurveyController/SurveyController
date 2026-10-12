@@ -230,7 +230,7 @@ def _build_execution_config_template(
         answer_rules=copy.deepcopy(list(getattr(config, "answer_rules", []) or [])),
         reverse_fill_spec=copy.deepcopy(reverse_fill_spec),
         psycho_target_alpha=psycho_target_alpha,
-        ai_mode=str(getattr(config, "ai_mode", "free") or "free").strip().lower(),
+        ai_mode="provider",
         ai_system_prompt=str(getattr(config, "ai_system_prompt", "") or "").strip(),
     )
     execution_config.questions_metadata = _build_questions_metadata(questions_info)

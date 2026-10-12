@@ -7,7 +7,6 @@ from software.core.task import ExecutionState
 from software.logging.log_utils import log_suppressed_exception
 
 from software.integrations.ai.client import agenerate_answer
-from software.integrations.ai.client import FreeAITimeoutError
 from software.app.config import _HTML_SPACE_RE
 
 
@@ -17,8 +16,8 @@ class AIRuntimeError(RuntimeError):
 
 _AI_FILL_MAX_ATTEMPTS = 4
 _AI_FILL_RETRY_BACKOFF_SECONDS = 0.4
-_FREE_AI_TEXT_PLACEHOLDER_PREFIX = "__FREE_AI_TEXT__"
-_FREE_AI_OPTION_FILL_PLACEHOLDER_PREFIX = "__FREE_AI_OPTION_FILL__"
+_AI_TEXT_PLACEHOLDER_PREFIX = "__AI_TEXT__"
+_AI_OPTION_FILL_PLACEHOLDER_PREFIX = "__AI_OPTION_FILL__"
 
 
 def _is_retryable_ai_generation_error(error: Exception) -> bool:
@@ -35,20 +34,11 @@ def _is_retryable_ai_generation_error(error: Exception) -> bool:
     return not any(marker in text for marker in non_retryable_markers)
 
 
-def is_free_ai_runtime_error(error: object) -> bool:
-    if is_ai_timeout_runtime_error(error):
-        return True
-    text = str(error or "").strip()
-    return "免费 AI" in text or "免费AI" in text
-
-
 def is_ai_timeout_runtime_error(error: object) -> bool:
     current = error if isinstance(error, BaseException) else None
     visited: set[int] = set()
     while current is not None and id(current) not in visited:
         visited.add(id(current))
-        if isinstance(current, FreeAITimeoutError):
-            return True
         text = str(current or "").strip().lower()
         if "timed out" in text or "timeout" in text or "超时" in text:
             return True
@@ -122,20 +112,20 @@ def build_ai_option_fill_prompt(
     return prompt
 
 
-def build_free_ai_text_placeholder(question_num: int, blank_index: int) -> str:
-    return f"{_FREE_AI_TEXT_PLACEHOLDER_PREFIX}{int(question_num or 0)}_{int(blank_index or 0)}"
+def build_ai_text_placeholder(question_num: int, blank_index: int) -> str:
+    return f"{_AI_TEXT_PLACEHOLDER_PREFIX}{int(question_num or 0)}_{int(blank_index or 0)}"
 
 
-def build_free_ai_option_fill_placeholder(question_num: int, option_index: int) -> str:
-    return f"{_FREE_AI_OPTION_FILL_PLACEHOLDER_PREFIX}{int(question_num or 0)}_{int(option_index or 0)}"
+def build_ai_option_fill_placeholder(question_num: int, option_index: int) -> str:
+    return f"{_AI_OPTION_FILL_PLACEHOLDER_PREFIX}{int(question_num or 0)}_{int(option_index or 0)}"
 
 
-def is_free_ai_text_placeholder(value: object) -> bool:
-    return str(value or "").startswith(_FREE_AI_TEXT_PLACEHOLDER_PREFIX)
+def is_ai_text_placeholder(value: object) -> bool:
+    return str(value or "").startswith(_AI_TEXT_PLACEHOLDER_PREFIX)
 
 
-def is_free_ai_option_fill_placeholder(value: object) -> bool:
-    return str(value or "").startswith(_FREE_AI_OPTION_FILL_PLACEHOLDER_PREFIX)
+def is_ai_option_fill_placeholder(value: object) -> bool:
+    return str(value or "").startswith(_AI_OPTION_FILL_PLACEHOLDER_PREFIX)
 
 
 async def agenerate_ai_answer(

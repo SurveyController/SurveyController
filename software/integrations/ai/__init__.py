@@ -1,6 +1,5 @@
 from software.integrations.ai.client import (
     AI_PROVIDERS,
-    DEFAULT_SYSTEM_PROMPT_FREE,
     DEFAULT_SYSTEM_PROMPT_PROVIDER,
     agenerate_answer,
     get_ai_readiness_error,
@@ -13,7 +12,6 @@ from software.integrations.ai.settings import reset_ai_settings
 
 __all__ = [
     "AI_PROVIDERS",
-    "DEFAULT_SYSTEM_PROMPT_FREE",
     "DEFAULT_SYSTEM_PROMPT_PROVIDER",
     "agenerate_answer",
     "get_ai_readiness_error",

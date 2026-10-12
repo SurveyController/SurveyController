@@ -36,7 +36,7 @@ async def resolve_option_fill_text_from_config(
     if text != OPTION_FILL_AI_TOKEN:
         return resolve_dynamic_text_token(text)
     if ctx is not None:
-        cached = ctx.get_free_ai_option_fill_prefill_answer(thread_name, question_number, option_index)
+        cached = ctx.get_ai_option_fill_prefill_answer(thread_name, question_number, option_index)
         if cached:
             return cached
     if allow_ai_placeholder:

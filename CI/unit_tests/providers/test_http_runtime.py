@@ -1453,12 +1453,12 @@ async def test_wjx_builder_defaults_selected_fillable_option_text() -> None:
 
 
 @pytest.mark.asyncio
-async def test_wjx_builder_uses_prefilled_free_ai_text_answer(monkeypatch) -> None:
+async def test_wjx_builder_uses_prefilled_ai_text_answer(monkeypatch) -> None:
     config = ExecutionConfig(survey_provider="wjx")
     config.question_config_index_map = {1: ("text", 0)}
     config.text_ai_flags = [True]
     state = ExecutionState(config=config)
-    state.set_free_ai_prefill_answers("slot-1", {1: ("预填答案",)})
+    state.set_ai_prefill_answers("slot-1", {1: ("预填答案",)})
     question = SurveyQuestionMeta(
         num=1,
         title="请填写职业",
@@ -1485,13 +1485,13 @@ async def test_wjx_builder_uses_prefilled_free_ai_text_answer(monkeypatch) -> No
 
 
 @pytest.mark.asyncio
-async def test_wjx_builder_uses_prefilled_free_ai_option_fill_answer(monkeypatch) -> None:
+async def test_wjx_builder_uses_prefilled_ai_option_fill_answer(monkeypatch) -> None:
     config = ExecutionConfig(survey_provider="wjx")
     config.question_config_index_map = {1: ("single", 0)}
     config.single_prob = [[1.0, 0.0]]
     config.single_option_fill_texts = [["__AI_FILL__", None]]
     state = ExecutionState(config=config)
-    state.set_free_ai_option_fill_prefill_answers("slot-opt-1", {(1, 0): "补充说明"})
+    state.set_ai_option_fill_prefill_answers("slot-opt-1", {(1, 0): "补充说明"})
     question = SurveyQuestionMeta(
         num=1,
         title="请选择水果",
@@ -1570,12 +1570,12 @@ async def test_qq_builder_supports_dropdown_and_matrix_star_for_http(monkeypatch
 
 
 @pytest.mark.asyncio
-async def test_qq_builder_uses_prefilled_free_ai_text_answer(monkeypatch) -> None:
+async def test_qq_builder_uses_prefilled_ai_text_answer(monkeypatch) -> None:
     config = ExecutionConfig(survey_provider="qq")
     config.question_config_index_map = {1: ("text", 0)}
     config.text_ai_flags = [True]
     state = ExecutionState(config=config)
-    state.set_free_ai_prefill_answers("slot-2", {1: ("上海", "羽毛球")})
+    state.set_ai_prefill_answers("slot-2", {1: ("上海", "羽毛球")})
     question = SurveyQuestionMeta(
         num=1,
         title="请依次填写城市和爱好",
@@ -1604,13 +1604,13 @@ async def test_qq_builder_uses_prefilled_free_ai_text_answer(monkeypatch) -> Non
 
 
 @pytest.mark.asyncio
-async def test_qq_builder_uses_prefilled_free_ai_option_fill_answer(monkeypatch) -> None:
+async def test_qq_builder_uses_prefilled_ai_option_fill_answer(monkeypatch) -> None:
     config = ExecutionConfig(survey_provider="qq")
     config.question_config_index_map = {1: ("single", 0)}
     config.single_prob = [[1.0, 0.0]]
     config.single_option_fill_texts = [["__AI_FILL__", None]]
     state = ExecutionState(config=config)
-    state.set_free_ai_option_fill_prefill_answers("slot-opt-2", {(1, 0): "补充信息"})
+    state.set_ai_option_fill_prefill_answers("slot-opt-2", {(1, 0): "补充信息"})
     question = SurveyQuestionMeta(
         num=1,
         title="请选择职业方向",
@@ -1706,14 +1706,14 @@ async def test_wjx_http_runtime_clears_prefill_cache_on_error(monkeypatch) -> No
         return "<html><body><input type='hidden' value='2026/5/30 1:23:18' id='starttime' name='starttime' /></body></html>"
 
     async def fake_prefill(_questions, ctx, *, thread_name=""):
-        ctx.set_free_ai_prefill_answers(thread_name, {1: ("缓存答案",)})
+        ctx.set_ai_prefill_answers(thread_name, {1: ("缓存答案",)})
         return None
 
     async def fake_build_action(*_args, **_kwargs):
         raise RuntimeError("boom")
 
     monkeypatch.setattr(wjx_http, "_load_wjx_page", fake_load)
-    monkeypatch.setattr(wjx_http, "prefill_free_ai_answers_for_questions", fake_prefill)
+    monkeypatch.setattr(wjx_http, "prefill_ai_answers_for_questions", fake_prefill)
     monkeypatch.setattr(wjx_http, "build_answer_action", fake_build_action)
 
     with pytest.raises(RuntimeError, match="boom"):
@@ -1723,7 +1723,7 @@ async def test_wjx_http_runtime_clears_prefill_cache_on_error(monkeypatch) -> No
             thread_name="slot-3",
         )
 
-    assert state.get_free_ai_prefill_answer("slot-3", 1) is None
+    assert state.get_ai_prefill_answer("slot-3", 1) is None
 
 
 def test_credamo_builder_supports_dropdown_and_order_for_http(monkeypatch) -> None:

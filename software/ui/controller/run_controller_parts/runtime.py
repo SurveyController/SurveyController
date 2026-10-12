@@ -27,7 +27,7 @@ class RunControllerRuntimeMixin(
         pauseStateChanged: Any
         cleanupFinished: Any
         quickBugReportSuggested: Any
-        freeAiUnstableSuggested: Any
+        aiUnstableSuggested: Any
         _status_timer: QTimer
         _cleanup_runner: CleanupRunner
         quota_request_form_opener: Optional[Callable[[], bool]]

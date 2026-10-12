@@ -4,7 +4,7 @@ from types import SimpleNamespace
 
 import pytest
 
-from software.integrations.ai.client import AI_MODE_PROVIDER, FREE_QUESTION_TYPE_FILL, save_ai_settings
+from software.integrations.ai.client import AI_MODE_PROVIDER, QUESTION_TYPE_FILL, save_ai_settings
 import software.integrations.ai.protocols as protocols
 from software.integrations.ai.protocols import _extract_chat_completion_text, _extract_responses_text, _resolve_custom_endpoint
 
@@ -143,7 +143,7 @@ class AIProtocolTests:
             answer = asyncio.run(
                 client_module.agenerate_answer(
                     '测试问题',
-                    question_type=FREE_QUESTION_TYPE_FILL,
+                    question_type=QUESTION_TYPE_FILL,
                     blank_count=1,
                 )
             )

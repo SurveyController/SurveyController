@@ -16,8 +16,8 @@ from software.app.config import DEFAULT_FILL_TEXT
 from software.core.ai.runtime import (
     AIRuntimeError,
     agenerate_ai_answer,
-    build_free_ai_option_fill_placeholder,
-    build_free_ai_text_placeholder,
+    build_ai_option_fill_placeholder,
+    build_ai_text_placeholder,
 )
 from surveycore.core.persona.context import apply_persona_boost
 from surveycore.core.questions.consistency import (
@@ -126,7 +126,7 @@ async def _build_wjx_single_action(
         ctx=ctx,
         thread_name=thread_name,
         allow_ai_placeholder=allow_ai_placeholder,
-        ai_placeholder_text=build_free_ai_option_fill_placeholder(current, selected_index),
+        ai_placeholder_text=build_ai_option_fill_placeholder(current, selected_index),
     )
     fill_value = default_missing_option_fill(question, selected_index, fill_value)
     selected_texts = [f"{selected_text} / {fill_value}" if selected_text and fill_value else (fill_value or selected_text)]
@@ -213,7 +213,7 @@ async def _build_wjx_dropdown_action(
         ctx=ctx,
         thread_name=thread_name,
         allow_ai_placeholder=allow_ai_placeholder,
-        ai_placeholder_text=build_free_ai_option_fill_placeholder(current, selected_index),
+        ai_placeholder_text=build_ai_option_fill_placeholder(current, selected_index),
     )
     fill_value = default_missing_option_fill(question, selected_index, fill_value)
     selected_texts = [f"{selected_text} / {fill_value}" if selected_text and fill_value else (fill_value or selected_text)]
@@ -253,12 +253,12 @@ async def _build_wjx_text_action(
     else:
         ai_enabled = bool(config.text_ai_flags[config_index]) if config_index < len(config.text_ai_flags) else False
         if ai_enabled:
-            cached_answers = ctx.get_free_ai_prefill_answer(thread_name, current)
+            cached_answers = ctx.get_ai_prefill_answer(thread_name, current)
             if cached_answers:
                 text_values = [str(item or "").strip() or DEFAULT_FILL_TEXT for item in cached_answers]
             elif allow_ai_placeholder:
                 text_values = [
-                    build_free_ai_text_placeholder(current, blank_index)
+                    build_ai_text_placeholder(current, blank_index)
                     for blank_index in range(blank_count)
                 ]
             else:
@@ -345,7 +345,7 @@ async def _build_wjx_multiple_action(
                 ctx=ctx,
                 thread_name=thread_name,
                 allow_ai_placeholder=allow_ai_placeholder,
-                ai_placeholder_text=build_free_ai_option_fill_placeholder(current, option_idx),
+                ai_placeholder_text=build_ai_option_fill_placeholder(current, option_idx),
             )
             fill_value = default_missing_option_fill(question, option_idx, fill_value)
             if fill_value:

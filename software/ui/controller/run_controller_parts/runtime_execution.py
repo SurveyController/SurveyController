@@ -38,7 +38,7 @@ class RunControllerExecutionMixin:
         pauseStateChanged: Any
         cleanupFinished: Any
         quickBugReportSuggested: Any
-        freeAiUnstableSuggested: Any
+        aiUnstableSuggested: Any
         submissionVerificationSuggested: Any
         quota_request_form_opener: Optional[Callable[[], bool]]
         on_ip_counter: Optional[Callable[[float, float, bool], None]]
@@ -551,9 +551,9 @@ class RunControllerExecutionMixin:
         failure_reason = str(failure_reason or "").strip()
         if not category:
             return
-        if category == "free_ai_unstable":
+        if category == "ai_unstable":
             self._quick_feedback_prompt_emitted = True
-            self.freeAiUnstableSuggested.emit()
+            self.aiUnstableSuggested.emit()
             return
         if category == "submission_verification":
             self._quick_feedback_prompt_emitted = True

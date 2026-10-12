@@ -48,7 +48,7 @@ class RuntimeErrorHandlerTests:
 
         assert stopped
         assert stop_signal.is_set()
-        assert state.get_terminal_stop_snapshot()[0] == "free_ai_unstable"
+        assert state.get_terminal_stop_snapshot()[0] == "ai_unstable"
         assert state.get_terminal_stop_snapshot()[1] == FailureReason.FILL_FAILED.value
 
     def test_submission_verification_error_stops_immediately(self) -> None:

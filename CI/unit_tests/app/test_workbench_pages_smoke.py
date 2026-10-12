@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from types import SimpleNamespace
 
+import pytest
 from PySide6.QtCore import QObject, Signal
 
 from software.core.config.schema import RuntimeConfig
@@ -115,9 +116,9 @@ def _patch_page_dependencies(monkeypatch) -> None:
     monkeypatch.setattr(random_ip_card, "apply_custom_proxy_api", lambda _url: None)
     monkeypatch.setattr(random_ip_card, "test_custom_proxy_api", lambda _url: (True, "", []))
 
-    monkeypatch.setattr(ai_module, "get_ai_settings", lambda: {"ai_mode": "free"})
+    monkeypatch.setattr(ai_module, "get_ai_settings", lambda: {"ai_mode": "provider"})
     monkeypatch.setattr(ai_module, "save_ai_settings", lambda **_kwargs: None)
-    monkeypatch.setattr(ai_module, "get_default_system_prompt", lambda _mode="free": "默认提示")
+    monkeypatch.setattr(ai_module, "get_default_system_prompt", lambda: "默认提示")
     monkeypatch.setattr(runtime_proxy_sync, "apply_proxy_source_settings", lambda *_args, **_kwargs: None)
     monkeypatch.setattr(runtime_proxy_sync, "apply_custom_proxy_api", lambda *_args, **_kwargs: None)
     monkeypatch.setattr(runtime_proxy_sync, "get_proxy_minute_by_answer_seconds", lambda *_args, **_kwargs: 1)
@@ -149,6 +150,40 @@ def test_runtime_page_builds_and_syncs_config_without_network(monkeypatch, qtbot
     assert cfg.threads <= HTTP_MAX_THREADS
     assert cfg.answer_datetime_window == ("", "")
     assert cfg.ai_system_prompt
+    assert cfg.ai_mode == "provider"
+    assert not hasattr(page.ai_section, "ai_mode_combo")
+    assert not hasattr(page.ai_section, "ai_free_mode_bar")
+
+
+@pytest.mark.parametrize("provider,model", [("custom", "test-model"), ("deepseek", "deepseek-v4-pro")])
+def test_runtime_ai_preserves_saved_model_when_loading_legacy_config(monkeypatch, qtbot, provider, model) -> None:
+    _patch_page_dependencies(monkeypatch)
+    import software.ui.pages.workbench.runtime_panel.ai as ai_module
+
+    saved = {
+        "ai_mode": "free",
+        "provider": provider,
+        "api_key": "test-key",
+        "base_url": "https://example.test/v1",
+        "model": model,
+        "system_prompt": "用户提示词",
+    }
+    monkeypatch.setattr(ai_module, "get_ai_settings", lambda: dict(saved))
+    writes = []
+    monkeypatch.setattr(ai_module, "save_ai_settings", lambda **kwargs: writes.append(kwargs))
+    page = RuntimePage(_FakeController())
+    qtbot.addWidget(page)
+    assert page.ai_section._get_current_model_value() == model
+    assert writes == []
+
+    cfg = RuntimeConfig(ai_mode="free")
+    page.apply_config(cfg)
+    page.update_config(cfg)
+    assert cfg.ai_mode == "provider"
+    assert cfg.ai_provider == provider
+    assert cfg.ai_model == model
+    assert cfg.ai_api_key == "test-key"
+    assert cfg.ai_system_prompt == "用户提示词"
 
 
 def test_strategy_page_builds_rules_and_dimension_sections(monkeypatch, qtbot) -> None:

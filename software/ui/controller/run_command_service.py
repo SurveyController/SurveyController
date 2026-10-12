@@ -898,9 +898,9 @@ class RunCommandService(RandomIpRuntimeService, RunControllerInitializationMixin
         failure_reason = str(failure_reason or "").strip()
         if not category:
             return
-        if category == "free_ai_unstable":
+        if category == "ai_unstable":
             self._quick_feedback_prompt_emitted = True
-            self.emit_event(event_payload("free_ai_unstable"))
+            self.emit_event(event_payload("ai_unstable"))
             return
         if category == "submission_verification":
             self._quick_feedback_prompt_emitted = True

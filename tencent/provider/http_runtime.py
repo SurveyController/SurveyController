@@ -37,7 +37,7 @@ from surveycore.tencent.provider.http_runtime import (
 
 import software.network.http as http_client
 from software.app.config import DEFAULT_HTTP_HEADERS, DEFAULT_USER_AGENT
-from software.core.ai.batch_runtime import assert_no_free_ai_placeholders_in_actions, prefill_free_ai_answers_for_questions
+from software.core.ai.batch_runtime import assert_no_ai_placeholders_in_actions, prefill_ai_answers_for_questions
 from software.core.config.codec import UserAgentProfile
 from surveycore.core.modes.duration_control import sample_answer_duration_seconds
 from surveycore.core.persona.context import record_answer
@@ -197,13 +197,13 @@ async def brush_qq_http(
             build_action=_build_action,
         )
         actions = list(plan.actions)
-        await prefill_free_ai_answers_for_questions(
+        await prefill_ai_answers_for_questions(
             questions,
             actions,
             ctx,
             thread_name=thread_name,
         )
-        assert_no_free_ai_placeholders_in_actions(actions, provider_label="腾讯问卷")
+        assert_no_ai_placeholders_in_actions(actions, provider_label="腾讯问卷")
         action_by_question_id = {
             str(action.question_id or "").strip(): action
             for action in actions
@@ -331,7 +331,7 @@ async def brush_qq_http(
         mark_submit_proxy_success(ctx, submit_proxy_address)
         return True
     finally:
-        ctx.clear_free_ai_prefill_answers(thread_name)
+        ctx.clear_ai_prefill_answers(thread_name)
 
 
 __all__ = ["QqSubmitResult", "brush_qq_http", "classify_qq_submit_payload"]

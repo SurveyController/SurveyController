@@ -1,6 +1,5 @@
 from software.integrations.ai import (
     AI_PROVIDERS,
-    DEFAULT_SYSTEM_PROMPT_FREE,
     DEFAULT_SYSTEM_PROMPT_PROVIDER,
     agenerate_answer,
     get_ai_readiness_error,
@@ -12,7 +11,6 @@ from software.integrations.ai import (
 
 __all__ = [
     "AI_PROVIDERS",
-    "DEFAULT_SYSTEM_PROMPT_FREE",
     "DEFAULT_SYSTEM_PROMPT_PROVIDER",
     "agenerate_answer",
     "get_ai_readiness_error",

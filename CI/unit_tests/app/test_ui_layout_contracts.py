@@ -198,9 +198,9 @@ def test_workbench_pages_survive_125_percent_dpi_subprocess() -> None:
         random_ip_card.apply_proxy_area_code = lambda _code: None
         random_ip_card.apply_custom_proxy_api = lambda _url: None
         random_ip_card.test_custom_proxy_api = lambda _url: (True, "", [])
-        ai_module.get_ai_settings = lambda: {"ai_mode": "free"}
+        ai_module.get_ai_settings = lambda: {"ai_mode": "provider"}
         ai_module.save_ai_settings = lambda **_kwargs: None
-        ai_module.get_default_system_prompt = lambda _mode="free": "默认提示"
+        ai_module.get_default_system_prompt = lambda: "默认提示"
         runtime_proxy_sync.apply_proxy_source_settings = lambda *_args, **_kwargs: None
         runtime_proxy_sync.apply_custom_proxy_api = lambda *_args, **_kwargs: None
         runtime_proxy_sync.get_proxy_minute_by_answer_seconds = lambda *_args, **_kwargs: 1

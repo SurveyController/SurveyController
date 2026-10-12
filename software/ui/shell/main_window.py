@@ -450,7 +450,7 @@ class MainWindow(
         if confirmed:
             self._open_contact_dialog(default_type="报错反馈", lock_message_type=True)
 
-    def _notify_free_ai_unstable(self) -> None:
+    def _notify_ai_unstable(self) -> None:
         self._toast("AI 填空连续失败，请稍后再试", "warning", duration=3500)
 
     def _notify_submission_verification(self, message: str) -> None:
@@ -688,8 +688,8 @@ class MainWindow(
         if event_type == "quick_bug_report_suggested":
             self._prompt_quick_bug_report()
             return
-        if event_type == "free_ai_unstable":
-            self._notify_free_ai_unstable()
+        if event_type == "ai_unstable":
+            self._notify_ai_unstable()
             return
         if event_type == "submission_verification_required":
             self._notify_submission_verification(str((event or {}).get("message") or ""))

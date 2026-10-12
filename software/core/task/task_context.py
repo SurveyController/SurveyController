@@ -23,6 +23,9 @@ class ExecutionConfig(CoreExecutionConfig):
     proxy_source: str = "default"
     proxy_ip_pool: list[ProxyLease] | deque[ProxyLease] = field(default_factory=deque)
 
+    def __post_init__(self) -> None:
+        self.ai_mode = "provider"
+
 
 @dataclass
 class ExecutionState(ProxyRuntimeMixin, CoreExecutionState):
@@ -36,6 +39,13 @@ class ExecutionState(ProxyRuntimeMixin, CoreExecutionState):
     proxy_cooldown_until_by_address: dict[str, float] = field(default_factory=dict)
     _runtime_async_event: Any = field(default=None, init=False, repr=False)
     _runtime_async_event_loop: Any = field(default=None, init=False, repr=False)
+
+    # 锁定核心库仍使用旧缓存名；复用其锁与线程隔离，不接入免费服务。
+    set_ai_prefill_answers = CoreExecutionState.set_free_ai_prefill_answers
+    get_ai_prefill_answer = CoreExecutionState.get_free_ai_prefill_answer
+    clear_ai_prefill_answers = CoreExecutionState.clear_free_ai_prefill_answers
+    set_ai_option_fill_prefill_answers = CoreExecutionState.set_free_ai_option_fill_prefill_answers
+    get_ai_option_fill_prefill_answer = CoreExecutionState.get_free_ai_option_fill_prefill_answer
 
     @property
     def app_config(self) -> ExecutionConfig:

@@ -4,7 +4,6 @@ import logging
 from typing import List, Optional, Union
 
 from software.core.task import ExecutionState
-from software.integrations.ai.free_api import FreeAITimeoutError, call_free_ai_api_async
 from software.integrations.ai.protocols import (
     _CHAT_COMPLETIONS_SUFFIX,
     _RESPONSES_SUFFIX,
@@ -15,17 +14,13 @@ from software.integrations.ai.protocols import (
     _resolve_custom_endpoint,
 )
 from software.integrations.ai.settings import (
-    AI_MODE_FREE,
     AI_MODE_PROVIDER,
     AI_PROVIDERS,
     CUSTOM_API_PROTOCOLS,
-    DEFAULT_SYSTEM_PROMPT_FREE,
     DEFAULT_SYSTEM_PROMPT_PROVIDER,
-    FREE_QUESTION_TYPE_FILL,
-    FREE_QUESTION_TYPE_MULTI,
-    _normalize_ai_mode,
+    QUESTION_TYPE_FILL,
+    QUESTION_TYPE_MULTI,
     _normalize_custom_api_protocol,
-    _normalize_free_question_type,
     get_ai_readiness_error,
     get_ai_settings,
     get_default_system_prompt,
@@ -35,15 +30,12 @@ from software.integrations.ai.settings import (
 logger = logging.getLogger(__name__)
 
 __all__ = [
-    "AI_MODE_FREE",
     "AI_MODE_PROVIDER",
     "AI_PROVIDERS",
     "CUSTOM_API_PROTOCOLS",
-    "DEFAULT_SYSTEM_PROMPT_FREE",
     "DEFAULT_SYSTEM_PROMPT_PROVIDER",
-    "FREE_QUESTION_TYPE_FILL",
-    "FREE_QUESTION_TYPE_MULTI",
-    "FreeAITimeoutError",
+    "QUESTION_TYPE_FILL",
+    "QUESTION_TYPE_MULTI",
     "agenerate_answer",
     "get_ai_readiness_error",
     "get_ai_settings",
@@ -56,7 +48,7 @@ __all__ = [
 async def agenerate_answer(
     question_title: str,
     *,
-    question_type: str = FREE_QUESTION_TYPE_FILL,
+    question_type: str = QUESTION_TYPE_FILL,
     blank_count: Optional[int] = None,
     ctx: ExecutionState | None = None,
 ) -> Union[str, List[str]]:
@@ -66,22 +58,7 @@ async def agenerate_answer(
     if readiness_error:
         raise RuntimeError(f"AI 配置不完整：{readiness_error}")
 
-    resolved_question_type = _normalize_free_question_type(question_type)
-    resolved_blank_count = int(blank_count or 0) if blank_count is not None else None
-    ai_mode = _normalize_ai_mode(config.get("ai_mode"))
-    system_prompt = str(config.get("system_prompt") or "").strip() or get_default_system_prompt(ai_mode)
-
-    if ai_mode == AI_MODE_FREE:
-        answers = await call_free_ai_api_async(
-            question=question_title,
-            question_type=resolved_question_type,
-            blank_count=resolved_blank_count,
-            system_prompt=system_prompt,
-            ctx=ctx,
-        )
-        if resolved_question_type == FREE_QUESTION_TYPE_FILL:
-            return answers[0]
-        return answers
+    system_prompt = str(config.get("system_prompt") or "").strip() or get_default_system_prompt()
 
     api_key = str(config.get("api_key") or "")
     if not api_key:
@@ -120,18 +97,18 @@ async def agenerate_answer(
 async def atest_connection() -> str:
     
     try:
-        ai_mode = _normalize_ai_mode(get_ai_settings().get("ai_mode"))
-        logger.info("AI 连接测试开始 | mode=%s", ai_mode)
+        provider = get_ai_settings().get("provider")
+        logger.info("AI 连接测试开始 | provider=%s", provider)
         result = await agenerate_answer(
             "这是一个测试问题，请回复'连接成功'",
-            question_type=FREE_QUESTION_TYPE_FILL,
+            question_type=QUESTION_TYPE_FILL,
             blank_count=1,
         )
         if isinstance(result, list):
             preview = " | ".join(result[:3])
         else:
             preview = str(result)
-        logger.info("AI 连接测试成功 | mode=%s | preview=%s", ai_mode, preview[:80])
+        logger.info("AI 连接测试成功 | provider=%s | preview=%s", provider, preview[:80])
         return f"连接成功！AI 回复: {preview[:50]}..."
     except Exception as exc:
         logger.error("AI 连接测试失败: %s", exc)

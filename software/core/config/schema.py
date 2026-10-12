@@ -31,7 +31,7 @@ class RuntimeConfig:
     pause_on_aliyun_captcha: bool = True
     reliability_mode_enabled: bool = True
     psycho_target_alpha: float = 0.85
-    ai_mode: str = "free"
+    ai_mode: str = "provider"
     ai_provider: str = "deepseek"
     ai_api_key: str = ""
     ai_base_url: str = ""

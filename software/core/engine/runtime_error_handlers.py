@@ -12,7 +12,6 @@ from surveycore.providers.errors import (
     SurveyProviderUnavailableAtRuntimeError,
 )
 AI_FILL_FAIL_THRESHOLD = 5
-FREE_AI_TIMEOUT_FAIL_THRESHOLD = AI_FILL_FAIL_THRESHOLD
 SUBMISSION_VERIFICATION_STOP_CATEGORY = "submission_verification"
 SURVEY_PROVIDER_UNAVAILABLE_STOP_CATEGORY = "survey_provider_unavailable"
 
@@ -42,7 +41,7 @@ def handle_ai_runtime_error(
         status_text=status_text,
         log_message=log_message,
         threshold_override=AI_FILL_FAIL_THRESHOLD,
-        terminal_stop_category="free_ai_unstable",
+        terminal_stop_category="ai_unstable",
         force_stop_when_threshold_reached=True,
         consume_reverse_fill_attempt=False,
     )
@@ -148,7 +147,6 @@ def handle_survey_provider_unavailable_error(
 
 __all__ = [
     "AI_FILL_FAIL_THRESHOLD",
-    "FREE_AI_TIMEOUT_FAIL_THRESHOLD",
     "SUBMISSION_VERIFICATION_STOP_CATEGORY",
     "SURVEY_PROVIDER_UNAVAILABLE_STOP_CATEGORY",
     "handle_ai_runtime_error",

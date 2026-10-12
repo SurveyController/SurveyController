@@ -184,7 +184,7 @@ class _DummyExecutionController(RunControllerExecutionMixin):
         self.pauseStateChanged = _FakeSignal()
         self.cleanupFinished = _FakeSignal()
         self.quickBugReportSuggested = _FakeSignal()
-        self.freeAiUnstableSuggested = _FakeSignal()
+        self.aiUnstableSuggested = _FakeSignal()
         self.quota_request_form_opener = lambda: True
         self.on_ip_counter = None
         self.on_random_ip_loading = None
@@ -593,9 +593,9 @@ class RunControllerExecutionTests:
         assert controller._close_shutdown_thread is None
 
         controller._execution_state = _FakeExecutionState()
-        controller._execution_state.terminal_snapshot = ("free_ai_unstable", "", "")
+        controller._execution_state.terminal_snapshot = ("ai_unstable", "", "")
         controller._emit_quick_bug_report_suggestion_if_needed()
-        assert controller.freeAiUnstableSuggested.calls == [()]
+        assert controller.aiUnstableSuggested.calls == [()]
 
         controller = _DummyExecutionController()
         controller._execution_state = _FakeExecutionState()
