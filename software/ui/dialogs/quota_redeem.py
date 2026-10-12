@@ -40,7 +40,7 @@ class QuotaRedeemDialog(MessageBoxBase):
     
 
     _redeemFinished = Signal(bool, object)
-    _SHOP_URL = "https://pay.ldxp.cn/shop/surveycontroller"
+    _SHOP_URL = "https://wzyp.cn/shop/surveycontroller"
     _SHOP_ICON_PATH = "assets/pay_ldxp_favicon.ico"
 
     def __init__(self, parent=None):
