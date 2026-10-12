@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 
-from software.core.questions.schema import QuestionEntry, _infer_option_count
+from surveycore.core.questions.schema import QuestionEntry, _infer_option_count
 
 
 class SchemaHelperTests:

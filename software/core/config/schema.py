@@ -4,9 +4,9 @@ from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple
 
 from software.providers.common import SURVEY_PROVIDER_WJX
-from software.providers.contracts import SurveyQuestionMeta
+from surveycore.providers.contracts import SurveyQuestionMeta
 if TYPE_CHECKING:
-    from software.core.questions.config import QuestionEntry
+    from surveycore.core.questions.config import QuestionEntry
 
 
 @dataclass

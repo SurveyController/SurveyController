@@ -4,13 +4,10 @@ import concurrent.futures
 import logging
 from typing import TYPE_CHECKING, Any, List
 
-from software.core.questions.config import (
-    QuestionEntry,
-    build_default_question_entries,
-)
+from surveycore.core.questions.config import QuestionEntry, build_default_question_entries
 from software.providers.common import is_supported_survey_url
-from software.providers.contracts import SurveyDefinition, SurveyQuestionMeta
-from software.providers.errors import (
+from surveycore.providers.contracts import SurveyDefinition, SurveyQuestionMeta
+from surveycore.providers.errors import (
     SurveyEnterpriseUnavailableError,
     SurveyNotOpenError,
     SurveyPausedError,

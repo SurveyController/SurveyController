@@ -3,9 +3,9 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any, Awaitable, Callable
 
-from software.core.engine.runtime_actions import RuntimeActionResult, ensure_runtime_action_result
+from surveycore.core.engine.runtime_actions import RuntimeActionResult, ensure_runtime_action_result
 from software.core.task import ExecutionConfig, ExecutionState
-from software.providers.contracts import SurveyDefinition
+from surveycore.providers.contracts import SurveyDefinition
 
 ParseSurveyHook = Callable[[str], Awaitable[SurveyDefinition]]
 FillSurveyHook = Callable[..., Awaitable[bool]]

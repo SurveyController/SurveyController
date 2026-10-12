@@ -1,5 +1,10 @@
 from __future__ import annotations
 
+from surveycore.tencent.provider.answering_builders import (
+    _build_qq_score_like_action as _build_qq_score_like_action,
+    _build_qq_matrix_action as _build_qq_matrix_action,
+)
+
 import random
 from typing import Any, List, Optional, Sequence
 
@@ -10,36 +15,33 @@ from software.core.ai.runtime import (
     build_free_ai_option_fill_placeholder,
     build_free_ai_text_placeholder,
 )
-from software.core.persona.context import apply_persona_boost
-from software.core.questions.consistency import (
-    apply_matrix_row_consistency,
+from surveycore.core.persona.context import apply_persona_boost
+from surveycore.core.questions.consistency import (
     apply_single_like_consistency,
     get_multiple_rule_constraint,
 )
-from software.core.questions.distribution import (
-    resolve_distribution_probabilities,
-)
+from surveycore.core.questions.distribution import resolve_distribution_probabilities
 from software.core.questions.text_values import (
     resolve_option_fill_text_from_config,
     resolve_text_values_from_config,
 )
-from software.core.questions.strict_ratio import (
+from surveycore.core.questions.strict_ratio import (
     enforce_reference_rank_order,
     is_strict_ratio_question,
     stochastic_round,
     weighted_sample_without_replacement,
 )
-from software.core.questions.tendency import get_tendency_index
-from software.core.questions.utils import (
-    normalize_droplist_probs,
-    weighted_index,
-)
+from surveycore.core.questions.tendency import get_tendency_index
+from surveycore.core.questions.utils import normalize_droplist_probs, weighted_index
 from software.core.task import ExecutionState
-from software.providers.answering import AnswerAction
-from software.providers.answering.option_fill import default_missing_option_fill
-from software.providers.contracts import SurveyQuestionMeta
+from surveycore.providers.answering import AnswerAction
+from surveycore.providers.answering.option_fill import default_missing_option_fill
+from surveycore.providers.contracts import SurveyQuestionMeta
 
-from .answering_rules import apply_multiple_constraints, normalize_selected_indices
+from surveycore.tencent.provider.answering_rules import (
+    apply_multiple_constraints,
+    normalize_selected_indices,
+)
 
 
 async def _build_qq_single_action(
@@ -255,48 +257,6 @@ async def _build_qq_dropdown_action(
     )
 
 
-async def _build_qq_score_like_action(
-    question: SurveyQuestionMeta,
-    config_index: int,
-    ctx: ExecutionState,
-    *,
-    psycho_plan: Optional[Any],
-) -> Optional[AnswerAction]:
-    config = ctx.config
-    current = int(question.num or 0)
-    raw_option_count = int(question.options or 0)
-    if raw_option_count <= 0:
-        return None
-    option_count = max(2, raw_option_count)
-    probabilities = config.scale_prob[config_index] if config_index < len(config.scale_prob) else -1
-    probs = normalize_droplist_probs(probabilities, option_count)
-    probs = apply_single_like_consistency(probs, current)
-    probs = resolve_distribution_probabilities(
-        probs,
-        option_count,
-        ctx,
-        current,
-        psycho_plan=psycho_plan,
-    )
-    selected_index = get_tendency_index(
-        option_count,
-        probs,
-        dimension=config.question_dimension_map.get(current),
-        psycho_plan=psycho_plan,
-        question_index=current,
-    )
-    return AnswerAction(
-        question_num=current,
-        question_id=str(question.provider_question_id or ""),
-        kind="choice",
-        input_type="radio",
-        selected_indices=(selected_index,),
-        scalar_value=selected_index,
-        record_type="score",
-        pending_distribution_choices=((selected_index, option_count, None),),
-    )
-
-
 async def _build_qq_multiple_action(
     driver: Any | None,
     question: SurveyQuestionMeta,
@@ -460,80 +420,6 @@ async def _build_qq_multiple_action(
     if not selected and positive_indices:
         selected = [random.choice(positive_indices)]
     return await _finalize(selected)
-
-
-async def _build_qq_matrix_action(
-    question: SurveyQuestionMeta,
-    config_index: int,
-    ctx: ExecutionState,
-    *,
-    psycho_plan: Optional[Any],
-) -> Optional[AnswerAction]:
-    config = ctx.config
-    current = int(question.num or 0)
-    row_count = max(1, int(question.rows or 1))
-    raw_option_count = int(question.options or 0)
-    if raw_option_count <= 0:
-        return None
-    option_count = max(2, raw_option_count)
-    strict_ratio_question = is_strict_ratio_question(ctx, current)
-    next_index = config_index
-    selected_indices: list[int] = []
-    pending: list[tuple[int, int, Optional[int]]] = []
-    for row_index in range(row_count):
-        raw_probabilities = config.matrix_prob[next_index] if next_index < len(config.matrix_prob) else -1
-        next_index += 1
-        strict_reference: Optional[List[float]] = None
-        row_probabilities: Any = -1
-        if isinstance(raw_probabilities, list):
-            try:
-                probs = [float(value) for value in raw_probabilities]
-            except Exception:
-                probs = []
-            if len(probs) != option_count:
-                probs = [1.0] * option_count
-            strict_reference = list(probs)
-            probs = apply_matrix_row_consistency(probs, current, row_index)
-            if any(prob > 0 for prob in probs):
-                row_probabilities = resolve_distribution_probabilities(
-                    probs,
-                    option_count,
-                    ctx,
-                    current,
-                    row_index=row_index,
-                    psycho_plan=psycho_plan,
-                )
-        else:
-            uniform_probs = apply_matrix_row_consistency([1.0] * option_count, current, row_index)
-            if any(prob > 0 for prob in uniform_probs):
-                row_probabilities = resolve_distribution_probabilities(
-                    uniform_probs,
-                    option_count,
-                    ctx,
-                    current,
-                    row_index=row_index,
-                    psycho_plan=psycho_plan,
-                )
-        if strict_ratio_question and isinstance(row_probabilities, list):
-            row_probabilities = enforce_reference_rank_order(row_probabilities, strict_reference or row_probabilities)
-        selected_index = get_tendency_index(
-            option_count,
-            row_probabilities,
-            dimension=config.question_dimension_map.get(current),
-            psycho_plan=psycho_plan,
-            question_index=current,
-            row_index=row_index,
-        )
-        selected_indices.append(selected_index)
-        pending.append((selected_index, option_count, row_index))
-    return AnswerAction(
-        question_num=current,
-        question_id=str(question.provider_question_id or ""),
-        kind="matrix",
-        matrix_indices=tuple(selected_indices),
-        record_type="matrix",
-        pending_distribution_choices=tuple(pending),
-    )
 
 
 async def build_answer_action(

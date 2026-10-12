@@ -25,7 +25,7 @@ from software.core.config.answer_datetime_window import (
     format_answer_datetime_string,
     parse_answer_datetime_string,
 )
-from software.core.psychometrics.psychometric import (
+from surveycore.core.psychometrics.psychometric import (
     DEFAULT_TARGET_ALPHA,
     MAX_TARGET_ALPHA,
     MIN_TARGET_ALPHA,

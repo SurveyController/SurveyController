@@ -7,13 +7,13 @@ from unittest.mock import MagicMock, patch
 import pytest
 from openpyxl import Workbook
 
-from software.core.reverse_fill.schema import (
+from surveycore.core.reverse_fill.schema import (
     REVERSE_FILL_FORMAT_AUTO,
     REVERSE_FILL_FORMAT_WJX_SCORE,
     REVERSE_FILL_FORMAT_WJX_SEQUENCE,
     REVERSE_FILL_FORMAT_WJX_TEXT,
 )
-from software.io.spreadsheets.wjx_excel import load_wjx_excel_export
+from surveycore.io.spreadsheets.wjx_excel import load_wjx_excel_export
 
 
 def _write_workbook(path: Path, rows: list[list[object]]) -> Path:

@@ -7,7 +7,7 @@ from software.core.engine import runtime_error_handlers
 from software.core.engine.failure_reason import FailureReason
 from software.core.engine.run_stop_policy import RunStopPolicy
 from software.core.task import ExecutionConfig, ExecutionState
-from software.providers.errors import SubmissionVerificationRequiredError
+from surveycore.providers.errors import SubmissionVerificationRequiredError
 
 
 class RuntimeErrorHandlerTests:

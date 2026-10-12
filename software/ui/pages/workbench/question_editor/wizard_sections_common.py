@@ -6,13 +6,13 @@ from PySide6.QtGui import QRegularExpressionValidator
 from PySide6.QtWidgets import QSizePolicy, QHBoxLayout, QVBoxLayout, QWidget
 from qfluentwidgets import BodyLabel, LineEdit, isDarkTheme
 
-from software.core.questions.config import QuestionEntry
-from software.core.questions.utils import (
+from surveycore.core.questions.config import QuestionEntry
+from surveycore.core.questions.utils import (
     OPTION_FILL_AI_TOKEN,
     parse_random_int_token,
     try_parse_random_int_range,
 )
-from software.providers.contracts import SurveyQuestionMeta
+from surveycore.providers.contracts import SurveyQuestionMeta
 from software.ui.helpers.ai_fill import ensure_ai_ready
 from software.ui.widgets.no_wheel import NoWheelSlider
 

@@ -5,8 +5,8 @@ from typing import Any, Dict, List, Protocol, Tuple
 from PySide6.QtWidgets import QWidget
 from qfluentwidgets import LineEdit
 
-from software.core.questions.utils import try_parse_random_int_range
-from software.providers.contracts import SurveyQuestionMeta
+from surveycore.core.questions.utils import try_parse_random_int_range
+from surveycore.providers.contracts import SurveyQuestionMeta
 from software.ui.widgets.no_wheel import NoWheelSlider
 
 from .utils import _shorten_text

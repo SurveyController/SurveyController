@@ -18,7 +18,7 @@ from qfluentwidgets import (
 )
 
 from software.ui.widgets.no_wheel import NoWheelSpinBox
-from software.core.questions.config import QuestionEntry
+from surveycore.core.questions.config import QuestionEntry
 from software.app.config import DEFAULT_FILL_TEXT
 from software.ui.helpers.qfluent_compat import resolve_mask_dialog_parent
 

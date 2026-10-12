@@ -20,8 +20,8 @@ from qfluentwidgets import (
 )
 
 from software.app.config import DIMENSION_UNGROUPED, PRESET_DIMENSIONS
-from software.core.questions.config import QuestionEntry
-from software.providers.contracts import (
+from surveycore.core.questions.config import QuestionEntry
+from surveycore.providers.contracts import (
     SurveyQuestionMeta,
     ensure_survey_question_meta,
     ensure_survey_question_metas,

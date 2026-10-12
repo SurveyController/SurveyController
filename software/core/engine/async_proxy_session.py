@@ -4,7 +4,7 @@ from typing import Callable, Optional
 
 from software.core.config.codec import UserAgentProfile
 from software.core.engine.runtime_ui_bridge import RuntimeUiBridge
-from software.core.engine.stop_signal import StopSignalLike
+from surveycore.core.engine.stop_signal import StopSignalLike
 from software.core.task import ExecutionConfig, ExecutionState
 from software.network.session_policy import (
     _select_user_agent_for_session,

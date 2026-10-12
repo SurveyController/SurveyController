@@ -4,11 +4,18 @@ import os
 import tempfile
 from openpyxl import Workbook
 from software.app.config import DEFAULT_FILL_TEXT
-from software.core.questions.schema import QuestionEntry
-from software.core.reverse_fill.schema import REVERSE_FILL_FORMAT_WJX_SCORE, REVERSE_FILL_FORMAT_WJX_SEQUENCE, REVERSE_FILL_FORMAT_WJX_TEXT, REVERSE_FILL_STATUS_BLOCKED, REVERSE_FILL_STATUS_FALLBACK, REVERSE_FILL_STATUS_REVERSE
+from surveycore.core.questions.schema import QuestionEntry
+from surveycore.core.reverse_fill.schema import (
+    REVERSE_FILL_FORMAT_WJX_SCORE,
+    REVERSE_FILL_FORMAT_WJX_SEQUENCE,
+    REVERSE_FILL_FORMAT_WJX_TEXT,
+    REVERSE_FILL_STATUS_BLOCKED,
+    REVERSE_FILL_STATUS_FALLBACK,
+    REVERSE_FILL_STATUS_REVERSE,
+)
 from software.core.reverse_fill.validation import build_enabled_reverse_fill_spec, build_reverse_fill_spec
 from software.core.config.schema import RuntimeConfig
-from software.io.spreadsheets.wjx_excel import load_wjx_excel_export
+from surveycore.io.spreadsheets.wjx_excel import load_wjx_excel_export
 
 def _write_workbook(rows: list[list[object]]) -> str:
     workbook = Workbook()

@@ -7,8 +7,8 @@ from unittest.mock import AsyncMock, patch
 from software.core.task import ExecutionConfig, ExecutionState
 from software.providers import registry
 from software.providers.common import SURVEY_PROVIDER_CREDAMO, SURVEY_PROVIDER_QQ, SURVEY_PROVIDER_WJX
-from software.providers.contracts import SurveyDefinition
-from software.providers.hooks import build_fill_http_hook, build_parse_hook
+from surveycore.providers.contracts import SurveyDefinition
+from surveycore.providers.hooks import build_fill_http_hook, build_parse_hook
 
 
 async def test_parse_survey_routes_detected_provider_directly() -> None:
@@ -176,7 +176,7 @@ async def test_attempt_submission_recovery_routes_to_selected_provider() -> None
 
 
 async def test_provider_hook_rejects_non_async_return_value() -> None:
-    with patch("software.providers.hooks._load_hook", return_value=lambda *_args, **_kwargs: True):
+    with patch("surveycore.providers.hooks._load_hook", return_value=lambda *_args, **_kwargs: True):
         hook = build_fill_http_hook(("fake.module", "sync_http_fill"))
         try:
             await hook(ExecutionConfig(), ExecutionState())
@@ -190,7 +190,7 @@ async def test_parse_hook_normalizes_tuple_result_to_survey_definition() -> None
     async def fake_parse(_url: str):
         return ([{"num": 1, "title": "Q1", "type_code": "3"}], "  标题  ")
 
-    with patch("software.providers.hooks._load_hook", return_value=fake_parse):
+    with patch("surveycore.providers.hooks._load_hook", return_value=fake_parse):
         hook = build_parse_hook(SURVEY_PROVIDER_QQ, ("fake.module", "parse"))
         definition = await hook("https://wj.qq.com/s2/demo")
 
@@ -201,7 +201,7 @@ async def test_parse_hook_normalizes_tuple_result_to_survey_definition() -> None
 
 
 async def test_parse_hook_rejects_sync_parser_result() -> None:
-    with patch("software.providers.hooks._load_hook", return_value=lambda _url: ([], "标题")):
+    with patch("surveycore.providers.hooks._load_hook", return_value=lambda _url: ([], "标题")):
         hook = build_parse_hook(SURVEY_PROVIDER_WJX, ("fake.module", "parse"))
         try:
             await hook("https://www.wjx.cn/vm/demo.aspx")

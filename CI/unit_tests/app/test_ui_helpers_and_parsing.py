@@ -11,7 +11,7 @@ from PySide6.QtCore import QAbstractAnimation, QEvent
 import software.ui.controller.run_controller_parts.parsing as parsing_module
 import software.ui.controller.ui_dispatcher as ui_dispatcher_module
 import software.ui.helpers.qfluent_compat as qfluent_compat
-from software.providers.errors import SurveyPausedError
+from surveycore.providers.errors import SurveyPausedError
 
 
 class _FakeAniGroup:

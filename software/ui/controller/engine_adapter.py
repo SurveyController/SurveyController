@@ -8,14 +8,14 @@ from inspect import isawaitable
 from typing import Any, Callable, List, Optional, cast
 
 from software.core.engine.cleanup import CleanupRunner
-from software.core.engine.runtime_actions import (
+from surveycore.core.engine.runtime_actions import (
     RuntimeActionKind,
     RuntimeActionRequest,
     RuntimeActionResult,
     ensure_runtime_action_result,
 )
 from software.core.engine.runtime_ui_bridge import RuntimeUiBridge
-from software.core.engine.stop_signal import StopSignalLike
+from surveycore.core.engine.stop_signal import StopSignalLike
 from software.core.task import ExecutionState
 
 

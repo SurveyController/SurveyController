@@ -1,6 +1,6 @@
 from typing import Dict
 
-from software.core.questions.config import QuestionEntry
+from surveycore.core.questions.config import QuestionEntry
 
 
 TYPE_CHOICES = [

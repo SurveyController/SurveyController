@@ -23,11 +23,8 @@ from qfluentwidgets import (
     TableWidget,
 )
 
-from software.core.questions.consistency import sanitize_answer_rules
-from software.providers.contracts import (
-    SurveyQuestionMeta,
-    ensure_survey_question_metas,
-)
+from surveycore.core.questions.consistency import sanitize_answer_rules
+from surveycore.providers.contracts import SurveyQuestionMeta, ensure_survey_question_metas
 from software.ui.pages.workbench.shared.table_helpers import set_table_text
 
 from .dimension_panel import DimensionGroupingPanel

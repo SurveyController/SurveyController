@@ -2,28 +2,53 @@ from __future__ import annotations
 
 import asyncio
 import logging
-import re
 import time
 import uuid
 from collections import OrderedDict
-from typing import Any, Mapping, Optional
+from typing import Any, Mapping
+
+from surveycore.tencent.provider.http_runtime import (
+    QqSubmitResult as QqSubmitResult,
+    _QQ_FILLBLANK_TOKEN_RE as _QQ_FILLBLANK_TOKEN_RE,
+    _choice_question_answer as _choice_question_answer,
+    _extract_answer_session_state as _extract_answer_session_state,
+    _extract_option_blank_id as _extract_option_blank_id,
+    _match_existing_submit_question as _match_existing_submit_question,
+    _matrix_question_answer as _matrix_question_answer,
+    _meaningful_type_code as _meaningful_type_code,
+    _merge_submit_question_meta as _merge_submit_question_meta,
+    _normalize_match_text as _normalize_match_text,
+    _normalize_submit_questions as _normalize_submit_questions,
+    _option_answer as _option_answer,
+    _option_blank_answer as _option_blank_answer,
+    _option_items as _option_items,
+    _proxy_arg as _proxy_arg,
+    _question_answer as _question_answer,
+    _question_signature as _question_signature,
+    _question_types_compatible as _question_types_compatible,
+    _raise_qq_submit_failed as _raise_qq_submit_failed,
+    _raw_questions_by_id as _raw_questions_by_id,
+    _safe_int as _safe_int,
+    _score_question_answer as _score_question_answer,
+    _submit_response_answer_hash as _submit_response_answer_hash,
+    _text_question_answer as _text_question_answer,
+    classify_qq_submit_payload as classify_qq_submit_payload,
+)
 
 import software.network.http as http_client
 from software.app.config import DEFAULT_HTTP_HEADERS, DEFAULT_USER_AGENT
 from software.core.ai.batch_runtime import assert_no_free_ai_placeholders_in_actions, prefill_free_ai_answers_for_questions
 from software.core.config.codec import UserAgentProfile
-from software.core.modes.duration_control import sample_answer_duration_seconds
-from software.core.persona.context import record_answer
-from software.core.questions.distribution import record_pending_distribution_choice
+from surveycore.core.modes.duration_control import sample_answer_duration_seconds
+from surveycore.core.persona.context import record_answer
+from surveycore.core.questions.distribution import record_pending_distribution_choice
 from software.core.task import ExecutionConfig, ExecutionState
-from software.providers.answering import AnswerAction
-from software.providers.answering.option_fill import option_fill_text_map
-from software.providers.answering.recording import record_answer_action
-from software.providers.http_logic import build_http_logic_plan
-from software.providers.http_progress import update_http_submit_step
+from surveycore.providers.answering import AnswerAction
+from surveycore.providers.answering.recording import record_answer_action
+from surveycore.providers.http_logic import build_http_logic_plan
+from surveycore.providers.http_progress import update_http_submit_step
 from software.network.session_policy import SubmitProxyUnavailableError, mark_submit_proxy_success, release_submit_proxy
-from software.providers.common import SURVEY_PROVIDER_QQ
-from software.providers.contracts import SurveyQuestionMeta, ensure_survey_question_metas
+from surveycore.providers.contracts import SurveyQuestionMeta
 from tencent.provider.answering_builders import build_answer_action
 from tencent.provider.parser import (
     _build_qq_api_headers,
@@ -31,339 +56,16 @@ from tencent.provider.parser import (
     _ensure_qq_api_ok,
     _extract_qq_identifiers,
     _request_qq_api,
-    _standardize_qq_questions,
 )
 
 
-class QqSubmitResult:
-    SUCCESS = "success"
-    FAILED = "failed"
-
-
 _QQ_SUBMIT_TIMEOUT_SECONDS = 30
-_QQ_FILLBLANK_TOKEN_RE = re.compile(r"\{(fillblank-[^{}]+)\}", re.IGNORECASE)
-
-
-def _proxy_arg(proxy_address: str | None) -> Any:
-    proxy = str(proxy_address or "").strip()
-    return proxy if proxy else {}
 
 
 def _headers(page_url: str, user_agent: str | None = None) -> dict[str, str]:
     headers = _build_qq_api_headers(page_url)
     headers["User-Agent"] = str(user_agent or "").strip() or DEFAULT_USER_AGENT
     return headers
-
-
-def _safe_int(value: Any) -> int:
-    try:
-        return int(value or 0)
-    except Exception:
-        return 0
-
-
-def _raw_questions_by_id(questions: list[Any]) -> dict[str, Mapping[str, Any]]:
-    result: dict[str, Mapping[str, Any]] = {}
-    for item in questions:
-        if not isinstance(item, Mapping):
-            continue
-        question_id = str(item.get("id") or "").strip()
-        if question_id:
-            result[question_id] = item
-    return result
-
-
-def _normalize_match_text(raw: Any) -> str:
-    return "".join(str(raw or "").split())
-
-
-def _meaningful_type_code(question: SurveyQuestionMeta) -> str:
-    type_code = str(getattr(question, "type_code", "") or "").strip()
-    return "" if type_code in {"", "0"} else type_code
-
-
-def _question_signature(question: SurveyQuestionMeta) -> tuple[str, str]:
-    provider_type = str(getattr(question, "provider_type", "") or "").strip().lower()
-    type_marker = provider_type or _meaningful_type_code(question)
-    return type_marker, _normalize_match_text(getattr(question, "title", ""))
-
-
-def _question_types_compatible(current: SurveyQuestionMeta, existing: SurveyQuestionMeta) -> bool:
-    current_provider_type = str(getattr(current, "provider_type", "") or "").strip().lower()
-    existing_provider_type = str(getattr(existing, "provider_type", "") or "").strip().lower()
-    if current_provider_type and existing_provider_type:
-        return current_provider_type == existing_provider_type
-    current_type = _meaningful_type_code(current)
-    existing_type = _meaningful_type_code(existing)
-    if current_type and existing_type:
-        return current_type == existing_type
-    return True
-
-
-def _merge_submit_question_meta(existing: SurveyQuestionMeta, current: SurveyQuestionMeta) -> SurveyQuestionMeta:
-    merged = current.to_dict()
-    merged["num"] = int(getattr(existing, "num", 0) or merged.get("num") or 0)
-    merged["display_num"] = getattr(existing, "display_num", None)
-    if not str(merged.get("title") or "").strip():
-        merged["title"] = str(getattr(existing, "title", "") or "").strip()
-    if not str(merged.get("description") or "").strip():
-        merged["description"] = str(getattr(existing, "description", "") or "").strip()
-    merged["has_jump"] = bool(getattr(existing, "has_jump", False))
-    merged["jump_rules"] = list(getattr(existing, "jump_rules", []) or [])
-    merged["has_display_condition"] = bool(getattr(existing, "has_display_condition", False))
-    merged["display_conditions"] = list(getattr(existing, "display_conditions", []) or [])
-    merged["has_dependent_display_logic"] = bool(getattr(existing, "has_dependent_display_logic", False))
-    merged["controls_display_targets"] = list(getattr(existing, "controls_display_targets", []) or [])
-    merged["logic_parse_status"] = str(getattr(existing, "logic_parse_status", "") or merged.get("logic_parse_status") or "")
-    merged["question_media"] = list(getattr(existing, "question_media", []) or merged.get("question_media") or [])
-    merged["required"] = bool(getattr(existing, "required", merged.get("required", False)))
-    return ensure_survey_question_metas([merged], default_provider=SURVEY_PROVIDER_QQ)[0]
-
-
-def _match_existing_submit_question(
-    current: SurveyQuestionMeta,
-    existing_by_signature: dict[tuple[str, str], list[SurveyQuestionMeta]],
-    ordered_existing: list[SurveyQuestionMeta],
-    index: int,
-) -> Optional[SurveyQuestionMeta]:
-    signature = _question_signature(current)
-    if signature[1]:
-        candidates = existing_by_signature.get(signature) or []
-        if candidates:
-            return candidates.pop(0)
-    if index < len(ordered_existing):
-        candidate = ordered_existing[index]
-        if _question_types_compatible(current, candidate):
-            return candidate
-    return None
-
-
-def _normalize_submit_questions(config: ExecutionConfig, raw_questions: list[Any]) -> list[SurveyQuestionMeta]:
-    normalized_inputs = _standardize_qq_questions(
-        [item for item in raw_questions if isinstance(item, Mapping)]
-    )
-    normalized_questions = ensure_survey_question_metas(
-        normalized_inputs,
-        default_provider=SURVEY_PROVIDER_QQ,
-    )
-    current_questions = [item for item in normalized_questions if not bool(getattr(item, "is_description", False))]
-    ordered_existing = [
-        item
-        for _, item in sorted((config.questions_metadata or {}).items(), key=lambda pair: int(pair[0]))
-        if not bool(getattr(item, "is_description", False))
-    ]
-    existing_by_signature: dict[tuple[str, str], list[SurveyQuestionMeta]] = {}
-    for item in ordered_existing:
-        signature = _question_signature(item)
-        if signature[1]:
-            existing_by_signature.setdefault(signature, []).append(item)
-
-    merged_questions: list[SurveyQuestionMeta] = []
-    for index, current in enumerate(current_questions):
-        existing = _match_existing_submit_question(
-            current,
-            existing_by_signature,
-            ordered_existing,
-            index,
-        )
-        merged_questions.append(_merge_submit_question_meta(existing, current) if existing is not None else current)
-    return merged_questions
-
-
-def _option_items(raw_question: Mapping[str, Any]) -> list[Mapping[str, Any]]:
-    options = raw_question.get("options")
-    if isinstance(options, list):
-        return [item for item in options if isinstance(item, Mapping)]
-
-    provider_type = str(raw_question.get("type") or "").strip()
-    if provider_type not in {"star", "nps", "matrix_star"}:
-        return []
-    try:
-        count = int(raw_question.get("star_num") or 0)
-    except Exception:
-        count = 0
-    if count <= 0:
-        return []
-    raw_start = raw_question.get("star_begin_num")
-    try:
-        start = int(raw_start) if raw_start is not None else (0 if provider_type == "nps" else 1)
-    except Exception:
-        start = 0 if provider_type == "nps" else 1
-    return [{"id": "", "text": str(start + index)} for index in range(count)]
-
-
-def _extract_option_blank_id(value: Any, *, depth: int = 0) -> str:
-    if depth > 4 or value is None:
-        return ""
-    if isinstance(value, Mapping):
-        for key, item in value.items():
-            key_text = str(key or "").strip()
-            match = _QQ_FILLBLANK_TOKEN_RE.search(key_text)
-            if match:
-                return str(match.group(1) or "").strip()
-            lowered_key = key_text.lower()
-            if "fillblank" in lowered_key:
-                raw_id = str(item or "").strip()
-                return raw_id or "fillblank"
-            nested = _extract_option_blank_id(item, depth=depth + 1)
-            if nested:
-                return nested
-        return ""
-    if isinstance(value, (list, tuple, set)):
-        for item in value:
-            nested = _extract_option_blank_id(item, depth=depth + 1)
-            if nested:
-                return nested
-        return ""
-    match = _QQ_FILLBLANK_TOKEN_RE.search(str(value or ""))
-    return str(match.group(1) or "").strip() if match else ""
-
-
-def _option_blank_answer(raw_option: Mapping[str, Any], fill_text: str) -> dict[str, str]:
-    blank_id = _extract_option_blank_id(raw_option)
-    if not blank_id:
-        blank_id = str(raw_option.get("id") or "").strip()
-    return {
-        "id": blank_id,
-        "text": str(fill_text or "").strip(),
-    }
-
-
-def _option_answer(raw_option: Mapping[str, Any], *, checked: bool) -> dict[str, Any]:
-    return {
-        "id": str(raw_option.get("id") or "").strip(),
-        "text": str(raw_option.get("text") or "").strip(),
-        "checked": 1 if checked else 0,
-    }
-
-
-def _score_question_answer(raw_question: Mapping[str, Any], action: AnswerAction) -> dict[str, Any]:
-    provider_type = str(raw_question.get("type") or "").strip()
-    option_items = _option_items(raw_question)
-    if not option_items:
-        raise RuntimeError(f"腾讯问卷第{int(action.question_num or 0)}题没有可提交的评分选项")
-    selected_index: int | None = action.scalar_value
-    if selected_index is None and action.selected_indices:
-        selected_index = int(action.selected_indices[0])
-    if selected_index is None:
-        normalized_index = -1
-    else:
-        try:
-            normalized_index = int(selected_index)
-        except Exception:
-            normalized_index = -1
-    if normalized_index < 0 or normalized_index >= len(option_items):
-        raise RuntimeError(f"腾讯问卷第{int(action.question_num or 0)}题没有生成评分答案")
-    selected_option = option_items[normalized_index]
-    question_id = str(raw_question.get("id") or action.question_id).strip()
-    score_value = str(selected_option.get("text") or "").strip()
-    if not score_value:
-        score_value = str(selected_option.get("id") or "").strip()
-    if not score_value:
-        score_value = str(normalized_index)
-    answer_id = question_id
-    if provider_type in {"star", "nps"} and score_value:
-        answer_id = f"{question_id}-{score_value}"
-    return {
-        "id": answer_id,
-        "type": provider_type,
-        "answer": score_value,
-    }
-
-
-def _choice_question_answer(raw_question: Mapping[str, Any], action: AnswerAction) -> dict[str, Any]:
-    selected = {int(item) for item in action.selected_indices}
-    fill_by_index = option_fill_text_map(action.option_fill_texts)
-    blanks: list[dict[str, str]] = []
-    options = [
-        _option_answer(option, checked=index in selected)
-        for index, option in enumerate(_option_items(raw_question))
-    ]
-    raw_options = _option_items(raw_question)
-    for index, option in enumerate(raw_options):
-        if index not in selected:
-            continue
-        fill_text = fill_by_index.get(index, "")
-        if not fill_text:
-            continue
-        blanks.append(_option_blank_answer(option, fill_text))
-    return {
-        "id": str(raw_question.get("id") or action.question_id).strip(),
-        "type": str(raw_question.get("type") or "").strip(),
-        "blanks": blanks,
-        "options": options,
-    }
-
-
-def _text_question_answer(raw_question: Mapping[str, Any], action: AnswerAction) -> dict[str, Any]:
-    text_values = [str(item or "").strip() for item in action.text_values if str(item or "").strip()]
-    return {
-        "id": str(raw_question.get("id") or action.question_id).strip(),
-        "type": str(raw_question.get("type") or "text").strip(),
-        "text": "\n".join(text_values),
-    }
-
-
-def _matrix_question_answer(raw_question: Mapping[str, Any], action: AnswerAction) -> list[dict[str, Any]]:
-    rows = raw_question.get("sub_titles")
-    normalized_answers: list[dict[str, Any]] = []
-    question_id = str(raw_question.get("id") or action.question_id).strip()
-    provider_type = str(raw_question.get("type") or "").strip()
-    if isinstance(rows, list):
-        option_template = _option_items(raw_question)
-        if not option_template:
-            raise RuntimeError(f"腾讯问卷第{int(action.question_num or 0)}题没有可提交的矩阵列")
-        for row_index, row in enumerate(rows):
-            if not isinstance(row, Mapping):
-                continue
-            selected_index = action.matrix_indices[row_index] if row_index < len(action.matrix_indices) else -1
-            try:
-                selected_index = int(selected_index)
-            except Exception:
-                selected_index = -1
-            if selected_index < 0 or selected_index >= len(option_template):
-                raise RuntimeError(f"腾讯问卷第{int(action.question_num or 0)}题第{row_index + 1}行没有生成矩阵答案")
-            selected_option = option_template[selected_index]
-            row_id = str(row.get("id") or "").strip()
-            if provider_type == "matrix_radio":
-                option_id = str(selected_option.get("id") or "").strip()
-                if not option_id:
-                    raise RuntimeError(f"腾讯问卷第{int(action.question_num or 0)}题第{row_index + 1}行缺少矩阵列 id")
-                if row_id:
-                    composite_id = f"{question_id}_{row_id}_{option_id}"
-                else:
-                    composite_id = f"{question_id}_{option_id}"
-                answer_value = "on"
-            else:
-                score_value = str(selected_option.get("text") or "").strip()
-                if not score_value:
-                    score_value = str(selected_index + 1)
-                if row_id:
-                    composite_id = f"{question_id}-{row_id}-{score_value}"
-                else:
-                    composite_id = f"{question_id}-{score_value}"
-                answer_value = "on"
-            normalized_answers.append(
-                {
-                    "id": composite_id,
-                    "type": provider_type,
-                    "answer": answer_value,
-                }
-            )
-    if not normalized_answers:
-        raise RuntimeError(f"腾讯问卷第{int(action.question_num or 0)}题没有生成矩阵答案")
-    return normalized_answers
-
-
-def _question_answer(raw_question: Mapping[str, Any], action: AnswerAction) -> dict[str, Any] | list[dict[str, Any]]:
-    provider_type = str(raw_question.get("type") or "").strip()
-    if action.kind == "text" or provider_type in {"text", "textarea", "number"}:
-        return _text_question_answer(raw_question, action)
-    if provider_type in {"star", "nps"}:
-        return _score_question_answer(raw_question, action)
-    if action.kind == "matrix" or provider_type.startswith("matrix_"):
-        return _matrix_question_answer(raw_question, action)
-    return _choice_question_answer(raw_question, action)
 
 
 def _record_action(ctx: ExecutionState, action: AnswerAction) -> None:
@@ -404,22 +106,6 @@ async def _fetch_submit_source(
     return answer_session_id, session_data, raw_questions
 
 
-def _submit_response_answer_hash(payload: Mapping[str, Any]) -> str:
-    data = payload.get("data")
-    if not isinstance(data, Mapping):
-        return ""
-    return str(data.get("answer_hash") or "").strip()
-
-
-def _extract_answer_session_state(session_data: Mapping[str, Any]) -> tuple[int, int]:
-    answer_session = session_data.get("answer_session")
-    if not isinstance(answer_session, Mapping):
-        return 0, 0
-    last_submitted_at = _safe_int(answer_session.get("last_submitted_at"))
-    last_answer_id = _safe_int(answer_session.get("last_answer_id"))
-    return last_submitted_at, last_answer_id
-
-
 async def _confirm_qq_submit_persisted(
     survey_id: str,
     hash_value: str,
@@ -456,18 +142,6 @@ async def _confirm_qq_submit_persisted(
         if attempt < 2:
             await asyncio.sleep(0.2)
     raise RuntimeError("腾讯问卷提交后未确认到服务端已记录答案")
-
-
-def classify_qq_submit_payload(payload: Mapping[str, Any]) -> str:
-    code = str(payload.get("code") or "").upper()
-    if code in {"OK", "0"}:
-        return QqSubmitResult.SUCCESS
-    return QqSubmitResult.FAILED
-
-
-def _raise_qq_submit_failed(payload: Mapping[str, Any]) -> None:
-    message = str(payload.get("message") or payload.get("msg") or payload.get("code") or payload).strip()
-    raise RuntimeError(f"腾讯问卷提交失败：{message}")
 
 
 async def brush_qq_http(

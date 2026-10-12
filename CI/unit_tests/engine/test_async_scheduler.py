@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import asyncio
 
-from software.core.engine.async_scheduler import AsyncScheduler
+from surveycore.core.engine.async_scheduler import AsyncScheduler
 
 
 async def test_scheduler_enforces_bounded_tokens() -> None:

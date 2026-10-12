@@ -18,7 +18,7 @@ from qfluentwidgets import (
     TableWidget,
 )
 
-from software.core.reverse_fill.schema import (
+from surveycore.core.reverse_fill.schema import (
     REVERSE_FILL_FORMAT_AUTO,
     REVERSE_FILL_FORMAT_WJX_SCORE,
     REVERSE_FILL_FORMAT_WJX_SEQUENCE,
@@ -27,10 +27,7 @@ from software.core.reverse_fill.schema import (
 )
 from software.core.config.schema import RuntimeConfig
 from software.providers.common import SURVEY_PROVIDER_WJX, normalize_survey_provider
-from software.providers.contracts import (
-    SurveyQuestionMeta,
-    ensure_survey_question_metas,
-)
+from surveycore.providers.contracts import SurveyQuestionMeta, ensure_survey_question_metas
 from software.ui.pages.workbench.reverse_fill.actions import (
     apply_excel_source_path,
     bind_reverse_fill_events,

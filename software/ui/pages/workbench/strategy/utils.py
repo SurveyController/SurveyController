@@ -3,8 +3,8 @@ from __future__ import annotations
 from typing import Any, Iterable, List, Optional
 
 from software.app.config import DIMENSION_UNGROUPED
-from software.core.psychometrics.ordinal_options import infer_ordinal_option_mapping
-from software.core.questions.config import QuestionEntry
+from surveycore.core.psychometrics.ordinal_options import infer_ordinal_option_mapping
+from surveycore.core.questions.config import QuestionEntry
 
 DIMENSION_SUPPORTED_TYPES = {"scale", "score", "matrix"}
 _BIAS_TEXT_MAP = {

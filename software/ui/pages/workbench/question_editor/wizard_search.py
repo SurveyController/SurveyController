@@ -17,7 +17,7 @@ from PySide6.QtWidgets import (
 from qfluentwidgets import ListWidget, SearchLineEdit, isDarkTheme
 from shiboken6 import isValid
 
-from software.providers.contracts import SurveyQuestionMeta
+from surveycore.providers.contracts import SurveyQuestionMeta
 
 from .constants import _get_entry_type_label
 from .wizard_search_popup import (

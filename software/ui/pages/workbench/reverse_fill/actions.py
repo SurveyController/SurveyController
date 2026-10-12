@@ -15,7 +15,7 @@ from software.providers.common import (
     is_wjx_survey_url,
     normalize_survey_provider,
 )
-from software.providers.contracts import ensure_survey_question_metas
+from surveycore.providers.contracts import ensure_survey_question_metas
 from software.ui.pages.workbench.reverse_fill.logic import (
     is_supported_excel_path,
     iter_supported_drop_paths,

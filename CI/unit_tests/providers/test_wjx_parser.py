@@ -5,6 +5,7 @@ from unittest.mock import AsyncMock
 import pytest
 
 from wjx.provider import parser as wjx_parser
+from surveycore.wjx.provider import parser as core_parser
 
 
 class _FakeHttpResponse:
@@ -191,8 +192,8 @@ class WjxParserTests:
 
         patch_attrs(
             (wjx_parser.http_client, "aget", aget),
-            (wjx_parser, "parse_survey_questions_from_html", lambda _html: [{"num": 1, "title": "Q1", "type_code": "3"}]),
-            (wjx_parser, "extract_survey_title_from_html", lambda _html: "  标题  "),
+            (core_parser, "parse_survey_questions_from_html", lambda _html: [{"num": 1, "title": "Q1", "type_code": "3"}]),
+            (core_parser, "extract_survey_title_from_html", lambda _html: "  标题  "),
         )
 
         info, title = await wjx_parser.parse_wjx_survey("https://www.wjx.cn/vm/demo.aspx")
@@ -205,8 +206,8 @@ class WjxParserTests:
     async def test_parse_wjx_survey_raises_when_http_parse_result_is_empty(self, patch_attrs) -> None:
         patch_attrs(
             (wjx_parser.http_client, "aget", AsyncMock(return_value=_FakeHttpResponse("<html><body>http-empty</body></html>"))),
-            (wjx_parser, "parse_survey_questions_from_html", lambda _html: []),
-            (wjx_parser, "extract_survey_title_from_html", lambda _html: "HTTP 标题"),
+            (core_parser, "parse_survey_questions_from_html", lambda _html: []),
+            (core_parser, "extract_survey_title_from_html", lambda _html: "HTTP 标题"),
             (wjx_parser.asyncio, "sleep", AsyncMock()),
         )
 
@@ -225,8 +226,8 @@ class WjxParserTests:
 
         patch_attrs(
             (wjx_parser.http_client, "aget", aget),
-            (wjx_parser, "parse_survey_questions_from_html", lambda html: [] if "temp-empty" in html else [{"num": 1, "title": "Q1", "type_code": "3"}]),
-            (wjx_parser, "extract_survey_title_from_html", lambda _html: "标题"),
+            (core_parser, "parse_survey_questions_from_html", lambda html: [] if "temp-empty" in html else [{"num": 1, "title": "Q1", "type_code": "3"}]),
+            (core_parser, "extract_survey_title_from_html", lambda _html: "标题"),
             (wjx_parser.asyncio, "sleep", sleep),
         )
 
@@ -252,8 +253,8 @@ class WjxParserTests:
 
         patch_attrs(
             (wjx_parser.http_client, "aget", AsyncMock(return_value=_FakeHttpResponse(static_html))),
-            (wjx_parser, "parse_survey_questions_from_html", lambda _html: [{"num": 23, "display_num": 22, "title": "Q23", "type_code": "2"}]),
-            (wjx_parser, "extract_survey_title_from_html", lambda _html: "标题"),
+            (core_parser, "parse_survey_questions_from_html", lambda _html: [{"num": 23, "display_num": 22, "title": "Q23", "type_code": "2"}]),
+            (core_parser, "extract_survey_title_from_html", lambda _html: "标题"),
         )
 
         info, title = await wjx_parser.parse_wjx_survey("https://www.wjx.cn/vm/demo.aspx")

@@ -1,6 +1,6 @@
 from typing import Any, List
 
-from software.core.psychometrics.ordinal_options import infer_ordinal_option_mapping
+from surveycore.core.psychometrics.ordinal_options import infer_ordinal_option_mapping
 
 
 

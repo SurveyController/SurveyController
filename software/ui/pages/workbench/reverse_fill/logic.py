@@ -4,7 +4,7 @@ import os
 from dataclasses import dataclass
 from typing import Any, Iterable
 
-from software.core.reverse_fill.schema import (
+from surveycore.core.reverse_fill.schema import (
     REVERSE_FILL_STATUS_FALLBACK,
     REVERSE_FILL_STATUS_REVERSE,
     ReverseFillSpec,

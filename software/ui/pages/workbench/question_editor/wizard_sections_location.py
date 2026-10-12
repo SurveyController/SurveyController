@@ -6,7 +6,7 @@ from PySide6.QtCore import Qt
 from PySide6.QtWidgets import QHBoxLayout, QSizePolicy, QVBoxLayout, QWidget
 from qfluentwidgets import BodyLabel, CardWidget, ComboBox
 
-from software.core.questions.config import QuestionEntry
+from surveycore.core.questions.config import QuestionEntry
 
 from .location_options import (
     AUTO_LOCATION_TEXT,

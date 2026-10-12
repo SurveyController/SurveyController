@@ -16,9 +16,9 @@ from software.core.config.codec import (
     serialize_runtime_config,
 )
 from software.core.config.schema import RuntimeConfig
-from software.core.questions.schema import QuestionEntry
-from software.core.reverse_fill.schema import REVERSE_FILL_FORMAT_WJX_SEQUENCE
-from software.providers.contracts import SurveyQuestionMeta
+from surveycore.core.questions.schema import QuestionEntry
+from surveycore.core.reverse_fill.schema import REVERSE_FILL_FORMAT_WJX_SEQUENCE
+from surveycore.providers.contracts import SurveyQuestionMeta
 
 class ConfigCodecTests:
 

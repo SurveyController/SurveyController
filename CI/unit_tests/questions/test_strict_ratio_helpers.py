@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from types import SimpleNamespace
 
-import software.core.questions.strict_ratio as strict_ratio
+import surveycore.core.questions.strict_ratio as strict_ratio
 
 
 class StrictRatioHelperTests:

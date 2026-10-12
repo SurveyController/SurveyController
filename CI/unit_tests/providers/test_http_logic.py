@@ -2,12 +2,9 @@ from __future__ import annotations
 
 import pytest
 
-from software.providers.answering import AnswerAction
-from software.providers.contracts import (
-    LOGIC_PARSE_STATUS_UNKNOWN,
-    SurveyQuestionMeta,
-)
-from software.providers.http_logic import build_http_logic_plan, get_http_logic_fallback_reason
+from surveycore.providers.answering import AnswerAction
+from surveycore.providers.contracts import LOGIC_PARSE_STATUS_UNKNOWN, SurveyQuestionMeta
+from surveycore.providers.http_logic import build_http_logic_plan, get_http_logic_fallback_reason
 
 
 async def _choice_action(question: SurveyQuestionMeta):

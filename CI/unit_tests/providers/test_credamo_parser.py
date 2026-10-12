@@ -4,18 +4,20 @@ from unittest.mock import AsyncMock, patch
 
 import pytest
 
+from surveycore.credamo.provider import parser as core_parser
+
 from credamo.provider import parser
-from software.core.questions.default_builder import build_default_question_entries
-from software.core.questions.normalization import configure_probabilities
-from software.core.questions.schema import QuestionEntry
+from surveycore.core.questions.default_builder import build_default_question_entries
+from surveycore.core.questions.normalization import configure_probabilities
+from surveycore.core.questions.schema import QuestionEntry
 
 
 class CredamoParserTests:
     def test_infer_type_code_uses_page_block_kind(self) -> None:
-        assert parser._infer_type_code({'question_kind': 'dropdown'}) == '7'
-        assert parser._infer_type_code({'question_kind': 'scale'}) == '5'
-        assert parser._infer_type_code({'question_kind': 'order'}) == '11'
-        assert parser._infer_type_code({'question_kind': 'multiple'}) == '4'
+        assert core_parser._infer_type_code({'question_kind': 'dropdown'}) == '7'
+        assert core_parser._infer_type_code({'question_kind': 'scale'}) == '5'
+        assert core_parser._infer_type_code({'question_kind': 'order'}) == '11'
+        assert core_parser._infer_type_code({'question_kind': 'multiple'}) == '4'
 
     def test_normalize_question_keeps_credamo_specific_type(self) -> None:
         question = parser._normalize_question({'question_num': 'Q3', 'title': 'Q3', 'question_kind': 'dropdown', 'provider_type': 'dropdown', 'option_texts': ['选项 1', '选项 2', '选项 3'], 'text_inputs': 0, 'page': 2, 'question_id': 'question-2'}, fallback_num=3)
@@ -117,15 +119,15 @@ class CredamoParserTests:
         assert question['forced_option_text'] == '非常不满意'
 
     def test_helper_parsers_cover_arithmetic_counts_and_forced_texts(self) -> None:
-        assert parser._safe_eval_arithmetic_expression("100 + 20 / 2") == 110.0
-        assert parser._safe_eval_arithmetic_expression("1/0") is None
-        assert parser._parse_count_token("十二") == 12
-        assert parser._parse_count_token("abc") is None
-        assert parser._extract_forced_texts('请填写：“你好”', extra_fragments=['请填写：“你好”']) == ['你好']
-        assert parser._extract_arithmetic_option("请问100+100等于多少", ["300", "200", "500"])[0] == 1
+        assert core_parser._safe_eval_arithmetic_expression("100 + 20 / 2") == 110.0
+        assert core_parser._safe_eval_arithmetic_expression("1/0") is None
+        assert core_parser._parse_count_token("十二") == 12
+        assert core_parser._parse_count_token("abc") is None
+        assert core_parser._extract_forced_texts('请填写：“你好”', extra_fragments=['请填写：“你好”']) == ['你好']
+        assert core_parser._extract_arithmetic_option("请问100+100等于多少", ["300", "200", "500"])[0] == 1
 
     def test_extract_multi_select_limits_clamps_and_merges_range(self) -> None:
-        min_limit, max_limit = parser._extract_multi_select_limits(
+        min_limit, max_limit = core_parser._extract_multi_select_limits(
             "请至少选三项，最多选十项，也可以选择2-4项",
             option_count=4,
             extra_fragments=["最少选两项"],
@@ -182,8 +184,8 @@ class CredamoParserTests:
             {'type_code': '5', 'question_kind': 'scale', 'options': 7, 'text_inputs': 0, 'title': '我认为AI购物助手...'}
         ]
 
-        assert not parser._page_has_answerable_questions(intro_only)
-        assert parser._page_has_answerable_questions(real_questions)
+        assert not core_parser._page_has_answerable_questions(intro_only)
+        assert core_parser._page_has_answerable_questions(real_questions)
 
     def test_default_builder_locks_credamo_force_select_question(self) -> None:
         entries = build_default_question_entries([{'num': 7, 'title': '本题检测是否认真作答，请选 非常不满意', 'type_code': '3', 'options': 4, 'option_texts': ['非常不满意', '不满意', '满意', '非常满意'], 'provider': 'credamo', 'provider_question_id': 'question-7', 'provider_page_id': '1', 'forced_option_index': 0, 'forced_option_text': '非常不满意'}], survey_url='https://www.credamo.com/answer.html#/s/demo')

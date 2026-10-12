@@ -9,8 +9,8 @@ from software.core.ai.runtime import (
 )
 from software.core.task import ExecutionConfig, ExecutionState
 from software.integrations.ai import free_api
-from software.providers.answering import AnswerAction
-from software.providers.contracts import SurveyQuestionMeta
+from surveycore.providers.answering import AnswerAction
+from surveycore.providers.contracts import SurveyQuestionMeta
 
 
 @pytest.mark.asyncio

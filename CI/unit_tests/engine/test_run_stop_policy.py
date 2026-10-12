@@ -2,7 +2,7 @@ from __future__ import annotations
 import threading
 from software.core.engine.failure_reason import FailureReason
 from software.core.engine.run_stop_policy import RunStopPolicy
-from software.core.reverse_fill.schema import ReverseFillSampleRow, ReverseFillSpec
+from surveycore.core.reverse_fill.schema import ReverseFillSampleRow, ReverseFillSpec
 from software.core.task import ExecutionConfig, ExecutionState
 
 class RunStopPolicyTests:

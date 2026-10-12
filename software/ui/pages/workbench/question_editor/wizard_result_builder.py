@@ -6,13 +6,13 @@ from PySide6.QtWidgets import QButtonGroup
 from qfluentwidgets import LineEdit, SwitchButton
 
 from software.app.config import DEFAULT_FILL_TEXT
-from software.core.questions.config import QuestionEntry
-from software.core.questions.utils import (
+from surveycore.core.questions.config import QuestionEntry
+from surveycore.core.questions.utils import (
     OPTION_FILL_AI_TOKEN,
     build_random_int_token,
     serialize_random_int_range,
 )
-from software.providers.contracts import SurveyQuestionMeta
+from surveycore.providers.contracts import SurveyQuestionMeta
 from software.ui.widgets.no_wheel import NoWheelSlider
 
 from .wizard_sections import (
@@ -74,7 +74,7 @@ def get_results(source: WizardResultSource) -> Dict[int, Any]:
 
 
 def get_text_results(source: WizardResultSource) -> Dict[int, List[str]]:
-    from software.core.questions.text_shared import MULTI_TEXT_DELIMITER
+    from surveycore.core.questions.text_shared import MULTI_TEXT_DELIMITER
 
     result: Dict[int, List[str]] = {}
     for idx, edits in source.text_edit_map.items():

@@ -4,7 +4,7 @@ from dataclasses import dataclass
 from typing import Iterable, Optional
 import logging
 
-from software.core.engine.stop_signal import StopSignalLike
+from surveycore.core.engine.stop_signal import StopSignalLike
 from software.core.engine.runtime_ui_bridge import RuntimeUiBridge
 from software.core.task import ExecutionState, ProxyLease
 from software.app.config import PROXY_MAX_PROXIES
@@ -28,11 +28,11 @@ class SubmitProxyUnavailableError(RuntimeError):
     pass
 
 def _ensure_proxy_pool_deque_locked(ctx: ExecutionState) -> deque:
-    pool = ctx.config.proxy_ip_pool
+    pool = ctx.app_config.proxy_ip_pool
     if isinstance(pool, deque):
         return pool
     normalized_pool = deque(pool or [])
-    ctx.config.proxy_ip_pool = normalized_pool
+    ctx.app_config.proxy_ip_pool = normalized_pool
     return normalized_pool
 
 
@@ -155,7 +155,7 @@ def _purge_unusable_proxy_pool_locked(
         kept.append(lease)
     if removed:
         logging.info("代理池已清理无效/重复代理 %s 个", removed)
-    ctx.config.proxy_ip_pool = kept
+    ctx.app_config.proxy_ip_pool = kept
     if removed:
         ctx.notify_runtime_change()
     return seen
@@ -359,7 +359,7 @@ async def _select_proxy_for_session_async(
     stop_signal: Optional[StopSignalLike] = None,
     wait: bool = False,
 ) -> Optional[str]:
-    if not ctx.config.random_proxy_ip_enabled:
+    if not ctx.app_config.random_proxy_ip_enabled:
         return None
     selected: Optional[ProxyLease] = None
     with ctx.lock:
@@ -493,7 +493,7 @@ def _discard_unresponsive_proxy(ctx: ExecutionState, proxy_address: str) -> None
                 removed = True
                 continue
             retained.append(lease)
-        ctx.config.proxy_ip_pool = retained
+        ctx.app_config.proxy_ip_pool = retained
         if removed:
             logging.info(f"已移除无响应代理：{mask_proxy_for_log(proxy_address)}")
             ctx.notify_runtime_change()

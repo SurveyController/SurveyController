@@ -4,8 +4,8 @@ from types import SimpleNamespace
 
 from PySide6.QtWidgets import QApplication, QLabel
 
-from software.core.questions.config import QuestionEntry
-from software.providers.contracts import SurveyQuestionMeta
+from surveycore.core.questions.config import QuestionEntry
+from surveycore.providers.contracts import SurveyQuestionMeta
 from software.ui.pages.workbench.question_editor import utils as editor_utils
 from software.ui.pages.workbench.question_editor import location_options
 

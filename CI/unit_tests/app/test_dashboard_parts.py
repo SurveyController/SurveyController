@@ -6,8 +6,8 @@ from unittest.mock import MagicMock
 import software.ui.pages.workbench.dashboard.parts.config_io as config_io_module
 import software.ui.pages.workbench.dashboard.parts.survey_parse as survey_parse_module
 from software.core.config.schema import RuntimeConfig
-from software.core.questions.config import QuestionEntry
-from software.providers.contracts import SurveyQuestionMeta
+from surveycore.core.questions.config import QuestionEntry
+from surveycore.providers.contracts import SurveyQuestionMeta
 from software.ui.pages.workbench.dashboard.parts.config_io import DashboardConfigIOMixin
 from software.ui.pages.workbench.dashboard.parts.survey_parse import (
     _QQ_LOGIN_REQUIRED_MESSAGE,

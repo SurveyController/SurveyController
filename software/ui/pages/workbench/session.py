@@ -6,14 +6,11 @@ from typing import Any, List, Optional
 from PySide6.QtCore import QObject, Signal
 from PySide6.QtWidgets import QDialog, QWidget
 
-from software.core.questions.config import QuestionEntry
+from surveycore.core.questions.config import QuestionEntry
 from software.core.config.schema import RuntimeConfig
 from software.core.config.codec import build_runtime_config_snapshot
 from software.logging.action_logger import log_action
-from software.providers.contracts import (
-    SurveyQuestionMeta,
-    ensure_survey_question_metas,
-)
+from surveycore.providers.contracts import SurveyQuestionMeta, ensure_survey_question_metas
 from software.ui.pages.workbench.question_editor.add_dialog import (
     QuestionAddDialog,
 )

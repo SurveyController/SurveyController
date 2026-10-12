@@ -5,6 +5,8 @@ from unittest.mock import AsyncMock
 
 import pytest
 
+from surveycore.tencent.provider import parser as core_parser
+
 from tencent.provider import parser as qq_parser
 
 
@@ -100,7 +102,7 @@ class TencentParserTests:
         info, title = await qq_parser._fetch_qq_survey_via_http("123", "hash")
 
         assert title == "腾讯问卷标题 - 腾讯问卷"
-        assert qq_parser._normalize_qq_title("标题 - 腾讯问卷") == "标题"
+        assert core_parser._normalize_qq_title("标题 - 腾讯问卷") == "标题"
         assert info[0]["provider_question_id"] == "q1"
         assert "meta:zhs" in calls
         assert "questions:zh" in calls
@@ -158,8 +160,8 @@ class TencentParserTests:
         normalized = qq_parser._standardize_qq_questions([question, rating_question, unsupported_question])
 
         first = normalized[0]
-        assert qq_parser._normalize_qq_option_text(" 其他 _{fillblank-1} ") == "其他"
-        assert qq_parser._option_payload_contains_fillblank({"nested": ["x", "{fillblank-a}"]})
+        assert core_parser._normalize_qq_option_text(" 其他 _{fillblank-1} ") == "其他"
+        assert core_parser._option_payload_contains_fillblank({"nested": ["x", "{fillblank-a}"]})
         assert first["fillable_options"] == [1]
         assert first["row_texts"] == ["行1", "行2"]
         assert first["multi_min_limit"] == 1
@@ -331,7 +333,7 @@ class TencentParserTests:
         assert target_two["logic_parse_status"] == "complete"
 
     def test_build_question_media_from_payload_normalizes_protocol_relative_urls_and_deduplicates(self) -> None:
-        media = qq_parser._build_question_media_from_payload(
+        media = core_parser._build_question_media_from_payload(
             {
                 "title": {"image_url": "//cdn.example.com/title.png", "nested": {"src": "//cdn.example.com/title.png"}},
                 "description": {"img": "//cdn.example.com/title.png"},
@@ -414,7 +416,7 @@ class TencentParserTests:
 
     def test_normalize_media_url_extracts_markdown_image_target(self) -> None:
         assert (
-            qq_parser._normalize_media_url(
+            core_parser._normalize_media_url(
                 "![2552.jpeg](https://wj.gtimg.com/attachments/question/20260523/8cWPTabEOrZS.jpg){auto,auto}"
             )
             == "https://wj.gtimg.com/attachments/question/20260523/8cWPTabEOrZS.jpg"
@@ -430,7 +432,7 @@ class TencentParserTests:
             await qq_parser.parse_qq_survey("https://wj.qq.com/s2/123/hash/")
 
     def test_merge_same_page_descriptions_carries_media_to_next_question(self) -> None:
-        merged = qq_parser._merge_same_page_descriptions_into_questions(
+        merged = core_parser._merge_same_page_descriptions_into_questions(
             [
                 {
                     "num": 5,

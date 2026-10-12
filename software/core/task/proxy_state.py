@@ -6,7 +6,7 @@ import time
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Optional, Protocol
 
-from software.core.engine.stop_signal import StopSignalLike
+from surveycore.core.engine.stop_signal import StopSignalLike
 
 
 @dataclass

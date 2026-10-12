@@ -1,8 +1,8 @@
 from __future__ import annotations
 
-from software.core.persona.context import record_answer, reset_context
-from software.core.questions import consistency
-from software.providers.contracts import SurveyQuestionMeta
+from surveycore.core.persona.context import record_answer, reset_context
+from surveycore.core.questions import consistency
+from surveycore.providers.contracts import SurveyQuestionMeta
 
 
 class ConsistencyRulesTests:

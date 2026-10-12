@@ -6,8 +6,8 @@ from types import SimpleNamespace
 
 import pytest
 
-from software.core.engine.async_events import AsyncRunContext, ThreadEventProxy
-from software.core.engine.async_status_bus import AsyncStatusBus
+from surveycore.core.engine.async_events import AsyncRunContext, ThreadEventProxy
+from surveycore.core.engine.async_status_bus import AsyncStatusBus
 
 
 class AsyncStatusBusTests:
@@ -17,14 +17,14 @@ class AsyncStatusBusTests:
             dispatcher=lambda callback: callback(),
             throttle_seconds=0.0,
         )
-        patch_attrs((__import__("software.core.engine.async_status_bus", fromlist=["time"]).time, "monotonic", lambda: 10.0))
+        patch_attrs((__import__("surveycore.core.engine.async_status_bus", fromlist=["time"]).time, "monotonic", lambda: 10.0))
 
         bus.emit({"slot_id": "slot-1", "callback": lambda: delivered.append("ok")})
 
         assert delivered == ["ok"]
 
     def test_emit_throttles_high_frequency_events(self, patch_attrs) -> None:
-        module = __import__("software.core.engine.async_status_bus", fromlist=["time"])
+        module = __import__("surveycore.core.engine.async_status_bus", fromlist=["time"])
         timestamps = iter([1.0, 1.01])
         dispatched: list[str] = []
         patch_attrs((module.time, "monotonic", lambda: next(timestamps)))
@@ -39,7 +39,7 @@ class AsyncStatusBusTests:
         assert dispatched == ["dispatch", "first"]
 
     def test_emit_does_not_throttle_non_high_frequency_events(self, patch_attrs) -> None:
-        module = __import__("software.core.engine.async_status_bus", fromlist=["time"])
+        module = __import__("surveycore.core.engine.async_status_bus", fromlist=["time"])
         timestamps = iter([2.0, 2.01])
         dispatched: list[str] = []
         patch_attrs((module.time, "monotonic", lambda: next(timestamps)))

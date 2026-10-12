@@ -2,7 +2,11 @@ from __future__ import annotations
 
 import threading
 
-from software.core.engine.runtime_actions import RuntimeActionKind, RuntimeActionRequest, RuntimeActionResult
+from surveycore.core.engine.runtime_actions import (
+    RuntimeActionKind,
+    RuntimeActionRequest,
+    RuntimeActionResult,
+)
 from software.ui.controller.engine_adapter import EngineGuiAdapter
 
 

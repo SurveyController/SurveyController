@@ -3,12 +3,17 @@ from __future__ import annotations
 from types import SimpleNamespace
 
 import pytest
+from surveycore.wjx.provider import http_runtime as core_wjx_http
+from surveycore.credamo.provider import http_runtime as core_credamo_http
 
 from software.core.task import ExecutionConfig, ExecutionState
-from software.providers.answering import AnswerAction
-from software.providers.contracts import SurveyQuestionMeta
-from software.providers.errors import SubmissionVerificationRequiredError, SurveyProviderUnavailableAtRuntimeError
-from credamo.provider import answering_builders as credamo_builders
+from surveycore.providers.answering import AnswerAction
+from surveycore.providers.contracts import SurveyQuestionMeta
+from surveycore.providers.errors import (
+    SubmissionVerificationRequiredError,
+    SurveyProviderUnavailableAtRuntimeError,
+)
+from surveycore.credamo.provider import answering_builders as credamo_builders
 from credamo.provider import http_runtime as credamo_http
 from tencent.provider import answering_builders as qq_builders
 from tencent.provider import http_runtime as qq_http
@@ -96,7 +101,7 @@ def test_wjx_ktimes_sampling_failure_falls_back_to_90(monkeypatch) -> None:
     def _raise(*_args, **_kwargs):
         raise RuntimeError("boom")
 
-    monkeypatch.setattr(wjx_http, "sample_answer_duration_seconds", _raise)
+    monkeypatch.setattr(core_wjx_http, "sample_answer_duration_seconds", _raise)
 
     assert wjx_http._sample_ktimes(config) == 90
 
@@ -150,7 +155,7 @@ async def test_wjx_submit_timing_uses_configured_answer_duration(monkeypatch) ->
     monkeypatch.setattr(wjx_http, "_load_wjx_page", fake_load)
     monkeypatch.setattr(wjx_http, "build_answer_action", fake_build_action)
     monkeypatch.setattr(wjx_http.http_client, "apost", fake_post)
-    page_start = int(wjx_http.datetime.strptime("2026/5/30 1:23:18", "%Y/%m/%d %H:%M:%S").timestamp())
+    page_start = int(core_wjx_http.datetime.strptime("2026/5/30 1:23:18", "%Y/%m/%d %H:%M:%S").timestamp())
     monkeypatch.setattr(wjx_http.time, "time", lambda: float(page_start + 5))
     monkeypatch.setattr(wjx_http.random, "gauss", lambda center, _std: center)
 
@@ -1373,7 +1378,7 @@ async def test_credamo_http_runtime_uses_proxy_and_posts_json(monkeypatch) -> No
     monkeypatch.setattr(credamo_http, "_init_answer", fake_init)
     monkeypatch.setattr(credamo_http, "_save_answers", fake_save)
     monkeypatch.setattr(credamo_builders, "weighted_index", lambda _probs: 0)
-    monkeypatch.setattr(credamo_http, "sample_answer_duration_seconds", lambda *_args, **_kwargs: 70.0)
+    monkeypatch.setattr(core_credamo_http, "sample_answer_duration_seconds", lambda *_args, **_kwargs: 70.0)
 
     ok = await credamo_http.brush_credamo_http(
         config,
@@ -1841,7 +1846,7 @@ def test_credamo_samples_answer_start_time_inside_datetime_window(monkeypatch) -
         survey_provider="credamo",
         answer_datetime_window_ms=(1710000000000, 1710003600000),
     )
-    monkeypatch.setattr(credamo_http.random, "randint", lambda start, end: start + 1234)
+    monkeypatch.setattr(core_credamo_http.random, "randint", lambda start, end: start + 1234)
 
     started_at = credamo_http._sample_answer_start_time_ms(
         config,

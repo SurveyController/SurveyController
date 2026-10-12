@@ -6,7 +6,7 @@ from PySide6.QtCore import Qt
 from PySide6.QtWidgets import QHBoxLayout, QTableWidgetItem, QWidget
 from qfluentwidgets import BodyLabel, FluentIcon, IconInfoBadge
 
-from software.core.reverse_fill.schema import ReverseFillSpec, reverse_fill_format_label
+from surveycore.core.reverse_fill.schema import ReverseFillSpec, reverse_fill_format_label
 from software.core.reverse_fill.validation import build_reverse_fill_spec
 from software.providers.common import SURVEY_PROVIDER_WJX, normalize_survey_provider
 from software.ui.pages.workbench.reverse_fill.logic import (

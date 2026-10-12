@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from wjx.provider.html_parser import parse_survey_questions_from_html
+from surveycore.wjx.provider.html_parser import parse_survey_questions_from_html
 
 
 class WjxHtmlParserTests:

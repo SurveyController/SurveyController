@@ -14,11 +14,8 @@ from qfluentwidgets import (
     SubtitleLabel,
 )
 
-from software.core.questions.config import QuestionEntry
-from software.providers.contracts import (
-    SurveyQuestionMeta,
-    ensure_survey_question_meta,
-)
+from surveycore.core.questions.config import QuestionEntry
+from surveycore.providers.contracts import SurveyQuestionMeta, ensure_survey_question_meta
 from software.ui.widgets.no_wheel import NoWheelSlider
 
 from .constants import (

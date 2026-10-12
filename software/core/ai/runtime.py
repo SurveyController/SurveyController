@@ -90,13 +90,13 @@ def build_ai_question_prompt(
         return ""
 
     try:
-        from software.core.persona.context import build_ai_context_prompt
+        from surveycore.core.persona.context import build_ai_context_prompt
         context_prompt = build_ai_context_prompt()
         if context_prompt:
             return f"{context_prompt}\n\n请回答以下问卷问题：{title}"
     except Exception as exc:
         log_suppressed_exception(
-            "build_ai_question_prompt: from software.core.persona.context import build_ai_context_prompt",
+            "build_ai_question_prompt: from surveycore.core.persona.context import build_ai_context_prompt",
             exc,
             level=logging.WARNING,
         )

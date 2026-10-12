@@ -25,8 +25,8 @@ from software.integrations.ai.settings import (
     _normalize_ai_mode,
     get_default_system_prompt,
 )
-from software.providers.answering import AnswerAction
-from software.providers.contracts import SurveyQuestionMeta
+from surveycore.providers.answering import AnswerAction
+from surveycore.providers.contracts import SurveyQuestionMeta
 
 _PROVIDER_BATCH_MAX_CONCURRENCY = 4
 

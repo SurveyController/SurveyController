@@ -3,22 +3,27 @@ from __future__ import annotations
 import copy
 import logging
 import random
-from dataclasses import asdict, dataclass, fields
+from dataclasses import asdict, fields
 from typing import Any, Dict, List, Optional, Tuple
 
-from software.core.reverse_fill import REVERSE_FILL_FORMAT_AUTO, REVERSE_FILL_FORMAT_WJX_SCORE, REVERSE_FILL_FORMAT_WJX_SEQUENCE, REVERSE_FILL_FORMAT_WJX_TEXT
+from surveycore.core.reverse_fill import (
+    REVERSE_FILL_FORMAT_AUTO,
+    REVERSE_FILL_FORMAT_WJX_SCORE,
+    REVERSE_FILL_FORMAT_WJX_SEQUENCE,
+    REVERSE_FILL_FORMAT_WJX_TEXT,
+)
 from software.core.config.answer_datetime_window import normalize_answer_datetime_window
 from software.core.config.schema import RuntimeConfig
-from software.core.psychometrics.psychometric import normalize_target_alpha
-from software.core.questions.consistency import normalize_rule_dict, sanitize_answer_rules
-from software.core.questions.utils import serialize_random_int_range
+from surveycore.core.psychometrics.psychometric import normalize_target_alpha
+from surveycore.core.questions.consistency import normalize_rule_dict, sanitize_answer_rules
+from surveycore.core.questions.utils import serialize_random_int_range
 from software.providers.common import (
     SURVEY_PROVIDER_WJX,
     detect_survey_provider,
     ensure_questions_provider_fields,
     normalize_survey_provider,
 )
-from software.providers.contracts import (
+from surveycore.providers.contracts import (
     SurveyQuestionMeta,
     clone_survey_question_metas,
     ensure_survey_question_metas,
@@ -26,6 +31,7 @@ from software.providers.contracts import (
 )
 from software.logging.log_utils import log_suppressed_exception
 from software.app.config import USER_AGENT_PRESETS
+from surveycore.core.user_agent import UserAgentProfile
 
 _TEXT_RANDOM_MODES = {"none", "name", "mobile", "id_card", "integer"}
 _REVERSE_FILL_FORMATS = {
@@ -43,13 +49,6 @@ _USER_AGENT_DEVICE_TO_PRESET_KEYS = {
     "pc": ["pc_web"],
 }
 
-
-@dataclass(frozen=True)
-class UserAgentProfile:
-    category: str
-    preset_key: str
-    ua: str
-    label: str
 
 __all__ = [
     "CURRENT_CONFIG_SCHEMA_VERSION",
@@ -379,7 +378,7 @@ def serialize_question_entry(entry) -> Dict[str, Any]:
 
 
 def deserialize_question_entry(data: Dict[str, Any]):
-    from software.core.questions.config import QuestionEntry
+    from surveycore.core.questions.config import QuestionEntry
 
     def _as_int(value: Any, default: int = 0) -> int:
         try:

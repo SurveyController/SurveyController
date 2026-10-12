@@ -11,7 +11,7 @@ from software.core.engine.runtime_control_port import (
     on_random_ip_submission as trigger_random_ip_submission,
     wait_if_paused as runtime_wait_if_paused,
 )
-from software.core.engine.stop_signal import StopSignalLike
+from surveycore.core.engine.stop_signal import StopSignalLike
 from software.core.task import ExecutionConfig, ExecutionState
 
 

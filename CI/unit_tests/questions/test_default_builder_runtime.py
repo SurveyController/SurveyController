@@ -1,8 +1,8 @@
 from __future__ import annotations
 
-from software.core.questions.default_builder import build_default_question_entries
-from software.core.questions.schema import QuestionEntry, _TEXT_RANDOM_MOBILE, _TEXT_RANDOM_NONE
-from software.providers.contracts import SurveyQuestionMeta
+from surveycore.core.questions.default_builder import build_default_question_entries
+from surveycore.core.questions.schema import QuestionEntry, _TEXT_RANDOM_MOBILE, _TEXT_RANDOM_NONE
+from surveycore.providers.contracts import SurveyQuestionMeta
 
 
 class DefaultBuilderRuntimeTests:

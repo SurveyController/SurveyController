@@ -6,12 +6,9 @@ from PySide6.QtWidgets import QDialog
 from qfluentwidgets import MessageBox
 from shiboken6 import isValid
 
-from software.core.questions.config import QuestionEntry
-from software.core.questions.utils import (
-    describe_random_int_range,
-    parse_random_int_token,
-)
-from software.providers.contracts import SurveyQuestionMeta
+from surveycore.core.questions.config import QuestionEntry
+from surveycore.core.questions.utils import describe_random_int_range, parse_random_int_token
+from surveycore.providers.contracts import SurveyQuestionMeta
 from software.ui.pages.workbench.question_editor.constants import (
     _get_entry_type_label,
 )

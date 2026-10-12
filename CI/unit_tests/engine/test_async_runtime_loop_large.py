@@ -9,12 +9,15 @@ import software.core.engine.async_runtime_loop as runtime_loop
 import software.core.engine.async_proxy_session as proxy_session
 import software.core.engine.async_round_resources as round_resources
 from software.core.ai.runtime import AIRuntimeError
-from software.core.engine.async_events import AsyncRunContext
+from surveycore.core.engine.async_events import AsyncRunContext
 from software.core.engine.async_runtime_loop import AsyncSlotRunner
 from software.core.engine.failure_reason import FailureReason
 from software.core.task import ExecutionConfig, ExecutionState, ProxyLease
-from software.providers.contracts import SurveyQuestionMeta
-from software.providers.errors import SubmissionVerificationRequiredError, SurveyProviderUnavailableAtRuntimeError
+from surveycore.providers.contracts import SurveyQuestionMeta
+from surveycore.providers.errors import (
+    SubmissionVerificationRequiredError,
+    SurveyProviderUnavailableAtRuntimeError,
+)
 
 
 class _FakeScheduler:

@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 
-from wjx.provider.questions import multiple_rules
+from surveycore.wjx.provider.questions import multiple_rules
 
 
 class MultipleRulesTests:

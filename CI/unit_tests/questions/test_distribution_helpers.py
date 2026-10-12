@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from types import SimpleNamespace
 
-import software.core.questions.distribution as distribution
+import surveycore.core.questions.distribution as distribution
 
 
 class _FakeCtx:

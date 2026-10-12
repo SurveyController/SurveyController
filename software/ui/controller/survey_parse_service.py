@@ -5,10 +5,10 @@ import logging
 from typing import Any, Callable
 
 from software.core.config.schema import RuntimeConfig
-from software.core.questions.config import build_default_question_entries
+from surveycore.core.questions.config import build_default_question_entries
 from software.providers.common import is_supported_survey_url
-from software.providers.contracts import SurveyDefinition
-from software.providers.errors import (
+from surveycore.providers.contracts import SurveyDefinition
+from surveycore.providers.errors import (
     SurveyEnterpriseUnavailableError,
     SurveyNotOpenError,
     SurveyPausedError,

@@ -6,15 +6,12 @@ from PySide6.QtGui import QColor, QIntValidator
 from PySide6.QtWidgets import QLabel, QSizePolicy
 from qfluentwidgets import LineEdit
 
-from software.core.questions.config import QuestionEntry
+from surveycore.core.questions.config import QuestionEntry
 from software.providers.common import (
     SURVEY_PROVIDER_WJX,
     normalize_survey_provider,
 )
-from software.providers.contracts import (
-    SurveyQuestionMeta,
-    ensure_survey_question_meta,
-)
+from surveycore.providers.contracts import SurveyQuestionMeta, ensure_survey_question_meta
 from software.ui.widgets.no_wheel import NoWheelSlider
 
 

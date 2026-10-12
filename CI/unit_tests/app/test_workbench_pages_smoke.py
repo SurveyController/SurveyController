@@ -5,9 +5,9 @@ from types import SimpleNamespace
 from PySide6.QtCore import QObject, Signal
 
 from software.core.config.schema import RuntimeConfig
-from software.core.questions.config import QuestionEntry
+from surveycore.core.questions.config import QuestionEntry
 from software.app.config import HTTP_MAX_THREADS
-from software.providers.contracts import SurveyQuestionMeta
+from surveycore.providers.contracts import SurveyQuestionMeta
 from software.ui.pages.workbench.dashboard.page import DashboardPage
 from software.ui.pages.workbench.reverse_fill.page import ReverseFillPage
 from software.ui.pages.workbench.runtime_panel.main import RuntimePage

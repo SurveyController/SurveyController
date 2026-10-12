@@ -8,8 +8,8 @@ import pytest
 import software.ui.pages.workbench.presenter as presenter_module
 import software.ui.pages.workbench.session as session_module
 from software.core.config.schema import RuntimeConfig
-from software.core.questions.config import QuestionEntry
-from software.providers.contracts import SurveyQuestionMeta
+from surveycore.core.questions.config import QuestionEntry
+from surveycore.providers.contracts import SurveyQuestionMeta
 from software.ui.pages.workbench.presenter import WorkbenchPresenter
 from software.ui.pages.workbench.session import WorkbenchRunCoordinator, WorkbenchState
 

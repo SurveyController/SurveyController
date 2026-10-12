@@ -15,8 +15,8 @@ from qfluentwidgets import (
     SegmentedWidget,
 )
 
-from software.core.questions.config import QuestionEntry
-from software.providers.contracts import SurveyQuestionMeta
+from surveycore.core.questions.config import QuestionEntry
+from surveycore.providers.contracts import SurveyQuestionMeta
 from software.ui.widgets.no_wheel import NoWheelSlider
 
 from .psycho_config import (

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from PySide6.QtWidgets import QWidget
 
-from software.providers.contracts import SurveyQuestionMeta
+from surveycore.providers.contracts import SurveyQuestionMeta
 from software.ui.pages.workbench.strategy.question_selector_dialog import QuestionSelectorDialog
 from software.ui.pages.workbench.strategy.rule_dialog import (
     ConditionRuleDialog,

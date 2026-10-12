@@ -5,8 +5,8 @@ from types import SimpleNamespace
 
 import pytest
 
-from software.core.questions.normalization import configure_probabilities
-from software.core.questions.schema import (
+from surveycore.core.questions.normalization import configure_probabilities
+from surveycore.core.questions.schema import (
     GLOBAL_RELIABILITY_DIMENSION,
     QuestionEntry,
     _TEXT_RANDOM_ID_CARD,
@@ -17,7 +17,7 @@ from software.core.questions.schema import (
     _TEXT_RANDOM_NAME,
     _TEXT_RANDOM_NAME_TOKEN,
 )
-from software.providers.contracts import SurveyQuestionMeta
+from surveycore.providers.contracts import SurveyQuestionMeta
 
 
 class NormalizationRuntimeTests:

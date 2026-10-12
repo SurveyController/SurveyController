@@ -3,7 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional, Sequence
 
-from software.providers.contracts import (
+from surveycore.providers.contracts import (
     LOGIC_PARSE_STATUS_UNKNOWN,
     SurveyQuestionMeta,
     ensure_survey_question_meta,

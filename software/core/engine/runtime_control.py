@@ -3,7 +3,7 @@ from __future__ import annotations
 import threading
 from typing import Any, Optional
 
-from software.core.engine.async_wait import sleep_or_stop
+from surveycore.core.engine.async_wait import sleep_or_stop
 from software.logging.log_utils import log_suppressed_exception
 
 

@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from software.providers.contracts import (
+from surveycore.providers.contracts import (
     LOGIC_PARSE_STATUS_COMPLETE,
     LOGIC_PARSE_STATUS_UNKNOWN,
     SurveyQuestionMeta,

@@ -7,10 +7,10 @@ import threading
 from typing import Any, Callable, Optional
 
 from software.app.version import __VERSION__
-from software.core.engine.async_events import AsyncRunContext
+from surveycore.core.engine.async_events import AsyncRunContext
 from software.core.engine.async_runtime_loop import AsyncSlotRunner
-from software.core.engine.async_scheduler import AsyncScheduler
-from software.core.engine.async_status_bus import AsyncStatusBus
+from surveycore.core.engine.async_scheduler import AsyncScheduler
+from surveycore.core.engine.async_status_bus import AsyncStatusBus
 from software.core.engine.runtime_control_port import RuntimeControlPort, on_random_ip_loading_changed
 from software.core.task import ExecutionConfig, ExecutionState
 from software.network.proxy.api import fetch_proxy_batch_async

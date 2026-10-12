@@ -4,7 +4,7 @@ from types import SimpleNamespace
 
 import pytest
 
-from software.core.modes import duration_control
+from surveycore.core.modes import duration_control
 from software.providers.common import SURVEY_PROVIDER_CREDAMO, SURVEY_PROVIDER_QQ, SURVEY_PROVIDER_WJX
 
 

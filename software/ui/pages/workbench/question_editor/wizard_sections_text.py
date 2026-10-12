@@ -13,9 +13,9 @@ from qfluentwidgets import (
 )
 
 from software.app.config import DEFAULT_FILL_TEXT
-from software.core.questions.config import QuestionEntry
-from software.core.questions.utils import try_parse_random_int_range
-from software.providers.contracts import SurveyQuestionMeta
+from surveycore.core.questions.config import QuestionEntry
+from surveycore.core.questions.utils import try_parse_random_int_range
+from surveycore.providers.contracts import SurveyQuestionMeta
 from software.ui.helpers.fluent_tooltip import install_tooltip_filters
 
 from .utils import _apply_label_color
@@ -300,7 +300,7 @@ class WizardSectionsTextMixin:
         blank_count: int,
     ) -> None:
         
-        from software.core.questions.text_shared import MULTI_TEXT_DELIMITER
+        from surveycore.core.questions.text_shared import MULTI_TEXT_DELIMITER
 
         
         header_widget = QWidget(card)

@@ -8,7 +8,7 @@ from software.providers.common import (
     SURVEY_PROVIDER_QQ,
     SURVEY_PROVIDER_WJX,
 )
-from software.providers.contracts import (
+from surveycore.providers.contracts import (
     LOGIC_PARSE_STATUS_COMPLETE,
     LOGIC_PARSE_STATUS_NONE,
     LOGIC_PARSE_STATUS_UNKNOWN,
@@ -17,7 +17,7 @@ from software.providers.contracts import (
     serialize_survey_question_metas,
 )
 from tencent.provider import parser as qq_parser
-from wjx.provider.html_parser import parse_survey_questions_from_html
+from surveycore.wjx.provider.html_parser import parse_survey_questions_from_html
 
 
 def _build_wjx_question():

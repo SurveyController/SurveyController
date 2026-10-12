@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from types import SimpleNamespace
 
-from software.core.reverse_fill.schema import (
+from surveycore.core.reverse_fill.schema import (
     REVERSE_FILL_FORMAT_AUTO,
     REVERSE_FILL_STATUS_BLOCKED,
     REVERSE_FILL_STATUS_FALLBACK,

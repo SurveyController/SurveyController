@@ -5,10 +5,10 @@ import os
 from collections.abc import Sequence
 from typing import Any, Dict, List, Optional
 
-from software.core.questions.default_builder import build_default_question_entries
-from software.core.questions.schema import QuestionEntry, _infer_option_count
-from software.core.questions.validation import validate_question_config
-from software.core.reverse_fill.parser import (
+from surveycore.core.questions.default_builder import build_default_question_entries
+from surveycore.core.questions.schema import QuestionEntry, _infer_option_count
+from surveycore.core.questions.validation import validate_question_config
+from surveycore.core.reverse_fill.parser import (
     infer_reverse_fill_question_type,
     parse_choice_answer,
     parse_matrix_answer,
@@ -18,7 +18,7 @@ from software.core.reverse_fill.parser import (
     resolve_question_entry,
     supports_reverse_fill_runtime,
 )
-from software.core.reverse_fill.schema import (
+from surveycore.core.reverse_fill.schema import (
     REVERSE_FILL_FORMAT_AUTO,
     REVERSE_FILL_FORMAT_WJX_SEQUENCE,
     REVERSE_FILL_STATUS_BLOCKED,
@@ -30,10 +30,10 @@ from software.core.reverse_fill.schema import (
     ReverseFillSpec,
     reverse_fill_format_label,
 )
-from software.io.spreadsheets.wjx_excel import load_wjx_excel_export
+from surveycore.io.spreadsheets.wjx_excel import load_wjx_excel_export
 from software.core.config.schema import RuntimeConfig
 from software.providers.common import SURVEY_PROVIDER_WJX, normalize_survey_provider
-from software.providers.contracts import SurveyQuestionMeta, ensure_survey_question_meta
+from surveycore.providers.contracts import SurveyQuestionMeta, ensure_survey_question_meta
 
 
 def _detail_from_columns(columns: List[Any]) -> str:

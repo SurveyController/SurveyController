@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Any, Optional
 
-from software.core.engine.stop_signal import StopSignalLike
+from surveycore.core.engine.stop_signal import StopSignalLike
 from software.core.task import ExecutionConfig, ExecutionState
 from software.providers.common import (
     SURVEY_PROVIDER_CREDAMO,
@@ -10,7 +10,7 @@ from software.providers.common import (
     SURVEY_PROVIDER_WJX,
     normalize_survey_provider,
 )
-from software.providers.http_logic import get_http_logic_fallback_reason
+from surveycore.providers.http_logic import get_http_logic_fallback_reason
 from software.providers.registry import fill_survey_http
 
 HTTP_RUNTIME_PROVIDERS = {

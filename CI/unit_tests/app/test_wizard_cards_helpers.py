@@ -3,8 +3,8 @@ from __future__ import annotations
 from PySide6.QtWidgets import QVBoxLayout, QWidget
 from qfluentwidgets import ComboBox, LineEdit
 
-from software.core.questions.config import QuestionEntry
-from software.providers.contracts import SurveyQuestionMeta
+from surveycore.core.questions.config import QuestionEntry
+from surveycore.providers.contracts import SurveyQuestionMeta
 from software.ui.pages.workbench.question_editor.constants import _get_entry_type_label
 from software.ui.pages.workbench.question_editor.location_options import AUTO_LOCATION_TEXT
 from software.ui.pages.workbench.question_editor.wizard_cards import WizardCardsMixin

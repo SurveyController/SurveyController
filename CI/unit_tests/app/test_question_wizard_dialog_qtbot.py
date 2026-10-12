@@ -6,8 +6,8 @@ from qfluentwidgets import BodyLabel, InfoBadge, PushButton, ScrollArea
 from PySide6.QtWidgets import QDialog, QTreeWidgetItem
 
 from software.app.config import DEFAULT_FILL_TEXT
-from software.core.questions.config import QuestionEntry
-from software.providers.contracts import (
+from surveycore.core.questions.config import QuestionEntry
+from surveycore.providers.contracts import (
     LOGIC_PARSE_STATUS_COMPLETE,
     LOGIC_PARSE_STATUS_UNKNOWN,
     SurveyQuestionMeta,

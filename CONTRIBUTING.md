@@ -9,7 +9,7 @@
 需要准备：
 
 - Windows 10/11
-- Python 3.13.14
+- Python 3.13.16
 - Git
 - uv 包管理器
 
@@ -53,6 +53,8 @@ cd SurveyController
 ```bash
 uv sync
 ```
+
+`surveycore-py` 从 `pyproject.toml` 指定的 Git 提交安装，`uv.lock` 固定依赖解析结果。不要修改虚拟环境中的库文件；通用题目模型、纯解析和答案策略的改动在 [surveycore-py](https://github.com/SurveyController/surveycore-py) 仓库维护，应用集成改动留在本仓库。
 
 启动程序：
 
@@ -229,10 +231,11 @@ git push
 
 | 目标 | 目录 |
 | --- | --- |
-| 问卷星解析、提交、题型处理 | `wjx/provider/` |
-| 腾讯问卷适配 | `tencent/provider/` |
-| Credamo 见数适配 | `credamo/provider/` |
-| 通用执行引擎、任务调度 | `software/core/` |
+| 题目模型、纯解析、答案策略、信度与人设算法 | `surveycore-py` 依赖 |
+| 问卷星 HTTP 获取、提交与应用策略接入 | `wjx/provider/` |
+| 腾讯问卷 HTTP 获取、提交与应用策略接入 | `tencent/provider/` |
+| Credamo 见数 HTTP 获取与提交 | `credamo/provider/` |
+| 应用执行引擎、任务调度与共享状态 | `software/core/` |
 | UI 页面、弹窗、组件 | `software/ui/` |
 | 配置读写、表格、二维码、报告 | `software/io/` |
 | HTTP、代理配置 | `software/network/` |
@@ -253,6 +256,7 @@ git push
 - GUI 一律使用 QFluentWidgets 原生组件。
 - 尽量**不要使用 emoji 表情符号**，而应该要使用 QFluentWidgets 提供的图标资源。
 - 当前分支用纯 HTTP 完成问卷提交，不要新增 Playwright、Selenium 或浏览器自动化依赖。
+- 核心模型直接使用 `surveycore` 类型，避免复制出字段相同但类型不同的模型。配置兼容、成功份数目标、暂停恢复、代理与 HTTP 会话仍由应用管理。
 - `software/app/runtime_paths.py` 只表示安装目录和只读资源目录，不要把它当可写目录。
 - 用户配置写入 `%AppData%\SurveyController\`。
 - 日志和缓存写入 `%LocalAppData%\SurveyController\`。
@@ -278,6 +282,8 @@ uv run pytest CI/unit_tests
 ```
 
 完整检查会额外做模块导入和主窗口冒烟测试。涉及启动链路、UI、HTTP 提交链路、配置迁移时，建议跑完整检查。
+
+模块导入检查会核对 `surveycore` 依赖及其行政区数据。覆盖率门槛仅计算本仓库实现，库内部算法仍通过本项目调用边界的离线回归验证。Windows 打包入口 `Setup/build-release-installer.ps1` 显式包含应用需要的库模块、资源与版本元数据；更换依赖版本时须同时核对这一入口。
 
 ## 测试建议
 
@@ -332,12 +338,12 @@ Fixes #123
 ├── software/                # 桌面应用主体
 │   ├── app/                 # 启动、路径、配置、版本、迁移
 │   ├── assets/              # 应用内资源
-│   ├── core/                # 核心业务、执行引擎、题目模型
+│   ├── core/                # 应用执行、共享状态、配置与核心库接入
 │   ├── integrations/        # 外部服务接入
 │   ├── io/                  # 文件读写、报告、二维码、表格
 │   ├── logging/             # 日志
 │   ├── network/             # HTTP、代理配置
-│   ├── providers/           # 平台提供方公共层
+│   ├── providers/           # 核心库与应用的 Provider 接入
 │   ├── system/              # 系统能力封装
 │   ├── ui/                  # PySide6 / QFluentWidgets 界面
 │   └── update/              # 应用更新

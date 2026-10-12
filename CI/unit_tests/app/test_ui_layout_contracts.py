@@ -13,7 +13,7 @@ from qfluentwidgets import ScrollArea as FluentScrollArea
 from qfluentwidgets import Slider, SpinBox
 
 from CI.unit_tests.app.test_workbench_pages_smoke import _FakeController, _patch_page_dependencies
-from software.providers.contracts import SurveyQuestionMeta
+from surveycore.providers.contracts import SurveyQuestionMeta
 from software.ui.pages.workbench.dashboard.page import DashboardPage
 from software.ui.pages.workbench.reverse_fill.page import ReverseFillPage
 from software.ui.pages.workbench.runtime_panel.main import RuntimePage

@@ -3,7 +3,7 @@ from __future__ import annotations
 from types import SimpleNamespace
 from typing import Any
 
-from software.core.questions.config import QuestionEntry
+from surveycore.core.questions.config import QuestionEntry
 from software.core.config.schema import RuntimeConfig
 from software.ui.pages.workbench.session import WorkbenchRunCoordinator, WorkbenchState
 

@@ -1,7 +1,18 @@
 from __future__ import annotations
 import pytest
-from software.core.reverse_fill.parser import parse_choice_answer, parse_matrix_answer, parse_multi_text_answer, resolve_ordered_columns, supports_reverse_fill_runtime
-from software.core.reverse_fill.schema import REVERSE_FILL_FORMAT_WJX_SCORE, REVERSE_FILL_FORMAT_WJX_TEXT, ReverseFillColumn, ReverseFillRawRow
+from surveycore.core.reverse_fill.parser import (
+    parse_choice_answer,
+    parse_matrix_answer,
+    parse_multi_text_answer,
+    resolve_ordered_columns,
+    supports_reverse_fill_runtime,
+)
+from surveycore.core.reverse_fill.schema import (
+    REVERSE_FILL_FORMAT_WJX_SCORE,
+    REVERSE_FILL_FORMAT_WJX_TEXT,
+    ReverseFillColumn,
+    ReverseFillRawRow,
+)
 
 class ReverseFillParserTests:
 

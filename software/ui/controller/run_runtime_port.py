@@ -8,7 +8,7 @@ from inspect import isawaitable
 from typing import Any, Callable, List, Optional, cast
 
 from software.core.engine.runtime_control_port import RuntimeControlPort
-from software.core.engine.stop_signal import StopSignalLike
+from surveycore.core.engine.stop_signal import StopSignalLike
 
 
 class BoolState:

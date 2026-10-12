@@ -23,8 +23,8 @@ from qfluentwidgets import (
     TreeWidget,
 )
 
-from software.core.questions.config import QuestionEntry
-from software.providers.contracts import SurveyQuestionMeta
+from surveycore.core.questions.config import QuestionEntry
+from surveycore.providers.contracts import SurveyQuestionMeta
 
 from .utils import (
     _apply_label_color,

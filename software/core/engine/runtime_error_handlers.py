@@ -5,9 +5,12 @@ from typing import Any, Callable
 
 from software.core.ai.runtime import AIRuntimeError, is_ai_timeout_runtime_error
 from software.core.engine.failure_reason import FailureReason
-from software.core.engine.stop_signal import StopSignalLike
+from surveycore.core.engine.stop_signal import StopSignalLike
 from software.core.task import ExecutionConfig, ExecutionState
-from software.providers.errors import SubmissionVerificationRequiredError, SurveyProviderUnavailableAtRuntimeError
+from surveycore.providers.errors import (
+    SubmissionVerificationRequiredError,
+    SurveyProviderUnavailableAtRuntimeError,
+)
 AI_FILL_FAIL_THRESHOLD = 5
 FREE_AI_TIMEOUT_FAIL_THRESHOLD = AI_FILL_FAIL_THRESHOLD
 SUBMISSION_VERIFICATION_STOP_CATEGORY = "submission_verification"

@@ -17,6 +17,7 @@ TARGET_DIRS = [
     ROOT_DIR / "credamo",
 ]
 ENTRY_FILES = [ROOT_DIR / "SurveyController.py"]
+DEPENDENCY_IMPORT_MODULES = ("surveycore",)
 
 
 
@@ -80,6 +81,13 @@ module_name = sys.argv[1]
 
 try:
     importlib.import_module(module_name)
+    if module_name == "surveycore":
+        from importlib.resources import files
+
+        area_codes = files("surveycore").joinpath("data", "area_codes_2022.json")
+        data = json.loads(area_codes.read_text(encoding="utf-8"))
+        if not isinstance(data, dict) or not data.get("provinces"):
+            raise ValueError("surveycore 行政区数据缺失或格式错误")
 except BaseException as exc:
     payload = {
         "ok": False,
@@ -169,7 +177,7 @@ def iter_compile_targets() -> list[Path]:
 
 
 def iter_module_names(files: Iterable[Path]) -> list[str]:
-    modules: list[str] = []
+    modules: list[str] = list(DEPENDENCY_IMPORT_MODULES)
     for path in files:
         rel = path.relative_to(ROOT_DIR).with_suffix("")
         parts = list(rel.parts)

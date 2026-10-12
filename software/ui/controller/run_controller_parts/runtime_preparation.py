@@ -11,12 +11,9 @@ from software.core.config.answer_datetime_window import (
     normalize_answer_datetime_window,
     parse_answer_datetime_string,
 )
-from software.core.psychometrics.psychometric import normalize_target_alpha
-from software.core.questions.config import (
-    configure_probabilities,
-    validate_question_config,
-)
-from software.core.reverse_fill import ReverseFillSpec
+from surveycore.core.psychometrics.psychometric import normalize_target_alpha
+from surveycore.core.questions.config import configure_probabilities, validate_question_config
+from surveycore.core.reverse_fill import ReverseFillSpec
 from software.core.reverse_fill.validation import (
     build_enabled_reverse_fill_spec,
 )
@@ -31,11 +28,8 @@ from software.providers.common import (
     normalize_survey_provider,
     supports_answer_datetime_window,
 )
-from software.providers.contracts import SurveyQuestionMeta
-from software.providers.errors import (
-    SurveyEnterpriseUnavailableError,
-    SurveyStoppedError,
-)
+from surveycore.providers.contracts import SurveyQuestionMeta
+from surveycore.providers.errors import SurveyEnterpriseUnavailableError, SurveyStoppedError
 from wjx.provider.parser import (
     ENTERPRISE_UNAVAILABLE_SURVEY_ERROR_MESSAGE,
     STOPPED_SURVEY_ERROR_MESSAGE,

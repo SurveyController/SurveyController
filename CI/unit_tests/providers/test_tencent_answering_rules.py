@@ -1,7 +1,10 @@
 from __future__ import annotations
 
 
-from tencent.provider.answering_rules import apply_multiple_constraints, normalize_selected_indices
+from surveycore.tencent.provider.answering_rules import (
+    apply_multiple_constraints,
+    normalize_selected_indices,
+)
 
 
 class TencentAnsweringRulesTests:

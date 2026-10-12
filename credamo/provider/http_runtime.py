@@ -1,50 +1,77 @@
 from __future__ import annotations
 
-import hashlib
 import json
 import logging
-import random
-import re
 import time
-import uuid
-from dataclasses import dataclass, replace
 from typing import Any, Mapping
-from urllib.parse import urlparse
+
+from surveycore.credamo.provider.http_runtime import (
+    CredamoSubmitResult as CredamoSubmitResult,
+    _CIPHER as _CIPHER,
+    _CredamoAnswerInit as _CredamoAnswerInit,
+    _DEFAULT_ORIGIN as _DEFAULT_ORIGIN,
+    _RANDOM_CHARS as _RANDOM_CHARS,
+    _RESOLUTION as _RESOLUTION,
+    _answer_page_url as _answer_page_url,
+    _answer_payload_items as _answer_payload_items,
+    _as_mapping_list as _as_mapping_list,
+    _build_signature_headers as _build_signature_headers,
+    _build_submit_body as _build_submit_body,
+    _choice_answer as _choice_answer,
+    _choice_index_by_text as _choice_index_by_text,
+    _choice_payload as _choice_payload,
+    _config_entry_for_question as _config_entry_for_question,
+    _enrich_question_meta as _enrich_question_meta,
+    _ensure_api_ok as _ensure_api_ok,
+    _forced_index_from_config as _forced_index_from_config,
+    _id_from_mapping as _id_from_mapping,
+    _iter_raw_questions as _iter_raw_questions,
+    _matrix_answer as _matrix_answer,
+    _new_time_code as _new_time_code,
+    _noauth_short_url as _noauth_short_url,
+    _normalize_id as _normalize_id,
+    _normalized_choice_text as _normalized_choice_text,
+    _order_answer as _order_answer,
+    _origin_from_url as _origin_from_url,
+    _question_answer as _question_answer,
+    _question_items as _question_items,
+    _random_token as _random_token,
+    _raw_option_count as _raw_option_count,
+    _raw_provider_type as _raw_provider_type,
+    _raw_question_num as _raw_question_num,
+    _raw_question_type as _raw_question_type,
+    _raw_questions_by_num as _raw_questions_by_num,
+    _raw_row_count as _raw_row_count,
+    _raw_selector as _raw_selector,
+    _resolve_httpx_proxy as _resolve_httpx_proxy,
+    _sample_answer_start_time_ms as _sample_answer_start_time_ms,
+    _sample_duration_seconds as _sample_duration_seconds,
+    _scale_answer as _scale_answer,
+    _selected_choice_index as _selected_choice_index,
+    _selected_item as _selected_item,
+    _sha1_upper as _sha1_upper,
+    _short_url_from_url as _short_url_from_url,
+    _sort_value as _sort_value,
+    _text_answer as _text_answer,
+    classify_credamo_api_payload as classify_credamo_api_payload,
+)
 
 import httpx
 from software.app.config import DEFAULT_HTTP_HEADERS, DEFAULT_USER_AGENT
 from software.core.config.codec import UserAgentProfile
-from software.core.modes.duration_control import sample_answer_duration_seconds
-from software.core.persona.context import record_answer
-from software.core.questions.distribution import record_pending_distribution_choice
+from surveycore.core.persona.context import record_answer
+from surveycore.core.questions.distribution import record_pending_distribution_choice
 from software.core.task import ExecutionConfig, ExecutionState
-from software.providers.answering import AnswerAction
-from software.providers.answering.option_fill import option_fill_text_map
-from software.providers.answering.recording import record_answer_action
-from software.providers.contracts import SurveyQuestionMeta
-from software.providers.http_logic import build_http_logic_plan
-from software.providers.http_progress import update_http_submit_step
+from surveycore.providers.answering import AnswerAction
+from surveycore.providers.answering.recording import record_answer_action
+from surveycore.providers.contracts import SurveyQuestionMeta
+from surveycore.providers.http_logic import build_http_logic_plan
+from surveycore.providers.http_progress import update_http_submit_step
 from software.network.session_policy import SubmitProxyUnavailableError, mark_submit_proxy_success, release_submit_proxy
 
-from .answering_builders import build_answer_action
+from surveycore.credamo.provider.answering_builders import build_answer_action
 
-_CIPHER = "P96D0A7D0M8C3R2D0M1"
-_RANDOM_CHARS = "ABCDEFGHJKMNPQRSTWXYZabcdefhijkmnprstwxyz2345678"
-_DEFAULT_ORIGIN = "https://www.credamo.com"
-_RESOLUTION = "1920px*1080px"
 _CREDAMO_REQUEST_TIMEOUT_SECONDS = 30
-
-
-@dataclass(frozen=True)
-class _CredamoAnswerInit:
-    answer_token: str
-    timestamp_ms: int
-    time_code: str
-
-
-class CredamoSubmitResult:
-    SUCCESS = "success"
-    FAILED = "failed"
 
 
 class _CredamoHttpSession:
@@ -76,83 +103,6 @@ class _CredamoHttpSession:
 
     async def post(self, url: str, **kwargs: Any) -> httpx.Response:
         return await self._ensure_client().post(url, **kwargs)
-
-
-def _resolve_httpx_proxy(proxy_address: str) -> str | None:
-    proxy = str(proxy_address or "").strip()
-    return proxy if proxy else None
-
-
-def _origin_from_url(url: str) -> str:
-    parsed = urlparse(str(url or "").strip())
-    if parsed.scheme and parsed.netloc:
-        return f"{parsed.scheme}://{parsed.netloc}"
-    return _DEFAULT_ORIGIN
-
-
-def _short_url_from_url(url: str) -> str:
-    text = str(url or "").strip()
-    parsed = urlparse(text)
-    candidates = [parsed.path, parsed.fragment, text]
-    for candidate in candidates:
-        clean = str(candidate or "").strip().lstrip("#").split("?", 1)[0].rstrip("/")
-        if not clean:
-            continue
-        parts = [part for part in clean.split("/") if part]
-        if "s" in parts:
-            index = parts.index("s")
-            if index + 1 < len(parts):
-                return parts[index + 1].strip()
-        if re.fullmatch(r"[A-Za-z0-9_]+(?:ano)?", clean):
-            return clean
-    raise RuntimeError("见数链接缺少短链接编号")
-
-
-def _noauth_short_url(short_url: str) -> str:
-    short = str(short_url or "").strip().rstrip("/")
-    if short.endswith("_"):
-        return f"{short[:-1]}ano"
-    if short.endswith("ano"):
-        return short
-    raise RuntimeError("见数 HTTP 目前只支持免登录短链接")
-
-
-def _answer_page_url(origin: str, short_url: str) -> str:
-    return f"{origin.rstrip('/')}/answer.html#/s/{short_url}"
-
-
-def _sha1_upper(value: str) -> str:
-    return hashlib.sha1(str(value or "").encode("utf-8")).hexdigest().upper()
-
-
-def _random_token(length: int) -> str:
-    return "".join(random.choice(_RANDOM_CHARS) for _ in range(max(1, int(length or 1))))
-
-
-def _new_time_code() -> str:
-    return uuid.uuid4().hex
-
-
-def _build_signature_headers(
-    *,
-    answer_token: str = "",
-    union_id: str | None = None,
-    nonce: str | None = None,
-    timestamp_ms: int | str | None = None,
-) -> dict[str, str]:
-    token = str(answer_token or "")
-    union = str(union_id or _random_token(10))
-    nonce_value = str(nonce or _random_token(16))
-    timestamp = str(timestamp_ms if timestamp_ms is not None else int(time.time() * 1000))
-    inner = _sha1_upper(f"{token}{nonce_value}{timestamp}{union}{_CIPHER}")
-    signature = _sha1_upper(f"{token}{nonce_value}{timestamp}{inner}{union}{_CIPHER}")
-    return {
-        "unionId": union,
-        "nonce": nonce_value,
-        "timestamp": timestamp,
-        "signature": signature,
-        "Accept-Language": "zh-CN,zh;q=0.9",
-    }
 
 
 def _request_headers(
@@ -192,20 +142,6 @@ def _json_payload(response: Any, label: str) -> Mapping[str, Any]:
     if not isinstance(payload, Mapping):
         raise RuntimeError(f"见数{label}接口返回了非 JSON 对象")
     return payload
-
-
-def _ensure_api_ok(payload: Mapping[str, Any], label: str) -> Mapping[str, Any]:
-    if classify_credamo_api_payload(payload) != CredamoSubmitResult.SUCCESS:
-        message = str(payload.get("message") or payload.get("msg") or payload.get("code") or payload).strip()
-        raise RuntimeError(f"见数{label}失败：{message}")
-    data = payload.get("data")
-    return data if isinstance(data, Mapping) else payload
-
-
-def classify_credamo_api_payload(payload: Mapping[str, Any]) -> str:
-    if payload.get("success") is False:
-        return CredamoSubmitResult.FAILED
-    return CredamoSubmitResult.SUCCESS
 
 
 async def _fetch_detail(
@@ -256,137 +192,6 @@ async def _init_answer(
     )
 
 
-def _as_mapping_list(value: Any) -> list[Mapping[str, Any]]:
-    if not isinstance(value, list):
-        return []
-    return [item for item in value if isinstance(item, Mapping)]
-
-
-def _iter_raw_questions(detail_data: Mapping[str, Any]) -> list[Mapping[str, Any]]:
-    result: list[Mapping[str, Any]] = []
-    direct_questions = _as_mapping_list(detail_data.get("questions"))
-    if direct_questions:
-        result.extend(direct_questions)
-    for block in _as_mapping_list(detail_data.get("blocks")):
-        for element in _as_mapping_list(block.get("blockElements") or block.get("elements")):
-            candidates = [
-                element.get("question"),
-                element.get("qst"),
-                element.get("surveyQuestion"),
-                element,
-            ]
-            for candidate in candidates:
-                if not isinstance(candidate, Mapping):
-                    continue
-                if candidate.get("qstId") or candidate.get("questionId") or candidate.get("questionType"):
-                    result.append(candidate)
-                    break
-    return result
-
-
-def _raw_question_num(raw_question: Mapping[str, Any], fallback_num: int) -> int:
-    for key in ("qstNo", "questionNo", "qstNum", "sortNo"):
-        match = re.search(r"\d+", str(raw_question.get(key) or ""))
-        if match:
-            return max(1, int(match.group(0)))
-    return max(1, int(fallback_num or 1))
-
-
-def _raw_questions_by_num(raw_questions: list[Mapping[str, Any]]) -> dict[int, Mapping[str, Any]]:
-    result: dict[int, Mapping[str, Any]] = {}
-    for index, raw_question in enumerate(raw_questions, start=1):
-        result[_raw_question_num(raw_question, index)] = raw_question
-    return result
-
-
-def _raw_question_type(raw_question: Mapping[str, Any]) -> int:
-    try:
-        return int(raw_question.get("questionType") or 0)
-    except Exception:
-        return 0
-
-
-def _raw_selector(raw_question: Mapping[str, Any]) -> int:
-    try:
-        return int(raw_question.get("selector") or 0)
-    except Exception:
-        return 0
-
-
-def _raw_provider_type(raw_question: Mapping[str, Any]) -> str:
-    question_type = _raw_question_type(raw_question)
-    selector = _raw_selector(raw_question)
-    if question_type == 2 and selector == 2:
-        return "multiple"
-    if question_type == 2 and selector == 3:
-        return "dropdown"
-    if question_type == 2:
-        return "single"
-    if question_type == 4:
-        return "matrix"
-    if question_type == 6:
-        return "order"
-    if question_type == 11:
-        return "scale"
-    if question_type == 1:
-        return "text"
-    return str(question_type or "")
-
-
-def _raw_option_count(raw_question: Mapping[str, Any]) -> int:
-    question_type = _raw_question_type(raw_question)
-    if question_type == 4:
-        return len(_as_mapping_list(raw_question.get("answers")))
-    if question_type == 1:
-        return 1
-    return len(_as_mapping_list(raw_question.get("choices")))
-
-
-def _raw_row_count(raw_question: Mapping[str, Any]) -> int:
-    if _raw_question_type(raw_question) == 4:
-        return max(1, len(_as_mapping_list(raw_question.get("choices"))))
-    return 1
-
-
-def _enrich_question_meta(question: SurveyQuestionMeta, raw_question: Mapping[str, Any]) -> SurveyQuestionMeta:
-    question_id = str(raw_question.get("questionId") or raw_question.get("qstId") or question.provider_question_id or "").strip()
-    return replace(
-        question,
-        options=_raw_option_count(raw_question) or int(getattr(question, "options", 0) or 0),
-        rows=_raw_row_count(raw_question) or int(getattr(question, "rows", 1) or 1),
-        provider_question_id=question_id,
-        provider_type=_raw_provider_type(raw_question) or str(getattr(question, "provider_type", "") or ""),
-    )
-
-
-def _question_items(
-    config: ExecutionConfig,
-    raw_by_num: Mapping[int, Mapping[str, Any]],
-) -> list[SurveyQuestionMeta]:
-    questions: list[SurveyQuestionMeta] = []
-    for question in sorted(
-        list((config.questions_metadata or {}).values()),
-        key=lambda item: (int(getattr(item, "page", 1) or 1), int(getattr(item, "num", 0) or 0)),
-    ):
-        question_num = int(getattr(question, "num", 0) or 0)
-        raw_question = raw_by_num.get(question_num)
-        if raw_question is None:
-            raise RuntimeError(f"见数第{question_num}题未在接口详情中找到，无法纯 HTTP 提交")
-        questions.append(_enrich_question_meta(question, raw_question))
-    return questions
-
-
-def _config_entry_for_question(config: ExecutionConfig, question: SurveyQuestionMeta) -> tuple[str, int] | None:
-    question_num = int(getattr(question, "num", 0) or 0)
-    entry = (config.question_config_index_map or {}).get(question_num)
-    if entry is not None:
-        return entry
-    provider_id = str(getattr(question, "provider_question_id", "") or "").strip()
-    if provider_id:
-        return (config.provider_question_config_index_map or {}).get(provider_id)
-    return None
-
-
 async def _build_actions(
     config: ExecutionConfig,
     ctx: ExecutionState,
@@ -434,330 +239,6 @@ def _record_action(ctx: ExecutionState, action: AnswerAction) -> None:
         record_pending_distribution_choice_fn=record_pending_distribution_choice,
         default_fill_text="",
     )
-
-
-def _normalize_id(value: Any) -> Any:
-    text = str(value or "").strip()
-    if not text:
-        return ""
-    try:
-        return int(text)
-    except Exception:
-        return text
-
-
-def _sort_value(value: Any, fallback: int) -> int:
-    try:
-        return int(value)
-    except Exception:
-        return int(fallback)
-
-
-def _id_from_mapping(item: Mapping[str, Any], *keys: str) -> Any:
-    for key in keys:
-        value = item.get(key)
-        if value is not None and str(value).strip():
-            return _normalize_id(value)
-    return ""
-
-
-def _selected_item(items: list[Mapping[str, Any]], index: int, *, question_num: int, label: str) -> Mapping[str, Any]:
-    selected_index = int(index)
-    if selected_index < 0 or selected_index >= len(items):
-        raise RuntimeError(f"见数第{question_num}题{label}索引越界")
-    return items[selected_index]
-
-
-def _choice_payload(raw_choice: Mapping[str, Any], *, fill_text: str = "") -> dict[str, Any]:
-    return {
-        "choiceId": _id_from_mapping(raw_choice, "choiceId", "id"),
-        "choiceContent": str(fill_text or "").strip(),
-    }
-
-
-def _normalized_choice_text(value: Any) -> str:
-    return re.sub(r"\s+", "", str(value or "")).strip()
-
-
-def _choice_index_by_text(choices: list[Mapping[str, Any]], target_text: str) -> int | None:
-    normalized_target = _normalized_choice_text(target_text)
-    if not normalized_target:
-        return None
-    for index, choice in enumerate(choices):
-        for key in ("display", "choiceContent", "choiceTitle", "content", "text"):
-            if _normalized_choice_text(choice.get(key)) == normalized_target:
-                return index
-    return None
-
-
-def _forced_index_from_config(
-    config: ExecutionConfig | None,
-    action: AnswerAction,
-    choices: list[Mapping[str, Any]],
-) -> int | None:
-    if config is None:
-        return None
-    try:
-        question = (config.questions_metadata or {}).get(int(action.question_num or 0))
-    except Exception:
-        question = None
-    if question is None:
-        return None
-    forced_text = str(getattr(question, "forced_option_text", "") or "").strip()
-    by_text = _choice_index_by_text(choices, forced_text)
-    if by_text is not None:
-        return by_text
-    forced_index = getattr(question, "forced_option_index", None)
-    if forced_index is None:
-        return None
-    try:
-        index = int(forced_index)
-    except Exception:
-        return None
-    if 0 <= index < len(choices):
-        return index
-    return None
-
-
-def _selected_choice_index(
-    choices: list[Mapping[str, Any]],
-    action: AnswerAction,
-    *,
-    config: ExecutionConfig | None = None,
-) -> int:
-    forced = _forced_index_from_config(config, action, choices)
-    if forced is not None:
-        return forced
-    return int(action.selected_indices[0] if action.selected_indices else 0)
-
-
-def _choice_answer(
-    raw_question: Mapping[str, Any],
-    action: AnswerAction,
-    *,
-    config: ExecutionConfig | None = None,
-) -> dict[str, Any]:
-    choices = _as_mapping_list(raw_question.get("choices"))
-    question_num = int(action.question_num or 0)
-    question_type = _raw_question_type(raw_question)
-    selector = _raw_selector(raw_question)
-    fill_by_index = option_fill_text_map(action.option_fill_texts)
-    item: dict[str, Any] = {
-        "qstId": _id_from_mapping(raw_question, "qstId", "id"),
-        "answerTime": 0,
-        "answerQstEeg": None,
-        "answerContent": "",
-    }
-    if selector == 2 or action.kind == "multiple":
-        item["answerQstChoiceList"] = [
-            _choice_payload(
-                _selected_item(choices, int(index), question_num=question_num, label="选项"),
-                fill_text=fill_by_index.get(int(index), ""),
-            )
-            for index in action.selected_indices
-        ]
-    else:
-        selected_index = _selected_choice_index(choices, action, config=config)
-        item["answerQstChoice"] = _choice_payload(
-            _selected_item(choices, selected_index, question_num=question_num, label="选项"),
-            fill_text=fill_by_index.get(int(selected_index), ""),
-        )
-    try:
-        sub_selector = int(raw_question.get("subSelector") or 0)
-    except Exception:
-        sub_selector = 0
-    if question_type == 2 and sub_selector > 0:
-        item["questionType"] = 2
-        item["subSelector"] = sub_selector
-    return item
-
-
-def _scale_answer(
-    raw_question: Mapping[str, Any],
-    action: AnswerAction,
-    *,
-    config: ExecutionConfig | None = None,
-) -> dict[str, Any]:
-    choices = _as_mapping_list(raw_question.get("choices"))
-    selected_index = _selected_choice_index(choices, action, config=config)
-    return {
-        "qstId": _id_from_mapping(raw_question, "qstId", "id"),
-        "answerTime": 0,
-        "answerQstEeg": None,
-        "answerQstChoice": _choice_payload(
-            _selected_item(choices, selected_index, question_num=int(action.question_num or 0), label="选项")
-        ),
-    }
-
-
-def _matrix_answer(raw_question: Mapping[str, Any], action: AnswerAction) -> dict[str, Any]:
-    rows = _as_mapping_list(raw_question.get("choices"))
-    columns = _as_mapping_list(raw_question.get("answers"))
-    question_num = int(action.question_num or 0)
-    answer_rows: list[dict[str, Any]] = []
-    for row_index, row in enumerate(rows):
-        if row_index >= len(action.matrix_indices):
-            continue
-        selected_col = int(action.matrix_indices[row_index])
-        column = _selected_item(columns, selected_col, question_num=question_num, label="矩阵列")
-        answer_rows.append(
-            {
-                "choiceId": _id_from_mapping(row, "choiceId", "id"),
-                "choiceAnswerList": [{"answerId": _id_from_mapping(column, "answerId", "id")}],
-            }
-        )
-    if not answer_rows:
-        raise RuntimeError(f"见数第{question_num}题没有生成矩阵答案")
-    return {
-        "qstId": _id_from_mapping(raw_question, "qstId", "id"),
-        "answerTime": 0,
-        "answerQstEeg": None,
-        "answerContent": "",
-        "answerQstChoiceList": answer_rows,
-    }
-
-
-def _order_answer(raw_question: Mapping[str, Any], action: AnswerAction) -> dict[str, Any]:
-    choices = _as_mapping_list(raw_question.get("choices"))
-    question_num = int(action.question_num or 0)
-    ranked: list[dict[str, Any]] = []
-    for rank, selected_index in enumerate(action.selected_indices, start=1):
-        choice = _selected_item(choices, int(selected_index), question_num=question_num, label="排序选项")
-        ranked.append(
-            {
-                "choiceId": _id_from_mapping(choice, "choiceId", "id"),
-                "choiceContent": rank,
-            }
-        )
-    if not ranked:
-        raise RuntimeError(f"见数第{question_num}题没有生成排序答案")
-    return {
-        "qstId": _id_from_mapping(raw_question, "qstId", "id"),
-        "answerTime": 0,
-        "answerQstEeg": None,
-        "answerContent": "",
-        "answerChoiceContent": ranked,
-    }
-
-
-def _text_answer(raw_question: Mapping[str, Any], action: AnswerAction) -> dict[str, Any]:
-    text_values = [str(item or "").strip() for item in action.text_values if str(item or "").strip()]
-    return {
-        "qstId": _id_from_mapping(raw_question, "qstId", "id"),
-        "answerTime": 0,
-        "answerQstEeg": None,
-        "answerContent": "\n".join(text_values),
-    }
-
-
-def _question_answer(
-    raw_question: Mapping[str, Any],
-    action: AnswerAction,
-    *,
-    config: ExecutionConfig | None = None,
-) -> dict[str, Any]:
-    question_type = _raw_question_type(raw_question)
-    if question_type == 1 or action.kind in {"text", "multi_text"}:
-        return _text_answer(raw_question, action)
-    if question_type == 2 or action.kind in {"single", "multiple", "select"}:
-        return _choice_answer(raw_question, action, config=config)
-    if question_type == 11 or action.kind == "scale":
-        return _scale_answer(raw_question, action, config=config)
-    if question_type in {4, 25} or action.kind == "matrix":
-        return _matrix_answer(raw_question, action)
-    if question_type == 6 or action.kind == "order":
-        return _order_answer(raw_question, action)
-    raise RuntimeError(f"见数第{action.question_num}题类型暂不支持纯 HTTP 提交：{question_type}")
-
-
-def _answer_payload_items(
-    raw_by_num: Mapping[int, Mapping[str, Any]],
-    actions: list[AnswerAction],
-    *,
-    config: ExecutionConfig | None = None,
-    answer_duration_seconds: float = 0.0,
-) -> list[dict[str, Any]]:
-    per_question_time = 0
-    if actions:
-        per_question_time = max(1, int(round((float(answer_duration_seconds or 0.0) * 1000) / len(actions))))
-    result: list[dict[str, Any]] = []
-    for action in actions:
-        question_num = int(action.question_num or 0)
-        raw_question = raw_by_num.get(question_num)
-        if raw_question is None:
-            raise RuntimeError(f"见数第{question_num}题缺少接口题目数据")
-        item = _question_answer(raw_question, action, config=config)
-        item["answerTime"] = per_question_time
-        item["_sortNo"] = _sort_value(raw_question.get("sortNo"), fallback=len(result) + 1)
-        result.append(item)
-    result.sort(key=lambda item: _sort_value(item.get("_sortNo"), fallback=0))
-    for item in result:
-        item.pop("_sortNo", None)
-    return result
-
-
-def _sample_duration_seconds(config: ExecutionConfig) -> float:
-    try:
-        sampled = sample_answer_duration_seconds(
-            config.answer_duration_range_seconds,
-            survey_provider="credamo",
-            default_unconfigured_seconds=90,
-        )
-    except Exception:
-        sampled = 0.0
-    sampled_seconds = max(0.0, float(sampled or 0.0))
-    if sampled_seconds > 0:
-        return sampled_seconds
-    return 90.0
-
-
-def _sample_answer_start_time_ms(
-    config: ExecutionConfig,
-    *,
-    init_started_at_ms: int,
-    duration_seconds: float,
-) -> int:
-    window_start_ms, window_end_ms = getattr(config, "answer_datetime_window_ms", (0, 0))
-    if window_start_ms <= 0 or window_end_ms <= window_start_ms:
-        return int(init_started_at_ms)
-    duration_ms = max(1, int(round(float(duration_seconds or 0.0) * 1000)))
-    latest_start_ms = int(window_end_ms - duration_ms)
-    earliest_start_ms = int(window_start_ms)
-    if latest_start_ms <= earliest_start_ms:
-        return earliest_start_ms
-    return random.randint(earliest_start_ms, latest_start_ms)
-
-
-def _build_submit_body(
-    *,
-    short_url: str,
-    raw_by_num: Mapping[int, Mapping[str, Any]],
-    actions: list[AnswerAction],
-    config: ExecutionConfig | None = None,
-    answer_started_at_ms: int | None = None,
-    duration_seconds: float,
-) -> dict[str, Any]:
-    started_at = int(answer_started_at_ms or int(time.time() * 1000))
-    duration_ms = max(1, int(round(float(duration_seconds or 0.0) * 1000)))
-    ended_at = started_at + duration_ms
-    body = {
-        "answerStartTime": started_at,
-        "answerEndTime": ended_at,
-        "status": 1,
-        "answerQstList": _answer_payload_items(
-            raw_by_num,
-            actions,
-            config=config,
-            answer_duration_seconds=duration_seconds,
-        ),
-        "shortUrl": short_url,
-        "resolution": _RESOLUTION,
-        "sourceDetail": 1,
-    }
-    for item in body["answerQstList"]:
-        if isinstance(item, dict) and item.get("answerQstEeg") is None:
-            item.pop("answerQstEeg", None)
-    return body
 
 
 async def _save_answers(

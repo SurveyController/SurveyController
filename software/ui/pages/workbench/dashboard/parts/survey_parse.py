@@ -5,7 +5,7 @@ from typing import TYPE_CHECKING, Any
 
 from software.logging.action_logger import log_action
 from software.logging.log_utils import log_suppressed_exception
-from software.providers.contracts import ensure_survey_question_metas
+from surveycore.providers.contracts import ensure_survey_question_metas
 
 from software.providers.common import (
     SURVEY_PROVIDER_CREDAMO,

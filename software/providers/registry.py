@@ -2,8 +2,8 @@ from __future__ import annotations
 
 from typing import Any, Optional
 
-from software.core.engine.provider_common import provider_run_context
-from software.core.engine.runtime_actions import RuntimeActionResult
+from surveycore.core.engine.provider_common import provider_run_context
+from surveycore.core.engine.runtime_actions import RuntimeActionResult
 from software.core.task import ExecutionConfig, ExecutionState
 from software.providers.adapter_base import CallableProviderAdapter, ProviderAdapterHooks
 from software.providers.common import (
@@ -14,12 +14,8 @@ from software.providers.common import (
     normalize_survey_parse_url,
     normalize_survey_provider,
 )
-from software.providers.contracts import SurveyDefinition
-from software.providers.hooks import (
-    HookTarget,
-    build_fill_http_hook,
-    build_parse_hook,
-)
+from surveycore.providers.contracts import SurveyDefinition
+from surveycore.providers.hooks import HookTarget, build_fill_http_hook, build_parse_hook
 def _resolve_provider(*, provider: Optional[str] = None, ctx: Any = None) -> str:
     if provider is not None:
         return normalize_survey_provider(provider, default=SURVEY_PROVIDER_WJX)

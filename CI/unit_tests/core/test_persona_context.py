@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from software.core.persona import context
+from surveycore.core.persona import context
 
 
 class _Persona:

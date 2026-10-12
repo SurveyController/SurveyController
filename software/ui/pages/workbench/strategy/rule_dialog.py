@@ -25,11 +25,8 @@ from qfluentwidgets import (
     MessageBoxBase,
 )
 
-from software.core.questions.consistency import normalize_rule_dict
-from software.providers.contracts import (
-    SurveyQuestionMeta,
-    ensure_survey_question_metas,
-)
+from surveycore.core.questions.consistency import normalize_rule_dict
+from surveycore.providers.contracts import SurveyQuestionMeta, ensure_survey_question_metas
 from software.ui.pages.workbench.question_editor.ui_helpers import clear_layout
 
 ALLOWED_RULE_TYPE_CODES = {"3", "4", "5", "6"}

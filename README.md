@@ -7,7 +7,7 @@
   [![GitHub Release](https://img.shields.io/github/v/release/SurveyController/SurveyController?style=flat&logo=github&color=blue)](https://github.com/SurveyController/SurveyController/releases/latest)
   ![Downloads](https://img.shields.io/github/downloads/SurveyController/SurveyController/total?style=flat&logo=github&color=green)
   [![Issues](https://img.shields.io/github/issues/SurveyController/SurveyController?style=flat&logo=github)](https://github.com/SurveyController/SurveyController/issues)
-  [![Python](https://img.shields.io/badge/Python-3.13.14+-3776AB?style=flat&logo=python&logoColor=white)](https://www.python.org/)
+  [![Python](https://img.shields.io/badge/Python-3.13.16+-3776AB?style=flat&logo=python&logoColor=white)](https://www.python.org/)
   [![License](https://img.shields.io/github/license/SurveyController/SurveyController?style=flat&color=orange)](./LICENSE)
 
   <p><strong>一站式问卷自动化处理程序，适配问卷星、腾讯问卷、Credamo见数平台</strong></p>
@@ -35,11 +35,11 @@
 > [!TIP]
 > **安装包：** 前往 [发行版](https://github.com/SurveyController/SurveyController/releases/latest) 下载最新版本 .exe 安装包，安装后直接运行即可
 
-建议配合[教程文档](https://surveydoc.hungrym0.com/)食用。二开可前往 [SurveyCore](https://github.com/SurveyController/SurveyCore)
+使用说明见[教程文档](https://surveydoc.hungrym0.com/)。Python 核心库见 [surveycore-py](https://github.com/SurveyController/surveycore-py)。
 
 ### 从源码运行
 
-**环境要求：** Python 3.13.14+，Git
+**环境要求：** Python 3.13.16+，Git
 
 <details>
 <summary>Windows 使用</summary>
@@ -95,6 +95,8 @@ uv run python SurveyController.py
 详细配置项请参考[教程文档](https://surveydoc.hungrym0.com/runtime.html)。
 
 ## 技术架构
+
+题目模型、纯解析与答案策略复用 `surveycore-py`；依赖提交由 `pyproject.toml` 和 `uv.lock` 固定。桌面应用保留配置兼容、成功份数调度、暂停恢复、代理租约与 HTTP 会话、AI 服务接入和运行状态展示。
 
 ```mermaid
 flowchart TB

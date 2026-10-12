@@ -3,9 +3,9 @@ from __future__ import annotations
 from PySide6.QtWidgets import QButtonGroup, QRadioButton
 from qfluentwidgets import LineEdit
 
-from software.core.questions.config import QuestionEntry
-from software.core.questions.utils import OPTION_FILL_AI_TOKEN
-from software.providers.contracts import SurveyQuestionMeta
+from surveycore.core.questions.config import QuestionEntry
+from surveycore.core.questions.utils import OPTION_FILL_AI_TOKEN
+from surveycore.providers.contracts import SurveyQuestionMeta
 from software.ui.pages.workbench.question_editor import wizard_result_builder as builder
 from software.ui.pages.workbench.question_editor import wizard_validation as validation
 

@@ -6,8 +6,8 @@ from typing import Any, Dict, cast
 from PySide6.QtWidgets import QDialog
 
 import software.ui.pages.workbench.dashboard.parts.entries as entries_module
-from software.core.questions.config import QuestionEntry
-from software.providers.contracts import SurveyQuestionMeta
+from surveycore.core.questions.config import QuestionEntry
+from surveycore.providers.contracts import SurveyQuestionMeta
 from software.ui.pages.workbench.dashboard.parts.entries import DashboardEntriesMixin
 
 

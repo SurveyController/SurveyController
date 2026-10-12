@@ -5,7 +5,7 @@ import logging
 from typing import Any, Awaitable, Callable
 
 from software.core.engine.failure_reason import FailureReason
-from software.core.engine.provider_common import ensure_joint_psychometric_answer_plan
+from surveycore.core.engine.provider_common import ensure_joint_psychometric_answer_plan
 from software.core.task import ExecutionConfig, ExecutionState
 
 JOINT_PRE_ANSWER_RESERVATION_LEASE_SECONDS = 45.0

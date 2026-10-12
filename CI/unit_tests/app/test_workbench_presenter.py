@@ -2,9 +2,9 @@ from __future__ import annotations
 
 from typing import Any, cast
 
-from software.core.questions.config import QuestionEntry
+from surveycore.core.questions.config import QuestionEntry
 from software.core.config.schema import RuntimeConfig
-from software.providers.contracts import SurveyQuestionMeta
+from surveycore.providers.contracts import SurveyQuestionMeta
 from software.ui.pages.workbench.presenter import WorkbenchPresenter
 from software.ui.pages.workbench.session import WorkbenchState
 

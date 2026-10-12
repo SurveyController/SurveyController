@@ -1,5 +1,13 @@
 from __future__ import annotations
 
+from surveycore.wjx.provider.answering_builders import (
+    _resolve_runtime_option_texts as _resolve_runtime_option_texts,
+    _build_wjx_score_like_action as _build_wjx_score_like_action,
+    _build_wjx_matrix_action as _build_wjx_matrix_action,
+    _build_wjx_slider_action as _build_wjx_slider_action,
+    _build_wjx_order_action as _build_wjx_order_action,
+)
+
 import math
 import random
 from typing import Any, List, Optional, Sequence
@@ -11,53 +19,40 @@ from software.core.ai.runtime import (
     build_free_ai_option_fill_placeholder,
     build_free_ai_text_placeholder,
 )
-from software.core.persona.context import apply_persona_boost
-from software.core.questions.consistency import (
-    apply_matrix_row_consistency,
+from surveycore.core.persona.context import apply_persona_boost
+from surveycore.core.questions.consistency import (
     apply_single_like_consistency,
     get_multiple_rule_constraint,
 )
-from software.core.questions.distribution import (
-    resolve_distribution_probabilities,
-)
+from surveycore.core.questions.distribution import resolve_distribution_probabilities
 from software.core.questions.text_values import (
     resolve_option_fill_text_from_config,
     resolve_text_values_from_config,
 )
-from software.core.questions.strict_ratio import (
+from surveycore.core.questions.strict_ratio import (
     enforce_reference_rank_order,
     is_strict_ratio_question,
     stochastic_round,
     weighted_sample_without_replacement,
 )
-from software.core.questions.tendency import get_tendency_index
-from software.core.questions.utils import (
-    normalize_droplist_probs,
-    weighted_index,
-)
-from software.core.reverse_fill.runtime import resolve_current_reverse_fill_answer
-from software.core.reverse_fill.schema import (
+from surveycore.core.questions.tendency import get_tendency_index
+from surveycore.core.questions.utils import normalize_droplist_probs, weighted_index
+from surveycore.core.reverse_fill.runtime import resolve_current_reverse_fill_answer
+from surveycore.core.reverse_fill.schema import (
     REVERSE_FILL_KIND_CHOICE,
-    REVERSE_FILL_KIND_MATRIX,
     REVERSE_FILL_KIND_MULTI_TEXT,
     REVERSE_FILL_KIND_TEXT,
 )
 from software.core.task import ExecutionState
-from software.providers.answering import AnswerAction
-from software.providers.answering.option_fill import default_missing_option_fill
-from software.providers.answering.selection import (
+from surveycore.providers.answering import AnswerAction
+from surveycore.providers.answering.option_fill import default_missing_option_fill
+from surveycore.providers.answering.selection import (
     coerce_positive_int as _coerce_positive_int,
     valid_forced_choice_index as _valid_forced_choice_index,
 )
-from software.providers.contracts import SurveyQuestionMeta
-from wjx.provider.questions.multiple_rules import _normalize_selected_indices
+from surveycore.providers.contracts import SurveyQuestionMeta
+from surveycore.wjx.provider.questions.multiple_rules import _normalize_selected_indices
 
-
-async def _resolve_runtime_option_texts(
-    _driver: Any,
-    question: SurveyQuestionMeta,
-) -> list[str]:
-    return [str(item or "").strip() for item in list(question.option_texts or []) if str(item or "").strip()]
 
 async def _build_wjx_single_action(
     driver: Any,
@@ -309,62 +304,6 @@ async def _build_wjx_text_action(
     )
 
 
-async def _build_wjx_score_like_action(
-    driver: Any,
-    question: SurveyQuestionMeta,
-    config_index: int,
-    ctx: ExecutionState,
-    *,
-    psycho_plan: Optional[Any],
-    answer_type: str,
-    thread_name: str = "",
-) -> Optional[AnswerAction]:
-    config = ctx.config
-    current = int(question.num or 0)
-    option_texts = await _resolve_runtime_option_texts(driver, question)
-    option_count = max(2, len(option_texts) or int(question.options or 0))
-    reverse_fill_answer = resolve_current_reverse_fill_answer(
-        ctx,
-        current,
-        thread_name=thread_name,
-    )
-    forced_index: Optional[int] = None
-    if reverse_fill_answer is not None and reverse_fill_answer.kind == REVERSE_FILL_KIND_CHOICE:
-        forced_index = _valid_forced_choice_index(reverse_fill_answer.choice_index, option_count)
-    if forced_index is None:
-        forced_index = _valid_forced_choice_index(question.forced_option_index, option_count)
-
-    if forced_index is None:
-        probabilities = config.scale_prob[config_index] if config_index < len(config.scale_prob) else -1
-        probs = normalize_droplist_probs(probabilities, option_count)
-        probs = apply_single_like_consistency(probs, current)
-        probs = resolve_distribution_probabilities(
-            probs,
-            option_count,
-            ctx,
-            current,
-            psycho_plan=psycho_plan,
-        )
-        selected_index = get_tendency_index(
-            option_count,
-            probs,
-            dimension=config.question_dimension_map.get(current),
-            psycho_plan=psycho_plan,
-            question_index=current,
-        )
-    else:
-        selected_index = forced_index
-    return AnswerAction(
-        question_num=current,
-        kind="choice",
-        input_type="radio",
-        selected_indices=(selected_index,),
-        selected_texts=(option_texts[selected_index] if selected_index < len(option_texts) else "",),
-        record_type=answer_type,
-        pending_distribution_choices=((selected_index, option_count, None),) if forced_index is None else (),
-    )
-
-
 async def _build_wjx_multiple_action(
     driver: Any,
     question: SurveyQuestionMeta,
@@ -516,124 +455,6 @@ async def _build_wjx_multiple_action(
         while len(selected) < min_required and missing:
             selected.append(missing.pop(0))
     return await _finalize(selected[:max_allowed])
-
-
-async def _build_wjx_matrix_action(
-    question: SurveyQuestionMeta,
-    config_index: int,
-    ctx: ExecutionState,
-    *,
-    psycho_plan: Optional[Any],
-    thread_name: str = "",
-) -> Optional[AnswerAction]:
-    config = ctx.config
-    current = int(question.num or 0)
-    row_count = max(1, int(question.rows or 1))
-    option_count = max(2, len(question.option_texts or []) or int(question.options or 0))
-    reverse_fill_answer = resolve_current_reverse_fill_answer(
-        ctx,
-        current,
-        thread_name=thread_name,
-    )
-    forced_indices: list[int] = []
-    if reverse_fill_answer is not None and reverse_fill_answer.kind == REVERSE_FILL_KIND_MATRIX:
-        forced_indices = [int(item) for item in list(reverse_fill_answer.matrix_choice_indexes or []) if int(item) >= 0]
-    strict_ratio_question = is_strict_ratio_question(ctx, current)
-    selected_indices: list[int] = []
-    pending: list[tuple[int, int, Optional[int]]] = []
-    next_index = config_index
-    for row_index in range(row_count):
-        if row_index < len(forced_indices):
-            selected_index = min(max(0, forced_indices[row_index]), option_count - 1)
-        else:
-            raw_probabilities = config.matrix_prob[next_index] if next_index < len(config.matrix_prob) else -1
-            strict_reference: Optional[List[float]] = None
-            row_probabilities: Any = -1
-            if isinstance(raw_probabilities, list):
-                try:
-                    probs = [float(value) for value in raw_probabilities]
-                except Exception:
-                    probs = []
-                if len(probs) != option_count:
-                    probs = [1.0] * option_count
-                strict_reference = list(probs)
-                probs = apply_matrix_row_consistency(probs, current, row_index)
-                if any(prob > 0 for prob in probs):
-                    row_probabilities = resolve_distribution_probabilities(
-                        probs,
-                        option_count,
-                        ctx,
-                        current,
-                        row_index=row_index,
-                        psycho_plan=psycho_plan,
-                    )
-            else:
-                uniform_probs = apply_matrix_row_consistency([1.0] * option_count, current, row_index)
-                if any(prob > 0 for prob in uniform_probs):
-                    row_probabilities = resolve_distribution_probabilities(
-                        uniform_probs,
-                        option_count,
-                        ctx,
-                        current,
-                        row_index=row_index,
-                        psycho_plan=psycho_plan,
-                    )
-            if strict_ratio_question and isinstance(row_probabilities, list):
-                row_probabilities = enforce_reference_rank_order(row_probabilities, strict_reference or row_probabilities)
-            selected_index = get_tendency_index(
-                option_count,
-                row_probabilities,
-                dimension=config.question_dimension_map.get(current),
-                psycho_plan=psycho_plan,
-                question_index=current,
-                row_index=row_index,
-            )
-            pending.append((selected_index, option_count, row_index))
-        selected_indices.append(selected_index)
-        next_index += 1
-    return AnswerAction(
-        question_num=current,
-        kind="matrix",
-        matrix_indices=tuple(selected_indices),
-        record_type="matrix",
-        pending_distribution_choices=tuple(pending),
-    )
-
-
-async def _build_wjx_slider_action(
-    question: SurveyQuestionMeta,
-    config_index: int,
-    ctx: ExecutionState,
-) -> Optional[AnswerAction]:
-    target_value = 50.0
-    if config_index < len(ctx.config.slider_targets):
-        try:
-            target_value = float(ctx.config.slider_targets[config_index])
-        except Exception:
-            target_value = 50.0
-    return AnswerAction(
-        question_num=int(question.num or 0),
-        kind="slider",
-        slider_value=target_value,
-        record_type="slider",
-    )
-
-
-async def _build_wjx_order_action(
-    driver: Any,
-    question: SurveyQuestionMeta,
-) -> AnswerAction:
-    option_texts = await _resolve_runtime_option_texts(driver, question)
-    option_count = max(1, len(option_texts) or int(question.options or 0))
-    ordered_indices = list(range(option_count))
-    random.shuffle(ordered_indices)
-    return AnswerAction(
-        question_num=int(question.num or 0),
-        kind="order",
-        selected_indices=tuple(ordered_indices),
-        selected_texts=tuple(option_texts[index] for index in ordered_indices if index < len(option_texts)),
-        record_type="order",
-    )
 
 
 async def build_answer_action(

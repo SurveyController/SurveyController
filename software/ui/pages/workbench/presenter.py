@@ -10,10 +10,7 @@ from software.core.config.schema import RuntimeConfig
 from software.core.config.codec import build_runtime_config_snapshot
 from software.logging.action_logger import log_action
 from software.providers.common import detect_survey_provider
-from software.providers.contracts import (
-    SurveyQuestionMeta,
-    ensure_survey_question_metas,
-)
+from surveycore.providers.contracts import SurveyQuestionMeta, ensure_survey_question_metas
 from software.ui.pages.workbench.dashboard.page import DashboardPage
 from software.ui.pages.workbench.reverse_fill.page import ReverseFillPage
 from software.ui.pages.workbench.runtime_panel.main import RuntimePage

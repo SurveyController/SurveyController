@@ -17,7 +17,7 @@ from software.core.engine.async_engine import AsyncEngineClient
 from software.core.engine.failure_reason import FailureReason
 from software.core.task import ExecutionConfig, ExecutionState, ProxyLease
 from software.core.config.schema import RuntimeConfig
-from software.providers.contracts import SurveyQuestionMeta
+from surveycore.providers.contracts import SurveyQuestionMeta
 from .runtime_preparation import (
     PreparedExecutionArtifacts,
     RuntimePreparationError,

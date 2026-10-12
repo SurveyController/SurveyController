@@ -6,7 +6,7 @@ import random
 from typing import Any, Optional, cast
 
 from software.core.ai.runtime import AIRuntimeError
-from software.core.engine.async_events import AsyncRunContext, ThreadEventProxy
+from surveycore.core.engine.async_events import AsyncRunContext, ThreadEventProxy
 from software.core.engine.async_http_submitter import AsyncHttpSubmitter
 from software.core.engine.async_proxy_session import AsyncProxySession
 from software.core.engine.async_round_resources import (
@@ -14,7 +14,7 @@ from software.core.engine.async_round_resources import (
     JOINT_PRE_ANSWER_ATTEMPT_REQUEUE_DELAY_SECONDS,
     JOINT_PRE_ANSWER_TIMEOUT,
 )
-from software.core.engine.async_scheduler import AsyncScheduler
+from surveycore.core.engine.async_scheduler import AsyncScheduler
 from software.core.engine.failure_reason import FailureReason
 from software.core.engine.run_stop_policy import RunStopPolicy
 from software.core.engine.runtime_control_port import RuntimeControlPort
@@ -22,7 +22,10 @@ from software.core.engine.runtime_error_handlers import handle_ai_runtime_error 
 from software.core.engine.runtime_error_handlers import handle_submission_verification_error
 from software.core.engine.runtime_error_handlers import handle_survey_provider_unavailable_error
 from software.core.task import ExecutionConfig, ExecutionState
-from software.providers.errors import SubmissionVerificationRequiredError, SurveyProviderUnavailableAtRuntimeError
+from surveycore.providers.errors import (
+    SubmissionVerificationRequiredError,
+    SurveyProviderUnavailableAtRuntimeError,
+)
 import software.network.http as http_client
 from software.network.session_policy import (
     _discard_unresponsive_proxy,
@@ -34,7 +37,7 @@ from software.network.session_policy import (
 )
 from software.network.proxy.session import get_session_snapshot
 from software.network.submission_report import report_submission_result_async
-from software.providers.http_progress import update_http_submit_step
+from surveycore.providers.http_progress import update_http_submit_step
 
 
 class AsyncSlotRunner:
