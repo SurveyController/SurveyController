@@ -172,17 +172,6 @@ class MainWindowLazyPagesMixin:
                 self.stackedWidget.addWidget(self._about_page)
         return self._about_page
 
-    def _get_ip_usage_page(self):
-        
-        if self._ip_usage_page is None:
-            from software.ui.pages.more.ip_usage_page import IpUsagePage
-
-            self._ip_usage_page = IpUsagePage(self)
-            self._ip_usage_page.setObjectName("ip_usage")
-            if self.stackedWidget.indexOf(self._ip_usage_page) == -1:
-                self.stackedWidget.addWidget(self._ip_usage_page)
-        return self._ip_usage_page
-
     def _get_donate_page(self):
         
         if self._donate_page is None:
@@ -216,13 +205,6 @@ class MainWindowLazyPagesMixin:
         tutorial_action = Action(FluentIcon.LIBRARY, "使用教程")
         tutorial_action.triggered.connect(self._open_usage_tutorial)
         menu.addAction(tutorial_action)
-
-        
-        ip_usage_action = Action(FluentIcon.CALENDAR, "IP 使用记录")
-        ip_usage_action.triggered.connect(
-            lambda: self._switch_to_more_page(self._get_ip_usage_page())
-        )
-        menu.addAction(ip_usage_action)
 
         
         donate_action = Action(FluentIcon.HEART, "捐助")
