@@ -25,7 +25,8 @@ from software.providers.common import (
     SURVEY_PROVIDER_WJX,
 )
 
-HTTP_PROXY_MIN_REMAINING_TTL_SECONDS = 50
+# 纯 HTTP 链路不设置预留时长门槛；仍由 expire_ts 判断代理是否已经过期。
+HTTP_PROXY_MIN_REMAINING_TTL_SECONDS = 0
 
 
 

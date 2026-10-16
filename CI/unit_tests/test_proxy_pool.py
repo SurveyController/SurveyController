@@ -78,6 +78,7 @@ class ProxyPoolTests:
         assert leases[0].expire_ts > 0
 
     def test_proxy_ttl_helpers(self, patch_attrs) -> None:
+        assert pool.HTTP_PROXY_MIN_REMAINING_TTL_SECONDS == 0
         assert pool.get_proxy_required_ttl_seconds(None) == pool.PROXY_TTL_GRACE_SECONDS
         assert pool.get_proxy_required_ttl_seconds((10, 20)) == 20 + pool.PROXY_TTL_GRACE_SECONDS
         assert (
