@@ -17,7 +17,6 @@ class PsychometricPlanTests:
         with patch('surveycore.core.psychometrics.psychometric.randn', side_effect=[1.0, 0.0, 0.0, 0.0]):
             plan = build_psychometric_plan(items, target_alpha=0.9)
         assert plan is not None
-        assert plan is not None
         assert set(plan.choices.keys()) == {'q:1', 'q:2', 'q:3'}
         assert plan.get_choice(1) == 3
         assert plan.get_choice(2) == 3
@@ -28,7 +27,6 @@ class PsychometricPlanTests:
         grouped_items = {'engagement': [PsychometricItem(kind='scale', question_index=1, option_count=5, bias='center', target_probabilities=[1, 1, 1, 1, 1]), PsychometricItem(kind='scale', question_index=2, option_count=5, bias='center', target_probabilities=[1, 1, 1, 1, 1])], 'single-item': [PsychometricItem(kind='scale', question_index=9, option_count=5, bias='center', target_probabilities=[1, 1, 1, 1, 1])]}
         with patch('surveycore.core.psychometrics.psychometric.randn', return_value=0.0):
             plan = build_dimension_psychometric_plan(grouped_items, target_alpha=0.9)
-        assert plan is not None
         assert plan is not None
         assert 'engagement' in plan.plans
         assert plan.skipped_dimensions == {'single-item': 1}

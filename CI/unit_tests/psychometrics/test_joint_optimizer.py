@@ -46,7 +46,6 @@ class JointOptimizerTests:
         with patch('surveycore.core.psychometrics.joint_optimizer.randn', return_value=0.0):
             plan = build_joint_psychometric_answer_plan(config)
         assert plan is not None
-        assert plan is not None
         assert plan.sample_count == 4
         assert set(plan.answers_by_sample.keys()) == {0, 1, 2, 3}
         assert plan.item_dimension_map['q:1'] == 'stress'
@@ -63,7 +62,6 @@ class JointOptimizerTests:
             assert int(q1_choice) in range(5)
             assert int(q3_choice) in range(5)
         sample_plan = plan.build_sample_plan(0)
-        assert sample_plan is not None
         assert sample_plan is not None
         assert sample_plan.is_distribution_locked(1)
         assert sample_plan.diagnostics_by_dimension['stress'].anchor_direction == 'left'

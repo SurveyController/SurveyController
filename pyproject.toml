@@ -10,28 +10,34 @@ dependencies = [
     "keyring>=25,<26; sys_platform == 'darwin'",
     "openpyxl",
     "packaging",
-    "PySide6==6.11.1",
-    "PySide6-Fluent-Widgets==1.11.2",
+    "PySide6==6.12.0",
+    "PySide6-Fluent-Widgets==1.11.3",
     "surveycore-py",
     "zxing-cpp",
 ]
 
 [dependency-groups]
 dev = [
-    "pyright>=1.1.410",
+    "pyright>=1.1.414",
     "pytest",
     "pytest-asyncio",
     "pytest-cov",
     "pytest-qt>=4.5.0",
-    "ruff>=0.15.17",
+    "ruff>=0.17.1",
 ]
 build = [
-    "nuitka>=4.1.2,<5",
+    "nuitka>=4.3,<5",
 ]
 
 [tool.uv]
 package = false
 default-groups = ["dev"]
+exclude-dependencies = [
+    { package = { name = "pyside6", version = "6.12.0" }, dependencies = [
+        "pyside6-pdf",
+        "pyside6-webengine",
+    ] },
+]
 
 [tool.uv.sources]
 surveycore-py = { git = "https://github.com/SurveyController/surveycore-py", rev = "6c3c72bde24db8133800c7185fd9aeceb627acf9" }

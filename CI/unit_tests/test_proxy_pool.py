@@ -78,24 +78,23 @@ class ProxyPoolTests:
         assert leases[0].expire_ts > 0
 
     def test_proxy_ttl_helpers(self, patch_attrs) -> None:
-        assert pool.HTTP_PROXY_MIN_REMAINING_TTL_SECONDS == 0
         assert pool.get_proxy_required_ttl_seconds(None) == pool.PROXY_TTL_GRACE_SECONDS
         assert pool.get_proxy_required_ttl_seconds((10, 20)) == 20 + pool.PROXY_TTL_GRACE_SECONDS
         assert (
             pool.get_proxy_required_ttl_seconds((10, 20), survey_provider=SURVEY_PROVIDER_QQ)
-            == pool.HTTP_PROXY_MIN_REMAINING_TTL_SECONDS
+            == 0
         )
         assert (
             pool.get_proxy_required_ttl_seconds((250, 250), survey_provider=SURVEY_PROVIDER_QQ)
-            == pool.HTTP_PROXY_MIN_REMAINING_TTL_SECONDS
+            == 0
         )
         assert (
             pool.get_proxy_required_ttl_seconds((250, 250), survey_provider=SURVEY_PROVIDER_WJX)
-            == pool.HTTP_PROXY_MIN_REMAINING_TTL_SECONDS
+            == 0
         )
         assert (
             pool.get_proxy_required_ttl_seconds((250, 250), survey_provider=SURVEY_PROVIDER_CREDAMO)
-            == pool.HTTP_PROXY_MIN_REMAINING_TTL_SECONDS
+            == 0
         )
         assert pool.proxy_lease_has_sufficient_ttl(None, required_ttl_seconds=1) is False
         assert pool.proxy_lease_has_sufficient_ttl(ProxyLease(address="x"), required_ttl_seconds=99999) is True
