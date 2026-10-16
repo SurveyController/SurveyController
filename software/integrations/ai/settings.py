@@ -8,8 +8,8 @@ AI_PROVIDERS = {
     "deepseek": {
         "label": "DeepSeek",
         "base_url": "https://api.deepseek.com/v1",
-        "recommended_models": ["deepseek-v4-flash", "deepseek-v4-pro"],
-        "default_model": "deepseek-v4-flash",
+        "recommended_models": ["deepseek-flash", "deepseek-v4-pro"],
+        "default_model": "deepseek-flash",
     },
     "custom": {
         "label": "OpenAI 兼容",
