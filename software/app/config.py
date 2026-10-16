@@ -65,7 +65,6 @@ def get_proxy_auth() -> str:
     return os.environ.get("WJX_PROXY_AUTH", "")
 _DEFAULT_CONTACT_API = "https://bot.hungrym0.com"
 _DEFAULT_AUTH_TRIAL = "https://api-wjx.hungrym0.com/api/auth/trial"
-_DEFAULT_AUTH_BONUS_CLAIM = "https://api-wjx.hungrym0.com/api/bonus"
 _DEFAULT_CARD_REDEEM_ENDPOINT = "https://api-wjx.hungrym0.com/api/cards/redeem"
 _DEFAULT_IP_EXTRACT_ENDPOINT = "https://api-wjx.hungrym0.com/api/ip/extract"
 _DEFAULT_SUBMISSION_REPORT_ENDPOINT = "https://api-wjx.hungrym0.com/api/submission/report"
@@ -150,7 +149,6 @@ PROXY_POOL_QUALITY = "quality"
 
 CONTACT_API_URL = _resolve_env_value("CONTACT_API_URL", _DEFAULT_CONTACT_API)
 AUTH_TRIAL_ENDPOINT = _resolve_env_value("AUTH_TRIAL_ENDPOINT", _DEFAULT_AUTH_TRIAL)
-AUTH_BONUS_CLAIM_ENDPOINT = _resolve_env_value("AUTH_BONUS_CLAIM_ENDPOINT", _DEFAULT_AUTH_BONUS_CLAIM)
 CARD_REDEEM_ENDPOINT = _resolve_env_value("CARD_REDEEM_ENDPOINT", _DEFAULT_CARD_REDEEM_ENDPOINT)
 IP_EXTRACT_ENDPOINT = _resolve_env_value("IP_EXTRACT_ENDPOINT", _DEFAULT_IP_EXTRACT_ENDPOINT)
 SUBMISSION_REPORT_ENDPOINT = _resolve_env_value("SUBMISSION_REPORT_ENDPOINT", _DEFAULT_SUBMISSION_REPORT_ENDPOINT)

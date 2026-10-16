@@ -11,18 +11,11 @@ from software.network.proxy.session.models import RandomIPAuthError, RandomIPSes
 @pytest.fixture(autouse=True)
 def isolate_random_ip_auth_storage(monkeypatch: pytest.MonkeyPatch):
     settings = _Settings()
-    secrets: dict[str, str] = {}
-
-    def read_secret(key: str) -> _Secret:
-        value = secrets.get(key, "")
-        return _Secret(value, "ok" if value else "not_found")
 
     monkeypatch.setattr(auth, "_get_settings", lambda: settings)
-    monkeypatch.setattr(auth, "read_secret", read_secret)
-    monkeypatch.setattr(auth, "set_secret", lambda key, value: secrets.__setitem__(key, str(value or "")))
     auth._session_loaded = False
     auth._session = RandomIPSession()
-    yield settings, secrets
+    yield settings
     auth._session_loaded = False
     auth._session = RandomIPSession()
 
@@ -47,12 +40,6 @@ class _Settings:
         self.synced += 1
 
 
-class _Secret:
-    def __init__(self, value: str = "", status: str = "not_found") -> None:
-        self.value = value
-        self.status = status
-
-
 class _Response:
     def __init__(self, payload: object, status_code: int = 200) -> None:
         self._payload = payload
@@ -70,7 +57,6 @@ def _reset_auth_state(session: RandomIPSession | None = None) -> None:
 @pytest.mark.parametrize(
     ("detail", "expected"),
     [
-        ("bonus_already_claimed", "彩蛋已触发"),
         ("device_id_required", "设备标识缺失"),
         ("trial_already_claimed", "已领取过免费试用"),
         ("trial_rate_limited", "领取试用过于频繁"),
@@ -102,12 +88,9 @@ class RandomIPSessionAuthTests:
             auth._settings_key("used_quota"): "7",
             auth._settings_key("quota_known"): True,
         }
-        secrets: dict[str, str] = {}
         auth._session_loaded = False
         patch_attrs(
             (auth, "_get_settings", lambda: settings),
-            (auth, "read_secret", lambda _key: _Secret("", "not_found")),
-            (auth, "set_secret", lambda key, value: secrets.setdefault(key, value)),
             (auth, "build_stable_device_id", lambda: "sc-v2-generated-device"),
         )
 
@@ -118,9 +101,9 @@ class RandomIPSessionAuthTests:
         assert auth._session.remaining_quota == 3.0
         assert auth._session.total_quota == 10.0
         assert auth._session.used_quota == 7.0
-        assert secrets[auth._DEVICE_SECRET_KEY] == "sc-v2-generated-device"
+        assert settings.values[auth._settings_key("device_id")] == "sc-v2-generated-device"
 
-    def test_ensure_loaded_keeps_existing_secret_device_id(self, patch_attrs) -> None:
+    def test_ensure_loaded_keeps_existing_settings_device_id(self, patch_attrs) -> None:
         settings = _Settings()
         settings.values = {
             auth._settings_key("device_id"): "settings-device",
@@ -129,41 +112,19 @@ class RandomIPSessionAuthTests:
         auth._session_loaded = False
         patch_attrs(
             (auth, "_get_settings", lambda: settings),
-            (auth, "read_secret", lambda _key: _Secret("existing-secret-device", "ok")),
             (auth, "build_stable_device_id", lambda: "sc-v2-should-not-be-used"),
         )
 
         auth._ensure_loaded()
 
-        assert auth._session.device_id == "existing-secret-device"
-        assert auth._session.user_id == 38852
-
-    def test_ensure_loaded_keeps_existing_settings_device_id(self, patch_attrs) -> None:
-        settings = _Settings()
-        settings.values = {
-            auth._settings_key("device_id"): "existing-settings-device",
-            auth._settings_key("user_id"): "38852",
-        }
-        auth._session_loaded = False
-        patch_attrs(
-            (auth, "_get_settings", lambda: settings),
-            (auth, "read_secret", lambda _key: _Secret("", "not_found")),
-            (auth, "build_stable_device_id", lambda: "sc-v2-should-not-be-used"),
-        )
-
-        auth._ensure_loaded()
-
-        assert auth._session.device_id == "existing-settings-device"
+        assert auth._session.device_id == "settings-device"
         assert auth._session.user_id == 38852
 
     def test_set_session_persists_normalized_quota_and_snapshot(self, patch_attrs) -> None:
         settings = _Settings()
-        secrets: dict[str, str] = {}
         _reset_auth_state(RandomIPSession(device_id="old-device"))
         patch_attrs(
             (auth, "_get_settings", lambda: settings),
-            (auth, "read_secret", lambda _key: _Secret("device-2", "ok")),
-            (auth, "set_secret", lambda key, value: secrets.setdefault(key, value)),
         )
 
         session = auth._set_session(
@@ -181,18 +142,16 @@ class RandomIPSessionAuthTests:
         assert session.user_id == 9
         assert settings.values[auth._settings_key("user_id")] == 9
         assert settings.values[auth._settings_key("remaining_quota")] == "2"
-        assert secrets[auth._DEVICE_SECRET_KEY] == "device-2"
+        assert settings.values[auth._settings_key("device_id")] == "device-2"
         snapshot = auth.get_session_snapshot()
         assert snapshot["authenticated"] is True
         assert snapshot["remaining_quota"] == 2.0
 
-    def test_set_session_allows_unsupported_secure_store_when_settings_persisted(self, patch_attrs) -> None:
+    def test_set_session_persists_device_id_in_settings(self, patch_attrs) -> None:
         settings = _Settings()
         _reset_auth_state(RandomIPSession(device_id="old-device"))
         patch_attrs(
             (auth, "_get_settings", lambda: settings),
-            (auth, "read_secret", lambda _key: _Secret("", "unsupported")),
-            (auth, "set_secret", lambda *_args, **_kwargs: None),
         )
 
         session = auth._set_session(
@@ -286,33 +245,6 @@ class RandomIPSessionAuthTests:
         assert auth._extract_request_timeout_seconds(16) == 40.0
         assert auth._extract_request_timeout_seconds(999) == 60.0
 
-    def test_claim_bonus_updates_quota_snapshot(self, patch_attrs) -> None:
-        _reset_auth_state(RandomIPSession(device_id="device-6", user_id=44, remaining_quota=1, total_quota=2, used_quota=1, quota_known=True))
-        settings = _Settings()
-        async def fake_bonus_post(*_args, **_kwargs):
-            return _Response(
-                {
-                    "claimed": True,
-                    "bonus_quota": 5,
-                    "remaining_quota": 6,
-                    "total_quota": 7,
-                    "used_quota": 1,
-                    "detail": "ok",
-                }
-            )
-        patch_attrs(
-            (auth, "_get_settings", lambda: settings),
-            (auth, "set_secret", lambda *_args, **_kwargs: None),
-            (auth, "_apost_json", fake_bonus_post),
-        )
-
-        result = asyncio.run(auth.claim_easter_egg_bonus_async())
-
-        assert result["claimed"] is True
-        assert result["bonus_quota"] == 5.0
-        assert result["remaining_quota"] == 6.0
-        assert auth._session.total_quota == 7.0
-
     def test_redeem_card_updates_quota_snapshot(self, patch_attrs) -> None:
         _reset_auth_state(
             RandomIPSession(
@@ -341,7 +273,6 @@ class RandomIPSessionAuthTests:
 
         patch_attrs(
             (auth, "_get_settings", lambda: settings),
-            (auth, "set_secret", lambda *_args, **_kwargs: None),
             (auth, "_apost_json", fake_redeem_post),
         )
 

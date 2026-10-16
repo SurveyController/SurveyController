@@ -87,12 +87,11 @@ class ConfigStoreTests:
         with pytest.raises(ValueError, match="JSON 顶层必须是对象"):
             config_store.load_config(str(path), strict=True)
 
-    def test_load_config_rejects_unknown_keys_in_strict_mode(self, tmp_path: Path) -> None:
+    def test_load_config_ignores_unknown_keys_in_strict_mode(self, tmp_path: Path) -> None:
         path = tmp_path / "legacy.json"
         path.write_text('{"url": "https://example.test", "random_proxy_api": "old"}', encoding="utf-8")
 
-        with pytest.raises(ValueError, match="该配置文件损坏"):
-            config_store.load_config(str(path), strict=True)
+        assert config_store.load_config(str(path), strict=True).url == "https://example.test"
 
     def test_save_config_creates_parent_directory_and_round_trips(self, tmp_path: Path) -> None:
         path = tmp_path / "nested" / "config.json"

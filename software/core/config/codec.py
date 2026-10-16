@@ -388,7 +388,7 @@ def deserialize_question_entry(data: Dict[str, Any]):
 
     unknown_keys = set(data or {}) - _QUESTION_ENTRY_FIELDS
     if unknown_keys:
-        raise ValueError(f"{_CONFIG_CORRUPTED_MESSAGE}：题目配置包含不支持的字段（{', '.join(sorted(unknown_keys))}）")
+        logging.warning("忽略题目配置中的未知字段：%s", ", ".join(sorted(unknown_keys)))
     mode_raw = data.get("distribution_mode") or "random"
     probabilities = data.get("probabilities")
     custom_weights = data.get("custom_weights")
@@ -510,7 +510,7 @@ def normalize_runtime_config_payload(raw: Dict[str, Any]) -> RuntimeConfig:
     config = RuntimeConfig()
     unknown_keys = set(raw or {}) - _RUNTIME_CONFIG_FIELDS
     if unknown_keys:
-        raise ValueError(f"{_CONFIG_CORRUPTED_MESSAGE}：配置包含不支持的字段（{', '.join(sorted(unknown_keys))}）")
+        logging.warning("忽略配置中的未知字段：%s", ", ".join(sorted(unknown_keys)))
     config.url = str(raw.get("url") or "")
     config.survey_title = str(raw.get("survey_title") or "")
     config.survey_provider = normalize_survey_provider(
@@ -592,8 +592,9 @@ def normalize_runtime_config_payload(raw: Dict[str, Any]) -> RuntimeConfig:
             if isinstance(item, dict):
                 unknown_question_keys = set(item) - _SURVEY_QUESTION_META_FIELDS
                 if unknown_question_keys:
-                    raise ValueError(
-                        f"{_CONFIG_CORRUPTED_MESSAGE}：题目元数据包含不支持的字段（{', '.join(sorted(unknown_question_keys))}）"
+                    logging.warning(
+                        "忽略题目元数据中的未知字段：%s",
+                        ", ".join(sorted(unknown_question_keys)),
                     )
         normalized_questions = ensure_questions_provider_fields(
             questions_info_data,

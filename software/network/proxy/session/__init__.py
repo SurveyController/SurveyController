@@ -1,7 +1,6 @@
 from software.network.proxy.session.auth import (
     RandomIPAuthError,
     activate_trial_async,
-    claim_easter_egg_bonus_async,
     extract_proxy_async,
     format_quota_value,
     format_random_ip_error,
@@ -20,7 +19,6 @@ from software.network.proxy.session.auth import (
 __all__ = [
     "RandomIPAuthError",
     "activate_trial_async",
-    "claim_easter_egg_bonus_async",
     "extract_proxy_async",
     "format_quota_value",
     "format_random_ip_error",

@@ -9,7 +9,6 @@ from software.core.config.schema import RuntimeConfig
 from software.core.engine.async_engine import AsyncEngineClient
 from software.core.engine.cleanup import CleanupRunner
 from software.io.config.store import save_config
-from software.system.power_management import SystemSleepBlocker
 from software.ui.controller.run_command_service import RunCommandService
 from software.ui.controller.run_state_store import RunStateStore
 from software.ui.controller.survey_parse_service import SurveyParseService
@@ -28,7 +27,6 @@ class RunController(QObject):
         self._uiCallbackQueued.connect(self._drain_ui_callbacks)
         self._async_engine_client = AsyncEngineClient()
         self._cleanup_runner = CleanupRunner()
-        self._sleep_blocker = SystemSleepBlocker()
         self._state_store = RunStateStore(
             on_runtime_snapshot_changed=self._emit_runtime_snapshot,
             on_survey_snapshot_changed=self._emit_survey_snapshot,
@@ -37,7 +35,6 @@ class RunController(QObject):
             state_store=self._state_store,
             async_engine_client=self._async_engine_client,
             cleanup_runner=self._cleanup_runner,
-            sleep_blocker=self._sleep_blocker,
             dispatch_async=self._dispatch_to_ui_async,
             emit_event=self._emit_controller_event,
         )

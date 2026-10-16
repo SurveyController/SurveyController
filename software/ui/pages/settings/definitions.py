@@ -67,17 +67,6 @@ BEHAVIOR_SWITCHES = (
         handler_name="_on_ask_save_on_close_toggled",
     ),
     SwitchCardDefinition(
-        attr_name="prevent_sleep_card",
-        icon=FluentIcon.HISTORY,
-        title="执行期间阻止自动休眠",
-        content="任务运行时阻止电脑因为长时间无操作而自动休眠，任务结束后会自动恢复",
-        setting_key="prevent_sleep_during_run",
-        default=True,
-        event="toggle_prevent_sleep_during_run",
-        target="prevent_sleep_switch",
-        handler_name="_on_prevent_sleep_toggled",
-    ),
-    SwitchCardDefinition(
         attr_name="task_result_notification_card",
         icon=FluentIcon.INFO,
         title="后台任务完成/失败时通知",

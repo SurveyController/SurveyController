@@ -7,7 +7,6 @@ from dataclasses import replace
 from typing import Any, Dict, List, Optional
 
 from software.app.config import (
-    AUTH_BONUS_CLAIM_ENDPOINT,
     AUTH_TRIAL_ENDPOINT,
     CARD_REDEEM_ENDPOINT,
     IP_EXTRACT_ENDPOINT,
@@ -15,7 +14,6 @@ from software.app.config import (
 from software.app.settings_store import app_settings
 from software.logging.log_utils import log_suppressed_exception
 from software.system.device_fingerprint import build_stable_device_id
-from software.system.secure_store import read_secret, set_secret
 
 from .client import (
     _apost_json,
@@ -42,8 +40,6 @@ from .normalize import (
 )
 
 _SESSION_PREFIX = "random_ip_auth/"
-
-_DEVICE_SECRET_KEY = "random_ip/device_id"
 
 _SESSION_PERSIST_FAILED_DETAIL = "session_persist_failed"
 _EXTRACT_REQUEST_BASE_TIMEOUT_SECONDS = 10.0
@@ -94,15 +90,12 @@ def _ensure_loaded() -> None:
         if _session_loaded:
             return
         settings = _get_settings()
-        device_secret = read_secret(_DEVICE_SECRET_KEY)
-        device_id = device_secret.value.strip()
-        device_from = "secure_store"
-        if not device_id:
-            device_id = str(settings.value(_settings_key("device_id")) or "").strip()
-            device_from = "settings" if device_id else "generated"
+        device_id = str(settings.value(_settings_key("device_id")) or "").strip()
+        device_from = "settings" if device_id else "generated"
         if not device_id:
             device_id = build_stable_device_id()
-            set_secret(_DEVICE_SECRET_KEY, device_id)
+            settings.setValue(_settings_key("device_id"), device_id)
+            settings.sync()
         loaded_user_id = _to_non_negative_int(settings.value(_settings_key("user_id")), 0)
         loaded_remaining_quota = _to_non_negative_quota(settings.value(_settings_key("remaining_quota")), 0.0)
         loaded_total_quota = _to_non_negative_quota(settings.value(_settings_key("total_quota")), loaded_remaining_quota)
@@ -131,14 +124,10 @@ def _ensure_loaded() -> None:
         )
         _session = loaded_session
         _session_loaded = True
-        log_level = logging.INFO
-        if device_secret.status not in {"ok", "not_found"}:
-            log_level = logging.WARNING
         _log_session_event(
-            log_level,
+            logging.INFO,
             "启动加载完成",
             loaded_session,
-            device_secret=device_secret.status,
             device_from=device_from,
             settings_user_id=loaded_user_id,
         )
@@ -152,7 +141,6 @@ def _persist_session_locked() -> None:
     settings.setValue(_settings_key("used_quota"), format_quota_value(_session.used_quota))
     settings.setValue(_settings_key("quota_known"), bool(_session.quota_known))
     settings.sync()
-    set_secret(_DEVICE_SECRET_KEY, _session.device_id)
 
 def _verify_persisted_session(session: RandomIPSession) -> None:
     settings = _get_settings()
@@ -187,17 +175,6 @@ def _verify_persisted_session(session: RandomIPSession) -> None:
     persisted_quota_known = _to_optional_bool(settings.value(_settings_key("quota_known")))
     if persisted_quota_known is None or bool(persisted_quota_known) != expected_quota_known:
         failures.append("settings.quota_known")
-
-    persisted_device_secret = read_secret(_DEVICE_SECRET_KEY)
-    if persisted_device_secret.status == "unsupported":
-        _log_session_event(
-            logging.WARNING,
-            "安全存储不可用，设备标识持久化校验降级为仅检查本地设置",
-            session,
-            device_secret=persisted_device_secret.status,
-        )
-    elif persisted_device_secret.value.strip() != expected_device_id:
-        failures.append(f"secure_store.device_id[{persisted_device_secret.status}]")
 
     if failures:
         logging.error("随机IP会话持久化校验失败：%s", ", ".join(failures))
@@ -305,10 +282,6 @@ def format_random_ip_error(exc: BaseException) -> str:
     if not isinstance(exc, RandomIPAuthError):
         return str(exc or "请求失败，请稍后重试")
     detail = exc.detail
-    if detail in {"bonus_already_claimed", "easter_egg_already_claimed"}:
-        return "彩蛋已触发，无需重复领取"
-    if detail in {"bonus_claim_not_available", "easter_egg_not_available"}:
-        return "当前暂时无法领取彩蛋奖励，请稍后再试"
     if detail == "device_id_required":
         return "设备标识缺失，请重启软件后重试"
     if detail == "invalid_request_body":
@@ -560,38 +533,6 @@ def _apply_quota_payload(data: Dict[str, Any], *, log_context: str = "随机IP�
         quota_known=quota_known,
     )
     return _set_session(updated)
-
-async def claim_easter_egg_bonus_async() -> Dict[str, Any]:
-    session = _require_authenticated_session()
-    response = await _apost_json(
-        AUTH_BONUS_CLAIM_ENDPOINT,
-        json_body={
-            "user_id": int(session.user_id),
-            "bonus_code": "fuck-you-hacker",
-        },
-    )
-    if int(getattr(response, "status_code", 0) or 0) != 200:
-        raise _extract_error_payload(response)
-    try:
-        data = response.json()
-    except Exception as exc:
-        raise RandomIPAuthError(f"invalid_response:{exc}") from exc
-    if not isinstance(data, dict):
-        raise RandomIPAuthError("invalid_response")
-
-    session = _apply_quota_payload(data, log_context="随机IP彩蛋额度响应")
-    claimed = bool(data.get("claimed", False))
-    bonus_quota = _to_non_negative_quota(data.get("bonus_quota"), 0.0)
-    detail = str(data.get("detail") or "").strip()
-    return {
-        "claimed": claimed,
-        "bonus_quota": bonus_quota,
-        "detail": detail,
-        "used_quota": session.used_quota,
-        "remaining_quota": session.remaining_quota,
-        "total_quota": session.total_quota,
-    }
-
 
 async def redeem_card_async(card_code: str) -> Dict[str, Any]:
     session = _require_authenticated_session()

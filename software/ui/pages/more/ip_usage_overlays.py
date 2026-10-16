@@ -1,105 +1,20 @@
 from __future__ import annotations
 
-import math
-import random
 from typing import Any, cast
 
-from PySide6.QtCore import Property, QByteArray, QEasingCurve, QPointF, QPropertyAnimation, QRectF, QTimer, Qt
+from PySide6.QtCore import (
+    QByteArray,
+    QEasingCurve,
+    QPointF,
+    Property,
+    QPropertyAnimation,
+    QRectF,
+    QTimer,
+    Qt,
+)
 from PySide6.QtGui import QBrush, QColor, QPainter, QPen
 from PySide6.QtWidgets import QWidget
 from qfluentwidgets import isDarkTheme, themeColor
-
-
-class ConfettiOverlay(QWidget):
-    _COLORS = [
-        QColor(255, 75, 75),
-        QColor(255, 210, 0),
-        QColor(60, 180, 255),
-        QColor(60, 220, 110),
-        QColor(200, 90, 255),
-        QColor(255, 130, 0),
-        QColor(255, 90, 170),
-        QColor(0, 215, 195),
-    ]
-
-    def __init__(self, parent=None):
-        _ = parent
-        super().__init__(None)
-        self.setWindowFlags(
-            Qt.WindowType.FramelessWindowHint
-            | Qt.WindowType.WindowStaysOnTopHint
-            | Qt.WindowType.Tool
-        )
-        self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground, True)
-        self.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents, True)
-        self._particles: list = []
-        self._timer = QTimer(self)
-        self._timer.setInterval(16)
-        self._timer.timeout.connect(self._tick)
-        self.hide()
-
-    def launch(self):
-        self._particles.clear()
-        w, h = self.width(), self.height()
-        for cannon_x, base_angle in [(w * 0.15, 65), (w * 0.85, 115)]:
-            for _ in range(90):
-                angle_rad = math.radians(base_angle + random.uniform(-28, 28))
-                speed = random.uniform(10, 22)
-                self._particles.append(
-                    {
-                        "x": float(cannon_x),
-                        "y": float(h),
-                        "vx": math.cos(angle_rad) * speed,
-                        "vy": -math.sin(angle_rad) * speed,
-                        "angle": random.uniform(0, 360),
-                        "av": random.uniform(-9, 9),
-                        "color": random.choice(self._COLORS),
-                        "w": random.uniform(7, 13),
-                        "h": random.uniform(3, 7),
-                        "life": 1.0,
-                        "decay": random.uniform(0.005, 0.010),
-                    }
-                )
-        self.show()
-        self.raise_()
-        self._timer.start()
-
-    def _tick(self):
-        alive = []
-        for p in self._particles:
-            p["vy"] += 0.32
-            p["vx"] *= 0.992
-            p["x"] += p["vx"]
-            p["y"] += p["vy"]
-            p["angle"] += p["av"]
-            p["life"] -= p["decay"]
-            if p["life"] > 0:
-                alive.append(p)
-        self._particles = alive
-        if not self._particles:
-            self._timer.stop()
-            self.hide()
-        else:
-            self.update()
-
-    def paintEvent(self, event):
-        _ = event
-        if not self._particles:
-            return
-        painter = QPainter(self)
-        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
-        for p in self._particles:
-            painter.save()
-            painter.translate(p["x"], p["y"])
-            painter.rotate(p["angle"])
-            color = QColor(p["color"])
-            color.setAlphaF(min(1.0, p["life"] * 1.8))
-            painter.setPen(Qt.PenStyle.NoPen)
-            painter.setBrush(color)
-            hw, hh = p["w"] / 2, p["h"] / 2
-            painter.drawRect(int(-hw), int(-hh), int(p["w"]), int(p["h"]))
-            painter.restore()
-        painter.end()
 
 
 class ChartOverlay(QWidget):

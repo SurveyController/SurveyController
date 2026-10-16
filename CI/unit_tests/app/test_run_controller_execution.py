@@ -35,18 +35,6 @@ class _FakeTimer:
         self.stopped += 1
 
 
-class _FakeSleepBlocker:
-    def __init__(self) -> None:
-        self.acquired = 0
-        self.released = 0
-
-    def acquire(self) -> None:
-        self.acquired += 1
-
-    def release(self) -> None:
-        self.released += 1
-
-
 class _FakeCleanupRunner:
     def __init__(self) -> None:
         self.calls: list[tuple[Any, float]] = []
@@ -203,7 +191,6 @@ class _DummyExecutionController(RunControllerExecutionMixin):
         self._monitor_thread = None
         self._execution_state = None
         self._async_engine_client = _FakeEngineClient()
-        self._sleep_blocker = _FakeSleepBlocker()
         self._close_shutdown_lock = _FakeCloseLock()
         self._close_shutdown_thread = None
         self.survey_provider = ""
@@ -452,7 +439,6 @@ class RunControllerExecutionTests:
         controller._on_run_finished("adapter-a")
         assert cleanup == ["adapter-a", "status"]
         assert controller._status_timer.stopped == 1
-        assert controller._sleep_blocker.released == 1
         assert controller.running is False
         assert controller.runStateChanged.calls == [(False,)]
 

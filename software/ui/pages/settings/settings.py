@@ -63,7 +63,6 @@ class SettingsPage(ScrollArea):
     navigation_text_card: SwitchSettingCard
     topmost_card: SwitchSettingCard
     ask_save_card: SwitchSettingCard
-    prevent_sleep_card: SwitchSettingCard
     task_result_notification_card: SwitchSettingCard
     submission_report_telemetry_card: SwitchSettingCard
     auto_update_card: SwitchSettingCard
@@ -87,7 +86,6 @@ class SettingsPage(ScrollArea):
             NAVIGATION_TEXT_VISIBLE_SETTING_KEY: True,
             "window_topmost": False,
             "ask_save_on_close": True,
-            "prevent_sleep_during_run": True,
             TASK_RESULT_SYSTEM_NOTIFICATION_SETTING_KEY: True,
             SUBMISSION_REPORT_TELEMETRY_SETTING_KEY: True,
             AUTO_SAVE_LOGS_SETTING_KEY: DEFAULT_AUTO_SAVE_LOGS,
@@ -354,15 +352,6 @@ class SettingsPage(ScrollArea):
             persist=persist,
         )
 
-    def _apply_prevent_sleep_state(self, checked: bool, persist: bool = True):
-        self._persist_bool_setting(
-            key="prevent_sleep_during_run",
-            checked=checked,
-            event="toggle_prevent_sleep_during_run",
-            target="prevent_sleep_switch",
-            persist=persist,
-        )
-
     def _apply_task_result_notification_state(self, checked: bool, persist: bool = True):
         self._persist_bool_setting(
             key=TASK_RESULT_SYSTEM_NOTIFICATION_SETTING_KEY,
@@ -452,9 +441,6 @@ class SettingsPage(ScrollArea):
     def _on_ask_save_on_close_toggled(self, checked: bool):
         self._apply_ask_save_state(checked)
 
-    def _on_prevent_sleep_toggled(self, checked: bool):
-        self._apply_prevent_sleep_state(checked)
-
     def _on_task_result_notification_toggled(self, checked: bool):
         self._apply_task_result_notification_state(checked)
 
@@ -506,10 +492,6 @@ class SettingsPage(ScrollArea):
         self._set_switch_state(self.topmost_card, self._defaults["window_topmost"])
         self._set_switch_state(self.ask_save_card, self._defaults["ask_save_on_close"])
         self._set_switch_state(
-            self.prevent_sleep_card,
-            self._defaults["prevent_sleep_during_run"],
-        )
-        self._set_switch_state(
             self.task_result_notification_card,
             self._defaults[TASK_RESULT_SYSTEM_NOTIFICATION_SETTING_KEY],
         )
@@ -530,10 +512,6 @@ class SettingsPage(ScrollArea):
         )
         self._apply_topmost_state(self._defaults["window_topmost"], persist=False)
         self._apply_ask_save_state(self._defaults["ask_save_on_close"], persist=False)
-        self._apply_prevent_sleep_state(
-            self._defaults["prevent_sleep_during_run"],
-            persist=False,
-        )
         self._apply_task_result_notification_state(
             self._defaults[TASK_RESULT_SYSTEM_NOTIFICATION_SETTING_KEY],
             persist=False,

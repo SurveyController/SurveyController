@@ -7,18 +7,13 @@ import time
 from dataclasses import dataclass, field
 from typing import Any, Callable, Dict, List, Optional
 
-from software.app.config import (
-    STOP_FORCE_WAIT_SECONDS,
-    app_settings,
-    get_bool_from_qsettings,
-)
+from software.app.config import STOP_FORCE_WAIT_SECONDS
 from software.core.config.schema import RuntimeConfig
 from software.core.engine.async_engine import AsyncEngineClient
 from software.core.engine.cleanup import CleanupRunner
 from software.core.engine.failure_reason import FailureReason
 from software.core.task import ExecutionState, ProxyLease
 from software.io.config.store import load_config, save_config
-from software.system.power_management import SystemSleepBlocker
 from software.ui.controller.controller_events import event_payload
 from software.ui.controller.run_runtime_port import RunRuntimePort
 from software.ui.controller.run_state_store import RunStateStore
@@ -108,14 +103,12 @@ class RunCommandService(RandomIpRuntimeService, RunControllerInitializationMixin
         state_store: RunStateStore,
         async_engine_client: AsyncEngineClient,
         cleanup_runner: CleanupRunner,
-        sleep_blocker: SystemSleepBlocker,
         dispatch_async: Callable[[Callable[[], Any]], None],
         emit_event: Callable[[dict[str, Any]], None],
     ) -> None:
         self._state_store = state_store
         self._async_engine_client = async_engine_client
         self._cleanup_runner = cleanup_runner
-        self._sleep_blocker = sleep_blocker
         self._dispatch_async = dispatch_async
         self._emit_event = emit_event
         self._runtime = _RuntimeLifecycleState()
@@ -307,24 +300,6 @@ class RunCommandService(RandomIpRuntimeService, RunControllerInitializationMixin
     def save_current_config(self, path: Optional[str] = None) -> str:
         return save_config(self._last_loaded_config, path)
 
-    def _should_prevent_sleep_during_run(self) -> bool:
-        settings = app_settings()
-        return get_bool_from_qsettings(settings.value("prevent_sleep_during_run"), True)
-
-    def _apply_sleep_blocker_for_run_start(self) -> None:
-        if not self._should_prevent_sleep_during_run():
-            return
-        try:
-            self._sleep_blocker.acquire()
-        except Exception:
-            logging.warning("启用阻止自动休眠失败", exc_info=True)
-
-    def _release_sleep_blocker(self) -> None:
-        try:
-            self._sleep_blocker.release()
-        except Exception:
-            logging.warning("恢复自动休眠状态失败", exc_info=True)
-
     def start_run(self, config: RuntimeConfig) -> None:
         if self.running or self._starting or self._initializing or self._stopping:
             logging.warning("任务仍在运行或停止收尾中，忽略重复启动请求")
@@ -415,7 +390,6 @@ class RunCommandService(RandomIpRuntimeService, RunControllerInitializationMixin
         self._prepared_execution_artifacts = None
         self._last_loaded_config = config
 
-        self._apply_sleep_blocker_for_run_start()
         self.running = True
         self._starting = False
         self._initializing = False
@@ -623,7 +597,6 @@ class RunCommandService(RandomIpRuntimeService, RunControllerInitializationMixin
         was_active = bool(self.running or self._stopping or self._initializing)
         self._stopped_by_stop_run = False
         self._stopping = False
-        self._release_sleep_blocker()
         self.running = False
         self._initializing = False
         if was_active:

@@ -83,23 +83,18 @@ class ConfigCodecTests:
         assert config.answer_rules[0]['equals'][0] == 0
         assert config.dimension_groups[0] == '情绪维度'
 
-    def test_unknown_fields_raise_corruption_error(self) -> None:
-        with pytest.raises(ValueError, match="该配置文件损坏"):
-            normalize_runtime_config_payload({"url": "https://example.test", "unknown_field": 1})
-        with pytest.raises(ValueError, match="该配置文件损坏"):
-            normalize_runtime_config_payload(
-                {
-                    "url": "https://example.test",
-                    "question_entries": [{"question_type": "single", "unexpected": 1}],
-                }
-            )
-        with pytest.raises(ValueError, match="该配置文件损坏"):
-            normalize_runtime_config_payload(
-                {
-                    "url": "https://example.test",
-                    "questions_info": [{"num": 1, "title": "Q1", "unexpected": 1}],
-                }
-            )
+    def test_unknown_fields_are_ignored(self) -> None:
+        config = normalize_runtime_config_payload(
+            {
+                "url": "https://example.test",
+                "unknown_field": 1,
+                "question_entries": [{"question_type": "single", "unexpected": 1}],
+                "questions_info": [{"num": 1, "title": "Q1", "unexpected": 1}],
+            }
+        )
+        assert config.url == "https://example.test"
+        assert config.question_entries[0].question_type == "single"
+        assert config.questions_info[0].title == "Q1"
 
     def test_ensure_supported_config_payload_keeps_payload_without_schema_version(self) -> None:
         payload = _ensure_supported_config_payload({"url": "https://example.test"}, config_path="demo.json")
@@ -236,14 +231,14 @@ class ConfigCodecTests:
             {"random_ua_ratios": {"wechat": 200, "mobile": -100, "pc": 0}}
         ).random_ua_ratios == {"wechat": 33, "mobile": 33, "pc": 34}
 
-    def test_random_ua_legacy_keys_raise(self) -> None:
-        with pytest.raises(ValueError, match="该配置文件损坏"):
-            normalize_runtime_config_payload(
-                {
-                    "random_ua_keys": ["pc_web"],
-                    "random_ua_ratios": {"wechat": 0, "mobile": 0, "pc": 100},
-                }
-            )
+    def test_random_ua_legacy_keys_are_ignored(self) -> None:
+        config = normalize_runtime_config_payload(
+            {
+                "random_ua_keys": ["pc_web"],
+                "random_ua_ratios": {"wechat": 0, "mobile": 0, "pc": 100},
+            }
+        )
+        assert config.random_ua_ratios == {"wechat": 0, "mobile": 0, "pc": 100}
 
     def test_select_user_agent_from_ratios_handles_empty_unknown_and_valid_devices(self) -> None:
         assert _select_user_agent_from_ratios({"wechat": 0, "mobile": 0}) is None

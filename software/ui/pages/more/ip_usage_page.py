@@ -1,12 +1,11 @@
 from __future__ import annotations
 
-import logging
 import math
 import threading
 from typing import Any
 
 from PySide6.QtCharts import QChart, QDateTimeAxis, QLineSeries, QValueAxis
-from PySide6.QtCore import QDate, QDateTime, QPoint, QPointF, QRect, QTime, QTimer, Qt, Signal, Slot
+from PySide6.QtCore import QDate, QDateTime, QPointF, QTime, QTimer, Qt, Signal, Slot
 from PySide6.QtGui import QBrush, QColor, QPainter, QPen
 from PySide6.QtWidgets import QHBoxLayout, QSizePolicy, QVBoxLayout, QWidget
 from qfluentwidgets import (
@@ -24,42 +23,19 @@ from qfluentwidgets import (
     themeColor,
 )
 
-from software.logging.log_utils import log_suppressed_exception
-from software.system.registry_manager import RegistryManager
-from software.ui.helpers.proxy_access import (
-    RandomIPAuthError,
-    claim_easter_egg_bonus_async,
-    format_quota_value,
-    format_random_ip_error,
-    has_authenticated_session,
-)
-
 from .ip_usage_chart import InteractiveChartView
 from .ip_usage_math import compute_monotone_slopes
-from .ip_usage_overlays import ConfettiOverlay
 
 
 class IpUsagePage(ScrollArea):
     _dataLoaded = Signal(object, str)
-    _bonusClaimFinished = Signal(object)
-    _ENABLE_CONFETTI = True
 
     def __init__(self, parent=None):
         super().__init__(parent)
         self._dataLoaded.connect(self._on_data_loaded, Qt.ConnectionType.QueuedConnection)
-        self._bonusClaimFinished.connect(
-            self._on_bonus_claim_finished, Qt.ConnectionType.QueuedConnection
-        )
         self._load_requested_once = False
         self._last_load_failed = False
         self._load_scheduled = False
-        self._confetti_overlay: ConfettiOverlay | None = None
-        self._confetti_played = RegistryManager.is_confetti_played()
-        self._confetti_pending = False
-        self._bonus_claim_in_progress = False
-        self._confetti_retry_timer = QTimer(self)
-        self._confetti_retry_timer.setSingleShot(True)
-        self._confetti_retry_timer.timeout.connect(self._try_launch_confetti)
         self._loading = False
         self._point_meta: dict[int, tuple[str, int]] = {}
         self._data_points: list = []
@@ -69,26 +45,6 @@ class IpUsagePage(ScrollArea):
         self.setWidgetResizable(True)
         self.enableTransparentBackground()
         self._build_ui()
-
-    def _dispose_confetti_overlay(self) -> None:
-        overlay = self._confetti_overlay
-        if overlay is None:
-            return
-        try:
-            overlay.hide()
-            overlay.close()
-            overlay.deleteLater()
-        except Exception as exc:
-            log_suppressed_exception("_dispose_confetti_overlay", exc, level=logging.WARNING)
-        finally:
-            self._confetti_overlay = None
-
-    def _mark_confetti_played(self, played: bool = True) -> None:
-        self._confetti_played = bool(played)
-        try:
-            RegistryManager.set_confetti_played(self._confetti_played)
-        except Exception as exc:
-            log_suppressed_exception("_mark_confetti_played", exc, level=logging.WARNING)
 
     def _build_ui(self):
         layout = QVBoxLayout(self.view)
@@ -377,189 +333,13 @@ class IpUsagePage(ScrollArea):
         super().showEvent(event)
         self._update_chart_height()
         self._update_overlay_geometry()
-        if self._ENABLE_CONFETTI and (not self._confetti_played) and (not self._confetti_pending):
-            self._start_bonus_claim()
         if not self._load_scheduled:
             self._load_scheduled = True
             QTimer.singleShot(0, self._trigger_load_if_needed)
 
-    def _schedule_confetti_launch(self, delay_ms: int) -> None:
-        if self._confetti_pending and not self._confetti_retry_timer.isActive():
-            self._confetti_retry_timer.start(max(0, int(delay_ms)))
-
-    def _try_launch_confetti(self):
-        if not self._ENABLE_CONFETTI:
-            self._confetti_pending = False
-            self._dispose_confetti_overlay()
-            return
-        if not self._confetti_pending:
-            return
-        if self._loading or (not self.isVisible()):
-            self._confetti_retry_timer.start(80)
-            return
-        top = self.window()
-        if top is None:
-            self._confetti_retry_timer.start(80)
-            return
-        size = top.size()
-        if size.width() <= 0 or size.height() <= 0:
-            self._confetti_retry_timer.start(80)
-            return
-        if self._confetti_overlay is None:
-            self._confetti_overlay = ConfettiOverlay()
-        global_rect = QRect(top.mapToGlobal(QPoint(0, 0)), size)
-        try:
-            self._confetti_overlay.setGeometry(global_rect)
-            self._confetti_overlay.launch()
-        except Exception as exc:
-            log_suppressed_exception("_try_launch_confetti", exc, level=logging.WARNING)
-            self._dispose_confetti_overlay()
-            self._confetti_pending = False
-            return
-        self._confetti_pending = False
-        self._mark_confetti_played(True)
-
-    def _start_bonus_claim(self) -> None:
-        if self._bonus_claim_in_progress:
-            return
-        self._bonus_claim_in_progress = True
-        win = self.window()
-        controller = getattr(win, "controller", None) if win is not None else None
-        if controller is not None and hasattr(controller, "_async_engine_client"):
-            try:
-                controller._async_engine_client.submit_ui_task(
-                    "claim_easter_egg_bonus",
-                    self._claim_bonus_task,
-                )
-                return
-            except Exception as exc:
-                log_suppressed_exception("_start_bonus_claim submit_ui_task", exc, level=logging.WARNING)
-        self._bonusClaimFinished.emit(
-            {
-                "level": "warning",
-                "message": "领取彩蛋奖励失败：异步引擎不可用",
-                "play_confetti": False,
-            }
-        )
-
-    async def _claim_bonus_task(self) -> None:
-        payload: dict[str, Any] = {
-            "level": "success",
-            "message": "恭喜发现彩蛋",
-            "play_confetti": True,
-        }
-        try:
-            if not has_authenticated_session():
-                payload = {
-                    "level": "info",
-                    "message": "恭喜发现彩蛋，激活随机IP后可领取隐藏福利",
-                    "play_confetti": True,
-                }
-            else:
-                result = await claim_easter_egg_bonus_async()
-                claimed = bool(result.get("claimed"))
-                bonus_quota = float(result.get("bonus_quota") or 0.0)
-                detail = str(result.get("detail") or "").strip()
-                if claimed and bonus_quota > 0:
-                    payload = {
-                        "level": "success",
-                        "message": f"恭喜发现彩蛋，额度+{format_quota_value(bonus_quota)}",
-                        "play_confetti": True,
-                    }
-                elif claimed:
-                    payload = {
-                        "level": "success",
-                        "message": "恭喜发现彩蛋，隐藏福利已到账",
-                        "play_confetti": True,
-                    }
-                elif detail in {"bonus_already_claimed", "easter_egg_already_claimed"}:
-                    payload = {
-                        "skip_infobar": True,
-                        "play_confetti": False,
-                        "mark_confetti_played": True,
-                    }
-                else:
-                    payload = {"skip_infobar": True, "play_confetti": False}
-        except RandomIPAuthError as exc:
-            detail = str(exc.detail or "").strip()
-            if detail in {"bonus_already_claimed", "easter_egg_already_claimed"}:
-                payload = {
-                    "skip_infobar": True,
-                    "play_confetti": False,
-                    "mark_confetti_played": True,
-                }
-            else:
-                payload = {
-                    "level": "warning",
-                    "message": format_random_ip_error(exc),
-                    "play_confetti": False,
-                }
-        except Exception as exc:
-            payload = {
-                "level": "warning",
-                "message": f"领取彩蛋奖励失败：{exc}",
-                "play_confetti": False,
-            }
-        finally:
-            self._bonusClaimFinished.emit(payload)
-
-    @Slot(object)
-    def _on_bonus_claim_finished(self, payload: Any) -> None:
-        self._bonus_claim_in_progress = False
-        if isinstance(payload, dict) and "mark_confetti_played" in payload:
-            self._mark_confetti_played(bool(payload.get("mark_confetti_played")))
-        if (
-            isinstance(payload, dict)
-            and bool(payload.get("play_confetti"))
-            and self._ENABLE_CONFETTI
-            and (not self._confetti_played)
-            and (not self._confetti_pending)
-        ):
-            self._confetti_pending = True
-            self._schedule_confetti_launch(100)
-        try:
-            win = self.window()
-            controller = getattr(win, "controller", None) if win is not None else None
-            if controller is not None:
-                controller.refresh_random_ip_counter()
-        except Exception as exc:
-            log_suppressed_exception(
-                "_on_bonus_claim_finished refresh counter",
-                exc,
-                level=logging.WARNING,
-            )
-        if isinstance(payload, dict) and bool(payload.get("skip_infobar")):
-            return
-        QTimer.singleShot(400, lambda current_payload=payload: self._show_easter_egg_infobar(current_payload))
-
-    def _show_easter_egg_infobar(self, payload: Any = None):
-        data = payload if isinstance(payload, dict) else {}
-        level = str(data.get("level") or "success").strip().lower()
-        message = str(data.get("message") or "恭喜发现彩蛋").strip()
-        try:
-            factory = {
-                "warning": InfoBar.warning,
-                "error": InfoBar.error,
-                "info": InfoBar.info,
-                "success": InfoBar.success,
-            }.get(level, InfoBar.success)
-            factory(
-                title="",
-                content=message,
-                parent=self.window(),
-                position=InfoBarPosition.TOP,
-                duration=5000,
-            )
-        except Exception as exc:
-            log_suppressed_exception("_show_easter_egg_infobar", exc, level=logging.WARNING)
-
     def hideEvent(self, event):
         super().hideEvent(event)
         self._load_scheduled = False
-        self._confetti_retry_timer.stop()
-        self._dispose_confetti_overlay()
 
     def closeEvent(self, event):
-        self._confetti_retry_timer.stop()
-        self._dispose_confetti_overlay()
         super().closeEvent(event)

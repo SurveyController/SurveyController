@@ -8,11 +8,7 @@ from typing import TYPE_CHECKING, Any, Callable, Dict, List, Optional
 
 from PySide6.QtCore import QCoreApplication
 
-from software.app.config import (
-    STOP_FORCE_WAIT_SECONDS,
-    app_settings,
-    get_bool_from_qsettings,
-)
+from software.app.config import STOP_FORCE_WAIT_SECONDS
 from software.core.engine.async_engine import AsyncEngineClient
 from software.core.engine.failure_reason import FailureReason
 from software.core.task import ExecutionConfig, ExecutionState, ProxyLease
@@ -55,7 +51,6 @@ class RunControllerExecutionMixin:
         _monitor_thread: Optional[threading.Thread]
         _execution_state: Optional[ExecutionState]
         _async_engine_client: Optional[AsyncEngineClient]
-        _sleep_blocker: Any
         _close_shutdown_lock: threading.Lock
         _close_shutdown_thread: Optional[threading.Thread]
         survey_provider: str
@@ -197,24 +192,6 @@ class RunControllerExecutionMixin:
         )
         return adapter
 
-    def _should_prevent_sleep_during_run(self) -> bool:
-        settings = app_settings()
-        return get_bool_from_qsettings(settings.value("prevent_sleep_during_run"), True)
-
-    def _apply_sleep_blocker_for_run_start(self) -> None:
-        if not self._should_prevent_sleep_during_run():
-            return
-        try:
-            self._sleep_blocker.acquire()
-        except Exception:
-            logging.warning("启用阻止自动休眠失败", exc_info=True)
-
-    def _release_sleep_blocker(self) -> None:
-        try:
-            self._sleep_blocker.release()
-        except Exception:
-            logging.warning("恢复自动休眠状态失败", exc_info=True)
-
     def _dispatch_to_ui(self, callback: Callable[[], Any]):
         if QCoreApplication.instance() is None:
             try:
@@ -308,7 +285,6 @@ class RunControllerExecutionMixin:
         self._prepared_execution_artifacts = None
 
         self.config.threads = worker_count
-        self._apply_sleep_blocker_for_run_start()
         self.running = True
         self._starting = False
         self._stopping = False
@@ -370,7 +346,6 @@ class RunControllerExecutionMixin:
         self._stopped_by_stop_run = False
         self._stopping = False
         self._status_timer.stop()
-        self._release_sleep_blocker()
         self.running = False
         if was_active:
             self.runStateChanged.emit(False)

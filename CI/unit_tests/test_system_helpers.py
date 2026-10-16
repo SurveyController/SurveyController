@@ -1,62 +1,11 @@
 from __future__ import annotations
 
 from software.network.proxy.pool import prefetch
-from software.system.power_management import SystemSleepBlocker
 from software.system import secure_store
 from software.ui.helpers import ai_fill
 
 
-class _Kernel32:
-    def __init__(self, returns: list[int] | None = None) -> None:
-        self.returns = list(returns or [1])
-        self.calls: list[int] = []
-
-    def SetThreadExecutionState(self, flags: int) -> int:
-        self.calls.append(flags)
-        return self.returns.pop(0) if self.returns else 1
-
-
 class SystemHelpersTests:
-    def test_sleep_blocker_non_windows_and_windows_success_paths(self, patch_attrs) -> None:
-        blocker = SystemSleepBlocker()
-        patch_attrs((secure_store.sys, "platform", "linux"))
-        patch_attrs((__import__("software.system.power_management", fromlist=["sys"]).sys, "platform", "linux"))
-
-        assert blocker.acquire() is False
-        blocker._active = True
-        assert blocker.release() is True
-        assert blocker.active is False
-
-        import software.system.power_management as power_management
-
-        kernel = _Kernel32([1, 1])
-        patch_attrs(
-            (power_management.sys, "platform", "win32"),
-            (power_management, "_kernel32", lambda: kernel),
-        )
-        blocker = SystemSleepBlocker()
-        assert blocker.acquire() is True
-        assert blocker.acquire() is True
-        assert blocker.release() is True
-        assert kernel.calls == [0x80000001, 0x80000000]
-
-    def test_sleep_blocker_handles_windows_api_failure(self, patch_attrs) -> None:
-        import software.system.power_management as power_management
-
-        kernel = _Kernel32([0])
-        patch_attrs(
-            (power_management.sys, "platform", "win32"),
-            (power_management, "_kernel32", lambda: kernel),
-        )
-        blocker = SystemSleepBlocker()
-        assert blocker.acquire() is False
-
-        kernel = _Kernel32([0])
-        patch_attrs((power_management, "_kernel32", lambda: kernel))
-        blocker._active = True
-        assert blocker.release() is False
-        assert blocker.active is True
-
     def test_secure_store_unsupported_and_invalid_key_paths(self, patch_attrs) -> None:
         patch_attrs((secure_store.sys, "platform", "linux"))
         secure_store.set_secret("key", "value")
