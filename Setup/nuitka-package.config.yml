@@ -1,0 +1,29 @@
+# Backport the PySide6 probe lifetime fix missing from Nuitka 4.3.
+# https://github.com/Nuitka/Nuitka/commit/ffc265f0de662eca73855fd34045b1a3f10aea72
+- module-name: 'PySide6'
+  implicit-imports:
+    - when: 'version("nuitka") == (4, 3)'
+      post-import-code:
+        - |
+          def doesCompiledMethodLeak():
+              try:
+                  class NuitkaProbeHandler:
+                      def probeMethod(self, value):
+                          pass
+
+                  handler = NuitkaProbeHandler()
+                  sender = QtCore.QObject()
+                  affected = False
+
+                  try:
+                      for _ in range(2):
+                          probing_method = handler.probeMethod
+                          _protected.append(probing_method)
+                          orig_connect(sender.destroyed, probing_method)
+                  except SystemError:
+                      affected = True
+
+                  del probing_method, sender, handler
+                  return affected
+              except Exception:
+                  return False

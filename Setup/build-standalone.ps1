@@ -145,11 +145,12 @@ try {
     $nuitkaArgs = @(
         "-m"
         "nuitka"
-        "--standalone"
+        "--mode=standalone"
         "--assume-yes-for-downloads"
         "--windows-console-mode=disable"
         "--enable-plugin=pyside6"
         "--enable-plugin=anti-bloat"
+        "--user-package-configuration-file=Setup/nuitka-package.config.yml"
         "--python-flag=no_asserts"
         "--python-flag=no_docstrings"
         "--noinclude-pytest-mode=nofollow"

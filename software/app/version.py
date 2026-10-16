@@ -1,4 +1,4 @@
-__VERSION__ = "4.0.6"
+__VERSION__ = "4.0.7"
 
 
 GITHUB_OWNER = "SurveyController"
