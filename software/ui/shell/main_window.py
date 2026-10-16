@@ -10,7 +10,6 @@ from PySide6.QtCore import QPoint, Qt, QTimer, QEvent, Slot
 from PySide6.QtGui import QIcon, QGuiApplication
 from PySide6.QtWidgets import QDialog, QStackedWidget, QWidget
 from qfluentwidgets import (
-    FluentWindow,
     InfoBar,
     InfoBarPosition,
     MSFluentWindow,
@@ -58,7 +57,7 @@ from software.app.runtime_paths import get_resource_path
 
 from software.ui.shell.boot import create_boot_splash, finish_boot_splash
 
-_BaseFluentWindow = MSFluentWindow if sys.platform == "win32" else FluentWindow
+_BaseFluentWindow = MSFluentWindow
 
 
 class _ImportCheckWindow(QWidget):
@@ -80,7 +79,7 @@ class _ImportCheckWindow(QWidget):
 
 
 def _should_use_import_check_window() -> bool:
-    if sys.platform != "darwin":
+    if sys.platform != "win32":
         return False
     return str(os.environ.get(MainWindow._IMPORT_CHECK_ENV, "") or "").strip() == "1"
 

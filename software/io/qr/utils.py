@@ -33,7 +33,7 @@ def decode_qrcode(image_source: object) -> Optional[str]:
 
         result = zxingcpp.read_barcode(
             image,
-            zxingcpp.BarcodeFormat.QRCode,
+            zxingcpp.BarcodeFormats([zxingcpp.BarcodeFormat.QRCode]),
             try_rotate=True,
             try_downscale=True,
             try_invert=True,

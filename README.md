@@ -58,20 +58,7 @@ powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 | ie
 ```
 </details>
 
-<details>
-<summary>macOS 使用</summary>
-
-当前暂未提供 macOS 安装包，可以通过源码运行：
-```bash
-brew install python git uv
-git clone https://github.com/SurveyController/SurveyController.git
-cd SurveyController
-uv sync
-uv run python SurveyController.py
-```
-
-如果没有安装 Homebrew，可以先参考 [Homebrew 官网](https://brew.sh/) 安装。
-</details>
+[MacOS 使用](https://github.com/SurveyController/SurveyController-Mac)
 
 ## 使用方法
 

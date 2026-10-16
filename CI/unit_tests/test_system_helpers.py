@@ -63,7 +63,6 @@ class SystemHelpersTests:
         secure_store.delete_secret("key")
         assert secure_store.read_secret("key").status == "unsupported"
 
-        patch_attrs((secure_store.sys, "platform", "darwin"), (secure_store, "keyring", object()))
         assert secure_store.read_secret("").status == "invalid_key"
         secure_store.set_secret("", "value")
         secure_store.delete_secret("")
