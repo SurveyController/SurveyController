@@ -10,6 +10,7 @@ import pytest
 from CI.unit_tests.application.fakes import FakeEngine, FakePreferences, FakeRepository, Harness
 from software.application.configuration import ConfigurationService
 from software.application.errors import ProxyAuthenticationError
+from software.application.events import ApplicationEventType
 from software.application.interactions import InteractionKind, InteractionRequest
 from software.application.preferences import PreferencesService
 from software.application.run_state_store import RunStateStore
@@ -163,8 +164,12 @@ def test_failure_stop_preserves_engine_reason_without_feedback_request(category,
         assert snapshot["terminal_stop"]["failure_reason"] == reason
         harness.service._emit_terminal_notice_if_needed()
         assert harness.requests == []
-        if category in {"ai_unstable", "submission_verification"}:
-            assert harness.events[-1].type == category
+        expected_event_type = {
+            "ai_unstable": ApplicationEventType.AI_UNSTABLE,
+            "submission_verification": ApplicationEventType.SUBMISSION_VERIFICATION_REQUIRED,
+        }.get(category)
+        if expected_event_type is not None:
+            assert harness.events[-1].type == expected_event_type
     finally:
         harness.close()
 
@@ -238,7 +243,7 @@ def test_parse_success_failure_invalid_url_and_engine_submission_failure():
 
 
 @pytest.mark.parametrize("provider,url", [
-    ("wjx", "https://v.wjx.cn/vm/demo.aspx"), ("qq", "https://wj.qq.com/s2/demo"),
+    ("wjx", "https://v.wjx.cn/vm/demo.aspx"), ("qq", "https://wj.qq.com/s2/123456/Abcd"),
 ])
 def test_parse_filters_descriptions_and_updates_provider(provider, url):
     state, engine = RunStateStore(), FakeEngine()

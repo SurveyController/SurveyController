@@ -49,7 +49,8 @@ def test_configuration_adapter_reads_existing_python_json_and_preserves_strict_e
     assert loaded.url == config.url
     new_path = str(tmp_path / "new.json")
     assert service.save(loaded, new_path) == new_path
-    assert json.loads((tmp_path / "new.json").read_text(encoding="utf-8")) == serialize_runtime_config(loaded)
+    expected_payload = json.loads(json.dumps(serialize_runtime_config(loaded)))
+    assert json.loads((tmp_path / "new.json").read_text(encoding="utf-8")) == expected_payload
     path.write_text("{invalid", encoding="utf-8")
     with pytest.raises(ValueError, match="读取配置失败"):
         service.load(str(path), strict=True)

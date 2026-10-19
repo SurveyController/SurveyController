@@ -399,6 +399,7 @@ class DashboardRandomIPTests:
         DashboardRandomIPMixin._on_ip_balance_checked(dashboard, 99)
         assert dashboard._ip_low_infobar.hidden >= 1
 
+        dashboard._window = SimpleNamespace()
         try:
             dashboard._open_quota_redeem_dialog()
         except RuntimeError as exc:
