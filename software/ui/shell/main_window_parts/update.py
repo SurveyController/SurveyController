@@ -38,7 +38,6 @@ class MainWindowUpdateMixin:
         _update_check_worker: Any
         _startup_update_check_timer: Any
         _startup_update_check_completed: bool
-        _startup_update_check_suspended: bool
         _startup_update_notification_timer: Any
         _startup_update_pending_info: Any
 
@@ -95,25 +94,8 @@ class MainWindowUpdateMixin:
         if notification_timer is not None:
             notification_timer.stop()
 
-    def _set_startup_update_check_suspended(self, suspended: bool) -> None:
-        self._startup_update_check_suspended = bool(suspended)
-        if suspended:
-            return
-        if getattr(self, "_startup_update_pending_info", None):
-            timer = getattr(self, "_startup_update_notification_timer", None)
-            if timer is None or not timer.isActive():
-                self._schedule_startup_update_notification(600)
-            return
-        if not getattr(self, "_startup_update_check_completed", False):
-            timer = getattr(self, "_startup_update_check_timer", None)
-            if timer is None or not timer.isActive():
-                self._schedule_startup_update_check(1200)
-
     def _on_startup_update_check_timeout(self) -> None:
         if getattr(self, "_startup_update_check_completed", False):
-            return
-        if getattr(self, "_startup_update_check_suspended", False):
-            self._schedule_startup_update_check(3000)
             return
         self._start_update_check_worker()
 
@@ -130,8 +112,6 @@ class MainWindowUpdateMixin:
             return False
 
     def _can_show_startup_update_notification(self) -> bool:
-        if getattr(self, "_startup_update_check_suspended", False):
-            return False
         if not getattr(self, "_startup_update_pending_info", None):
             return False
         try:

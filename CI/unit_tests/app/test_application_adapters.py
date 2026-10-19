@@ -163,15 +163,13 @@ def test_interaction_dispatch_failure_resolves_rejected_without_hanging():
     assert reply.result(timeout=0) is False
 
 
-def test_notice_and_confirmation_map_to_existing_dialog_events():
+def test_notice_maps_to_existing_dialog_event():
     request = InteractionRequest.create(InteractionKind.NOTICE, "quota_exhausted", level="warning")
     view = interaction_view(request)
     assert view["request_id"] == request.request_id
     assert view["type"] == "dialog_message"
     assert view["message"] == "随机IP已用额度已达到上限，请先补充额度后再启用。"
     assert view["level"] == "warning"
-    confirmation = InteractionRequest.create(InteractionKind.CONFIRMATION, "quick_bug_report")
-    assert interaction_view(confirmation)["type"] == "quick_bug_report_suggested"
 
 
 def test_qimage_conversion_owns_pixels_and_removes_row_padding(tmp_path):

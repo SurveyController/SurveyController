@@ -65,7 +65,6 @@ def _resolve_env_value(key: str, default: str) -> str:
 def get_proxy_auth() -> str:
     
     return os.environ.get("WJX_PROXY_AUTH", "")
-_DEFAULT_CONTACT_API = "https://bot.hungrym0.com"
 _DEFAULT_AUTH_TRIAL = "https://api-wjx.hungrym0.com/api/auth/trial"
 _DEFAULT_CARD_REDEEM_ENDPOINT = "https://api-wjx.hungrym0.com/api/cards/redeem"
 _DEFAULT_IP_EXTRACT_ENDPOINT = "https://api-wjx.hungrym0.com/api/ip/extract"
@@ -149,7 +148,6 @@ PROXY_SOURCE_CUSTOM = "custom"
 PROXY_POOL_ORDINARY = "ordinary"
 PROXY_POOL_QUALITY = "quality"
 
-CONTACT_API_URL = _resolve_env_value("CONTACT_API_URL", _DEFAULT_CONTACT_API)
 AUTH_TRIAL_ENDPOINT = _resolve_env_value("AUTH_TRIAL_ENDPOINT", _DEFAULT_AUTH_TRIAL)
 CARD_REDEEM_ENDPOINT = _resolve_env_value("CARD_REDEEM_ENDPOINT", _DEFAULT_CARD_REDEEM_ENDPOINT)
 IP_EXTRACT_ENDPOINT = _resolve_env_value("IP_EXTRACT_ENDPOINT", _DEFAULT_IP_EXTRACT_ENDPOINT)

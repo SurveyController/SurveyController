@@ -1,26 +1,9 @@
 from __future__ import annotations
 
-import importlib
 from pathlib import Path
 
 from software.ui.pages import community as community_module
 from software.ui.widgets import config_drawer as config_drawer_module
-
-
-def test_config_ignores_dotenv_file_and_reads_process_env(monkeypatch, tmp_path) -> None:
-    dotenv_path = tmp_path / ".env"
-    dotenv_path.write_text("CONTACT_API_URL=https://dotenv.example\n", encoding="utf-8")
-    monkeypatch.chdir(tmp_path)
-    monkeypatch.delenv("CONTACT_API_URL", raising=False)
-
-    import software.app.config as config_module
-
-    reloaded = importlib.reload(config_module)
-    assert reloaded.CONTACT_API_URL == "https://bot.hungrym0.com"
-
-    monkeypatch.setenv("CONTACT_API_URL", "https://env.example")
-    reloaded = importlib.reload(config_module)
-    assert reloaded.CONTACT_API_URL == "https://env.example"
 
 
 def test_config_drawer_opens_config_directory_via_qdesktopservices(monkeypatch, tmp_path, qtbot) -> None:

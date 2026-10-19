@@ -10,7 +10,6 @@ from typing import Callable
 
 class InteractionKind(StrEnum):
     NOTICE = "notice"
-    CONFIRMATION = "confirmation"
     QUOTA = "quota"
 
 

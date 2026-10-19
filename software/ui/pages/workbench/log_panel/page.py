@@ -1,22 +1,18 @@
 import os
 import logging
 from datetime import datetime
-from typing import Any, cast
 from PySide6.QtCore import QObject, Qt, QTimer, Signal
 from PySide6.QtWidgets import (
     QWidget,
     QVBoxLayout,
     QHBoxLayout,
     QFileDialog,
-    QSizePolicy,
 )
 from PySide6.QtGui import QFont, QTextCursor
 from qfluentwidgets import (
     SubtitleLabel,
-    PrimaryPushButton,
     PushButton,
     InfoBar,
-    InfoBarIcon,
     InfoBarPosition,
     FluentIcon as FIF,
     isDarkTheme,
@@ -28,7 +24,6 @@ from software.logging.log_utils import (
     export_full_log_to_file,
     log_suppressed_exception,
 )
-from software.ui.widgets.full_width_infobar import FullWidthInfoBar
 from software.app.config import LOG_BUFFER_CAPACITY, LOG_REFRESH_INTERVAL_MS
 from software.app.user_paths import (
     get_last_session_log_path,
@@ -90,34 +85,12 @@ class LogPage(QWidget):
         
         layout.addWidget(SubtitleLabel("日志", self))
 
-        self.bug_report_tip_bar = FullWidthInfoBar(
-            icon=InfoBarIcon.WARNING,
-            title="",
-            content="遇到问题请提交完整的日志文件，而不是发送这个页面的截图；报错反馈会自动附带诊断日志",
-            orient=Qt.Orientation.Horizontal,
-            isClosable=False,
-            position=InfoBarPosition.NONE,
-            duration=-1,
-            parent=self,
-        )
-        self.bug_report_tip_bar.setSizePolicy(
-            QSizePolicy.Policy.Expanding,
-            QSizePolicy.Policy.Fixed,
-        )
-        self.bug_report_tip_bar.setMinimumWidth(0)
-        layout.addWidget(self.bug_report_tip_bar)
-
-        
         toolbar = QHBoxLayout()
         toolbar.setSpacing(8)
 
         self.save_btn = PushButton("导出到文件", self, FIF.SAVE)
-        self.feedback_btn = PrimaryPushButton("报错反馈", self, FIF.HELP)
-        self.feedback_btn.setToolTip("打开联系开发者，并直接选择“报错反馈”")
-
         toolbar.addWidget(self.save_btn)
         toolbar.addStretch(1)
-        toolbar.addWidget(self.feedback_btn)
         layout.addLayout(toolbar)
 
         
@@ -156,7 +129,6 @@ class LogPage(QWidget):
 
     def _bind_events(self):
         self.save_btn.clicked.connect(self.save_logs)
-        self.feedback_btn.clicked.connect(self._open_bug_report_dialog)
 
     def showEvent(self, event):
         super().showEvent(event)
@@ -191,23 +163,6 @@ class LogPage(QWidget):
     def _refresh_from_ui_thread(self) -> None:
         self._refresh_pending = False
         self.refresh_logs()
-
-    def _open_bug_report_dialog(self):
-        
-        win = self.window()
-        if hasattr(win, "_open_contact_dialog"):
-            try:
-                cast(Any, win)._open_contact_dialog(default_type="报错反馈", lock_message_type=True)
-                return
-            except Exception as exc:
-                log_suppressed_exception("_open_bug_report_dialog", exc, level=logging.WARNING)
-        InfoBar.error(
-            "",
-            "报错反馈窗口打开失败，请稍后重试",
-            parent=self.window(),
-            position=InfoBarPosition.TOP,
-            duration=3000,
-        )
 
     def refresh_logs(self):
         

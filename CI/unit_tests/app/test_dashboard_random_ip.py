@@ -385,16 +385,7 @@ class DashboardRandomIPTests:
         assert dashboard.sync_calls[-1] is True
 
         dashboard._window = SimpleNamespace(
-            _open_contact_dialog=lambda default_type, lock_message_type: (
-                default_type,
-                lock_message_type,
-            ),
             _open_quota_redeem_dialog=lambda: True,
-        )
-        assert dashboard._open_contact_dialog("报错反馈") == ("报错反馈", False)
-        assert dashboard._open_contact_dialog("新功能建议", lock_message_type=True) == (
-            "新功能建议",
-            True,
         )
         assert dashboard._open_quota_redeem_dialog() is True
         dashboard._on_request_quota_clicked()
@@ -407,16 +398,6 @@ class DashboardRandomIPTests:
         assert dashboard._ip_low_infobar_dismissed is True
         DashboardRandomIPMixin._on_ip_balance_checked(dashboard, 99)
         assert dashboard._ip_low_infobar.hidden >= 1
-
-    def test_open_dialog_methods_require_main_window_handlers(self) -> None:
-        dashboard = _FakeDashboard()
-
-        try:
-            dashboard._open_contact_dialog()
-        except RuntimeError as exc:
-            assert "主窗口不支持联系开发者弹窗" in str(exc)
-        else:
-            raise AssertionError("expected RuntimeError")
 
         try:
             dashboard._open_quota_redeem_dialog()

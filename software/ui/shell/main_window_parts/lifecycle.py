@@ -28,7 +28,6 @@ class MainWindowLifecycleMixin:
     if TYPE_CHECKING:
         _async_dialog_refs: Any
         _boot_splash: Any
-        _contact_dialog: Any
         _quota_redeem_dialog: Any
         _log_page: Any
         _random_ip_quota_auto_sync_timer: Any
@@ -94,13 +93,6 @@ class MainWindowLifecycleMixin:
             self._cancel_startup_update_check()
         except Exception as exc:
             log_suppressed_exception("closeEvent: self._cancel_startup_update_check()", exc)
-
-        try:
-            dialog = getattr(self, "_contact_dialog", None)
-            if dialog is not None:
-                dialog.close()
-        except Exception as exc:
-            log_suppressed_exception("closeEvent: self._contact_dialog.close()", exc)
 
         try:
             dialog = getattr(self, "_quota_redeem_dialog", None)

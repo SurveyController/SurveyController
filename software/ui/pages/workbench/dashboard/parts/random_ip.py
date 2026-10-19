@@ -409,20 +409,6 @@ class DashboardRandomIPMixin:
         self.random_ip_cb.blockSignals(False)
         self._sync_random_ip_toggle_presentation(fallback_enabled)
 
-    def _open_contact_dialog(self, default_type: str = "报错反馈", lock_message_type: bool = False):
-        
-        win = self.window()
-        if hasattr(win, "_open_contact_dialog"):
-            try:
-                return cast(Any, win)._open_contact_dialog(default_type, lock_message_type)
-            except Exception as exc:
-                log_suppressed_exception(
-                    "_open_contact_dialog passthrough",
-                    exc,
-                    level=logging.WARNING,
-                )
-        raise RuntimeError("主窗口不支持联系开发者弹窗")
-
     def _open_quota_redeem_dialog(self) -> bool:
         
         win = self.window()

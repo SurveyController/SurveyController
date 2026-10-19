@@ -89,8 +89,6 @@ def interaction_view(request: InteractionRequest) -> dict[str, Any]:
     event: dict[str, Any] = {"request_id": request.request_id}
     if request.kind == InteractionKind.QUOTA:
         return {**event, "type": "open_quota_request_form"}
-    if request.kind == InteractionKind.CONFIRMATION:
-        return {**event, "type": "quick_bug_report_suggested"}
     title, default = _PROXY_NOTICES.get(request.code, ("提示", ""))
     detail = request.detail
     if request.code == "trial_failed" and detail:

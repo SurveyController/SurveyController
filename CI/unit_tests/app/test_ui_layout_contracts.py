@@ -58,7 +58,6 @@ def _iter_feature_ui_files() -> list[Path]:
             "add_dialog.py",
             "rule_dialog.py",
             "question_selector_dialog.py",
-            "contact.py",
             "quota_redeem.py",
             "terms_of_service.py",
         }

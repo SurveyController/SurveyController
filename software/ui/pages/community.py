@@ -1,6 +1,5 @@
 import os
 import webbrowser
-from typing import Any, cast
 
 from PySide6.QtCore import Qt, QSize, QUrl
 from PySide6.QtGui import QPixmap, QPainter, QPainterPath, QDesktopServices
@@ -23,10 +22,8 @@ from qfluentwidgets import (
     ImageLabel,
 )
 
-from software.app.config import STATUS_ENDPOINT
 from software.app.version import GITHUB_OWNER, GITHUB_REPO
 from software.app.runtime_paths import get_assets_directory
-from software.ui.helpers.proxy_access import format_status_payload
 from software.ui.widgets.adaptive_flow_layout import AdaptiveFlowLayout
 
 _GITHUB_URL = f"https://github.com/{GITHUB_OWNER}/{GITHUB_REPO}"
@@ -87,9 +84,6 @@ class CommunityPage(ScrollArea):
         
         self.qq_card = self._build_qq_card()
         card_layout.addWidget(self.qq_card)
-
-        self.contact_card = self._build_contact_card()
-        card_layout.addWidget(self.contact_card)
 
         self.contribute_card = self._build_contribute_card()
         card_layout.addWidget(self.contribute_card)
@@ -185,7 +179,7 @@ class CommunityPage(ScrollArea):
         text_layout.setSpacing(8)
 
         desc = BodyLabel(
-            "扫码加入 QQ 交流群，实时获取最新版本、反馈问题、交流使用经验、订阅最新的服务情况",
+            "加入 QQ 交流群，交流使用问题和建议，查看版本与服务动态。",
             card,
         )
         desc.setWordWrap(True)
@@ -290,54 +284,11 @@ class CommunityPage(ScrollArea):
 
     
 
-    def _build_contact_card(self) -> ElevatedCardWidget:
-        card, layout = self._create_grid_card("联系开发者", FluentIcon.SEND)
-
-        desc = BodyLabel(
-            "遇到问题？有建议？不想加 QQ 群？\n可以直接在此处与我们沟通，我们会尽快回复。",
-            card,
-        )
-        desc.setWordWrap(True)
-        desc.setStyleSheet("font-size: 13px; line-height: 1.6; color: #999;")
-        layout.addWidget(desc)
-        layout.addStretch(1)
-
-        btn = PushButton("发送消息", card)
-        btn.setIcon(FluentIcon.SEND)
-        self._setup_card_button(btn)
-        btn.clicked.connect(self._open_contact_dialog)
-
-        action_bar = self._create_action_bar(
-            card,
-            btn,
-        )
-        layout.addWidget(action_bar)
-
-        return card
-
-    def _open_contact_dialog(self):
-        
-        window = self.window()
-        if hasattr(window, "_open_contact_dialog"):
-            cast(Any, window)._open_contact_dialog()
-            return
-
-        from software.ui.dialogs.contact import ContactDialog
-
-        dialog = ContactDialog(
-            self,
-            status_endpoint=STATUS_ENDPOINT,
-            status_formatter=format_status_payload,
-        )
-        dialog.exec()
-
-    
-
     def _build_contribute_card(self) -> ElevatedCardWidget:
         card, layout = self._create_grid_card("参与贡献", FluentIcon.DEVELOPER_TOOLS)
 
         desc = BodyLabel(
-            "我们接受开发、设计、测试、提供创新性想法、反馈报错等任何贡献形式\n相信我们能够一起把项目做得更好。",
+            "欢迎参与开发、设计、测试，也欢迎提出改进建议。",
             card,
         )
         desc.setWordWrap(True)

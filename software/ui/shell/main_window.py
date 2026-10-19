@@ -22,7 +22,6 @@ from qfluentwidgets import (
 )
 from shiboken6 import isValid
 
-from software.ui.dialogs.contact import ContactDialog
 from software.ui.dialogs.quota_redeem import QuotaRedeemDialog
 
 from software.app.bootstrap import create_application_dependencies
@@ -39,7 +38,6 @@ from software.ui.shell.main_window_parts.update import MainWindowUpdateMixin
 from software.app.config import (
     APP_ICON_RELATIVE_PATH,
     NAVIGATION_TEXT_VISIBLE_SETTING_KEY,
-    STATUS_ENDPOINT,
     app_settings,
     get_bool_from_qsettings,
 )
@@ -51,9 +49,6 @@ from software.ui.shell.startup_tutorial import (
 from software.logging.action_logger import log_action
 from software.logging.log_utils import register_popup_handler
 from software.app.version import __VERSION__
-from software.network.proxy import (
-    format_status_payload,
-)
 from software.app.runtime_paths import get_resource_path
 
 from software.ui.shell.boot import create_boot_splash, finish_boot_splash
@@ -112,13 +107,10 @@ class MainWindow(
         qconfig.themeChanged.connect(self._on_theme_changed)
         self._skip_save_on_close = False
         self._async_dialog_refs = []
-        self._contact_dialog = None
-        self._contact_dialog_active = False
         self._quota_redeem_dialog = None
         self._quota_redeem_dialog_active = False
         self._startup_update_check_timer = None
         self._startup_update_check_completed = False
-        self._startup_update_check_suspended = False
         self._startup_update_notification_timer = None
         self._startup_update_pending_info = None
         self._startup_post_init_done = False
@@ -347,94 +339,8 @@ class MainWindow(
             )
             self._last_logged_page = current_name
 
-    def _open_contact_dialog(self, default_type: str = "报错反馈", lock_message_type: bool = False):
-        dialog = getattr(self, "_contact_dialog", None)
-        if dialog is not None and isValid(dialog):
-            try:
-                dialog.raise_()
-                dialog.activateWindow()
-            except Exception:
-                logging.info("联系开发者窗口前置失败", exc_info=True)
-            return False
-
-        log_action(
-            "UI",
-            "open_contact_dialog",
-            "contact_dialog",
-            "main_window",
-            result="shown",
-            payload={"locked_type": bool(lock_message_type)},
-        )
-        dlg = ContactDialog(
-            self,
-            default_type=default_type,
-            lock_message_type=lock_message_type,
-            status_endpoint=STATUS_ENDPOINT,
-            status_formatter=format_status_payload,
-        )
-        open_non_blocking = str(default_type or "").strip() == "报错反馈"
-        self._contact_dialog = dlg
-        self._contact_dialog_active = True
-        self._set_startup_update_check_suspended(True)
-        dlg.setProperty("_lock_message_type", bool(lock_message_type))
-        dlg.finished.connect(self._on_contact_dialog_finished_event)
-        dlg.destroyed.connect(self._on_contact_dialog_destroyed_event)
-        if open_non_blocking:
-            dlg.open()
-            try:
-                dlg.raise_()
-                dlg.activateWindow()
-            except Exception:
-                logging.info("异步打开联系开发者窗口后前置失败", exc_info=True)
-            return False
-        return dlg.exec() == QDialog.DialogCode.Accepted
-
-    def _on_contact_dialog_finished(
-        self, dialog: QDialog, result: int, lock_message_type: bool
-    ) -> None:
-        accepted = int(result) == int(QDialog.DialogCode.Accepted)
-        log_action(
-            "UI",
-            "open_contact_dialog",
-            "contact_dialog",
-            "main_window",
-            result="submitted" if accepted else "cancelled",
-            payload={"locked_type": bool(lock_message_type)},
-        )
-        self._on_contact_dialog_destroyed(dialog)
-
-    @Slot(int)
-    def _on_contact_dialog_finished_event(self, result: int) -> None:
-        dialog = self.sender()
-        if not isinstance(dialog, QDialog):
-            return
-        lock_message_type = bool(dialog.property("_lock_message_type"))
-        self._on_contact_dialog_finished(dialog, result, lock_message_type)
-
-    def _on_contact_dialog_destroyed(self, dialog: QDialog) -> None:
-        current_dialog = getattr(self, "_contact_dialog", None)
-        if current_dialog is dialog:
-            self._contact_dialog = None
-            self._contact_dialog_active = False
-            self._set_startup_update_check_suspended(False)
-
-    @Slot()
-    def _on_contact_dialog_destroyed_event(self, *_args) -> None:
-        dialog = getattr(self, "_contact_dialog", None)
-        if isinstance(dialog, QDialog):
-            self._on_contact_dialog_destroyed(dialog)
-
     def _show_dialog_message(self, title: str, message: str, level: str = "info") -> None:
         self.show_message_dialog(title, message, level=level)
-
-    def _prompt_quick_bug_report(self) -> bool:
-        confirmed = self.show_confirm_dialog(
-            "运行异常",
-            "本次运行因异常提前终止，是否打开报错反馈？\n\n遇到问题请提交完整的日志文件，而不是发送这个页面的截图",
-        )
-        if confirmed:
-            self._open_contact_dialog(default_type="报错反馈", lock_message_type=True)
-        return bool(confirmed)
 
     def _notify_ai_unstable(self) -> None:
         self._toast("AI 填空连续失败，请稍后再试", "warning", duration=3500)
@@ -659,7 +565,7 @@ class MainWindow(
         if event_type == "run_failed":
             self._on_run_failed(str((event or {}).get("message") or ""))
             return
-        if event_type in {"dialog_message", "open_quota_request_form", "quick_bug_report_suggested"}:
+        if event_type in {"dialog_message", "open_quota_request_form"}:
             accepted = False
             try:
                 if event_type == "dialog_message":
@@ -669,8 +575,6 @@ class MainWindow(
                     )
                 elif event_type == "open_quota_request_form":
                     accepted = self._open_quota_request_form()
-                else:
-                    accepted = bool(self._prompt_quick_bug_report())
             finally:
                 request_id = str(event.get("request_id") or "")
                 if request_id:

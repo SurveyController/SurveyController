@@ -85,7 +85,6 @@ class _FakeLifecycleWindow(MainWindowLifecycleMixin):
             stop=lambda: self._record("quota_timer")
         )
         self._boot_splash = SimpleNamespace(cleanup=lambda: self._record("boot_splash"))
-        self._contact_dialog = SimpleNamespace(close=lambda: self._record("contact_dialog"))
         self._quota_redeem_dialog = SimpleNamespace(close=lambda: self._record("quota_dialog"))
         self._log_page = SimpleNamespace(
             _refresh_timer=SimpleNamespace(stop=lambda: self._record("log_timer"))
@@ -456,7 +455,6 @@ class MainWindowModalSafetyTests:
             "shutdown",
             "boot_splash",
             "log_timer",
-            "contact_dialog",
             "quota_dialog",
             "async1",
             "async2",

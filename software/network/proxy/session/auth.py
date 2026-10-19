@@ -297,21 +297,21 @@ def format_random_ip_error(exc: BaseException) -> str:
             return f"领取试用过于频繁，请 {exc.retry_after_seconds} 秒后再试"
         return "领取试用过于频繁，请稍后再试"
     if detail.startswith(_SESSION_PERSIST_FAILED_DETAIL):
-        return "随机IP账号信息没能安全保存到本机，当前会话已停止使用。请重新领取试用或联系开发者。"
+        return "随机IP账号信息没能安全保存到本机，当前会话已停止使用。请重新领取试用或通过社区 QQ 群获取帮助。"
     if detail == "device_banned":
-        return "当前设备已被封禁，请联系开发者"
+        return "当前设备已被封禁，请通过社区 QQ 群获取帮助"
     if detail == "user_banned":
-        return "当前账号已被封禁，请联系开发者"
+        return "当前账号已被封禁，请通过社区 QQ 群获取帮助"
     if detail == "user_expired":
-        return "随机IP账号已过期，请联系开发者补额度或重新开通"
+        return "随机IP账号已过期，请通过社区 QQ 群获取补充额度或重新开通的帮助"
     if detail == "device_owned_by_other_user":
-        return "当前设备绑定的随机IP账号与本机记录不一致，请联系开发者处理"
+        return "当前设备绑定的随机IP账号与本机记录不一致，请通过社区 QQ 群获取帮助"
     if detail == "user_id_required":
         return "本机缺少随机IP用户ID，请重新领取试用后再试"
     if detail == "invalid_user_id":
-        return "本机保存的随机IP用户ID无效，请重新领取试用或联系开发者"
+        return "本机保存的随机IP用户ID无效，请重新领取试用或通过社区 QQ 群获取帮助"
     if detail == "unauthorized":
-        return "随机IP账号校验失败，请重新领取试用或联系开发者"
+        return "随机IP账号校验失败，请重新领取试用或通过社区 QQ 群获取帮助"
     if detail == "minute_not_allowed":
         return "代理时长参数不被后端接受，请更新客户端"
     if detail == "pool_not_allowed":

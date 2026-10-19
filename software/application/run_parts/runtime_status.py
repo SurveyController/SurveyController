@@ -7,8 +7,6 @@ import time
 from typing import TYPE_CHECKING, Any
 
 from software.application.events import event_payload
-from software.application.interactions import InteractionKind, InteractionRequest
-from software.core.engine.failure_reason import FailureReason
 from software.core.task import ExecutionState
 
 if TYPE_CHECKING:
@@ -184,25 +182,24 @@ def publish_runtime_snapshot(service: RunApplicationService) -> None:
 
 
 
-def suggest_feedback(service: RunApplicationService) -> None:
-    if service._quick_feedback_prompt_emitted:
+def emit_terminal_notice(service: RunApplicationService) -> None:
+    if service._terminal_notice_emitted:
         return
     if service.running or service._starting or service._initializing:
         return
     ctx = service._execution_state
     if ctx is None:
         return
-    category, failure_reason, message = ctx.get_terminal_stop_snapshot()
+    category, _, message = ctx.get_terminal_stop_snapshot()
     category = str(category or "").strip()
-    failure_reason = str(failure_reason or "").strip()
     if not category:
         return
     if category == "ai_unstable":
-        service._quick_feedback_prompt_emitted = True
+        service._terminal_notice_emitted = True
         service.emit_event(event_payload("ai_unstable"))
         return
     if category == "submission_verification":
-        service._quick_feedback_prompt_emitted = True
+        service._terminal_notice_emitted = True
         service.emit_event(
             event_payload(
                 "submission_verification_required",
@@ -210,15 +207,3 @@ def suggest_feedback(service: RunApplicationService) -> None:
             )
         )
         return
-    if category in {"target_reached", "user_stopped"}:
-        return
-    if failure_reason in {
-        FailureReason.DEVICE_QUOTA_LIMIT.value,
-        FailureReason.SUBMISSION_VERIFICATION_REQUIRED.value,
-        FailureReason.USER_STOPPED.value,
-    }:
-        return
-    service._quick_feedback_prompt_emitted = True
-    service._interactions.request(
-        InteractionRequest.create(InteractionKind.CONFIRMATION, "quick_bug_report")
-    )

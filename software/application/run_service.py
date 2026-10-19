@@ -29,7 +29,7 @@ from software.application.run_parts.runtime_shutdown import (
 )
 
 from software.application.run_parts.runtime_status import (
-    monitor_runtime, publish_runtime_snapshot, suggest_feedback,
+    emit_terminal_notice, monitor_runtime, publish_runtime_snapshot,
 )
 
 
@@ -93,7 +93,7 @@ class RunApplicationService(RandomIpRuntimeService):
         self._completion_cleanup_done = False
         self._cleanup_scheduled = False
         self._stopped_by_stop_run = False
-        self._quick_feedback_prompt_emitted = False
+        self._terminal_notice_emitted = False
         self._starting = False
         self._initializing = False
         self._init_gate_stop_event: threading.Event | None = None
@@ -230,7 +230,7 @@ class RunApplicationService(RandomIpRuntimeService):
         self._stopping = False
         self._completion_cleanup_done = False
         self._cleanup_scheduled = False
-        self._quick_feedback_prompt_emitted = False
+        self._terminal_notice_emitted = False
         self._starting = True
         self._initializing = True
         self._state_store.apply_runtime_patch({
@@ -523,7 +523,7 @@ class RunApplicationService(RandomIpRuntimeService):
         if was_active:
             self.emit_status_snapshot()
         if not self._closing:
-            self._emit_quick_bug_report_suggestion_if_needed()
+            self._emit_terminal_notice_if_needed()
 
     def _submit_cleanup_task(self, delay_seconds: float = 0.0) -> None:
         runtime_port = self.runtime_port
@@ -560,8 +560,8 @@ class RunApplicationService(RandomIpRuntimeService):
     def shutdown_for_close(self, timeout_seconds: float = 5.0) -> bool:
         return shutdown_for_close(self, timeout_seconds)
 
-    def _emit_quick_bug_report_suggestion_if_needed(self) -> None:
-        suggest_feedback(self)
+    def _emit_terminal_notice_if_needed(self) -> None:
+        emit_terminal_notice(self)
 
 
 

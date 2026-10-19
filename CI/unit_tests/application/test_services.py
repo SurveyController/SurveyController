@@ -146,12 +146,12 @@ def test_target_completion_cleans_once_and_keeps_semantic_snapshot():
         harness.close()
 
 
-@pytest.mark.parametrize("category,reason,request_count", [
-    ("runtime_failed", "other", 1),
-    ("ai_unstable", "", 0),
-    ("submission_verification", "", 0),
+@pytest.mark.parametrize("category,reason", [
+    ("runtime_failed", "other"),
+    ("ai_unstable", ""),
+    ("submission_verification", ""),
 ])
-def test_failure_stop_preserves_engine_reason_and_emits_feedback_once(category, reason, request_count):
+def test_failure_stop_preserves_engine_reason_without_feedback_request(category, reason):
     harness = Harness()
     try:
         harness.start()
@@ -161,12 +161,10 @@ def test_failure_stop_preserves_engine_reason_and_emits_feedback_once(category, 
         assert snapshot["phase"] == "failed"
         assert snapshot["progress"]["consecutive_failures"] == 5
         assert snapshot["terminal_stop"]["failure_reason"] == reason
-        harness.service._emit_quick_bug_report_suggestion_if_needed()
-        assert len(harness.requests) == request_count
-        if request_count:
-            assert harness.requests[0].kind == InteractionKind.CONFIRMATION
-        else:
-            assert len(harness.events) == 1
+        harness.service._emit_terminal_notice_if_needed()
+        assert harness.requests == []
+        if category in {"ai_unstable", "submission_verification"}:
+            assert harness.events[-1].type == category
     finally:
         harness.close()
 

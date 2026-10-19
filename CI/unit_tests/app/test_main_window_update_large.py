@@ -234,7 +234,6 @@ class _FakeUpdateWindow(MainWindowUpdateMixin):
         self._startup_update_check_timer = None
         self._startup_update_notification_timer = None
         self._startup_update_check_completed = False
-        self._startup_update_check_suspended = False
         self._startup_update_pending_info = None
         self._latest_badge = None
         self._outdated_badge = None
@@ -316,7 +315,7 @@ class MainWindowUpdateLargeTests:
         assert window._startup_update_check_timer.stopped == 1
         assert window._startup_update_notification_timer.stopped == 1
 
-    def test_suspend_timeout_and_notification_gate(self, monkeypatch: pytest.MonkeyPatch) -> None:
+    def test_timeout_and_notification_gate(self, monkeypatch: pytest.MonkeyPatch) -> None:
         self._patch_widget_deps(monkeypatch)
         window = _FakeUpdateWindow()
         starts: list[str] = []
@@ -327,12 +326,10 @@ class MainWindowUpdateLargeTests:
         window._on_startup_update_check_timeout()
         assert starts == ["start"]
 
-        window._startup_update_check_suspended = True
         window._on_startup_update_check_timeout()
-        assert window._startup_update_check_timer.started_with[-1] == 3000
+        assert starts == ["start", "start"]
 
         window._startup_update_pending_info = {"version": "3.3.0"}
-        window._startup_update_check_suspended = False
         assert window._can_show_startup_update_notification() is True
         window.visible = False
         assert window._can_show_startup_update_notification() is False
