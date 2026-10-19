@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import uuid
 
-from software.app.settings_store import app_settings
+from software.io.runtime_environment import preference_store as app_settings
 from software.system.secure_store import read_secret
 
 _DEVICE_ID_PREFIX = "sc-v2-"

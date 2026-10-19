@@ -56,6 +56,8 @@ uv sync
 
 `surveycore-py` 从 `pyproject.toml` 指定的 Git 提交安装，`uv.lock` 固定依赖解析结果。不要修改虚拟环境中的库文件；通用题目模型、纯解析和答案策略的改动在 [surveycore-py](https://github.com/SurveyController/surveycore-py) 仓库维护，应用集成改动留在本仓库。
 
+应用用例放在 `software/application/`，禁止导入 Qt 或 UI。引擎、配置、偏好、AI 和代理实现由 `software/app/bootstrap.py` 组合注入；界面文案和快照映射放在 Qt 控制器边界。现有 Python 配置格式继续使用，不把它当作未来语言迁移的固定协议。架构边界与无 Qt 应用用例的回归位于 `CI/unit_tests/application/` 和 `CI/unit_tests/app/test_application_boundaries.py`。
+
 启动程序：
 
 ```bash

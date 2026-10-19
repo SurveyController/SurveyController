@@ -8,6 +8,20 @@ from typing import Any, Callable
 from PySide6.QtCore import QCoreApplication
 
 
+class UiDispatchError(RuntimeError):
+    pass
+
+
+class _QueuedCallback:
+    def __init__(self, callback: Callable[[], Any]) -> None:
+        self.callback = callback
+        self.cancelled = False
+
+    def __call__(self) -> None:
+        if not self.cancelled:
+            self.callback()
+
+
 class UiCallbackDispatcher:
     
 
@@ -29,11 +43,13 @@ class UiCallbackDispatcher:
                 logging.info("执行 UI 回调失败", exc_info=True)
 
     def enqueue(self, callback: Callable[[], Any]) -> bool:
+        queued = _QueuedCallback(callback)
         try:
-            self._queue.put_nowait(callback)
+            self._queue.put_nowait(queued)
             self._emit_signal()
             return True
         except Exception:
+            queued.cancelled = True
             logging.warning("UI 回调入队失败", exc_info=True)
             return False
 
@@ -52,4 +68,5 @@ class UiCallbackDispatcher:
             except Exception:
                 logging.info("主线程直接执行回调失败", exc_info=True)
             return
-        self.enqueue(callback)
+        if not self.enqueue(callback):
+            raise UiDispatchError("UI 回调派发失败")

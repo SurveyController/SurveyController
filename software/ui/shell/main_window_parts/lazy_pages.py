@@ -148,7 +148,11 @@ class MainWindowLazyPagesMixin:
         if self._settings_page is None:
             from software.ui.pages.settings.settings import SettingsPage
 
-            self._settings_page = SettingsPage(self)
+            self._settings_page = SettingsPage(
+                self,
+                ai_settings=getattr(getattr(self, "controller", None), "ai_settings", None),
+                preferences=getattr(getattr(self, "controller", None), "preferences", None),
+            )
             self._settings_page.setObjectName("settings")
         return self._settings_page
 

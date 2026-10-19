@@ -20,7 +20,7 @@ from software.core.engine.async_engine import AsyncEngineClient
 from surveycore.core.questions.config import build_default_question_entries
 from software.core.task import ExecutionState  
 from software.providers.registry import parse_survey  
-from software.ui.controller.run_controller_parts.runtime_preparation import prepare_execution_artifacts  
+from software.core.engine.runtime_preparation import prepare_execution_artifacts  
 
 
 def _iter_exception_messages(exc: BaseException) -> list[str]:
@@ -82,6 +82,12 @@ def main() -> int:
     parser.add_argument("--url", required=True)
     parser.add_argument("--timeout", type=float, default=180.0)
     args = parser.parse_args()
+
+    from software.app.settings_store import app_settings
+    from software.app.user_paths import get_default_runtime_config_path
+    from software.io.runtime_environment import configure_runtime_environment
+
+    configure_runtime_environment(app_settings, get_default_runtime_config_path)
 
     try:
         logging.disable(logging.CRITICAL)

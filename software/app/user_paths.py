@@ -2,8 +2,6 @@ from __future__ import annotations
 
 import os
 
-from PySide6.QtCore import QCoreApplication, QStandardPaths
-
 from software.app.path_utils import normalize_filesystem_path
 from software.app.settings_store import (
     CONFIG_DIRECTORY_SETTING_KEY,
@@ -20,6 +18,8 @@ def _normalize_path(path: str) -> str:
 
 
 def _strip_qt_app_suffix(path: str) -> str:
+    from PySide6.QtCore import QCoreApplication
+
     normalized = _normalize_path(path)
     if not normalized:
         return normalized
@@ -34,9 +34,12 @@ def _strip_qt_app_suffix(path: str) -> str:
     return current
 
 
-def _get_standard_base_root(location: QStandardPaths.StandardLocation, *fallback_parts: str) -> str:
+def _get_standard_base_root(location: str, *fallback_parts: str) -> str:
+    from PySide6.QtCore import QStandardPaths
+
     configure_qt_application_metadata()
-    path = str(QStandardPaths.writableLocation(location) or "").strip()
+    standard_location = getattr(QStandardPaths.StandardLocation, location)
+    path = str(QStandardPaths.writableLocation(standard_location) or "").strip()
     if path:
         stripped = _strip_qt_app_suffix(path)
         if stripped:
@@ -47,7 +50,7 @@ def _get_standard_base_root(location: QStandardPaths.StandardLocation, *fallback
 def get_roaming_app_data_root() -> str:
     
     return _get_standard_base_root(
-        QStandardPaths.StandardLocation.AppDataLocation,
+        "AppDataLocation",
         "AppData",
         "Roaming",
     )
@@ -56,7 +59,7 @@ def get_roaming_app_data_root() -> str:
 def get_local_app_data_root() -> str:
     
     return _get_standard_base_root(
-        QStandardPaths.StandardLocation.AppLocalDataLocation,
+        "AppLocalDataLocation",
         "AppData",
         "Local",
     )

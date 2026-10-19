@@ -51,25 +51,31 @@ class WorkerTests:
         assert received == []
 
     def test_ai_test_worker_treats_connection_success_prefix_as_success(self) -> None:
-        worker = AITestWorker()
+        async def test_connection() -> str:
+            return "连接成功：延迟 120ms"
+
+        worker = AITestWorker(test_connection=test_connection)
         received: list[tuple[bool, str]] = []
         worker.finished.connect(lambda success, message: received.append((success, message)))
-        with patch('software.ui.workers.ai_test_worker.atest_connection', return_value='连接成功：延迟 120ms'):
-            worker.run()
+        worker.run()
         assert received == [(True, '连接成功：延迟 120ms')]
 
     def test_ai_test_worker_treats_non_success_result_as_failure(self) -> None:
-        worker = AITestWorker()
+        async def test_connection() -> str:
+            return "服务暂时不可用"
+
+        worker = AITestWorker(test_connection=test_connection)
         received: list[tuple[bool, str]] = []
         worker.finished.connect(lambda success, message: received.append((success, message)))
-        with patch('software.ui.workers.ai_test_worker.atest_connection', return_value='服务暂时不可用'):
-            worker.run()
+        worker.run()
         assert received == [(False, '服务暂时不可用')]
 
     def test_ai_test_worker_emits_readable_error_when_dependency_raises(self) -> None:
-        worker = AITestWorker()
+        async def test_connection() -> str:
+            raise RuntimeError('timeout')
+
+        worker = AITestWorker(test_connection=test_connection)
         received: list[tuple[bool, str]] = []
         worker.finished.connect(lambda success, message: received.append((success, message)))
-        with patch('software.ui.workers.ai_test_worker.atest_connection', side_effect=RuntimeError('timeout')):
-            worker.run()
+        worker.run()
         assert received == [(False, '连接失败: timeout')]

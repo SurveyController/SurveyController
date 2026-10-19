@@ -4,7 +4,7 @@ from unittest.mock import patch
 from surveycore.core.questions.config import QuestionEntry
 from software.core.config.schema import RuntimeConfig
 from surveycore.core.reverse_fill.schema import ReverseFillSpec
-from software.ui.controller.run_controller_parts.runtime_preparation import PreparedExecutionArtifacts, RuntimePreparationError, prepare_execution_artifacts
+from software.core.engine.runtime_preparation import PreparedExecutionArtifacts, RuntimePreparationError, prepare_execution_artifacts
 
 class _FakeHttpResponse:
 
@@ -43,7 +43,7 @@ class RuntimePreparationTests:
 
     def test_prepare_execution_artifacts_rejects_validation_error(self) -> None:
         config = self._build_config()
-        with patch('software.ui.controller.run_controller_parts.runtime_preparation.validate_question_config', return_value='第1题配置冲突'):
+        with patch('software.core.engine.runtime_preparation.validate_question_config', return_value='第1题配置冲突'):
             with pytest.raises(RuntimePreparationError) as cm:
                 prepare_execution_artifacts(config)
         assert '题目配置存在冲突' in cm.value.user_message
@@ -56,7 +56,7 @@ class RuntimePreparationTests:
         config.question_entries[0].survey_provider = 'wjx'
         config.questions_info[0]['provider'] = 'wjx'
         html = "<html><body><div id='divWorkError'>此问卷处于停止状态，无法作答！</div></body></html>"
-        with patch('software.network.http.get', return_value=_FakeHttpResponse(html)) as http_get, patch('software.ui.controller.run_controller_parts.runtime_preparation.validate_question_config', return_value=''):
+        with patch('software.network.http.get', return_value=_FakeHttpResponse(html)) as http_get, patch('software.core.engine.runtime_preparation.validate_question_config', return_value=''):
             with pytest.raises(RuntimePreparationError) as cm:
                 prepare_execution_artifacts(config)
         assert cm.value.user_message == '问卷已停止，无法作答'
@@ -74,14 +74,14 @@ class RuntimePreparationTests:
           <div id="divQuestion"><fieldset><div topic="1" type="3">Q1</div></fieldset></div>
         </body></html>
         """
-        with patch('software.network.http.get', return_value=_FakeHttpResponse(html)), patch('software.ui.controller.run_controller_parts.runtime_preparation.validate_question_config', return_value=''):
+        with patch('software.network.http.get', return_value=_FakeHttpResponse(html)), patch('software.core.engine.runtime_preparation.validate_question_config', return_value=''):
             with pytest.raises(RuntimePreparationError) as cm:
                 prepare_execution_artifacts(config)
         assert cm.value.user_message == '问卷发布者企业标准版未购买或已到期，暂时不能填写'
 
     def test_prepare_execution_artifacts_marks_reverse_fill_error_as_detailed(self) -> None:
         config = self._build_config()
-        with patch('software.ui.controller.run_controller_parts.runtime_preparation.build_enabled_reverse_fill_spec', side_effect=RuntimeError('反填源文件损坏')):
+        with patch('software.core.engine.runtime_preparation.build_enabled_reverse_fill_spec', side_effect=RuntimeError('反填源文件损坏')):
             with pytest.raises(RuntimePreparationError) as cm:
                 prepare_execution_artifacts(config)
         assert cm.value.detailed
@@ -95,7 +95,7 @@ class RuntimePreparationTests:
             assert reliability_mode_enabled
             ctx.single_prob = [[100.0, 0.0]]
             ctx.question_config_index_map = {1: ('single', 0)}
-        with patch('software.ui.controller.run_controller_parts.runtime_preparation.build_enabled_reverse_fill_spec', return_value=None), patch('software.ui.controller.run_controller_parts.runtime_preparation.configure_probabilities', side_effect=fake_configure_probabilities), patch('software.ui.controller.run_controller_parts.runtime_preparation.set_proxy_occupy_minute_by_answer_duration') as sync_proxy_duration:
+        with patch('software.core.engine.runtime_preparation.build_enabled_reverse_fill_spec', return_value=None), patch('software.core.engine.runtime_preparation.configure_probabilities', side_effect=fake_configure_probabilities), patch('software.core.engine.runtime_preparation.set_proxy_occupy_minute_by_answer_duration') as sync_proxy_duration:
             artifacts = prepare_execution_artifacts(config, fallback_survey_title='后备标题')
         assert isinstance(artifacts, PreparedExecutionArtifacts)
         assert artifacts.survey_provider == 'qq'
@@ -119,7 +119,7 @@ class RuntimePreparationTests:
         config.survey_provider = "credamo"
         config.question_entries[0].survey_provider = "credamo"
         config.questions_info[0]["provider"] = "credamo"
-        with patch('software.ui.controller.run_controller_parts.runtime_preparation.build_enabled_reverse_fill_spec', return_value=None), patch('software.ui.controller.run_controller_parts.runtime_preparation.configure_probabilities', return_value=None):
+        with patch('software.core.engine.runtime_preparation.build_enabled_reverse_fill_spec', return_value=None), patch('software.core.engine.runtime_preparation.configure_probabilities', return_value=None):
             artifacts = prepare_execution_artifacts(config)
         assert artifacts.execution_config_template.answer_datetime_window_ms == (0, 0)
 
@@ -160,7 +160,7 @@ class RuntimePreparationTests:
         config.question_entries[0].survey_provider = "credamo"
         config.questions_info[0]["provider"] = "credamo"
         config.answer_datetime_window = ("2026-02-10 09:00:00", "2026-02-10 10:00:00")
-        with patch('software.ui.controller.run_controller_parts.runtime_preparation.build_enabled_reverse_fill_spec', return_value=None), patch('software.ui.controller.run_controller_parts.runtime_preparation.configure_probabilities', return_value=None):
+        with patch('software.core.engine.runtime_preparation.build_enabled_reverse_fill_spec', return_value=None), patch('software.core.engine.runtime_preparation.configure_probabilities', return_value=None):
             artifacts = prepare_execution_artifacts(config)
         start_ms, end_ms = artifacts.execution_config_template.answer_datetime_window_ms
         assert end_ms > start_ms > 0
@@ -168,7 +168,7 @@ class RuntimePreparationTests:
     def test_prepare_execution_artifacts_uses_fallback_title_when_config_title_blank(self) -> None:
         config = self._build_config()
         config.survey_title = ''
-        with patch('software.ui.controller.run_controller_parts.runtime_preparation.build_enabled_reverse_fill_spec', return_value=None), patch('software.ui.controller.run_controller_parts.runtime_preparation.configure_probabilities', return_value=None):
+        with patch('software.core.engine.runtime_preparation.build_enabled_reverse_fill_spec', return_value=None), patch('software.core.engine.runtime_preparation.configure_probabilities', return_value=None):
             artifacts = prepare_execution_artifacts(config, fallback_survey_title='解析得到的标题')
         assert artifacts.execution_config_template.survey_title == '解析得到的标题'
         assert artifacts.questions_info[0].provider == 'qq'
@@ -177,7 +177,7 @@ class RuntimePreparationTests:
     def test_prepare_execution_artifacts_clamps_threads_by_http_limit(self) -> None:
         config = self._build_config()
         config.threads = 99
-        with patch('software.ui.controller.run_controller_parts.runtime_preparation.build_enabled_reverse_fill_spec', return_value=None), patch('software.ui.controller.run_controller_parts.runtime_preparation.configure_probabilities', return_value=None):
+        with patch('software.core.engine.runtime_preparation.build_enabled_reverse_fill_spec', return_value=None), patch('software.core.engine.runtime_preparation.configure_probabilities', return_value=None):
             artifacts = prepare_execution_artifacts(config)
         assert artifacts.execution_config_template.num_threads == 64
 
@@ -187,7 +187,7 @@ class RuntimePreparationTests:
         config.threads = 8
         config.reverse_fill_threads = 3
         reverse_fill_spec = ReverseFillSpec(source_path='D:/demo.xlsx', selected_format='wjx_sequence', detected_format='wjx_sequence', start_row=1, total_samples=9, available_samples=9, target_num=9)
-        with patch('software.ui.controller.run_controller_parts.runtime_preparation.build_enabled_reverse_fill_spec', return_value=reverse_fill_spec), patch('software.ui.controller.run_controller_parts.runtime_preparation.configure_probabilities', return_value=None):
+        with patch('software.core.engine.runtime_preparation.build_enabled_reverse_fill_spec', return_value=reverse_fill_spec), patch('software.core.engine.runtime_preparation.configure_probabilities', return_value=None):
             artifacts = prepare_execution_artifacts(config)
         assert artifacts.execution_config_template.target_num == 9
         assert artifacts.execution_config_template.num_threads == 3

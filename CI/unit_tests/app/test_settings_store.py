@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 from unittest.mock import patch
+from PySide6.QtCore import QSettings
 
 import software.app.settings_store as settings_store
 
@@ -10,7 +11,7 @@ class SettingsStoreTests:
     def test_app_settings_builds_expected_qsettings_scope(self) -> None:
         with (
             patch.dict("os.environ", {"SURVEYCONTROLLER_QSETTINGS_FILE": ""}),
-            patch("software.app.settings_store.QSettings", return_value="settings") as qsettings,
+            patch("PySide6.QtCore.QSettings", return_value="settings") as qsettings,
         ):
             result = settings_store.app_settings()
 
@@ -23,7 +24,7 @@ class SettingsStoreTests:
             result = settings_store.app_settings()
 
         assert Path(result.fileName()) == settings_file
-        assert result.format() == settings_store.QSettings.Format.IniFormat
+        assert result.format() == QSettings.Format.IniFormat
 
     def test_get_bool_from_qsettings_accepts_common_true_values(self) -> None:
         for value in (True, "true", "TRUE", "1", "yes", "on", 1):

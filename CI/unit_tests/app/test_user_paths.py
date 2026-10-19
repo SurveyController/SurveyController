@@ -3,6 +3,8 @@ from __future__ import annotations
 import os
 from pathlib import Path
 
+from PySide6.QtCore import QCoreApplication, QStandardPaths
+
 import software.app.user_paths as user_paths
 
 
@@ -22,17 +24,17 @@ class UserPathsTests:
         local_root = tmp_path / "local-root" / "SurveyController" / "Settings"
 
         monkeypatch.setattr(user_paths, "configure_qt_application_metadata", lambda: None)
-        monkeypatch.setattr(user_paths.QCoreApplication, "applicationName", lambda: "Settings")
-        monkeypatch.setattr(user_paths.QCoreApplication, "organizationName", lambda: "SurveyController")
+        monkeypatch.setattr(QCoreApplication, "applicationName", lambda: "Settings")
+        monkeypatch.setattr(QCoreApplication, "organizationName", lambda: "SurveyController")
 
         def fake_writable_location(location) -> str:
-            if location == user_paths.QStandardPaths.StandardLocation.AppDataLocation:
+            if location == QStandardPaths.StandardLocation.AppDataLocation:
                 return str(config_root)
-            if location == user_paths.QStandardPaths.StandardLocation.AppLocalDataLocation:
+            if location == QStandardPaths.StandardLocation.AppLocalDataLocation:
                 return str(local_root)
             raise AssertionError(f"unexpected location: {location}")
 
-        monkeypatch.setattr(user_paths.QStandardPaths, "writableLocation", fake_writable_location)
+        monkeypatch.setattr(QStandardPaths, "writableLocation", fake_writable_location)
 
         assert user_paths.get_roaming_app_data_root() == str(config_root.parent.parent)
         assert user_paths.get_local_app_data_root() == str(local_root.parent.parent)
@@ -45,7 +47,7 @@ class UserPathsTests:
 
     def test_standard_roots_fall_back_to_home_when_qt_returns_empty(self, monkeypatch, tmp_path) -> None:
         monkeypatch.setattr(user_paths, "configure_qt_application_metadata", lambda: None)
-        monkeypatch.setattr(user_paths.QStandardPaths, "writableLocation", lambda _location: "")
+        monkeypatch.setattr(QStandardPaths, "writableLocation", lambda _location: "")
         monkeypatch.setattr(user_paths.os.path, "expanduser", lambda _path: str(tmp_path))
 
         assert user_paths.get_roaming_app_data_root() == str(tmp_path / "AppData" / "Roaming")

@@ -11,7 +11,7 @@ from software.core.config.codec import (
     serialize_runtime_config,
 )
 from software.core.config.schema import RuntimeConfig
-from software.app.user_paths import get_default_runtime_config_path
+from software.io.runtime_environment import default_config_path as get_default_runtime_config_path
 
 __all__ = [
     "_sanitize_filename",

@@ -1,8 +1,9 @@
 from __future__ import annotations
 
-from typing import Any, Dict, List, Optional
+from typing import Any, Callable, Dict, List, Optional
 
-from software.app.settings_store import app_settings
+from software.application.ports import PreferencesStorePort
+from software.io.runtime_environment import preference_store
 
 AI_PROVIDERS = {
     "deepseek": {
@@ -72,6 +73,7 @@ _DEFAULT_AI_SETTINGS: Dict[str, Any] = {
 }
 _RUNTIME_AI_SETTINGS: Optional[Dict[str, Any]] = None
 _AI_SETTINGS_KEY_PREFIX = "ai/"
+_SETTINGS_STORE_FACTORY: Optional[Callable[[], PreferencesStorePort]] = None
 
 __all__ = [
     "AI_MODE_PROVIDER",
@@ -81,6 +83,7 @@ __all__ = [
     "QUESTION_TYPE_FILL",
     "QUESTION_TYPE_MULTI",
     "_normalize_custom_api_protocol",
+    "configure_ai_settings_store",
     "get_ai_readiness_error",
     "get_ai_settings",
     "get_default_system_prompt",
@@ -93,6 +96,20 @@ def get_default_system_prompt() -> str:
     return DEFAULT_SYSTEM_PROMPT_PROVIDER
 
 
+def configure_ai_settings_store(
+    store_factory: Callable[[], PreferencesStorePort] | None,
+) -> None:
+    global _SETTINGS_STORE_FACTORY, _RUNTIME_AI_SETTINGS
+    _SETTINGS_STORE_FACTORY = store_factory
+    _RUNTIME_AI_SETTINGS = None
+
+
+def _get_settings_store() -> PreferencesStorePort:
+    if _SETTINGS_STORE_FACTORY is None:
+        return preference_store()
+    return _SETTINGS_STORE_FACTORY()
+
+
 def _ensure_runtime_settings() -> Dict[str, Any]:
     global _RUNTIME_AI_SETTINGS
     if _RUNTIME_AI_SETTINGS is None:
@@ -102,7 +119,7 @@ def _ensure_runtime_settings() -> Dict[str, Any]:
 
 def _load_ai_settings_from_store() -> Dict[str, Any]:
     settings = dict(_DEFAULT_AI_SETTINGS)
-    store = app_settings()
+    store = _get_settings_store()
     provider = str(store.value(f"{_AI_SETTINGS_KEY_PREFIX}provider", settings["provider"]) or "deepseek").strip()
     settings["provider"] = provider if provider in AI_PROVIDERS else "deepseek"
     settings["api_key"] = str(store.value(f"{_AI_SETTINGS_KEY_PREFIX}api_key", settings["api_key"]) or "")
@@ -119,7 +136,7 @@ def _load_ai_settings_from_store() -> Dict[str, Any]:
 
 
 def _persist_ai_settings(settings: Dict[str, Any]) -> None:
-    store = app_settings()
+    store = _get_settings_store()
     store.setValue(f"{_AI_SETTINGS_KEY_PREFIX}mode", settings["ai_mode"])
     store.setValue(f"{_AI_SETTINGS_KEY_PREFIX}provider", settings["provider"])
     store.setValue(f"{_AI_SETTINGS_KEY_PREFIX}api_key", settings["api_key"])
@@ -182,7 +199,7 @@ def save_ai_settings(
 def reset_ai_settings() -> None:
     
     global _RUNTIME_AI_SETTINGS
-    store = app_settings()
+    store = _get_settings_store()
     for key in (
         f"{_AI_SETTINGS_KEY_PREFIX}mode",
         f"{_AI_SETTINGS_KEY_PREFIX}provider",

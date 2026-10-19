@@ -8,7 +8,7 @@ from software.integrations.ai.client import (
     save_ai_settings,
     atest_connection,
 )
-from software.integrations.ai.settings import reset_ai_settings
+from software.integrations.ai.settings import configure_ai_settings_store, reset_ai_settings
 
 __all__ = [
     "AI_PROVIDERS",
@@ -16,6 +16,7 @@ __all__ = [
     "agenerate_answer",
     "get_ai_readiness_error",
     "get_ai_settings",
+    "configure_ai_settings_store",
     "get_default_system_prompt",
     "reset_ai_settings",
     "save_ai_settings",

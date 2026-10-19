@@ -10,6 +10,7 @@ from PySide6.QtWidgets import QFileDialog, QWidget
 
 from software.app.user_paths import get_user_local_data_root
 from software.io.qr.utils import decode_qrcode
+from software.ui.adapters.qr_image import qr_pixel_buffer
 from software.logging.log_utils import log_suppressed_exception
 
 
@@ -251,7 +252,11 @@ class SurveyClipboardMixin:
 
     def _process_qrcode_image(self, image_source):
         try:
-            url = decode_qrcode(image_source)
+            pixels = qr_pixel_buffer(image_source)
+            if pixels is None:
+                self._toast("未能识别二维码中的链接", "error")
+                return
+            url = decode_qrcode(pixels)
             if not url:
                 self._toast("未能识别二维码中的链接", "error")
                 return

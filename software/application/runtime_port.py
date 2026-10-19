@@ -42,7 +42,7 @@ class RunRuntimePort(RuntimeControlPort):
         self._pause_reason = ""
 
     def pause_run(self, reason: str = "") -> None:
-        self._pause_reason = str(reason or "已暂停")
+        self._pause_reason = str(reason or "")
         self._pause_event.set()
 
     def resume_run(self) -> None:

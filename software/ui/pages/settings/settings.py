@@ -32,9 +32,11 @@ from software.app.config import (
 from software.app.path_utils import normalize_filesystem_path
 from software.app.user_paths import (
     get_default_user_config_directory,
-    resolve_user_config_directory,
 )
-from software.integrations.ai import reset_ai_settings
+from software.app.ai_settings_adapter import PythonAiSettingsAdapter
+from software.application.ports import AiSettingsPort
+from software.application.preferences import PreferencesService
+from software.app.preferences_adapter import QSettingsPreferences
 from software.logging.action_logger import bind_logged_action, log_action
 from software.logging.log_utils import log_suppressed_exception
 from software.ui.helpers.message_bar import show_message_bar
@@ -71,13 +73,16 @@ class SettingsPage(ScrollArea):
     reset_ui_card: PrimaryPushSettingCard
     config_directory_card: PushSettingCard
 
-    def __init__(self, parent=None):
+    def __init__(self, parent=None, *, ai_settings: AiSettingsPort | None = None, preferences: PreferencesService | None = None):
         super().__init__(parent)
         self.view = QWidget(self)
         self.setWidget(self.view)
         self.setWidgetResizable(True)
         self.enableTransparentBackground()
-        self._settings = app_settings()
+        self._preferences = preferences if preferences is not None else PreferencesService(
+            QSettingsPreferences(app_settings())
+        )
+        self._ai_settings = ai_settings if ai_settings is not None else PythonAiSettingsAdapter()
         self._defaults = self._build_defaults()
         self._build_ui()
 
@@ -175,7 +180,7 @@ class SettingsPage(ScrollArea):
         for count in AUTO_SAVE_LOG_RETENTION_OPTIONS:
             self.auto_save_logs_combo.addItem(str(count), userData=int(count))
         keep_count = get_int_from_qsettings(
-            self._settings.value(AUTO_SAVE_LOG_RETENTION_COUNT_SETTING_KEY),
+            self._preferences.get(AUTO_SAVE_LOG_RETENTION_COUNT_SETTING_KEY),
             DEFAULT_AUTO_SAVE_LOG_RETENTION_COUNT,
             minimum=1,
             maximum=max(AUTO_SAVE_LOG_RETENTION_OPTIONS),
@@ -254,10 +259,13 @@ class SettingsPage(ScrollArea):
         )
 
     def _read_bool_setting(self, key: str, default: bool) -> bool:
-        return get_bool_from_qsettings(self._settings.value(key), default)
+        return get_bool_from_qsettings(self._preferences.get(key), default)
 
     def _current_config_directory(self) -> str:
-        return resolve_user_config_directory(self._settings)
+        configured = str(self._preferences.get(CONFIG_DIRECTORY_SETTING_KEY) or "").strip()
+        if not configured:
+            return get_default_user_config_directory()
+        return normalize_filesystem_path(os.path.expanduser(configured))
 
     def _set_config_directory_content(self, directory: str) -> None:
         normalized = normalize_filesystem_path(directory)
@@ -294,7 +302,7 @@ class SettingsPage(ScrollArea):
         persist: bool = True,
     ) -> None:
         if persist:
-            self._settings.setValue(key, checked)
+            self._preferences.set(key, checked)
         log_action(
             "CONFIG",
             event,
@@ -383,7 +391,7 @@ class SettingsPage(ScrollArea):
     def _apply_auto_save_log_retention_count(self, keep_count: int, persist: bool = True):
         normalized = int(keep_count)
         if persist:
-            self._settings.setValue(AUTO_SAVE_LOG_RETENTION_COUNT_SETTING_KEY, normalized)
+            self._preferences.set(AUTO_SAVE_LOG_RETENTION_COUNT_SETTING_KEY, normalized)
         log_action(
             "CONFIG",
             "change_auto_save_log_retention",
@@ -419,8 +427,7 @@ class SettingsPage(ScrollArea):
             )
             raise RuntimeError(f"无法创建配置文件目录：{exc}") from exc
         if persist:
-            self._settings.setValue(CONFIG_DIRECTORY_SETTING_KEY, normalized)
-            self._settings.sync()
+            self._preferences.set(CONFIG_DIRECTORY_SETTING_KEY, normalized)
         self._set_config_directory_content(normalized)
         log_action(
             "CONFIG",
@@ -484,9 +491,8 @@ class SettingsPage(ScrollArea):
         self._show_bar(f"配置文件目录已更新：{normalized}", "success", 2500)
 
     def _reset_all_settings(self) -> None:
-        self._settings.clear()
-        self._settings.sync()
-        reset_ai_settings()
+        self._preferences.reset()
+        self._ai_settings.reset_settings()
 
         self._set_switch_state(self.navigation_text_card, self._defaults[NAVIGATION_TEXT_VISIBLE_SETTING_KEY])
         self._set_switch_state(self.topmost_card, self._defaults["window_topmost"])

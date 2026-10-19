@@ -8,10 +8,8 @@ from typing import Any, cast
 import pytest
 from PySide6.QtCore import QAbstractAnimation, QEvent
 
-import software.ui.controller.run_controller_parts.parsing as parsing_module
 import software.ui.controller.ui_dispatcher as ui_dispatcher_module
 import software.ui.helpers.qfluent_compat as qfluent_compat
-from surveycore.providers.errors import SurveyPausedError
 
 
 class _FakeAniGroup:
@@ -202,49 +200,7 @@ class _FakeEvent:
         return "resized"
 
 
-class _FakeFuture:
-    def __init__(self, result: Any = None, error: BaseException | None = None) -> None:
-        self._result = result
-        self._error = error
-
-    def result(self):
-        if self._error is not None:
-            raise self._error
-        return self._result
-
-    def add_done_callback(self, callback) -> None:
-        callback(self)
-
-
-class _FakeParsingController:
-    parse_survey = parsing_module.RunControllerParsingMixin.parse_survey
-
-    def __init__(self, future: _FakeFuture | None = None) -> None:
-        self.surveyParsed = SimpleNamespace(emit=lambda *args: self.parsed.append(args))
-        self.surveyParseFailed = SimpleNamespace(emit=lambda message: self.failures.append(message))
-        self.config = SimpleNamespace(
-            url="",
-            survey_provider="",
-            survey_title="",
-            questions_info=[],
-            question_entries=[],
-        )
-        self.questions_info = []
-        self.question_entries = []
-        self.survey_title = ""
-        self.survey_provider = ""
-        self.runtime_state_updates: list[dict[str, Any]] = []
-        self.parsed: list[Any] = []
-        self.failures: list[str] = []
-        self._async_engine_client = SimpleNamespace(parse_survey=lambda _url: future)
-        self._dispatch_to_ui_async = lambda callback: callback()
-
-    def set_runtime_ui_state(self, **updates):
-        self.runtime_state_updates.append(dict(updates))
-        return dict(updates)
-
-
-class UiHelperAndParsingTests:
+class UiHelperTests:
     def test_set_indeterminate_progress_ring_active_handles_resume_start_and_hide(self) -> None:
         paused_ring = _FakeRing(state=QAbstractAnimation.State.Paused)
         qfluent_compat.set_indeterminate_progress_ring_active(paused_ring, True)
@@ -435,72 +391,3 @@ class UiHelperAndParsingTests:
         monkeypatch.setattr(dispatcher._queue, "put_nowait", _boom)
         assert dispatcher.enqueue(lambda: None) is False
 
-    def test_parse_survey_validates_url_and_handles_success(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        definition = SimpleNamespace(
-            title="问卷A",
-            provider="wjx",
-            questions=[
-                SimpleNamespace(is_description=False, name="q1"),
-                SimpleNamespace(is_description=True, name="desc"),
-            ],
-        )
-        controller = _FakeParsingController(_FakeFuture(result=definition))
-        monkeypatch.setattr(parsing_module, "is_supported_survey_url", lambda url: url.startswith("http"))
-        monkeypatch.setattr(
-            parsing_module,
-            "build_default_question_entries",
-            lambda info, survey_url, existing_entries: [f"{survey_url}:{len(info)}"],
-        )
-
-        controller.parse_survey(" http://survey ")
-
-        assert controller.parsed == [([definition.questions[0]], "问卷A")]
-        assert controller.config.url == "http://survey"
-        assert controller.config.survey_provider == "wjx"
-        assert controller.question_entries == ["http://survey:1"]
-        assert controller.runtime_state_updates == [{"survey_provider": "wjx"}]
-
-    def test_parse_survey_syncs_qq_provider_into_runtime_ui_state(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        definition = SimpleNamespace(
-            title="腾讯问卷",
-            provider="qq",
-            questions=[SimpleNamespace(is_description=False, name="q1")],
-        )
-        controller = _FakeParsingController(_FakeFuture(result=definition))
-        monkeypatch.setattr(parsing_module, "is_supported_survey_url", lambda _url: True)
-        monkeypatch.setattr(
-            parsing_module,
-            "build_default_question_entries",
-            lambda info, survey_url, existing_entries: [f"{survey_url}:{len(info)}"],
-        )
-
-        controller.parse_survey("https://wj.qq.com/s2/26778849/5e9e/")
-
-        assert controller.config.survey_provider == "qq"
-        assert controller.survey_provider == "qq"
-        assert controller.runtime_state_updates[-1] == {"survey_provider": "qq"}
-
-    def test_parse_survey_handles_empty_unsupported_and_known_business_error(
-        self,
-        monkeypatch: pytest.MonkeyPatch,
-    ) -> None:
-        controller = _FakeParsingController()
-        controller.parse_survey("")
-        assert controller.failures == ["请填写问卷链接"]
-
-        monkeypatch.setattr(parsing_module, "is_supported_survey_url", lambda _url: False)
-        controller.parse_survey("bad")
-        assert controller.failures[-1] == "仅支持问卷星、腾讯问卷与 Credamo 见数链接"
-
-        monkeypatch.setattr(parsing_module, "is_supported_survey_url", lambda _url: True)
-        paused = _FakeParsingController(_FakeFuture(error=SurveyPausedError("暂停中")))
-        paused.parse_survey("http://survey")
-        assert paused.failures == ["暂停中"]
-
-    def test_parse_survey_handles_unexpected_error(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        monkeypatch.setattr(parsing_module, "is_supported_survey_url", lambda _url: True)
-        controller = _FakeParsingController(_FakeFuture(error=RuntimeError("炸了")))
-
-        controller.parse_survey("http://survey")
-
-        assert controller.failures == ["炸了"]

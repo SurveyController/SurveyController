@@ -25,12 +25,7 @@ from qfluentwidgets import (
 
 from software.ui.widgets.full_width_infobar import FullWidthInfoBar
 from software.ui.workers.ai_test_worker import AITestWorker
-from software.integrations.ai import (
-    AI_PROVIDERS,
-    get_ai_settings,
-    get_default_system_prompt,
-    save_ai_settings,
-)
+from software.application.ports import AiSettingsPort
 from software.core.config.schema import RuntimeConfig
 
 
@@ -44,7 +39,7 @@ class AIPromptSettingCard(ExpandGroupSettingCard):
             "在此处编辑 AI 填空的系统提示词",
             parent,
         )
-        self._default_prompt = (default_prompt or "").strip() or get_default_system_prompt()
+        self._default_prompt = (default_prompt or "").strip() or (prompt_text or "").strip()
 
         self._group_container = QWidget(self)
         layout = QVBoxLayout(self._group_container)
@@ -80,18 +75,25 @@ class RuntimeAISection(QObject):
         "custom": "https://platform.openai.com/docs/api-reference/introduction",
     }
 
-    def __init__(self, parent_view: QWidget, owner: QWidget):
+    def __init__(
+        self,
+        parent_view: QWidget,
+        owner: QWidget,
+        *,
+        ai_settings: AiSettingsPort,
+    ):
         super().__init__(parent_view)
         self._owner = owner
+        self._ai_settings = ai_settings
         self.group = SettingCardGroup("AI 填空助手", parent_view)
         self._ai_loading = True
         self._ai_test_thread: Optional[QThread] = None
         self._ai_test_worker: Optional[AITestWorker] = None
         self._current_infobar: Optional[InfoBar] = None  
-        ai_config = get_ai_settings()
+        ai_config = self._ai_settings.get_settings()
         self._ai_system_prompt = str(
             ai_config.get("system_prompt") or ""
-        ).strip() or get_default_system_prompt()
+        ).strip() or self._ai_settings.default_system_prompt()
         self._build_ui(ai_config)
         self._bind_events()
         self._update_ai_visibility()
@@ -134,10 +136,10 @@ class RuntimeAISection(QObject):
         )
         self.ai_provider_combo = ComboBox(self.ai_provider_card)
         self.ai_provider_combo.setMinimumWidth(200)
-        for key, provider in AI_PROVIDERS.items():
+        for key, provider in self._ai_settings.providers.items():
             self.ai_provider_combo.addItem(provider.get("label", key), userData=key)
         saved_provider = ai_config.get("provider") or "deepseek"
-        if saved_provider not in AI_PROVIDERS:
+        if saved_provider not in self._ai_settings.providers:
             saved_provider = "deepseek"
         idx = self.ai_provider_combo.findData(saved_provider)
         if idx >= 0:
@@ -236,7 +238,7 @@ class RuntimeAISection(QObject):
 
         self.ai_prompt_card = AIPromptSettingCard(
             self._ai_system_prompt,
-            get_default_system_prompt(),
+            self._ai_settings.default_system_prompt(),
             self.group,
         )
         self.group.addSettingCard(self.ai_prompt_card)
@@ -261,7 +263,7 @@ class RuntimeAISection(QObject):
         cfg.ai_base_url = self.ai_baseurl_edit.text().strip()
         cfg.ai_api_protocol = "auto"
         cfg.ai_model = self._get_current_model_value()
-        cfg.ai_system_prompt = self._ai_system_prompt or get_default_system_prompt()
+        cfg.ai_system_prompt = self._ai_system_prompt or self._ai_settings.default_system_prompt()
 
     def apply_config(self, cfg: RuntimeConfig):
         self._apply_ai_config(cfg)
@@ -309,7 +311,7 @@ class RuntimeAISection(QObject):
         self.ai_baseurl_card.setVisible(is_custom)
 
         
-        provider_config = AI_PROVIDERS.get(provider_key, {})
+        provider_config = self._ai_settings.providers.get(provider_key, {})
         recommended_models = provider_config.get("recommended_models", [])
         default_model = provider_config.get("default_model", "")
 
@@ -321,7 +323,7 @@ class RuntimeAISection(QObject):
             
             if not self._ai_loading:
                 self.ai_model_edit.setText("")
-                save_ai_settings(model="")
+                self._ai_settings.save_settings(model="")
         else:
             
             current_model = self.ai_model_combo.currentText().strip()
@@ -337,14 +339,14 @@ class RuntimeAISection(QObject):
                 self.ai_model_combo.setText(current_model or default_model)
             else:
                 self.ai_model_combo.setText(default_model)
-                save_ai_settings(model=default_model)
+                self._ai_settings.save_settings(model=default_model)
 
         self._update_ai_doc_link(provider_key)
 
     def _apply_ai_config(self, cfg: RuntimeConfig):
         ai_config_present = getattr(cfg, "_ai_config_present", False)
         if not ai_config_present:
-            ai_config = get_ai_settings()
+            ai_config = self._ai_settings.get_settings()
             cfg.ai_provider = str(ai_config.get("provider") or "deepseek")
             cfg.ai_api_key = str(ai_config.get("api_key") or "")
             cfg.ai_base_url = str(ai_config.get("base_url") or "")
@@ -352,16 +354,16 @@ class RuntimeAISection(QObject):
             cfg.ai_model = str(ai_config.get("model") or "")
             cfg.ai_system_prompt = str(
                 ai_config.get("system_prompt") or ""
-            ).strip() or get_default_system_prompt()
+            ).strip() or self._ai_settings.default_system_prompt()
         if not getattr(cfg, "ai_provider", ""):
             cfg.ai_provider = "deepseek"
-        if cfg.ai_provider not in AI_PROVIDERS:
+        if cfg.ai_provider not in self._ai_settings.providers:
             cfg.ai_provider = "deepseek"
         cfg.ai_mode = "provider"
         if not getattr(cfg, "ai_api_protocol", ""):
             cfg.ai_api_protocol = "auto"
         if not getattr(cfg, "ai_system_prompt", ""):
-            cfg.ai_system_prompt = get_default_system_prompt()
+            cfg.ai_system_prompt = self._ai_settings.default_system_prompt()
 
         self._ai_loading = True
         self._set_ai_controls_blocked(True)
@@ -375,7 +377,7 @@ class RuntimeAISection(QObject):
         current_model = (cfg.ai_model or "").strip()
         self.ai_model_combo.setText(current_model)
         self.ai_model_edit.setText(current_model)
-        default_prompt = get_default_system_prompt()
+        default_prompt = self._ai_settings.default_system_prompt()
         self._ai_system_prompt = cfg.ai_system_prompt or default_prompt
         self.ai_prompt_card.set_prompt_text(self._ai_system_prompt, default_prompt=default_prompt)
         self._update_ai_visibility()
@@ -388,7 +390,7 @@ class RuntimeAISection(QObject):
             return
         idx = self.ai_provider_combo.currentIndex()
         provider_key = str(self.ai_provider_combo.itemData(idx)) if idx >= 0 else "deepseek"
-        save_ai_settings(provider=provider_key)
+        self._ai_settings.save_settings(provider=provider_key)
         self._update_ai_visibility()
 
     def _update_ai_doc_link(self, provider_key: str):
@@ -407,25 +409,25 @@ class RuntimeAISection(QObject):
         
         if self._ai_loading:
             return
-        save_ai_settings(api_key=self.ai_apikey_edit.text())
+        self._ai_settings.save_settings(api_key=self.ai_apikey_edit.text())
 
     def _on_ai_baseurl_changed(self):
         
         if self._ai_loading:
             return
-        save_ai_settings(base_url=self.ai_baseurl_edit.text())
+        self._ai_settings.save_settings(base_url=self.ai_baseurl_edit.text())
 
     def _on_ai_model_changed(self, text: str):
         
         if self._ai_loading:
             return
-        save_ai_settings(model=text.strip())
+        self._ai_settings.save_settings(model=text.strip())
 
     def _on_ai_model_edit_changed(self):
         
         if self._ai_loading:
             return
-        save_ai_settings(model=self.ai_model_edit.text().strip())
+        self._ai_settings.save_settings(model=self.ai_model_edit.text().strip())
 
     def _get_current_model_value(self) -> str:
         
@@ -439,7 +441,7 @@ class RuntimeAISection(QObject):
         if self._ai_loading:
             return
         self._ai_system_prompt = self.ai_prompt_card.prompt_text()
-        save_ai_settings(system_prompt=self._ai_system_prompt)
+        self._ai_settings.save_settings(system_prompt=self._ai_system_prompt)
 
     def _on_ai_test_clicked(self):
         
@@ -447,7 +449,7 @@ class RuntimeAISection(QObject):
             return
         if self._ai_test_thread is not None and self._ai_test_thread.isRunning():
             return
-        save_ai_settings(
+        self._ai_settings.save_settings(
             api_key=self.ai_apikey_edit.text(),
             base_url=self.ai_baseurl_edit.text(),
             api_protocol="auto",
@@ -456,7 +458,7 @@ class RuntimeAISection(QObject):
         )
         self._set_ai_test_loading(True)
         self._ai_test_thread = QThread()
-        self._ai_test_worker = AITestWorker()
+        self._ai_test_worker = AITestWorker(test_connection=self._ai_settings.test_connection)
         self._ai_test_worker.moveToThread(self._ai_test_thread)
         self._ai_test_thread.started.connect(self._ai_test_worker.run)
         self._ai_test_worker.finished.connect(self._on_ai_test_finished)

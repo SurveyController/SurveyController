@@ -2,10 +2,10 @@ from __future__ import annotations
 
 import copy
 import logging
-from dataclasses import dataclass
 from typing import Any, List, Optional, Tuple, cast
 
-from software.app.config import HTTP_MAX_THREADS
+from software.core.engine.constants import HTTP_MAX_THREADS
+from software.core.engine.execution_artifacts import PreparedExecutionArtifacts, RuntimePreparationError
 from software.core.config.answer_datetime_window import (
     answer_datetime_window_to_epoch_ms,
     normalize_answer_datetime_window,
@@ -36,33 +36,6 @@ from wjx.provider.parser import (
     is_enterprise_unavailable_survey_page,
     is_stopped_survey_page,
 )
-
-
-@dataclass(frozen=True)
-class PreparedExecutionArtifacts:
-    
-
-    execution_config_template: ExecutionConfig
-    survey_provider: str
-    question_entries: List[Any]
-    questions_info: List[SurveyQuestionMeta]
-    reverse_fill_spec: Optional[ReverseFillSpec]
-
-
-class RuntimePreparationError(Exception):
-    
-
-    def __init__(
-        self,
-        user_message: str,
-        *,
-        log_message: str = "",
-        detailed: bool = False,
-    ) -> None:
-        super().__init__(str(user_message or "运行准备失败"))
-        self.user_message = str(user_message or "运行准备失败")
-        self.log_message = str(log_message or self.user_message)
-        self.detailed = bool(detailed)
 
 
 def _resolve_thread_limit(config: RuntimeConfig) -> int:

@@ -4,6 +4,7 @@ import concurrent.futures
 import logging
 from typing import Any, Callable
 
+from software.application.events import ApplicationEvent
 from software.core.config.schema import RuntimeConfig
 from surveycore.core.questions.config import build_default_question_entries
 from software.providers.common import is_supported_survey_url
@@ -14,31 +15,46 @@ from surveycore.providers.errors import (
     SurveyPausedError,
     SurveyStoppedError,
 )
-from software.ui.controller.run_state_store import RunStateStore
+from software.application.ports import RuntimeEnginePort
+from software.application.run_state_store import RunStateStore
 
 
 class SurveyParseService:
     def __init__(
         self,
         *,
-        async_engine_client: Any,
+        async_engine_client: RuntimeEnginePort,
         state_store: RunStateStore,
-        emit_event: Callable[[dict[str, Any]], Any],
+        emit_event: Callable[[ApplicationEvent], Any],
         dispatch_async: Callable[[Callable[[], Any]], None],
     ) -> None:
         self._async_engine_client = async_engine_client
         self._state_store = state_store
         self._emit_event = emit_event
         self._dispatch_async = dispatch_async
+        self._generation = 0
+        self._closed = False
+        self._parse_future: concurrent.futures.Future[SurveyDefinition] | None = None
+
+    def close(self) -> None:
+        self._closed = True
+        self._generation += 1
+        if self._parse_future is not None:
+            self._parse_future.cancel()
 
     def parse_survey(self, url: str) -> None:
+        if self._closed:
+            return
+        self._generation += 1
+        generation = self._generation
         normalized_url = str(url or "").strip()
         if not normalized_url:
             self._state_store.apply_survey_patch(
                 {
                     "phase": "error",
                     "url": "",
-                    "parse_error": "请填写问卷链接",
+                    "parse_error": "",
+                    "error_code": "url_required",
                 }
             )
             return
@@ -48,7 +64,8 @@ class SurveyParseService:
                 {
                     "phase": "error",
                     "url": normalized_url,
-                    "parse_error": "仅支持问卷星、腾讯问卷与 Credamo 见数链接",
+                    "parse_error": "",
+                    "error_code": "url_unsupported",
                 }
             )
             return
@@ -62,11 +79,13 @@ class SurveyParseService:
                 "questions_info": [],
                 "question_entries": [],
                 "parse_error": "",
+                "error_code": "",
             }
         )
-        future = self._async_engine_client.parse_survey(normalized_url)
 
         def _apply_parse_success(definition: SurveyDefinition) -> None:
+            if self._closed or generation != self._generation:
+                return
             info = [q for q in definition.questions if not q.is_description]
             title = definition.title
             provider = definition.provider
@@ -84,6 +103,7 @@ class SurveyParseService:
                     "questions_info": list(info or []),
                     "question_entries": list(entries or []),
                     "parse_error": "",
+                    "error_code": "",
                 }
             )
             self._state_store.update_runtime_settings(
@@ -92,6 +112,8 @@ class SurveyParseService:
             )
 
         def _apply_parse_failure(message: str) -> None:
+            if self._closed or generation != self._generation:
+                return
             self._state_store.apply_survey_patch(
                 {
                     "phase": "error",
@@ -99,30 +121,49 @@ class SurveyParseService:
                     "survey_title": "",
                     "questions_info": [],
                     "question_entries": [],
-                    "parse_error": str(message or "解析失败，请稍后重试"),
+                    "parse_error": str(message or ""),
+                    "error_code": "parse_failed",
                 }
             )
 
         def _on_done(done_future: concurrent.futures.Future[SurveyDefinition]) -> None:
+            if self._closed or generation != self._generation:
+                return
+            callback: Callable[[], None]
             try:
                 definition = done_future.result()
-                self._dispatch_async(
-                    lambda parsed_definition=definition: _apply_parse_success(parsed_definition)
-                )
             except (
-                SurveyPausedError,
-                SurveyStoppedError,
-                SurveyEnterpriseUnavailableError,
-                SurveyNotOpenError,
+                SurveyPausedError, SurveyStoppedError,
+                SurveyEnterpriseUnavailableError, SurveyNotOpenError,
             ) as exc:
-                friendly = str(exc) or "解析失败，请稍后重试"
-                logging.info("解析问卷被业务状态拦截，url=%r：%s", normalized_url, friendly)
-                self._dispatch_async(lambda msg=friendly: _apply_parse_failure(msg))
+                logging.info("解析问卷被业务状态拦截，url=%r：%s", normalized_url, exc)
+                callback = lambda message=str(exc): _apply_parse_failure(message)
             except Exception as exc:
                 logging.exception("解析问卷流程失败，url=%r", normalized_url)
-                friendly = str(exc) or "解析失败，请稍后重试"
-                self._dispatch_async(lambda msg=friendly: _apply_parse_failure(msg))
+                callback = lambda message=str(exc): _apply_parse_failure(message)
+            else:
+                def apply_success() -> None:
+                    try:
+                        _apply_parse_success(definition)
+                    except Exception as exc:
+                        logging.exception("构建问卷编辑草稿失败")
+                        _apply_parse_failure(str(exc))
+                callback = apply_success
+            try:
+                self._dispatch_async(callback)
+            except Exception:
+                logging.warning("派发问卷解析结果失败", exc_info=True)
+                if not self._closed and generation == self._generation:
+                    self._state_store.apply_survey_patch({
+                        "phase": "error", "error_code": "dispatch_failed", "parse_error": "",
+                    }, emit=False)
 
+        try:
+            future = self._async_engine_client.parse_survey(normalized_url)
+        except Exception as exc:
+            _apply_parse_failure(str(exc))
+            return
+        self._parse_future = future
         future.add_done_callback(_on_done)
 
     def hydrate_from_config(self, cfg: RuntimeConfig) -> None:

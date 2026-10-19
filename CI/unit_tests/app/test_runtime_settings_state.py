@@ -3,7 +3,7 @@ from __future__ import annotations
 from software.core.config.schema import RuntimeConfig
 from software.providers.common import SURVEY_PROVIDER_WJX
 from software.ui.controller.run_controller import RunController
-from software.ui.controller.runtime_settings_state import RuntimeSettingsState
+from software.application.runtime_settings_state import RuntimeSettingsState
 
 
 def test_runtime_settings_state_defaults() -> None:

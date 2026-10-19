@@ -11,7 +11,7 @@ from software.app.config import (
     CARD_REDEEM_ENDPOINT,
     IP_EXTRACT_ENDPOINT,
 )
-from software.app.settings_store import app_settings
+from software.io.runtime_environment import preference_store as app_settings
 from software.logging.log_utils import log_suppressed_exception
 from software.system.device_fingerprint import build_stable_device_id
 

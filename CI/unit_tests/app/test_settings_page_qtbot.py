@@ -21,8 +21,8 @@ class _FakeSettings:
         self.cleared = False
         self.synced = False
 
-    def value(self, key: str):
-        return self.data.get(key)
+    def value(self, key: str, default=None):
+        return self.data.get(key, default)
 
     def setValue(self, key: str, value) -> None:
         self.data[key] = value
@@ -63,14 +63,7 @@ def test_settings_page_toggles_update_settings_and_related_widgets(qtbot, monkey
     qtbot.addWidget(fake_window)
     monkeypatch.setattr(settings_module, "app_settings", lambda: fake_settings)
     monkeypatch.setattr(settings_module, "get_default_user_config_directory", lambda: "D:/default-configs")
-    monkeypatch.setattr(
-        settings_module,
-        "resolve_user_config_directory",
-        lambda settings=None: str(
-            fake_settings.data.get(CONFIG_DIRECTORY_SETTING_KEY) or "D:/default-configs"
-        ),
-    )
-    monkeypatch.setattr(settings_module, "reset_ai_settings", lambda: None)
+    monkeypatch.setattr(settings_module.PythonAiSettingsAdapter, "reset_settings", lambda _self: None)
     page = SettingsPage(parent=fake_window)
     page.show()
     qtbot.waitUntil(lambda: page.navigation_text_card.isChecked() is True)
@@ -96,14 +89,7 @@ def test_settings_page_reset_restores_defaults(qtbot, monkeypatch) -> None:
     qtbot.addWidget(fake_window)
     monkeypatch.setattr(settings_module, "app_settings", lambda: fake_settings)
     monkeypatch.setattr(settings_module, "get_default_user_config_directory", lambda: "D:/default-configs")
-    monkeypatch.setattr(
-        settings_module,
-        "resolve_user_config_directory",
-        lambda settings=None: str(
-            fake_settings.data.get(CONFIG_DIRECTORY_SETTING_KEY) or "D:/default-configs"
-        ),
-    )
-    monkeypatch.setattr(settings_module, "reset_ai_settings", lambda: None)
+    monkeypatch.setattr(settings_module.PythonAiSettingsAdapter, "reset_settings", lambda _self: None)
     page = SettingsPage(parent=fake_window)
     page.show()
     qtbot.waitUntil(lambda: page.auto_update_card.isChecked() is True)
@@ -127,14 +113,7 @@ def test_settings_page_can_change_config_directory(qtbot, monkeypatch, tmp_path)
     qtbot.addWidget(fake_window)
     monkeypatch.setattr(settings_module, "app_settings", lambda: fake_settings)
     monkeypatch.setattr(settings_module, "get_default_user_config_directory", lambda: "D:/default-configs")
-    monkeypatch.setattr(
-        settings_module,
-        "resolve_user_config_directory",
-        lambda settings=None: str(
-            fake_settings.data.get(CONFIG_DIRECTORY_SETTING_KEY) or "D:/default-configs"
-        ),
-    )
-    monkeypatch.setattr(settings_module, "reset_ai_settings", lambda: None)
+    monkeypatch.setattr(settings_module.PythonAiSettingsAdapter, "reset_settings", lambda _self: None)
     monkeypatch.setattr(
         settings_module.QFileDialog,
         "getExistingDirectory",
@@ -159,14 +138,7 @@ def test_settings_page_shows_error_when_config_directory_creation_fails(qtbot, m
     qtbot.addWidget(fake_window)
     monkeypatch.setattr(settings_module, "app_settings", lambda: fake_settings)
     monkeypatch.setattr(settings_module, "get_default_user_config_directory", lambda: "D:/default-configs")
-    monkeypatch.setattr(
-        settings_module,
-        "resolve_user_config_directory",
-        lambda settings=None: str(
-            fake_settings.data.get(CONFIG_DIRECTORY_SETTING_KEY) or "D:/default-configs"
-        ),
-    )
-    monkeypatch.setattr(settings_module, "reset_ai_settings", lambda: None)
+    monkeypatch.setattr(settings_module.PythonAiSettingsAdapter, "reset_settings", lambda _self: None)
     monkeypatch.setattr(
         settings_module.QFileDialog,
         "getExistingDirectory",

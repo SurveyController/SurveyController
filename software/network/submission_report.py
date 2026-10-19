@@ -7,9 +7,9 @@ import software.network.http as http_client
 from software.app.config import (
     SUBMISSION_REPORT_ENDPOINT,
     SUBMISSION_REPORT_TELEMETRY_SETTING_KEY,
-    app_settings,
     get_bool_from_qsettings,
 )
+from software.io.runtime_environment import preference_store as app_settings
 from software.app.version import __VERSION__
 from software.network.proxy.policy.source import PROXY_SOURCE_BENEFIT, PROXY_SOURCE_DEFAULT
 from software.network.proxy.session import get_device_id

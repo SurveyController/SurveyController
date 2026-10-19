@@ -25,6 +25,7 @@ from shiboken6 import isValid
 from software.ui.dialogs.contact import ContactDialog
 from software.ui.dialogs.quota_redeem import QuotaRedeemDialog
 
+from software.app.bootstrap import create_application_dependencies
 from software.ui.controller.run_controller import RunController
 from software.ui.pages.workbench.presenter import WorkbenchPresenter
 from software.ui.shell.main_window_parts.dialogs import MainWindowDialogsMixin
@@ -152,7 +153,10 @@ class MainWindow(
         if not self._import_check_mode:
             self._boot_splash = create_boot_splash(self)
 
-        self.controller = RunController(self)
+        self.controller = RunController(
+            self,
+            dependencies=create_application_dependencies(),
+        )
         self.workbench = WorkbenchPresenter(controller=self.controller, host=self)
         self.workbench_state = self.workbench.state
         self.runtime_page = self.workbench.runtime_page
@@ -423,13 +427,14 @@ class MainWindow(
     def _show_dialog_message(self, title: str, message: str, level: str = "info") -> None:
         self.show_message_dialog(title, message, level=level)
 
-    def _prompt_quick_bug_report(self) -> None:
+    def _prompt_quick_bug_report(self) -> bool:
         confirmed = self.show_confirm_dialog(
             "运行异常",
             "本次运行因异常提前终止，是否打开报错反馈？\n\n遇到问题请提交完整的日志文件，而不是发送这个页面的截图",
         )
         if confirmed:
             self._open_contact_dialog(default_type="报错反馈", lock_message_type=True)
+        return bool(confirmed)
 
     def _notify_ai_unstable(self) -> None:
         self._toast("AI 填空连续失败，请稍后再试", "warning", duration=3500)
@@ -654,20 +659,22 @@ class MainWindow(
         if event_type == "run_failed":
             self._on_run_failed(str((event or {}).get("message") or ""))
             return
-        if event_type == "dialog_message":
-            self._show_dialog_message(
-                str((event or {}).get("title") or ""),
-                str((event or {}).get("message") or ""),
-                str((event or {}).get("level") or "info"),
-            )
-            return
-        if event_type == "open_quota_request_form":
-            accepted = self._open_quota_request_form()
-            if accepted and bool((event or {}).get("retry_enable_random_ip")):
-                self.controller.request_toggle_random_ip(True)
-            return
-        if event_type == "quick_bug_report_suggested":
-            self._prompt_quick_bug_report()
+        if event_type in {"dialog_message", "open_quota_request_form", "quick_bug_report_suggested"}:
+            accepted = False
+            try:
+                if event_type == "dialog_message":
+                    self._show_dialog_message(
+                        str(event.get("title") or ""), str(event.get("message") or ""),
+                        str(event.get("level") or "info"),
+                    )
+                elif event_type == "open_quota_request_form":
+                    accepted = self._open_quota_request_form()
+                else:
+                    accepted = bool(self._prompt_quick_bug_report())
+            finally:
+                request_id = str(event.get("request_id") or "")
+                if request_id:
+                    self.controller.respond_to_interaction(request_id, accepted)
             return
         if event_type == "ai_unstable":
             self._notify_ai_unstable()

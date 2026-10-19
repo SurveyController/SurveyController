@@ -1,15 +1,16 @@
 from __future__ import annotations
 
 from copy import deepcopy
-from typing import Any, Callable, Dict, Optional
+from typing import Any, Callable, Dict, Mapping, Optional, cast
 
 from software.core.config.codec import clone_question_entries, clone_questions_info
 from software.core.config.schema import RuntimeConfig
 from software.providers.common import detect_survey_provider, normalize_survey_provider
-from software.ui.controller.runtime_settings_state import RuntimeSettingsState
+from software.application.models import RuntimeSnapshot, SurveySnapshot
+from software.application.runtime_settings_state import RuntimeSettingsState
 
 
-def _deep_merge(base: Dict[str, Any], patch: Dict[str, Any]) -> Dict[str, Any]:
+def _deep_merge(base: Mapping[str, Any], patch: Mapping[str, Any]) -> Dict[str, Any]:
     merged = dict(base)
     for key, value in patch.items():
         current = merged.get(key)
@@ -26,8 +27,8 @@ class RunStateStore:
     def __init__(
         self,
         *,
-        on_runtime_snapshot_changed: Optional[Callable[[dict[str, Any]], Any]] = None,
-        on_survey_snapshot_changed: Optional[Callable[[dict[str, Any]], Any]] = None,
+        on_runtime_snapshot_changed: Optional[Callable[[RuntimeSnapshot], Any]] = None,
+        on_survey_snapshot_changed: Optional[Callable[[SurveySnapshot], Any]] = None,
     ) -> None:
         self._runtime_settings_state = RuntimeSettingsState()
         self._runtime_snapshot = self._build_runtime_snapshot()
@@ -36,14 +37,13 @@ class RunStateStore:
         self._on_survey_snapshot_changed = on_survey_snapshot_changed
 
     @staticmethod
-    def _build_runtime_snapshot() -> Dict[str, Any]:
+    def _build_runtime_snapshot() -> RuntimeSnapshot:
         settings_state = {**RuntimeSettingsState.DEFAULTS}
         return {
             "phase": "idle",
             "running": False,
             "paused": False,
             "stopping": False,
-            "status_text": "等待配置...",
             "progress": {
                 "current": 0,
                 "target": 0,
@@ -57,14 +57,13 @@ class RunStateStore:
             },
             "initialization": {
                 "active": False,
-                "text": "",
-                "logs": [],
+                "stage": "",
             },
             "settings": dict(settings_state),
             "random_ip": {
                 "enabled": bool(settings_state["random_ip_enabled"]),
                 "loading": False,
-                "loading_message": "",
+                "loading_stage": "",
                 "used_quota": 0.0,
                 "total_quota": 0.0,
                 "custom_api": False,
@@ -77,7 +76,7 @@ class RunStateStore:
         }
 
     @staticmethod
-    def _build_survey_snapshot() -> Dict[str, Any]:
+    def _build_survey_snapshot() -> SurveySnapshot:
         return {
             "phase": "idle",
             "url": "",
@@ -89,11 +88,11 @@ class RunStateStore:
             "has_question_entries": False,
         }
 
-    def get_runtime_snapshot(self) -> Dict[str, Any]:
-        return deepcopy(self._runtime_snapshot)
+    def get_runtime_snapshot(self) -> RuntimeSnapshot:
+        return cast(RuntimeSnapshot, deepcopy(self._runtime_snapshot))
 
-    def get_survey_snapshot(self) -> Dict[str, Any]:
-        return deepcopy(self._survey_snapshot)
+    def get_survey_snapshot(self) -> SurveySnapshot:
+        return cast(SurveySnapshot, deepcopy(self._survey_snapshot))
 
     def runtime_settings(self) -> Dict[str, Any]:
         return dict(self._runtime_snapshot.get("settings") or {})
@@ -115,7 +114,7 @@ class RunStateStore:
                 "enabled": bool(state.get("random_ip_enabled", False)),
             },
         }
-        self._set_runtime_snapshot(_deep_merge(self._runtime_snapshot, patch), emit=emit and changed)
+        self._set_runtime_snapshot(cast(RuntimeSnapshot, _deep_merge(self._runtime_snapshot, patch)), emit=emit and changed)
         return dict(state)
 
     def sync_runtime_settings_from_config(
@@ -135,18 +134,18 @@ class RunStateStore:
                 "enabled": bool(state.get("random_ip_enabled", False)),
             },
         }
-        self._set_runtime_snapshot(_deep_merge(self._runtime_snapshot, patch), emit=emit and changed)
+        self._set_runtime_snapshot(cast(RuntimeSnapshot, _deep_merge(self._runtime_snapshot, patch)), emit=emit and changed)
         return dict(state)
 
     def write_runtime_settings_to_config(self, config: RuntimeConfig) -> RuntimeConfig:
         return self._runtime_settings_state.write_to_config(config)
 
-    def apply_runtime_patch(self, patch: Dict[str, Any], *, emit: bool = True) -> Dict[str, Any]:
-        snapshot = _deep_merge(self._runtime_snapshot, patch)
+    def apply_runtime_patch(self, patch: Dict[str, Any], *, emit: bool = True) -> RuntimeSnapshot:
+        snapshot = cast(RuntimeSnapshot, _deep_merge(self._runtime_snapshot, patch))
         self._set_runtime_snapshot(snapshot, emit=emit)
         return self.get_runtime_snapshot()
 
-    def apply_survey_patch(self, patch: Dict[str, Any], *, emit: bool = True) -> Dict[str, Any]:
+    def apply_survey_patch(self, patch: Dict[str, Any], *, emit: bool = True) -> SurveySnapshot:
         normalized_patch = dict(patch or {})
         if "questions_info" in normalized_patch:
             normalized_patch["questions_info"] = clone_questions_info(
@@ -163,7 +162,7 @@ class RunStateStore:
             normalized_patch["question_entries"] = clone_question_entries(
                 normalized_patch.get("question_entries")
             )
-        snapshot = _deep_merge(self._survey_snapshot, normalized_patch)
+        snapshot = cast(SurveySnapshot, _deep_merge(self._survey_snapshot, normalized_patch))
         snapshot["has_question_entries"] = bool(snapshot.get("question_entries"))
         self._set_survey_snapshot(snapshot, emit=emit)
         return self.get_survey_snapshot()
@@ -204,20 +203,20 @@ class RunStateStore:
         *,
         questions_info: Any = None,
         emit: bool = True,
-    ) -> Dict[str, Any]:
+    ) -> SurveySnapshot:
         patch: Dict[str, Any] = {"question_entries": list(entries or [])}
         if questions_info is not None:
             patch["questions_info"] = list(questions_info or [])
         return self.apply_survey_patch(patch, emit=emit)
 
-    def _set_runtime_snapshot(self, snapshot: Dict[str, Any], *, emit: bool) -> None:
+    def _set_runtime_snapshot(self, snapshot: RuntimeSnapshot, *, emit: bool) -> None:
         if snapshot == self._runtime_snapshot:
             return
         self._runtime_snapshot = snapshot
         if emit:
             self._emit_runtime_snapshot()
 
-    def _set_survey_snapshot(self, snapshot: Dict[str, Any], *, emit: bool) -> None:
+    def _set_survey_snapshot(self, snapshot: SurveySnapshot, *, emit: bool) -> None:
         if snapshot == self._survey_snapshot:
             return
         self._survey_snapshot = snapshot

@@ -70,6 +70,11 @@ def _qt_message_handler(mode, context, message):
 
 
 def main():
+    from software.io.runtime_environment import configure_runtime_environment
+    from software.app.settings_store import app_settings
+    from software.app.user_paths import get_default_runtime_config_path
+
+    configure_runtime_environment(app_settings, get_default_runtime_config_path)
     configure_qt_application_metadata()
     ensure_user_data_directories()
     _enable_fault_handler()

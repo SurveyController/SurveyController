@@ -75,17 +75,21 @@ def test_clipboard_process_qrcode_success_empty_and_exception(monkeypatch, qtbot
     host = _ClipboardHost()
     qtbot.addWidget(host)
 
-    monkeypatch.setattr(clipboard_module, "decode_qrcode", lambda source: f"https://wjx.cn/{source}")
-    host._process_qrcode_image("ok.png")
+    def decode(source):
+        assert isinstance(source, memoryview)
+        return "https://wjx.cn/ok.png"
+
+    monkeypatch.setattr(clipboard_module, "decode_qrcode", decode)
+    host._process_qrcode_image(_image())
     assert host.url_edit.text == "https://wjx.cn/ok.png"
     assert host.parse_calls == 1
 
     monkeypatch.setattr(clipboard_module, "decode_qrcode", lambda _source: "")
-    host._process_qrcode_image("empty.png")
+    host._process_qrcode_image(_image())
     assert host.toasts[-1] == ("未能识别二维码中的链接", "error")
 
     monkeypatch.setattr(clipboard_module, "decode_qrcode", lambda _source: (_ for _ in ()).throw(RuntimeError("bad")))
-    host._process_qrcode_image("bad.png")
+    host._process_qrcode_image(_image())
     assert host.toasts[-1] == ("处理二维码图片失败：bad", "error")
 
 

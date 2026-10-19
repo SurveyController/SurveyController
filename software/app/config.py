@@ -3,6 +3,8 @@ import re
 import sys
 from typing import Any, cast
 
+from software.application.constants import STOP_FORCE_WAIT_SECONDS as _STOP_FORCE_WAIT_SECONDS
+from software.core.engine.constants import HTTP_MAX_THREADS as _HTTP_MAX_THREADS
 from software.app.settings_store import (
     CONFIG_DIRECTORY_SETTING_KEY as _CONFIG_DIRECTORY_SETTING_KEY,
     app_settings as _app_settings,
@@ -72,7 +74,7 @@ _DEFAULT_STATUS_ENDPOINT = "https://api-wjx.hungrym0.com/api/status"
 
 
 
-HTTP_MAX_THREADS = 64
+HTTP_MAX_THREADS = _HTTP_MAX_THREADS
 
 
 USER_AGENT_PRESETS = {
@@ -122,7 +124,7 @@ POST_SUBMIT_URL_POLL_INTERVAL = 0.05
 
 POST_SUBMIT_CLOSE_GRACE_SECONDS = 0.8
 
-STOP_FORCE_WAIT_SECONDS = 0.3
+STOP_FORCE_WAIT_SECONDS = _STOP_FORCE_WAIT_SECONDS
 
 
 PROXY_MAX_PROXIES = 80
