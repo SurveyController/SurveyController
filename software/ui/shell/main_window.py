@@ -48,7 +48,7 @@ from software.ui.shell.startup_tutorial import (
 )
 from software.logging.action_logger import log_action
 from software.logging.log_utils import register_popup_handler
-from software.app.version import __VERSION__
+from software.app.app_info import APP_VERSION
 from software.app.runtime_paths import get_resource_path
 
 from software.ui.shell.boot import create_boot_splash, finish_boot_splash
@@ -61,7 +61,7 @@ class _ImportCheckWindow(QWidget):
 
     def __init__(self):
         super().__init__()
-        self.setWindowTitle(f"SurveyController v{__VERSION__}")
+        self.setWindowTitle(f"SurveyController v{APP_VERSION}")
         self.navigationInterface = object()
         self.stackedWidget = QStackedWidget(self)
         self.workbench = SimpleNamespace()
@@ -125,7 +125,7 @@ class MainWindow(
         )
         self._random_ip_quota_auto_sync_timer.timeout.connect(self._sync_random_ip_quota_silently)
 
-        self._base_window_title = f"SurveyController v{__VERSION__}"
+        self._base_window_title = f"SurveyController v{APP_VERSION}"
         self.setWindowTitle(self._base_window_title)
         icon_path = get_resource_path(os.path.join("assets", "icon.png"))
         if not os.path.exists(icon_path):

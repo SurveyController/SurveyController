@@ -16,7 +16,7 @@ from qfluentwidgets import (
 )
 
 from software.app.runtime_paths import get_resource_path
-from software.app.version import __VERSION__
+from software.app.app_info import APP_VERSION
 
 __all__ = ["BootSplash", "create_boot_splash", "finish_boot_splash"]
 
@@ -46,7 +46,7 @@ class BootSplash:
 
         
         self.version_label = CaptionLabel(self.splash_screen)
-        self.version_label.setText(f"v{__VERSION__}")
+        self.version_label.setText(f"v{APP_VERSION}")
         self.version_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
 
         

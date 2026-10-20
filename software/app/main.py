@@ -6,6 +6,7 @@ from PySide6.QtCore import qInstallMessageHandler, QtMsgType
 from PySide6.QtGui import QFont
 from PySide6.QtWidgets import QApplication
 
+from software.app.app_info import APP_VERSION
 from software.app.settings_store import configure_qt_application_metadata
 from software.app.user_paths import (
     ensure_user_data_directories,
@@ -82,6 +83,7 @@ def main():
 
     qInstallMessageHandler(_qt_message_handler)
     app = QApplication(sys.argv)
+    app.setApplicationVersion(APP_VERSION)
     install_qfluentwidgets_animation_guards()
 
     

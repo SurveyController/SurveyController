@@ -21,7 +21,8 @@ class _Response:
 
 
 @pytest.mark.asyncio
-async def test_report_submission_result_posts_expected_payload(monkeypatch) -> None:
+@pytest.mark.parametrize("client_version", [None, "4.0.1"])
+async def test_report_submission_result_posts_expected_payload(monkeypatch, client_version) -> None:
     calls: list[dict[str, object]] = []
     monkeypatch.setattr(submission_report, "app_settings", lambda: _Settings(True))
     monkeypatch.setattr(submission_report, "get_device_id", lambda: "device-1")
@@ -37,7 +38,7 @@ async def test_report_submission_result_posts_expected_payload(monkeypatch) -> N
         survey_url="https://www.wjx.cn/vm/demo.aspx",
         result="success",
         proxy_provider="benefit",
-        client_version="4.0.1",
+        client_version=client_version,
     )
 
     kwargs = calls[0]["kwargs"]
@@ -46,7 +47,7 @@ async def test_report_submission_result_posts_expected_payload(monkeypatch) -> N
         "survey_url": "https://www.wjx.cn/vm/demo.aspx",
         "result": "success",
         "proxy_provider": "idiot",
-        "client_version": "4.0.1",
+        "client_version": client_version or submission_report.APP_VERSION,
     }
     assert kwargs["headers"]["X-Device-ID"] == "device-1"
 

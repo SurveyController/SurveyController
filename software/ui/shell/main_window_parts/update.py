@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import logging
-import re
 from typing import TYPE_CHECKING, cast
 
 from PySide6.QtCore import QObject, QThread, QTimer, Qt
@@ -11,9 +10,10 @@ from qfluentwidgets import (
     IndeterminateProgressRing,
     InfoBadge,
 )
+from packaging.version import Version
 
 from software.app.config import app_settings, get_bool_from_qsettings
-from software.app.version import __VERSION__
+from software.app.app_info import APP_VERSION
 from software.ui.helpers.qfluent_compat import (
     set_indeterminate_progress_ring_active,
 )
@@ -43,12 +43,7 @@ class MainWindowUpdateMixin:
 
     @staticmethod
     def _is_preview_version() -> bool:
-        version_text = str(__VERSION__ or "").strip().lower()
-        if not version_text:
-            return False
-        if any(token in version_text for token in ("alpha", "beta", "rc", "pre", "preview", "dev")):
-            return True
-        return bool(re.search(r"\d(?:a|b)\d*$", version_text))
+        return Version(APP_VERSION).is_prerelease
 
     def _check_update_on_startup(self):
         

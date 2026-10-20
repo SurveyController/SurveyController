@@ -189,12 +189,12 @@ class MainWindowLazyPagesMixin:
 
     def _show_about_menu(self):
         
-        from software.app.version import __VERSION__
+        from software.app.app_info import APP_VERSION
 
         menu = RoundMenu(parent=self)
 
         
-        version_action = Action(FluentIcon.INFO, f"SurveyController v{__VERSION__}")
+        version_action = Action(FluentIcon.INFO, f"SurveyController v{APP_VERSION}")
         version_action.setEnabled(False)
         menu.addAction(version_action)
 
@@ -242,7 +242,7 @@ class MainWindowLazyPagesMixin:
             logging.info("同步更多侧边栏高亮失败", exc_info=True)
 
     def _open_changelog_releases(self) -> None:
-        from software.app.version import GITHUB_RELEASES_PAGE_URL
+        from software.app.project_links import GITHUB_RELEASES_PAGE_URL
 
         webbrowser.open(GITHUB_RELEASES_PAGE_URL)
 

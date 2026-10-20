@@ -10,7 +10,7 @@ from software.app.config import (
     get_bool_from_qsettings,
 )
 from software.io.runtime_environment import preference_store as app_settings
-from software.app.version import __VERSION__
+from software.app.app_info import APP_VERSION
 from software.network.proxy.policy.source import PROXY_SOURCE_BENEFIT, PROXY_SOURCE_DEFAULT
 from software.network.proxy.session import get_device_id
 
@@ -59,7 +59,7 @@ async def report_submission_result_async(
         "survey_url": str(survey_url or "").strip(),
         "result": str(result or "").strip().lower(),
         "proxy_provider": _normalize_proxy_provider(proxy_provider),
-        "client_version": str(client_version or __VERSION__).strip(),
+        "client_version": str(client_version or APP_VERSION).strip(),
     }
 
     try:

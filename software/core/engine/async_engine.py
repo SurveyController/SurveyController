@@ -6,7 +6,7 @@ import logging
 import threading
 from typing import Any, Callable, Optional
 
-from software.app.version import __VERSION__
+from software.app.app_info import APP_VERSION
 from surveycore.core.engine.async_events import AsyncRunContext
 from software.core.engine.async_runtime_loop import AsyncSlotRunner
 from surveycore.core.engine.async_scheduler import AsyncScheduler
@@ -129,7 +129,7 @@ class AsyncRuntimeEngine:
         )
         logging.info(
             "任务启动：版本=%s 问卷链接=%s 平台=%s 目标份数=%s 当前进度=%s/%s 并发数=%s 作答时长=%s 随机IP=%s 代理源=%s 运行时=纯HTTP",
-            __VERSION__,
+            APP_VERSION,
             config.url or "",
             config.survey_provider or "",
             config.target_num,

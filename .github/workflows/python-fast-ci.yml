@@ -5,7 +5,7 @@ on:
   push:
     branches:
       - "**"
-    tags-ignore:
+    tags:
       - "v*"
 
 permissions:
@@ -38,6 +38,16 @@ jobs:
 
       - name: Install dependencies
         run: uv sync --locked
+
+      - name: Validate application version and release tag
+        shell: pwsh
+        run: |
+          $metadataArgs = @("run", "python", "-m", "CI.build_tools.app_metadata", "--output", "build/metadata/build-info.json")
+          if ($env:GITHUB_REF_TYPE -eq "tag") {
+            $metadataArgs += @("--release-tag", $env:GITHUB_REF_NAME)
+          }
+          & uv @metadataArgs
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
       - name: Run compile check
         run: uv run python -m CI.python_checks.compile_check

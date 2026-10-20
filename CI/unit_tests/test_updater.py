@@ -17,13 +17,13 @@ class UpdateHelperTests:
             "tag_name": "v3.2.0", "body": "发行说明", "html_url": "https://example.com/release",
         }
         with (
-            patch.object(updater, "__VERSION__", "3.1.2"),
+            patch.object(updater, "APP_VERSION", "3.1.2"),
             patch.object(updater.sys, "platform", "win32"),
             patch.object(updater.http_client, "get", return_value=response) as get,
         ):
             result = updater.UpdateManager.check_updates()
         get.assert_called_once_with(
-            updater.GITHUB_API_URL,
+            updater.GITHUB_LATEST_RELEASE_URL,
             headers={"Accept": "application/vnd.github.v3+json"},
             timeout=(10, 30),
         )
@@ -44,7 +44,7 @@ class UpdateHelperTests:
 
     def test_build_github_update_result_returns_unknown_when_version_cannot_be_parsed(self) -> None:
         with (
-            patch.object(updater, "__VERSION__", "3.1.2"),
+            patch.object(updater, "APP_VERSION", "3.1.2"),
             patch.object(updater, "_fetch_latest_github_release", return_value={"tag_name": "???", "body": "说明"}),
         ):
             result = updater._build_github_update_result("3.1.2")

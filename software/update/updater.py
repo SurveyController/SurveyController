@@ -6,20 +6,17 @@ import sys
 import webbrowser
 from typing import Any, Optional
 
+from packaging.version import InvalidVersion, Version
+
 import software.network.http as http_client
-from software.app.version import (
-    GITHUB_API_URL,
+from software.app.app_info import APP_VERSION
+from software.app.project_links import (
+    GITHUB_LATEST_RELEASE_URL,
     GITHUB_RELEASES_PAGE_URL,
     GITHUB_RELEASES_URL,
     GITHUB_RELEASE_TAG_URL,
-    __VERSION__,
 )
 from software.logging.action_logger import log_action
-
-try:
-    from packaging import version
-except ImportError:
-    version = None
 
 
 def _preview_release_notes(text: str, limit: int) -> str:
@@ -36,19 +33,17 @@ def _preview_release_notes(text: str, limit: int) -> str:
     return preview + ("\n..." if len(text) > limit else "")
 
 
-def _parse_version_text(value: str):
-    if not version:
-        return None
+def _parse_version_text(value: str) -> Version | None:
     try:
-        return version.parse(str(value or "").strip())
-    except Exception:
+        return Version(str(value or "").strip())
+    except InvalidVersion:
         return None
 
 
 def _fetch_latest_github_release() -> Optional[dict[str, Any]]:
     try:
         response = http_client.get(
-            GITHUB_API_URL,
+            GITHUB_LATEST_RELEASE_URL,
             headers={"Accept": "application/vnd.github.v3+json"},
             timeout=(10, 30),
         )
@@ -105,12 +100,9 @@ def _build_github_update_result(current_version: str) -> dict[str, Any]:
 class UpdateManager:
     @staticmethod
     def check_updates() -> dict[str, Any]:
-        current_version = str(__VERSION__ or "").strip()
+        current_version = APP_VERSION
         if sys.platform != "win32":
             return {"has_update": False, "status": "unsupported", "current_version": current_version}
-        if not version:
-            logging.warning("更新功能依赖 packaging 模块")
-            return {"has_update": False, "status": "unknown", "current_version": current_version}
         return _build_github_update_result(current_version)
 
     @staticmethod

@@ -3,6 +3,8 @@ param(
     [Parameter(Mandatory = $false)]
     [string]$OutputDir = "dist",
 
+    [string]$ReleaseTag = "",
+
     [switch]$SkipClean,
     [switch]$SkipSync
 )
@@ -95,6 +97,7 @@ $nuitkaCacheRoot = Join-Path $repoRoot "build\nuitka-cache"
 $nuitkaDistDir = Join-Path $buildRoot "SurveyController.dist"
 $packDir = Join-Path $targetRoot "lib"
 $mainExe = Join-Path $packDir "SurveyController.exe"
+$metadataPath = Join-Path $repoRoot "build\metadata\build-info.json"
 
 Write-Step "Check environment"
 Assert-CommandAvailable -Name "python" -InstallHint "Install Python first and ensure python is available in PATH."
@@ -120,11 +123,36 @@ if (-not $SkipSync) {
     Push-Location $repoRoot
     try {
         uv sync --locked --group build
+        if ($LASTEXITCODE -ne 0) {
+            throw ("Dependency sync failed with exit code {0}" -f $LASTEXITCODE)
+        }
     }
     finally {
         Pop-Location
     }
 }
+
+Write-Step "Generate application metadata"
+Push-Location $repoRoot
+try {
+    $metadataArgs = @("run", "python", "-m", "CI.build_tools.app_metadata", "--output", $metadataPath)
+    if ([string]::IsNullOrWhiteSpace($ReleaseTag) -and $env:GITHUB_REF_TYPE -eq "tag") {
+        $ReleaseTag = $env:GITHUB_REF_NAME
+    }
+    if (-not [string]::IsNullOrWhiteSpace($ReleaseTag)) {
+        $metadataArgs += @("--release-tag", $ReleaseTag)
+    }
+    $metadataOutput = & uv @metadataArgs
+    if ($LASTEXITCODE -ne 0) {
+        throw ("Application metadata generation failed with exit code {0}" -f $LASTEXITCODE)
+    }
+    $appMetadata = ($metadataOutput -join "`n") | ConvertFrom-Json
+}
+finally {
+    Pop-Location
+}
+$windowsVersion = [string]$appMetadata.windows_version
+Write-Host ("Application version: {0}" -f $appMetadata.version)
 
 Write-Step "Build standalone bundle with Nuitka"
 New-Item -ItemType Directory -Path $buildRoot -Force | Out-Null
@@ -146,6 +174,10 @@ try {
         "-m"
         "nuitka"
         "--mode=standalone"
+        "--product-name=SurveyController"
+        "--file-description=SurveyController"
+        "--product-version=$windowsVersion"
+        "--file-version=$windowsVersion"
         "--assume-yes-for-downloads"
         "--windows-console-mode=disable"
         "--enable-plugin=pyside6"
@@ -195,6 +227,7 @@ try {
         "--include-data-file=assets/reverse_fill_example.xlsx=assets/reverse_fill_example.xlsx"
         "--include-data-dir=software/assets=software/assets"
         "--include-data-file=software/ui/theme.json=software/ui/theme.json"
+        "--include-data-files=$metadataPath=software/app/build-info.json"
         "--include-data-file=icon.ico=icon.ico"
         "--windows-icon-from-ico=icon.ico"
         "--output-dir=$buildRoot"
@@ -252,6 +285,15 @@ if (-not (Test-Path $packDir)) {
 if (-not (Test-Path $mainExe)) {
     throw ("Main executable not found: {0}" -f $mainExe)
 }
+$packagedMetadataPath = Join-Path $packDir "software\app\build-info.json"
+$packagedMetadata = Get-Content -LiteralPath $packagedMetadataPath -Raw -Encoding UTF8 | ConvertFrom-Json
+if ($packagedMetadata.version -cne $appMetadata.version -or $packagedMetadata.windows_version -cne $windowsVersion) {
+    throw "Packaged application metadata does not match the build version."
+}
+$binaryVersion = [System.Diagnostics.FileVersionInfo]::GetVersionInfo($mainExe)
+if ($binaryVersion.FileVersion -ne $windowsVersion -or $binaryVersion.ProductVersion -ne $windowsVersion) {
+    throw "Executable version resources do not match the build version."
+}
 foreach ($relativePath in $blockedQtFiles) {
     $candidate = Join-Path $packDir $relativePath
     if (Test-Path $candidate) {
@@ -259,9 +301,14 @@ foreach ($relativePath in $blockedQtFiles) {
     }
 }
 
+Write-Step "Create versioned archive"
+$archivePath = Join-Path $targetRoot ([string]$appMetadata.archive_name)
+Compress-Archive -LiteralPath $packDir -DestinationPath $archivePath -Force
+
 Write-Step "Build finished"
 Get-ChildItem $packDir | Sort-Object Name | Format-Table Name, Length, LastWriteTime -AutoSize
 
 Write-Host ""
 Write-Host ("Standalone bundle: {0}" -f $packDir) -ForegroundColor Green
 Write-Host ("Main executable: {0}" -f $mainExe) -ForegroundColor Green
+Write-Host ("Versioned archive: {0}" -f $archivePath) -ForegroundColor Green

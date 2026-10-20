@@ -293,9 +293,11 @@ class MainWindowUpdateLargeTests:
         self._patch_widget_deps(monkeypatch)
         window = _FakeUpdateWindow()
 
-        monkeypatch.setattr(update_module, "__VERSION__", "3.2.0beta1")
+        monkeypatch.setattr(update_module, "APP_VERSION", "3.2.0b1")
         assert window._is_preview_version() is True
-        monkeypatch.setattr(update_module, "__VERSION__", "3.2.0")
+        monkeypatch.setattr(update_module, "APP_VERSION", "3.2.0.dev1")
+        assert window._is_preview_version() is True
+        monkeypatch.setattr(update_module, "APP_VERSION", "3.2.0")
         assert window._is_preview_version() is False
 
         monkeypatch.setattr(

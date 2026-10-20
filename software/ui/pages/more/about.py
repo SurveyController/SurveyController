@@ -33,7 +33,8 @@ from qfluentwidgets import (
     FluentIcon,
 )
 
-from software.app.version import __VERSION__, GITHUB_OWNER, GITHUB_REPO
+from software.app.app_info import APP_VERSION
+from software.app.project_links import REPOSITORY_URL
 from software.ui.widgets.full_width_infobar import FullWidthInfoBar
 from software.app.runtime_paths import get_resource_path
 from software.ui.helpers.qfluent_compat import (
@@ -135,7 +136,7 @@ class AboutPage(ScrollArea):
         version_layout.addWidget(StrongBodyLabel("当前版本", self))
 
         version_row = QHBoxLayout()
-        v_num = BodyLabel(f"v{__VERSION__}", self)
+        v_num = BodyLabel(f"v{APP_VERSION}", self)
         self.publish_time_label = CaptionLabel("", self)
         self.publish_time_label.setStyleSheet("color: #888;")
         version_row.addWidget(v_num)
@@ -232,7 +233,7 @@ class AboutPage(ScrollArea):
 
         self.update_btn.clicked.connect(self._check_updates)
         self.github_btn.clicked.connect(
-            lambda: webbrowser.open(f"https://github.com/{GITHUB_OWNER}/{GITHUB_REPO}")
+            lambda: webbrowser.open(REPOSITORY_URL)
         )
         self.website_btn.clicked.connect(lambda: webbrowser.open("https://surveydoc.hungrym0.com/"))
 
@@ -271,7 +272,7 @@ class AboutPage(ScrollArea):
         elif status == "latest":
             InfoBar.success(
                 "",
-                f"当前已是最新版本 v{__VERSION__}",
+                f"当前已是最新版本 v{APP_VERSION}",
                 parent=win,
                 position=InfoBarPosition.TOP,
                 duration=3000,
@@ -280,7 +281,7 @@ class AboutPage(ScrollArea):
             latest = update_info.get("latest_version", "?") if update_info else "?"
             InfoBar.warning(
                 "",
-                f"远端最新版是 v{latest}，当前安装的是 v{__VERSION__}",
+                f"远端最新版是 v{latest}，当前安装的是 v{APP_VERSION}",
                 parent=win,
                 position=InfoBarPosition.TOP,
                 duration=4000,
@@ -335,7 +336,7 @@ class AboutPage(ScrollArea):
 
                 releases = UpdateManager.get_all_releases()
                 for r in releases:
-                    if r.get("version") == __VERSION__:
+                    if r.get("version") == APP_VERSION:
                         published_at = r.get("published_at", "")
                         if published_at:
                             dt = datetime.fromisoformat(published_at.replace("Z", "+00:00"))

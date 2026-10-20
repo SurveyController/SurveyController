@@ -287,6 +287,24 @@ uv run pytest CI/unit_tests
 
 模块导入检查会核对 `surveycore` 依赖及其行政区数据。覆盖率门槛仅计算本仓库实现，库内部算法仍通过本项目调用边界的离线回归验证。Windows 打包入口 `Setup/build-standalone.ps1` 显式包含应用需要的库模块、资源与版本元数据；更换依赖版本时须同时核对这一入口。
 
+## 版本与打包
+
+应用版本只在 `pyproject.toml` 的 `[project].version` 维护，使用规范的 PEP 440 格式，例如 `4.1.0`、`4.1.0rc1`。修改后用 `uv lock` 同步锁文件中的项目元数据。版本读取统一通过 `software/app/app_info.py` 的 `APP_VERSION`，项目主页和发布地址统一放在 `software/app/project_links.py`。
+
+源码运行时，版本入口按模块位置读取 `pyproject.toml`，并在首次导入时缓存。Nuitka 或冻结程序只读取同目录的 `build-info.json`；缺失或非法时直接报错，不读取工作目录、环境变量或 Git，也不回退为默认版本。
+
+Windows 独立包使用以下入口：
+
+```powershell
+.\Setup\build-standalone.ps1
+```
+
+脚本调用 `CI/build_tools/app_metadata.py`，在 `build/metadata/` 生成快照并打包到 `lib/software/app/build-info.json`，同时写入 EXE 的产品版本和文件版本。完整版本保留在快照中；Windows 版本资源使用补齐到四段的数字版本，例如 `4.1.0rc1` 对应 `4.1.0.0`。构建工具拒绝无法表示为 Windows 数字版本的值。
+
+输出保留 `dist/lib/SurveyController.exe`，另生成 `dist/SurveyController-<版本>.zip`。构建脚本会检查快照与 EXE 版本资源一致后再生成 ZIP；快照和压缩包均为忽略的构建产物，不手动维护或提交。
+
+正式发布前，可用 `-ReleaseTag v<版本>` 验证标签，例如 `-ReleaseTag v4.1.0`。GitHub 标签构建会自动读取当前标签；CI 对 `v*` 标签执行同样的检查，标签必须与项目版本完全一致。该参数只校验版本，不会创建标签或发布。
+
 ## 测试建议
 
 改哪一块，就补哪一块测试：

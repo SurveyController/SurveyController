@@ -22,11 +22,10 @@ from qfluentwidgets import (
     ImageLabel,
 )
 
-from software.app.version import GITHUB_OWNER, GITHUB_REPO
+from software.app.project_links import REPOSITORY_URL
 from software.app.runtime_paths import get_assets_directory
 from software.ui.widgets.adaptive_flow_layout import AdaptiveFlowLayout
 
-_GITHUB_URL = f"https://github.com/{GITHUB_OWNER}/{GITHUB_REPO}"
 
 
 class CommunityPage(ScrollArea):
@@ -299,7 +298,7 @@ class CommunityPage(ScrollArea):
         repo_btn = PushButton("仓库主页", card)
         repo_btn.setIcon(FluentIcon.GITHUB)
         self._setup_card_button(repo_btn)
-        repo_btn.clicked.connect(lambda: webbrowser.open(_GITHUB_URL))
+        repo_btn.clicked.connect(lambda: webbrowser.open(REPOSITORY_URL))
 
         action_bar = self._create_action_bar(
             card,
@@ -330,7 +329,7 @@ class CommunityPage(ScrollArea):
         license_btn = PushButton("查看协议", card)
         license_btn.setIcon(FluentIcon.INFO)
         self._setup_card_button(license_btn)
-        license_btn.clicked.connect(lambda: webbrowser.open(f"{_GITHUB_URL}/blob/main/LICENSE"))
+        license_btn.clicked.connect(lambda: webbrowser.open(f"{REPOSITORY_URL}/blob/main/LICENSE"))
 
         action_bar = self._create_action_bar(
             card,

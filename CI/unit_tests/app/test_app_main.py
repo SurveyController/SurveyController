@@ -9,10 +9,14 @@ class _FakeApp:
     def __init__(self, argv) -> None:
         self.argv = list(argv)
         self.font = None
+        self.application_version = ""
         self.exec_calls = 0
 
     def setFont(self, font) -> None:
         self.font = font
+
+    def setApplicationVersion(self, version: str) -> None:
+        self.application_version = version
 
     def exec(self) -> int:
         self.exec_calls += 1
@@ -79,6 +83,7 @@ def test_main_returns_exit_code_and_avoids_hard_exit(monkeypatch) -> None:
 
     assert exit_code == 7
     assert fake_app.exec_calls == 1
+    assert fake_app.application_version == main_module.APP_VERSION
     assert fake_window.shown == 1
     assert events == [
         "metadata",
