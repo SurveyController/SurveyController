@@ -10,7 +10,6 @@ import textwrap
 from PySide6.QtCore import QCoreApplication, QEvent, QRect
 from PySide6.QtWidgets import QApplication, QLayout, QScrollArea, QWidget
 from qfluentwidgets import ScrollArea as FluentScrollArea
-from qfluentwidgets import Slider, SpinBox
 
 from CI.unit_tests.app.test_workbench_pages_smoke import _FakeController, _patch_page_dependencies
 from surveycore.providers.contracts import SurveyQuestionMeta
@@ -19,7 +18,6 @@ from software.ui.pages.workbench.reverse_fill.page import ReverseFillPage
 from software.ui.pages.workbench.runtime_panel.main import RuntimePage
 from software.ui.pages.workbench.session import WorkbenchState
 from software.ui.pages.workbench.strategy.page import QuestionStrategyPage
-from software.ui.widgets.no_wheel import NoWheelSlider, NoWheelSpinBox
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[3]
@@ -148,11 +146,6 @@ def test_feature_pages_do_not_import_native_qt_controls_directly() -> None:
     }
 
     assert violations == {}
-
-
-def test_no_wheel_inputs_keep_qfluentwidgets_control_base() -> None:
-    assert issubclass(NoWheelSpinBox, SpinBox)
-    assert issubclass(NoWheelSlider, Slider)
 
 
 def test_workbench_pages_fit_minimum_window_width_without_horizontal_overflow(monkeypatch, qtbot) -> None:

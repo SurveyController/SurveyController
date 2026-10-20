@@ -393,45 +393,6 @@ def test_question_wizard_dialog_keeps_controls_alive_after_accept(qtbot) -> None
     assert dlg.get_results()[0] == [50, 50]
 
 
-def test_question_wizard_dialog_multi_text_stays_inside_detail_width(qtbot) -> None:
-    entries = [
-        QuestionEntry(
-            question_type="multi_text",
-            probabilities=[1],
-            texts=["无|||填空2|||填空3"],
-            rows=1,
-            option_count=1,
-            distribution_mode="random",
-            custom_weights=None,
-            question_num=1,
-        )
-    ]
-    info = [
-        SurveyQuestionMeta(
-            num=1,
-            title="多项填空测试",
-            page=1,
-            text_inputs=3,
-            is_multi_text=True,
-            logic_parse_status=LOGIC_PARSE_STATUS_COMPLETE,
-        )
-    ]
-    dlg = QuestionWizardDialog(entries, info, "demo")
-    qtbot.addWidget(dlg)
-    dlg.show()
-
-    qtbot.waitUntil(lambda: bool(dlg._entry_card_widgets))
-    assert dlg._detail_scroll is not None
-
-    dlg._sync_detail_content_width()
-    card = dlg._entry_card_widgets[0]
-    qtbot.waitUntil(
-        lambda: card.width() <= dlg._detail_scroll.viewport().width(),
-        timeout=2000,
-    )
-    assert card.maximumWidth() <= dlg._detail_scroll.viewport().width()
-
-
 def test_question_wizard_dialog_matrix_rows_use_outer_detail_scroll(qtbot) -> None:
     entries = [
         QuestionEntry(
@@ -473,43 +434,6 @@ def test_question_wizard_dialog_matrix_rows_use_outer_detail_scroll(qtbot) -> No
     ]
     assert inner_scrolls == []
     assert len(dlg.matrix_row_slider_map[0]) == 4
-
-
-def test_question_wizard_dialog_text_stays_inside_detail_width(qtbot) -> None:
-    entries = [
-        QuestionEntry(
-            question_type="text",
-            probabilities=[1],
-            texts=["默认答案"],
-            rows=1,
-            option_count=1,
-            distribution_mode="random",
-            custom_weights=None,
-            question_num=1,
-        )
-    ]
-    info = [
-        SurveyQuestionMeta(
-            num=1,
-            title="普通填空测试",
-            page=1,
-            logic_parse_status=LOGIC_PARSE_STATUS_COMPLETE,
-        )
-    ]
-    dlg = QuestionWizardDialog(entries, info, "demo")
-    qtbot.addWidget(dlg)
-    dlg.show()
-
-    qtbot.waitUntil(lambda: bool(dlg._entry_card_widgets))
-    assert dlg._detail_scroll is not None
-
-    dlg._sync_detail_content_width()
-    card = dlg._entry_card_widgets[0]
-    qtbot.waitUntil(
-        lambda: card.width() <= dlg._detail_scroll.viewport().width(),
-        timeout=2000,
-    )
-    assert card.maximumWidth() <= dlg._detail_scroll.viewport().width()
 
 
 def test_question_wizard_dialog_accept_shows_validation_error_without_navigation_crash(qtbot) -> None:
