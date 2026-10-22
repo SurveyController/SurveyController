@@ -16,7 +16,7 @@ from surveycore.providers.contracts import SurveyQuestionMeta
 from software.ui.helpers.ai_fill import ensure_ai_ready
 from software.ui.widgets.no_wheel import NoWheelSlider
 
-from .question_media_preview import QuestionMediaThumbnail
+from .question_media_preview import MediaFetcher, QuestionMediaThumbnail
 from .utils import _shorten_text
 
 _TEXT_RANDOM_NONE = "none"
@@ -52,6 +52,7 @@ class WizardSectionsCommonMixin:
         text_random_mode_map: Dict[int, str]
         ai_check_map: Dict[int, Any]
         ai_label_map: Dict[int, BodyLabel]
+        media_fetcher: MediaFetcher | None
         text_random_list_radio_map: Dict[int, Any]
         text_random_name_check_map: Dict[int, Any]
         text_random_mobile_check_map: Dict[int, Any]
@@ -147,7 +148,14 @@ class WizardSectionsCommonMixin:
             media_column.setContentsMargins(0, 0, 0, 0)
             media_column.setSpacing(6)
             for item in media_items:
-                media_column.addWidget(QuestionMediaThumbnail(item, fixed_size=48, parent=container))
+                media_column.addWidget(
+                    QuestionMediaThumbnail(
+                        item,
+                        fixed_size=48,
+                        media_fetcher=self.media_fetcher,
+                        parent=container,
+                    )
+                )
             media_column.addStretch(1)
             layout.addLayout(media_column)
 

@@ -64,6 +64,15 @@ def _make_page() -> SimpleNamespace:
 
 
 class ReverseFillActionsTests:
+    def test_prepare_start_does_not_restart_preview_while_validation_is_running(self) -> None:
+        page = _make_page()
+        page._preview_in_flight = True
+
+        assert actions.prepare_reverse_fill_start_target(page) is False
+
+        page._refresh_preview.assert_not_called()
+        page._toast.assert_called_once()
+
     def test_prepare_start_target_and_start_clicked_cover_reset_flow(self) -> None:
         coordinator = SimpleNamespace(
             set_reverse_fill_target=MagicMock(),

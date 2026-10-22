@@ -39,6 +39,7 @@ from . import wizard_result_builder
 from .wizard_search import WizardSearchMixin
 from .wizard_sections import WizardSectionsMixin
 from .wizard_state import WizardRuntimeState, bind_runtime_state
+from .question_media_preview import MediaFetcher
 
 _VIEW_LOGIC = "logic"
 _VIEW_SEQUENTIAL = "sequential"
@@ -105,6 +106,8 @@ class QuestionWizardDialog(
         survey_title: Optional[str] = None,
         parent=None,
         reliability_mode_enabled: bool = True,
+        *,
+        media_fetcher: MediaFetcher | None = None,
     ):
         super().__init__(parent)
         self.setAttribute(Qt.WidgetAttribute.WA_DeleteOnClose, False)
@@ -119,6 +122,7 @@ class QuestionWizardDialog(
         self.info = build_entry_info_list(self.entries, raw_info)
         self._logic_tree_state = build_logic_tree_state(self.info)
         self.reliability_mode_enabled = reliability_mode_enabled
+        self.media_fetcher = media_fetcher
 
         bind_runtime_state(self, WizardRuntimeState())
         self._entry_snapshots: List[QuestionEntry] = [copy.deepcopy(entry) for entry in entries]

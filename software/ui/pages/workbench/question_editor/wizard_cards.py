@@ -24,7 +24,7 @@ from .constants import (
     SLIDER_TARGET_MAX,
     _get_entry_type_label,
 )
-from .question_media_preview import QuestionMediaStrip
+from .question_media_preview import MediaFetcher, QuestionMediaStrip
 from .utils import _apply_label_color, _shorten_text, resolve_config_question_num
 from .wizard_validation import (
     validate_before_accept,
@@ -48,6 +48,7 @@ class WizardCardsMixin:
         bias_preset_map: Dict[int, Any]
         _entry_snapshots: List[QuestionEntry]
         _logic_tree_state: Any
+        media_fetcher: MediaFetcher | None
 
         def _navigate_to_question(self, question_idx: int, animate: bool = False) -> None: ...
         def get_multi_text_blank_modes(self) -> Dict[int, List[str]]: ...
@@ -363,6 +364,7 @@ class WizardCardsMixin:
                     title_media,
                     fixed_size=96,
                     show_item_labels=False,
+                    media_fetcher=self.media_fetcher,
                     parent=card,
                 )
             )

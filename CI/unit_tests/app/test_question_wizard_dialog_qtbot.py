@@ -1,7 +1,9 @@
 from __future__ import annotations
 
-import time
+from concurrent.futures import Future
 
+from PySide6.QtCore import QBuffer, QIODevice, Qt
+from PySide6.QtGui import QImage
 from qfluentwidgets import BodyLabel, InfoBadge, PushButton, ScrollArea
 from PySide6.QtWidgets import QDialog, QTreeWidgetItem
 
@@ -469,46 +471,58 @@ def test_question_wizard_dialog_accept_shows_validation_error_without_navigation
     assert dlg._current_question_idx == 0
 
 
-def test_question_media_thumbnail_can_be_deleted_before_worker_finishes(qtbot, monkeypatch) -> None:
-    class _Resp:
-        content = b""
-
-        def raise_for_status(self) -> None:
-            return None
-
-    def _slow_get(*_args, **_kwargs):
-        time.sleep(0.2)
-        return _Resp()
-
-    from software.ui.pages.workbench.question_editor import question_media_preview as preview_module
-
-    monkeypatch.setattr(preview_module.http_client, "get", _slow_get)
+def test_question_media_thumbnail_can_be_deleted_before_fetch_finishes(qtbot) -> None:
+    pending: Future[bytes] = Future()
     widget = QuestionMediaThumbnail(
-        {"source_url": "https://example.com/a.png", "label": "题干图"}
+        {"source_url": "https://example.com/a.png", "label": "题干图"},
+        media_fetcher=lambda _url: pending,
     )
     qtbot.addWidget(widget)
     widget.show()
 
     widget.deleteLater()
-    qtbot.wait(350)
+    qtbot.wait(10)
+    assert pending.cancelled()
 
 
-def test_question_media_thumbnail_blocks_private_address_fetch(monkeypatch, qtbot) -> None:
+def test_question_media_thumbnail_displays_application_result(qtbot) -> None:
+    future: Future[bytes] = Future()
     calls: list[str] = []
 
-    def _fake_get(url, **kwargs):
+    def fetch_media(url: str) -> Future[bytes]:
         calls.append(url)
-        raise AssertionError("private address should not be fetched")
+        return future
 
-    from software.ui.pages.workbench.question_editor import question_media_preview as preview_module
-
-    monkeypatch.setattr(preview_module.http_client, "get", _fake_get)
-    widget = QuestionMediaThumbnail({"source_url": "http://127.0.0.1/a.png", "label": "题干图"})
+    widget = QuestionMediaThumbnail(
+        {"source_url": "https://example.com/a.png", "label": "题干图"},
+        media_fetcher=fetch_media,
+    )
     qtbot.addWidget(widget)
-    widget.show()
-    qtbot.wait(100)
+    assert widget.image_label.text() == "图片"
 
-    assert calls == []
+    image = QImage(2, 2, QImage.Format.Format_RGBA8888)
+    image.fill(Qt.GlobalColor.red)
+    buffer = QBuffer()
+    assert buffer.open(QIODevice.OpenModeFlag.WriteOnly)
+    assert image.save(buffer, "PNG")
+    future.set_result(bytes(buffer.data()))
+
+    qtbot.waitUntil(lambda: widget.image_label.text() == "")
+    assert calls == ["https://example.com/a.png"]
+    assert widget.image_label.text() == ""
+
+
+def test_question_media_thumbnail_keeps_placeholder_when_fetch_fails(qtbot) -> None:
+    future: Future[bytes] = Future()
+    widget = QuestionMediaThumbnail(
+        {"source_url": "https://example.com/a.png", "label": "题干图"},
+        media_fetcher=lambda _url: future,
+    )
+    qtbot.addWidget(widget)
+
+    future.set_exception(RuntimeError("download failed"))
+
+    assert widget.image_label.text() == "图片"
 
 
 def test_question_media_strip_can_hide_item_labels(qtbot) -> None:
@@ -578,7 +592,20 @@ def test_question_wizard_dialog_shows_media_badge_for_option_image(qtbot) -> Non
             logic_parse_status=LOGIC_PARSE_STATUS_COMPLETE,
         )
     ]
-    dlg = QuestionWizardDialog(_build_entries()[:1], info, "demo")
+    calls: list[str] = []
+
+    def fetch_media(url: str) -> Future[bytes]:
+        calls.append(url)
+        future: Future[bytes] = Future()
+        future.set_result(b"")
+        return future
+
+    dlg = QuestionWizardDialog(
+        _build_entries()[:1],
+        info,
+        "demo",
+        media_fetcher=fetch_media,
+    )
     qtbot.addWidget(dlg)
     dlg.show()
 
@@ -586,6 +613,7 @@ def test_question_wizard_dialog_shows_media_badge_for_option_image(qtbot) -> Non
     card = dlg._entry_card_widgets[0]
     badges = [widget.text() for widget in card.findChildren(InfoBadge)]
     assert "图片题" in badges
+    assert calls == ["https://example.com/a.png"]
 
 
 def test_question_wizard_dialog_delete_answer_row_renumbers(qtbot) -> None:

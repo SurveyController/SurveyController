@@ -33,6 +33,7 @@ def bind_reverse_fill_events(page: Any) -> None:
     page.parse_btn.clicked.connect(page._on_parse_clicked)
     page.url_edit.textChanged.connect(page._on_url_text_changed)
     page.file_edit.editingFinished.connect(page._refresh_preview)
+    page.cancel_preview_btn.clicked.connect(page._cancel_preview)
     page.reverse_fill_threads_spin.valueChanged.connect(page._on_reverse_fill_threads_changed)
     page.random_ip_cb.toggled.connect(page._on_random_ip_toggled)
     page.browse_btn.clicked.connect(page._browse_excel_file)
@@ -45,6 +46,9 @@ def bind_reverse_fill_events(page: Any) -> None:
 
 
 def prepare_reverse_fill_start_target(page: Any) -> bool:
+    if bool(getattr(page, "_preview_in_flight", False)):
+        page._toast("反填数据正在预检，请等待结果后再启动", "warning", duration=3200)
+        return False
     if page._last_spec is None:
         page._refresh_preview()
     spec = page._last_spec

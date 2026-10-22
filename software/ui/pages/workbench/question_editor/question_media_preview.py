@@ -1,145 +1,25 @@
 from __future__ import annotations
 
-import ipaddress
-import socket
+from concurrent.futures import Future
+from collections.abc import Callable
 from itertools import count
 from typing import Any, Dict, Optional
-from urllib.parse import urlsplit
 
-from PySide6.QtCore import QCoreApplication, QObject, QRunnable, QThreadPool, Qt, Signal
+from PySide6.QtCore import QObject, Qt, Signal
 from PySide6.QtGui import QImage, QPixmap
 from PySide6.QtWidgets import QHBoxLayout, QVBoxLayout, QWidget
 from qfluentwidgets import BodyLabel, CardWidget, ImageLabel
 
-import software.network.http as http_client
-
 from .utils import _apply_label_color
 
-_MEDIA_THREAD_POOL = QThreadPool.globalInstance()
-_MEDIA_MAX_BYTES = 5 * 1024 * 1024
 _MEDIA_REQUEST_COUNTER = count(1)
-_ACTIVE_MEDIA_WORKERS: set["_MediaLoaderWorker"] = set()
-_MEDIA_QUIT_BOUND = False
-_MEDIA_SHUTTING_DOWN = False
 
 
-def _is_public_http_url(url: str) -> bool:
-    text = str(url or "").strip()
-    if not text:
-        return False
-    try:
-        parsed = urlsplit(text)
-    except Exception:
-        return False
-    scheme = str(parsed.scheme or "").strip().lower()
-    if scheme not in {"http", "https"}:
-        return False
-    hostname = str(parsed.hostname or "").strip()
-    if not hostname:
-        return False
-    try:
-        ip = ipaddress.ip_address(hostname)
-        return ip.is_global
-    except ValueError:
-        pass
-    try:
-        for family, _type, _proto, _canonname, sockaddr in socket.getaddrinfo(hostname, None):
-            if family not in (socket.AF_INET, socket.AF_INET6):
-                continue
-            raw_ip = sockaddr[0]
-            try:
-                if not ipaddress.ip_address(raw_ip).is_global:
-                    return False
-            except ValueError:
-                return False
-    except Exception:
-        return False
-    return True
+MediaFetcher = Callable[[str], Future[bytes]]
 
 
-class _MediaLoaderDispatcher(QObject):
-    finished = Signal(int, str, bytes)
-
-
-_MEDIA_DISPATCHER = _MediaLoaderDispatcher()
-
-
-def _mark_media_shutdown() -> None:
-    global _MEDIA_SHUTTING_DOWN
-    _MEDIA_SHUTTING_DOWN = True
-
-
-def _bind_media_shutdown_guard() -> None:
-    global _MEDIA_QUIT_BOUND
-    if _MEDIA_QUIT_BOUND:
-        return
-    app = QCoreApplication.instance()
-    if app is None:
-        return
-    app.aboutToQuit.connect(_mark_media_shutdown)
-    _MEDIA_QUIT_BOUND = True
-
-
-class _MediaLoaderWorker(QRunnable):
-    def __init__(self, request_id: int, url: str) -> None:
-        super().__init__()
-        self._request_id = int(request_id)
-        self._url = str(url or "").strip()
-        self.setAutoDelete(True)
-
-    def run(self) -> None:
-        data = b""
-        try:
-            if self._url and _is_public_http_url(self._url):
-                try:
-                    response = http_client.get(
-                        self._url,
-                        timeout=8,
-                        proxies={},
-                        allow_redirects=False,
-                        stream=True,
-                    )
-                    try:
-                        response.raise_for_status()
-                        content_length = response.headers.get("content-length")
-                        if content_length:
-                            try:
-                                if int(content_length) > _MEDIA_MAX_BYTES:
-                                    data = b""
-                                else:
-                                    data = self._read_response_bytes(response)
-                            except Exception:
-                                data = self._read_response_bytes(response)
-                        else:
-                            data = self._read_response_bytes(response)
-                    finally:
-                        try:
-                            response.close()
-                        except Exception:
-                            pass
-                except Exception:
-                    data = b""
-            if _MEDIA_SHUTTING_DOWN:
-                return
-            try:
-                _MEDIA_DISPATCHER.finished.emit(self._request_id, self._url, data)
-            except RuntimeError:
-                return
-        finally:
-            _ACTIVE_MEDIA_WORKERS.discard(self)
-
-    @staticmethod
-    def _read_response_bytes(response: Any) -> bytes:
-        chunks: list[bytes] = []
-        total = 0
-        for chunk in response.iter_content(65536):
-            if not chunk:
-                continue
-            total += len(chunk)
-            if total > _MEDIA_MAX_BYTES:
-                return b""
-            chunks.append(bytes(chunk))
-        return b"".join(chunks) if chunks else b""
+class _MediaResultRelay(QObject):
+    finished = Signal(int, object)
 
 
 class QuestionMediaThumbnail(QWidget):
@@ -149,11 +29,13 @@ class QuestionMediaThumbnail(QWidget):
         *,
         fixed_size: int = 72,
         show_label: bool = True,
+        media_fetcher: MediaFetcher | None = None,
         parent: Optional[QWidget] = None,
     ) -> None:
         super().__init__(parent)
         self._media_item = dict(media_item or {})
-        self._worker: Optional[_MediaLoaderWorker] = None
+        self._media_fetcher = media_fetcher
+        self._future: Future[bytes] | None = None
         self._fixed_size = max(40, int(fixed_size))
         self._destroyed = False
         self._request_id = 0
@@ -181,13 +63,15 @@ class QuestionMediaThumbnail(QWidget):
             layout.addWidget(self.text_label, 0, Qt.AlignmentFlag.AlignLeft)
 
         self._set_placeholder()
-        _bind_media_shutdown_guard()
-        _MEDIA_DISPATCHER.finished.connect(self._on_loaded)
+        self._media_result_relay = _MediaResultRelay(self)
+        self._media_result_relay.finished.connect(self._on_loaded)
         self._load_async()
         self.destroyed.connect(self._mark_destroyed)
 
     def _mark_destroyed(self) -> None:
         self._destroyed = True
+        if self._future is not None and not self._future.done():
+            self._future.cancel()
 
     def _set_placeholder(self) -> None:
         self.image_label.setText("图片")
@@ -197,20 +81,33 @@ class QuestionMediaThumbnail(QWidget):
 
     def _load_async(self) -> None:
         source_url = str(self._media_item.get("source_url") or "").strip()
-        if not source_url:
+        if not source_url or self._media_fetcher is None:
             return
         self._request_id = next(_MEDIA_REQUEST_COUNTER)
-        self._worker = _MediaLoaderWorker(self._request_id, source_url)
-        _ACTIVE_MEDIA_WORKERS.add(self._worker)
-        _MEDIA_THREAD_POOL.start(self._worker)
+        try:
+            future = self._media_fetcher(source_url)
+        except Exception:
+            return
+        self._future = future
+        relay = self._media_result_relay
+        request_id = self._request_id
 
-    def _clear_loader_refs(self, *_args) -> None:
-        self._worker = None
+        def publish_result(done: Future[bytes]) -> None:
+            try:
+                payload = done.result()
+            except Exception:
+                payload = b""
+            try:
+                relay.finished.emit(request_id, payload)
+            except RuntimeError:
+                return
 
-    def _on_loaded(self, request_id: int, _url: str, payload: bytes) -> None:
+        future.add_done_callback(publish_result)
+
+    def _on_loaded(self, request_id: int, payload: bytes) -> None:
         if self._destroyed or int(request_id) != self._request_id:
             return
-        self._clear_loader_refs()
+        self._future = None
         if not payload:
             return
         image = QImage()
@@ -236,6 +133,7 @@ class QuestionMediaStrip(CardWidget):
         *,
         fixed_size: int = 72,
         show_item_labels: bool = True,
+        media_fetcher: MediaFetcher | None = None,
         parent: Optional[QWidget] = None,
     ) -> None:
         super().__init__(parent)
@@ -257,6 +155,7 @@ class QuestionMediaStrip(CardWidget):
                     item,
                     fixed_size=fixed_size,
                     show_label=show_item_labels,
+                    media_fetcher=media_fetcher,
                     parent=self,
                 )
             )

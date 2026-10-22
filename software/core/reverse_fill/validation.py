@@ -3,10 +3,10 @@ from __future__ import annotations
 import copy
 import os
 from collections.abc import Sequence
-from typing import Any, Dict, List, Optional
+from typing import Any, Callable, Dict, List, Optional
 
 from surveycore.core.questions.default_builder import build_default_question_entries
-from surveycore.core.questions.schema import QuestionEntry, _infer_option_count
+from surveycore.core.questions.schema import QuestionEntry
 from surveycore.core.questions.validation import validate_question_config
 from surveycore.core.reverse_fill.parser import (
     infer_reverse_fill_question_type,
@@ -30,10 +30,24 @@ from surveycore.core.reverse_fill.schema import (
     ReverseFillSpec,
     reverse_fill_format_label,
 )
+from software.providers.surveycore_compat import _infer_option_count
 from surveycore.io.spreadsheets.wjx_excel import load_wjx_excel_export
 from software.core.config.schema import RuntimeConfig
 from software.providers.common import SURVEY_PROVIDER_WJX, normalize_survey_provider
 from surveycore.providers.contracts import SurveyQuestionMeta, ensure_survey_question_meta
+
+
+class ReverseFillValidationCancelled(RuntimeError):
+    """Raised when a caller cancels cooperative reverse-fill validation."""
+
+
+ProgressCallback = Callable[[str, int, int], None]
+CancellationCheck = Callable[[], bool]
+
+
+def _check_cancelled(cancel_check: CancellationCheck | None) -> None:
+    if cancel_check is not None and cancel_check():
+        raise ReverseFillValidationCancelled("反填预检已取消")
 
 
 def _detail_from_columns(columns: List[Any]) -> str:
@@ -170,7 +184,10 @@ def build_reverse_fill_spec(
     selected_format: str = REVERSE_FILL_FORMAT_AUTO,
     start_row: int = 1,
     target_num: int = 0,
+    progress_callback: ProgressCallback | None = None,
+    cancellation_check: CancellationCheck | None = None,
 ) -> ReverseFillSpec:
+    _check_cancelled(cancellation_check)
     provider = normalize_survey_provider(survey_provider, default=SURVEY_PROVIDER_WJX)
     if provider != SURVEY_PROVIDER_WJX:
         raise ValueError("反填 V1 目前只支持问卷星")
@@ -189,7 +206,11 @@ def build_reverse_fill_spec(
         if int(getattr(entry, "question_num", 0) or 0) > 0
     }
 
+    if progress_callback is not None:
+        progress_callback("reading", 0, 0)
+    _check_cancelled(cancellation_check)
     export = load_wjx_excel_export(source_path, preferred_format=selected_format)
+    _check_cancelled(cancellation_check)
     normalized_start_row = max(1, int(start_row or 1))
     total_samples = int(export.total_data_rows or 0)
     available_rows = max(0, total_samples - normalized_start_row + 1)
@@ -198,18 +219,34 @@ def build_reverse_fill_spec(
         effective_target_num = available_rows
     selected_rows = list(export.raw_rows or [])[normalized_start_row - 1 :]
 
+    question_count = len(normalized_questions_info)
+    if progress_callback is not None:
+        progress_callback("questions", 0, question_count)
+
     issues: List[ReverseFillIssue] = []
     question_plans: List[ReverseFillQuestionPlan] = []
-    answers_by_row: Dict[int, Dict[int, Any]] = {
-        int(row.data_row_number): {} for row in selected_rows
-    }
+    answers_by_row: Dict[int, Dict[int, Any]] = {}
+    row_progress_interval = max(1, len(selected_rows) // 100)
+    if progress_callback is not None:
+        progress_callback("preparing", 0, len(selected_rows))
+    for row_index, row in enumerate(selected_rows, start=1):
+        _check_cancelled(cancellation_check)
+        answers_by_row[int(row.data_row_number)] = {}
+        if progress_callback is not None and (
+            row_index % row_progress_interval == 0
+            or row_index == len(selected_rows)
+        ):
+            progress_callback("preparing", row_index, len(selected_rows))
 
     if available_rows <= 0:
         issues.append(_build_no_sample_issue(start_row=normalized_start_row, total_samples=total_samples))
     elif target_num > 0 and target_num > available_rows:
         issues.append(_build_global_issue(target_num=target_num, available_samples=available_rows))
 
-    for info in normalized_questions_info:
+    for info_index, info in enumerate(normalized_questions_info, start=1):
+        _check_cancelled(cancellation_check)
+        if progress_callback is not None:
+            progress_callback("questions", info_index, question_count)
         if bool(info.is_description):
             continue
         question_num = int(info.num or 0)
@@ -408,7 +445,15 @@ def build_reverse_fill_spec(
             ordered_columns = resolve_ordered_columns(columns, blank_labels)
 
         parse_errors: List[int] = []
-        for raw_row in selected_rows:
+        if progress_callback is not None:
+            progress_callback("samples", 0, len(selected_rows))
+        for row_index, raw_row in enumerate(selected_rows, start=1):
+            _check_cancelled(cancellation_check)
+            if progress_callback is not None and (
+                row_index % row_progress_interval == 0
+                or row_index == len(selected_rows)
+            ):
+                progress_callback("samples", row_index, len(selected_rows))
             try:
                 if question_type in {"single", "dropdown", "scale", "score"}:
                     answer = parse_choice_answer(
@@ -476,6 +521,7 @@ def build_reverse_fill_spec(
                 )
             )
             for row_answers in answers_by_row.values():
+                _check_cancelled(cancellation_check)
                 row_answers.pop(question_num, None)
             continue
 
@@ -492,7 +538,10 @@ def build_reverse_fill_spec(
         )
 
     samples: List[ReverseFillSampleRow] = []
-    for raw_row in selected_rows:
+    if progress_callback is not None:
+        progress_callback("assembling", 0, len(selected_rows))
+    for row_index, raw_row in enumerate(selected_rows, start=1):
+        _check_cancelled(cancellation_check)
         answers = dict(answers_by_row.get(int(raw_row.data_row_number)) or {})
         samples.append(
             ReverseFillSampleRow(
@@ -501,6 +550,15 @@ def build_reverse_fill_spec(
                 answers=answers,
             )
         )
+        if progress_callback is not None and (
+            row_index % row_progress_interval == 0
+            or row_index == len(selected_rows)
+        ):
+            progress_callback("assembling", row_index, len(selected_rows))
+
+    _check_cancelled(cancellation_check)
+    if progress_callback is not None:
+        progress_callback("complete", 1, 1)
 
     return ReverseFillSpec(
         source_path=os.path.abspath(str(source_path or "").strip()),
@@ -537,6 +595,9 @@ def build_enabled_reverse_fill_spec(
     config: RuntimeConfig,
     questions_info: List[SurveyQuestionMeta | Dict[str, Any]],
     question_entries: List[QuestionEntry],
+    *,
+    progress_callback: ProgressCallback | None = None,
+    cancellation_check: CancellationCheck | None = None,
 ) -> Optional[ReverseFillSpec]:
     if not bool(getattr(config, "reverse_fill_enabled", False)):
         return None
@@ -551,6 +612,8 @@ def build_enabled_reverse_fill_spec(
         selected_format=str(getattr(config, "reverse_fill_format", REVERSE_FILL_FORMAT_AUTO) or REVERSE_FILL_FORMAT_AUTO),
         start_row=max(1, int(getattr(config, "reverse_fill_start_row", 1) or 1)),
         target_num=max(0, int(getattr(config, "target", 0) or 0)),
+        progress_callback=progress_callback,
+        cancellation_check=cancellation_check,
     )
     if spec.blocking_issue_count > 0:
         raise ValueError(format_reverse_fill_blocking_message(spec))

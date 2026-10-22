@@ -1,9 +1,9 @@
 from __future__ import annotations
 
 import copy
-from typing import TYPE_CHECKING, Any, Callable, List, Optional, Sequence
+from typing import TYPE_CHECKING, Any, Callable, List, Optional, Sequence, cast
 
-from PySide6.QtCore import QEvent, Signal
+from PySide6.QtCore import QEvent, Signal, Slot
 from PySide6.QtGui import QDragEnterEvent, QDropEvent
 from PySide6.QtWidgets import QToolButton, QWidget
 from qfluentwidgets import (
@@ -45,8 +45,13 @@ from software.ui.pages.workbench.reverse_fill.actions import (
     validate_reverse_fill_start_url,
 )
 from software.ui.pages.workbench.reverse_fill.preview import (
+    PreviewCancellation,
+    PreviewDispatcher,
+    cancel_preview,
     clear_tables,
     populate_plan_table,
+    preview_progress,
+    preview_ready,
     refresh_preview,
 )
 from software.ui.pages.workbench.reverse_fill.ui_builder import build_reverse_fill_page_ui
@@ -100,6 +105,7 @@ class ReverseFillPage(SurveyClipboardMixin, QWidget):
     parse_btn: PrimaryPushButton
     file_edit: LineEdit
     browse_btn: "PushButton"
+    cancel_preview_btn: "PushButton"
     open_wizard_btn: PrimaryPushButton
     reverse_fill_threads_spin: "NoWheelSpinBox"
     random_ip_row: "RandomIpToggleRow"
@@ -134,6 +140,14 @@ class ReverseFillPage(SurveyClipboardMixin, QWidget):
         self._run_coordinator: Optional[Any] = None
         self._issue_question_nums: List[int] = []
         self._clipboard_parse_ticket = 0
+        self._preview_generation = 0
+        self._preview_in_flight = False
+        self._preview_pending = None
+        self._preview_cancel_requested = False
+        self._preview_stage = ""
+        self._preview_future = None
+        self._preview_cancellation = PreviewCancellation()
+        self._preview_dispatcher = PreviewDispatcher(self)
         self._parse_requested_from_reverse_fill = False
         init_run_feedback_state(self)
         self._main_progress_indeterminate = False
@@ -142,6 +156,9 @@ class ReverseFillPage(SurveyClipboardMixin, QWidget):
 
         build_reverse_fill_page_ui(self)
         self._bind_events()
+        self._preview_dispatcher.finished.connect(self._on_preview_ready)
+        self._preview_dispatcher.progress.connect(self._on_preview_progress)
+        self.destroyed.connect(self._preview_cancellation.cancel_current)
         if hasattr(self.controller, "get_runtime_snapshot"):
             runtime_snapshot = self.controller.get_runtime_snapshot()
             self._apply_runtime_ui_state(runtime_snapshot.get("settings") or {})
@@ -298,7 +315,11 @@ class ReverseFillPage(SurveyClipboardMixin, QWidget):
         if running is None:
             running = bool(getattr(self.controller, "running", False))
         enabled = (
-            (not bool(running)) and self._has_question_entries() and self._has_excel_source_path()
+            (not bool(running))
+            and not self._preview_in_flight
+            and self._last_spec is not None
+            and self._has_question_entries()
+            and self._has_excel_source_path()
         )
         self.start_btn.setEnabled(enabled)
 
@@ -449,3 +470,20 @@ class ReverseFillPage(SurveyClipboardMixin, QWidget):
 
     def _refresh_preview(self) -> None:
         refresh_preview(self)
+
+    @Slot(int, object, str, bool)
+    def _on_preview_ready(
+        self,
+        ticket: int,
+        spec: object,
+        error: str,
+        cancelled: bool,
+    ) -> None:
+        preview_ready(self, ticket, cast(Optional[ReverseFillSpec], spec), error, cancelled)
+
+    @Slot(int, str, int, int)
+    def _on_preview_progress(self, ticket: int, stage: str, current: int, total: int) -> None:
+        preview_progress(self, ticket, stage, current, total)
+
+    def _cancel_preview(self) -> None:
+        cancel_preview(self)
