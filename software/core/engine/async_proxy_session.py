@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Callable, Optional
 
-from software.core.config.codec import UserAgentProfile
+from surveycore.core.user_agent import UserAgentProfile
 from software.core.engine.runtime_ui_bridge import RuntimeUiBridge
 from surveycore.core.engine.stop_signal import StopSignalLike
 from software.core.task import ExecutionConfig, ExecutionState

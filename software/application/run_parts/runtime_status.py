@@ -15,6 +15,19 @@ if TYPE_CHECKING:
 STATUS_SNAPSHOT_MIN_INTERVAL_SECONDS = 0.15
 
 
+class RuntimeProjection:
+    """Translate runtime state into application snapshots and terminal events."""
+
+    def __init__(self, service: RunApplicationService) -> None:
+        self._service = service
+
+    def publish(self) -> None:
+        publish_runtime_snapshot(self._service)
+
+    def emit_terminal_notice(self) -> None:
+        emit_terminal_notice(self._service)
+
+
 def monitor_runtime(
     service: RunApplicationService,
     execution_state: ExecutionState,

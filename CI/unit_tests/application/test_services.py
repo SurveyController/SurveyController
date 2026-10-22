@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import threading
 from concurrent.futures import Future
 from threading import Event
 from types import SimpleNamespace
@@ -13,10 +14,16 @@ from software.application.errors import ProxyAuthenticationError
 from software.application.events import ApplicationEventType
 from software.application.interactions import InteractionKind, InteractionRequest
 from software.application.preferences import PreferencesService
+from software.application.run_parts import runtime_shutdown
 from software.application.run_state_store import RunStateStore
 from software.application.survey_parse_service import SurveyParseService
 from software.core.config.schema import RuntimeConfig
 from software.core.engine.execution_artifacts import RuntimePreparationError
+from software.providers.contracts import (
+    ProviderErrorCategory,
+    ProviderFailure,
+    ProviderParseResult,
+)
 from surveycore.providers.contracts import SurveyDefinition, SurveyQuestionMeta
 from surveycore.providers.errors import SurveyPausedError
 
@@ -200,6 +207,52 @@ def test_close_cancels_interactions_and_cleans_resources_once():
     assert closed == [True]
 
 
+def test_shutdown_requests_engine_close_before_joining_engine_thread(monkeypatch):
+    order = []
+
+    class EngineThread(threading.Thread):
+        def __init__(self):
+            super().__init__(name="AsyncRuntimeEngine")
+            self.alive = True
+
+        def is_alive(self):
+            return self.alive
+
+        def join(self, timeout=None):
+            order.append("join")
+
+    thread = EngineThread()
+    engine = FakeEngine()
+    engine.thread = thread
+    monkeypatch.setattr(runtime_shutdown, "collect_shutdown_threads", lambda _service: [thread])
+    original_shutdown = engine.shutdown
+
+    def shutdown(*, timeout=5.0):
+        order.append("shutdown")
+        thread.alive = False
+        original_shutdown(timeout=timeout)
+
+    engine.shutdown = shutdown
+    harness = Harness()
+    harness.service._async_engine_client = engine
+    harness.service.worker_threads = [thread]
+    try:
+        assert runtime_shutdown.shutdown_for_close(harness.service, timeout_seconds=0.05)
+        assert order[0] == "shutdown"
+        assert "join" not in order
+    finally:
+        harness.drain()
+
+
+def test_close_waits_for_shutdown_worker_completion():
+    harness = Harness()
+    try:
+        harness.service.request_shutdown_for_close(timeout_seconds=1.0)
+        assert harness.service.wait_for_shutdown(timeout_seconds=2.0)
+    finally:
+        harness.drain()
+
+
 @pytest.mark.asyncio
 @pytest.mark.parametrize("accepted", [True, False])
 async def test_proxy_quota_waits_for_the_matching_ui_reply(accepted):
@@ -221,7 +274,7 @@ async def test_proxy_quota_waits_for_the_matching_ui_reply(accepted):
         await asyncio.gather(pending, return_exceptions=True)
 
 
-def test_parse_success_failure_invalid_url_and_engine_submission_failure():
+def test_parse_success_failure_invalid_url_and_engine_submission_failure(caplog):
     state = RunStateStore()
     engine = FakeEngine()
     service = SurveyParseService(async_engine_client=engine, state_store=state,
@@ -231,8 +284,30 @@ def test_parse_success_failure_invalid_url_and_engine_submission_failure():
     service.parse_survey("https://example.com")
     assert state.get_survey_snapshot()["error_code"] == "url_unsupported"
     service.parse_survey("https://v.wjx.cn/vm/demo.aspx")
-    engine.parse_future.set_result(SimpleNamespace(title="Demo", provider="wjx", questions=[]))
+    engine.parse_future.set_result(
+        ProviderParseResult(
+            provider="wjx",
+            definition=SimpleNamespace(title="Demo", provider="wjx", questions=[]),
+        )
+    )
     assert state.get_survey_snapshot()["survey_title"] == "Demo"
+    engine.parse_future = Future()
+    service.parse_survey("https://v.wjx.cn/vm/demo.aspx")
+    failure = RuntimeError("provider unavailable")
+    engine.parse_future.set_result(
+        ProviderParseResult(
+            provider="wjx",
+            failure=ProviderFailure(
+                provider="wjx",
+                category=ProviderErrorCategory.UNAVAILABLE,
+                message=str(failure),
+                exception=failure,
+            ),
+        )
+    )
+    assert state.get_survey_snapshot()["parse_error"] == "provider unavailable"
+    assert any("category=unavailable" in record.message for record in caplog.records)
+    assert failure.__notes__ == ["provider=wjx; category=unavailable"]
     engine.parse_future = Future()
     service.parse_survey("https://v.wjx.cn/vm/demo.aspx")
     engine.parse_future.set_exception(RuntimeError("unavailable"))
@@ -252,7 +327,16 @@ def test_parse_filters_descriptions_and_updates_provider(provider, url):
     question = SurveyQuestionMeta(num=1, title="Q1", type_code="3", options=2, provider=provider)
     description = SurveyQuestionMeta(num=2, title="说明", is_description=True, provider=provider)
     service.parse_survey(url)
-    engine.parse_future.set_result(SurveyDefinition(provider=provider, title="问卷", questions=[question, description]))
+    engine.parse_future.set_result(
+        ProviderParseResult(
+            provider=provider,
+            definition=SurveyDefinition(
+                provider=provider,
+                title="问卷",
+                questions=[question, description],
+            ),
+        )
+    )
     snapshot = state.get_survey_snapshot()
     assert len(snapshot["questions_info"]) == 1
     assert snapshot["questions_info"][0].title == "Q1"
@@ -376,7 +460,12 @@ def test_parse_dispatch_failure_and_close_never_apply_late_results():
     service = SurveyParseService(async_engine_client=engine, state_store=state,
         emit_event=lambda event: None, dispatch_async=unavailable)
     service.parse_survey("https://v.wjx.cn/vm/demo.aspx")
-    engine.parse_future.set_result(SurveyDefinition(provider="wjx", title="late", questions=[]))
+    engine.parse_future.set_result(
+        ProviderParseResult(
+            provider="wjx",
+            definition=SurveyDefinition(provider="wjx", title="late", questions=[]),
+        )
+    )
     assert state.get_survey_snapshot()["error_code"] == "dispatch_failed"
     engine.parse_future = Future()
     service.parse_survey("https://v.wjx.cn/vm/demo.aspx")

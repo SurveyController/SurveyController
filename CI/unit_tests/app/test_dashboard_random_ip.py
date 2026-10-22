@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import threading
+from concurrent.futures import Future
 from types import SimpleNamespace
 
 from PySide6.QtGui import QColor
@@ -204,6 +205,13 @@ class _FakeDashboard(DashboardRandomIPMixin):
         self.low_infobar_calls = []
         self.cost_infobar_calls = []
         self.sync_calls = []
+        self.heartbeat_futures: list[Future[object]] = []
+
+        def submit_health_check() -> Future[object]:
+            future: Future[object] = Future()
+            self.heartbeat_futures.append(future)
+            return future
+
         self.controller = SimpleNamespace(
             set_runtime_ui_state=lambda **kwargs: self.sync_calls.append(("ui_state", kwargs)),
             update_runtime_settings=lambda **kwargs: self.sync_calls.append(("ui_state", kwargs)),
@@ -220,6 +228,7 @@ class _FakeDashboard(DashboardRandomIPMixin):
             request_toggle_random_ip=lambda enabled, adapter=None: bool(enabled),
             adapter="adapter",
             refresh_random_ip_counter=lambda: self.sync_calls.append(("refresh_counter",)),
+            submit_random_ip_health_check=submit_health_check,
         )
 
     def _update_ip_low_infobar(self, count: float, limit: float, custom_api: bool) -> None:
@@ -270,13 +279,17 @@ class DashboardRandomIPTests:
             "set_indeterminate_progress_ring_active",
             lambda ring, active: setattr(ring, "active", bool(active)),
         )
-        monkeypatch.setattr(
-            dashboard_random_ip.http_client,
-            "post",
-            lambda *args, **kwargs: SimpleNamespace(status_code=204),
+        dashboard.refresh_random_ip_heartbeat_async()
+        success_future = dashboard.heartbeat_futures[-1]
+        success_future.set_result(
+            {
+                "level": "success",
+                "text": "服务正常 123 ms",
+                "tooltip": "随机IP提取接口返回 HTTP 204，耗时 123 ms。",
+            }
         )
-        payload = dashboard._fetch_random_ip_heartbeat_status()
-        assert payload["level"] == "success"
+        assert dashboard._random_ip_status_fetching is False
+        assert dashboard._randomIpHeartbeatUpdated.calls[-1][0]["level"] == "success"
 
         dashboard._apply_random_ip_heartbeat_status(
             {"level": "error", "text": "挂了", "tooltip": "HTTP 500"}
@@ -286,12 +299,8 @@ class DashboardRandomIPTests:
         assert dashboard.random_ip_status_label.text == "挂了"
         assert dashboard.random_ip_status_row.tooltip == "HTTP 500"
 
-        monkeypatch.setattr(
-            dashboard_random_ip.http_client,
-            "post",
-            lambda *args, **kwargs: (_ for _ in ()).throw(RuntimeError("boom")),
-        )
-        dashboard._run_random_ip_heartbeat_fetch()
+        dashboard.refresh_random_ip_heartbeat_async()
+        dashboard.heartbeat_futures[-1].set_exception(RuntimeError("boom"))
         assert dashboard._randomIpHeartbeatUpdated.calls[-1][0]["text"] == "HTTP 0"
 
     def test_init_random_ip_status_refresh_and_async_guard(self, monkeypatch) -> None:
@@ -312,23 +321,11 @@ class DashboardRandomIPTests:
         assert dashboard.random_ip_status_timer.started == 1
         assert refresh_calls == ["refresh"]
 
-        started = []
-
-        class _Thread:
-            def __init__(self, *, target=None, daemon=False, name="") -> None:
-                self.target = target
-                self.name = name
-                started.append(self)
-
-            def start(self) -> None:
-                return
-
-        monkeypatch.setattr(dashboard_random_ip.threading, "Thread", _Thread)
         dashboard.refresh_random_ip_heartbeat_async = DashboardRandomIPMixin.refresh_random_ip_heartbeat_async.__get__(dashboard, _FakeDashboard)
         dashboard.refresh_random_ip_heartbeat_async()
         dashboard._random_ip_status_fetching = True
         dashboard.refresh_random_ip_heartbeat_async()
-        assert len(started) == 1
+        assert len(dashboard.heartbeat_futures) == 1
 
     def test_sync_loading_toggle_and_cost_infobars(self, monkeypatch) -> None:
         dashboard = _FakeDashboard()

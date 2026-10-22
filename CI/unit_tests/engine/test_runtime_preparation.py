@@ -1,4 +1,5 @@
 from __future__ import annotations
+import threading
 import pytest
 from unittest.mock import patch
 from surveycore.core.questions.config import QuestionEntry
@@ -40,6 +41,13 @@ class RuntimePreparationTests:
         with pytest.raises(RuntimePreparationError) as cm:
             prepare_execution_artifacts(config)
         assert '未配置任何题目' in cm.value.user_message
+
+    def test_prepare_execution_artifacts_rejects_cancelled_preparation(self) -> None:
+        stop_signal = threading.Event()
+        stop_signal.set()
+
+        with pytest.raises(RuntimePreparationError, match="运行准备已取消"):
+            prepare_execution_artifacts(self._build_config(), stop_signal=stop_signal)
 
     def test_prepare_execution_artifacts_rejects_validation_error(self) -> None:
         config = self._build_config()

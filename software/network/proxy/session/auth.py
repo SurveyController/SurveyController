@@ -6,7 +6,7 @@ from urllib.parse import urlsplit
 from dataclasses import replace
 from typing import Any, Dict, List, Optional
 
-from software.app.config import (
+from software.network.config import (
     AUTH_TRIAL_ENDPOINT,
     CARD_REDEEM_ENDPOINT,
     IP_EXTRACT_ENDPOINT,

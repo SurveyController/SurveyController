@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import pytest
+
 from software.network.proxy.pool import prefetch
 from software.system import secure_store
 from software.ui.helpers import ai_fill
@@ -16,7 +18,8 @@ class SystemHelpersTests:
         secure_store.set_secret("", "value")
         secure_store.delete_secret("")
 
-    def test_prefetch_proxy_pool_passes_effective_url_and_minimum_count(self, patch_attrs) -> None:
+    @pytest.mark.asyncio
+    async def test_prefetch_proxy_pool_passes_effective_url_and_minimum_count(self, patch_attrs) -> None:
         calls: list[dict[str, object]] = []
 
         def fake_fetch(**kwargs):
@@ -32,7 +35,7 @@ class SystemHelpersTests:
             (proxy_api, "fetch_proxy_batch_async", fake_fetch_async),
         )
 
-        assert prefetch.prefetch_proxy_pool(0) == ["lease"]
+        assert await prefetch.prefetch_proxy_pool(0) == ["lease"]
         assert calls == [
             {
                 "expected_count": 1,

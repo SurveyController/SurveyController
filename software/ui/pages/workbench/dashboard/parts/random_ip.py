@@ -2,15 +2,12 @@ from __future__ import annotations
 
 import logging
 import threading
-import time
+from concurrent.futures import Future
 from typing import TYPE_CHECKING, Any, Optional, cast
 from PySide6.QtGui import QColor
 from qfluentwidgets import themeColor
 
-import software.network.http as http_client
-
 from software.ui.dialogs.quota_redeem import load_shop_icon
-from software.app.config import DEFAULT_HTTP_HEADERS, IP_EXTRACT_ENDPOINT
 from software.logging.log_utils import log_suppressed_exception
 from software.ui.helpers.qfluent_compat import set_indeterminate_progress_ring_active
 from software.ui.helpers.proxy_access import (
@@ -22,8 +19,6 @@ from software.ui.helpers.proxy_access import (
     has_unknown_local_quota,
     is_quota_exhausted,
 )
-
-_RANDOM_IP_HEALTH_TIMEOUT_SECONDS = 5
 
 if TYPE_CHECKING:
     from qfluentwidgets import (
@@ -113,27 +108,35 @@ class DashboardRandomIPMixin:
             self._random_ip_status_fetching = True
         self._apply_random_ip_heartbeat_loading()
 
-        threading.Thread(
-            target=self._run_random_ip_heartbeat_fetch,
-            daemon=True,
-            name="DashboardRandomIpHeartbeat",
-        ).start()
-
-    def _run_random_ip_heartbeat_fetch(self) -> None:
-        payload = None
         try:
-            payload = self._fetch_random_ip_heartbeat_status()
+            future = self.controller.submit_random_ip_health_check()
         except Exception as exc:
-            logging.warning("随机IP服务状态检查失败，已按未知状态处理：%s", exc)
+            self._finish_random_ip_heartbeat(None, exc)
+            return
+        future.add_done_callback(self._on_random_ip_heartbeat_completed)
+
+    def _on_random_ip_heartbeat_completed(self, future: Future[Any]) -> None:
+        try:
+            payload = future.result()
+        except Exception as exc:
+            self._finish_random_ip_heartbeat(None, exc)
+        else:
+            self._finish_random_ip_heartbeat(payload, None)
+
+    def _finish_random_ip_heartbeat(
+        self,
+        payload: Any,
+        error: Exception | None,
+    ) -> None:
+        if error is not None:
+            logging.warning("随机IP服务状态检查失败，已按未知状态处理：%s", error)
             payload = {
                 "level": "warning",
                 "text": "HTTP 0",
-                "tooltip": f"随机IP提取接口请求失败：{exc}",
+                "tooltip": f"随机IP提取接口请求失败：{error}",
             }
-        finally:
-            with self._random_ip_status_fetch_lock:
-                self._random_ip_status_fetching = False
-
+        with self._random_ip_status_fetch_lock:
+            self._random_ip_status_fetching = False
         try:
             if bool(getattr(self, "_is_closing", False)):
                 return
@@ -147,37 +150,10 @@ class DashboardRandomIPMixin:
             self._randomIpHeartbeatUpdated.emit(payload or {})
         except Exception as exc:
             log_suppressed_exception(
-                "_run_random_ip_heartbeat_fetch emit",
+                "_finish_random_ip_heartbeat emit",
                 exc,
                 level=logging.WARNING,
             )
-
-    def _fetch_random_ip_heartbeat_status(self) -> dict[str, str]:
-        headers = {
-            **DEFAULT_HTTP_HEADERS,
-            "X-Health-Token": "status-rzib9lqpuk3httr4",
-            "Content-Type": "application/json",
-        }
-        started = time.perf_counter()
-        response = http_client.post(
-            IP_EXTRACT_ENDPOINT,
-            json={},
-            timeout=_RANDOM_IP_HEALTH_TIMEOUT_SECONDS,
-            headers=headers,
-        )
-        elapsed_ms = max(1, int(round((time.perf_counter() - started) * 1000)))
-        status_code = int(getattr(response, "status_code", 0) or 0)
-        if 200 <= status_code < 300:
-            return {
-                "level": "success",
-                "text": f"服务正常 {elapsed_ms} ms",
-                "tooltip": f"随机IP提取接口返回 HTTP {status_code}，耗时 {elapsed_ms} ms。",
-            }
-        return {
-            "level": "error",
-            "text": f"异常 {status_code or 0}",
-            "tooltip": f"随机IP提取接口返回 HTTP {status_code or 0}，耗时 {elapsed_ms} ms。",
-        }
 
     def _apply_random_ip_heartbeat_status(self, payload: Any) -> None:
         data = payload if isinstance(payload, dict) else {}

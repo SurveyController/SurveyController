@@ -1,10 +1,13 @@
 from __future__ import annotations
 
-from typing import Any, Callable, Optional
+from collections.abc import Coroutine
+from concurrent.futures import Future
+from typing import Any, Callable, Optional, cast
 
 from PySide6.QtCore import QObject, Signal, Slot
 
 from software.app.bootstrap import ApplicationDependencies, create_application_dependencies
+from software.app.question_media_adapter import fetch_question_media as fetch_question_media_bytes
 from software.application.events import ApplicationEvent
 from software.application.models import RuntimeSnapshot, SurveySnapshot
 from software.application.interactions import InteractionBroker, InteractionRequest
@@ -172,6 +175,34 @@ class RunController(QObject):
     def parse_survey(self, url: str) -> None:
         self._parse_service.parse_survey(url)
 
+    def submit_ui_task(
+        self,
+        task_name: str,
+        coro_factory: Callable[[], Coroutine[Any, Any, Any]],
+    ) -> Future[Any]:
+        return self._async_engine_client.submit_ui_task(task_name, coro_factory)
+
+    def submit_random_ip_health_check(self) -> Future[dict[str, str]]:
+        return cast(
+            Future[dict[str, str]],
+            self.submit_ui_task(
+                "random-ip-health-check",
+                self.dependencies.random_ip_health.check,
+            ),
+        )
+
+    def fetch_question_media(self, source_url: str) -> Future[bytes]:
+        return cast(
+            Future[bytes],
+            self.submit_ui_task(
+                "question-media-thumbnail",
+                lambda: fetch_question_media_bytes(source_url),
+            ),
+        )
+
+    def get_proxy_session_snapshot(self) -> dict[str, Any]:
+        return self.dependencies.proxy_gateway.get_session_snapshot()
+
     def start_run(self, cfg: RuntimeConfig) -> None:
         self._command_service.start_run(cfg)
 
@@ -187,6 +218,9 @@ class RunController(QObject):
     def request_shutdown_for_close(self, timeout_seconds: float = 5.0) -> None:
         self._parse_service.close()
         self._command_service.request_shutdown_for_close(timeout_seconds=timeout_seconds)
+
+    def wait_for_shutdown(self, timeout_seconds: float = 5.0) -> bool:
+        return self._command_service.wait_for_shutdown(timeout_seconds=timeout_seconds)
 
     def request_toggle_random_ip(
         self,
@@ -223,16 +257,27 @@ class RunController(QObject):
         self.hydrate_from_config(cfg)
         return cfg
 
-    def save_config(self, cfg: RuntimeConfig, path: Optional[str] = None) -> str:
+    def save_config(
+        self,
+        cfg: RuntimeConfig,
+        path: Optional[str] = None,
+        *,
+        include_secrets: bool = False,
+    ) -> str:
         self.config = cfg
         self.hydrate_from_config(cfg)
-        return self._command_service.save_config(cfg, path)
+        return self._command_service.save_config(
+            cfg,
+            path,
+            include_secrets=include_secrets,
+        )
 
     def save_current_config(
         self,
         path: Optional[str] = None,
         *,
         config: Optional[RuntimeConfig] = None,
+        include_secrets: bool = False,
     ) -> str:
         cfg = config or build_runtime_config_snapshot(
             RuntimeConfig(),
@@ -247,7 +292,11 @@ class RunController(QObject):
         cfg.questions_info = list(snapshot.get("questions_info") or [])
         cfg.question_entries = list(snapshot.get("question_entries") or [])
         self.config = cfg
-        return self.dependencies.configuration.save(cfg, path)
+        return self.dependencies.configuration.save(
+            cfg,
+            path,
+            include_secrets=include_secrets,
+        )
 
 
 __all__ = ["RunController"]

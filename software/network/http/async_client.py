@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import asyncio
-import atexit
 import logging
 import threading
 import time
@@ -11,10 +10,16 @@ from typing import Any, Literal, overload
 import httpx
 
 from software.logging.log_utils import log_suppressed_exception
-from software.network.http.client import _CLIENT_LIMITS, _normalize_timeout, _resolve_proxy
+from software.network.http.client_policy import (
+    CLIENT_LIMITS,
+    CLIENT_TTL_SECONDS,
+    MAX_CLIENTS,
+    normalize_timeout,
+    resolve_proxy,
+)
 
-_MAX_CLIENTS = 20
-_CLIENT_TTL = 300
+_MAX_CLIENTS = MAX_CLIENTS
+_CLIENT_TTL = CLIENT_TTL_SECONDS
 
 
 @dataclass(frozen=True)
@@ -108,7 +113,7 @@ class _AsyncClientManager:
             proxy=proxy,
             follow_redirects=follow_redirects,
             trust_env=trust_env,
-            limits=_CLIENT_LIMITS,
+            limits=CLIENT_LIMITS,
         )
 
     def _select_stale_clients_locked(self) -> list[httpx.AsyncClient]:
@@ -201,8 +206,8 @@ class _AsyncClientManager:
         allow_redirects = bool(kwargs.pop("allow_redirects", True))
         verify = kwargs.pop("verify", True)
         proxies = kwargs.pop("proxies", None)
-        proxy, trust_env = _resolve_proxy(proxies, url)
-        timeout = _normalize_timeout(kwargs.pop("timeout", None))
+        proxy, trust_env = resolve_proxy(proxies, url)
+        timeout = normalize_timeout(kwargs.pop("timeout", None))
         loop = asyncio.get_running_loop()
         storage_key, entry, clients_to_close = self.acquire(
             loop=loop,
@@ -226,29 +231,19 @@ class _AsyncClientManager:
         finally:
             await self.release(storage_key)
 
-    async def close(self) -> None:
+    async def close_for_loop(self, loop: asyncio.AbstractEventLoop) -> None:
+        loop_id = id(loop)
         with self._lock:
-            clients = [entry.client for entry in self._clients.values()]
-            self._clients.clear()
+            storage_keys = [key for key in self._clients if key[0] == loop_id]
+            clients = [self._clients.pop(key).client for key in storage_keys]
         await self._close_clients(clients)
 
 
 _client_manager = _AsyncClientManager()
 
 
-def close() -> None:
-    try:
-        try:
-            loop = asyncio.get_running_loop()
-        except RuntimeError:
-            asyncio.run(_client_manager.close())
-            return
-        loop.create_task(_client_manager.close())
-    except Exception as exc:
-        log_suppressed_exception("async_http_client.close _client_manager.close()", exc, level=logging.WARNING)
-
-
-atexit.register(close)
+async def aclose_for_loop(loop: asyncio.AbstractEventLoop | None = None) -> None:
+    await _client_manager.close_for_loop(loop or asyncio.get_running_loop())
 
 
 @overload
@@ -322,7 +317,6 @@ async def delete(url: str, **kwargs: Any) -> httpx.Response | _AsyncStreamRespon
 
 
 __all__ = [
-    "close",
     "delete",
     "get",
     "post",

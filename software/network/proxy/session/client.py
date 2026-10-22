@@ -5,7 +5,7 @@ import re
 from typing import Any, Dict, List, Optional
 
 import software.network.http as http_client
-from software.app.config import DEFAULT_HTTP_HEADERS
+from software.network.http.defaults import DEFAULT_HTTP_HEADERS
 from .models import RandomIPAuthError
 from .normalize import _to_non_negative_int, _to_non_negative_quota
 

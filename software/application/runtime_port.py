@@ -1,11 +1,8 @@
 from __future__ import annotations
 
-import asyncio
-import collections.abc
 import logging
 import threading
-from inspect import isawaitable
-from typing import Any, Callable, List, Optional, cast
+from typing import Any, Callable, List, Optional
 
 from software.core.engine.runtime_control_port import RuntimeControlPort
 from surveycore.core.engine.stop_signal import StopSignalLike
@@ -117,13 +114,6 @@ class RunRuntimePort(RuntimeControlPort):
                 try:
                     mark_cleanup_done = getattr(driver, "mark_cleanup_done", None)
                     if callable(mark_cleanup_done) and not mark_cleanup_done():
-                        continue
-                    aclose_driver = getattr(driver, "aclose", None)
-                    if callable(aclose_driver):
-                        close_result = aclose_driver()
-                        if isawaitable(close_result):
-                            asyncio.run(cast(collections.abc.Coroutine[Any, Any, Any], close_result))
-                        cleaned += 1
                         continue
                     quit_driver = getattr(driver, "quit", None)
                     if callable(quit_driver):

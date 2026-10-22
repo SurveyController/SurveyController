@@ -7,11 +7,12 @@ import logging
 from surveycore.core.engine.stop_signal import StopSignalLike
 from software.core.engine.runtime_ui_bridge import RuntimeUiBridge
 from software.core.task import ExecutionState, ProxyLease
-from software.app.config import PROXY_MAX_PROXIES
+from software.network.config import PROXY_MAX_PROXIES
 from software.network.proxy.pool import coerce_proxy_lease, mask_proxy_for_log
 from software.network.proxy.api import fetch_proxy_batch_async
 from software.network.proxy import get_proxy_required_ttl_seconds, proxy_lease_has_sufficient_ttl
-from software.core.config.codec import UserAgentProfile, _select_user_agent_from_ratios
+from software.core.config.user_agents import select_user_agent_from_ratios
+from surveycore.core.user_agent import UserAgentProfile
 
 _PROXY_WAIT_POLL_SECONDS = 0.3
 _BAD_PROXY_COOLDOWN_SECONDS = 180.0
@@ -473,7 +474,7 @@ def mark_submit_proxy_success(ctx: ExecutionState, proxy_address: str | None) ->
 def _select_user_agent_for_session(ctx: ExecutionState) -> Optional[UserAgentProfile]:
     if not ctx.config.random_user_agent_enabled:
         return None
-    return _select_user_agent_from_ratios(ctx.config.user_agent_ratios)
+    return select_user_agent_from_ratios(ctx.config.user_agent_ratios)
 
 
 def _discard_unresponsive_proxy(ctx: ExecutionState, proxy_address: str) -> None:

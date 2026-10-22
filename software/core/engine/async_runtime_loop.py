@@ -3,7 +3,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import random
-from typing import Any, Optional, cast
+from typing import Any, Callable, Optional, cast
 
 from software.core.ai.runtime import AIRuntimeError
 from surveycore.core.engine.async_events import AsyncRunContext, ThreadEventProxy
@@ -18,6 +18,7 @@ from surveycore.core.engine.async_scheduler import AsyncScheduler
 from software.core.engine.failure_reason import FailureReason
 from software.core.engine.run_stop_policy import RunStopPolicy
 from software.core.engine.runtime_control_port import RuntimeControlPort
+from software.core.engine.task_registry import TaskRegistry
 from software.core.engine.runtime_error_handlers import handle_ai_runtime_error as _handle_ai_runtime_error_impl
 from software.core.engine.runtime_error_handlers import handle_submission_verification_error
 from software.core.engine.runtime_error_handlers import handle_survey_provider_unavailable_error
@@ -51,6 +52,9 @@ class AsyncSlotRunner:
         state: ExecutionState,
         run_context: AsyncRunContext,
         scheduler: AsyncScheduler,
+        task_registry: TaskRegistry,
+        app_version: str = "",
+        submission_report_enabled: Callable[[], bool] | None = None,
         runtime_bridge: RuntimeControlPort | None = None,
     ) -> None:
         self.slot_id = max(1, int(slot_id or 1))
@@ -59,6 +63,9 @@ class AsyncSlotRunner:
         self.state = state
         self.run_context = run_context
         self.scheduler = scheduler
+        self.task_registry = task_registry
+        self.app_version = str(app_version or "")
+        self.submission_report_enabled = submission_report_enabled or (lambda: True)
         self.runtime_bridge = runtime_bridge
         self.stop_proxy = ThreadEventProxy(run_context.stop_event, loop=asyncio.get_running_loop())
         self.stop_policy = RunStopPolicy(config, state, runtime_bridge)
@@ -268,16 +275,25 @@ class AsyncSlotRunner:
         if user_id <= 0:
             return
         try:
-            asyncio.create_task(
-                report_submission_result_async(
-                    user_id=user_id,
-                    survey_url=str(self.config.url or ""),
-                    result=result,
-                    proxy_provider=self.proxy_session.proxy_provider,
-                )
+            coroutine = report_submission_result_async(
+                user_id=user_id,
+                survey_url=str(self.config.url or ""),
+                result=result,
+                proxy_provider=self.proxy_session.proxy_provider,
+                **self._submission_report_options(),
             )
+            self.task_registry.create_task(coroutine, name="SubmissionResultReport")
         except Exception:
+            close = getattr(locals().get("coroutine"), "close", None)
+            if callable(close):
+                close()
             logging.info("提交结果上报任务创建失败", exc_info=True)
+
+    def _submission_report_options(self) -> dict[str, Any]:
+        return {
+            "enabled": bool(self.submission_report_enabled()),
+            "client_version": self.app_version,
+        }
 
     def _handle_http_transport_error(self, exc: BaseException) -> bool:
         if self.proxy_session.proxy_address:

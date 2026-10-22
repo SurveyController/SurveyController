@@ -26,6 +26,7 @@ class _FakeApp:
 class _FakeWindow:
     def __init__(self) -> None:
         self.shown = 0
+        self.controller = SimpleNamespace(wait_for_shutdown=lambda **_kwargs: True)
 
     def show(self) -> None:
         self.shown += 1
@@ -34,6 +35,12 @@ class _FakeWindow:
 def test_main_returns_exit_code_and_avoids_hard_exit(monkeypatch) -> None:
     events: list[str] = []
     fake_window = _FakeWindow()
+
+    def wait_for_shutdown(**_kwargs):
+        events.append("shutdown_wait")
+        return True
+
+    fake_window.controller.wait_for_shutdown = wait_for_shutdown
 
     monkeypatch.setattr(
         main_module,
@@ -93,6 +100,7 @@ def test_main_returns_exit_code_and_avoids_hard_exit(monkeypatch) -> None:
         "qt_msg",
         "guards",
         "prewarm",
+        "shutdown_wait",
         "logging_off",
         "fault_off",
     ]

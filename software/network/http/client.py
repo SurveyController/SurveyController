@@ -1,17 +1,22 @@
 from __future__ import annotations
 
-import atexit
 import logging
 import threading
 import time
 from dataclasses import dataclass
 from typing import Any, Dict, Iterator, Literal, Optional, Tuple, Union, overload
-from urllib.parse import urlsplit
 
 import httpx
 from packaging.version import InvalidVersion, Version
 
 from software.logging.log_utils import log_suppressed_exception
+from software.network.http.client_policy import (
+    CLIENT_LIMITS as _CLIENT_LIMITS,
+    CLIENT_TTL_SECONDS as _CLIENT_TTL,
+    MAX_CLIENTS as _MAX_CLIENTS,
+    normalize_timeout as _normalize_timeout,
+    resolve_proxy as _resolve_proxy,
+)
 
 
 _MIN_HTTPX_VERSION = Version("0.27.0")
@@ -35,9 +40,6 @@ def _ensure_supported_httpx() -> None:
 _ensure_supported_httpx()
 
 
-_CLIENT_LIMITS = httpx.Limits(max_connections=20, max_keepalive_connections=10)
-_MAX_CLIENTS = 20
-_CLIENT_TTL = 300
 _PREWARM_LOCK = threading.Lock()
 _PREWARMED = False
 
@@ -310,49 +312,6 @@ class _SyncClientManager:
         self._close_clients(clients)
 
 
-def _resolve_proxy(proxies: Any, url: str) -> Tuple[Optional[str], bool]:
-    
-    if proxies is None:
-        return None, True
-    if proxies == {}:
-        return None, False
-    if isinstance(proxies, str):
-        return proxies, False
-    if isinstance(proxies, dict):
-        scheme = urlsplit(url).scheme.lower()
-        http_proxy = proxies.get("http") or proxies.get("http://")
-        https_proxy = proxies.get("https") or proxies.get("https://")
-        if not http_proxy and not https_proxy:
-            return None, False
-        if scheme == "https":
-            return str(https_proxy or http_proxy), False
-        return str(http_proxy or https_proxy), False
-    return None, False
-
-
-def _normalize_timeout(timeout: Any) -> Any:
-    
-    if timeout is None:
-        return None
-    if isinstance(timeout, (int, float)):
-        return float(timeout)
-    if isinstance(timeout, tuple):
-        if len(timeout) == 2:
-            connect, read = timeout
-            connect_val = float(connect) if connect is not None else None
-            read_val = float(read) if read is not None else None
-            return httpx.Timeout(connect=connect_val, read=read_val, write=read_val, pool=connect_val)
-        if len(timeout) == 4:
-            connect, read, write, pool = timeout
-            return httpx.Timeout(
-                connect=float(connect) if connect is not None else None,
-                read=float(read) if read is not None else None,
-                write=float(write) if write is not None else None,
-                pool=float(pool) if pool is not None else None,
-            )
-    return timeout
-
-
 _client_manager = _SyncClientManager()
 
 
@@ -392,9 +351,6 @@ def close() -> None:
         _client_manager.close()
     except Exception as exc:
         log_suppressed_exception("http_client.close _client_manager.close()", exc, level=logging.WARNING)
-
-
-atexit.register(close)
 
 
 @overload

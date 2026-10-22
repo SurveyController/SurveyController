@@ -4,11 +4,15 @@ import asyncio
 import concurrent.futures
 import logging
 import threading
-from typing import Any, Callable, Optional
+import time
+from typing import Any, Callable, Coroutine, Optional
 
-from software.app.app_info import APP_VERSION
 from surveycore.core.engine.async_events import AsyncRunContext
 from software.core.engine.async_runtime_loop import AsyncSlotRunner
+from software.core.engine.engine_state import EngineState
+from software.core.engine.task_registry import TaskRegistry
+from software.network.http.async_client import aclose_for_loop
+from software.network.http.client import close as close_sync_http_clients
 from surveycore.core.engine.async_scheduler import AsyncScheduler
 from surveycore.core.engine.async_status_bus import AsyncStatusBus
 from software.core.engine.runtime_control_port import RuntimeControlPort, on_random_ip_loading_changed
@@ -23,6 +27,7 @@ from software.network.session_policy import (
     wait_for_proxy_prefetch_cycle,
 )
 from software.providers.registry import parse_survey
+from software.providers.contracts import ProviderParseResult
 
 
 def _format_seconds_range(value: Any) -> str:
@@ -46,53 +51,137 @@ def _format_proxy_source(source: Any) -> str:
 class AsyncRuntimeEngine:
     
 
-    def __init__(self, *, status_bus: Optional[AsyncStatusBus] = None) -> None:
+    def __init__(
+        self,
+        *,
+        status_bus: Optional[AsyncStatusBus] = None,
+        app_version: str = "",
+        submission_report_enabled: Callable[[], bool] | None = None,
+    ) -> None:
         self._status_bus = status_bus or AsyncStatusBus()
+        self._app_version = str(app_version or "")
+        self._submission_report_enabled = submission_report_enabled or (lambda: True)
         self._thread: Optional[threading.Thread] = None
         self._loop: Optional[asyncio.AbstractEventLoop] = None
         self._loop_ready = threading.Event()
         self._start_lock = threading.Lock()
+        self._lifecycle_lock = threading.Lock()
         self._run_future: Optional[concurrent.futures.Future[Any]] = None
         self._stop_event: Optional[asyncio.Event] = None
         self._pause_event: Optional[asyncio.Event] = None
-        self._closed = False
+        self._engine_state = EngineState.OPEN
+        self._ui_task_registry: TaskRegistry | None = None
         self._state: Optional[ExecutionState] = None
+        self._loop_start_error: BaseException | None = None
 
     @property
     def thread(self) -> Optional[threading.Thread]:
         return self._thread
 
+    @property
+    def engine_state(self) -> EngineState:
+        with self._lifecycle_lock:
+            return self._engine_state
+
     def start(self) -> None:
         with self._start_lock:
-            if self._thread is not None and self._thread.is_alive():
-                return
+            with self._lifecycle_lock:
+                if self._engine_state is not EngineState.OPEN:
+                    raise RuntimeError(f"AsyncRuntimeEngine 已关闭或正在关闭：{self._engine_state.value}")
+                if self._thread is not None and self._thread.is_alive():
+                    return
             self._loop_ready.clear()
+            self._loop_start_error = None
 
             def _runner() -> None:
-                loop = asyncio.new_event_loop()
-                asyncio.set_event_loop(loop)
-                self._loop = loop
-                self._loop_ready.set()
+                loop: asyncio.AbstractEventLoop | None = None
                 try:
+                    loop = asyncio.new_event_loop()
+                    self._loop = loop
+                    asyncio.set_event_loop(loop)
+                    self._ui_task_registry = TaskRegistry()
+                    self._loop_ready.set()
                     loop.run_forever()
+                except BaseException as exc:
+                    self._loop_start_error = exc
+                    logging.exception("AsyncRuntimeEngine loop 启动失败")
                 finally:
-                    pending = [task for task in asyncio.all_tasks(loop) if not task.done()]
-                    for task in pending:
-                        task.cancel()
-                    if pending:
-                        loop.run_until_complete(asyncio.gather(*pending, return_exceptions=True))
-                    loop.run_until_complete(loop.shutdown_asyncgens())
-                    loop.close()
+                    self._loop_ready.set()
+                    if loop is not None:
+                        try:
+                            pending = [task for task in asyncio.all_tasks(loop) if not task.done()]
+                            for task in pending:
+                                task.cancel()
+                            if pending:
+                                _, pending = loop.run_until_complete(asyncio.wait(pending, timeout=1.0))
+                            if pending:
+                                names = ", ".join(sorted(task.get_name() for task in pending))
+                                logging.warning("事件循环关闭后仍有任务未退出：%s", names)
+                        except Exception:
+                            logging.warning("取消事件循环后台任务失败", exc_info=True)
+                        try:
+                            loop.run_until_complete(loop.shutdown_asyncgens())
+                        except Exception:
+                            logging.warning("关闭事件循环异步生成器失败", exc_info=True)
+                        try:
+                            loop.run_until_complete(aclose_for_loop(loop))
+                        except Exception:
+                            logging.warning("回收事件循环 HTTP 客户端失败", exc_info=True)
+                        finally:
+                            try:
+                                loop.close()
+                            finally:
+                                self._mark_stopped(loop)
+                    else:
+                        with self._lifecycle_lock:
+                            self._thread = None
+                            self._engine_state = EngineState.OPEN
 
-            self._thread = threading.Thread(target=_runner, daemon=True, name="AsyncRuntimeEngine")
-            self._thread.start()
+            thread = threading.Thread(target=_runner, daemon=True, name="AsyncRuntimeEngine")
+            with self._lifecycle_lock:
+                self._thread = thread
+                self._engine_state = EngineState.RUNNING
+            try:
+                thread.start()
+            except Exception:
+                with self._lifecycle_lock:
+                    if self._thread is thread:
+                        self._thread = None
+                        self._engine_state = EngineState.OPEN
+                raise
         self._loop_ready.wait()
+        if self._loop_start_error is not None:
+            error = self._loop_start_error
+            raise RuntimeError("AsyncRuntimeEngine loop 启动失败") from error
+
+    def _mark_stopped(self, loop: asyncio.AbstractEventLoop | None = None) -> None:
+        with self._lifecycle_lock:
+            if (
+                loop is None
+                or self._loop is loop
+                or self._thread is threading.current_thread()
+            ):
+                self._loop = None
+                self._thread = None
+                self._engine_state = EngineState.CLOSED
 
     def _submit(self, coro: Any) -> concurrent.futures.Future[Any]:
-        self.start()
-        if self._loop is None:
-            raise RuntimeError("AsyncRuntimeEngine loop 未启动")
-        return asyncio.run_coroutine_threadsafe(coro, self._loop)
+        try:
+            self.start()
+            with self._lifecycle_lock:
+                if self._engine_state in {EngineState.STOPPING, EngineState.CLOSED}:
+                    raise RuntimeError(f"AsyncRuntimeEngine 不接受新任务：{self._engine_state.value}")
+                loop = self._loop
+                if loop is None or loop.is_closed():
+                    raise RuntimeError("AsyncRuntimeEngine loop 未启动")
+                if self._engine_state is not EngineState.RUNNING:
+                    raise RuntimeError(f"AsyncRuntimeEngine 不接受新任务：{self._engine_state.value}")
+                return asyncio.run_coroutine_threadsafe(coro, loop)
+        except Exception:
+            close = getattr(coro, "close", None)
+            if callable(close):
+                close()
+            raise
 
     def start_run(
         self,
@@ -121,6 +210,7 @@ class AsyncRuntimeEngine:
         worker_count = max(1, int(config.num_threads or 1))
         state.ensure_worker_threads(worker_count, prefix="Slot")
         scheduler = AsyncScheduler(concurrency=worker_count)
+        task_registry = TaskRegistry()
         run_context = AsyncRunContext(
             state=state,
             stop_event=self._stop_event,
@@ -129,7 +219,7 @@ class AsyncRuntimeEngine:
         )
         logging.info(
             "任务启动：版本=%s 问卷链接=%s 平台=%s 目标份数=%s 当前进度=%s/%s 并发数=%s 作答时长=%s 随机IP=%s 代理源=%s 运行时=纯HTTP",
-            APP_VERSION,
+            self._app_version,
             config.url or "",
             config.survey_provider or "",
             config.target_num,
@@ -196,6 +286,9 @@ class AsyncRuntimeEngine:
                             state=state,
                             run_context=run_context,
                             scheduler=scheduler,
+                            task_registry=task_registry,
+                            app_version=self._app_version,
+                            submission_report_enabled=self._submission_report_enabled,
                             runtime_bridge=runtime_bridge,
                         ).run(),
                         name=f"AsyncSlotRunner-{slot_index + 1}",
@@ -212,6 +305,9 @@ class AsyncRuntimeEngine:
             await asyncio.gather(prefetch_task, return_exceptions=True)
             if self._stop_event is not None:
                 self._stop_event.set()
+            dropped = await task_registry.drain(timeout=5.0)
+            if dropped:
+                logging.warning("任务结束时有 %d 个后台任务超时取消", dropped)
             await scheduler.close()
             state.stop_event.set()
             self._stop_event = None
@@ -226,8 +322,12 @@ class AsyncRuntimeEngine:
                 state.stop_event.set()
             except Exception:
                 logging.debug("设置 ExecutionState.stop_event 失败", exc_info=True)
-        if self._loop is not None and stop_event is not None:
-            self._loop.call_soon_threadsafe(stop_event.set)
+        loop = self._loop
+        if loop is not None and stop_event is not None and not loop.is_closed():
+            try:
+                loop.call_soon_threadsafe(stop_event.set)
+            except RuntimeError:
+                logging.debug("AsyncRuntimeEngine loop 已关闭，忽略 stop 信号", exc_info=True)
         future = self._run_future
         if future is not None and future.done():
             self._run_future = None
@@ -235,43 +335,81 @@ class AsyncRuntimeEngine:
     def pause_run(self, reason: str = "") -> None:
         del reason
         pause_event = self._pause_event
-        if self._loop is not None and pause_event is not None:
-            self._loop.call_soon_threadsafe(pause_event.set)
+        loop = self._loop
+        if loop is not None and pause_event is not None and not loop.is_closed():
+            try:
+                loop.call_soon_threadsafe(pause_event.set)
+            except RuntimeError:
+                logging.debug("AsyncRuntimeEngine loop 已关闭，忽略 pause 信号", exc_info=True)
 
     def resume_run(self) -> None:
         pause_event = self._pause_event
-        if self._loop is not None and pause_event is not None:
-            self._loop.call_soon_threadsafe(pause_event.clear)
+        loop = self._loop
+        if loop is not None and pause_event is not None and not loop.is_closed():
+            try:
+                loop.call_soon_threadsafe(pause_event.clear)
+            except RuntimeError:
+                logging.debug("AsyncRuntimeEngine loop 已关闭，忽略 resume 信号", exc_info=True)
 
-    def parse_survey(self, url: str) -> concurrent.futures.Future[Any]:
+    def parse_survey(self, url: str) -> concurrent.futures.Future[ProviderParseResult]:
         return self._submit(parse_survey(url))
 
-    def submit_ui_task(self, task_name: str, coro_factory: Callable[[], Any]) -> concurrent.futures.Future[Any]:
+    def submit_ui_task(
+        self,
+        task_name: str,
+        coro_factory: Callable[[], Coroutine[Any, Any, Any]],
+    ) -> concurrent.futures.Future[Any]:
         async def _run_task() -> Any:
             logging.debug("AsyncUiTaskService 执行任务：%s", task_name)
-            return await coro_factory()
+            registry = self._ui_task_registry
+            if registry is None:
+                raise RuntimeError("AsyncRuntimeEngine 后台任务注册表未初始化")
+            task = registry.create_task(coro_factory(), name=task_name)
+            return await task
 
         return self._submit(_run_task())
 
     def shutdown(self, *, timeout: float = 5.0) -> None:
-        if self._closed:
-            return
-        self._closed = True
+        timeout_seconds = max(0.0, float(timeout or 0.0))
+        deadline = time.monotonic() + timeout_seconds
+        with self._start_lock:
+            with self._lifecycle_lock:
+                if self._engine_state is EngineState.CLOSED:
+                    return
+                self._engine_state = EngineState.STOPPING
+                thread = self._thread
+                loop = self._loop
+                future = self._run_future
+        if loop is None and thread is not None:
+            self._loop_ready.wait(timeout=max(0.0, deadline - time.monotonic()))
+            with self._lifecycle_lock:
+                loop = self._loop
         self.stop_run()
-        future = self._run_future
-        if future is not None:
+        called_from_engine_thread = thread is threading.current_thread()
+        if future is not None and not called_from_engine_thread:
             try:
-                future.result(timeout=max(0.0, float(timeout or 0.0)))
+                future.result(timeout=max(0.0, deadline - time.monotonic()))
             except Exception:
                 logging.debug("AsyncRuntimeEngine shutdown 等待运行结束失败", exc_info=True)
-        loop = self._loop
-        thread = self._thread
         if loop is not None and not loop.is_closed():
-            loop.call_soon_threadsafe(loop.stop)
-        if thread is not None and thread.is_alive():
-            thread.join(timeout=max(0.0, float(timeout or 0.0)))
-        self._thread = None
-        self._loop = None
+            registry = self._ui_task_registry
+            if registry is not None and not called_from_engine_thread:
+                try:
+                    drain_future = asyncio.run_coroutine_threadsafe(registry.drain(timeout=1.0), loop)
+                    drain_future.result(timeout=max(0.0, deadline - time.monotonic()))
+                except Exception:
+                    logging.warning("等待后台 UI 任务收尾失败", exc_info=True)
+            try:
+                loop.call_soon_threadsafe(loop.stop)
+            except RuntimeError:
+                logging.debug("AsyncRuntimeEngine loop 已关闭，无法发送 stop", exc_info=True)
+        if thread is not None and thread is not threading.current_thread() and thread.is_alive():
+            thread.join(timeout=max(0.0, deadline - time.monotonic()))
+        if thread is None or not thread.is_alive():
+            self._mark_stopped(loop)
+            close_sync_http_clients()
+        elif thread is not None:
+            logging.warning("AsyncRuntimeEngine 在 %.1f 秒关闭期限内未退出", timeout_seconds)
 
 
 class AsyncEngineClient:
@@ -283,6 +421,10 @@ class AsyncEngineClient:
     @property
     def thread(self) -> Optional[threading.Thread]:
         return self._engine.thread
+
+    @property
+    def engine_state(self) -> EngineState:
+        return self._engine.engine_state
 
     def start_run(
         self,
@@ -302,14 +444,18 @@ class AsyncEngineClient:
     def resume_run(self) -> None:
         self._engine.resume_run()
 
-    def parse_survey(self, url: str) -> concurrent.futures.Future[Any]:
+    def parse_survey(self, url: str) -> concurrent.futures.Future[ProviderParseResult]:
         return self._engine.parse_survey(url)
 
-    def submit_ui_task(self, task_name: str, coro_factory: Callable[[], Any]) -> concurrent.futures.Future[Any]:
+    def submit_ui_task(
+        self,
+        task_name: str,
+        coro_factory: Callable[[], Coroutine[Any, Any, Any]],
+    ) -> concurrent.futures.Future[Any]:
         return self._engine.submit_ui_task(task_name, coro_factory)
 
     def shutdown(self, *, timeout: float = 5.0) -> None:
         self._engine.shutdown(timeout=timeout)
 
 
-__all__ = ["AsyncEngineClient", "AsyncRuntimeEngine"]
+__all__ = ["AsyncEngineClient", "AsyncRuntimeEngine", "EngineState"]

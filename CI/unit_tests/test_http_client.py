@@ -308,13 +308,25 @@ class HttpClientTests:
         assert isinstance(second, _FakeAsyncResponse)
         assert len(created_clients) == 1
 
-    def test_async_close_without_running_loop_closes_cached_clients(self, monkeypatch) -> None:
+    def test_async_client_cleanup_closes_clients_owned_by_loop(self, monkeypatch) -> None:
         manager = async_http_client._AsyncClientManager()
         client = _FakeAsyncClient()
-        key = (123, async_http_client._AsyncClientKey(proxy=None, verify=True, follow_redirects=True, trust_env=True))
-        manager._clients[key] = async_http_client._AsyncClientEntry(client=client, last_used=0.0)
         monkeypatch.setattr(async_http_client, "_client_manager", manager)
 
-        async_http_client.close()
+        async def close_owned_client() -> None:
+            loop = asyncio.get_running_loop()
+            key = (
+                id(loop),
+                async_http_client._AsyncClientKey(
+                    proxy=None,
+                    verify=True,
+                    follow_redirects=True,
+                    trust_env=True,
+                ),
+            )
+            manager._clients[key] = async_http_client._AsyncClientEntry(client=client, last_used=0.0)
+            await async_http_client.aclose_for_loop(loop)
+
+        asyncio.run(close_owned_client())
 
         assert client.close_calls == 1

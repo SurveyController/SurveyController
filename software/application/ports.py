@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import concurrent.futures
+import threading
 from collections.abc import Mapping
 from typing import TYPE_CHECKING, Any, Callable, Coroutine, Protocol
 
@@ -11,14 +12,14 @@ if TYPE_CHECKING:
     from software.core.config.schema import RuntimeConfig
     from software.core.task import ExecutionConfig, ExecutionState
     from software.core.engine.runtime_control_port import RuntimeControlPort
-    from surveycore.providers.contracts import SurveyDefinition
+    from software.providers.contracts import ProviderParseResult
 
 
 class RuntimeEnginePort(Protocol):
     @property
     def thread(self) -> Any: ...
 
-    def parse_survey(self, url: str) -> concurrent.futures.Future[SurveyDefinition]: ...
+    def parse_survey(self, url: str) -> concurrent.futures.Future[ProviderParseResult]: ...
 
     def start_run(
         self,
@@ -44,12 +45,28 @@ class RuntimeEnginePort(Protocol):
 class ConfigRepositoryPort(Protocol):
     def load(self, path: str | None = None, *, strict: bool = False) -> RuntimeConfig: ...
 
-    def save(self, config: RuntimeConfig, path: str | None = None) -> str: ...
+    def save(
+        self,
+        config: RuntimeConfig,
+        path: str | None = None,
+        *,
+        include_secrets: bool = False,
+    ) -> str: ...
+
+
+class AiConfigPort(Protocol):
+    def update(self, config: RuntimeConfig) -> None: ...
+
+    def snapshot(self) -> dict[str, Any]: ...
 
 
 class ExecutionPreparerPort(Protocol):
     def __call__(
-        self, config: RuntimeConfig, *, fallback_survey_title: str = "",
+        self,
+        config: RuntimeConfig,
+        *,
+        fallback_survey_title: str = "",
+        stop_signal: threading.Event | None = None,
     ) -> PreparedExecutionArtifacts: ...
 
 
@@ -83,7 +100,18 @@ class AiSettingsPort(Protocol):
 
     def get_settings(self) -> dict[str, Any]: ...
 
-    def save_settings(self, **values: Any) -> None: ...
+    def save_settings(
+        self,
+        *,
+        provider: str | None = None,
+        api_key: str | None = None,
+        base_url: str | None = None,
+        api_protocol: str | None = None,
+        model: str | None = None,
+        system_prompt: str | None = None,
+    ) -> None: ...
+
+    def update_session(self, config: dict[str, Any]) -> dict[str, Any]: ...
 
     def reset_settings(self) -> None: ...
 
@@ -108,6 +136,10 @@ class ProxyOperationsPort(Protocol):
         silent: bool = True,
         min_interval_seconds: float = 0.0,
     ) -> None: ...
+
+
+class RandomIpHealthPort(Protocol):
+    async def check(self) -> dict[str, str]: ...
 
 
 class ProxyGatewayPort(Protocol):

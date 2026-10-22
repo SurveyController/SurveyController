@@ -9,7 +9,7 @@ from importlib import resources
 from typing import Any, Dict, List, Optional, Set, Tuple
 
 import software.network.http as http_client
-from software.app.config import DEFAULT_HTTP_HEADERS
+from software.network.http.defaults import DEFAULT_HTTP_HEADERS
 
 _BENEFIT_AREA_INFO_URL = "https://www.juliangip.com/downLoadAreaInfo"
 _BENEFIT_FETCH_TIMEOUT_SECONDS = 10

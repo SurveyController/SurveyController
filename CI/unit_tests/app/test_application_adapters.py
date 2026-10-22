@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import threading
+from concurrent.futures import Future
 
 import pytest
 from PySide6.QtCore import QSettings
@@ -93,6 +94,33 @@ def test_qt_controller_preserves_queued_snapshot_and_event_order(qtbot):
     assert observed[0][1]["status_text"] == "正在初始化"
     assert observed[0][1]["initialization"]["logs"] == ["正在初始化"]
     assert observed[1][1] == {"type": "cleanup_finished"}
+    controller._command_service.shutdown_for_close(0)
+
+
+def test_controller_submits_random_ip_health_check_to_engine(monkeypatch) -> None:
+    engine = FakeEngine()
+    submitted: list[str] = []
+    task_future: Future[object] = Future()
+    monkeypatch.setattr(
+        engine,
+        "submit_ui_task",
+        lambda name, _factory: submitted.append(name) or task_future,
+    )
+
+    class FakeHealth:
+        async def check(self) -> dict[str, str]:
+            return {"level": "success"}
+
+    dependencies = create_application_dependencies(
+        runtime_engine=engine,
+        cleanup_runner=FakeCleanup(),
+        preference_store=FakePreferences(),
+        random_ip_health=FakeHealth(),
+    )
+    controller = RunController(dependencies=dependencies)
+
+    assert controller.submit_random_ip_health_check() is task_future
+    assert submitted == ["random-ip-health-check"]
     controller._command_service.shutdown_for_close(0)
 
 

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import copy
 import logging
+import threading
 from typing import Any, List, Optional, Tuple, cast
 
 from software.core.engine.constants import HTTP_MAX_THREADS
@@ -20,6 +21,7 @@ from software.core.reverse_fill.validation import (
 from software.core.task import ExecutionConfig
 from software.core.config.schema import RuntimeConfig
 from software.core.config.codec import clone_questions_info
+from software.network.http.defaults import DEFAULT_HTTP_HEADERS
 from software.network.proxy import set_proxy_occupy_minute_by_answer_duration
 from software.providers.common import (
     SURVEY_PROVIDER_WJX,
@@ -84,20 +86,26 @@ def _validate_answer_datetime_window(config: RuntimeConfig, survey_provider: str
         raise RuntimePreparationError("见数作答时间窗太窄，容不下当前最长作答时长")
 
 
-def _verify_wjx_survey_is_answerable(config: RuntimeConfig, survey_provider: str) -> None:
+def _verify_wjx_survey_is_answerable(
+    config: RuntimeConfig,
+    survey_provider: str,
+    stop_signal: threading.Event | None = None,
+) -> None:
     if survey_provider != SURVEY_PROVIDER_WJX:
         return
     url = str(getattr(config, "url", "") or "").strip()
     if not url:
         return
+    if stop_signal is not None and stop_signal.is_set():
+        return
     try:
         import software.network.http as http_client
-        from software.app.config import DEFAULT_HTTP_HEADERS
-
         response = http_client.get(url, timeout=8, headers=DEFAULT_HTTP_HEADERS, proxies={})
         response.raise_for_status()
     except Exception:
         logging.info("启动前问卷星状态复查失败，已放行到运行时处理", exc_info=True)
+        return
+    if stop_signal is not None and stop_signal.is_set():
         return
     html = str(getattr(response, "text", "") or "")
     if is_stopped_survey_page(html):
@@ -215,7 +223,10 @@ def prepare_execution_artifacts(
     config: RuntimeConfig,
     *,
     fallback_survey_title: str = "",
+    stop_signal: threading.Event | None = None,
 ) -> PreparedExecutionArtifacts:
+    if stop_signal is not None and stop_signal.is_set():
+        raise RuntimePreparationError("运行准备已取消")
     question_entries = list(getattr(config, "question_entries", []) or [])
     if not question_entries:
         raise RuntimePreparationError(
@@ -226,12 +237,14 @@ def prepare_execution_artifacts(
     survey_provider = _resolve_survey_provider(config)
     _validate_answer_datetime_window(config, survey_provider)
     try:
-        _verify_wjx_survey_is_answerable(config, survey_provider)
+        _verify_wjx_survey_is_answerable(config, survey_provider, stop_signal)
     except (SurveyStoppedError, SurveyEnterpriseUnavailableError) as exc:
         raise RuntimePreparationError(
             str(exc),
             log_message=f"启动前问卷状态检查失败：{exc}",
         ) from exc
+    if stop_signal is not None and stop_signal.is_set():
+        raise RuntimePreparationError("运行准备已取消")
 
     questions_info = clone_questions_info(
         getattr(config, "questions_info", []) or [],
@@ -251,11 +264,15 @@ def prepare_execution_artifacts(
             config,
             questions_info_inputs,
             question_entries,
+            cancellation_check=stop_signal.is_set if stop_signal is not None else None,
         )
     except Exception as exc:
         raise RuntimePreparationError(
             str(exc), log_message=f"反填配置验证失败：{exc}", detailed=True
         ) from exc
+
+    if stop_signal is not None and stop_signal.is_set():
+        raise RuntimePreparationError("运行准备已取消")
 
     try:
         set_proxy_occupy_minute_by_answer_duration(

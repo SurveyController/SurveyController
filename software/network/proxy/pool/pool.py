@@ -6,7 +6,7 @@ from typing import Any, List, Optional, Tuple
 
 import software.network.http as http_client
 from software.core.task import ProxyLease
-from software.app.config import (
+from software.network.config import (
     PROXY_HEALTH_CHECK_TIMEOUT,
     PROXY_HEALTH_CHECK_URL,
     PROXY_SOURCE_DEFAULT,

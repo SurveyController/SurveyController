@@ -51,7 +51,12 @@ def _build_live_test_config(url: str) -> RuntimeConfig:
     if not normalized_url:
         raise ValueError("问卷链接为空")
 
-    definition = asyncio.run(parse_survey(normalized_url))
+    result = asyncio.run(parse_survey(normalized_url))
+    if result.failure is not None:
+        raise result.failure.exception
+    definition = result.definition
+    if definition is None:
+        raise RuntimeError("Provider 返回了空的解析结果")
     questions_info = [question for question in definition.questions if not question.is_description]
     question_entries = build_default_question_entries(
         questions_info,
@@ -84,10 +89,17 @@ def main() -> int:
     args = parser.parse_args()
 
     from software.app.settings_store import app_settings
-    from software.app.user_paths import get_default_runtime_config_path
+    from software.app.user_paths import (
+        get_default_runtime_config_path,
+        get_legacy_runtime_config_path,
+    )
     from software.io.runtime_environment import configure_runtime_environment
 
-    configure_runtime_environment(app_settings, get_default_runtime_config_path)
+    configure_runtime_environment(
+        app_settings,
+        get_default_runtime_config_path,
+        get_legacy_runtime_config_path,
+    )
 
     try:
         logging.disable(logging.CRITICAL)

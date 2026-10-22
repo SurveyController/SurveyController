@@ -8,8 +8,8 @@ from typing import Any, List, Optional, Set
 import software.network.http as http_client
 from software.core.task import ProxyLease
 from software.network.proxy.session.auth import extract_proxy_async, format_random_ip_error
-from software.app.config import (
-    DEFAULT_HTTP_HEADERS,
+from software.network.http.defaults import DEFAULT_HTTP_HEADERS
+from software.network.config import (
     PROXY_MAX_PROXIES,
     PROXY_POOL_QUALITY,
     PROXY_SOURCE_CUSTOM,

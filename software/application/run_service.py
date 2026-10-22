@@ -15,21 +15,24 @@ from software.application.ports import (
 )
 from software.application.interactions import InteractionKind, InteractionRequest
 from software.core.config.schema import RuntimeConfig
-from software.core.engine.failure_reason import FailureReason
 from software.core.task import ExecutionConfig, ExecutionState, ProxyLease
 from software.application.runtime_port import RunRuntimePort
 from software.application.run_state_store import RunStateStore
-from software.core.engine.execution_artifacts import PreparedExecutionArtifacts, RuntimePreparationError
+from software.core.engine.execution_artifacts import PreparedExecutionArtifacts
+from software.application.run_parts.preparation_job import PreparationJob
+from software.application.run_parts.run_lifecycle import RunLifecycleCoordinator
 from software.application.run_parts.runtime_random_ip import (
     RandomIpRuntimeService,
 )
 from software.application.run_parts.runtime_shutdown import (
     request_shutdown_for_close,
     shutdown_for_close,
+    wait_for_shutdown,
 )
 
 from software.application.run_parts.runtime_status import (
-    emit_terminal_notice, monitor_runtime, publish_runtime_snapshot,
+    RuntimeProjection,
+    monitor_runtime,
 )
 
 
@@ -97,6 +100,7 @@ class RunApplicationService(RandomIpRuntimeService):
         self._starting = False
         self._initializing = False
         self._init_gate_stop_event: threading.Event | None = None
+        self._preparation_job: PreparationJob | None = None
         self._prepared_execution_artifacts: PreparedExecutionArtifacts | None = None
         self.stop_event = threading.Event()
         self.worker_threads: List[threading.Thread] = []
@@ -106,6 +110,7 @@ class RunApplicationService(RandomIpRuntimeService):
         self._execution_state: Optional[ExecutionState] = None
         self._close_shutdown_lock = threading.Lock()
         self._close_shutdown_thread: Optional[threading.Thread] = None
+        self._close_shutdown_complete = threading.Event()
         self._random_ip_toggle_lock = threading.Lock()
         self._random_ip_toggle_active = False
         self._random_ip_server_sync_lock = threading.Lock()
@@ -121,6 +126,8 @@ class RunApplicationService(RandomIpRuntimeService):
             notify_random_ip_loading=self.notify_random_ip_loading,
             handle_random_ip_submission=self.handle_random_ip_submission,
         )
+        self._lifecycle = RunLifecycleCoordinator(self)
+        self._runtime_projection = RuntimeProjection(self)
         self.adapter = _ProxyStateAdapter(self)
 
     def _dispatch(self, callback: Callable[[], Any]) -> None:
@@ -171,12 +178,31 @@ class RunApplicationService(RandomIpRuntimeService):
         self._last_loaded_config = cfg
         return cfg
 
-    def save_config(self, config: RuntimeConfig, path: Optional[str] = None) -> str:
+    def save_config(
+        self,
+        config: RuntimeConfig,
+        path: Optional[str] = None,
+        *,
+        include_secrets: bool = False,
+    ) -> str:
         self._last_loaded_config = config
-        return self._configuration_service.save(config, path)
+        return self._configuration_service.save(
+            config,
+            path,
+            include_secrets=include_secrets,
+        )
 
-    def save_current_config(self, path: Optional[str] = None) -> str:
-        return self._configuration_service.save(self._last_loaded_config, path)
+    def save_current_config(
+        self,
+        path: Optional[str] = None,
+        *,
+        include_secrets: bool = False,
+    ) -> str:
+        return self._configuration_service.save(
+            self._last_loaded_config,
+            path,
+            include_secrets=include_secrets,
+        )
 
     def _prepare_engine_state(
         self,
@@ -205,73 +231,7 @@ class RunApplicationService(RandomIpRuntimeService):
         self._start_workers_with_proxy_pool(config, list(proxy_pool))
 
     def start_run(self, config: RuntimeConfig) -> None:
-        if self._closing:
-            return
-        previous_preparation = self._init_gate_thread
-        if self.running or self._starting or self._initializing or self._stopping or (
-            previous_preparation is not None and previous_preparation.is_alive()
-        ):
-            logging.warning("任务仍在运行或停止收尾中，忽略重复启动请求")
-            return
-
-        self._last_loaded_config = config
-        self._state_store.hydrate_from_config(config, emit=True)
-
-        self.stop_event = threading.Event()
-        stop_signal = self.stop_event
-        self.runtime_port = RunRuntimePort(
-            stop_signal=stop_signal,
-            notify_random_ip_loading=self.notify_random_ip_loading,
-            handle_random_ip_submission=self.handle_random_ip_submission,
-        )
-        self.runtime_port.set_random_ip_enabled(bool(config.random_ip_enabled))
-        self._execution_state = None
-        self._paused_state = False
-        self._stopping = False
-        self._completion_cleanup_done = False
-        self._cleanup_scheduled = False
-        self._terminal_notice_emitted = False
-        self._starting = True
-        self._initializing = True
-        self._state_store.apply_runtime_patch({
-            "phase": "initializing", "running": False, "paused": False, "stopping": False,
-            "pause_reason": "",
-            "progress": {"current": 0, "target": 0, "consecutive_failures": 0, "device_quota_fail_count": 0},
-            "threads": {"rows": [], "num_threads": 0, "per_thread_target": 0},
-            "initialization": {"active": True, "stage": "preparing"},
-            "terminal_stop": {"category": "", "failure_reason": "", "message": ""},
-        })
-        fallback_title = str(self._state_store.get_survey_snapshot().get("survey_title") or "")
-
-        def prepare() -> None:
-            try:
-                prepared = self._execution_preparer(config, fallback_survey_title=fallback_title)
-            except Exception as exc:
-                if isinstance(exc, RuntimePreparationError):
-                    logging.error(exc.log_message, exc_info=exc.detailed)
-                    detail = exc.user_message
-                else:
-                    logging.exception("运行准备失败")
-                    detail = str(exc)
-                callback = lambda detail=detail: self._fail_start(stop_signal, "run_preparation_failed", detail)
-            else:
-                callback = lambda: self._complete_preparation(config, prepared, stop_signal)
-            try:
-                self._dispatch(callback)
-            except Exception:
-                stop_signal.set()
-                if stop_signal is self.stop_event:
-                    self._starting = False
-                    self._initializing = False
-                    self._state_store.apply_runtime_patch({
-                        "phase": "failed", "initialization": {"active": False, "stage": ""},
-                        "terminal_stop": {"category": "dispatch_failed", "failure_reason": "", "message": ""},
-                    }, emit=False)
-                logging.warning("派发运行准备结果失败", exc_info=True)
-
-        thread = threading.Thread(target=prepare, daemon=True, name="RuntimePreparation")
-        self._init_gate_thread = thread
-        thread.start()
+        self._lifecycle.start_run(config)
 
     def _fail_start(self, stop_signal: threading.Event, category: str, detail: str) -> None:
         if self._closing or stop_signal is not self.stop_event or stop_signal.is_set():
@@ -352,10 +312,9 @@ class RunApplicationService(RandomIpRuntimeService):
         )
         self._start_status_snapshot_monitor(execution_state)
 
-        runtime_thread = self._async_engine_client.thread
-        self.worker_threads = (
-            [runtime_thread] if isinstance(runtime_thread, threading.Thread) else []
-        )
+        # AsyncRuntimeEngine owns its loop thread and is shut down through its port.
+        # Keep this list for application-owned worker threads only.
+        self.worker_threads = []
         monitor = threading.Thread(
             target=self._wait_for_async_run,
             args=(run_future, execution_state, self.stop_event),
@@ -384,90 +343,13 @@ class RunApplicationService(RandomIpRuntimeService):
         monitor_runtime(self, execution_state, stop_signal)
 
     def stop_run(self) -> None:
-        ctx = self._execution_state
-        if ctx is not None:
-            ctx.mark_terminal_stop(
-                "user_stopped",
-                failure_reason=FailureReason.USER_STOPPED.value,
-            )
-        if self._starting and not self.running:
-            self.stop_event.set()
-            gate_stop = self._init_gate_stop_event
-            if gate_stop is not None:
-                gate_stop.set()
-            self._prepared_execution_artifacts = None
-            self._starting = False
-            self._initializing = False
-            self._state_store.apply_runtime_patch(
-                {
-                    "phase": "finished",
-                    "running": False,
-                    "paused": False,
-                    "stopping": False,
-                    "terminal_stop": {
-                        "category": "user_stopped",
-                        "failure_reason": FailureReason.USER_STOPPED.value,
-                        "message": "",
-                    },
-                    "initialization": {"active": False, "stage": ""},
-                },
-                emit=not self._closing,
-            )
-            return
-        if not self.running:
-            return
-        try:
-            self._async_engine_client.stop_run()
-        except Exception:
-            logging.debug("停止 async-first 内核失败", exc_info=True)
-        self.stop_event.set()
-        gate_stop = self._init_gate_stop_event
-        if gate_stop is not None:
-            gate_stop.set()
-        try:
-            self.runtime_port.resume_run()
-        except Exception:
-            logging.debug("停止时恢复暂停状态失败", exc_info=True)
-        try:
-            self._async_engine_client.resume_run()
-        except Exception:
-            logging.debug("停止时恢复 async-first 内核暂停状态失败", exc_info=True)
-        self._stopping = True
-        self._paused_state = False
-        self._stopped_by_stop_run = True
-        self._state_store.apply_runtime_patch(
-            {
-                "phase": "stopping",
-                "running": True,
-                "paused": False,
-                "stopping": True,
-            },
-            emit=not self._closing,
-        )
-        self.emit_status_snapshot()
+        self._lifecycle.stop_run()
 
     def pause_run(self, reason: str = "") -> None:
-        if not self.running or self._stopping:
-            return
-        self._async_engine_client.pause_run(reason)
-        self.runtime_port.pause_run(reason)
-        self._paused_state = True
-        self.emit_status_snapshot()
+        self._lifecycle.pause_run(reason)
 
     def resume_run(self) -> None:
-        if not self.running:
-            return
-        try:
-            self._async_engine_client.resume_run()
-        except Exception:
-            logging.debug("恢复 async-first 内核运行失败", exc_info=True)
-        try:
-            self.runtime_port.resume_run()
-        except Exception:
-            logging.debug("恢复运行时清除暂停状态失败", exc_info=True)
-        if self._paused_state:
-            self._paused_state = False
-        self.emit_status_snapshot()
+        self._lifecycle.resume_run()
 
     def _wait_for_async_run(
         self,
@@ -552,7 +434,7 @@ class RunApplicationService(RandomIpRuntimeService):
         self._submit_cleanup_task(delay_seconds=STOP_FORCE_WAIT_SECONDS)
 
     def emit_status_snapshot(self) -> None:
-        publish_runtime_snapshot(self)
+        self._runtime_projection.publish()
 
     def request_shutdown_for_close(self, timeout_seconds: float = 5.0) -> None:
         request_shutdown_for_close(self, timeout_seconds)
@@ -560,8 +442,11 @@ class RunApplicationService(RandomIpRuntimeService):
     def shutdown_for_close(self, timeout_seconds: float = 5.0) -> bool:
         return shutdown_for_close(self, timeout_seconds)
 
+    def wait_for_shutdown(self, timeout_seconds: float = 5.0) -> bool:
+        return wait_for_shutdown(self, timeout_seconds)
+
     def _emit_terminal_notice_if_needed(self) -> None:
-        emit_terminal_notice(self)
+        self._runtime_projection.emit_terminal_notice()
 
 
 

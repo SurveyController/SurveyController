@@ -10,7 +10,7 @@ from software.application.interactions import InteractionBroker
 from software.application.run_service import RunApplicationService
 from software.application.run_state_store import RunStateStore
 from software.core.config.schema import RuntimeConfig
-from software.core.engine.execution_artifacts import PreparedExecutionArtifacts
+from software.core.engine.execution_artifacts import PreparedExecutionArtifacts, RuntimePreparationError
 from software.core.task import ExecutionConfig
 
 
@@ -44,7 +44,8 @@ class FakeRepository:
         self.load_args = (path, strict)
         return self.config
 
-    def save(self, config, path=None):
+    def save(self, config, path=None, *, include_secrets=False):
+        del include_secrets
         self.saved = (config, path)
         return path or "default.json"
 
@@ -132,7 +133,15 @@ class FakeCleanup:
         self.tasks.append((task, delay_seconds))
 
 
-def prepare(config: RuntimeConfig, *, fallback_survey_title=""):
+def prepare(
+    config: RuntimeConfig,
+    *,
+    fallback_survey_title: str = "",
+    stop_signal=None,
+) -> PreparedExecutionArtifacts:
+    del fallback_survey_title
+    if stop_signal is not None and stop_signal.is_set():
+        raise RuntimePreparationError("运行准备已取消")
     return PreparedExecutionArtifacts(
         execution_config_template=ExecutionConfig(target_num=config.target, num_threads=config.threads),
         survey_provider=config.survey_provider,

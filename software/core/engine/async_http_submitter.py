@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 from typing import Any, Optional
 
 from surveycore.core.engine.stop_signal import StopSignalLike
@@ -10,8 +11,9 @@ from software.providers.common import (
     SURVEY_PROVIDER_WJX,
     normalize_survey_provider,
 )
-from surveycore.providers.http_logic import get_http_logic_fallback_reason
+from software.providers.contracts import ProviderFailure
 from software.providers.registry import fill_survey_http
+from surveycore.providers.http_logic import get_http_logic_fallback_reason
 
 HTTP_RUNTIME_PROVIDERS = {
     SURVEY_PROVIDER_WJX,
@@ -57,19 +59,35 @@ class AsyncHttpSubmitter:
         user_agent_profile: Any = None,
         submit_proxy_lease_factory: Any = None,
     ) -> bool:
-        return bool(
-            await fill_survey_http(
-                self.config,
-                self.state,
-                stop_signal=stop_signal,
-                thread_name=self.slot_label,
-                provider=self.config.survey_provider,
-                proxy_address=proxy_address,
-                user_agent=user_agent,
-                user_agent_profile=user_agent_profile,
-                submit_proxy_lease_factory=submit_proxy_lease_factory,
-            )
+        result = await fill_survey_http(
+            self.config,
+            self.state,
+            stop_signal=stop_signal,
+            thread_name=self.slot_label,
+            provider=self.config.survey_provider,
+            proxy_address=proxy_address,
+            user_agent=user_agent,
+            user_agent_profile=user_agent_profile,
+            submit_proxy_lease_factory=submit_proxy_lease_factory,
         )
+        if result.failure is not None:
+            _record_provider_failure(result.failure, operation="提交")
+            raise result.failure.exception
+        return result.submitted
+
+
+def _record_provider_failure(failure: ProviderFailure, *, operation: str) -> None:
+    category = failure.category.value
+    logging.error(
+        "Provider[%s] %s失败 category=%s: %s",
+        failure.provider,
+        operation,
+        category,
+        failure.message,
+    )
+    add_note = getattr(failure.exception, "add_note", None)
+    if callable(add_note):
+        add_note(f"provider={failure.provider}; category={category}")
 
 
 __all__ = ["AsyncHttpSubmitter", "HTTP_RUNTIME_PROVIDERS"]

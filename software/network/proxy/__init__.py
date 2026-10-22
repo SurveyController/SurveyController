@@ -45,7 +45,7 @@ from software.network.proxy.pool import (
     prefetch_proxy_pool,
     proxy_lease_has_sufficient_ttl,
 )
-from software.app.config import PROXY_SOURCE_CUSTOM, PROXY_SOURCE_DEFAULT
+from software.network.config import PROXY_SOURCE_CUSTOM, PROXY_SOURCE_DEFAULT
 from software.network.proxy.session import format_quota_value
 
 __all__ = [

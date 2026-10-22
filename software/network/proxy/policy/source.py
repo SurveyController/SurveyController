@@ -11,7 +11,7 @@ from software.network.proxy.session.auth import (
     is_quota_exhausted,
 )
 
-from software.app.config import (
+from software.network.config import (
     IP_EXTRACT_ENDPOINT,
     PROXY_MINUTE_OPTIONS,
     PROXY_POOL_QUALITY,

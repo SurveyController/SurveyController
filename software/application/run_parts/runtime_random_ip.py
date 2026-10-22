@@ -301,9 +301,9 @@ class RandomIpRuntimeService:
         if not adapter:
             return
         try:
-            self._submit_random_ip_background_task(
+            self._submit_random_ip_task(
                 "sync_random_ip_counter_from_server",
-                lambda: self._run_sync_random_ip_counter_from_server_task(
+                lambda: self._sync_random_ip_counter_from_server_task(
                     adapter=adapter,
                     silent=silent,
                     min_interval_seconds=min_interval_seconds,
@@ -311,21 +311,6 @@ class RandomIpRuntimeService:
             )
         except Exception:
             logging.info("提交随机IP额度同步任务失败", exc_info=True)
-
-    def _run_sync_random_ip_counter_from_server_task(
-        self,
-        *,
-        adapter: Optional[Any],
-        silent: bool,
-        min_interval_seconds: float,
-    ) -> None:
-        asyncio.run(
-            self._sync_random_ip_counter_from_server_task(
-                adapter=adapter,
-                silent=silent,
-                min_interval_seconds=min_interval_seconds,
-            )
-        )
 
     async def _try_activate_random_ip_trial_async(
         self,
