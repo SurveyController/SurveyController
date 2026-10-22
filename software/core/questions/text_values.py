@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Any, Optional, Sequence
 
-from software.app.config import DEFAULT_FILL_TEXT
+from software.core.text_constants import DEFAULT_FILL_TEXT
 from software.core.ai.runtime import AIRuntimeError, agenerate_ai_answer, build_ai_option_fill_prompt
 from software.core.task import ExecutionState
 from surveycore.core.questions.text_values import resolve_text_values_from_config

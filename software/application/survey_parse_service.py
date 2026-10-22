@@ -5,9 +5,12 @@ import logging
 from typing import Any, Callable
 
 from software.application.events import ApplicationEvent
+from software.application.ports import RuntimeEnginePort
+from software.application.run_state_store import RunStateStore
 from software.core.config.schema import RuntimeConfig
-from surveycore.core.questions.config import build_default_question_entries
 from software.providers.common import is_supported_survey_url
+from software.providers.contracts import ProviderFailure, ProviderParseResult
+from surveycore.core.questions.config import build_default_question_entries
 from surveycore.providers.contracts import SurveyDefinition
 from surveycore.providers.errors import (
     SurveyEnterpriseUnavailableError,
@@ -15,8 +18,6 @@ from surveycore.providers.errors import (
     SurveyPausedError,
     SurveyStoppedError,
 )
-from software.application.ports import RuntimeEnginePort
-from software.application.run_state_store import RunStateStore
 
 
 class SurveyParseService:
@@ -34,7 +35,7 @@ class SurveyParseService:
         self._dispatch_async = dispatch_async
         self._generation = 0
         self._closed = False
-        self._parse_future: concurrent.futures.Future[SurveyDefinition] | None = None
+        self._parse_future: concurrent.futures.Future[ProviderParseResult] | None = None
 
     def close(self) -> None:
         self._closed = True
@@ -126,12 +127,18 @@ class SurveyParseService:
                 }
             )
 
-        def _on_done(done_future: concurrent.futures.Future[SurveyDefinition]) -> None:
+        def _on_done(done_future: concurrent.futures.Future[ProviderParseResult]) -> None:
             if self._closed or generation != self._generation:
                 return
             callback: Callable[[], None]
             try:
-                definition = done_future.result()
+                result = done_future.result()
+                if result.failure is not None:
+                    _record_provider_failure(result.failure)
+                    raise result.failure.exception
+                if result.definition is None:
+                    raise RuntimeError("Provider 返回了空的解析结果")
+                definition = result.definition
             except (
                 SurveyPausedError, SurveyStoppedError,
                 SurveyEnterpriseUnavailableError, SurveyNotOpenError,
@@ -171,6 +178,19 @@ class SurveyParseService:
 
     def replace_question_entries(self, entries: Any, *, questions_info: Any = None) -> None:
         self._state_store.replace_question_entries(entries, questions_info=questions_info)
+
+
+def _record_provider_failure(failure: ProviderFailure) -> None:
+    category = failure.category.value
+    logging.error(
+        "Provider[%s] 解析失败 category=%s: %s",
+        failure.provider,
+        category,
+        failure.message,
+    )
+    add_note = getattr(failure.exception, "add_note", None)
+    if callable(add_note):
+        add_note(f"provider={failure.provider}; category={category}")
 
 
 __all__ = ["SurveyParseService"]

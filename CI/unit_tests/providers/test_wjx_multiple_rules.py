@@ -1,18 +1,23 @@
 from __future__ import annotations
 
 
-from surveycore.wjx.provider.questions import multiple_rules
+from software.providers.surveycore_compat import (
+    _apply_rule_constraints,
+    _normalize_selected_indices,
+    _resolve_rule_sets,
+    _wjx_multiple_rules as multiple_rules,
+)
 
 
 class MultipleRulesTests:
     def test_normalize_selected_indices_deduplicates_and_filters_out_of_range(self) -> None:
-        result = multiple_rules._normalize_selected_indices([2, 2, -1, 1, 5, 0, 1], 3)
+        result = _normalize_selected_indices([2, 2, -1, 1, 5, 0, 1], 3)
 
         assert result == [2, 1, 0]
 
     def test_resolve_rule_sets_prefers_required_when_required_and_blocked_overlap(self, caplog) -> None:
         with caplog.at_level("WARNING"):
-            required, blocked = multiple_rules._resolve_rule_sets(
+            required, blocked = _resolve_rule_sets(
                 {3, 1, 10},
                 {1, 2, 8},
                 option_count=4,
@@ -28,7 +33,7 @@ class MultipleRulesTests:
         monkeypatch.setattr(multiple_rules.random, "shuffle", lambda values: values.reverse())
 
         with caplog.at_level("WARNING"):
-            result = multiple_rules._apply_rule_constraints(
+            result = _apply_rule_constraints(
                 selected_indices=[4, 3, 2, 2, 1],
                 option_count=5,
                 min_required=1,
@@ -52,7 +57,7 @@ class MultipleRulesTests:
 
         monkeypatch.setattr(multiple_rules.random, "shuffle", fake_shuffle)
 
-        result = multiple_rules._apply_rule_constraints(
+        result = _apply_rule_constraints(
             selected_indices=[2],
             option_count=6,
             min_required=4,
@@ -71,7 +76,7 @@ class MultipleRulesTests:
         monkeypatch.setattr(multiple_rules.random, "shuffle", lambda _values: None)
 
         with caplog.at_level("WARNING"):
-            result = multiple_rules._apply_rule_constraints(
+            result = _apply_rule_constraints(
                 selected_indices=[],
                 option_count=3,
                 min_required=3,

@@ -24,7 +24,7 @@ from surveycore.wjx.provider.http_runtime import (
     _proxy_arg as _proxy_arg,
     _question_error_label as _question_error_label,
     _question_items as _question_items,
-    _raise_submit_rejected as _raise_submit_rejected,
+    _raise_submit_rejected as _raise_submit_rejected_legacy,
     _resolve_wjx_channel_profile as _resolve_wjx_channel_profile,
     _resolve_wjx_submit_start_seconds as _resolve_wjx_submit_start_seconds,
     _resolve_wjx_submit_timing as _resolve_wjx_submit_timing,
@@ -39,28 +39,45 @@ from surveycore.wjx.provider.http_runtime import (
 )
 
 import software.network.http as http_client
-from software.app.config import DEFAULT_HTTP_HEADERS, DEFAULT_USER_AGENT, USER_AGENT_PRESETS
+from software.core.config.user_agents import DEFAULT_USER_AGENT, USER_AGENT_PRESETS
 from software.core.ai.batch_runtime import assert_no_ai_placeholders_in_actions, prefill_ai_answers_for_questions
 from software.core.config.codec import UserAgentProfile
 from surveycore.core.persona.context import record_answer
 from surveycore.core.questions.distribution import record_pending_distribution_choice
 from software.core.task import ExecutionConfig, ExecutionState
 from software.network.proxy.pool import mask_proxy_for_log
-from software.network.session_policy import SubmitProxyUnavailableError, mark_submit_proxy_success, release_submit_proxy
+from software.network.http.defaults import DEFAULT_HTTP_HEADERS
+from software.network.session_policy import SubmitProxyUnavailableError, mark_submit_proxy_success
 from surveycore.providers.answering import AnswerAction
 from surveycore.providers.answering.recording import record_answer_action
 from surveycore.providers.http_logic import HttpLogicPlan, build_http_logic_plan
 from surveycore.providers.http_progress import update_http_submit_step
 from surveycore.providers.contracts import SurveyQuestionMeta
 from surveycore.providers.errors import (
+    SubmissionVerificationRequiredError,
     SurveyEnterpriseUnavailableError,
     SurveyNotOpenError,
     SurveyPausedError,
     SurveyProviderUnavailableAtRuntimeError,
     SurveyStoppedError,
 )
+from software.providers.contracts import ProviderSubmissionRejectedError
 from wjx.provider.answering_builders import build_answer_action
 from wjx.provider.parser import _parse_wjx_html, _raise_wjx_page_state_errors
+
+
+def _raise_submit_rejected(
+    config: ExecutionConfig,
+    response_text: str,
+    *,
+    proxy_address: str | None = None,
+) -> None:
+    try:
+        _raise_submit_rejected_legacy(config, response_text, proxy_address=proxy_address)
+    except SubmissionVerificationRequiredError:
+        raise
+    except RuntimeError as exc:
+        raise ProviderSubmissionRejectedError(str(exc)) from exc
 
 
 _WJX_PAGE_LOAD_TIMEOUT_SECONDS = 20
@@ -251,28 +268,21 @@ async def brush_wjx_http(
         submit_proxies = _proxy_arg(submit_proxy_address)
         if str(submit_proxy_address or "").strip():
             logging.debug("问卷星 HTTP 提交使用随机IP：%s", mask_proxy_for_log(submit_proxy_address))
-        try:
-            response = await http_client.apost(
-                submit_url,
-                params=params,
-                data={"submitdata": submitdata, "sceneId": scene_id},
-                headers={
-                    **headers,
-                    "Accept": "text/plain, */*; q=0.01",
-                    "Content-Type": "application/x-www-form-urlencoded; charset=UTF-8",
-                    "Origin": f"https://{domain}",
-                    "X-Requested-With": "XMLHttpRequest",
-                },
-                timeout=_WJX_SUBMIT_TIMEOUT_SECONDS,
-                proxies=submit_proxies,
-            )
-            response.raise_for_status()
-            if submit_proxy_address and thread_name:
-                release_submit_proxy(ctx, thread_name, submit_proxy_address)
-        except Exception:
-            if submit_proxy_address and thread_name:
-                release_submit_proxy(ctx, thread_name, submit_proxy_address)
-            raise
+        response = await http_client.apost(
+            submit_url,
+            params=params,
+            data={"submitdata": submitdata, "sceneId": scene_id},
+            headers={
+                **headers,
+                "Accept": "text/plain, */*; q=0.01",
+                "Content-Type": "application/x-www-form-urlencoded; charset=UTF-8",
+                "Origin": f"https://{domain}",
+                "X-Requested-With": "XMLHttpRequest",
+            },
+            timeout=_WJX_SUBMIT_TIMEOUT_SECONDS,
+            proxies=submit_proxies,
+        )
+        response.raise_for_status()
         await update_http_submit_step(ctx, thread_name, "校验结果")
         response_text = str(response.text or "").strip()
         if classify_wjx_submit_response(response_text) != WjxSubmitResult.SUCCESS:

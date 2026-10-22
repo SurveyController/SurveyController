@@ -5,32 +5,51 @@ from types import SimpleNamespace
 from unittest.mock import AsyncMock, patch
 
 from software.core.task import ExecutionConfig, ExecutionState
-from software.providers import registry
+from software.network.session_policy import SubmitProxyUnavailableError
+from software.providers import deprecated_browser, registry
+from software.providers.adapter_base import CallableProviderAdapter, ProviderAdapterHooks
 from software.providers.common import SURVEY_PROVIDER_CREDAMO, SURVEY_PROVIDER_QQ, SURVEY_PROVIDER_WJX
+from software.providers.contracts import (
+    ProviderErrorCategory,
+    ProviderParseResult,
+    ProviderSubmissionRejectedError,
+    ProviderSubmissionResult,
+)
 from surveycore.providers.contracts import SurveyDefinition
+from surveycore.providers.errors import SubmissionVerificationRequiredError
 from surveycore.providers.hooks import build_fill_http_hook, build_parse_hook
 
 
 async def test_parse_survey_routes_detected_provider_directly() -> None:
     qq_url = "https://wj.qq.com/s2/123/demo"
-    adapter = SimpleNamespace(parse_survey_async=AsyncMock(return_value="qq-definition"))
+    definition = SurveyDefinition(provider="qq", title="问卷", questions=[])
+    adapter = SimpleNamespace(
+        parse_survey_async=AsyncMock(
+            return_value=ProviderParseResult(provider="qq", definition=definition)
+        )
+    )
 
     with patch.object(registry, "_get_provider_adapter", return_value=adapter):
         result = await registry.parse_survey(qq_url)
 
-    assert result == "qq-definition"
+    assert result.definition is definition
     adapter.parse_survey_async.assert_awaited_once_with(qq_url)
 
 
 async def test_parse_survey_normalizes_credamo_short_url_before_dispatch() -> None:
     short_url = "https://www.credamo.com/s/demo/"
     normalized_url = "https://www.credamo.com/answer.html#/s/demo/"
-    adapter = SimpleNamespace(parse_survey_async=AsyncMock(return_value="credamo-definition"))
+    definition = SurveyDefinition(provider="credamo", title="问卷", questions=[])
+    adapter = SimpleNamespace(
+        parse_survey_async=AsyncMock(
+            return_value=ProviderParseResult(provider="credamo", definition=definition)
+        )
+    )
 
     with patch.object(registry, "_get_provider_adapter", return_value=adapter) as adapter_mock:
         result = await registry.parse_survey(short_url)
 
-    assert result == "credamo-definition"
+    assert result.definition is definition
     adapter_mock.assert_called_once_with(url=normalized_url)
     adapter.parse_survey_async.assert_awaited_once_with(normalized_url)
 
@@ -52,9 +71,9 @@ async def test_fill_survey_uses_provider_run_context_and_selected_adapter() -> N
 
     with (
         patch.object(adapter, "fill_survey_async", new=AsyncMock(return_value=True)) as fill_mock,
-        patch.object(registry, "provider_run_context", fake_provider_run_context),
+        patch.object(deprecated_browser, "provider_run_context", fake_provider_run_context),
     ):
-        result = await registry.fill_survey(
+        result = await deprecated_browser.fill_survey(
             object(),
             ExecutionConfig(survey_provider=SURVEY_PROVIDER_WJX),
             state,
@@ -78,7 +97,11 @@ async def test_fill_survey_http_routes_credamo_adapter() -> None:
         yield "resolved-plan"
 
     with (
-        patch.object(adapter, "fill_survey_http_async", new=AsyncMock(return_value=True)) as fill_mock,
+        patch.object(
+            adapter,
+            "fill_survey_http_async",
+            new=AsyncMock(return_value=ProviderSubmissionResult(provider="credamo", submitted=True)),
+        ) as fill_mock,
         patch.object(registry, "provider_run_context", fake_provider_run_context),
     ):
         result = await registry.fill_survey_http(
@@ -92,17 +115,112 @@ async def test_fill_survey_http_routes_credamo_adapter() -> None:
             user_agent="UA",
         )
 
-    assert result is True
+    assert result.succeeded is True
     assert fill_mock.await_args.kwargs["psycho_plan"] == "resolved-plan"
     assert fill_mock.await_args.kwargs["proxy_address"] == "http://1.1.1.1:80"
     assert fill_mock.await_args.kwargs["user_agent"] == "UA"
+
+
+async def test_provider_adapter_classifies_submission_failure() -> None:
+    async def parse(_url: str) -> SurveyDefinition:
+        return SurveyDefinition(provider="wjx", title="问卷", questions=[])
+
+    async def fill(*_args, **_kwargs) -> bool:
+        return False
+
+    async def submit(*_args, **_kwargs) -> bool:
+        raise SubmissionVerificationRequiredError("需要验证")
+
+    adapter = CallableProviderAdapter(
+        SURVEY_PROVIDER_WJX,
+        ProviderAdapterHooks(
+            parse_survey=parse,
+            fill_survey=fill,
+            fill_survey_http=submit,
+        ),
+    )
+    config = ExecutionConfig(survey_provider=SURVEY_PROVIDER_WJX)
+
+    result = await adapter.fill_survey_http_async(config, ExecutionState(config=config))
+
+    assert result.succeeded is False
+    assert result.failure is not None
+    assert result.failure.category is ProviderErrorCategory.VERIFICATION_REQUIRED
+
+
+async def test_provider_adapter_classifies_missing_submit_proxy_as_unavailable() -> None:
+    async def submit(*_args, **_kwargs) -> bool:
+        raise SubmitProxyUnavailableError("提交代理不可用")
+
+    adapter = CallableProviderAdapter(
+        SURVEY_PROVIDER_WJX,
+        ProviderAdapterHooks(
+            parse_survey=AsyncMock(),
+            fill_survey=AsyncMock(),
+            fill_survey_http=submit,
+        ),
+    )
+
+    result = await adapter.fill_survey_http_async(
+        ExecutionConfig(survey_provider=SURVEY_PROVIDER_WJX),
+        ExecutionState(),
+    )
+
+    assert result.failure is not None
+    assert result.failure.category is ProviderErrorCategory.UNAVAILABLE
+
+
+async def test_provider_adapter_classifies_explicit_submission_rejection() -> None:
+    async def submit(*_args, **_kwargs) -> bool:
+        raise ProviderSubmissionRejectedError("提交被拒绝")
+
+    adapter = CallableProviderAdapter(
+        SURVEY_PROVIDER_WJX,
+        ProviderAdapterHooks(
+            parse_survey=AsyncMock(),
+            fill_survey=AsyncMock(),
+            fill_survey_http=submit,
+        ),
+    )
+
+    result = await adapter.fill_survey_http_async(
+        ExecutionConfig(survey_provider=SURVEY_PROVIDER_WJX),
+        ExecutionState(),
+    )
+
+    assert result.failure is not None
+    assert result.failure.category is ProviderErrorCategory.SUBMISSION_REJECTED
+    assert isinstance(result.failure.exception, RuntimeError)
+
+
+async def test_provider_adapter_does_not_classify_generic_runtime_error_as_rejection() -> None:
+    async def submit(*_args, **_kwargs) -> bool:
+        raise RuntimeError("提交流程内部错误")
+
+    adapter = CallableProviderAdapter(
+        SURVEY_PROVIDER_WJX,
+        ProviderAdapterHooks(
+            parse_survey=AsyncMock(),
+            fill_survey=AsyncMock(),
+            fill_survey_http=submit,
+        ),
+    )
+
+    result = await adapter.fill_survey_http_async(
+        ExecutionConfig(survey_provider=SURVEY_PROVIDER_WJX),
+        ExecutionState(),
+    )
+
+    assert result.failure is not None
+    assert result.failure.category is ProviderErrorCategory.UNKNOWN
+    assert type(result.failure.exception) is RuntimeError
 
 
 async def test_wjx_fill_survey_browser_entry_is_removed() -> None:
     state = ExecutionState(config=ExecutionConfig(survey_provider=SURVEY_PROVIDER_WJX))
 
     try:
-        await registry.fill_survey(
+        await deprecated_browser.fill_survey(
             object(),
             ExecutionConfig(survey_provider=SURVEY_PROVIDER_WJX),
             state,
@@ -118,7 +236,7 @@ async def test_qq_fill_survey_browser_entry_is_removed() -> None:
     state = ExecutionState(config=ExecutionConfig(survey_provider=SURVEY_PROVIDER_QQ))
 
     try:
-        await registry.fill_survey(
+        await deprecated_browser.fill_survey(
             object(),
             ExecutionConfig(survey_provider=SURVEY_PROVIDER_QQ),
             state,
@@ -135,7 +253,7 @@ async def test_handle_submission_verification_detected_uses_ctx_config_provider(
     adapter = registry._PROVIDER_REGISTRY[SURVEY_PROVIDER_CREDAMO]
 
     with patch.object(adapter, "handle_submission_verification_detected_async", new=AsyncMock()) as handler_mock:
-        await registry.handle_submission_verification_detected(ctx, "stop")
+        await deprecated_browser.handle_submission_verification_detected(ctx, "stop")
 
     handler_mock.assert_awaited_once_with(ctx, "stop")
 
@@ -145,7 +263,7 @@ async def test_wait_for_submission_verification_routes_timeout_and_stop_signal()
     driver = object()
 
     with patch.object(adapter, "wait_for_submission_verification_async", new=AsyncMock(return_value=True)) as wait_mock:
-        result = await registry.wait_for_submission_verification(
+        result = await deprecated_browser.wait_for_submission_verification(
             driver,
             provider=SURVEY_PROVIDER_QQ,
             timeout=9,
@@ -162,7 +280,7 @@ async def test_attempt_submission_recovery_routes_to_selected_provider() -> None
     ctx = object()
 
     with patch.object(adapter, "attempt_submission_recovery_async", new=AsyncMock(return_value=True)) as recovery_mock:
-        result = await registry.attempt_submission_recovery(
+        result = await deprecated_browser.attempt_submission_recovery(
             driver,
             ctx,
             "gui",
@@ -173,6 +291,11 @@ async def test_attempt_submission_recovery_routes_to_selected_provider() -> None
 
     assert result is True
     recovery_mock.assert_awaited_once_with(driver, ctx, "gui", "stop", thread_name="Worker-7")
+
+
+def test_registry_exports_only_http_provider_entrypoints() -> None:
+    assert set(registry.__all__) == {"parse_survey", "fill_survey_http"}
+    assert all(not hasattr(registry, name) for name in deprecated_browser.__all__)
 
 
 async def test_provider_hook_rejects_non_async_return_value() -> None:

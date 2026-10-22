@@ -10,7 +10,7 @@ from surveycore.credamo.provider.parser import (
     _survey_title,
 )
 
-from software.app.config import DEFAULT_USER_AGENT
+from software.core.config.user_agents import DEFAULT_USER_AGENT
 
 from .http_runtime import (
     _CredamoHttpSession,

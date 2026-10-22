@@ -8,7 +8,7 @@ from surveycore.tencent.provider.answering_builders import (
 import random
 from typing import Any, List, Optional, Sequence
 
-from software.app.config import DEFAULT_FILL_TEXT
+from software.core.text_constants import DEFAULT_FILL_TEXT
 from software.core.ai.runtime import (
     AIRuntimeError,
     agenerate_ai_answer,

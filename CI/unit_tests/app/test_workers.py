@@ -1,7 +1,7 @@
 from __future__ import annotations
 import types
 from unittest.mock import patch
-from software.ui.workers.ai_test_worker import AITestWorker
+from software.ui.workers.ai_test_worker import ai_test_result
 from software.ui.workers.update_worker import UpdateCheckWorker
 
 class WorkerTests:
@@ -50,32 +50,11 @@ class WorkerTests:
             worker.run()
         assert received == []
 
-    def test_ai_test_worker_treats_connection_success_prefix_as_success(self) -> None:
-        async def test_connection() -> str:
-            return "连接成功：延迟 120ms"
+    def test_ai_test_result_treats_connection_success_prefix_as_success(self) -> None:
+        assert ai_test_result("连接成功：延迟 120ms") == (True, "连接成功：延迟 120ms")
 
-        worker = AITestWorker(test_connection=test_connection)
-        received: list[tuple[bool, str]] = []
-        worker.finished.connect(lambda success, message: received.append((success, message)))
-        worker.run()
-        assert received == [(True, '连接成功：延迟 120ms')]
+    def test_ai_test_result_treats_non_success_as_failure(self) -> None:
+        assert ai_test_result("服务暂时不可用") == (False, "服务暂时不可用")
 
-    def test_ai_test_worker_treats_non_success_result_as_failure(self) -> None:
-        async def test_connection() -> str:
-            return "服务暂时不可用"
-
-        worker = AITestWorker(test_connection=test_connection)
-        received: list[tuple[bool, str]] = []
-        worker.finished.connect(lambda success, message: received.append((success, message)))
-        worker.run()
-        assert received == [(False, '服务暂时不可用')]
-
-    def test_ai_test_worker_emits_readable_error_when_dependency_raises(self) -> None:
-        async def test_connection() -> str:
-            raise RuntimeError('timeout')
-
-        worker = AITestWorker(test_connection=test_connection)
-        received: list[tuple[bool, str]] = []
-        worker.finished.connect(lambda success, message: received.append((success, message)))
-        worker.run()
-        assert received == [(False, '连接失败: timeout')]
+    def test_ai_test_result_formats_exception(self) -> None:
+        assert ai_test_result(error=RuntimeError("timeout")) == (False, "连接失败: timeout")

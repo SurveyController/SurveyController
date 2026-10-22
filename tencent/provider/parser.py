@@ -21,7 +21,7 @@ from surveycore.tencent.provider.parser import (
 )
 
 import software.network.http as http_client
-from software.app.config import DEFAULT_HTTP_HEADERS
+from software.network.http.defaults import DEFAULT_HTTP_HEADERS
 
 
 def _build_qq_api_headers(page_url: str) -> Dict[str, str]:

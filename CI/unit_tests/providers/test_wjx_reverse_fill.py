@@ -2,6 +2,7 @@ from __future__ import annotations
 import pytest
 import os
 import tempfile
+import threading
 from openpyxl import Workbook
 from software.app.config import DEFAULT_FILL_TEXT
 from surveycore.core.questions.schema import QuestionEntry
@@ -13,7 +14,11 @@ from surveycore.core.reverse_fill.schema import (
     REVERSE_FILL_STATUS_FALLBACK,
     REVERSE_FILL_STATUS_REVERSE,
 )
-from software.core.reverse_fill.validation import build_enabled_reverse_fill_spec, build_reverse_fill_spec
+from software.core.reverse_fill.validation import (
+    ReverseFillValidationCancelled,
+    build_enabled_reverse_fill_spec,
+    build_reverse_fill_spec,
+)
 from software.core.config.schema import RuntimeConfig
 from surveycore.io.spreadsheets.wjx_excel import load_wjx_excel_export
 
@@ -42,6 +47,48 @@ class WjxReverseFillTests:
             self._temp_paths = []
         self._temp_paths.append(path)
         return path
+
+    def test_build_reverse_fill_spec_reports_progress_phases(self) -> None:
+        workbook_path = self._track(_write_workbook([['序号', '1、单选题'], [1, 1], [2, 2]]))
+        progress: list[tuple[str, int, int]] = []
+
+        build_reverse_fill_spec(
+            source_path=workbook_path,
+            survey_provider='wjx',
+            questions_info=[{'num': 1, 'title': '单选题', 'type_code': '3', 'option_texts': ['选项1', '选项2']}],
+            question_entries=[],
+            selected_format=REVERSE_FILL_FORMAT_WJX_SEQUENCE,
+            target_num=2,
+            progress_callback=lambda stage, current, total: progress.append(
+                (stage, current, total)
+            ),
+        )
+
+        assert progress[0] == ('reading', 0, 0)
+        assert ('preparing', 2, 2) in progress
+        assert ('questions', 1, 1) in progress
+        assert ('samples', 2, 2) in progress
+        assert progress[-1] == ('complete', 1, 1)
+
+    def test_build_reverse_fill_spec_can_cancel_during_sample_validation(self) -> None:
+        workbook_path = self._track(_write_workbook([['序号', '1、单选题'], [1, 1], [2, 2]]))
+        cancel_event = threading.Event()
+
+        def cancel_when_sample_validation_starts(stage: str, _current: int, _total: int) -> None:
+            if stage == 'samples':
+                cancel_event.set()
+
+        with pytest.raises(ReverseFillValidationCancelled, match='反填预检已取消'):
+            build_reverse_fill_spec(
+                source_path=workbook_path,
+                survey_provider='wjx',
+                questions_info=[{'num': 1, 'title': '单选题', 'type_code': '3', 'option_texts': ['选项1', '选项2']}],
+                question_entries=[],
+                selected_format=REVERSE_FILL_FORMAT_WJX_SEQUENCE,
+                target_num=2,
+                progress_callback=cancel_when_sample_validation_starts,
+                cancellation_check=cancel_event.is_set,
+            )
 
     def test_detects_three_wjx_export_formats(self) -> None:
         sequence_path = self._track(_write_workbook([['序号', '1、单选题', '2、(选项1)', '2、(选项2)'], [1, 2, 1, 2]]))

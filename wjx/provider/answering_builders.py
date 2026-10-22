@@ -12,7 +12,7 @@ import math
 import random
 from typing import Any, List, Optional, Sequence
 
-from software.app.config import DEFAULT_FILL_TEXT
+from software.core.text_constants import DEFAULT_FILL_TEXT
 from software.core.ai.runtime import (
     AIRuntimeError,
     agenerate_ai_answer,
@@ -51,7 +51,7 @@ from surveycore.providers.answering.selection import (
     valid_forced_choice_index as _valid_forced_choice_index,
 )
 from surveycore.providers.contracts import SurveyQuestionMeta
-from surveycore.wjx.provider.questions.multiple_rules import _normalize_selected_indices
+from software.providers.surveycore_compat import _normalize_selected_indices
 
 
 async def _build_wjx_single_action(
