@@ -52,11 +52,11 @@ jobs:
       - name: Run compile check
         run: uv run python -m CI.python_checks.compile_check
 
-      - name: Run Ruff check
+      - name: Run Ruff lint and format checks
         run: uv run python -m CI.python_checks.ruff_check
 
-      - name: Run Pyright check
-        run: uv run python -m CI.python_checks.pyright_check
+      - name: Run ty check
+        run: uv run python -m CI.python_checks.ty_check
 
   unit-tests:
     name: Unit Tests

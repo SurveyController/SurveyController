@@ -1,11 +1,14 @@
 from __future__ import annotations
 
 import getpass
+import io
 import json
 import os
+import re
+import shutil
 import subprocess
 import sys
-import tempfile
+import tokenize
 from pathlib import Path
 from typing import Iterable
 
@@ -22,24 +25,35 @@ DEPENDENCY_IMPORT_MODULES = ("surveycore",)
 
 
 
-RUFF_SELECT = "F"
 CHILD_RESULT_PREFIX = "__WJX_CHECK__"
 IMPORT_TIMEOUT_SECONDS = 12
 WINDOW_SMOKE_TIMEOUT_SECONDS = 25
 UNIT_TEST_TIMEOUT_SECONDS = int(os.environ.get("SURVEY_CONTROLLER_UNIT_TEST_TIMEOUT_SECONDS", "120"))
-DEFAULT_UNIT_TEST_COVERAGE_FAIL_UNDER = "75"
-PYRIGHT_TIMEOUT_SECONDS = int(os.environ.get("SURVEY_CONTROLLER_PYRIGHT_TIMEOUT_SECONDS", "90"))
+DEFAULT_UNIT_TEST_COVERAGE_FAIL_UNDER = "80"
+PACKAGE_COVERAGE_THRESHOLDS = {
+    "software/core": 85.0,
+    "software/application": 85.0,
+    "software/network": 85.0,
+    "providers": 80.0,
+    "software/ui": 65.0,
+}
+TY_TIMEOUT_SECONDS = int(
+    os.environ.get("SURVEY_CONTROLLER_TY_TIMEOUT_SECONDS", "90")
+)
 PYTEST_FAILURE_LOG_TAIL_LINES = 40
 TYPE_IGNORE_PATTERNS = (
-    "# " + "type" + ": ignore",
-    "# " + "pyright:",
+    re.compile(r"\btype\s*:\s*ignore\b", re.IGNORECASE),
+    re.compile(r"\b(?:pyright|basedpyright)\s*:", re.IGNORECASE),
+    re.compile(r"\bty\s*:\s*ignore\b", re.IGNORECASE),
 )
 TYPE_IGNORE_SCAN_ROOTS = (
     ROOT_DIR / "wjx",
     ROOT_DIR / "software",
     ROOT_DIR / "tencent",
     ROOT_DIR / "credamo",
+    ROOT_DIR / "CI",
 )
+TYPE_IGNORE_SCAN_FILES = tuple(ENTRY_FILES)
 UNICODE_ESCAPE_PATTERNS = (
     "\\" + "u",
     "\\" + "U",
@@ -115,7 +129,7 @@ import sys
 import traceback
 
 PREFIX = "__WJX_CHECK__"
-os.environ.setdefault("QT_QPA_PLATFORM", "minimal")
+os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 os.environ.setdefault("WJX_IMPORT_CHECK", "1")
 
 try:
@@ -224,17 +238,13 @@ def make_child_env() -> dict[str, str]:
         env.setdefault("HOME", home_dir)
         env.setdefault("USERPROFILE", home_dir)
 
-    env.setdefault(
-        "PYRIGHT_PYTHON_CACHE_DIR",
-        str(Path(tempfile.gettempdir()) / "SurveyController-pyright-cache"),
-    )
     return env
 
 
 def make_window_smoke_env() -> dict[str, str]:
     
     env = make_child_env()
-    env["QT_QPA_PLATFORM"] = "minimal"
+    env["QT_QPA_PLATFORM"] = "offscreen"
     return env
 
 
@@ -306,9 +316,11 @@ def build_unit_test_pytest_args(*, verbose_in_ci: bool) -> list[str]:
             "--cov=wjx",
             "--cov=tencent",
             "--cov=credamo",
+            "--cov-branch",
             f"--cov-fail-under={DEFAULT_UNIT_TEST_COVERAGE_FAIL_UNDER}",
             "--cov-report=term-missing:skip-covered",
             "--cov-report=xml:coverage.xml",
+            "--cov-report=json:coverage.json",
         ]
     )
     return args
@@ -333,14 +345,17 @@ def run_compile_checks(files: Iterable[Path]) -> list[dict]:
 
 def run_ruff_check(target_dirs: Iterable[Path]) -> tuple[list[dict], str | None]:
     target_args = [str(path) for path in target_dirs]
+    target_args.extend(str(path) for path in ENTRY_FILES if path.exists())
     if not target_args:
         return [], "No target directories found for Ruff checks."
 
     result = subprocess.run(
         [
-            sys.executable, "-m", "ruff", "check",
+            sys.executable,
+            "-m",
+            "ruff",
+            "check",
             *target_args,
-            "--select", RUFF_SELECT,
             "--output-format", "json",
         ],
         cwd=str(ROOT_DIR),
@@ -373,8 +388,49 @@ def run_ruff_check(target_dirs: Iterable[Path]) -> tuple[list[dict], str | None]
     return issues, None
 
 
-def run_pyright_check(target_dirs: Iterable[Path]) -> tuple[list[dict], str | None]:
-    
+def run_ruff_format_check(target_dirs: Iterable[Path]) -> tuple[list[dict], str | None]:
+    target_args = [str(path) for path in target_dirs]
+    target_args.extend(str(path) for path in ENTRY_FILES if path.exists())
+    if not target_args:
+        return [], "No target paths found for Ruff format checks."
+
+    result = subprocess.run(
+        [sys.executable, "-m", "ruff", "format", "--check", *target_args],
+        cwd=str(ROOT_DIR),
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        errors="replace",
+    )
+    if result.returncode == 0:
+        return [], None
+    if result.returncode != 1:
+        message = result.stderr.strip() or result.stdout.strip() or "Ruff format execution failed."
+        return [], message
+
+    issues: list[dict] = []
+    for line in (result.stdout or "").splitlines():
+        stripped = line.strip()
+        if stripped.startswith("Would reformat:"):
+            path = stripped.partition(":")[2].strip()
+        elif stripped.startswith("Would reformat "):
+            path = stripped.removeprefix("Would reformat ").strip()
+        else:
+            continue
+        issues.append(
+            {
+                "phase": "ruff-format",
+                "path": format_path(path),
+                "message": "文件未符合 Ruff 格式；请运行 `uv run ruff format <文件>`。",
+            }
+        )
+    if not issues:
+        message = result.stderr.strip() or result.stdout.strip() or "Ruff format check failed."
+        return [], message
+    return issues, None
+
+
+def run_ty_check(target_dirs: Iterable[Path]) -> tuple[list[dict], str | None]:
     target_args = [str(path) for path in target_dirs]
     env = make_child_env()
     for entry_file in ENTRY_FILES:
@@ -382,13 +438,21 @@ def run_pyright_check(target_dirs: Iterable[Path]) -> tuple[list[dict], str | No
             target_args.append(str(entry_file))
 
     if not target_args:
-        return [], "No target paths found for Pyright diagnostics."
+        return [], "No target paths found for ty diagnostics."
+
+    ty_command = shutil.which("ty")
+    if not ty_command:
+        return [], "ty is not installed or not available on PATH."
 
     try:
         result = subprocess.run(
             [
-                sys.executable, "-m", "pyright",
-                "--outputjson",
+                ty_command,
+                "check",
+                "--output-format",
+                "gitlab",
+                "--python",
+                sys.executable,
                 *target_args,
             ],
             cwd=str(ROOT_DIR),
@@ -397,51 +461,48 @@ def run_pyright_check(target_dirs: Iterable[Path]) -> tuple[list[dict], str | No
             encoding="utf-8",
             errors="replace",
             env=env,
-            timeout=PYRIGHT_TIMEOUT_SECONDS,
+            timeout=TY_TIMEOUT_SECONDS,
         )
     except subprocess.TimeoutExpired:
-        return [], f"Pyright timed out (>{PYRIGHT_TIMEOUT_SECONDS}s)."
+        return [], f"ty timed out (>{TY_TIMEOUT_SECONDS}s)."
 
     stderr_text = (result.stderr or "").strip()
-    if "No module named pyright" in stderr_text:
-        return [], "Pyright is not installed, so Pyright diagnostics cannot run."
-
     raw = (result.stdout or "").strip()
     if not raw:
         if result.returncode == 0:
             return [], None
-        message = stderr_text or "Pyright failed without producing parseable output."
+        message = stderr_text or "ty failed without producing parseable output."
         return [], message
 
     try:
         payload = json.loads(raw)
     except json.JSONDecodeError:
-        return [], f"Failed to parse Pyright output: {raw}"
+        return [], f"Failed to parse ty output: {raw}"
 
-    diagnostics = payload.get("generalDiagnostics", [])
+    if not isinstance(payload, list):
+        return [], f"Unexpected ty output format: {raw}"
     issues: list[dict] = []
-    for item in diagnostics:
-        range_start = item.get("range", {}).get("start", {})
-        file_name = item.get("file", "")
+    for item in payload:
+        location = item.get("location", {})
+        file_name = location.get("path", "")
+        line = location.get("lines", {}).get("begin", 1)
         severity = item.get("severity", "error")
-        rule = item.get("rule") or "pyright"
+        rule = item.get("check_name") or "ty"
         issues.append(
             {
-                "phase": "pyright",
+                "phase": "ty",
                 "path": format_path(file_name) if file_name else Path("<unknown>"),
-                "row": int(range_start.get("line", 0)) + 1,
-                "column": int(range_start.get("character", 0)) + 1,
+                "row": int(line),
+                "column": 1,
                 "severity": severity,
                 "code": rule,
-                "message": normalize_diagnostic_message(item.get("message", "")),
+                "message": normalize_diagnostic_message(item.get("description", "")),
             }
         )
 
-    
-    if result.returncode == 2 and not issues:
-        summary = payload.get("summary", {})
-        message = summary.get("errorMessage") or stderr_text or "Pyright execution error."
-        return [], str(message)
+    if result.returncode not in (0, 1):
+        message = stderr_text or f"ty exited with status {result.returncode}."
+        return [], message
 
     return issues, None
 
@@ -449,36 +510,53 @@ def run_pyright_check(target_dirs: Iterable[Path]) -> tuple[list[dict], str | No
 def run_type_ignore_check(target_dirs: Iterable[Path]) -> list[dict]:
     
     allowed_roots = {path.resolve() for path in TYPE_IGNORE_SCAN_ROOTS if path.exists()}
+    allowed_files = {path.resolve() for path in TYPE_IGNORE_SCAN_FILES if path.exists()}
     issues: list[dict] = []
     for target_dir in target_dirs:
         try:
             resolved_target = target_dir.resolve()
         except OSError:
             continue
-        if resolved_target not in allowed_roots:
+        if resolved_target in allowed_files:
+            paths = [target_dir]
+        elif resolved_target in allowed_roots:
+            paths = sorted(
+                path
+                for suffix in (".py", ".pyi")
+                for path in target_dir.rglob(f"*{suffix}")
+            )
+        else:
             continue
-        for path in sorted(target_dir.rglob("*.py")):
+        for path in paths:
             if "__pycache__" in path.parts:
                 continue
             try:
-                lines = path.read_text(encoding="utf-8").splitlines()
+                source = path.read_text(encoding="utf-8")
             except UnicodeDecodeError:
-                lines = path.read_text(encoding="utf-8", errors="replace").splitlines()
-            for row, line in enumerate(lines, start=1):
-                column = 0
+                source = path.read_text(encoding="utf-8", errors="replace")
+            try:
+                comment_tokens = [
+                    token
+                    for token in tokenize.generate_tokens(io.StringIO(source).readline)
+                    if token.type == tokenize.COMMENT
+                ]
+            except (IndentationError, tokenize.TokenError):
+                continue
+            for token in comment_tokens:
+                match = None
                 for pattern in TYPE_IGNORE_PATTERNS:
-                    column = line.find(pattern)
-                    if column >= 0:
+                    match = pattern.search(token.string)
+                    if match:
                         break
-                if column < 0:
+                if match is None:
                     continue
                 issues.append(
                     {
                         "phase": "type-ignore",
                         "path": format_path(path),
-                        "row": row,
-                        "column": column + 1,
-                        "message": "不要用 type ignore / pyright 指令掩盖类型问题，请改成明确类型或小范围 cast。",
+                        "row": token.start[0],
+                        "column": match.start() + 1,
+                        "message": "禁止类型忽略注释和类型检查器指令；请补全类型、收窄类型或使用明确的类型转换。",
                     }
                 )
     return issues
@@ -627,6 +705,64 @@ def extract_coverage_summary(stdout: str) -> str | None:
     return "\n".join(summary_lines) if summary_lines else None
 
 
+def check_package_coverage(payload: dict) -> list[dict]:
+    files = payload.get("files")
+    if not isinstance(files, dict):
+        return [{"phase": "unit", "message": "Coverage JSON does not contain a files object."}]
+
+    diagnostics: list[dict] = []
+    for package, threshold in PACKAGE_COVERAGE_THRESHOLDS.items():
+        matching = [
+            data.get("summary", {})
+            for file_name, data in files.items()
+            if file_name.replace("\\", "/").startswith(package)
+        ]
+        if package == "providers":
+            matching = [
+                data.get("summary", {})
+                for file_name, data in files.items()
+                if file_name.replace("\\", "/").startswith(
+                    ("software/providers/", "wjx/", "tencent/", "credamo/")
+                )
+            ]
+        statements = sum(int(item.get("num_statements", 0)) for item in matching)
+        covered = sum(int(item.get("covered_lines", 0)) for item in matching)
+        branches = sum(int(item.get("num_branches", 0)) for item in matching)
+        covered_branches = sum(int(item.get("covered_branches", 0)) for item in matching)
+        if statements <= 0:
+            diagnostics.append(
+                {
+                    "phase": "unit",
+                    "message": f"Coverage data is missing for {package}.",
+                }
+            )
+            continue
+        percent = covered / statements * 100
+        if percent < threshold:
+            diagnostics.append(
+                {
+                    "phase": "unit",
+                    "message": (
+                        f"{package} coverage is {percent:.1f}%; "
+                        f"the required minimum is {threshold:.0f}%."
+                    ),
+                }
+            )
+        if branches > 0:
+            branch_percent = covered_branches / branches * 100
+            if branch_percent < threshold:
+                diagnostics.append(
+                    {
+                        "phase": "unit",
+                        "message": (
+                            f"{package} branch coverage is {branch_percent:.1f}%; "
+                            f"the required minimum is {threshold:.0f}%."
+                        ),
+                    }
+                )
+    return diagnostics
+
+
 def run_unit_tests() -> tuple[dict | None, str | None]:
     env = make_child_env()
     try:
@@ -652,10 +788,21 @@ def run_unit_tests() -> tuple[dict | None, str | None]:
 
     coverage_summary = extract_coverage_summary(result.stdout or "")
 
+    coverage_issues: list[dict] = []
     if result.returncode == 0:
+        try:
+            coverage_payload = json.loads((ROOT_DIR / "coverage.json").read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError) as exc:
+            coverage_issues = [{"phase": "unit", "message": f"读取覆盖率 JSON 失败：{exc}"}]
+        else:
+            coverage_issues = check_package_coverage(coverage_payload)
+
+    if result.returncode == 0 and not coverage_issues:
         return None, coverage_summary
 
     summary = summarize_child_output(result.stdout, result.stderr) or "Unit tests failed."
+    if coverage_issues:
+        summary = "\n".join([summary, *(item["message"] for item in coverage_issues)])
     return {
         "phase": "unit",
         "message": summary,
@@ -723,15 +870,20 @@ def print_issues(title: str, issues: Iterable[dict]) -> None:
                     print(f"   {line}")
             continue
 
-        if phase == "pyright":
+        if phase == "ty":
             print(
                 f"{index}. {item['path']}:{item['row']}:{item['column']}  "
-                f"[{item.get('severity', 'error')}/{item.get('code', 'pyright')}]"
+                f"[{item.get('severity', 'error')}/{item.get('code', 'ty')}]"
             )
             message_lines = str(item.get("message", "")).splitlines() or [""]
             print(f"   {message_lines[0]}")
             for line in message_lines[1:]:
                 print(f"   {line}")
+            continue
+
+        if phase == "ruff-format":
+            print(f"{index}. {item['path']}")
+            print(f"   {item['message']}")
             continue
 
         if phase in {"type-ignore", "unicode-escape"}:
