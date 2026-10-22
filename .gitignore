@@ -1,23 +1,13 @@
-# 开发环境
 *.code-workspace
-.DS_Store
 .claude/
-.playwright-mcp/
-.local-private/
 .ruff_cache/
-.agent/
 .codex/environments/
-.trellis/workspace/
-.trellis/.runtime/
-.trellis/tasks/
 .venv/
-.zcode/
-/output/
 .coverage
 coverage.xml
+/coverage.json
 desktop.ini
 AGENTS.md
-CLAUDE.md
 
 # 编译环境
 /build/
@@ -26,6 +16,7 @@ CLAUDE.md
 /Setup/*.pfx
 /Setup/*.docx
 /Setup/*.pdf
+/Setup/build-standalone.ps1
 /Releases/
 
 # 运行环境
@@ -35,14 +26,6 @@ __pycache__/
 .pytest_tmp_async_runtime_loop_large/
 .uv-cache/
 *.pyc
-%SystemDrive%/
 /assets/promo-video/
 /configs/
 /logs/
-/worker/.dev.vars
-/worker/.env
-/worker/.wrangler/
-/CI/worker/
-/CI/worker/node_modules/
-/CI/worker/.wrangler/
-/CI/worker/tsconfig.tsbuildinfo

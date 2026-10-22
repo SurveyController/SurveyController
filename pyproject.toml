@@ -17,7 +17,8 @@ dependencies = [
 
 [dependency-groups]
 dev = [
-    "pyright>=1.1.414",
+    "ty==0.0.89",
+    "hypothesis>=6.130.0",
     "pytest",
     "pytest-asyncio",
     "pytest-cov",
@@ -43,3 +44,26 @@ surveycore-py = { git = "https://github.com/SurveyController/surveycore-py", rev
 
 [tool.ruff]
 line-length = 100
+target-version = "py313"
+
+[tool.ruff.lint]
+select = ["E4", "E7", "E9", "F", "I", "UP", "B", "ASYNC", "SIM", "PERF", "RUF"]
+
+[tool.ty.environment]
+python-version = "3.13"
+
+[tool.ty.src]
+include = ["SurveyController.py", "software", "wjx", "tencent", "credamo"]
+
+[[tool.ty.overrides]]
+include = ["software/core/**", "software/application/**", "software/network/**"]
+
+[tool.ty.overrides.rules]
+dynamic-function-decorator-return = "error"
+missing-type-argument = "error"
+possibly-unresolved-reference = "warn"
+unsound-return-statement = "error"
+
+[tool.coverage.run]
+branch = true
+source = ["software", "wjx", "tencent", "credamo"]
