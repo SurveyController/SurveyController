@@ -9,7 +9,7 @@ from software.core.task import ExecutionConfig
 from software.integrations.ai import client, settings
 
 
-def test_legacy_ai_settings_preserve_provider_credentials_and_prompt() -> None:
+def test_legacy_ai_settings_ignore_persisted_key_and_preserve_other_preferences() -> None:
     store = app_settings()
     for key, value in {
         "mode": "free",
@@ -25,11 +25,32 @@ def test_legacy_ai_settings_preserve_provider_credentials_and_prompt() -> None:
 
     config = settings.get_ai_settings()
     assert config["ai_mode"] == "provider"
-    assert settings.get_ai_readiness_error(config) == ""
+    assert config["api_key"] == ""
+    assert settings.get_ai_readiness_error(config) == "缺少 API Key"
     settings.save_ai_settings(ai_mode="free")
     settings._RUNTIME_AI_SETTINGS = None
-    assert settings.get_ai_settings() == config
+    restored = settings.get_ai_settings()
+    assert restored["api_key"] == ""
+    assert restored["provider"] == config["provider"]
+    assert restored["system_prompt"] == config["system_prompt"]
     assert store.value("ai/mode") == "provider"
+    assert store.value("ai/api_key") == "test-key"
+
+
+def test_saving_ai_session_keeps_new_api_key_out_of_qsettings() -> None:
+    store = app_settings()
+    store.remove("ai/api_key")
+    settings._RUNTIME_AI_SETTINGS = None
+
+    settings.save_ai_settings(
+        provider="custom",
+        api_key="process-only-key",
+        base_url="https://example.test/v1",
+        model="test-model",
+    )
+
+    assert settings.get_ai_settings()["api_key"] == "process-only-key"
+    assert store.value("ai/api_key") is None
 
 
 def test_ai_defaults_require_api_key_and_include_multi_blank_instructions() -> None:
@@ -53,7 +74,8 @@ def test_runtime_config_normalizes_legacy_mode_without_losing_provider_fields(mo
     })
     payload = serialize_runtime_config(config)
     assert payload["ai_mode"] == "provider"
-    assert payload["ai_api_key"] == "test-key"
+    assert "ai_api_key" not in payload
+    assert serialize_runtime_config(config, include_secrets=True)["ai_api_key"] == "test-key"
     assert payload["ai_system_prompt"] == "用户提示词"
     assert serialize_runtime_config(RuntimeConfig(ai_mode=mode))["ai_mode"] == "provider"
 

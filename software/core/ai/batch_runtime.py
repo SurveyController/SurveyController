@@ -4,7 +4,7 @@ import asyncio
 from dataclasses import replace
 from typing import Any, Dict, Iterable, List, Sequence, Tuple
 
-from software.app.config import DEFAULT_FILL_TEXT
+from software.core.text_constants import DEFAULT_FILL_TEXT
 from software.core.ai.batch_models import AIBatchItem, AIBatchResult, AIPrefillSummary
 from software.core.ai.runtime import (
     build_ai_option_fill_prompt,

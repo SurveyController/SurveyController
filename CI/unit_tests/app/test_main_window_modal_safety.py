@@ -552,11 +552,11 @@ class MainWindowModalSafetyTests:
         assert ("groups", ["dim1"]) in window.cleanup_events
         assert "refresh_counter" in window.cleanup_events
 
-        with patch(
-            "software.ui.shell.main_window_parts.lifecycle.get_session_snapshot",
-            return_value={"authenticated": True, "user_id": 7},
-        ):
-            MainWindowLifecycleMixin._refresh_title_random_ip_user_id(window)
+        window.controller.get_proxy_session_snapshot = lambda: {
+            "authenticated": True,
+            "user_id": 7,
+        }
+        MainWindowLifecycleMixin._refresh_title_random_ip_user_id(window)
         assert "(7)" in window.titleBar.titleLabel.text
         assert window.titleBar.titleLabel.adjusted == 1
 

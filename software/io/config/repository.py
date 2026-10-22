@@ -10,8 +10,14 @@ class JsonConfigRepository:
     def load(self, path: str | None = None, *, strict: bool = False) -> RuntimeConfig:
         return load_config(path, strict=strict)
 
-    def save(self, config: RuntimeConfig, path: str | None = None) -> str:
-        return save_config(config, path)
+    def save(
+        self,
+        config: RuntimeConfig,
+        path: str | None = None,
+        *,
+        include_secrets: bool = False,
+    ) -> str:
+        return save_config(config, path, include_secrets=include_secrets)
 
 
 __all__ = ["JsonConfigRepository"]

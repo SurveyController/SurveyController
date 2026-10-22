@@ -223,7 +223,11 @@ class DashboardConfigIOMixin:
             )
             return
         try:
-            self.controller.save_current_config(path, config=cfg)
+            self.controller.save_current_config(
+                path,
+                config=cfg,
+                include_secrets=True,
+            )
             log_action(
                 "CONFIG",
                 "save_config",

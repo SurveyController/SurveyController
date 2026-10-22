@@ -328,12 +328,14 @@ class DashboardEntriesMixin:
             return False
         title = survey_title if survey_title is not None else self._survey_title
         reliability_mode_enabled = self.runtime_page.reliability_card.switchButton.isChecked()
+        media_fetcher = getattr(self.controller, "fetch_question_media", None)
         dlg = QuestionWizardDialog(
             entries,
             info,
             title,
             parent=self,
             reliability_mode_enabled=reliability_mode_enabled,
+            media_fetcher=media_fetcher,
         )
         accepted = dlg.exec() == QDialog.DialogCode.Accepted
         try:

@@ -11,6 +11,7 @@ from software.integrations.ai import (
     get_default_system_prompt,
     reset_ai_settings,
     save_ai_settings,
+    update_ai_session,
 )
 
 
@@ -27,6 +28,9 @@ class PythonAiSettingsAdapter(AiSettingsPort):
 
     def save_settings(self, **values: Any) -> None:
         save_ai_settings(**values)
+
+    def update_session(self, config: dict[str, Any]) -> dict[str, Any]:
+        return update_ai_session(config)
 
     def reset_settings(self) -> None:
         reset_ai_settings()

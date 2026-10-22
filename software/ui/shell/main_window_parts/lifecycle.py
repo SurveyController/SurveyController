@@ -8,7 +8,6 @@ from PySide6.QtCore import Qt, QTimer
 from PySide6.QtWidgets import QFileDialog, QWidget
 from qfluentwidgets import MessageBox, PushButton
 
-from software.network.proxy.session import get_session_snapshot
 from software.app.config import app_settings, get_bool_from_qsettings
 from software.app.user_paths import (
     get_user_config_directory,
@@ -147,7 +146,7 @@ class MainWindowLifecycleMixin:
 
         from software.io.config.store import save_config
 
-        save_config(cfg, path)
+        save_config(cfg, path, include_secrets=True)
         logging.info("配置已保存到: %s", path)
         return True
 
@@ -280,7 +279,7 @@ class MainWindowLifecycleMixin:
         user_id = 0
         authenticated = False
         try:
-            snapshot = get_session_snapshot()
+            snapshot = self.controller.get_proxy_session_snapshot()
             authenticated = bool(snapshot.get("authenticated"))
             user_id = int(snapshot.get("user_id") or 0)
         except Exception as exc:

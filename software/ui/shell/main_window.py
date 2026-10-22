@@ -603,7 +603,7 @@ class MainWindow(
                 logging.info("额度兑换窗口前置失败", exc_info=True)
             return False
 
-        dlg = QuotaRedeemDialog(self)
+        dlg = QuotaRedeemDialog(self, submit_async_task=self.controller.submit_ui_task)
         self._quota_redeem_dialog = dlg
         self._quota_redeem_dialog_active = True
         dlg.finished.connect(self._on_quota_redeem_dialog_finished_event)

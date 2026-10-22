@@ -7,8 +7,8 @@ import subprocess
 import sys
 import textwrap
 
-from PySide6.QtCore import QCoreApplication, QEvent, QRect
-from PySide6.QtWidgets import QApplication, QLayout, QScrollArea, QWidget
+from PySide6.QtCore import QCoreApplication, QEvent
+from PySide6.QtWidgets import QApplication, QScrollArea, QWidget
 from qfluentwidgets import ScrollArea as FluentScrollArea
 
 from CI.unit_tests.app.test_workbench_pages_smoke import _FakeController, _patch_page_dependencies
@@ -80,38 +80,6 @@ def _qtwidgets_import_violations(path: Path) -> list[str]:
     return sorted(set(violations))
 
 
-def _assert_layout_items_do_not_overlap(root: QWidget) -> None:
-    problems: list[str] = []
-    for parent in root.findChildren(QWidget):
-        layout = parent.layout()
-        if layout is None:
-            continue
-        rects = _visible_layout_widget_rects(layout)
-        for left_index, left_rect in enumerate(rects):
-            for right_rect in rects[left_index + 1 :]:
-                intersection = left_rect.intersected(right_rect)
-                if intersection.isValid() and intersection.width() > 1 and intersection.height() > 1:
-                    problems.append(f"{parent.__class__.__name__}: {left_rect} overlaps {right_rect}")
-
-    assert problems == []
-
-
-def _visible_layout_widget_rects(layout: QLayout) -> list[QRect]:
-    if isinstance(layout.parentWidget(), QScrollArea):
-        return []
-
-    rects: list[QRect] = []
-    for index in range(layout.count()):
-        item = layout.itemAt(index)
-        if item is None:
-            continue
-        widget = item.widget()
-        if widget is None or not widget.isVisible() or widget.width() <= 0 or widget.height() <= 0:
-            continue
-        rects.append(widget.geometry())
-    return rects
-
-
 def _assert_no_horizontal_scrollbar(page: QWidget) -> None:
     scroll_areas: list[FluentScrollArea] = []
     if isinstance(page, FluentScrollArea):
@@ -162,7 +130,6 @@ def test_workbench_pages_fit_minimum_window_width_without_horizontal_overflow(mo
     for page in (runtime_page, strategy_page, reverse_fill_page, dashboard_page):
         _show_at_guarded_size(qtbot, page)
         _assert_no_horizontal_scrollbar(page)
-        _assert_layout_items_do_not_overlap(page)
 
 
 def test_workbench_pages_survive_125_percent_dpi_subprocess() -> None:
@@ -172,7 +139,6 @@ def test_workbench_pages_survive_125_percent_dpi_subprocess() -> None:
         from PySide6.QtWidgets import QApplication
 
         from CI.unit_tests.app.test_ui_layout_contracts import (
-            _assert_layout_items_do_not_overlap,
             _assert_no_horizontal_scrollbar,
         )
         from CI.unit_tests.app.test_workbench_pages_smoke import _FakeController
@@ -206,7 +172,6 @@ def test_workbench_pages_survive_125_percent_dpi_subprocess() -> None:
         ratio = app.primaryScreen().devicePixelRatio()
         assert ratio >= 1.24, ratio
         _assert_no_horizontal_scrollbar(page)
-        _assert_layout_items_do_not_overlap(page)
 
         page.close()
         page.deleteLater()

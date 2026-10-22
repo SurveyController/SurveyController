@@ -88,6 +88,7 @@ __all__ = [
     "get_ai_settings",
     "get_default_system_prompt",
     "save_ai_settings",
+    "update_ai_session",
     "reset_ai_settings",
 ]
 
@@ -122,7 +123,7 @@ def _load_ai_settings_from_store() -> Dict[str, Any]:
     store = _get_settings_store()
     provider = str(store.value(f"{_AI_SETTINGS_KEY_PREFIX}provider", settings["provider"]) or "deepseek").strip()
     settings["provider"] = provider if provider in AI_PROVIDERS else "deepseek"
-    settings["api_key"] = str(store.value(f"{_AI_SETTINGS_KEY_PREFIX}api_key", settings["api_key"]) or "")
+    # API Key is deliberately process-local. Ignore any legacy QSettings value.
     settings["base_url"] = str(store.value(f"{_AI_SETTINGS_KEY_PREFIX}base_url", settings["base_url"]) or "").strip()
     settings["api_protocol"] = _normalize_custom_api_protocol(
         store.value(f"{_AI_SETTINGS_KEY_PREFIX}api_protocol", settings["api_protocol"])
@@ -139,7 +140,6 @@ def _persist_ai_settings(settings: Dict[str, Any]) -> None:
     store = _get_settings_store()
     store.setValue(f"{_AI_SETTINGS_KEY_PREFIX}mode", settings["ai_mode"])
     store.setValue(f"{_AI_SETTINGS_KEY_PREFIX}provider", settings["provider"])
-    store.setValue(f"{_AI_SETTINGS_KEY_PREFIX}api_key", settings["api_key"])
     store.setValue(f"{_AI_SETTINGS_KEY_PREFIX}base_url", settings["base_url"])
     store.setValue(f"{_AI_SETTINGS_KEY_PREFIX}api_protocol", settings["api_protocol"])
     store.setValue(f"{_AI_SETTINGS_KEY_PREFIX}model", settings["model"])
@@ -159,6 +159,25 @@ def get_ai_settings() -> Dict[str, Any]:
     return settings
 
 
+def update_ai_session(config: Dict[str, Any]) -> Dict[str, Any]:
+    """Replace process-local AI configuration while persisting only preferences."""
+    global _RUNTIME_AI_SETTINGS
+    normalized = dict(_DEFAULT_AI_SETTINGS)
+    normalized.update(config)
+    provider = str(normalized.get("provider") or "deepseek").strip()
+    normalized["provider"] = provider if provider in AI_PROVIDERS else "deepseek"
+    normalized["api_key"] = str(normalized.get("api_key") or "")
+    normalized["base_url"] = str(normalized.get("base_url") or "").strip()
+    normalized["api_protocol"] = _normalize_custom_api_protocol(normalized.get("api_protocol"))
+    normalized["model"] = str(normalized.get("model") or "").strip()
+    prompt = str(normalized.get("system_prompt") or "").strip()
+    normalized["system_prompt"] = prompt or get_default_system_prompt()
+    normalized["ai_mode"] = AI_MODE_PROVIDER
+    _RUNTIME_AI_SETTINGS = normalized
+    _persist_ai_settings(normalized)
+    return dict(normalized)
+
+
 def save_ai_settings(
     ai_mode: Optional[str] = None,
     provider: Optional[str] = None,
@@ -170,7 +189,7 @@ def save_ai_settings(
 ):
     
     settings = _ensure_runtime_settings()
-    # 保留参数以兼容旧调用，运行时只使用服务商模式。
+    # The parameter remains accepted for compatibility; only provider mode runs.
     del ai_mode
     if provider is not None:
         settings["provider"] = str(provider)
@@ -203,7 +222,6 @@ def reset_ai_settings() -> None:
     for key in (
         f"{_AI_SETTINGS_KEY_PREFIX}mode",
         f"{_AI_SETTINGS_KEY_PREFIX}provider",
-        f"{_AI_SETTINGS_KEY_PREFIX}api_key",
         f"{_AI_SETTINGS_KEY_PREFIX}base_url",
         f"{_AI_SETTINGS_KEY_PREFIX}api_protocol",
         f"{_AI_SETTINGS_KEY_PREFIX}model",

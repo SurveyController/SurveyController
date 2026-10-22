@@ -7,7 +7,7 @@ from software.core.task import ExecutionState
 from software.logging.log_utils import log_suppressed_exception
 
 from software.integrations.ai.client import agenerate_answer
-from software.app.config import _HTML_SPACE_RE
+from software.core.text_constants import WHITESPACE_PATTERN
 
 
 class AIRuntimeError(RuntimeError):
@@ -52,7 +52,7 @@ def is_ai_timeout_runtime_error(error: object) -> bool:
 def _normalize_text(value: Optional[str]) -> str:
     if not value:
         return ""
-    return _HTML_SPACE_RE.sub(" ", str(value)).strip()
+    return WHITESPACE_PATTERN.sub(" ", str(value)).strip()
 
 
 def _cleanup_question_title(raw_title: str) -> str:

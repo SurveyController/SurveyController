@@ -34,7 +34,10 @@ from qfluentwidgets import (
     isDarkTheme,
 )
 
-from software.app.user_paths import get_user_config_directory
+from software.app.user_paths import (
+    get_legacy_runtime_config_path,
+    get_user_config_directory,
+)
 from software.ui.helpers.fluent_tooltip import install_tooltip_filter
 
 
@@ -141,6 +144,14 @@ class ConfigDrawer(QWidget):
                 continue
             stat = os.stat(path)
             files.append((stat.st_mtime, name, path, stat.st_size))
+
+        legacy_path = get_legacy_runtime_config_path()
+        legacy_directory = os.path.normcase(os.path.abspath(os.path.dirname(legacy_path)))
+        current_directory = os.path.normcase(os.path.abspath(configs_dir))
+        if legacy_directory != current_directory and os.path.isfile(legacy_path):
+            stat = os.stat(legacy_path)
+            legacy_name = f"{os.path.basename(legacy_path)}（旧位置）"
+            files.append((stat.st_mtime, legacy_name, legacy_path, stat.st_size))
 
         files.sort(key=lambda item: item[0], reverse=True)
         self.list_widget.clear()

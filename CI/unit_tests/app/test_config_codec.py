@@ -4,9 +4,7 @@ import pytest
 
 from software.app.config import DEFAULT_USER_AGENT, USER_AGENT_PRESETS
 from software.core.config.codec import (
-    CURRENT_CONFIG_SCHEMA_VERSION,
     UserAgentProfile,
-    _ensure_supported_config_payload,
     _select_user_agent_from_ratios,
     build_runtime_config_snapshot,
     deserialize_question_entry,
@@ -30,7 +28,6 @@ class ConfigCodecTests:
         config = RuntimeConfig(reverse_fill_enabled=True, reverse_fill_source_path='D:/demo.xlsx', reverse_fill_format=REVERSE_FILL_FORMAT_WJX_SEQUENCE, reverse_fill_start_row=3, reverse_fill_threads=4)
         payload = serialize_runtime_config(config)
         restored = deserialize_runtime_config(payload)
-        assert 'config_schema_version' not in payload
         assert restored.reverse_fill_enabled
         assert restored.reverse_fill_source_path == 'D:/demo.xlsx'
         assert restored.reverse_fill_format == REVERSE_FILL_FORMAT_WJX_SEQUENCE
@@ -96,9 +93,11 @@ class ConfigCodecTests:
         assert config.question_entries[0].question_type == "single"
         assert config.questions_info[0].title == "Q1"
 
-    def test_ensure_supported_config_payload_keeps_payload_without_schema_version(self) -> None:
-        payload = _ensure_supported_config_payload({"url": "https://example.test"}, config_path="demo.json")
-        assert payload == {"url": "https://example.test"}
+    def test_runtime_config_export_excludes_key_by_default_and_allows_explicit_export(self) -> None:
+        config = RuntimeConfig(ai_api_key="manual-export-key")
+
+        assert "ai_api_key" not in serialize_runtime_config(config)
+        assert serialize_runtime_config(config, include_secrets=True)["ai_api_key"] == "manual-export-key"
 
     def test_question_entry_normalizes_text_modes_ranges_provider_and_dimensions(self) -> None:
         entry = deserialize_question_entry(

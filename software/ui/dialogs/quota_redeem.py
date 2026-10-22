@@ -2,7 +2,9 @@ from __future__ import annotations
 
 import logging
 import os
-import threading
+from collections.abc import Callable, Coroutine
+from concurrent.futures import Future
+from typing import Any
 
 from PySide6.QtCore import QEvent, QTimer, Qt, QUrl, Signal, Slot
 from PySide6.QtGui import QDesktopServices, QIcon
@@ -43,8 +45,14 @@ class QuotaRedeemDialog(MessageBoxBase):
     _SHOP_URL = "https://wzyp.cn/shop/surveycontroller"
     _SHOP_ICON_PATH = "assets/pay_ldxp_favicon.ico"
 
-    def __init__(self, parent=None):
+    def __init__(
+        self,
+        parent=None,
+        *,
+        submit_async_task: Callable[[str, Callable[[], Coroutine[Any, Any, Any]]], Future[Any]],
+    ):
         super().__init__(parent)
+        self._submit_async_task = submit_async_task
         self.setAttribute(Qt.WidgetAttribute.WA_QuitOnClose, False)
         self.setWindowTitle("额度兑换")
         self.widget.setFixedWidth(540)
@@ -183,16 +191,22 @@ class QuotaRedeemDialog(MessageBoxBase):
 
         self._set_redeeming(True)
 
-        def _redeem() -> None:
-            try:
-                import asyncio
+        try:
+            future = self._submit_async_task(
+                "quota_card_redemption",
+                lambda: redeem_card_async(card_code),
+            )
+        except Exception as exc:
+            self._redeemFinished.emit(False, exc)
+            return False
 
-                result = asyncio.run(redeem_card_async(card_code))
-                self._redeemFinished.emit(True, result)
+        def _on_redeem_done(done: Future[Any]) -> None:
+            try:
+                self._redeemFinished.emit(True, done.result())
             except Exception as exc:
                 self._redeemFinished.emit(False, exc)
 
-        threading.Thread(target=_redeem, daemon=True, name="QuotaRedeemDialog").start()
+        future.add_done_callback(_on_redeem_done)
         return False
 
     def reject(self) -> None:

@@ -87,9 +87,8 @@ def resolve_user_config_directory(settings=None) -> str:
     return _normalize_path(os.path.expanduser(configured_path))
 
 
-def get_user_config_directory() -> str:
-    
-    return resolve_user_config_directory()
+def get_user_config_directory(settings=None) -> str:
+    return resolve_user_config_directory(settings)
 
 
 def get_user_local_data_root() -> str:
@@ -112,8 +111,17 @@ def get_user_updates_directory() -> str:
     return os.path.join(get_user_local_data_root(), "updates")
 
 
-def get_default_runtime_config_path() -> str:
-    
+def get_default_runtime_config_path(settings=None) -> str:
+    config_path = os.path.join(get_user_config_directory(settings), "config.json")
+    if os.path.normcase(os.path.abspath(config_path)) == os.path.normcase(
+        os.path.abspath(get_legacy_runtime_config_path())
+    ):
+        return os.path.join(os.path.dirname(config_path), "runtime-config.json")
+    return config_path
+
+
+def get_legacy_runtime_config_path() -> str:
+    """Return the pre-unification default path for read-only recovery."""
     return os.path.join(get_user_config_root(), "config.json")
 
 
@@ -147,6 +155,7 @@ __all__ = [
     "get_default_runtime_config_path",
     "get_default_user_config_directory",
     "get_fatal_crash_log_path",
+    "get_legacy_runtime_config_path",
     "get_last_session_log_path",
     "get_local_app_data_root",
     "get_roaming_app_data_root",

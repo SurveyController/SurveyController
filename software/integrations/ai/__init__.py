@@ -6,6 +6,7 @@ from software.integrations.ai.client import (
     get_ai_settings,
     get_default_system_prompt,
     save_ai_settings,
+    update_ai_session,
     atest_connection,
 )
 from software.integrations.ai.settings import configure_ai_settings_store, reset_ai_settings
@@ -20,6 +21,7 @@ __all__ = [
     "get_default_system_prompt",
     "reset_ai_settings",
     "save_ai_settings",
+    "update_ai_session",
     "atest_connection",
 ]
 

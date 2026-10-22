@@ -74,11 +74,71 @@ class ConfigStoreTests:
         default_path = tmp_path / "config.json"
         default_path.write_text("", encoding="utf-8")
 
-        with patch("software.io.config.store._default_config_path", return_value=str(default_path)):
+        with (
+            patch("software.io.config.store._default_config_path", return_value=str(default_path)),
+            patch("software.io.config.store.get_legacy_runtime_config_path", return_value=None),
+        ):
             config = config_store.load_config(strict=False)
 
         assert isinstance(config, RuntimeConfig)
         assert default_path.read_text(encoding="utf-8") == "{}\n"
+
+    def test_load_config_reads_legacy_default_without_modifying_it(
+        self,
+        tmp_path: Path,
+    ) -> None:
+        default_path = tmp_path / "configs" / "config.json"
+        legacy_path = tmp_path / "config.json"
+        legacy_path.write_text('{"url": "https://legacy.test"}\n', encoding="utf-8")
+        original_content = legacy_path.read_text(encoding="utf-8")
+
+        with (
+            patch("software.io.config.store._default_config_path", return_value=str(default_path)),
+            patch("software.io.config.store.get_legacy_runtime_config_path", return_value=str(legacy_path)),
+        ):
+            config = config_store.load_config(strict=True)
+
+        assert config.url == "https://legacy.test"
+        assert legacy_path.read_text(encoding="utf-8") == original_content
+        assert not default_path.exists()
+
+    def test_load_config_prefers_new_default_when_both_paths_exist(
+        self,
+        tmp_path: Path,
+    ) -> None:
+        default_path = tmp_path / "configs" / "config.json"
+        legacy_path = tmp_path / "config.json"
+        default_path.parent.mkdir()
+        default_path.write_text('{"url": "https://current.test"}\n', encoding="utf-8")
+        legacy_path.write_text('{"url": "https://legacy.test"}\n', encoding="utf-8")
+
+        with (
+            patch("software.io.config.store._default_config_path", return_value=str(default_path)),
+            patch("software.io.config.store.get_legacy_runtime_config_path", return_value=str(legacy_path)),
+        ):
+            config = config_store.load_config(strict=True)
+
+        assert config.url == "https://current.test"
+        assert legacy_path.read_text(encoding="utf-8") == '{"url": "https://legacy.test"}\n'
+
+    def test_save_default_config_writes_new_path_and_keeps_legacy_file(
+        self,
+        tmp_path: Path,
+    ) -> None:
+        default_path = tmp_path / "configs" / "config.json"
+        legacy_path = tmp_path / "config.json"
+        legacy_path.write_text('{"url": "https://legacy.test"}\n', encoding="utf-8")
+        original_content = legacy_path.read_text(encoding="utf-8")
+
+        with (
+            patch("software.io.config.store._default_config_path", return_value=str(default_path)),
+            patch("software.io.config.store.get_legacy_runtime_config_path", return_value=str(legacy_path)),
+        ):
+            saved_path = config_store.save_config(RuntimeConfig(url="https://new.test"))
+
+        assert saved_path == str(default_path)
+        assert config_store.load_config(str(default_path), strict=True).url == "https://new.test"
+        assert legacy_path.read_text(encoding="utf-8") == original_content
 
     def test_load_config_rejects_non_object_payload_in_strict_mode(self, tmp_path: Path) -> None:
         path = tmp_path / "list.json"
@@ -95,9 +155,36 @@ class ConfigStoreTests:
 
     def test_save_config_creates_parent_directory_and_round_trips(self, tmp_path: Path) -> None:
         path = tmp_path / "nested" / "config.json"
-        saved_path = config_store.save_config(RuntimeConfig(url="https://example.test", target=12), str(path))
+        saved_path = config_store.save_config(
+            RuntimeConfig(url="https://example.test", target=12, ai_api_key="export-only"),
+            str(path),
+        )
 
         assert saved_path == str(path)
         payload = json.loads(path.read_text(encoding="utf-8"))
         assert payload["url"] == "https://example.test"
+        assert "ai_api_key" not in payload
         assert config_store.load_config(str(path), strict=True).target == 12
+
+    def test_save_config_includes_key_only_when_explicitly_requested(self, tmp_path: Path) -> None:
+        path = tmp_path / "export.json"
+
+        config_store.save_config(
+            RuntimeConfig(ai_api_key="export-only"),
+            str(path),
+            include_secrets=True,
+        )
+
+        assert json.loads(path.read_text(encoding="utf-8"))["ai_api_key"] == "export-only"
+
+    def test_save_config_preserves_existing_file_when_atomic_replace_fails(self, tmp_path: Path) -> None:
+        path = tmp_path / "config.json"
+        original_content = '{"url": "https://existing.test"}\n'
+        path.write_text(original_content, encoding="utf-8")
+
+        with patch("software.io.config.store.os.replace", side_effect=OSError("replace failed")):
+            with pytest.raises(OSError, match="replace failed"):
+                config_store.save_config(RuntimeConfig(url="https://new.test"), str(path))
+
+        assert path.read_text(encoding="utf-8") == original_content
+        assert list(tmp_path.glob("*.tmp")) == []

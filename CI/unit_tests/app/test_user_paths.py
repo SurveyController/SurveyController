@@ -43,7 +43,10 @@ class UserPathsTests:
         assert user_paths.get_user_logs_directory() == str(local_root.parent / "logs")
         assert user_paths.get_user_cache_directory() == str(local_root.parent / "cache")
         assert user_paths.get_user_updates_directory() == str(local_root.parent / "updates")
-        assert user_paths.get_default_runtime_config_path() == str(config_root.parent / "config.json")
+        assert user_paths.get_default_runtime_config_path() == str(
+            config_root.parent / "configs" / "config.json"
+        )
+        assert user_paths.get_legacy_runtime_config_path() == str(config_root.parent / "config.json")
 
     def test_standard_roots_fall_back_to_home_when_qt_returns_empty(self, monkeypatch, tmp_path) -> None:
         monkeypatch.setattr(user_paths, "configure_qt_application_metadata", lambda: None)
@@ -76,3 +79,27 @@ class UserPathsTests:
         monkeypatch.setattr(user_paths, "get_user_config_root", lambda: str(tmp_path / "SurveyController"))
 
         assert user_paths.get_default_user_config_directory() == str(tmp_path / "SurveyController" / "configs")
+
+    def test_default_runtime_config_path_follows_selected_config_directory(
+        self,
+        tmp_path,
+    ) -> None:
+        selected_directory = tmp_path / "selected-configs"
+        settings = _FakeSettings(str(selected_directory))
+
+        assert user_paths.get_default_runtime_config_path(settings) == str(
+            selected_directory.resolve() / "config.json"
+        )
+
+    def test_runtime_config_avoids_overwriting_legacy_file_when_directory_matches(
+        self,
+        monkeypatch,
+        tmp_path,
+    ) -> None:
+        legacy_directory = tmp_path / "SurveyController"
+        monkeypatch.setattr(user_paths, "get_user_config_root", lambda: str(legacy_directory))
+        settings = _FakeSettings(str(legacy_directory))
+
+        assert user_paths.get_default_runtime_config_path(settings) == str(
+            legacy_directory.resolve() / "runtime-config.json"
+        )

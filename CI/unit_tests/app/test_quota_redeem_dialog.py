@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from concurrent.futures import Future
 from types import SimpleNamespace
 from typing import Any, cast
 
@@ -51,6 +52,14 @@ class _FakeLabel:
         self.style = str(style)
 
 
+class _FakeSignal:
+    def __init__(self) -> None:
+        self.emitted: list[tuple[object, ...]] = []
+
+    def emit(self, *values: object) -> None:
+        self.emitted.append(values)
+
+
 class _FakeMessageBox:
     next_exec_result = False
 
@@ -81,6 +90,8 @@ class _FakeDialog:
         self.set_redeeming_calls: list[bool] = []
         self.accept_calls = 0
         self.yesButton = object()
+        self._redeemFinished = _FakeSignal()
+        self._submit_async_task = lambda *_args: Future()
 
     def _show_pending_warning(self) -> None:
         self.pending_warning_calls += 1
@@ -138,6 +149,29 @@ class QuotaRedeemDialogTests:
         assert dialog.validate() is False
         assert dialog._redeeming is False
         assert dialog.set_redeeming_calls == []
+
+    def test_validate_submits_redemption_to_engine_task_port(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        dialog = _FakeDialog(card_code="CARD-001")
+        monkeypatch.setattr(quota_redeem, "MessageBox", _FakeMessageBox)
+        monkeypatch.setattr(_FakeMessageBox, "next_exec_result", True)
+        monkeypatch.setattr(quota_redeem, "has_authenticated_session", lambda: True)
+        monkeypatch.setattr(quota_redeem, "get_session_snapshot", lambda: {"user_id": 7})
+        submitted: list[tuple[str, object]] = []
+        future: Future[object] = Future()
+        future.set_result({"card_quota": 5})
+
+        def submit(task_name, coroutine_factory):
+            submitted.append((task_name, coroutine_factory))
+            return future
+
+        dialog._submit_async_task = submit
+
+        assert dialog.validate() is False
+        assert submitted[0][0] == "quota_card_redemption"
+        assert dialog._redeemFinished.emitted == [(True, {"card_quota": 5})]
 
     def test_refresh_account_hint_updates_by_session_state(
         self,

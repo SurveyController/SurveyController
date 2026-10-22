@@ -1,6 +1,4 @@
 from software.core.config.codec import (
-    CURRENT_CONFIG_SCHEMA_VERSION,
-    _ensure_supported_config_payload,
     _select_user_agent_from_ratios,
     build_runtime_config_snapshot,
     clone_question_entries,
@@ -21,8 +19,6 @@ from software.io.config.store import (
 
 __all__ = [
     "RuntimeConfig",
-    "CURRENT_CONFIG_SCHEMA_VERSION",
-    "_ensure_supported_config_payload",
     "_sanitize_filename",
     "_select_user_agent_from_ratios",
     "build_runtime_config_snapshot",

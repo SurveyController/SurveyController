@@ -25,6 +25,7 @@ from software.integrations.ai.settings import (
     get_ai_settings,
     get_default_system_prompt,
     save_ai_settings,
+    update_ai_session,
 )
 
 logger = logging.getLogger(__name__)
@@ -41,6 +42,7 @@ __all__ = [
     "get_ai_settings",
     "get_default_system_prompt",
     "save_ai_settings",
+    "update_ai_session",
     "atest_connection",
 ]
 

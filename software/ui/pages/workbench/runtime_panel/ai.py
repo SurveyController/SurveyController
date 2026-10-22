@@ -3,7 +3,9 @@ import logging
 from software.logging.log_utils import log_suppressed_exception
 
 
-from PySide6.QtCore import QObject, Qt, QThread
+from concurrent.futures import Future
+
+from PySide6.QtCore import QObject, Qt, Signal
 from PySide6.QtWidgets import QSizePolicy, QVBoxLayout, QWidget
 from qfluentwidgets import (
     ComboBox,
@@ -24,7 +26,7 @@ from qfluentwidgets import (
 )
 
 from software.ui.widgets.full_width_infobar import FullWidthInfoBar
-from software.ui.workers.ai_test_worker import AITestWorker
+from software.ui.workers.ai_test_worker import ai_test_result
 from software.application.ports import AiSettingsPort
 from software.core.config.schema import RuntimeConfig
 
@@ -70,6 +72,7 @@ class AIPromptSettingCard(ExpandGroupSettingCard):
 
 
 class RuntimeAISection(QObject):
+    aiTestFinished = Signal(bool, str)
     _PROVIDER_DOCS = {
         "deepseek": "https://api-docs.deepseek.com/zh-cn/",
         "custom": "https://platform.openai.com/docs/api-reference/introduction",
@@ -87,8 +90,7 @@ class RuntimeAISection(QObject):
         self._ai_settings = ai_settings
         self.group = SettingCardGroup("AI 填空助手", parent_view)
         self._ai_loading = True
-        self._ai_test_thread: Optional[QThread] = None
-        self._ai_test_worker: Optional[AITestWorker] = None
+        self._ai_test_future: Future[Any] | None = None
         self._current_infobar: Optional[InfoBar] = None  
         ai_config = self._ai_settings.get_settings()
         self._ai_system_prompt = str(
@@ -96,6 +98,7 @@ class RuntimeAISection(QObject):
         ).strip() or self._ai_settings.default_system_prompt()
         self._build_ui(ai_config)
         self._bind_events()
+        self.aiTestFinished.connect(self._on_ai_test_finished)
         self._update_ai_visibility()
         self._ai_loading = False
 
@@ -365,6 +368,18 @@ class RuntimeAISection(QObject):
         if not getattr(cfg, "ai_system_prompt", ""):
             cfg.ai_system_prompt = self._ai_settings.default_system_prompt()
 
+        if ai_config_present:
+            self._ai_settings.update_session(
+                {
+                    "provider": cfg.ai_provider,
+                    "api_key": cfg.ai_api_key,
+                    "base_url": cfg.ai_base_url,
+                    "api_protocol": cfg.ai_api_protocol,
+                    "model": cfg.ai_model,
+                    "system_prompt": cfg.ai_system_prompt,
+                }
+            )
+
         self._ai_loading = True
         self._set_ai_controls_blocked(True)
         idx = self.ai_provider_combo.findData(cfg.ai_provider)
@@ -447,7 +462,7 @@ class RuntimeAISection(QObject):
         
         if self._ai_loading:
             return
-        if self._ai_test_thread is not None and self._ai_test_thread.isRunning():
+        if self._ai_test_future is not None and not self._ai_test_future.done():
             return
         self._ai_settings.save_settings(
             api_key=self.ai_apikey_edit.text(),
@@ -457,26 +472,35 @@ class RuntimeAISection(QObject):
             system_prompt=self._ai_system_prompt,
         )
         self._set_ai_test_loading(True)
-        self._ai_test_thread = QThread()
-        self._ai_test_worker = AITestWorker(test_connection=self._ai_settings.test_connection)
-        self._ai_test_worker.moveToThread(self._ai_test_thread)
-        self._ai_test_thread.started.connect(self._ai_test_worker.run)
-        self._ai_test_worker.finished.connect(self._on_ai_test_finished)
-        self._ai_test_worker.finished.connect(self._ai_test_thread.quit)
-        self._ai_test_worker.finished.connect(self._ai_test_worker.deleteLater)
-        self._ai_test_thread.finished.connect(self._ai_test_thread.deleteLater)
-        self._ai_test_thread.finished.connect(self._on_ai_test_thread_finished)
-        self._ai_test_thread.start()
+        try:
+            runtime_engine = self._owner.controller._async_engine_client
+            future = runtime_engine.submit_ui_task(
+                "ai_test_connection",
+                self._ai_settings.test_connection,
+            )
+        except Exception as exc:
+            self._on_ai_test_finished(*ai_test_result(error=exc))
+            return
+        self._ai_test_future = future
+        future.add_done_callback(self._on_ai_test_future_done)
+
+    def _on_ai_test_future_done(self, future: Future[Any]) -> None:
+        try:
+            result = future.result()
+        except Exception as exc:
+            outcome = ai_test_result(error=exc)
+        else:
+            outcome = ai_test_result(result=str(result or ""))
+        try:
+            self.aiTestFinished.emit(*outcome)
+        except RuntimeError:
+            logging.debug("AI 测试结果到达时设置页已关闭")
 
     def _on_ai_test_finished(self, success: bool, message: str):
-        
+        self._ai_test_future = None
         self._set_ai_test_loading(False)
         if success:
             self._show_ai_infobar(message, success=True, duration=3000)
         else:
             logging.error("AI 连接测试失败: %s", message)
             self._show_ai_infobar(message, success=False, duration=5000)
-
-    def _on_ai_test_thread_finished(self):
-        self._ai_test_thread = None
-        self._ai_test_worker = None
