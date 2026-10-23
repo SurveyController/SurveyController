@@ -1,4 +1,4 @@
-from typing import Optional
+from typing import Any, Optional
 import logging
 from software.logging.log_utils import log_suppressed_exception
 

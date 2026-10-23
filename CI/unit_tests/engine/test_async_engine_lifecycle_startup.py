@@ -10,6 +10,18 @@ from .async_engine_fakes import FakeLoop, FakeThread, build_engine
 
 
 class AsyncRuntimeEngineStartupTests:
+    def test_start_reuses_a_running_background_loop(self) -> None:
+        engine = build_engine()
+        thread = FakeThread(target=lambda: None, daemon=True, name="AsyncRuntimeEngine")
+        thread.started = True
+        engine._thread = thread
+        engine._engine_state = async_engine.EngineState.RUNNING
+        engine._loop_ready.set()
+
+        engine.start()
+
+        assert engine.thread is thread
+
     def test_start_initializes_background_loop_and_shutdown_clears_handles(self, monkeypatch) -> None:
         engine = build_engine()
         fake_loop = FakeLoop()

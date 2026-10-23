@@ -84,12 +84,25 @@ class AsyncRuntimeEngine:
             return self._engine_state
 
     def start(self) -> None:
+        wait_for_existing_loop = False
         with self._start_lock:
             with self._lifecycle_lock:
-                if self._engine_state is not EngineState.OPEN:
+                if self._engine_state is EngineState.RUNNING:
+                    if self._thread is None or not self._thread.is_alive():
+                        raise RuntimeError("AsyncRuntimeEngine 运行线程已退出")
+                    wait_for_existing_loop = True
+                elif self._engine_state is not EngineState.OPEN:
                     raise RuntimeError(f"AsyncRuntimeEngine 已关闭或正在关闭：{self._engine_state.value}")
-                if self._thread is not None and self._thread.is_alive():
+                elif self._thread is not None and self._thread.is_alive():
                     return
+
+            if wait_for_existing_loop:
+                self._loop_ready.wait()
+                if self._loop_start_error is not None:
+                    error = self._loop_start_error
+                    raise RuntimeError("AsyncRuntimeEngine loop 启动失败") from error
+                return
+
             self._loop_ready.clear()
             self._loop_start_error = None
 
