@@ -25,7 +25,9 @@ def _decode_windows_dib(raw_data: bytes) -> Optional[QImage]:
     bit_count_offset = 10 if header_size == 12 else 14
     if len(raw_data) < bit_count_offset + 2:
         return None
-    bit_count = int.from_bytes(raw_data[bit_count_offset:bit_count_offset + 2], "little", signed=False)
+    bit_count = int.from_bytes(
+        raw_data[bit_count_offset : bit_count_offset + 2], "little", signed=False
+    )
 
     compression = 0
     colors_used = 0
@@ -58,8 +60,6 @@ def _decode_windows_dib(raw_data: bytes) -> Optional[QImage]:
 
 
 class SurveyClipboardMixin:
-    
-
     if TYPE_CHECKING:
         from typing import Any
 

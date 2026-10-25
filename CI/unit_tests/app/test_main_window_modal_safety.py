@@ -379,7 +379,9 @@ class MainWindowModalSafetyTests:
 
         window = _FakeDialogsWindow()
         monkeypatch.setattr(qt_widgets, "QSystemTrayIcon", _FakeTrayIcon, raising=False)
-        with patch.object(window, "_should_show_task_result_system_notification", return_value=True):
+        with patch.object(
+            window, "_should_show_task_result_system_notification", return_value=True
+        ):
             window.show_task_result_system_notification("标题", "内容")
             tray = window._task_result_tray_icon
             window.show_task_result_system_notification("标题2", "内容2")
@@ -498,7 +500,7 @@ class MainWindowModalSafetyTests:
             patch("software.ui.shell.main_window_parts.lifecycle.os.makedirs"),
         ):
             assert MainWindowLifecycleMixin._save_config_via_dialog(window, "cfg") is True
-        save_mock.assert_called_once_with("cfg", "D:/cfg.json")
+        save_mock.assert_called_once_with("cfg", "D:/cfg.json", include_secrets=True)
 
         with (
             patch(

@@ -23,7 +23,12 @@ class InteractionRequest:
 
     @classmethod
     def create(
-        cls, kind: InteractionKind, code: str, *, detail: str = "", level: str = "info",
+        cls,
+        kind: InteractionKind,
+        code: str,
+        *,
+        detail: str = "",
+        level: str = "info",
     ) -> InteractionRequest:
         return cls(kind, code, detail, level, str(uuid4()))
 

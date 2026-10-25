@@ -6,7 +6,10 @@ import threading
 from typing import Any, List, Optional, Tuple, cast
 
 from software.core.engine.constants import HTTP_MAX_THREADS
-from software.core.engine.execution_artifacts import PreparedExecutionArtifacts, RuntimePreparationError
+from software.core.engine.execution_artifacts import (
+    PreparedExecutionArtifacts,
+    RuntimePreparationError,
+)
 from software.core.config.answer_datetime_window import (
     answer_datetime_window_to_epoch_ms,
     normalize_answer_datetime_window,
@@ -100,6 +103,7 @@ def _verify_wjx_survey_is_answerable(
         return
     try:
         import software.network.http as http_client
+
         response = http_client.get(url, timeout=8, headers=DEFAULT_HTTP_HEADERS, proxies={})
         response.raise_for_status()
     except Exception:
@@ -215,7 +219,9 @@ def _build_execution_config_template(
         ai_system_prompt=str(getattr(config, "ai_system_prompt", "") or "").strip(),
     )
     execution_config.questions_metadata = _build_questions_metadata(questions_info)
-    execution_config.provider_question_metadata_map = _build_provider_question_metadata(questions_info)
+    execution_config.provider_question_metadata_map = _build_provider_question_metadata(
+        questions_info
+    )
     return execution_config
 
 

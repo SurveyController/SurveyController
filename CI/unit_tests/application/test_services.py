@@ -76,7 +76,9 @@ def test_start_pause_resume_stop_and_close():
     assert harness.engine.shutdown_calls
 
 
-@pytest.mark.parametrize("preparation_error", [RuntimePreparationError("配置无效"), ValueError("损坏")])
+@pytest.mark.parametrize(
+    "preparation_error", [RuntimePreparationError("配置无效"), ValueError("损坏")]
+)
 def test_preparation_failure_never_starts_engine(preparation_error):
     def fail(*args, **kwargs):
         raise preparation_error
@@ -99,7 +101,10 @@ def test_engine_initialization_failure_resets_state_and_schedules_cleanup():
     harness.engine.start_error = RuntimeError("engine init")
     try:
         harness.start()
-        assert harness.state.get_runtime_snapshot()["terminal_stop"]["category"] == "engine_start_failed"
+        assert (
+            harness.state.get_runtime_snapshot()["terminal_stop"]["category"]
+            == "engine_start_failed"
+        )
         assert not harness.service.running
         assert harness.service.stop_event.is_set()
         assert len(harness.cleanup.tasks) == 1
@@ -112,6 +117,7 @@ def test_stop_during_preparation_ignores_late_result():
 
     def slow_prepare(config, **kwargs):
         from CI.unit_tests.application.fakes import prepare
+
         entered.set()
         assert release.wait(2)
         return prepare(config, **kwargs)
@@ -154,11 +160,14 @@ def test_target_completion_cleans_once_and_keeps_semantic_snapshot():
         harness.close()
 
 
-@pytest.mark.parametrize("category,reason", [
-    ("runtime_failed", "other"),
-    ("ai_unstable", ""),
-    ("submission_verification", ""),
-])
+@pytest.mark.parametrize(
+    "category,reason",
+    [
+        ("runtime_failed", "other"),
+        ("ai_unstable", ""),
+        ("submission_verification", ""),
+    ],
+)
 def test_failure_stop_preserves_engine_reason_without_feedback_request(category, reason):
     harness = Harness()
     try:
@@ -197,7 +206,9 @@ def test_engine_future_failure_is_not_reported_as_success():
 def test_close_cancels_interactions_and_cleans_resources_once():
     harness = Harness()
     closed = []
-    harness.service.runtime_port.register_cleanup_target(SimpleNamespace(quit=lambda: closed.append(True)))
+    harness.service.runtime_port.register_cleanup_target(
+        SimpleNamespace(quit=lambda: closed.append(True))
+    )
     request = InteractionRequest.create(InteractionKind.QUOTA, "random_ip_required")
     reply = harness.interactions.request(request)
     harness.close()
@@ -262,10 +273,14 @@ async def test_proxy_quota_waits_for_the_matching_ui_reply(accepted):
         raise ProxyAuthenticationError("trial_already_claimed")
 
     harness.service._proxy_gateway.activate_trial = already_claimed
-    pending = asyncio.create_task(harness.service._ensure_random_ip_ready_async(harness.service.adapter))
+    pending = asyncio.create_task(
+        harness.service._ensure_random_ip_ready_async(harness.service.adapter)
+    )
     try:
         await asyncio.sleep(0)
-        request = next(request for request in harness.requests if request.kind == InteractionKind.QUOTA)
+        request = next(
+            request for request in harness.requests if request.kind == InteractionKind.QUOTA
+        )
         assert not pending.done()
         harness.interactions.resolve(request.request_id, accepted)
         assert await asyncio.wait_for(pending, timeout=2) is accepted
@@ -277,8 +292,12 @@ async def test_proxy_quota_waits_for_the_matching_ui_reply(accepted):
 def test_parse_success_failure_invalid_url_and_engine_submission_failure(caplog):
     state = RunStateStore()
     engine = FakeEngine()
-    service = SurveyParseService(async_engine_client=engine, state_store=state,
-        emit_event=lambda event: None, dispatch_async=lambda callback: callback())
+    service = SurveyParseService(
+        async_engine_client=engine,
+        state_store=state,
+        emit_event=lambda event: None,
+        dispatch_async=lambda callback: callback(),
+    )
     service.parse_survey("")
     assert state.get_survey_snapshot()["error_code"] == "url_required"
     service.parse_survey("https://example.com")
@@ -317,13 +336,21 @@ def test_parse_success_failure_invalid_url_and_engine_submission_failure(caplog)
     assert state.get_survey_snapshot()["phase"] == "error"
 
 
-@pytest.mark.parametrize("provider,url", [
-    ("wjx", "https://v.wjx.cn/vm/demo.aspx"), ("qq", "https://wj.qq.com/s2/123456/Abcd"),
-])
+@pytest.mark.parametrize(
+    "provider,url",
+    [
+        ("wjx", "https://v.wjx.cn/vm/demo.aspx"),
+        ("qq", "https://wj.qq.com/s2/123456/Abcd"),
+    ],
+)
 def test_parse_filters_descriptions_and_updates_provider(provider, url):
     state, engine = RunStateStore(), FakeEngine()
-    service = SurveyParseService(async_engine_client=engine, state_store=state,
-        emit_event=lambda event: None, dispatch_async=lambda callback: callback())
+    service = SurveyParseService(
+        async_engine_client=engine,
+        state_store=state,
+        emit_event=lambda event: None,
+        dispatch_async=lambda callback: callback(),
+    )
     question = SurveyQuestionMeta(num=1, title="Q1", type_code="3", options=2, provider=provider)
     description = SurveyQuestionMeta(num=2, title="说明", is_description=True, provider=provider)
     service.parse_survey(url)
@@ -355,8 +382,12 @@ def test_delayed_cleanup_remains_bound_to_finished_run():
     first_port.register_cleanup_target(SimpleNamespace(quit=lambda: first_closed.append(True)))
     harness.service._schedule_cleanup()
     from software.application.runtime_port import RunRuntimePort
-    second_port = RunRuntimePort(stop_signal=Event(), notify_random_ip_loading=lambda *args: None,
-        handle_random_ip_submission=lambda **kwargs: None)
+
+    second_port = RunRuntimePort(
+        stop_signal=Event(),
+        notify_random_ip_loading=lambda *args: None,
+        handle_random_ip_submission=lambda **kwargs: None,
+    )
     second_port.register_cleanup_target(SimpleNamespace(quit=lambda: second_closed.append(True)))
     harness.service.runtime_port = second_port
     harness.cleanup.tasks[0][0]()
@@ -392,8 +423,11 @@ def test_prepared_config_is_cloned_before_injecting_proxy_leases():
     harness = Harness()
     template = ExecutionConfig(random_proxy_ip_enabled=True, single_prob=[[1.0, 0.0]])
     harness.service._prepared_execution_artifacts = PreparedExecutionArtifacts(
-        execution_config_template=template, survey_provider="wjx", question_entries=[],
-        questions_info=[], reverse_fill_spec=None,
+        execution_config_template=template,
+        survey_provider="wjx",
+        question_entries=[],
+        questions_info=[],
+        reverse_fill_spec=None,
     )
     lease = ProxyLease(address="127.0.0.1:8080")
     config, state = harness.service._prepare_engine_state([lease])
@@ -444,6 +478,7 @@ def test_close_drops_queued_proxy_state_and_ui_events():
     harness = Harness()
     harness.service.apply_runtime_patch({"random_ip": {"used_quota": 9}})
     from software.application.events import event_payload
+
     harness.service.emit_event(event_payload("cleanup_finished"))
     harness.close()
     assert harness.state.get_runtime_snapshot()["random_ip"]["used_quota"] == 0
@@ -457,8 +492,12 @@ def test_parse_dispatch_failure_and_close_never_apply_late_results():
     def unavailable(callback):
         raise RuntimeError("dispatcher closed")
 
-    service = SurveyParseService(async_engine_client=engine, state_store=state,
-        emit_event=lambda event: None, dispatch_async=unavailable)
+    service = SurveyParseService(
+        async_engine_client=engine,
+        state_store=state,
+        emit_event=lambda event: None,
+        dispatch_async=unavailable,
+    )
     service.parse_survey("https://v.wjx.cn/vm/demo.aspx")
     engine.parse_future.set_result(
         ProviderParseResult(

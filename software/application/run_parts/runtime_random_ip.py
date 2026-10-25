@@ -27,6 +27,7 @@ class RandomIpRuntimeService:
         _state_store: Any
 
         def sync_random_ip_enabled(self, enabled: bool) -> None: ...
+
         _random_ip_background_threads: set[threading.Thread]
         _random_ip_background_threads_lock: threading.Lock
 
@@ -60,7 +61,9 @@ class RandomIpRuntimeService:
     def _proxy_callbacks_active(self) -> bool:
         return not bool(getattr(self, "_closing", False))
 
-    def _submit_random_ip_background_task(self, task_name: str, target: Any) -> concurrent.futures.Future[Any]:
+    def _submit_random_ip_background_task(
+        self, task_name: str, target: Any
+    ) -> concurrent.futures.Future[Any]:
         future: concurrent.futures.Future[Any] = concurrent.futures.Future()
 
         def _runner() -> None:
@@ -331,9 +334,7 @@ class RandomIpRuntimeService:
             self._show_random_ip_message(adapter, "trial_failed", message, level="error")
             return False, False
         except Exception as exc:
-            self._show_random_ip_message(
-                adapter, "trial_failed", str(exc), level="error"
-            )
+            self._show_random_ip_message(adapter, "trial_failed", str(exc), level="error")
             return False, False
         finally:
             self._set_random_ip_loading(adapter, False, "")
@@ -509,4 +510,3 @@ class RandomIpRuntimeService:
 
         future.add_done_callback(_on_done_callback)
         return True
-

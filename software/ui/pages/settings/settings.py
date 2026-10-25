@@ -56,7 +56,6 @@ if TYPE_CHECKING:
 
 
 class SettingsPage(ScrollArea):
-    
     view: QWidget
     appearance_group: SettingCardGroup
     behavior_group: SettingCardGroup
@@ -73,14 +72,22 @@ class SettingsPage(ScrollArea):
     reset_ui_card: PrimaryPushSettingCard
     config_directory_card: PushSettingCard
 
-    def __init__(self, parent=None, *, ai_settings: AiSettingsPort | None = None, preferences: PreferencesService | None = None):
+    def __init__(
+        self,
+        parent=None,
+        *,
+        ai_settings: AiSettingsPort | None = None,
+        preferences: PreferencesService | None = None,
+    ):
         super().__init__(parent)
         self.view = QWidget(self)
         self.setWidget(self.view)
         self.setWidgetResizable(True)
         self.enableTransparentBackground()
-        self._preferences = preferences if preferences is not None else PreferencesService(
-            QSettingsPreferences(app_settings())
+        self._preferences = (
+            preferences
+            if preferences is not None
+            else PreferencesService(QSettingsPreferences(app_settings()))
         )
         self._ai_settings = ai_settings if ai_settings is not None else PythonAiSettingsAdapter()
         self._defaults = self._build_defaults()
@@ -220,9 +227,7 @@ class SettingsPage(ScrollArea):
             event="change_auto_save_log_retention",
             target="auto_save_log_retention_combo",
             page="settings",
-            payload_factory=lambda _index: {
-                "keep_count": self.auto_save_logs_combo.currentData()
-            },
+            payload_factory=lambda _index: {"keep_count": self.auto_save_logs_combo.currentData()},
             forward_signal_args=False,
         )
 
@@ -246,6 +251,7 @@ class SettingsPage(ScrollArea):
             payload_factory=lambda: {"path": self._current_config_directory()},
             forward_signal_args=False,
         )
+
     def _window_parent(self):
         return self.window() or self
 
@@ -494,7 +500,9 @@ class SettingsPage(ScrollArea):
         self._preferences.reset()
         self._ai_settings.reset_settings()
 
-        self._set_switch_state(self.navigation_text_card, self._defaults[NAVIGATION_TEXT_VISIBLE_SETTING_KEY])
+        self._set_switch_state(
+            self.navigation_text_card, self._defaults[NAVIGATION_TEXT_VISIBLE_SETTING_KEY]
+        )
         self._set_switch_state(self.topmost_card, self._defaults["window_topmost"])
         self._set_switch_state(self.ask_save_card, self._defaults["ask_save_on_close"])
         self._set_switch_state(
@@ -574,4 +582,3 @@ class SettingsPage(ScrollArea):
             "settings",
             result="success",
         )
-

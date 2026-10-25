@@ -102,7 +102,11 @@ class UpdateManager:
     def check_updates() -> dict[str, Any]:
         current_version = APP_VERSION
         if sys.platform != "win32":
-            return {"has_update": False, "status": "unsupported", "current_version": current_version}
+            return {
+                "has_update": False,
+                "status": "unsupported",
+                "current_version": current_version,
+            }
         return _build_github_update_result(current_version)
 
     @staticmethod

@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import queue
 import threading
-from types import SimpleNamespace
 from typing import Any, cast
 
 import pytest
@@ -235,7 +234,11 @@ class UiHelperTests:
         monkeypatch: pytest.MonkeyPatch,
     ) -> None:
         fake_info_bar_manager = type("FakeInfoBarManager", (), {"managers": {}})
-        monkeypatch.setattr(qfluent_compat, "_install_infobar_manager_guards", lambda cls: setattr(cls, "patched", True))
+        monkeypatch.setattr(
+            qfluent_compat,
+            "_install_infobar_manager_guards",
+            lambda cls: setattr(cls, "patched", True),
+        )
         monkeypatch.setattr("qfluentwidgets.IndeterminateProgressBar", _FakeProgressBar)
         monkeypatch.setattr(
             "qfluentwidgets.components.widgets.info_bar.InfoBarManager",
@@ -267,7 +270,9 @@ class UiHelperTests:
     ) -> None:
         monkeypatch.setattr(qfluent_compat, "QParallelAnimationGroup", _FakeAnimationGroup)
         monkeypatch.setattr(qfluent_compat, "QPropertyAnimation", _FakeAnimation)
-        monkeypatch.setattr(qfluent_compat, "isValid", lambda obj: not getattr(obj, "invalid", False))
+        monkeypatch.setattr(
+            qfluent_compat, "isValid", lambda obj: not getattr(obj, "invalid", False)
+        )
         qfluent_compat._install_infobar_manager_guards(_FakeManager)
 
         manager = cast(Any, _FakeManager())
@@ -301,7 +306,9 @@ class UiHelperTests:
     ) -> None:
         monkeypatch.setattr(qfluent_compat, "QParallelAnimationGroup", _FakeAnimationGroup)
         monkeypatch.setattr(qfluent_compat, "QPropertyAnimation", _FakeAnimation)
-        monkeypatch.setattr(qfluent_compat, "isValid", lambda obj: not getattr(obj, "invalid", False))
+        monkeypatch.setattr(
+            qfluent_compat, "isValid", lambda obj: not getattr(obj, "invalid", False)
+        )
         local_manager_cls = type("LocalFakeManager", (_FakeManager,), {"managers": {}})
         qfluent_compat._install_infobar_manager_guards(local_manager_cls)
 
@@ -326,7 +333,9 @@ class UiHelperTests:
     ) -> None:
         monkeypatch.setattr(qfluent_compat, "QParallelAnimationGroup", _FakeAnimationGroup)
         monkeypatch.setattr(qfluent_compat, "QPropertyAnimation", _FakeAnimation)
-        monkeypatch.setattr(qfluent_compat, "isValid", lambda obj: not getattr(obj, "invalid", False))
+        monkeypatch.setattr(
+            qfluent_compat, "isValid", lambda obj: not getattr(obj, "invalid", False)
+        )
         local_manager_cls = type(
             "LocalFakeManagerRemove",
             (_FakeManager,),
@@ -382,7 +391,9 @@ class UiHelperTests:
 
         assert calls == ["queued", "no-app", "main-thread", "background"]
 
-    def test_ui_callback_dispatcher_handles_enqueue_failure(self, monkeypatch: pytest.MonkeyPatch) -> None:
+    def test_ui_callback_dispatcher_handles_enqueue_failure(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
         dispatcher = ui_dispatcher_module.UiCallbackDispatcher(lambda: None)
 
         def _boom(_callback) -> None:
@@ -390,4 +401,3 @@ class UiHelperTests:
 
         monkeypatch.setattr(dispatcher._queue, "put_nowait", _boom)
         assert dispatcher.enqueue(lambda: None) is False
-

@@ -57,8 +57,6 @@ _BaseFluentWindow = MSFluentWindow
 
 
 class _ImportCheckWindow(QWidget):
-    
-
     def __init__(self):
         super().__init__()
         self.setWindowTitle(f"SurveyController v{APP_VERSION}")
@@ -87,11 +85,8 @@ class MainWindow(
     MainWindowUpdateMixin,
     _BaseFluentWindow,
 ):
-    
-
     _IMPORT_CHECK_ENV = "WJX_IMPORT_CHECK"
 
-    
     def __init__(self, parent=None):
         self._boot_splash = None
         self._import_check_mode = (
@@ -136,12 +131,10 @@ class MainWindow(
         self._apply_default_window_size()
         self._enable_window_material_effect()
 
-        
         settings = app_settings()
         if get_bool_from_qsettings(settings.value("window_topmost"), False):
             self.apply_topmost_state(True, show=False)
 
-        
         if not self._import_check_mode:
             self._boot_splash = create_boot_splash(self)
 
@@ -157,7 +150,6 @@ class MainWindow(
         self.run_coordinator = self.workbench.run_coordinator
         self.reverse_fill_page = self.workbench.reverse_fill_page
 
-        
         self._log_page = None
         self._community_page = None
         self._about_page = None
@@ -167,7 +159,7 @@ class MainWindow(
 
         self._init_navigation()
         self.stackedWidget.currentChanged.connect(self._on_stack_widget_changed)
-        
+
         QTimer.singleShot(0, self._configure_navigation_interface)
         self._bind_controller_signals()
         self._refresh_title_random_ip_user_id()
@@ -179,7 +171,6 @@ class MainWindow(
             finish_boot_splash(1500)
             QTimer.singleShot(0, self._run_post_init_tasks)
 
-        
         self._latest_badge = None
         self._outdated_badge = None
         self._preview_badge = None
@@ -187,14 +178,14 @@ class MainWindow(
         self._update_checking_spinner = None
 
     def _apply_theme_mode(self, theme_mode: Theme):
-        
+
         try:
             setTheme(theme_mode, save=False, lazy=False)
         except Exception:
             logging.info("应用主题模式失败", exc_info=True)
 
     def _enable_window_material_effect(self):
-        
+
         if not sys.platform.startswith("win"):
             return
         if not hasattr(self, "setMicaEffectEnabled"):
@@ -205,13 +196,13 @@ class MainWindow(
             logging.info("启用窗口材质效果失败", exc_info=True)
 
     def _read_navigation_text_visible_setting(self) -> bool:
-        
+
         settings = app_settings()
         stored_value = settings.value(NAVIGATION_TEXT_VISIBLE_SETTING_KEY)
         return get_bool_from_qsettings(stored_value, True)
 
     def _configure_navigation_interface(self):
-        
+
         nav = getattr(self, "navigationInterface", None)
         if nav is None:
             return
@@ -222,7 +213,7 @@ class MainWindow(
             logging.info("应用导航栏显示偏好失败", exc_info=True)
 
     def _apply_default_window_size(self):
-        
+
         fallback_width, fallback_height = 1100, 780
         try:
             screen = self.screen() or QGuiApplication.primaryScreen()
@@ -246,7 +237,7 @@ class MainWindow(
             self.resize(fallback_width, fallback_height)
 
     def _on_theme_changed(self, _theme: Theme):
-        
+
         self._enable_window_material_effect()
         try:
             drawer = getattr(getattr(self, "dashboard", None), "config_drawer", None)
@@ -256,7 +247,7 @@ class MainWindow(
             logging.info("主题变更后刷新组件失败", exc_info=True)
 
     def changeEvent(self, e):
-        
+
         super().changeEvent(e)
         watched_events = {
             QEvent.Type.ApplicationPaletteChange,
@@ -281,25 +272,24 @@ class MainWindow(
             theme_mode = Theme.AUTO
         if theme_mode != Theme.AUTO:
             return
-        
-        
+
         from qfluentwidgets.common.style_sheet import updateStyleSheet
 
         old_theme = qconfig.theme
-        qconfig.theme = Theme.AUTO  
+        qconfig.theme = Theme.AUTO
         if qconfig.theme != old_theme:
             updateStyleSheet()
             qconfig.themeChangedFinished.emit()
             qconfig._cfg.themeChanged.emit(Theme.AUTO)
 
     def resizeEvent(self, e):
-        
+
         super().resizeEvent(e)
         if self._boot_splash:
             self._boot_splash.update_layout(self.width(), self.height())
 
     def closeEvent(self, e):
-        
+
         if getattr(self, "_close_request_confirmed", False):
             self._finalize_confirmed_close()
             e.accept()
@@ -346,10 +336,12 @@ class MainWindow(
         self._toast("AI 填空连续失败，请稍后再试", "warning", duration=3500)
 
     def _notify_submission_verification(self, message: str) -> None:
-        self._toast(str(message or "提交触发智能验证，请启用随机 IP 后再试"), "warning", duration=4500)
+        self._toast(
+            str(message or "提交触发智能验证，请启用随机 IP 后再试"), "warning", duration=4500
+        )
 
     def _center_on_screen(self):
-        
+
         try:
             screen = self.screen() or QGuiApplication.primaryScreen()
             if not screen:
@@ -421,12 +413,20 @@ class MainWindow(
         )
         pos = self.mapToGlobal(local_pos)
         try:
-            screen = self.screen() or QGuiApplication.screenAt(pos) or QGuiApplication.primaryScreen()
+            screen = (
+                self.screen() or QGuiApplication.screenAt(pos) or QGuiApplication.primaryScreen()
+            )
             if screen is None:
                 return pos
             available = screen.availableGeometry()
-            x = min(max(pos.x(), available.left() + margin), available.right() - int(hint_width) - margin + 1)
-            y = min(max(pos.y(), available.top() + margin), available.bottom() - int(hint_height) - margin + 1)
+            x = min(
+                max(pos.x(), available.left() + margin),
+                available.right() - int(hint_width) - margin + 1,
+            )
+            y = min(
+                max(pos.y(), available.top() + margin),
+                available.bottom() - int(hint_height) - margin + 1,
+            )
             return QPoint(x, y)
         except Exception:
             logging.info("计算启动教程提示位置失败", exc_info=True)
@@ -485,7 +485,7 @@ class MainWindow(
         self._clear_startup_tutorial_refs()
 
     def apply_topmost_state(self, checked: bool, show: bool = False):
-        
+
         flags = self.windowFlags()
         already_checked = bool(flags & Qt.WindowType.WindowStaysOnTopHint)
         if already_checked == checked:
@@ -544,7 +544,6 @@ class MainWindow(
 
         register_popup_handler(handler)
 
-    
     @Slot(list, str)
     def _on_survey_parsed(self, info: list, title: str):
         self.workbench.on_survey_parsed(info, title)
@@ -570,7 +569,8 @@ class MainWindow(
             try:
                 if event_type == "dialog_message":
                     self._show_dialog_message(
-                        str(event.get("title") or ""), str(event.get("message") or ""),
+                        str(event.get("title") or ""),
+                        str(event.get("message") or ""),
                         str(event.get("level") or "info"),
                     )
                 elif event_type == "open_quota_request_form":
@@ -662,7 +662,7 @@ class MainWindow(
 
 
 def create_window() -> MainWindow:
-    
+
     if _should_use_import_check_window():
         return cast(MainWindow, _ImportCheckWindow())
     return MainWindow()

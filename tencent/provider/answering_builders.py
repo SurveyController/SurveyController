@@ -62,7 +62,9 @@ async def _build_qq_single_action(
     if raw_option_count <= 0:
         return None
     option_count = max(1, raw_option_count)
-    probabilities = config.single_prob[config_index] if config_index < len(config.single_prob) else -1
+    probabilities = (
+        config.single_prob[config_index] if config_index < len(config.single_prob) else -1
+    )
     probabilities = normalize_droplist_probs(probabilities, option_count)
     strict_ratio = is_strict_ratio_question(ctx, current)
     dimension = config.question_dimension_map.get(current)
@@ -93,7 +95,11 @@ async def _build_qq_single_action(
         else weighted_index(probabilities)
     )
     selected_text = option_texts[selected_index] if selected_index < len(option_texts) else ""
-    fill_entries = config.single_option_fill_texts[config_index] if config_index < len(config.single_option_fill_texts) else None
+    fill_entries = (
+        config.single_option_fill_texts[config_index]
+        if config_index < len(config.single_option_fill_texts)
+        else None
+    )
     fill_value = await resolve_option_fill_text_from_config(
         fill_entries,
         selected_index,
@@ -107,7 +113,11 @@ async def _build_qq_single_action(
         ai_placeholder_text=build_ai_option_fill_placeholder(current, selected_index),
     )
     fill_value = default_missing_option_fill(question, selected_index, fill_value)
-    selected_texts = [f"{selected_text} / {fill_value}" if selected_text and fill_value else (fill_value or selected_text)]
+    selected_texts = [
+        f"{selected_text} / {fill_value}"
+        if selected_text and fill_value
+        else (fill_value or selected_text)
+    ]
     return AnswerAction(
         question_num=current,
         question_id=question_id,
@@ -117,7 +127,9 @@ async def _build_qq_single_action(
         option_fill_texts=((selected_index, fill_value),) if fill_value else (),
         selected_texts=tuple(selected_texts),
         record_type="single",
-        pending_distribution_choices=((selected_index, option_count, None),) if strict_ratio or has_reliability_dimension else (),
+        pending_distribution_choices=((selected_index, option_count, None),)
+        if strict_ratio or has_reliability_dimension
+        else (),
     )
 
 
@@ -139,11 +151,21 @@ async def _build_qq_text_action(
         config.texts[config_index] if config_index < len(config.texts) else [DEFAULT_FILL_TEXT],
         config.texts_prob[config_index] if config_index < len(config.texts_prob) else [1.0],
         blank_count=blank_count,
-        entry_type=str(text_entry_types[config_index] if config_index < len(text_entry_types) else "text"),
-        blank_modes=multi_text_blank_modes[config_index] if config_index < len(multi_text_blank_modes) else [],
-        blank_int_ranges=multi_text_blank_ranges[config_index] if config_index < len(multi_text_blank_ranges) else [],
+        entry_type=str(
+            text_entry_types[config_index] if config_index < len(text_entry_types) else "text"
+        ),
+        blank_modes=multi_text_blank_modes[config_index]
+        if config_index < len(multi_text_blank_modes)
+        else [],
+        blank_int_ranges=multi_text_blank_ranges[config_index]
+        if config_index < len(multi_text_blank_ranges)
+        else [],
     )
-    ai_enabled = bool(config.text_ai_flags[config_index]) if config_index < len(config.text_ai_flags) else False
+    ai_enabled = (
+        bool(config.text_ai_flags[config_index])
+        if config_index < len(config.text_ai_flags)
+        else False
+    )
     if ai_enabled:
         cached_answers = ctx.get_ai_prefill_answer(thread_name, current)
         if cached_answers:
@@ -172,12 +194,17 @@ async def _build_qq_text_action(
                 else [str(generated or "").strip() or DEFAULT_FILL_TEXT]
             )
     if len(text_values) < blank_count:
-        text_values.extend([text_values[-1] if text_values else DEFAULT_FILL_TEXT] * (blank_count - len(text_values)))
+        text_values.extend(
+            [text_values[-1] if text_values else DEFAULT_FILL_TEXT]
+            * (blank_count - len(text_values))
+        )
     return AnswerAction(
         question_num=current,
         question_id=str(question.provider_question_id or ""),
         kind="text",
-        text_values=tuple(str(item or "").strip() or DEFAULT_FILL_TEXT for item in text_values[:blank_count]),
+        text_values=tuple(
+            str(item or "").strip() or DEFAULT_FILL_TEXT for item in text_values[:blank_count]
+        ),
         record_type="text",
     )
 
@@ -200,7 +227,9 @@ async def _build_qq_dropdown_action(
     if raw_option_count <= 0:
         return None
     option_count = max(1, raw_option_count)
-    probabilities = config.droplist_prob[config_index] if config_index < len(config.droplist_prob) else -1
+    probabilities = (
+        config.droplist_prob[config_index] if config_index < len(config.droplist_prob) else -1
+    )
     probabilities = normalize_droplist_probs(probabilities, option_count)
     strict_ratio = is_strict_ratio_question(ctx, current)
     dimension = config.question_dimension_map.get(current)
@@ -230,7 +259,11 @@ async def _build_qq_dropdown_action(
         else weighted_index(probabilities)
     )
     selected_text = option_texts[selected_index] if selected_index < len(option_texts) else ""
-    fill_entries = config.droplist_option_fill_texts[config_index] if config_index < len(config.droplist_option_fill_texts) else None
+    fill_entries = (
+        config.droplist_option_fill_texts[config_index]
+        if config_index < len(config.droplist_option_fill_texts)
+        else None
+    )
     fill_value = await resolve_option_fill_text_from_config(
         fill_entries,
         selected_index,
@@ -244,7 +277,11 @@ async def _build_qq_dropdown_action(
         ai_placeholder_text=build_ai_option_fill_placeholder(current, selected_index),
     )
     fill_value = default_missing_option_fill(question, selected_index, fill_value)
-    selected_texts = [f"{selected_text} / {fill_value}" if selected_text and fill_value else (fill_value or selected_text)]
+    selected_texts = [
+        f"{selected_text} / {fill_value}"
+        if selected_text and fill_value
+        else (fill_value or selected_text)
+    ]
     return AnswerAction(
         question_num=current,
         question_id=question_id,
@@ -253,7 +290,9 @@ async def _build_qq_dropdown_action(
         option_fill_texts=((selected_index, fill_value),) if fill_value else (),
         selected_texts=tuple(selected_texts),
         record_type="dropdown",
-        pending_distribution_choices=((selected_index, option_count, None),) if strict_ratio or has_reliability_dimension else (),
+        pending_distribution_choices=((selected_index, option_count, None),)
+        if strict_ratio or has_reliability_dimension
+        else (),
     )
 
 
@@ -280,15 +319,23 @@ async def _build_qq_multiple_action(
     if min_required > max_allowed:
         min_required = max_allowed
 
-    must_select_indices, must_not_select_indices, _ = get_multiple_rule_constraint(current, option_count)
+    must_select_indices, must_not_select_indices, _ = get_multiple_rule_constraint(
+        current, option_count
+    )
     required_indices = normalize_selected_indices(sorted(must_select_indices or []), option_count)
-    blocked_indices = normalize_selected_indices(sorted(must_not_select_indices or []), option_count)
+    blocked_indices = normalize_selected_indices(
+        sorted(must_not_select_indices or []), option_count
+    )
 
     async def _finalize(selected_indices: Sequence[int]) -> Optional[AnswerAction]:
         selected = normalize_selected_indices(selected_indices, option_count)
         if not selected:
             return None
-        fill_entries = config.multiple_option_fill_texts[config_index] if config_index < len(config.multiple_option_fill_texts) else None
+        fill_entries = (
+            config.multiple_option_fill_texts[config_index]
+            if config_index < len(config.multiple_option_fill_texts)
+            else None
+        )
         fill_texts: list[tuple[int, str]] = []
         selected_texts: list[str] = []
         for option_idx in selected:
@@ -321,13 +368,21 @@ async def _build_qq_multiple_action(
             record_type="multiple",
         )
 
-    selection_probabilities = config.multiple_prob[config_index] if config_index < len(config.multiple_prob) else [50.0] * option_count
+    selection_probabilities = (
+        config.multiple_prob[config_index]
+        if config_index < len(config.multiple_prob)
+        else [50.0] * option_count
+    )
     if selection_probabilities == -1 or (
         isinstance(selection_probabilities, list)
         and len(selection_probabilities) == 1
         and selection_probabilities[0] == -1
     ):
-        available_pool = [idx for idx in range(option_count) if idx not in blocked_indices and idx not in required_indices]
+        available_pool = [
+            idx
+            for idx in range(option_count)
+            if idx not in blocked_indices and idx not in required_indices
+        ]
         min_total = max(min_required, len(required_indices))
         max_total = min(max_allowed, len(required_indices) + len(available_pool))
         if min_total > max_total:
@@ -370,7 +425,8 @@ async def _build_qq_multiple_action(
 
     if strict_ratio:
         positive_optional = [
-            idx for idx, prob in enumerate(sanitized_probabilities)
+            idx
+            for idx, prob in enumerate(sanitized_probabilities)
             if prob > 0 and idx not in blocked_indices and idx not in required_indices
         ]
         required_selected = normalize_selected_indices(required_indices, option_count)
@@ -399,13 +455,16 @@ async def _build_qq_multiple_action(
     max_attempts = 32
     if positive_indices:
         while sum(selection_mask) == 0 and attempts < max_attempts:
-            selection_mask = [1 if random.random() < (prob / 100.0) else 0 for prob in sanitized_probabilities]
+            selection_mask = [
+                1 if random.random() < (prob / 100.0) else 0 for prob in sanitized_probabilities
+            ]
             attempts += 1
         if sum(selection_mask) == 0:
             selection_mask = [0] * option_count
             selection_mask[random.choice(positive_indices)] = 1
     selected = [
-        idx for idx, selected_flag in enumerate(selection_mask)
+        idx
+        for idx, selected_flag in enumerate(selection_mask)
         if selected_flag == 1 and sanitized_probabilities[idx] > 0
     ]
     selected = apply_multiple_constraints(
@@ -448,7 +507,9 @@ async def build_answer_action(
         "score": ("scale_prob",),
         "matrix": ("matrix_prob",),
     }.get(entry_type)
-    if not required_config_fields or not all(hasattr(ctx.config, field_name) for field_name in required_config_fields):
+    if not required_config_fields or not all(
+        hasattr(ctx.config, field_name) for field_name in required_config_fields
+    ):
         return None
     if entry_type == "single":
         return await _build_qq_single_action(
@@ -488,8 +549,9 @@ async def build_answer_action(
             allow_ai_placeholder=allow_ai_placeholder,
         )
     if entry_type in {"scale", "score"}:
-        return await _build_qq_score_like_action(question, config_index, ctx, psycho_plan=psycho_plan)
+        return await _build_qq_score_like_action(
+            question, config_index, ctx, psycho_plan=psycho_plan
+        )
     if entry_type == "matrix":
         return await _build_qq_matrix_action(question, config_index, ctx, psycho_plan=psycho_plan)
     return None
-

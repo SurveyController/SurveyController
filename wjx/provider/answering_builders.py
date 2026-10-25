@@ -83,7 +83,9 @@ async def _build_wjx_single_action(
     dimension = config.question_dimension_map.get(current)
     has_reliability_dimension = isinstance(dimension, str) and bool(str(dimension).strip())
     if forced_index is None:
-        probabilities = config.single_prob[config_index] if config_index < len(config.single_prob) else -1
+        probabilities = (
+            config.single_prob[config_index] if config_index < len(config.single_prob) else -1
+        )
         probabilities = normalize_droplist_probs(probabilities, option_count)
         strict_ratio = is_strict_ratio_question(ctx, current)
         if not strict_ratio:
@@ -115,7 +117,11 @@ async def _build_wjx_single_action(
         selected_index = forced_index
 
     selected_text = option_texts[selected_index] if selected_index < len(option_texts) else ""
-    fill_entries = config.single_option_fill_texts[config_index] if config_index < len(config.single_option_fill_texts) else None
+    fill_entries = (
+        config.single_option_fill_texts[config_index]
+        if config_index < len(config.single_option_fill_texts)
+        else None
+    )
     fill_value = await resolve_option_fill_text_from_config(
         fill_entries,
         selected_index,
@@ -129,7 +135,11 @@ async def _build_wjx_single_action(
         ai_placeholder_text=build_ai_option_fill_placeholder(current, selected_index),
     )
     fill_value = default_missing_option_fill(question, selected_index, fill_value)
-    selected_texts = [f"{selected_text} / {fill_value}" if selected_text and fill_value else (fill_value or selected_text)]
+    selected_texts = [
+        f"{selected_text} / {fill_value}"
+        if selected_text and fill_value
+        else (fill_value or selected_text)
+    ]
     return AnswerAction(
         question_num=current,
         kind="choice",
@@ -138,7 +148,9 @@ async def _build_wjx_single_action(
         option_fill_texts=((selected_index, fill_value),) if fill_value else (),
         selected_texts=tuple(selected_texts),
         record_type="single",
-        pending_distribution_choices=((selected_index, option_count, None),) if forced_index is None and (strict_ratio or has_reliability_dimension) else (),
+        pending_distribution_choices=((selected_index, option_count, None),)
+        if forced_index is None and (strict_ratio or has_reliability_dimension)
+        else (),
     )
 
 
@@ -171,7 +183,9 @@ async def _build_wjx_dropdown_action(
     has_reliability_dimension = isinstance(dimension, str) and bool(str(dimension).strip())
     strict_ratio = False
     if forced_index is None:
-        probabilities = config.droplist_prob[config_index] if config_index < len(config.droplist_prob) else -1
+        probabilities = (
+            config.droplist_prob[config_index] if config_index < len(config.droplist_prob) else -1
+        )
         probabilities = normalize_droplist_probs(probabilities, option_count)
         strict_ratio = is_strict_ratio_question(ctx, current)
         if not strict_ratio:
@@ -202,7 +216,11 @@ async def _build_wjx_dropdown_action(
         selected_index = forced_index
 
     selected_text = option_texts[selected_index] if selected_index < len(option_texts) else ""
-    fill_entries = config.droplist_option_fill_texts[config_index] if config_index < len(config.droplist_option_fill_texts) else None
+    fill_entries = (
+        config.droplist_option_fill_texts[config_index]
+        if config_index < len(config.droplist_option_fill_texts)
+        else None
+    )
     fill_value = await resolve_option_fill_text_from_config(
         fill_entries,
         selected_index,
@@ -216,7 +234,11 @@ async def _build_wjx_dropdown_action(
         ai_placeholder_text=build_ai_option_fill_placeholder(current, selected_index),
     )
     fill_value = default_missing_option_fill(question, selected_index, fill_value)
-    selected_texts = [f"{selected_text} / {fill_value}" if selected_text and fill_value else (fill_value or selected_text)]
+    selected_texts = [
+        f"{selected_text} / {fill_value}"
+        if selected_text and fill_value
+        else (fill_value or selected_text)
+    ]
     return AnswerAction(
         question_num=current,
         kind="select",
@@ -224,7 +246,9 @@ async def _build_wjx_dropdown_action(
         option_fill_texts=((selected_index, fill_value),) if fill_value else (),
         selected_texts=tuple(selected_texts),
         record_type="dropdown",
-        pending_distribution_choices=((selected_index, option_count, None),) if forced_index is None and (strict_ratio or has_reliability_dimension) else (),
+        pending_distribution_choices=((selected_index, option_count, None),)
+        if forced_index is None and (strict_ratio or has_reliability_dimension)
+        else (),
     )
 
 
@@ -247,15 +271,24 @@ async def _build_wjx_text_action(
     )
 
     if reverse_fill_answer is not None and reverse_fill_answer.kind == REVERSE_FILL_KIND_MULTI_TEXT:
-        text_values = [str(item or "").strip() or DEFAULT_FILL_TEXT for item in list(reverse_fill_answer.text_values or [])]
+        text_values = [
+            str(item or "").strip() or DEFAULT_FILL_TEXT
+            for item in list(reverse_fill_answer.text_values or [])
+        ]
     elif reverse_fill_answer is not None and reverse_fill_answer.kind == REVERSE_FILL_KIND_TEXT:
         text_values = [str(reverse_fill_answer.text_value or "").strip() or DEFAULT_FILL_TEXT]
     else:
-        ai_enabled = bool(config.text_ai_flags[config_index]) if config_index < len(config.text_ai_flags) else False
+        ai_enabled = (
+            bool(config.text_ai_flags[config_index])
+            if config_index < len(config.text_ai_flags)
+            else False
+        )
         if ai_enabled:
             cached_answers = ctx.get_ai_prefill_answer(thread_name, current)
             if cached_answers:
-                text_values = [str(item or "").strip() or DEFAULT_FILL_TEXT for item in cached_answers]
+                text_values = [
+                    str(item or "").strip() or DEFAULT_FILL_TEXT for item in cached_answers
+                ]
             elif allow_ai_placeholder:
                 text_values = [
                     build_ai_text_placeholder(current, blank_index)
@@ -282,14 +315,26 @@ async def _build_wjx_text_action(
         else:
             text_entry_types = list(getattr(ctx.config, "text_entry_types", []) or [])
             multi_text_blank_modes = list(getattr(ctx.config, "multi_text_blank_modes", []) or [])
-            multi_text_blank_ranges = list(getattr(ctx.config, "multi_text_blank_int_ranges", []) or [])
+            multi_text_blank_ranges = list(
+                getattr(ctx.config, "multi_text_blank_int_ranges", []) or []
+            )
             text_values = resolve_text_values_from_config(
-                config.texts[config_index] if config_index < len(config.texts) else [DEFAULT_FILL_TEXT],
+                config.texts[config_index]
+                if config_index < len(config.texts)
+                else [DEFAULT_FILL_TEXT],
                 config.texts_prob[config_index] if config_index < len(config.texts_prob) else [1.0],
                 blank_count=blank_count,
-                entry_type=str(text_entry_types[config_index] if config_index < len(text_entry_types) else "text"),
-                blank_modes=multi_text_blank_modes[config_index] if config_index < len(multi_text_blank_modes) else [],
-                blank_int_ranges=multi_text_blank_ranges[config_index] if config_index < len(multi_text_blank_ranges) else [],
+                entry_type=str(
+                    text_entry_types[config_index]
+                    if config_index < len(text_entry_types)
+                    else "text"
+                ),
+                blank_modes=multi_text_blank_modes[config_index]
+                if config_index < len(multi_text_blank_modes)
+                else [],
+                blank_int_ranges=multi_text_blank_ranges[config_index]
+                if config_index < len(multi_text_blank_ranges)
+                else [],
             )
 
     if not text_values:
@@ -299,7 +344,11 @@ async def _build_wjx_text_action(
     return AnswerAction(
         question_num=current,
         kind="text",
-        text_values=tuple(str(text_values[index] if index < len(text_values) else text_values[-1] or "").strip() or DEFAULT_FILL_TEXT for index in range(blank_count)),
+        text_values=tuple(
+            str(text_values[index] if index < len(text_values) else text_values[-1] or "").strip()
+            or DEFAULT_FILL_TEXT
+            for index in range(blank_count)
+        ),
         record_type="text",
     )
 
@@ -318,19 +367,33 @@ async def _build_wjx_multiple_action(
     option_texts = await _resolve_runtime_option_texts(driver, question)
     option_count = max(1, len(option_texts) or int(question.options or 0))
     min_required = max(1, min(_coerce_positive_int(question.multi_min_limit, 1), option_count))
-    max_allowed = max(1, min(_coerce_positive_int(question.multi_max_limit, option_count) or option_count, option_count))
+    max_allowed = max(
+        1,
+        min(
+            _coerce_positive_int(question.multi_max_limit, option_count) or option_count,
+            option_count,
+        ),
+    )
     if min_required > max_allowed:
         min_required = max_allowed
 
-    must_select_indices, must_not_select_indices, _ = get_multiple_rule_constraint(current, option_count)
+    must_select_indices, must_not_select_indices, _ = get_multiple_rule_constraint(
+        current, option_count
+    )
     required_indices = _normalize_selected_indices(sorted(must_select_indices or []), option_count)
-    blocked_indices = _normalize_selected_indices(sorted(must_not_select_indices or []), option_count)
+    blocked_indices = _normalize_selected_indices(
+        sorted(must_not_select_indices or []), option_count
+    )
 
     async def _finalize(selected_indices: Sequence[int]) -> Optional[AnswerAction]:
         selected = _normalize_selected_indices(list(selected_indices), option_count)
         if not selected:
             return None
-        fill_entries = config.multiple_option_fill_texts[config_index] if config_index < len(config.multiple_option_fill_texts) else None
+        fill_entries = (
+            config.multiple_option_fill_texts[config_index]
+            if config_index < len(config.multiple_option_fill_texts)
+            else None
+        )
         fill_texts: list[tuple[int, str]] = []
         selected_texts: list[str] = []
         for option_idx in selected:
@@ -372,13 +435,21 @@ async def _build_wjx_multiple_action(
         if forced_index is not None:
             return await _finalize(_normalize_selected_indices([forced_index], option_count))
 
-    selection_probabilities = config.multiple_prob[config_index] if config_index < len(config.multiple_prob) else [50.0] * option_count
+    selection_probabilities = (
+        config.multiple_prob[config_index]
+        if config_index < len(config.multiple_prob)
+        else [50.0] * option_count
+    )
     if selection_probabilities == -1 or (
         isinstance(selection_probabilities, list)
         and len(selection_probabilities) == 1
         and selection_probabilities[0] == -1
     ):
-        available_pool = [idx for idx in range(option_count) if idx not in blocked_indices and idx not in required_indices]
+        available_pool = [
+            idx
+            for idx in range(option_count)
+            if idx not in blocked_indices and idx not in required_indices
+        ]
         min_total = max(min_required, len(required_indices))
         max_total = min(max_allowed, len(required_indices) + len(available_pool))
         if min_total > max_total:
@@ -414,7 +485,8 @@ async def _build_wjx_multiple_action(
 
     if strict_ratio:
         positive_optional = [
-            idx for idx, prob in enumerate(sanitized_probabilities)
+            idx
+            for idx, prob in enumerate(sanitized_probabilities)
             if prob > 0 and idx not in blocked_indices and idx not in required_indices
         ]
         required_selected = _normalize_selected_indices(required_indices, option_count)
@@ -443,15 +515,23 @@ async def _build_wjx_multiple_action(
     max_attempts = 32
     if positive_indices:
         while sum(selection_mask) == 0 and attempts < max_attempts:
-            selection_mask = [1 if random.random() < (prob / 100.0) else 0 for prob in sanitized_probabilities]
+            selection_mask = [
+                1 if random.random() < (prob / 100.0) else 0 for prob in sanitized_probabilities
+            ]
             attempts += 1
         if sum(selection_mask) == 0:
             selection_mask = [0] * option_count
             selection_mask[random.choice(positive_indices)] = 1
-    selected = [idx for idx, selected_flag in enumerate(selection_mask) if selected_flag == 1 and sanitized_probabilities[idx] > 0]
+    selected = [
+        idx
+        for idx, selected_flag in enumerate(selection_mask)
+        if selected_flag == 1 and sanitized_probabilities[idx] > 0
+    ]
     selected = _normalize_selected_indices(required_indices + selected, option_count)
     if len(selected) < min_required:
-        missing = [idx for idx in positive_indices if idx not in selected and idx not in blocked_indices]
+        missing = [
+            idx for idx in positive_indices if idx not in selected and idx not in blocked_indices
+        ]
         while len(selected) < min_required and missing:
             selected.append(missing.pop(0))
     return await _finalize(selected[:max_allowed])
@@ -543,4 +623,3 @@ async def build_answer_action(
     if entry_type == "order":
         return await _build_wjx_order_action(driver, question)
     return None
-

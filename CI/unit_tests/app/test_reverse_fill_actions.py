@@ -83,7 +83,10 @@ class ReverseFillActionsTests:
         page._last_spec = SimpleNamespace(target_num=3)
         page._run_coordinator = coordinator
 
-        with patch.object(actions, "set_last_progress") as set_progress, patch.object(actions, "set_completion_notified") as set_notified:
+        with (
+            patch.object(actions, "set_last_progress") as set_progress,
+            patch.object(actions, "set_completion_notified") as set_notified,
+        ):
             assert actions.prepare_reverse_fill_start_target(page) is True
             actions.on_start_clicked(page)
 
@@ -103,10 +106,13 @@ class ReverseFillActionsTests:
         xlsx_path = tmp_path / "data.xlsx"
         xlsx_path.write_text("ok", encoding="utf-8")
 
-        with patch.object(actions, "is_supported_survey_url", return_value=True), patch.object(
-            actions,
-            "is_wjx_survey_url",
-            return_value=True,
+        with (
+            patch.object(actions, "is_supported_survey_url", return_value=True),
+            patch.object(
+                actions,
+                "is_wjx_survey_url",
+                return_value=True,
+            ),
         ):
             assert actions.validate_reverse_fill_start_url(page) is True
 
@@ -123,11 +129,16 @@ class ReverseFillActionsTests:
         page._toast.assert_called()
 
         page.url_edit.setText("https://wjx.cn/test")
-        with patch.object(actions, "is_supported_survey_url", return_value=True), patch.object(
-            actions,
-            "detect_survey_provider",
-            return_value="wjx",
-        ), patch.object(actions, "is_wjx_survey_url", return_value=True), patch.object(actions, "log_action") as log_action:
+        with (
+            patch.object(actions, "is_supported_survey_url", return_value=True),
+            patch.object(
+                actions,
+                "detect_survey_provider",
+                return_value="wjx",
+            ),
+            patch.object(actions, "is_wjx_survey_url", return_value=True),
+            patch.object(actions, "log_action") as log_action,
+        ):
             actions.on_parse_clicked(page)
         assert page._parse_requested_from_reverse_fill is True
         assert page.surveyUrlChanged.values == ["https://wjx.cn/test"]

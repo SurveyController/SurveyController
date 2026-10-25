@@ -53,9 +53,11 @@ class ProxyAreaServiceTests:
             (
                 service,
                 "_read_asset_text",
-                lambda name: "北京 110100\n# 注释\nbad-line\n全部 all\n上海 310100\n"
-                if name == "area.txt"
-                else "",
+                lambda name: (
+                    "北京 110100\n# 注释\nbad-line\n全部 all\n上海 310100\n"
+                    if name == "area.txt"
+                    else ""
+                ),
             )
         )
 
@@ -87,9 +89,11 @@ class ProxyAreaServiceTests:
             (
                 service,
                 "_read_asset_text",
-                lambda name: '{"provinces":[{"code":"110000","name":"北京市","cities":[{"code":"110100","name":"市辖区"},{"code":"110200","name":"不支持"}]},{"code":"310000","name":"上海市","cities":[{"code":"310100","name":"市辖区"}]}]}'
-                if name == "area_codes_2022.json"
-                else "北京 110100\n",
+                lambda name: (
+                    '{"provinces":[{"code":"110000","name":"北京市","cities":[{"code":"110100","name":"市辖区"},{"code":"110200","name":"不支持"}]},{"code":"310000","name":"上海市","cities":[{"code":"310100","name":"市辖区"}]}]}'
+                    if name == "area_codes_2022.json"
+                    else "北京 110100\n"
+                ),
             )
         )
 
@@ -141,7 +145,9 @@ class ProxyAreaServiceTests:
         ]
         assert index == {"440300": "深圳", "110100": "北京"}
 
-    def test_benefit_cache_falls_back_to_local_codes_after_online_failure(self, patch_attrs) -> None:
+    def test_benefit_cache_falls_back_to_local_codes_after_online_failure(
+        self, patch_attrs
+    ) -> None:
         _reset_area_caches()
         patch_attrs(
             (

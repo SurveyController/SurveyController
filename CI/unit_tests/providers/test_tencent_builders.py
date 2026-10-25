@@ -49,8 +49,12 @@ async def test_qq_builder_supports_dropdown_and_matrix_star_for_http(monkeypatch
     monkeypatch.setattr(qq_builders, "get_tendency_index", lambda *_args, **_kwargs: 2)
     monkeypatch.setattr(qq_builders, "resolve_option_fill_text_from_config", _async_result(None))
 
-    dropdown_action = await qq_builders.build_answer_action(None, dropdown_question, state, psycho_plan=None)
-    matrix_action = await qq_builders.build_answer_action(None, matrix_star_question, state, psycho_plan=None)
+    dropdown_action = await qq_builders.build_answer_action(
+        None, dropdown_question, state, psycho_plan=None
+    )
+    matrix_action = await qq_builders.build_answer_action(
+        None, matrix_star_question, state, psycho_plan=None
+    )
 
     assert dropdown_action is not None
     assert dropdown_action.kind == "select"

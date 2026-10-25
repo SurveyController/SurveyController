@@ -163,7 +163,7 @@ class DashboardConfigIOMixin:
             logging.error("手动载入配置失败: %s", exc, exc_info=True)
             self._toast(self._format_load_config_error(exc), "error")
             return
-        
+
         self.runtime_page.apply_config(cfg)
         self.apply_config(cfg)
         self.workbench_state.set_entries(cfg.question_entries or [], cfg.questions_info or [])

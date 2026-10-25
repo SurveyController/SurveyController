@@ -17,7 +17,7 @@ def show_message_bar(
     position=InfoBarPosition.TOP,
     duration: int = 2000,
 ) -> InfoBar:
-    
+
     kind = str(level or "info").strip().lower()
     factory = {
         "success": InfoBar.success,
@@ -37,7 +37,7 @@ def show_message_bar(
 
 
 def replace_message_bar(current: Optional[InfoBar]) -> None:
-    
+
     if current is None:
         return
     if not isValid(current):
@@ -46,7 +46,7 @@ def replace_message_bar(current: Optional[InfoBar]) -> None:
 
 
 def reposition_message_bar(bar: Optional[InfoBar]) -> None:
-    
+
     if bar is None:
         return
 

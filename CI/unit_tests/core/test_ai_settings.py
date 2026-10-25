@@ -64,14 +64,16 @@ def test_ai_defaults_require_api_key_and_include_multi_blank_instructions() -> N
 
 @pytest.mark.parametrize("mode", ["free", "provider", "bad", None])
 def test_runtime_config_normalizes_legacy_mode_without_losing_provider_fields(mode) -> None:
-    config = deserialize_runtime_config({
-        "ai_mode": mode,
-        "ai_provider": "custom",
-        "ai_api_key": "test-key",
-        "ai_base_url": "https://example.test/v1",
-        "ai_model": "test-model",
-        "ai_system_prompt": "用户提示词",
-    })
+    config = deserialize_runtime_config(
+        {
+            "ai_mode": mode,
+            "ai_provider": "custom",
+            "ai_api_key": "test-key",
+            "ai_base_url": "https://example.test/v1",
+            "ai_model": "test-model",
+            "ai_system_prompt": "用户提示词",
+        }
+    )
     payload = serialize_runtime_config(config)
     assert payload["ai_mode"] == "provider"
     assert "ai_api_key" not in payload
@@ -82,7 +84,9 @@ def test_runtime_config_normalizes_legacy_mode_without_losing_provider_fields(mo
 
 @pytest.mark.asyncio
 async def test_legacy_mode_without_key_fails_before_provider_request(monkeypatch) -> None:
-    monkeypatch.setattr(client, "get_ai_settings", lambda: {"ai_mode": "free", "provider": "deepseek"})
+    monkeypatch.setattr(
+        client, "get_ai_settings", lambda: {"ai_mode": "free", "provider": "deepseek"}
+    )
 
     async def unexpected_request(*_args, **_kwargs):
         raise AssertionError("配置不完整时不得发送请求")

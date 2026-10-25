@@ -19,7 +19,7 @@ def set_widget_enabled_with_opacity(
     *,
     disabled_opacity: float = 0.4,
 ) -> None:
-    
+
     widget.setEnabled(bool(enabled))
     effect = widget.graphicsEffect()
     if not isinstance(effect, QGraphicsOpacityEffect):
@@ -29,8 +29,6 @@ def set_widget_enabled_with_opacity(
 
 
 class SpinBoxSettingCard(SettingCard):
-    
-
     def __init__(
         self,
         icon,
@@ -76,8 +74,6 @@ class SpinBoxSettingCard(SettingCard):
 
 
 class SliderSettingCard(SettingCard):
-    
-
     def __init__(
         self,
         icon,
@@ -106,8 +102,6 @@ class SliderSettingCard(SettingCard):
 
 
 class SwitchSettingCard(SettingCard):
-    
-
     def __init__(self, icon, title, content, parent=None):
         super().__init__(icon, title, content, parent)
         self.switchButton = SwitchButton(self, IndicatorPosition.RIGHT)
@@ -127,8 +121,6 @@ class SwitchSettingCard(SettingCard):
 
 
 class ComboSettingCard(SettingCard):
-    
-
     def __init__(self, icon, title, content, min_width: int = 180, parent=None):
         super().__init__(icon, title, content, parent)
         self.comboBox = ComboBox(self)
@@ -138,8 +130,6 @@ class ComboSettingCard(SettingCard):
 
 
 class ExpandComboSwitchSettingCard(ExpandGroupSettingCard):
-    
-
     def __init__(
         self,
         icon,

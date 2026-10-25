@@ -11,15 +11,13 @@ logger = logging.getLogger(__name__)
 
 
 class CleanupRunner:
-    
-
     def __init__(self) -> None:
         self._lock = threading.Lock()
         self._queue: Deque[Tuple[Callable[[], None], float]] = deque()
         self._thread: Optional[threading.Thread] = None
 
     def submit(self, task: Callable[[], None], delay_seconds: float = 0.0) -> None:
-        
+
         delay = max(0.0, float(delay_seconds or 0.0))
         with self._lock:
             self._queue.append((task, delay))
@@ -29,7 +27,7 @@ class CleanupRunner:
             self._thread.start()
 
     def _worker(self) -> None:
-        
+
         while True:
             with self._lock:
                 if not self._queue:
@@ -42,4 +40,3 @@ class CleanupRunner:
                 task()
             except Exception as exc:
                 log_suppressed_exception("_worker: task()", exc, level=logging.WARNING)
-

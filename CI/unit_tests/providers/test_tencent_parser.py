@@ -53,7 +53,9 @@ class TencentParserTests:
         assert qq_parser._is_qq_login_required_response(response)
 
     @pytest.mark.asyncio
-    async def test_request_qq_api_raises_on_invalid_json_and_non_dict_payload(self, patch_attrs) -> None:
+    async def test_request_qq_api_raises_on_invalid_json_and_non_dict_payload(
+        self, patch_attrs
+    ) -> None:
         bad_json_response = _FakeHttpResponse(json_payload=ValueError("bad json"), text="not login")
         bad_json_aget = AsyncMock(return_value=bad_json_response)
         patch_attrs((qq_parser.http_client, "aget", bad_json_aget))
@@ -91,7 +93,14 @@ class TencentParserTests:
                     "code": "OK",
                     "data": {
                         "questions": [
-                            {"id": "q1", "type": "radio", "title": "题目1", "options": [{"text": "A"}], "page_id": "p1", "page": 1}
+                            {
+                                "id": "q1",
+                                "type": "radio",
+                                "title": "题目1",
+                                "options": [{"text": "A"}],
+                                "page_id": "p1",
+                                "page": 1,
+                            }
                         ]
                     },
                 }
@@ -123,7 +132,9 @@ class TencentParserTests:
         with pytest.raises(RuntimeError, match="^腾讯问卷 HTTP 解析失败：量表题不支持$"):
             await qq_parser.parse_qq_survey("https://wj.qq.com/s2/123/hash/")
 
-    def test_builders_and_standardize_questions_cover_fillblank_rating_and_unsupported(self) -> None:
+    def test_builders_and_standardize_questions_cover_fillblank_rating_and_unsupported(
+        self,
+    ) -> None:
         question = {
             "id": "q1",
             "type": "checkbox",
@@ -157,7 +168,9 @@ class TencentParserTests:
             "page": "4",
         }
 
-        normalized = qq_parser._standardize_qq_questions([question, rating_question, unsupported_question])
+        normalized = qq_parser._standardize_qq_questions(
+            [question, rating_question, unsupported_question]
+        )
 
         first = normalized[0]
         assert core_parser._normalize_qq_option_text(" 其他 _{fillblank-1} ") == "其他"
@@ -176,7 +189,9 @@ class TencentParserTests:
         assert second["option_texts"] == ["3", "4", "5", "6"]
         assert second["rating_max"] == 4
         assert second["unsupported"] is True
-        assert second["unsupported_reason"] == "当前版本暂不支持腾讯问卷量表题，请改用 v3.2.2 旧版本"
+        assert (
+            second["unsupported_reason"] == "当前版本暂不支持腾讯问卷量表题，请改用 v3.2.2 旧版本"
+        )
 
         third = normalized[2]
         assert third["unsupported"]
@@ -332,17 +347,30 @@ class TencentParserTests:
         ]
         assert target_two["logic_parse_status"] == "complete"
 
-    def test_build_question_media_from_payload_normalizes_protocol_relative_urls_and_deduplicates(self) -> None:
+    def test_build_question_media_from_payload_normalizes_protocol_relative_urls_and_deduplicates(
+        self,
+    ) -> None:
         media = core_parser._build_question_media_from_payload(
             {
-                "title": {"image_url": "//cdn.example.com/title.png", "nested": {"src": "//cdn.example.com/title.png"}},
+                "title": {
+                    "image_url": "//cdn.example.com/title.png",
+                    "nested": {"src": "//cdn.example.com/title.png"},
+                },
                 "description": {"img": "//cdn.example.com/title.png"},
                 "options": [
-                    {"text": " 选项A ", "image_url": "//cdn.example.com/option-a.png", "extra": {"src": "//cdn.example.com/option-a.png"}},
+                    {
+                        "text": " 选项A ",
+                        "image_url": "//cdn.example.com/option-a.png",
+                        "extra": {"src": "//cdn.example.com/option-a.png"},
+                    },
                     {"text": "选项B", "pic_url": "https://example.com/option-b.jpg"},
                 ],
                 "sub_titles": [
-                    {"text": " 行1 ", "image": "//cdn.example.com/row-1.png", "nested": {"src": "//cdn.example.com/row-1.png"}}
+                    {
+                        "text": " 行1 ",
+                        "image": "//cdn.example.com/row-1.png",
+                        "nested": {"src": "//cdn.example.com/row-1.png"},
+                    }
                 ],
             },
             "radio",
@@ -423,9 +451,15 @@ class TencentParserTests:
         )
 
     @pytest.mark.asyncio
-    async def test_parse_qq_survey_does_not_fall_back_to_browser_when_http_fails(self, patch_attrs) -> None:
+    async def test_parse_qq_survey_does_not_fall_back_to_browser_when_http_fails(
+        self, patch_attrs
+    ) -> None:
         patch_attrs(
-            (qq_parser, "_fetch_qq_survey_via_http", lambda *_args, **_kwargs: (_ for _ in ()).throw(RuntimeError("http failed"))),
+            (
+                qq_parser,
+                "_fetch_qq_survey_via_http",
+                lambda *_args, **_kwargs: (_ for _ in ()).throw(RuntimeError("http failed")),
+            ),
         )
 
         with pytest.raises(RuntimeError, match="腾讯问卷 HTTP 解析失败：http failed"):
@@ -473,12 +507,16 @@ class TencentParserTests:
         ]
 
     @pytest.mark.asyncio
-    async def test_parse_qq_survey_returns_http_result_without_browser_fallback(self, patch_attrs) -> None:
+    async def test_parse_qq_survey_returns_http_result_without_browser_fallback(
+        self, patch_attrs
+    ) -> None:
         patch_attrs(
             (
                 qq_parser,
                 "_fetch_qq_survey_via_http",
-                AsyncMock(return_value=([{"num": 1, "title": "HTTP 题目", "type_code": "3"}], "HTTP 标题")),
+                AsyncMock(
+                    return_value=([{"num": 1, "title": "HTTP 题目", "type_code": "3"}], "HTTP 标题")
+                ),
             ),
         )
 
@@ -488,12 +526,18 @@ class TencentParserTests:
         assert title == "HTTP 标题"
 
     @pytest.mark.asyncio
-    async def test_parse_qq_survey_rejects_login_url_and_http_failure_without_browser_fallback(self, patch_attrs) -> None:
+    async def test_parse_qq_survey_rejects_login_url_and_http_failure_without_browser_fallback(
+        self, patch_attrs
+    ) -> None:
         with pytest.raises(RuntimeError, match="需要登录"):
             await qq_parser.parse_qq_survey("https://wj.qq.com/r/login.html")
 
         patch_attrs(
-            (qq_parser, "_fetch_qq_survey_via_http", lambda *_args, **_kwargs: (_ for _ in ()).throw(RuntimeError("http failed"))),
+            (
+                qq_parser,
+                "_fetch_qq_survey_via_http",
+                lambda *_args, **_kwargs: (_ for _ in ()).throw(RuntimeError("http failed")),
+            ),
         )
 
         with pytest.raises(RuntimeError, match="腾讯问卷 HTTP 解析失败：http failed"):
@@ -502,7 +546,11 @@ class TencentParserTests:
     @pytest.mark.asyncio
     async def test_parse_qq_survey_login_required_http_error_is_terminal(self, patch_attrs) -> None:
         patch_attrs(
-            (qq_parser, "_fetch_qq_survey_via_http", AsyncMock(side_effect=RuntimeError("need login"))),
+            (
+                qq_parser,
+                "_fetch_qq_survey_via_http",
+                AsyncMock(side_effect=RuntimeError("need login")),
+            ),
         )
 
         with pytest.raises(RuntimeError, match="需要登录"):
@@ -511,7 +559,11 @@ class TencentParserTests:
     @pytest.mark.asyncio
     async def test_parse_qq_survey_http_failure_is_terminal(self, patch_attrs) -> None:
         patch_attrs(
-            (qq_parser, "_fetch_qq_survey_via_http", lambda *_args, **_kwargs: (_ for _ in ()).throw(RuntimeError("http failed"))),
+            (
+                qq_parser,
+                "_fetch_qq_survey_via_http",
+                lambda *_args, **_kwargs: (_ for _ in ()).throw(RuntimeError("http failed")),
+            ),
         )
 
         with pytest.raises(RuntimeError, match="腾讯问卷 HTTP 解析失败：http failed"):

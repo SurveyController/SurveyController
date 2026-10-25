@@ -82,9 +82,7 @@ def test_fetch_question_media_rejects_declared_size_over_five_mib(monkeypatch) -
     monkeypatch.setattr(question_media_adapter, "_is_public_http_url", lambda _url: True)
     monkeypatch.setattr(question_media_adapter.http_client, "aget", fake_get)
 
-    payload = asyncio.run(
-        question_media_adapter.fetch_question_media("https://example.com/a.png")
-    )
+    payload = asyncio.run(question_media_adapter.fetch_question_media("https://example.com/a.png"))
 
     assert payload == b""
     assert response.closed is True

@@ -18,6 +18,7 @@ class _ColorLabel(QLabel):
     def setTextColor(self, light, dark) -> None:
         self.colors = (light.name(), dark.name())
 
+
 _APP = QApplication.instance() or QApplication([])
 
 
@@ -35,7 +36,10 @@ class QuestionEditorUtilsTests:
         assert editor_utils.resolve_display_question_num({"num": "7"}, fallback=1) == 7
         assert editor_utils.resolve_display_question_num(SimpleNamespace(num="5"), fallback=1) == 5
         assert editor_utils.resolve_display_question_num({}, fallback="3") == 3
-        assert editor_utils.resolve_config_question_num({"num": "7", "display_num": "1"}, fallback=1) == 7
+        assert (
+            editor_utils.resolve_config_question_num({"num": "7", "display_num": "1"}, fallback=1)
+            == 7
+        )
         assert editor_utils.resolve_config_question_num({"display_num": "9"}, fallback=1) == 1
 
         assert editor_utils._normalize_question_title("  A B \n C\t") == "ABC"
@@ -187,7 +191,9 @@ class QuestionEditorUtilsTests:
         assert len(city["areas"]) == 16
         assert city["areas"][0]["name"] == "东城区"
 
-    def test_load_location_provinces_uses_cache_and_returns_isolated_copy(self, monkeypatch) -> None:
+    def test_load_location_provinces_uses_cache_and_returns_isolated_copy(
+        self, monkeypatch
+    ) -> None:
         calls: list[object] = []
         payload = [
             {
@@ -197,7 +203,9 @@ class QuestionEditorUtilsTests:
             }
         ]
         location_options._load_location_provinces_cached.cache_clear()
-        monkeypatch.setattr(location_options, "_read_location_tree", lambda: calls.append(object()) or payload)
+        monkeypatch.setattr(
+            location_options, "_read_location_tree", lambda: calls.append(object()) or payload
+        )
 
         first = location_options.load_location_provinces()
         first[0]["name"] = "已污染"

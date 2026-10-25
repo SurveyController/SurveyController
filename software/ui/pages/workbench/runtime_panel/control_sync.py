@@ -24,7 +24,7 @@ class RuntimeControlSyncMixin:
     HTTP_MAX_THREADS: int
 
     def focus_answer_duration_setting(self):
-        
+
         page = cast(Any, self)
 
         def _focus_target():
@@ -166,7 +166,9 @@ class RuntimeControlSyncMixin:
         try:
             if hasattr(self.controller, "get_runtime_snapshot"):
                 provider_value = (
-                    self.controller.get_runtime_snapshot().get("settings", {}).get("survey_provider")
+                    self.controller.get_runtime_snapshot()
+                    .get("settings", {})
+                    .get("survey_provider")
                 )
             else:
                 provider_value = getattr(self.controller, "get_runtime_ui_state", lambda: {})().get(
@@ -175,4 +177,6 @@ class RuntimeControlSyncMixin:
             provider = normalize_survey_provider(provider_value or "wjx")
             self.answer_card.set_provider(provider)
         except Exception as exc:
-            log_suppressed_exception("_sync_answer_datetime_window_card", exc, level=logging.WARNING)
+            log_suppressed_exception(
+                "_sync_answer_datetime_window_card", exc, level=logging.WARNING
+            )

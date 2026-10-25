@@ -14,10 +14,16 @@ from .http_runtime_fakes import _FakeResponse
 def test_wjx_submitdata_formats_common_actions() -> None:
     submitdata = wjx_http._submitdata_from_actions(
         [
-            AnswerAction(question_num=1, kind="choice", selected_indices=(0,), record_type="single"),
-            AnswerAction(question_num=2, kind="choice", selected_indices=(0, 2), record_type="multiple"),
+            AnswerAction(
+                question_num=1, kind="choice", selected_indices=(0,), record_type="single"
+            ),
+            AnswerAction(
+                question_num=2, kind="choice", selected_indices=(0, 2), record_type="multiple"
+            ),
             AnswerAction(question_num=3, kind="text", text_values=("甲", "乙"), record_type="text"),
-            AnswerAction(question_num=4, kind="matrix", matrix_indices=(1, 2), record_type="matrix"),
+            AnswerAction(
+                question_num=4, kind="matrix", matrix_indices=(1, 2), record_type="matrix"
+            ),
             AnswerAction(question_num=5, kind="slider", slider_value=66.0, record_type="slider"),
         ]
     )
@@ -50,15 +56,27 @@ def test_wjx_submitdata_uses_current_fill_delimiter_and_escapes_special_chars() 
 def test_wjx_submitdata_keeps_frontend_skip_placeholders() -> None:
     submitdata = wjx_http._submitdata_from_actions(
         [
-            AnswerAction(question_num=1, kind="choice", selected_indices=(1,), record_type="single"),
-            AnswerAction(question_num=5, kind="choice", selected_indices=(0, 1), record_type="multiple"),
+            AnswerAction(
+                question_num=1, kind="choice", selected_indices=(1,), record_type="single"
+            ),
+            AnswerAction(
+                question_num=5, kind="choice", selected_indices=(0, 1), record_type="multiple"
+            ),
         ],
         questions=[
-            SurveyQuestionMeta(num=1, title="单选", type_code="3", option_texts=["A", "B"], options=2),
-            SurveyQuestionMeta(num=2, title="排序", type_code="11", option_texts=["A", "B", "C"], options=3),
-            SurveyQuestionMeta(num=3, title="量表", type_code="5", option_texts=["1", "2"], options=2),
+            SurveyQuestionMeta(
+                num=1, title="单选", type_code="3", option_texts=["A", "B"], options=2
+            ),
+            SurveyQuestionMeta(
+                num=2, title="排序", type_code="11", option_texts=["A", "B", "C"], options=3
+            ),
+            SurveyQuestionMeta(
+                num=3, title="量表", type_code="5", option_texts=["1", "2"], options=2
+            ),
             SurveyQuestionMeta(num=4, title="填空", type_code="1", options=1),
-            SurveyQuestionMeta(num=5, title="多选", type_code="4", option_texts=["A", "B"], options=2),
+            SurveyQuestionMeta(
+                num=5, title="多选", type_code="4", option_texts=["A", "B"], options=2
+            ),
         ],
         skipped_question_nums=(2, 3, 4),
     )
@@ -96,8 +114,13 @@ def test_wjx_scene_id_extraction_prefers_page_value() -> None:
 
 
 def test_wjx_scene_id_extraction_supports_snake_case_and_data_attr() -> None:
-    assert wjx_http._extract_wjx_scene_id("<script>var x = { scene_id: 'scene-snake-1' }</script>") == "scene-snake-1"
-    assert wjx_http._extract_wjx_scene_id("<div data-scene-id='scene-data-2'></div>") == "scene-data-2"
+    assert (
+        wjx_http._extract_wjx_scene_id("<script>var x = { scene_id: 'scene-snake-1' }</script>")
+        == "scene-snake-1"
+    )
+    assert (
+        wjx_http._extract_wjx_scene_id("<div data-scene-id='scene-data-2'></div>") == "scene-data-2"
+    )
 
 
 @pytest.mark.asyncio
@@ -124,7 +147,9 @@ async def test_wjx_submit_timing_uses_configured_answer_duration(monkeypatch) ->
         return page_html
 
     async def fake_build_action(*_args, **_kwargs):
-        return AnswerAction(question_num=1, kind="choice", selected_indices=(0,), record_type="single")
+        return AnswerAction(
+            question_num=1, kind="choice", selected_indices=(0,), record_type="single"
+        )
 
     async def fake_post(*_args, **kwargs):
         captured.update(kwargs)
@@ -133,7 +158,9 @@ async def test_wjx_submit_timing_uses_configured_answer_duration(monkeypatch) ->
     monkeypatch.setattr(wjx_http, "_load_wjx_page", fake_load)
     monkeypatch.setattr(wjx_http, "build_answer_action", fake_build_action)
     monkeypatch.setattr(wjx_http.http_client, "apost", fake_post)
-    page_start = int(core_wjx_http.datetime.strptime("2026/5/30 1:23:18", "%Y/%m/%d %H:%M:%S").timestamp())
+    page_start = int(
+        core_wjx_http.datetime.strptime("2026/5/30 1:23:18", "%Y/%m/%d %H:%M:%S").timestamp()
+    )
     monkeypatch.setattr(wjx_http.time, "time", lambda: float(page_start + 5))
     monkeypatch.setattr(wjx_http.random, "gauss", lambda center, _std: center)
 
@@ -170,7 +197,9 @@ async def test_wjx_submit_body_uses_extracted_scene_id(monkeypatch) -> None:
         """
 
     async def fake_build_action(*_args, **_kwargs):
-        return AnswerAction(question_num=1, kind="choice", selected_indices=(0,), record_type="single")
+        return AnswerAction(
+            question_num=1, kind="choice", selected_indices=(0,), record_type="single"
+        )
 
     async def fake_post(*_args, **kwargs):
         captured.update(kwargs)

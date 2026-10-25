@@ -37,7 +37,7 @@ _TEXT_RANDOM_ID_CARD_TOKEN = "__RANDOM_ID_CARD__"
 
 
 def _apply_ai_label_state_style(label: BodyLabel) -> None:
-    
+
     active_color = "#f5f5f5" if isDarkTheme() else "#202020"
     disabled_color = "#7f7f7f" if isDarkTheme() else "#9a9a9a"
     label.setStyleSheet(
@@ -62,7 +62,9 @@ class WizardSectionsCommonMixin:
         text_random_int_max_edit_map: Dict[int, LineEdit]
 
         def _get_entry_info(self, idx: int) -> SurveyQuestionMeta: ...
-        def _media_items_for(self, idx: int, scope: str, index: int | None = None) -> List[Dict[str, Any]]: ...
+        def _media_items_for(
+            self, idx: int, scope: str, index: int | None = None
+        ) -> List[Dict[str, Any]]: ...
 
     @staticmethod
     def _compute_ratio_percentages(values: List[Any]) -> List[float]:

@@ -15,7 +15,9 @@ class MultipleRulesTests:
 
         assert result == [2, 1, 0]
 
-    def test_resolve_rule_sets_prefers_required_when_required_and_blocked_overlap(self, caplog) -> None:
+    def test_resolve_rule_sets_prefers_required_when_required_and_blocked_overlap(
+        self, caplog
+    ) -> None:
         with caplog.at_level("WARNING"):
             required, blocked = _resolve_rule_sets(
                 {3, 1, 10},
@@ -29,7 +31,9 @@ class MultipleRulesTests:
         assert blocked == {2}
         assert "必选和禁选" in caplog.text
 
-    def test_apply_rule_constraints_truncates_required_and_keeps_required_first(self, monkeypatch, caplog) -> None:
+    def test_apply_rule_constraints_truncates_required_and_keeps_required_first(
+        self, monkeypatch, caplog
+    ) -> None:
         monkeypatch.setattr(multiple_rules.random, "shuffle", lambda values: values.reverse())
 
         with caplog.at_level("WARNING"):
@@ -48,7 +52,9 @@ class MultipleRulesTests:
         assert result == [4, 0]
         assert "已截断必选集合" in caplog.text
 
-    def test_apply_rule_constraints_fills_with_priority_then_random_fallback(self, monkeypatch) -> None:
+    def test_apply_rule_constraints_fills_with_priority_then_random_fallback(
+        self, monkeypatch
+    ) -> None:
         shuffled_values: list[list[int]] = []
 
         def fake_shuffle(values: list[int]) -> None:
@@ -72,7 +78,9 @@ class MultipleRulesTests:
         assert result == [0, 2, 4, 1]
         assert shuffled_values == [[3]]
 
-    def test_apply_rule_constraints_warns_when_available_options_are_insufficient(self, monkeypatch, caplog) -> None:
+    def test_apply_rule_constraints_warns_when_available_options_are_insufficient(
+        self, monkeypatch, caplog
+    ) -> None:
         monkeypatch.setattr(multiple_rules.random, "shuffle", lambda _values: None)
 
         with caplog.at_level("WARNING"):

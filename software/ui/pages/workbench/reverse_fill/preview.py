@@ -128,9 +128,7 @@ def _start_preview(page: Any, ticket: int, payload: dict[str, Any]) -> None:
         preview_ready(page, ticket, None, str(exc), False)
         return
     page._preview_future = future
-    future.add_done_callback(
-        lambda done: _publish_preview_result(dispatcher, ticket, done)
-    )
+    future.add_done_callback(lambda done: _publish_preview_result(dispatcher, ticket, done))
 
 
 def cancel_preview(page: Any) -> None:
@@ -164,9 +162,7 @@ def preview_progress(page: Any, ticket: int, stage: str, current: int, total: in
         page.detected_format_label.setText(f"正在校验题目 ({current}/{total})")
         page.state_hint_label.setText("检查题目配置与 Excel 列映射")
     elif stage == "samples":
-        page.detected_format_label.setText(
-            f"正在校验样本 ({current}/{total})"
-        )
+        page.detected_format_label.setText(f"正在校验样本 ({current}/{total})")
         page.state_hint_label.setText("检查样本值是否可以稳定回放")
     elif stage == "assembling":
         page.detected_format_label.setText("正在整理预检结果")

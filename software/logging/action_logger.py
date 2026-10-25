@@ -78,7 +78,6 @@ def log_action(
     detail: Any = None,
     payload: Optional[Mapping[str, Any]] = None,
 ) -> None:
-    
 
     if not _should_emit_action_log(scope, event, level, result):
         return
@@ -98,9 +97,7 @@ def log_action(
         f"page={normalized_page}",
         f"result={normalized_result}",
     ]
-    message_parts.extend(
-        f"{key}={value}" for key, value in normalized_payload.items()
-    )
+    message_parts.extend(f"{key}={value}" for key, value in normalized_payload.items())
     if normalized_detail:
         escaped_detail = normalized_detail.replace('"', "'")
         message_parts.append(f'detail="{escaped_detail}"')
@@ -132,7 +129,6 @@ def bind_logged_action(
     payload_factory: Optional[Callable[..., Optional[Mapping[str, Any]]]] = None,
     forward_signal_args: bool = True,
 ) -> Callable[..., Any]:
-    
 
     @functools.wraps(callback)
     def _wrapped(*args: Any, **kwargs: Any) -> Any:
@@ -158,4 +154,3 @@ def bind_logged_action(
 
     signal.connect(_wrapped)
     return _wrapped
-

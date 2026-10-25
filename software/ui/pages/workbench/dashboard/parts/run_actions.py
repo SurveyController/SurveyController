@@ -258,7 +258,7 @@ class DashboardRunActionsMixin:
         self.url_edit.setText(cfg.url)
         self.target_spin.setValue(max(1, int(cfg.target or 1)))
         self.thread_spin.setValue(max(1, int(cfg.threads or 1)))
-        
+
         self.random_ip_cb.blockSignals(True)
         self.random_ip_cb.setChecked(bool(cfg.random_ip_enabled))
         self.random_ip_cb.blockSignals(False)

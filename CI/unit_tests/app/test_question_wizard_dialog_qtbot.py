@@ -56,9 +56,7 @@ def test_question_wizard_dialog_shows_logic_view_and_switches_question(qtbot) ->
             page=1,
             option_texts=["显示下一题", "结束"],
             has_dependent_display_logic=True,
-            controls_display_targets=[
-                {"condition_option_indices": [0], "target_question_num": 2}
-            ],
+            controls_display_targets=[{"condition_option_indices": [0], "target_question_num": 2}],
             logic_parse_status=LOGIC_PARSE_STATUS_COMPLETE,
         ),
         SurveyQuestionMeta(
@@ -66,9 +64,7 @@ def test_question_wizard_dialog_shows_logic_view_and_switches_question(qtbot) ->
             title="第二题",
             page=1,
             has_display_condition=True,
-            display_conditions=[
-                {"condition_question_num": 1, "condition_option_indices": [0]}
-            ],
+            display_conditions=[{"condition_question_num": 1, "condition_option_indices": [0]}],
             logic_parse_status=LOGIC_PARSE_STATUS_COMPLETE,
         ),
     ]
@@ -150,9 +146,7 @@ def test_question_wizard_dialog_tree_marks_display_relation_and_expands(qtbot) -
             page=1,
             option_texts=["显示下一题", "不显示"],
             has_dependent_display_logic=True,
-            controls_display_targets=[
-                {"condition_option_indices": [0], "target_question_num": 2}
-            ],
+            controls_display_targets=[{"condition_option_indices": [0], "target_question_num": 2}],
             logic_parse_status=LOGIC_PARSE_STATUS_COMPLETE,
         ),
         SurveyQuestionMeta(
@@ -160,9 +154,7 @@ def test_question_wizard_dialog_tree_marks_display_relation_and_expands(qtbot) -
             title="条件题",
             page=1,
             has_display_condition=True,
-            display_conditions=[
-                {"condition_question_num": 1, "condition_option_indices": [0]}
-            ],
+            display_conditions=[{"condition_question_num": 1, "condition_option_indices": [0]}],
             logic_parse_status=LOGIC_PARSE_STATUS_COMPLETE,
         ),
     ]
@@ -430,15 +422,15 @@ def test_question_wizard_dialog_matrix_rows_use_outer_detail_scroll(qtbot) -> No
     qtbot.waitUntil(lambda: bool(dlg._entry_card_widgets))
     card = dlg._entry_card_widgets[0]
     inner_scrolls = [
-        scroll
-        for scroll in card.findChildren(ScrollArea)
-        if scroll is not dlg._detail_scroll
+        scroll for scroll in card.findChildren(ScrollArea) if scroll is not dlg._detail_scroll
     ]
     assert inner_scrolls == []
     assert len(dlg.matrix_row_slider_map[0]) == 4
 
 
-def test_question_wizard_dialog_accept_shows_validation_error_without_navigation_crash(qtbot) -> None:
+def test_question_wizard_dialog_accept_shows_validation_error_without_navigation_crash(
+    qtbot,
+) -> None:
     entries = [
         QuestionEntry(
             question_type="text",
@@ -627,7 +619,11 @@ def test_question_wizard_dialog_delete_answer_row_renumbers(qtbot) -> None:
         custom_weights=None,
         question_num=1,
     )
-    info = [SurveyQuestionMeta(num=1, title="普通填空测试", page=1, logic_parse_status=LOGIC_PARSE_STATUS_COMPLETE)]
+    info = [
+        SurveyQuestionMeta(
+            num=1, title="普通填空测试", page=1, logic_parse_status=LOGIC_PARSE_STATUS_COMPLETE
+        )
+    ]
     dlg = QuestionWizardDialog([entry], info, "demo")
     qtbot.addWidget(dlg)
     dlg.show()
@@ -640,5 +636,7 @@ def test_question_wizard_dialog_delete_answer_row_renumbers(qtbot) -> None:
     buttons[0].click()
     qtbot.wait(50)
 
-    labels = [label.text() for label in container.findChildren(BodyLabel) if label.text().endswith(".")]
+    labels = [
+        label.text() for label in container.findChildren(BodyLabel) if label.text().endswith(".")
+    ]
     assert labels[0] == "1."

@@ -20,7 +20,9 @@ class OrdinalOptionTests:
         assert mapping.score_by_choice_index == [0, 1, 2, 3, 4]
 
     def test_obvious_attitude_single_options_are_supported(self) -> None:
-        mapping = infer_ordinal_option_mapping(["非常不同意", "比较不同意", "没意见", "比较同意", "非常同意"])
+        mapping = infer_ordinal_option_mapping(
+            ["非常不同意", "比较不同意", "没意见", "比较同意", "非常同意"]
+        )
         assert mapping is not None
         assert mapping.score_by_choice_index == [0, 1, 2, 3, 4]
 
@@ -37,7 +39,9 @@ class OrdinalOptionTests:
             assert mapping.score_by_choice_index == [0, 1, 2, 3, 4]
 
     def test_reversed_attitude_single_options_are_supported(self) -> None:
-        mapping = infer_ordinal_option_mapping(["非常同意", "比较同意", "没意见", "比较不同意", "非常不同意"])
+        mapping = infer_ordinal_option_mapping(
+            ["非常同意", "比较同意", "没意见", "比较不同意", "非常不同意"]
+        )
         assert mapping is not None
         assert mapping.score_by_choice_index == [4, 3, 2, 1, 0]
 

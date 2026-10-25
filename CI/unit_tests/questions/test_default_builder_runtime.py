@@ -8,17 +8,36 @@ from surveycore.providers.contracts import SurveyQuestionMeta
 class DefaultBuilderRuntimeTests:
     def test_build_default_question_entries_creates_defaults_for_common_types(self) -> None:
         questions = [
-            SurveyQuestionMeta(num=1, title="单选", type_code="3", options=4, option_texts=["A", "B"], forced_option_index=2, forced_option_text="C"),
+            SurveyQuestionMeta(
+                num=1,
+                title="单选",
+                type_code="3",
+                options=4,
+                option_texts=["A", "B"],
+                forced_option_index=2,
+                forced_option_text="C",
+            ),
             SurveyQuestionMeta(num=2, title="多选", type_code="4", options=3),
             SurveyQuestionMeta(num=3, title="矩阵", type_code="6", options=5, rows=2),
             SurveyQuestionMeta(num=4, title="评分", type_code="5", is_rating=True, rating_max=7),
-            SurveyQuestionMeta(num=5, title="滑块", type_code="5", is_slider_matrix=True, slider_min=10, slider_max=20),
-            SurveyQuestionMeta(num=6, title="填空", type_code="1", text_inputs=1, forced_texts=["指定文本"]),
+            SurveyQuestionMeta(
+                num=5,
+                title="滑块",
+                type_code="5",
+                is_slider_matrix=True,
+                slider_min=10,
+                slider_max=20,
+            ),
+            SurveyQuestionMeta(
+                num=6, title="填空", type_code="1", text_inputs=1, forced_texts=["指定文本"]
+            ),
             SurveyQuestionMeta(num=7, title="说明", type_code="0", is_description=True),
             SurveyQuestionMeta(num=8, title="不支持", type_code="99", unsupported=True),
         ]
 
-        entries = build_default_question_entries(questions, survey_url="https://www.wjx.cn/vm/demo.aspx")
+        entries = build_default_question_entries(
+            questions, survey_url="https://www.wjx.cn/vm/demo.aspx"
+        )
 
         assert [entry.question_num for entry in entries] == [1, 2, 3, 4, 5, 6]
         assert entries[0].question_type == "single"
@@ -48,10 +67,16 @@ class DefaultBuilderRuntimeTests:
             )
         ]
 
-        entries = build_default_question_entries(questions, survey_url="https://www.wjx.cn/vm/demo.aspx")
+        entries = build_default_question_entries(
+            questions, survey_url="https://www.wjx.cn/vm/demo.aspx"
+        )
 
         assert entries[0].question_type == "multi_text"
-        assert entries[0].multi_text_blank_modes == [_TEXT_RANDOM_NONE, _TEXT_RANDOM_MOBILE, _TEXT_RANDOM_NONE]
+        assert entries[0].multi_text_blank_modes == [
+            _TEXT_RANDOM_NONE,
+            _TEXT_RANDOM_MOBILE,
+            _TEXT_RANDOM_NONE,
+        ]
 
     def test_build_default_question_entries_reuses_existing_by_provider_num_and_title(self) -> None:
         existing_by_provider = QuestionEntry(
@@ -93,7 +118,9 @@ class DefaultBuilderRuntimeTests:
                 options=2,
                 provider_question_id="provider-1",
                 fillable_options=[1],
-                attached_option_selects=[{"option_index": 1, "option_text": "其他", "select_options": ["北京", "上海"]}],
+                attached_option_selects=[
+                    {"option_index": 1, "option_text": "其他", "select_options": ["北京", "上海"]}
+                ],
                 has_attached_option_select=True,
             ),
             SurveyQuestionMeta(num=2, title="多选题", type_code="4", options=2),
@@ -110,7 +137,12 @@ class DefaultBuilderRuntimeTests:
         assert entries[0].option_fill_texts == [None, "其他"]
         assert entries[0].fillable_option_indices == [1]
         assert entries[0].attached_option_selects == [
-            {"option_index": 1, "option_text": "其他", "select_options": ["北京", "上海"], "weights": [1.0, 0.0]}
+            {
+                "option_index": 1,
+                "option_text": "其他",
+                "select_options": ["北京", "上海"],
+                "weights": [1.0, 0.0],
+            }
         ]
         assert entries[1].probabilities == [10, 90]
         assert entries[1].distribution_mode == "custom"
@@ -128,7 +160,11 @@ class DefaultBuilderRuntimeTests:
             fillable_option_indices=[0],
         )
         entries = build_default_question_entries(
-            [SurveyQuestionMeta(num=1, title="单选题", type_code="3", options=2, fillable_options=[])],
+            [
+                SurveyQuestionMeta(
+                    num=1, title="单选题", type_code="3", options=2, fillable_options=[]
+                )
+            ],
             existing_entries=[existing],
         )
 

@@ -3,7 +3,15 @@ from __future__ import annotations
 import time
 from typing import TYPE_CHECKING, Any, Dict, Optional, cast
 
-from PySide6.QtCore import QAbstractAnimation, QByteArray, QEasingCurve, QObject, QPropertyAnimation, Qt, QTimer
+from PySide6.QtCore import (
+    QAbstractAnimation,
+    QByteArray,
+    QEasingCurve,
+    QObject,
+    QPropertyAnimation,
+    Qt,
+    QTimer,
+)
 from PySide6.QtWidgets import QHBoxLayout, QSizePolicy, QVBoxLayout, QWidget
 from qfluentwidgets import (
     BodyLabel,
@@ -50,7 +58,9 @@ def _resolve_thread_step_percent(step_current: int, step_total: int) -> int:
     return int(min(100, (current / float(total)) * 100))
 
 
-def _resolve_thread_step_display_percent(step_current: int, step_total: int, status_text: str, *, running: bool) -> int:
+def _resolve_thread_step_display_percent(
+    step_current: int, step_total: int, status_text: str, *, running: bool
+) -> int:
     text = str(status_text or "").strip()
     if not running and text == "已完成":
         return 100
@@ -66,12 +76,13 @@ def _should_use_indeterminate_thread_step(status_text: str, *, running: bool) ->
     if text == "构造答案":
         return False
     return not (
-        text.startswith("已")
-        or text in {"提交成功", "失败重试", "代理连接失败", "网络请求失败"}
+        text.startswith("已") or text in {"提交成功", "失败重试", "代理连接失败", "网络请求失败"}
     )
 
 
-def _thread_progress_signature(item: Dict[str, Any], display_name: str, status_text: str) -> tuple[Any, ...]:
+def _thread_progress_signature(
+    item: Dict[str, Any], display_name: str, status_text: str
+) -> tuple[Any, ...]:
     return (
         display_name,
         status_text,
@@ -92,8 +103,6 @@ if TYPE_CHECKING:
 
 
 class DashboardProgressMixin:
-    
-
     THREAD_VIEW_QUESTION_LIST = "question_list"
     THREAD_VIEW_PROGRESS = "thread_progress"
     _THREAD_BUSY_STATUSES: set[str] = set()
@@ -542,9 +551,7 @@ class DashboardProgressMixin:
             "last_payload_signature": None,
             "last_step_switch_ts": 0.0,
         }
-        step_timer.timeout.connect(
-            lambda row_state=row: self._flush_pending_thread_step(row_state)
-        )
+        step_timer.timeout.connect(lambda row_state=row: self._flush_pending_thread_step(row_state))
         self._set_progress_bar_paused(step_bar, self._progress_paused_visual)
         self._set_progress_bar_paused(step_busy_bar, self._progress_paused_visual)
         self._refresh_thread_progress_layout()
@@ -570,7 +577,9 @@ class DashboardProgressMixin:
         except Exception:
             _set_value_if_changed(step_bar, normalized)
 
-    def _set_thread_step_bar_value_immediately(self, row: Dict[str, Any], target_value: int) -> None:
+    def _set_thread_step_bar_value_immediately(
+        self, row: Dict[str, Any], target_value: int
+    ) -> None:
         step_bar = row.get("step_bar")
         animation = row.get("step_anim")
         if step_bar is None:

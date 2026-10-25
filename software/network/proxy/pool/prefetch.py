@@ -5,12 +5,14 @@ from typing import List, Optional
 
 from software.core.task import ProxyLease
 from software.network.proxy.policy.source import get_effective_proxy_api_url
+
+
 async def prefetch_proxy_pool(
     expected_count: int,
     proxy_api_url: Optional[str] = None,
     stop_signal: Optional[threading.Event] = None,
 ) -> List[ProxyLease]:
-    
+
     from software.network.proxy.api import fetch_proxy_batch_async
 
     effective_url = proxy_api_url or get_effective_proxy_api_url()
@@ -21,4 +23,3 @@ async def prefetch_proxy_pool(
         stop_signal=stop_signal,
     )
     return proxy_pool
-

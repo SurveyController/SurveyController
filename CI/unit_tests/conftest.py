@@ -74,8 +74,12 @@ def isolate_qsettings(monkeypatch: pytest.MonkeyPatch, tmp_path) -> None:
 @pytest.fixture(autouse=True)
 def isolate_system_clipboard(monkeypatch: pytest.MonkeyPatch) -> None:
     fake_clipboard = _InMemoryClipboard()
-    monkeypatch.setattr(QApplication, "clipboard", staticmethod(lambda *_args, **_kwargs: fake_clipboard))
-    monkeypatch.setattr(QGuiApplication, "clipboard", staticmethod(lambda *_args, **_kwargs: fake_clipboard))
+    monkeypatch.setattr(
+        QApplication, "clipboard", staticmethod(lambda *_args, **_kwargs: fake_clipboard)
+    )
+    monkeypatch.setattr(
+        QGuiApplication, "clipboard", staticmethod(lambda *_args, **_kwargs: fake_clipboard)
+    )
     yield
 
 

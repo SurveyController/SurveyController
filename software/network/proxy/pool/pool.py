@@ -29,8 +29,6 @@ from software.providers.common import (
 HTTP_PROXY_MIN_REMAINING_TTL_SECONDS = 0
 
 
-
-
 def _normalize_proxy_address(proxy_address: Optional[str]) -> Optional[str]:
     if not proxy_address:
         return None
@@ -73,8 +71,6 @@ def _mask_proxy_for_log(proxy_address: Optional[str]) -> str:
     if "@" in raw:
         raw = raw.split("@", 1)[1]
     return raw
-
-
 
 
 def _parse_expire_at_to_ts(expire_at: Optional[str]) -> float:
@@ -134,10 +130,10 @@ def _coerce_proxy_lease(item: Any, *, source: str = "") -> Optional[ProxyLease]:
         item_source = str(item.get("source") or source or "").strip()
         if address and item.get("port") and isinstance(address, str) and ":" not in address:
             address = f"{address}:{item.get('port')}"
-        return _build_proxy_lease(address, expire_at=expire_at, poolable=poolable, source=item_source)
+        return _build_proxy_lease(
+            address, expire_at=expire_at, poolable=poolable, source=item_source
+        )
     return None
-
-
 
 
 def get_proxy_required_ttl_seconds(
@@ -153,7 +149,6 @@ def get_proxy_required_ttl_seconds(
             max_seconds = _to_non_negative_int(answer_duration_range_seconds[0], 0)
     normalized_provider = str(survey_provider or "").strip().lower()
     if normalized_provider in {SURVEY_PROVIDER_WJX, SURVEY_PROVIDER_QQ, SURVEY_PROVIDER_CREDAMO}:
-        
         return HTTP_PROXY_MIN_REMAINING_TTL_SECONDS
     if normalized_provider:
         minute = get_proxy_minute_by_answer_seconds(
@@ -165,7 +160,9 @@ def get_proxy_required_ttl_seconds(
     return max(0, int(max_seconds)) + PROXY_TTL_GRACE_SECONDS
 
 
-def proxy_lease_has_sufficient_ttl(lease: Optional[ProxyLease], *, required_ttl_seconds: int) -> bool:
+def proxy_lease_has_sufficient_ttl(
+    lease: Optional[ProxyLease], *, required_ttl_seconds: int
+) -> bool:
     if lease is None:
         return False
     expire_ts = float(getattr(lease, "expire_ts", 0.0) or 0.0)
@@ -174,9 +171,9 @@ def proxy_lease_has_sufficient_ttl(lease: Optional[ProxyLease], *, required_ttl_
     return (expire_ts - time.time()) >= max(0, int(required_ttl_seconds or 0))
 
 
-
-
-def _build_default_proxy_lease(payload: dict, *, source: str = PROXY_SOURCE_DEFAULT) -> Optional[ProxyLease]:
+def _build_default_proxy_lease(
+    payload: dict[str, Any], *, source: str = PROXY_SOURCE_DEFAULT
+) -> Optional[ProxyLease]:
     if not isinstance(payload, dict):
         return None
     host = str(payload.get("host") or "").strip()
@@ -194,7 +191,9 @@ def _build_default_proxy_lease(payload: dict, *, source: str = PROXY_SOURCE_DEFA
     return _build_proxy_lease(raw, expire_at=expire_at, poolable=poolable, source=source)
 
 
-def _build_default_proxy_leases_from_batch(payload: dict, *, source: str = PROXY_SOURCE_DEFAULT) -> List[ProxyLease]:
+def _build_default_proxy_leases_from_batch(
+    payload: dict[str, Any], *, source: str = PROXY_SOURCE_DEFAULT
+) -> List[ProxyLease]:
     if not isinstance(payload, dict):
         return []
     raw_items = payload.get("items")
@@ -212,8 +211,6 @@ def _build_default_proxy_leases_from_batch(payload: dict, *, source: str = PROXY
     return leases
 
 
-
-
 def _proxy_is_responsive(proxy_address: str, skip_for_default: bool = True) -> bool:
     masked_proxy = _mask_proxy_for_log(proxy_address)
     if skip_for_default and is_official_proxy_source(get_proxy_source()):
@@ -224,7 +221,9 @@ def _proxy_is_responsive(proxy_address: str, skip_for_default: bool = True) -> b
     proxies = {"http": proxy_address, "https": proxy_address}
     try:
         start = time.perf_counter()
-        response = http_client.get(PROXY_HEALTH_CHECK_URL, proxies=proxies, timeout=PROXY_HEALTH_CHECK_TIMEOUT)
+        response = http_client.get(
+            PROXY_HEALTH_CHECK_URL, proxies=proxies, timeout=PROXY_HEALTH_CHECK_TIMEOUT
+        )
         elapsed = time.perf_counter() - start
     except Exception as exc:
         logging.info(f"代理 {masked_proxy} 验证失败: {exc}")
@@ -246,7 +245,9 @@ async def _proxy_is_responsive_async(proxy_address: str, skip_for_default: bool 
     proxies = {"http": proxy_address, "https": proxy_address}
     try:
         start = time.perf_counter()
-        response = await http_client.aget(PROXY_HEALTH_CHECK_URL, proxies=proxies, timeout=PROXY_HEALTH_CHECK_TIMEOUT)
+        response = await http_client.aget(
+            PROXY_HEALTH_CHECK_URL, proxies=proxies, timeout=PROXY_HEALTH_CHECK_TIMEOUT
+        )
         elapsed = time.perf_counter() - start
     except Exception as exc:
         logging.info(f"代理 {masked_proxy} 验证失败: {exc}")
@@ -259,27 +260,27 @@ async def _proxy_is_responsive_async(proxy_address: str, skip_for_default: bool 
 
 
 def normalize_proxy_address(proxy_address: Optional[str]) -> Optional[str]:
-    
+
     return _normalize_proxy_address(proxy_address)
 
 
 def mask_proxy_for_log(proxy_address: Optional[str]) -> str:
-    
+
     return _mask_proxy_for_log(proxy_address)
 
 
 def coerce_proxy_lease(item: Any, *, source: str = "") -> Optional[ProxyLease]:
-    
+
     return _coerce_proxy_lease(item, source=source)
 
 
 def is_proxy_responsive(proxy_address: str, *, skip_for_default: bool = True) -> bool:
-    
+
     return _proxy_is_responsive(proxy_address, skip_for_default=skip_for_default)
 
 
 async def is_proxy_responsive_async(proxy_address: str, *, skip_for_default: bool = True) -> bool:
-    
+
     return await _proxy_is_responsive_async(proxy_address, skip_for_default=skip_for_default)
 
 
@@ -292,6 +293,3 @@ __all__ = [
     "normalize_proxy_address",
     "proxy_lease_has_sufficient_ttl",
 ]
-
-
-

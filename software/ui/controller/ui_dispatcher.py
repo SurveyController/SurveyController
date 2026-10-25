@@ -23,8 +23,6 @@ class _QueuedCallback:
 
 
 class UiCallbackDispatcher:
-    
-
     def __init__(self, emit_signal: Callable[[], Any]) -> None:
         self._emit_signal = emit_signal
         self._queue: "queue.Queue[Callable[[], Any]]" = queue.Queue()

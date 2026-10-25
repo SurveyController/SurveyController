@@ -1,7 +1,8 @@
 import asyncio
 from collections import deque
+from collections.abc import Iterable
 from dataclasses import dataclass
-from typing import Iterable, Optional
+from typing import Optional
 import logging
 
 from surveycore.core.engine.stop_signal import StopSignalLike
@@ -28,11 +29,12 @@ class SubmitProxyLease:
 class SubmitProxyUnavailableError(RuntimeError):
     pass
 
-def _ensure_proxy_pool_deque_locked(ctx: ExecutionState) -> deque:
+
+def _ensure_proxy_pool_deque_locked(ctx: ExecutionState) -> deque[ProxyLease]:
     pool = ctx.app_config.proxy_ip_pool
     if isinstance(pool, deque):
         return pool
-    normalized_pool = deque(pool or [])
+    normalized_pool = deque[ProxyLease](pool or [])
     ctx.app_config.proxy_ip_pool = normalized_pool
     return normalized_pool
 
@@ -59,11 +61,15 @@ def release_proxy_fetch_lock(ctx: ExecutionState) -> None:
         current_lock.release()
 
 
-def _active_proxy_addresses_locked(ctx: ExecutionState, *, exclude_thread_name: str = "") -> set[str]:
+def _active_proxy_addresses_locked(
+    ctx: ExecutionState, *, exclude_thread_name: str = ""
+) -> set[str]:
     return ctx.active_proxy_addresses_locked(exclude_thread_name=exclude_thread_name)
 
 
-def _blocked_proxy_addresses_locked(ctx: ExecutionState, *, exclude_thread_name: str = "") -> set[str]:
+def _blocked_proxy_addresses_locked(
+    ctx: ExecutionState, *, exclude_thread_name: str = ""
+) -> set[str]:
     blocked = _active_proxy_addresses_locked(ctx, exclude_thread_name=exclude_thread_name)
     blocked.update(ctx.successful_proxy_addresses_locked())
     return blocked
@@ -79,7 +85,7 @@ def _record_bad_proxy_and_maybe_pause(
     ctx: ExecutionState,
     runtime_bridge: Optional[RuntimeUiBridge],
 ) -> bool:
-    
+
     _ = ctx, runtime_bridge
     return False
 
@@ -127,7 +133,9 @@ def _purge_unusable_proxy_pool_locked(
     blocked_addresses: Optional[set[str]] = None,
 ) -> set[str]:
     ctx._purge_expired_proxy_cooldowns_locked()
-    required_ttl_seconds = _required_proxy_ttl_seconds(ctx) if required_ttl is None else int(required_ttl)
+    required_ttl_seconds = (
+        _required_proxy_ttl_seconds(ctx) if required_ttl is None else int(required_ttl)
+    )
     pool = _ensure_proxy_pool_deque_locked(ctx)
     kept = deque()
     seen = set()
@@ -235,19 +243,21 @@ def _merge_fetched_proxy_leases_locked(
 
 
 def merge_prefetched_proxy_leases(ctx: ExecutionState, fetched: Iterable[object]) -> int:
-    
-    if not fetched:
+    fetched_items = list(fetched)
+    if not fetched_items:
         return 0
     with ctx.lock:
         before = len(_ensure_proxy_pool_deque_locked(ctx))
-        _merge_fetched_proxy_leases_locked(ctx, fetched, select_first=False)
+        _merge_fetched_proxy_leases_locked(ctx, fetched_items, select_first=False)
         merged_count = max(0, len(_ensure_proxy_pool_deque_locked(ctx)) - before)
     if merged_count:
         ctx.notify_runtime_change()
     return merged_count
 
 
-def _mark_proxy_in_use(ctx: ExecutionState, thread_name: str, lease: Optional[ProxyLease]) -> Optional[str]:
+def _mark_proxy_in_use(
+    ctx: ExecutionState, thread_name: str, lease: Optional[ProxyLease]
+) -> Optional[str]:
     if lease is None:
         return None
     if thread_name:
@@ -264,7 +274,9 @@ def _mark_proxy_in_use(ctx: ExecutionState, thread_name: str, lease: Optional[Pr
 def _resolve_proxy_request_num_locked(ctx: ExecutionState) -> int:
     waiting_count = max(1, int(ctx.proxy_waiting_threads or 0))
     active_count = len(ctx.proxy_in_use_by_thread)
-    remaining_to_start = max(0, int(ctx.config.target_num or 0) - int(ctx.cur_num or 0) - active_count)
+    remaining_to_start = max(
+        0, int(ctx.config.target_num or 0) - int(ctx.cur_num or 0) - active_count
+    )
     if remaining_to_start <= 0:
         return 0
     request_capacity = min(waiting_count, _resolve_proxy_fetch_max_batch_size(ctx))
@@ -272,31 +284,37 @@ def _resolve_proxy_request_num_locked(ctx: ExecutionState) -> int:
 
 
 def resolve_proxy_prefetch_request_count(ctx: ExecutionState) -> int:
-    
+
     if not bool(getattr(ctx.config, "random_proxy_ip_enabled", False)):
         return 0
     with ctx.lock:
         active_count = len(ctx.proxy_in_use_by_thread)
-        remaining_to_start = max(0, int(ctx.config.target_num or 0) - int(ctx.cur_num or 0) - active_count)
+        remaining_to_start = max(
+            0, int(ctx.config.target_num or 0) - int(ctx.cur_num or 0) - active_count
+        )
         if remaining_to_start <= 0:
             return 0
         waiting_count = max(0, int(ctx.proxy_waiting_threads or 0))
         if waiting_count <= 0:
             return 0
-        target_buffer = min(waiting_count, remaining_to_start, _resolve_proxy_fetch_max_batch_size(ctx))
+        target_buffer = min(
+            waiting_count, remaining_to_start, _resolve_proxy_fetch_max_batch_size(ctx)
+        )
         current_pool_size = len(_ensure_proxy_pool_deque_locked(ctx))
     return max(0, int(target_buffer) - int(current_pool_size))
 
 
 def should_continue_proxy_prefetch(ctx: ExecutionState) -> bool:
-    
+
     if not bool(getattr(ctx.config, "random_proxy_ip_enabled", False)):
         return False
     if _should_stop_proxy_wait(ctx, getattr(ctx, "stop_event", None)):
         return False
     with ctx.lock:
         active_count = len(ctx.proxy_in_use_by_thread)
-        remaining_to_start = max(0, int(ctx.config.target_num or 0) - int(ctx.cur_num or 0) - active_count)
+        remaining_to_start = max(
+            0, int(ctx.config.target_num or 0) - int(ctx.cur_num or 0) - active_count
+        )
     return remaining_to_start > 0
 
 
@@ -382,7 +400,6 @@ async def _select_proxy_for_session_async(
                     return None
                 continue
 
-            
             fetch_lock_acquired = await _acquire_proxy_fetch_lock_async(ctx, stop_signal)
             if not fetch_lock_acquired:
                 return None
@@ -407,7 +424,9 @@ async def _select_proxy_for_session_async(
                         fetched = None
                     if fetched:
                         with ctx.lock:
-                            selected = _merge_fetched_proxy_leases_locked(ctx, fetched, select_first=True)
+                            selected = _merge_fetched_proxy_leases_locked(
+                                ctx, fetched, select_first=True
+                            )
                         if selected is not None:
                             return _mark_proxy_in_use(ctx, thread_name, selected)
             finally:
@@ -419,7 +438,6 @@ async def _select_proxy_for_session_async(
                 return None
     finally:
         ctx.unregister_proxy_waiter()
-
 
 
 def _resolve_proxy_provider_for_thread(ctx: ExecutionState, thread_name: str) -> str:
@@ -469,8 +487,6 @@ def mark_submit_proxy_success(ctx: ExecutionState, proxy_address: str | None) ->
         logging.info("记录成功代理失败：%s", proxy_address, exc_info=True)
 
 
-
-
 def _select_user_agent_for_session(ctx: ExecutionState) -> Optional[UserAgentProfile]:
     if not ctx.config.random_user_agent_enabled:
         return None
@@ -498,5 +514,3 @@ def _discard_unresponsive_proxy(ctx: ExecutionState, proxy_address: str) -> None
         if removed:
             logging.info(f"已移除无响应代理：{mask_proxy_for_log(proxy_address)}")
             ctx.notify_runtime_change()
-
-

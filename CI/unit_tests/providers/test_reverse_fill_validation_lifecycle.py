@@ -50,9 +50,7 @@ def test_reverse_fill_validation_reports_read_and_validation_progress(tmp_path) 
 
     _build_spec(
         source_path,
-        progress_callback=lambda stage, current, total: progress.append(
-            (stage, current, total)
-        ),
+        progress_callback=lambda stage, current, total: progress.append((stage, current, total)),
     )
 
     assert progress[0] == ("reading", 0, 0)

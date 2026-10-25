@@ -30,7 +30,9 @@ async def test_wjx_http_runtime_uses_proxy_and_posts_submitdata(monkeypatch) -> 
         return "<html><body><input type='hidden' value='2026/5/30 1:23:18' id='starttime' name='starttime' /></body></html>"
 
     async def fake_build_action(*_args, **_kwargs):
-        return AnswerAction(question_num=1, kind="choice", selected_indices=(0,), record_type="single")
+        return AnswerAction(
+            question_num=1, kind="choice", selected_indices=(0,), record_type="single"
+        )
 
     async def fake_post(*_args, **kwargs):
         captured.update(kwargs)
@@ -72,7 +74,9 @@ async def test_wjx_http_runtime_uses_wechat_channel_params_for_wechat_profile(mo
         return "<html><body><input type='hidden' value='2026/5/30 1:23:18' id='starttime' name='starttime' /></body></html>"
 
     async def fake_build_action(*_args, **_kwargs):
-        return AnswerAction(question_num=1, kind="choice", selected_indices=(0,), record_type="single")
+        return AnswerAction(
+            question_num=1, kind="choice", selected_indices=(0,), record_type="single"
+        )
 
     async def fake_post(*_args, **kwargs):
         captured.update(kwargs)
@@ -86,7 +90,9 @@ async def test_wjx_http_runtime_uses_wechat_channel_params_for_wechat_profile(mo
         config,
         state,
         user_agent="Mozilla/5.0 MicroMessenger/8.0.43 WeChat/arm64",
-        user_agent_profile=SimpleNamespace(category="wechat", ua="Mozilla/5.0 MicroMessenger/8.0.43 WeChat/arm64"),
+        user_agent_profile=SimpleNamespace(
+            category="wechat", ua="Mozilla/5.0 MicroMessenger/8.0.43 WeChat/arm64"
+        ),
     )
 
     assert ok is True
@@ -99,7 +105,9 @@ async def test_wjx_http_runtime_uses_wechat_channel_params_for_wechat_profile(mo
 
 
 @pytest.mark.asyncio
-async def test_wjx_http_runtime_uses_default_pc_ua_when_user_agent_is_not_explicitly_selected(monkeypatch) -> None:
+async def test_wjx_http_runtime_uses_default_pc_ua_when_user_agent_is_not_explicitly_selected(
+    monkeypatch,
+) -> None:
     config = ExecutionConfig(
         url="https://www.wjx.cn/vm/demo.aspx",
         survey_provider="wjx",
@@ -114,7 +122,9 @@ async def test_wjx_http_runtime_uses_default_pc_ua_when_user_agent_is_not_explic
         return None
 
     async def fake_build_action(*_args, **_kwargs):
-        return AnswerAction(question_num=1, kind="choice", selected_indices=(0,), record_type="single")
+        return AnswerAction(
+            question_num=1, kind="choice", selected_indices=(0,), record_type="single"
+        )
 
     async def fake_post(*_args, **kwargs):
         captured.update(kwargs)
@@ -154,7 +164,9 @@ async def test_wjx_http_runtime_uses_mobile_channel_for_mobile_profile(monkeypat
         return None
 
     async def fake_build_action(*_args, **_kwargs):
-        return AnswerAction(question_num=1, kind="choice", selected_indices=(0,), record_type="single")
+        return AnswerAction(
+            question_num=1, kind="choice", selected_indices=(0,), record_type="single"
+        )
 
     async def fake_post(*_args, **kwargs):
         captured.update(kwargs)
@@ -168,7 +180,9 @@ async def test_wjx_http_runtime_uses_mobile_channel_for_mobile_profile(monkeypat
         config,
         state,
         user_agent="Mozilla/5.0 Chrome/121.0.0.0 Mobile Safari/537.36",
-        user_agent_profile=SimpleNamespace(category="mobile", ua="Mozilla/5.0 Chrome/121.0.0.0 Mobile Safari/537.36"),
+        user_agent_profile=SimpleNamespace(
+            category="mobile", ua="Mozilla/5.0 Chrome/121.0.0.0 Mobile Safari/537.36"
+        ),
     )
 
     assert ok is True
@@ -193,7 +207,9 @@ async def test_wjx_http_runtime_uses_pc_channel_for_pc_profile(monkeypatch) -> N
         return None
 
     async def fake_build_action(*_args, **_kwargs):
-        return AnswerAction(question_num=1, kind="choice", selected_indices=(0,), record_type="single")
+        return AnswerAction(
+            question_num=1, kind="choice", selected_indices=(0,), record_type="single"
+        )
 
     async def fake_post(*_args, **kwargs):
         captured.update(kwargs)
@@ -207,7 +223,10 @@ async def test_wjx_http_runtime_uses_pc_channel_for_pc_profile(monkeypatch) -> N
         config,
         state,
         user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/121.0.0.0 Safari/537.36",
-        user_agent_profile=SimpleNamespace(category="pc", ua="Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/121.0.0.0 Safari/537.36"),
+        user_agent_profile=SimpleNamespace(
+            category="pc",
+            ua="Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/121.0.0.0 Safari/537.36",
+        ),
     )
 
     assert ok is True

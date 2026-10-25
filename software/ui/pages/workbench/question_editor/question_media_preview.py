@@ -5,7 +5,7 @@ from collections.abc import Callable
 from itertools import count
 from typing import Any, Dict, Optional
 
-from PySide6.QtCore import QObject, Qt, Signal
+from PySide6.QtCore import QEvent, QObject, Qt, Signal
 from PySide6.QtGui import QImage, QPixmap
 from PySide6.QtWidgets import QHBoxLayout, QVBoxLayout, QWidget
 from qfluentwidgets import BodyLabel, CardWidget, ImageLabel
@@ -72,6 +72,11 @@ class QuestionMediaThumbnail(QWidget):
         self._destroyed = True
         if self._future is not None and not self._future.done():
             self._future.cancel()
+
+    def event(self, event: QEvent) -> bool:
+        if event.type() == QEvent.Type.DeferredDelete:
+            self._mark_destroyed()
+        return super().event(event)
 
     def _set_placeholder(self) -> None:
         self.image_label.setText("图片")

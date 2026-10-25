@@ -140,8 +140,10 @@ class SurveyParseService:
                     raise RuntimeError("Provider 返回了空的解析结果")
                 definition = result.definition
             except (
-                SurveyPausedError, SurveyStoppedError,
-                SurveyEnterpriseUnavailableError, SurveyNotOpenError,
+                SurveyPausedError,
+                SurveyStoppedError,
+                SurveyEnterpriseUnavailableError,
+                SurveyNotOpenError,
             ) as exc:
                 logging.info("解析问卷被业务状态拦截，url=%r：%s", normalized_url, exc)
                 callback = lambda message=str(exc): _apply_parse_failure(message)
@@ -149,21 +151,28 @@ class SurveyParseService:
                 logging.exception("解析问卷流程失败，url=%r", normalized_url)
                 callback = lambda message=str(exc): _apply_parse_failure(message)
             else:
+
                 def apply_success() -> None:
                     try:
                         _apply_parse_success(definition)
                     except Exception as exc:
                         logging.exception("构建问卷编辑草稿失败")
                         _apply_parse_failure(str(exc))
+
                 callback = apply_success
             try:
                 self._dispatch_async(callback)
             except Exception:
                 logging.warning("派发问卷解析结果失败", exc_info=True)
                 if not self._closed and generation == self._generation:
-                    self._state_store.apply_survey_patch({
-                        "phase": "error", "error_code": "dispatch_failed", "parse_error": "",
-                    }, emit=False)
+                    self._state_store.apply_survey_patch(
+                        {
+                            "phase": "error",
+                            "error_code": "dispatch_failed",
+                            "parse_error": "",
+                        },
+                        emit=False,
+                    )
 
         try:
             future = self._async_engine_client.parse_survey(normalized_url)

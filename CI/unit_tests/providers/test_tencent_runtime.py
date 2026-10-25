@@ -20,7 +20,9 @@ async def test_qq_http_runtime_uses_proxy_and_answer_session(monkeypatch) -> Non
         answer_duration_range_seconds=(480, 480),
     )
     config.questions_metadata = {
-        1: SurveyQuestionMeta(num=1, title="Q1", provider="qq", provider_question_id="q1", provider_type="radio"),
+        1: SurveyQuestionMeta(
+            num=1, title="Q1", provider="qq", provider_question_id="q1", provider_type="radio"
+        ),
     }
     state = ExecutionState(config=config)
     captured = SimpleNamespace(fetch_proxies=None, post_kwargs=None)
@@ -29,10 +31,27 @@ async def test_qq_http_runtime_uses_proxy_and_answer_session(monkeypatch) -> Non
     async def fake_fetch(*_args, headers, proxies, **_kwargs):
         captured.fetch_proxies = proxies
         headers["X-Answer-Session"] = "sess"
-        return "sess", {"answer_session": {"last_submitted_at": 10, "last_answer_id": 1}}, [{"id": "q1", "type": "radio", "options": [{"id": "o1", "text": "A"}], "page_id": "p1"}]
+        return (
+            "sess",
+            {"answer_session": {"last_submitted_at": 10, "last_answer_id": 1}},
+            [
+                {
+                    "id": "q1",
+                    "type": "radio",
+                    "options": [{"id": "o1", "text": "A"}],
+                    "page_id": "p1",
+                }
+            ],
+        )
 
     async def fake_build_action(*_args, **_kwargs):
-        return AnswerAction(question_num=1, question_id="q1", kind="choice", selected_indices=(0,), record_type="single")
+        return AnswerAction(
+            question_num=1,
+            question_id="q1",
+            kind="choice",
+            selected_indices=(0,),
+            record_type="single",
+        )
 
     async def fake_post(*_args, **kwargs):
         captured.post_kwargs = kwargs
@@ -40,7 +59,10 @@ async def test_qq_http_runtime_uses_proxy_and_answer_session(monkeypatch) -> Non
 
     async def fake_request_qq_api(_survey_id, endpoint, **_kwargs):
         session_checks.append(endpoint)
-        return {"code": "OK", "data": {"answer_session": {"last_submitted_at": 11, "last_answer_id": 2}}}
+        return {
+            "code": "OK",
+            "data": {"answer_session": {"last_submitted_at": 11, "last_answer_id": 2}},
+        }
 
     monkeypatch.setattr(qq_http, "_fetch_submit_source", fake_fetch)
     monkeypatch.setattr(qq_http, "build_answer_action", fake_build_action)
@@ -90,7 +112,13 @@ async def test_qq_http_runtime_submits_only_visible_questions_grouped_by_page(mo
             provider_type="radio",
             has_display_condition=True,
             logic_parse_status="complete",
-            display_conditions=[{"condition_question_num": 1, "condition_mode": "selected", "condition_option_indices": [0]}],
+            display_conditions=[
+                {
+                    "condition_question_num": 1,
+                    "condition_mode": "selected",
+                    "condition_option_indices": [0],
+                }
+            ],
             option_texts=["C", "D"],
             options=2,
         ),
@@ -109,17 +137,48 @@ async def test_qq_http_runtime_submits_only_visible_questions_grouped_by_page(mo
     session_checks: list[str] = []
 
     async def fake_fetch(*_args, **_kwargs):
-        return "sess", {"answer_session": {"last_submitted_at": 20, "last_answer_id": 3}}, [
-            {"id": "q1", "type": "radio", "options": [{"id": "o1", "text": "A"}, {"id": "o2", "text": "B"}], "page_id": "p1"},
-            {"id": "q2", "type": "radio", "options": [{"id": "o3", "text": "C"}, {"id": "o4", "text": "D"}], "page_id": "p1"},
-            {"id": "q3", "type": "radio", "options": [{"id": "o5", "text": "E"}, {"id": "o6", "text": "F"}], "page_id": "p2"},
-        ]
+        return (
+            "sess",
+            {"answer_session": {"last_submitted_at": 20, "last_answer_id": 3}},
+            [
+                {
+                    "id": "q1",
+                    "type": "radio",
+                    "options": [{"id": "o1", "text": "A"}, {"id": "o2", "text": "B"}],
+                    "page_id": "p1",
+                },
+                {
+                    "id": "q2",
+                    "type": "radio",
+                    "options": [{"id": "o3", "text": "C"}, {"id": "o4", "text": "D"}],
+                    "page_id": "p1",
+                },
+                {
+                    "id": "q3",
+                    "type": "radio",
+                    "options": [{"id": "o5", "text": "E"}, {"id": "o6", "text": "F"}],
+                    "page_id": "p2",
+                },
+            ],
+        )
 
     async def fake_build_action(_driver, question, _ctx, **_kwargs):
         if int(question.num) == 1:
-            return AnswerAction(question_num=1, question_id="q1", kind="choice", selected_indices=(1,), record_type="single")
+            return AnswerAction(
+                question_num=1,
+                question_id="q1",
+                kind="choice",
+                selected_indices=(1,),
+                record_type="single",
+            )
         if int(question.num) == 3:
-            return AnswerAction(question_num=3, question_id="q3", kind="choice", selected_indices=(0,), record_type="single")
+            return AnswerAction(
+                question_num=3,
+                question_id="q3",
+                kind="choice",
+                selected_indices=(0,),
+                record_type="single",
+            )
         raise AssertionError("隐藏题不该进 HTTP 构建")
 
     async def fake_post(*_args, **kwargs):
@@ -128,7 +187,10 @@ async def test_qq_http_runtime_submits_only_visible_questions_grouped_by_page(mo
 
     async def fake_request_qq_api(_survey_id, endpoint, **_kwargs):
         session_checks.append(endpoint)
-        return {"code": "OK", "data": {"answer_session": {"last_submitted_at": 21, "last_answer_id": 4}}}
+        return {
+            "code": "OK",
+            "data": {"answer_session": {"last_submitted_at": 21, "last_answer_id": 4}},
+        }
 
     monkeypatch.setattr(qq_http, "_fetch_submit_source", fake_fetch)
     monkeypatch.setattr(qq_http, "build_answer_action", fake_build_action)
@@ -140,7 +202,10 @@ async def test_qq_http_runtime_submits_only_visible_questions_grouped_by_page(mo
     assert ok is True
     pages = captured["json"]["answer_survey"]["pages"]
     assert [page["id"] for page in pages] == ["p1", "p2"]
-    assert [[question["id"] for question in page["questions"]] for page in pages] == [["q1"], ["q3"]]
+    assert [[question["id"] for question in page["questions"]] for page in pages] == [
+        ["q1"],
+        ["q3"],
+    ]
     assert session_checks == ["session"]
 
 
@@ -175,10 +240,24 @@ async def test_qq_http_runtime_blocks_unparsed_display_logic(monkeypatch) -> Non
     state = ExecutionState(config=config)
 
     async def fake_fetch(*_args, **_kwargs):
-        return "sess", {}, [
-            {"id": "q1", "type": "radio", "options": [{"id": "o1", "text": "A"}, {"id": "o2", "text": "B"}], "page_id": "p1"},
-            {"id": "q2", "type": "radio", "options": [{"id": "o3", "text": "C"}, {"id": "o4", "text": "D"}], "page_id": "p1"},
-        ]
+        return (
+            "sess",
+            {},
+            [
+                {
+                    "id": "q1",
+                    "type": "radio",
+                    "options": [{"id": "o1", "text": "A"}, {"id": "o2", "text": "B"}],
+                    "page_id": "p1",
+                },
+                {
+                    "id": "q2",
+                    "type": "radio",
+                    "options": [{"id": "o3", "text": "C"}, {"id": "o4", "text": "D"}],
+                    "page_id": "p1",
+                },
+            ],
+        )
 
     async def fake_build_action(*_args, **_kwargs):
         raise AssertionError("未知显隐逻辑不该生成答案")
@@ -225,16 +304,20 @@ async def test_qq_http_runtime_skips_description_metadata(monkeypatch) -> None:
     captured: dict[str, object] = {}
 
     async def fake_fetch(*_args, **_kwargs):
-        return "sess", {}, [
-            {"id": "q5", "type": "description", "title": "模特A", "page_id": "p1"},
-            {
-                "id": "q-13-7d39",
-                "type": "matrix_star",
-                "options": [{"id": "o1", "text": "1"}, {"id": "o2", "text": "2"}],
-                "sub_titles": [{"id": "g-101-ae7c", "text": "专业"}],
-                "page_id": "p1",
-            },
-        ]
+        return (
+            "sess",
+            {},
+            [
+                {"id": "q5", "type": "description", "title": "模特A", "page_id": "p1"},
+                {
+                    "id": "q-13-7d39",
+                    "type": "matrix_star",
+                    "options": [{"id": "o1", "text": "1"}, {"id": "o2", "text": "2"}],
+                    "sub_titles": [{"id": "g-101-ae7c", "text": "专业"}],
+                    "page_id": "p1",
+                },
+            ],
+        )
 
     async def fake_build_action(_driver, question, _ctx, **_kwargs):
         built_questions.append(int(question.num))
@@ -254,7 +337,10 @@ async def test_qq_http_runtime_skips_description_metadata(monkeypatch) -> None:
     monkeypatch.setattr(qq_http, "build_answer_action", fake_build_action)
     monkeypatch.setattr(qq_http.http_client, "apost", fake_post)
 
-    with pytest.raises(RuntimeError, match="腾讯问卷第6题暂不支持：当前版本暂不支持腾讯问卷矩阵量表题，请改用 v3.2.2 旧版本"):
+    with pytest.raises(
+        RuntimeError,
+        match="腾讯问卷第6题暂不支持：当前版本暂不支持腾讯问卷矩阵量表题，请改用 v3.2.2 旧版本",
+    ):
         await qq_http.brush_qq_http(config, state)
 
     assert built_questions == []
@@ -289,17 +375,21 @@ async def test_qq_http_runtime_uses_latest_dynamic_ids_for_score_questions(monke
     captured: dict[str, object] = {}
 
     async def fake_fetch(*_args, **_kwargs):
-        return "sess", {}, [
-            {
-                "id": "q-15-new",
-                "type": "nps",
-                "title": "留校工作推荐度",
-                "star_begin_num": 0,
-                "star_num": 11,
-                "page_id": "p1",
-                "page": 1,
-            },
-        ]
+        return (
+            "sess",
+            {},
+            [
+                {
+                    "id": "q-15-new",
+                    "type": "nps",
+                    "title": "留校工作推荐度",
+                    "star_begin_num": 0,
+                    "star_num": 11,
+                    "page_id": "p1",
+                    "page": 1,
+                },
+            ],
+        )
 
     async def fake_post(*_args, **kwargs):
         captured.update(kwargs)
@@ -308,7 +398,10 @@ async def test_qq_http_runtime_uses_latest_dynamic_ids_for_score_questions(monke
     monkeypatch.setattr(qq_http, "_fetch_submit_source", fake_fetch)
     monkeypatch.setattr(qq_http.http_client, "apost", fake_post)
 
-    with pytest.raises(RuntimeError, match="腾讯问卷第8题暂不支持：当前版本暂不支持腾讯问卷量表题，请改用 v3.2.2 旧版本"):
+    with pytest.raises(
+        RuntimeError,
+        match="腾讯问卷第8题暂不支持：当前版本暂不支持腾讯问卷量表题，请改用 v3.2.2 旧版本",
+    ):
         await qq_http.brush_qq_http(config, state)
 
     assert captured == {}

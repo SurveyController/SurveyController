@@ -48,10 +48,10 @@ from software.network.proxy.pool.pool import (
 )
 
 _IP_PORT_RE = re.compile(
-    r'(?:https?://)?'
-    r'(?:([^\s:@/,]+):([^\s:@/,]+)@)?'
-    r'((?:\d{1,3}\.){3}\d{1,3})'
-    r':(\d{2,5})'
+    r"(?:https?://)?"
+    r"(?:([^\s:@/,]+):([^\s:@/,]+)@)?"
+    r"((?:\d{1,3}\.){3}\d{1,3})"
+    r":(\d{2,5})"
 )
 
 _FATAL_PATTERNS = [
@@ -73,8 +73,6 @@ class ProxyApiFatalError(RuntimeError):
     pass
 
 
-
-
 def get_status() -> Any:
     response = http_client.get(
         STATUS_ENDPOINT,
@@ -91,17 +89,19 @@ def _format_status_payload(payload: Any) -> tuple[str, str]:
     online = payload.get("online", None)
     message = str(payload.get("message") or "").strip()
     if not message:
-        message = "系统正常运行中" if online is True else ("系统当前不在线" if online is False else "状态未知")
+        message = (
+            "系统正常运行中"
+            if online is True
+            else ("系统当前不在线" if online is False else "状态未知")
+        )
     color = "#228B22" if online is True else ("#cc0000" if online is False else "#666666")
     prefix = "在线" if online is True else ("离线" if online is False else "未知")
     return f"{prefix}：{message}", color
 
 
 def format_status_payload(payload: Any) -> tuple[str, str]:
-    
+
     return _format_status_payload(payload)
-
-
 
 
 def _normalize_expected_proxy_count(expected_count: Any) -> int:
@@ -137,7 +137,7 @@ def _extract_proxy_from_string(s: str) -> Optional[str]:
     return f"{user}:{pwd}@{ip}:{port}" if user and pwd else f"{ip}:{port}"
 
 
-def _extract_proxy_from_dict(obj: dict) -> Optional[str]:
+def _extract_proxy_from_dict(obj: dict[str, Any]) -> Optional[str]:
     if not isinstance(obj, dict):
         return None
     ip = str(obj.get("ip") or obj.get("IP") or obj.get("host") or "").strip()
@@ -197,8 +197,6 @@ def _parse_proxy_payload(text: str) -> List[str]:
     return unique
 
 
-
-
 def _is_area_quality_retry_payload(payload: Any) -> bool:
     if not isinstance(payload, dict):
         return False
@@ -225,7 +223,7 @@ def _is_default_batch_extract_payload(payload: Any) -> bool:
 
 
 def _extract_custom_api_error(data: Any) -> Optional[str]:
-    
+
     if not isinstance(data, dict):
         return None
     code = data.get("code")
@@ -238,8 +236,6 @@ def _extract_custom_api_error(data: Any) -> Optional[str]:
         if re.search(pattern, message, re.IGNORECASE):
             return user_msg
     return None
-
-
 
 
 def _proxy_api_candidates(proxy_url: Optional[str]) -> List[str]:
@@ -262,7 +258,7 @@ def _warn_custom_api_returned_large_batch(returned_count: int, requested_count: 
 
 
 def _extract_minute_from_url(url: str) -> Optional[int]:
-    
+
     try:
         split = urlsplit(url)
         for key, value in parse_qsl(split.query):
@@ -274,7 +270,7 @@ def _extract_minute_from_url(url: str) -> Optional[int]:
 
 
 def _check_minute_conflict(url: str) -> Optional[str]:
-    
+
     minute = _extract_minute_from_url(url)
     if minute is None:
         return None
@@ -320,8 +316,6 @@ def test_custom_proxy_api(url: str) -> tuple[bool, str, List[str]]:
         return False, str(e), []
     except Exception as e:
         return False, f"解析失败: {e}", []
-
-
 
 
 def _resolve_official_area_request_value(source: str, area_code: Optional[str]) -> str:
@@ -382,7 +376,9 @@ async def fetch_proxy_batch_async(
                 final_upstream = _normalize_final_upstream(payload.get("provider"))
                 final_source = _resolve_final_source(final_upstream, current_source)
                 if _is_default_batch_extract_payload(payload):
-                    batch_items = _build_default_proxy_leases_from_batch(payload, source=final_source)
+                    batch_items = _build_default_proxy_leases_from_batch(
+                        payload, source=final_source
+                    )
                     fetched.extend(batch_items)
                     logging.info(
                         "随机IP提取成功：请求上游=%s，最终成功上游=%s，返回数量=%s",
@@ -486,5 +482,3 @@ __all__ = [
     "get_status",
     "test_custom_proxy_api",
 ]
-
-

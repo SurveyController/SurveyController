@@ -20,7 +20,9 @@ def test_credamo_signature_headers_match_frontend_algorithm() -> None:
     )
 
     inner = credamo_http._sha1_upper(f"{token}{nonce}{timestamp}{union_id}P96D0A7D0M8C3R2D0M1")
-    expected = credamo_http._sha1_upper(f"{token}{nonce}{timestamp}{inner}{union_id}P96D0A7D0M8C3R2D0M1")
+    expected = credamo_http._sha1_upper(
+        f"{token}{nonce}{timestamp}{inner}{union_id}P96D0A7D0M8C3R2D0M1"
+    )
 
     assert headers["signature"] == expected
     assert headers["unionId"] == "UNION12345"
@@ -29,10 +31,29 @@ def test_credamo_signature_headers_match_frontend_algorithm() -> None:
 
 def test_credamo_question_answer_payload_covers_current_types() -> None:
     raw_by_num = {
-        1: {"qstId": "101", "questionType": 2, "selector": 1, "choices": [{"choiceId": "11"}, {"choiceId": "12"}]},
-        2: {"qstId": "102", "questionType": 2, "selector": 2, "choices": [{"choiceId": "21"}, {"choiceId": "22"}]},
-        3: {"qstId": "103", "questionType": 2, "selector": 3, "choices": [{"choiceId": "31"}, {"choiceId": "32"}]},
-        4: {"qstId": "104", "questionType": 11, "choices": [{"choiceId": "41"}, {"choiceId": "42"}]},
+        1: {
+            "qstId": "101",
+            "questionType": 2,
+            "selector": 1,
+            "choices": [{"choiceId": "11"}, {"choiceId": "12"}],
+        },
+        2: {
+            "qstId": "102",
+            "questionType": 2,
+            "selector": 2,
+            "choices": [{"choiceId": "21"}, {"choiceId": "22"}],
+        },
+        3: {
+            "qstId": "103",
+            "questionType": 2,
+            "selector": 3,
+            "choices": [{"choiceId": "31"}, {"choiceId": "32"}],
+        },
+        4: {
+            "qstId": "104",
+            "questionType": 11,
+            "choices": [{"choiceId": "41"}, {"choiceId": "42"}],
+        },
         5: {"qstId": "105", "questionType": 6, "choices": [{"choiceId": "51"}, {"choiceId": "52"}]},
         6: {
             "qstId": "106",
@@ -55,10 +76,16 @@ def test_credamo_question_answer_payload_covers_current_types() -> None:
     items = credamo_http._answer_payload_items(raw_by_num, actions, answer_duration_seconds=70)
 
     assert items[0]["answerQstChoice"] == {"choiceId": 12, "choiceContent": ""}
-    assert items[1]["answerQstChoiceList"] == [{"choiceId": 21, "choiceContent": ""}, {"choiceId": 22, "choiceContent": ""}]
+    assert items[1]["answerQstChoiceList"] == [
+        {"choiceId": 21, "choiceContent": ""},
+        {"choiceId": 22, "choiceContent": ""},
+    ]
     assert items[2]["answerQstChoice"] == {"choiceId": 31, "choiceContent": ""}
     assert items[3]["answerQstChoice"] == {"choiceId": 42, "choiceContent": ""}
-    assert items[4]["answerChoiceContent"] == [{"choiceId": 52, "choiceContent": 1}, {"choiceId": 51, "choiceContent": 2}]
+    assert items[4]["answerChoiceContent"] == [
+        {"choiceId": 52, "choiceContent": 1},
+        {"choiceId": 51, "choiceContent": 2},
+    ]
     assert items[5]["answerQstChoiceList"] == [
         {"choiceId": 61, "choiceAnswerList": [{"answerId": 71}]},
         {"choiceId": 62, "choiceAnswerList": [{"answerId": 72}]},
@@ -69,12 +96,29 @@ def test_credamo_question_answer_payload_covers_current_types() -> None:
 
 def test_credamo_choice_payload_includes_option_fill_text() -> None:
     raw_by_num = {
-        1: {"qstId": "101", "questionType": 2, "selector": 1, "choices": [{"choiceId": "11"}, {"choiceId": "12"}]},
-        2: {"qstId": "102", "questionType": 2, "selector": 2, "choices": [{"choiceId": "21"}, {"choiceId": "22"}]},
+        1: {
+            "qstId": "101",
+            "questionType": 2,
+            "selector": 1,
+            "choices": [{"choiceId": "11"}, {"choiceId": "12"}],
+        },
+        2: {
+            "qstId": "102",
+            "questionType": 2,
+            "selector": 2,
+            "choices": [{"choiceId": "21"}, {"choiceId": "22"}],
+        },
     }
     actions = [
-        AnswerAction(question_num=1, kind="single", selected_indices=(1,), option_fill_texts=((1, "补充"),)),
-        AnswerAction(question_num=2, kind="multiple", selected_indices=(0, 1), option_fill_texts=((1, "其他"),)),
+        AnswerAction(
+            question_num=1, kind="single", selected_indices=(1,), option_fill_texts=((1, "补充"),)
+        ),
+        AnswerAction(
+            question_num=2,
+            kind="multiple",
+            selected_indices=(0, 1),
+            option_fill_texts=((1, "其他"),),
+        ),
     ]
 
     items = credamo_http._answer_payload_items(raw_by_num, actions, answer_duration_seconds=20)
@@ -174,7 +218,9 @@ def test_credamo_forced_choice_prefers_text_when_api_choice_order_changes() -> N
     }
     actions = [AnswerAction(question_num=8, kind="single", selected_indices=(1,))]
 
-    items = credamo_http._answer_payload_items(raw_by_num, actions, config=config, answer_duration_seconds=9)
+    items = credamo_http._answer_payload_items(
+        raw_by_num, actions, config=config, answer_duration_seconds=9
+    )
 
     assert items[0]["answerQstChoice"] == {"choiceId": 6789, "choiceContent": ""}
 

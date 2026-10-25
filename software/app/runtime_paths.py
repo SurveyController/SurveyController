@@ -7,13 +7,11 @@ from software.app.path_utils import normalize_filesystem_path
 
 
 def _get_repo_root() -> str:
-    return os.path.dirname(
-        os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-    )
+    return os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 
 def get_runtime_directory() -> str:
-    
+
     if getattr(sys, "frozen", False):
         exe_dir = os.path.dirname(sys.executable)
         if os.path.basename(exe_dir).lower() == "lib":
@@ -23,7 +21,7 @@ def get_runtime_directory() -> str:
 
 
 def get_bundle_resource_root() -> str:
-    
+
     if getattr(sys, "frozen", False):
         meipass = getattr(sys, "_MEIPASS", None)
         if meipass:
@@ -33,7 +31,7 @@ def get_bundle_resource_root() -> str:
 
 
 def get_assets_directory() -> str:
-    
+
     bundle_root = get_bundle_resource_root()
     candidates = [os.path.join(bundle_root, "assets")]
 
@@ -53,7 +51,7 @@ def get_assets_directory() -> str:
 
 
 def get_resource_path(relative_path: str) -> str:
-    
+
     return os.path.normpath(os.path.join(get_bundle_resource_root(), relative_path))
 
 

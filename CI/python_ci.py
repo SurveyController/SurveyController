@@ -12,6 +12,7 @@ if str(ROOT_DIR) not in sys.path:
 from CI.python_checks.common import (
     configure_console_encoding,
     ensure_target_dirs,
+    ENTRY_FILES,
     iter_compile_targets,
     iter_module_names,
     iter_python_files,
@@ -54,7 +55,9 @@ def main() -> int:
 
     print_scan_targets(target_dirs)
     ruff_targets = [*target_dirs, ROOT_DIR / "CI"]
-    print(f"[INFO] Ruff targets: {', '.join(str(path.relative_to(ROOT_DIR)) for path in ruff_targets)}")
+    print(
+        f"[INFO] Ruff targets: {', '.join(str(path.relative_to(ROOT_DIR)) for path in ruff_targets)}"
+    )
     print(f"[INFO] Check mode: {'quick' if quick_mode else 'full'}")
     print(f"[INFO] Python files: {len(python_files)}")
     print(f"[INFO] Compile targets: {len(compile_targets)}")
@@ -118,9 +121,13 @@ def main() -> int:
     if total_issues == 0:
         if quick_mode:
             print("[PASS] Quick checks passed: compile, Ruff, ty, and unit tests all succeeded.")
-            print("[INFO] For import and main window smoke checks, run: python CI/python_ci.py --full")
+            print(
+                "[INFO] For import and main window smoke checks, run: python CI/python_ci.py --full"
+            )
         else:
-            print("[PASS] Full checks passed: compile, Ruff, ty, unit tests, module import, and main window smoke checks all succeeded.")
+            print(
+                "[PASS] Full checks passed: compile, Ruff, ty, unit tests, module import, and main window smoke checks all succeeded."
+            )
         return 0
 
     print(f"[FAIL] Found {total_issues} issue(s):")

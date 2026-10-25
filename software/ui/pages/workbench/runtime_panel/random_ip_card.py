@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import logging
-from typing import Optional, cast
+from typing import Any, Optional, cast
 
 from PySide6.QtCore import QObject, QThread, Qt, QStringListModel, Signal
 from PySide6.QtWidgets import QCompleter, QGraphicsEffect, QHBoxLayout, QVBoxLayout, QWidget
@@ -42,8 +42,6 @@ _PROXY_SOURCE_CUSTOM = "custom"
 
 
 class SearchableComboBox(EditableComboBox):
-    
-
     def __init__(self, parent=None):
         super().__init__(parent)
         self._str_model = QStringListModel(self)
@@ -52,7 +50,7 @@ class SearchableComboBox(EditableComboBox):
         completer.setCaseSensitivity(Qt.CaseSensitivity.CaseInsensitive)
         self.setCompleter(completer)
 
-    def addItem(self, text, icon=None, userData=None):
+    def addItem(self, text: Any, icon: Any = None, userData: Any = None) -> None:
         super().addItem(text, icon, userData)
         self._sync_model()
 
@@ -97,8 +95,6 @@ class _ProxyApiTestWorker(QObject):
 
 
 class RandomIPSettingCard(ExpandGroupSettingCard):
-    
-
     def __init__(self, parent=None):
         super().__init__(
             FluentIcon.GLOBE,
@@ -227,7 +223,9 @@ class RandomIPSettingCard(ExpandGroupSettingCard):
         self.testApiSpinner = IndeterminateProgressRing(self.testBtnContainer)
         self.testApiSpinner.setFixedSize(20, 20)
         self.testApiSpinner.hide()
-        self.testApiStatus = IconInfoBadge(FluentIcon.INFO, self.testBtnContainer, InfoLevel.INFOAMTION)
+        self.testApiStatus = IconInfoBadge(
+            FluentIcon.INFO, self.testBtnContainer, InfoLevel.INFOAMTION
+        )
         self.testApiStatus.hide()
         for widget in (self.testApiBtn, self.testApiSpinner, self.testApiStatus):
             test_layout.addWidget(widget)
@@ -339,8 +337,14 @@ class RandomIPSettingCard(ExpandGroupSettingCard):
         self._benefit_prefetch_worker = None
 
     def _load_area_options(self, source: Optional[str] = None):
-        selected_source = str(source or self._get_selected_source() or _PROXY_SOURCE_DEFAULT).strip().lower()
-        if selected_source not in {_PROXY_SOURCE_DEFAULT, _PROXY_SOURCE_BENEFIT, _PROXY_SOURCE_CUSTOM}:
+        selected_source = (
+            str(source or self._get_selected_source() or _PROXY_SOURCE_DEFAULT).strip().lower()
+        )
+        if selected_source not in {
+            _PROXY_SOURCE_DEFAULT,
+            _PROXY_SOURCE_BENEFIT,
+            _PROXY_SOURCE_CUSTOM,
+        }:
             selected_source = _PROXY_SOURCE_DEFAULT
         self._area_source = selected_source
         try:

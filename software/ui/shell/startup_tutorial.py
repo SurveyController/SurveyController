@@ -18,8 +18,6 @@ STARTUP_TUTORIAL_HINT_SEEN_SETTING_KEY = "startup_tutorial_hint_seen"
 
 
 class StartupTutorialFlyoutView(FlyoutViewBase):
-    
-
     openRequested = Signal()
     dismissed = Signal()
 

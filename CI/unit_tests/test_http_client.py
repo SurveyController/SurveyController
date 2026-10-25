@@ -9,7 +9,9 @@ import software.network.http.client as http_client
 
 
 class _FakeResponse:
-    def __init__(self, *, status_code: int = 200, text: str = "ok", content: bytes = b"ok", chunks=None) -> None:
+    def __init__(
+        self, *, status_code: int = 200, text: str = "ok", content: bytes = b"ok", chunks=None
+    ) -> None:
         self.status_code = status_code
         self.headers = {"x-test": "1"}
         self.text = text
@@ -62,7 +64,9 @@ class _FakeClient:
 
 
 class _FakeAsyncResponse:
-    def __init__(self, *, status_code: int = 200, text: str = "ok", content: bytes = b"ok", chunks=None) -> None:
+    def __init__(
+        self, *, status_code: int = 200, text: str = "ok", content: bytes = b"ok", chunks=None
+    ) -> None:
         self.status_code = status_code
         self.headers = {"x-test": "1"}
         self.text = text
@@ -105,10 +109,19 @@ class _FakeAsyncStreamCtx:
 
 
 class _FakeAsyncClient:
-    def __init__(self, *, request_response=None, stream_ctx=None, stream_error: Exception | None = None, **kwargs) -> None:
+    def __init__(
+        self,
+        *,
+        request_response=None,
+        stream_ctx=None,
+        stream_error: Exception | None = None,
+        **kwargs,
+    ) -> None:
         del kwargs
         self.request_response = request_response or _FakeAsyncResponse()
-        self.stream_ctx = stream_ctx or _FakeAsyncStreamCtx(_FakeAsyncResponse(), enter_error=stream_error)
+        self.stream_ctx = stream_ctx or _FakeAsyncStreamCtx(
+            _FakeAsyncResponse(), enter_error=stream_error
+        )
         self.request_calls: list[dict[str, object]] = []
         self.stream_calls: list[dict[str, object]] = []
         self.close_calls = 0
@@ -138,9 +151,17 @@ class HttpClientTests:
     def test_resolve_proxy_and_normalize_timeout_cover_requests_shapes(self) -> None:
         assert http_client._resolve_proxy(None, "https://example.com") == (None, True)
         assert http_client._resolve_proxy({}, "https://example.com") == (None, False)
-        assert http_client._resolve_proxy("http://1.1.1.1:80", "https://example.com") == ("http://1.1.1.1:80", False)
-        assert http_client._resolve_proxy({"http": "http://a", "https": "http://b"}, "https://example.com") == ("http://b", False)
-        assert http_client._resolve_proxy({"http": "http://a"}, "http://example.com") == ("http://a", False)
+        assert http_client._resolve_proxy("http://1.1.1.1:80", "https://example.com") == (
+            "http://1.1.1.1:80",
+            False,
+        )
+        assert http_client._resolve_proxy(
+            {"http": "http://a", "https": "http://b"}, "https://example.com"
+        ) == ("http://b", False)
+        assert http_client._resolve_proxy({"http": "http://a"}, "http://example.com") == (
+            "http://a",
+            False,
+        )
 
         assert http_client._normalize_timeout(None) is None
         assert http_client._normalize_timeout(3) == 3.0
@@ -154,7 +175,9 @@ class HttpClientTests:
         response = _FakeResponse(chunks=[b"a", b"", b"b"])
         stream_ctx = _FakeStreamCtx(response)
         released: list[str] = []
-        wrapper = http_client._StreamResponse(response, stream_ctx, lambda: released.append("released"))
+        wrapper = http_client._StreamResponse(
+            response, stream_ctx, lambda: released.append("released")
+        )
 
         assert list(wrapper.iter_content(chunk_size=16)) == [b"a", b"b"]
         wrapper.close()
@@ -183,13 +206,19 @@ class HttpClientTests:
         manager.close()
         assert created_clients[0].close_calls == 1
 
-    def test_sync_client_manager_request_releases_client_on_success_and_error(self, monkeypatch) -> None:
+    def test_sync_client_manager_request_releases_client_on_success_and_error(
+        self, monkeypatch
+    ) -> None:
         manager = http_client._SyncClientManager()
         response = _FakeResponse()
         client = _FakeClient(request_response=response)
         entry = http_client._ClientEntry(client=client, last_used=0.0)
         release_calls: list[object] = []
-        monkeypatch.setattr(manager, "acquire", lambda **kwargs: (http_client._ClientKey(None, True, True, True), entry))
+        monkeypatch.setattr(
+            manager,
+            "acquire",
+            lambda **kwargs: (http_client._ClientKey(None, True, True, True), entry),
+        )
         monkeypatch.setattr(manager, "release", lambda key: release_calls.append(key))
 
         resolved = manager.request("GET", "https://example.com", timeout=(1, 2))
@@ -208,7 +237,11 @@ class HttpClientTests:
         client = _FakeClient(stream_ctx=stream_ctx)
         entry = http_client._ClientEntry(client=client, last_used=0.0)
         release_calls: list[object] = []
-        monkeypatch.setattr(manager, "acquire", lambda **kwargs: (http_client._ClientKey(None, True, True, True), entry))
+        monkeypatch.setattr(
+            manager,
+            "acquire",
+            lambda **kwargs: (http_client._ClientKey(None, True, True, True), entry),
+        )
         monkeypatch.setattr(manager, "release", lambda key: release_calls.append(key))
 
         wrapped = manager.request("GET", "https://example.com", stream=True)
@@ -240,7 +273,9 @@ class HttpClientTests:
         response = _FakeAsyncResponse(chunks=[b"a", b"", b"b"])
         release_calls: list[str] = []
         stream_ctx = _FakeAsyncStreamCtx(response)
-        wrapper = async_http_client._AsyncStreamResponse(response, stream_ctx, lambda: asyncio.sleep(0, result=release_calls.append("released")))
+        wrapper = async_http_client._AsyncStreamResponse(
+            response, stream_ctx, lambda: asyncio.sleep(0, result=release_calls.append("released"))
+        )
 
         chunks = [chunk async for chunk in wrapper.aiter_content(chunk_size=16)]
         await wrapper.aclose()
@@ -250,14 +285,20 @@ class HttpClientTests:
         assert release_calls == ["released"]
 
     @pytest.mark.asyncio
-    async def test_async_request_stream_uses_cached_client_and_keeps_it_open_until_close(self, monkeypatch) -> None:
+    async def test_async_request_stream_uses_cached_client_and_keeps_it_open_until_close(
+        self, monkeypatch
+    ) -> None:
         response = _FakeAsyncResponse()
         stream_ctx = _FakeAsyncStreamCtx(response)
         fake_client = _FakeAsyncClient(stream_ctx=stream_ctx)
-        monkeypatch.setattr(async_http_client, "_client_manager", async_http_client._AsyncClientManager())
+        monkeypatch.setattr(
+            async_http_client, "_client_manager", async_http_client._AsyncClientManager()
+        )
         monkeypatch.setattr(async_http_client.httpx, "AsyncClient", lambda **kwargs: fake_client)
 
-        wrapped = await async_http_client.request("GET", "https://example.com", stream=True, timeout=(1, 2))
+        wrapped = await async_http_client.request(
+            "GET", "https://example.com", stream=True, timeout=(1, 2)
+        )
 
         assert isinstance(wrapped, async_http_client._AsyncStreamResponse)
         assert fake_client.request_calls == []
@@ -324,7 +365,9 @@ class HttpClientTests:
                     trust_env=True,
                 ),
             )
-            manager._clients[key] = async_http_client._AsyncClientEntry(client=client, last_used=0.0)
+            manager._clients[key] = async_http_client._AsyncClientEntry(
+                client=client, last_used=0.0
+            )
             await async_http_client.aclose_for_loop(loop)
 
         asyncio.run(close_owned_client())

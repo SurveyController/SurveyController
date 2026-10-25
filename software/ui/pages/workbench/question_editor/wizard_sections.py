@@ -49,8 +49,6 @@ class WizardSectionsMixin(
     WizardSectionsTextMixin,
     WizardSectionsSliderMixin,
 ):
-    
-
     text_container_map: Dict[int, Any]
     text_add_btn_map: Dict[int, Any]
     location_combo_map: Dict[int, Any]
@@ -75,14 +73,21 @@ class WizardSectionsMixin(
     option_fill_edit_map: Dict[int, Any]
     option_fill_state_map: Dict[int, Any]
 
-    def _get_entry_info(self, idx: int) -> SurveyQuestionMeta: ...
+    def _get_entry_info(self, idx: int) -> SurveyQuestionMeta:
+        raise NotImplementedError
+
     def _media_items_for(
         self, idx: int, scope: str, index: int | None = None
-    ) -> List[Dict[str, Any]]: ...
+    ) -> List[Dict[str, Any]]:
+        raise NotImplementedError
+
     def _resolve_matrix_weights(
         self, entry: QuestionEntry, rows: int, columns: int
-    ) -> List[List[float]]: ...
-    def _resolve_slider_bounds(self, idx: int, entry: Any) -> Tuple[int, int]: ...
+    ) -> List[List[float]]:
+        raise NotImplementedError
+
+    def _resolve_slider_bounds(self, idx: int, entry: Any) -> Tuple[int, int]:
+        raise NotImplementedError
 
     def _build_matrix_section(
         self,
@@ -134,7 +139,9 @@ class WizardSectionsMixin(
                 header_row.setContentsMargins(0, 0, 0, 0)
                 header_row.setSpacing(8)
 
-                opt_text = option_texts[col_idx] if col_idx < len(option_texts) else f"列 {col_idx + 1}"
+                opt_text = (
+                    option_texts[col_idx] if col_idx < len(option_texts) else f"列 {col_idx + 1}"
+                )
                 option_widget = self._build_media_text_widget(
                     parent_widget,
                     idx=idx,

@@ -17,7 +17,7 @@ LEGAL_TEXT_FILES = (
 
 
 def _read_legal_text(relative_path: str) -> str:
-    
+
     full_path = get_resource_path(relative_path)
     try:
         with open(full_path, "r", encoding="utf-8") as file:
@@ -32,7 +32,7 @@ def _load_terms_content() -> str:
 
 
 def _resolve_dialog_size(parent) -> QSize:
-    
+
     if parent is not None and parent.width() > 0 and parent.height() > 0:
         base_width = parent.width()
         base_height = parent.height()
@@ -52,8 +52,6 @@ def _resolve_dialog_size(parent) -> QSize:
 
 
 class TermsOfServiceDialog(MessageBoxBase):
-    
-
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setAttribute(Qt.WidgetAttribute.WA_QuitOnClose, False)

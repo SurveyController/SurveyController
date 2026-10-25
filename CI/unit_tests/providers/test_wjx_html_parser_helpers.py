@@ -25,7 +25,9 @@ class WjxHtmlParserHelperTests:
         assert html_parser_choice._normalize_force_select_text(" 【A】 选项 ") == "a选项"
         assert html_parser_choice._extract_force_select_option_label("(B) 香蕉") == "B"
         assert html_parser_choice._extract_force_select_option_label("普通文本") is None
-        assert html_parser_choice._collect_force_select_fragments(question_div, "请务必选 A 项") == ["请务必选 A 项"]
+        assert html_parser_choice._collect_force_select_fragments(
+            question_div, "请务必选 A 项"
+        ) == ["请务必选 A 项"]
 
     def test_text_input_helpers_detect_shared_other_inputs(self) -> None:
         ui_other_div = _soup("<div class='ui-other'><input type='text' /></div>").div
@@ -77,9 +79,18 @@ class WjxHtmlParserHelperTests:
     def test_extract_question_number_and_cleanup_helpers(self) -> None:
         soup = _soup("<div id='div12' topic='12'></div>")
         assert html_parser_common._extract_question_number_from_div(soup.div) == 12
-        assert html_parser_common._extract_question_number_from_div(_soup("<div id='div77'></div>").div) == 77
-        assert html_parser_common._cleanup_question_title(" １． 【单选题】 题目标题 ") == "题目标题"
-        assert html_parser_common._cleanup_question_title(" 第1题 【多选题】 题目标题 ") == "题目标题"
+        assert (
+            html_parser_common._extract_question_number_from_div(
+                _soup("<div id='div77'></div>").div
+            )
+            == 77
+        )
+        assert (
+            html_parser_common._cleanup_question_title(" １． 【单选题】 题目标题 ") == "题目标题"
+        )
+        assert (
+            html_parser_common._cleanup_question_title(" 第1题 【多选题】 题目标题 ") == "题目标题"
+        )
         assert html_parser_common._cleanup_question_title(" Q1 题目标题 ") == "题目标题"
         assert html_parser_common._extract_display_question_number("* 18. 题目") == 18
         assert html_parser_common._extract_display_question_number("第8题 题目") == 8
@@ -116,7 +127,13 @@ class WjxHtmlParserHelperTests:
             """
         )
         assert html_parser_common._count_text_inputs_in_soup(soup.div) == 5
-        assert html_parser_common._extract_text_input_labels(soup.div) == ["姓名", "性别", "备注", "填空4", "填空5"]
+        assert html_parser_common._extract_text_input_labels(soup.div) == [
+            "姓名",
+            "性别",
+            "备注",
+            "填空4",
+            "填空5",
+        ]
 
     def test_extract_display_heading_text_falls_back_to_blockquote_and_plain_text(self) -> None:
         blockquote_div = _soup("<div><blockquote> 引用标题 </blockquote></div>").div
@@ -127,7 +144,9 @@ class WjxHtmlParserHelperTests:
 
     def test_description_reorder_scale_and_rating_detection(self) -> None:
         description_div = _soup("<div><div class='topichtml'>说明</div></div>").div
-        reorder_div = _soup("<div><ul><li>A</li><li>B</li></ul><div class='ui-sortable'></div></div>").div
+        reorder_div = _soup(
+            "<div><ul><li>A</li><li>B</li></ul><div class='ui-sortable'></div></div>"
+        ).div
         scale_div = _soup(
             """
             <div>
@@ -139,11 +158,15 @@ class WjxHtmlParserHelperTests:
             </div>
             """
         ).div
-        rating_div = _soup("<div><div class='evaluateTagWrap'></div><a class='rate-off'>星</a></div>").div
+        rating_div = _soup(
+            "<div><div class='evaluateTagWrap'></div><a class='rate-off'>星</a></div>"
+        ).div
         rating_count_div = _soup("<div><ul class='modlen5'><li></li></ul></div>").div
 
         assert html_parser_common._soup_question_looks_like_description(description_div, "3")
-        assert not html_parser_common._soup_question_looks_like_description(_soup("<div><input type='radio'/></div>").div, "3")
+        assert not html_parser_common._soup_question_looks_like_description(
+            _soup("<div><input type='radio'/></div>").div, "3"
+        )
         assert html_parser_common._soup_question_looks_like_reorder(reorder_div)
         assert html_parser_common._soup_question_looks_like_numeric_scale(scale_div)
         assert not html_parser_common._soup_question_looks_like_rating(scale_div)
@@ -186,22 +209,36 @@ class WjxHtmlParserHelperTests:
         assert html_parser_common._should_mark_as_multi_text("9", 0, 1, False, has_gapfill=True)
         assert not html_parser_common._should_mark_as_multi_text("3", 4, 2, False)
         assert not html_parser_common._should_mark_as_multi_text("1", 0, 2, True)
-        assert not html_parser_common._should_mark_as_multi_text("1", 0, 2, False, has_slider_matrix=True)
+        assert not html_parser_common._should_mark_as_multi_text(
+            "1", 0, 2, False, has_slider_matrix=True
+        )
 
     def test_force_select_detection_supports_text_label_and_index(self) -> None:
         text_div = _soup("<div><div class='topichtml'>本题检测，请选择 非常满意。</div></div>").div
         label_div = _soup("<div><div class='topichtml'>请务必选A项</div></div>").div
         index_div = _soup("<div><div class='topichtml'>请直接选第2项</div></div>").div
 
-        assert html_parser_choice._extract_force_select_option(text_div, "本题检测，请选择 非常满意。", ["非常不满意", "非常满意"]) == (1, "非常满意")
-        assert html_parser_choice._extract_force_select_option(label_div, "请务必选A项", ["(A) 苹果", "(B) 香蕉"]) == (0, "(A) 苹果")
-        assert html_parser_choice._extract_force_select_option(index_div, "请直接选第2项", ["甲", "乙", "丙"]) == (1, "乙")
-        assert html_parser_choice._extract_force_select_option(None, "请直接选第9项", ["甲", "乙"]) == (None, None)
+        assert html_parser_choice._extract_force_select_option(
+            text_div, "本题检测，请选择 非常满意。", ["非常不满意", "非常满意"]
+        ) == (1, "非常满意")
+        assert html_parser_choice._extract_force_select_option(
+            label_div, "请务必选A项", ["(A) 苹果", "(B) 香蕉"]
+        ) == (0, "(A) 苹果")
+        assert html_parser_choice._extract_force_select_option(
+            index_div, "请直接选第2项", ["甲", "乙", "丙"]
+        ) == (1, "乙")
+        assert html_parser_choice._extract_force_select_option(
+            None, "请直接选第9项", ["甲", "乙"]
+        ) == (None, None)
 
     def test_force_select_text_matching_requires_exact_normalized_text(self) -> None:
         question_div = _soup("<div><div class='topichtml'>请直接选满意</div></div>").div
-        assert html_parser_choice._extract_force_select_option(question_div, "请直接选满意", ["不满意", "满意度一般"]) == (None, None)
-        assert html_parser_choice._extract_force_select_option(question_div, "请直接选满意", ["数字1", "满意"]) == (1, "满意")
+        assert html_parser_choice._extract_force_select_option(
+            question_div, "请直接选满意", ["不满意", "满意度一般"]
+        ) == (None, None)
+        assert html_parser_choice._extract_force_select_option(
+            question_div, "请直接选满意", ["数字1", "满意"]
+        ) == (1, "满意")
 
     def test_choice_option_and_attached_select_parsing_marks_fillable_options(self) -> None:
         question_div = _soup(
@@ -260,7 +297,9 @@ class WjxHtmlParserHelperTests:
         custom_input = _soup("<input custom='请选择, 苹果,香蕉, 苹果' />").input
         typo_custom_input = _soup("<input cusom='北京|上海|北京' />").input
         location_div = _soup("<div><input verify='地图定位' /></div>").div
-        location_input = _soup("<input type='text' verify='省市区' onclick='openCityBox(this,3,event,1);' readonly='readonly' />").input
+        location_input = _soup(
+            "<input type='text' verify='省市区' onclick='openCityBox(this,3,event,1);' readonly='readonly' />"
+        ).input
         soup = _soup(
             """
             <div>
@@ -275,8 +314,14 @@ class WjxHtmlParserHelperTests:
             """
         )
 
-        assert html_parser_choice._extract_custom_select_option_texts(custom_input) == ["苹果", "香蕉"]
-        assert html_parser_choice._extract_custom_select_option_texts(typo_custom_input) == ["北京", "上海"]
+        assert html_parser_choice._extract_custom_select_option_texts(custom_input) == [
+            "苹果",
+            "香蕉",
+        ]
+        assert html_parser_choice._extract_custom_select_option_texts(typo_custom_input) == [
+            "北京",
+            "上海",
+        ]
         assert html_parser_choice._verify_text_indicates_location("腾讯地图")
         assert html_parser_choice._verify_text_indicates_location("省市区")
         assert not html_parser_choice._verify_text_indicates_location("city")
@@ -293,9 +338,17 @@ class WjxHtmlParserHelperTests:
         assert not html_parser_choice._soup_question_is_location(
             _soup("<div><input verify='city' /></div>").div
         )
-        assert html_parser_common._count_text_inputs_in_soup(_soup(f"<div>{location_input}</div>").div) == 0
-        assert html_parser_choice._collect_select_option_texts(soup.div, soup, 7) == ["北京", "上海"]
-        assert html_parser_choice._extract_select_option_texts_from_element(soup.find("select")) == ["北京", "上海"]
+        assert (
+            html_parser_common._count_text_inputs_in_soup(_soup(f"<div>{location_input}</div>").div)
+            == 0
+        )
+        assert html_parser_choice._collect_select_option_texts(soup.div, soup, 7) == [
+            "北京",
+            "上海",
+        ]
+        assert html_parser_choice._extract_select_option_texts_from_element(
+            soup.find("select")
+        ) == ["北京", "上海"]
 
     def test_question_title_limits_jump_and_display_rules(self) -> None:
         question_div = _soup(
@@ -308,7 +361,10 @@ class WjxHtmlParserHelperTests:
             """
         ).div
 
-        assert html_parser_rules._extract_question_title(question_div, 2) == "请选择你喜欢的项目 [至少选2项，最多选4项]"
+        assert (
+            html_parser_rules._extract_question_title(question_div, 2)
+            == "请选择你喜欢的项目 [至少选2项，最多选4项]"
+        )
         assert html_parser_rules._extract_multiple_choice_limits(question_div, 2) == (2, 4)
         assert html_parser_rules._extract_jump_rules_from_html(question_div, 2, ["A", "B"]) == (
             True,
@@ -373,7 +429,9 @@ class WjxHtmlParserHelperTests:
         soup = _soup(str(question_div))
 
         fragments = html_parser_rules._collect_multi_limit_text_fragments(question_div)
-        metadata = html_parser_rules._extract_question_metadata_from_html(soup, question_div, 7, "7")
+        metadata = html_parser_rules._extract_question_metadata_from_html(
+            soup, question_div, 7, "7"
+        )
 
         assert fragments == ["至少选1项，最多选3项"]
         assert metadata[0] == ["北京"]
@@ -390,11 +448,17 @@ class WjxHtmlParserHelperTests:
             """
         ).div
 
-        has_jump, jump_rules = html_parser_rules._extract_jump_rules_from_html(question_div, 3, ["A", "B"])
-        has_display, display_rules = html_parser_rules._extract_display_conditions_from_html(question_div, 3)
+        has_jump, jump_rules = html_parser_rules._extract_jump_rules_from_html(
+            question_div, 3, ["A", "B"]
+        )
+        has_display, display_rules = html_parser_rules._extract_display_conditions_from_html(
+            question_div, 3
+        )
 
         assert has_jump is True
-        assert jump_rules == [{"option_index": 0, "jumpto": 8, "option_text": "A", "terminates_survey": False}]
+        assert jump_rules == [
+            {"option_index": 0, "jumpto": 8, "option_text": "A", "terminates_survey": False}
+        ]
         assert has_display is True
         assert display_rules == [
             {
@@ -456,7 +520,9 @@ class WjxHtmlParserHelperTests:
             """
         ).div
 
-        assert html_parser_rules._extract_jump_rules_from_html(question_div, 7, ["北京", "上海"]) == (
+        assert html_parser_rules._extract_jump_rules_from_html(
+            question_div, 7, ["北京", "上海"]
+        ) == (
             True,
             [{"option_index": 0, "jumpto": 9, "option_text": "北京", "terminates_survey": False}],
         )
@@ -502,7 +568,9 @@ class WjxHtmlParserHelperTests:
             ],
         )
 
-    def test_jump_rule_helper_treats_wjx_mobile_jumpto_one_as_terminate_without_keyword(self) -> None:
+    def test_jump_rule_helper_treats_wjx_mobile_jumpto_one_as_terminate_without_keyword(
+        self,
+    ) -> None:
         question_div = _soup(
             """
             <div hasjump="1" type="3">
@@ -534,8 +602,16 @@ class WjxHtmlParserHelperTests:
             {
                 "num": 2,
                 "display_conditions": [
-                    {"condition_question_num": 1, "condition_mode": "selected", "condition_option_indices": [0, 0]},
-                    {"condition_question_num": 1, "condition_mode": "selected", "condition_option_indices": [0]},
+                    {
+                        "condition_question_num": 1,
+                        "condition_mode": "selected",
+                        "condition_option_indices": [0, 0],
+                    },
+                    {
+                        "condition_question_num": 1,
+                        "condition_mode": "selected",
+                        "condition_option_indices": [0],
+                    },
                 ],
                 "controls_display_targets": [],
             },

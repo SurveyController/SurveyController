@@ -58,7 +58,9 @@ def _normalize_area_display_name(value: Any) -> str:
     return re.sub(r"\s+", "", str(value or "").strip())
 
 
-def _normalize_city_node(raw_city: dict[str, Any], province_name: str, *, is_municipality: bool) -> dict[str, Any]:
+def _normalize_city_node(
+    raw_city: dict[str, Any], province_name: str, *, is_municipality: bool
+) -> dict[str, Any]:
     city_name = str(raw_city.get("name") or "").strip()
     raw_children = raw_city.get("children")
     city_children = raw_children if isinstance(raw_children, list) else []
@@ -87,7 +89,11 @@ def _normalize_province_node(raw_province: dict[str, Any]) -> dict[str, Any]:
             }
         ]
     else:
-        cities = [_normalize_city_node(city, province_name, is_municipality=False) for city in province_children if isinstance(city, dict)]
+        cities = [
+            _normalize_city_node(city, province_name, is_municipality=False)
+            for city in province_children
+            if isinstance(city, dict)
+        ]
     return {
         **raw_province,
         "name": province_name,

@@ -15,16 +15,26 @@ from .async_runtime_loop_fakes import _build_runner
 
 class AsyncRuntimeHttpRoundTests:
     @pytest.mark.asyncio
-    async def test_prepare_round_context_marks_terminal_stop_when_reverse_fill_exhausted(self, monkeypatch) -> None:
+    async def test_prepare_round_context_marks_terminal_stop_when_reverse_fill_exhausted(
+        self, monkeypatch
+    ) -> None:
         config = ExecutionConfig(target_num=2, survey_provider="wjx")
         state = ExecutionState(config=config)
         state.reset_pending_distribution = lambda *_args, **_kwargs: None
         state.reserve_joint_sample = lambda *_args, **_kwargs: 0
-        state.acquire_reverse_fill_sample = lambda *_args, **_kwargs: SimpleNamespace(status="exhausted", sample=None)
+        state.acquire_reverse_fill_sample = lambda *_args, **_kwargs: SimpleNamespace(
+            status="exhausted", sample=None
+        )
         terminal: list[tuple[str, str, str]] = []
-        state.mark_terminal_stop = lambda category, *, failure_reason, message: terminal.append((category, failure_reason, message))
+        state.mark_terminal_stop = lambda category, *, failure_reason, message: terminal.append(
+            (category, failure_reason, message)
+        )
         state.release_joint_sample = lambda *_args, **_kwargs: None
-        monkeypatch.setattr(round_resources, "ensure_joint_psychometric_answer_plan", lambda _config: SimpleNamespace(sample_count=2))
+        monkeypatch.setattr(
+            round_resources,
+            "ensure_joint_psychometric_answer_plan",
+            lambda _config: SimpleNamespace(sample_count=2),
+        )
         runner, _state, ctx, _scheduler = _build_runner(config=config, state=state)
 
         assert await runner._prepare_round_context() is False
@@ -85,12 +95,18 @@ class AsyncRuntimeHttpRoundTests:
 
     @pytest.mark.asyncio
     async def test_run_uses_http_runtime_for_credamo(self, monkeypatch) -> None:
-        config = ExecutionConfig(url="https://www.credamo.com/answer.html#/s/demo", survey_provider="credamo")
+        config = ExecutionConfig(
+            url="https://www.credamo.com/answer.html#/s/demo", survey_provider="credamo"
+        )
         runner, _state, _ctx, scheduler = _build_runner(config=config)
         scheduler.acquire_values = [6, None]
-        monkeypatch.setattr(runner.http_submitter, "submit", lambda **_kwargs: asyncio.sleep(0, result=True))
+        monkeypatch.setattr(
+            runner.http_submitter, "submit", lambda **_kwargs: asyncio.sleep(0, result=True)
+        )
         monkeypatch.setattr(runner, "_prepare_round_context", lambda: asyncio.sleep(0, result=True))
-        monkeypatch.setattr(runner, "_select_session_proxy_and_ua", lambda: asyncio.sleep(0, result=(None, "UA")))
+        monkeypatch.setattr(
+            runner, "_select_session_proxy_and_ua", lambda: asyncio.sleep(0, result=(None, "UA"))
+        )
 
         await runner.run()
 
@@ -99,13 +115,25 @@ class AsyncRuntimeHttpRoundTests:
 
     @pytest.mark.asyncio
     async def test_run_http_runtime_reports_fixed_submit_steps(self, monkeypatch) -> None:
-        config = ExecutionConfig(url="https://www.credamo.com/answer.html#/s/demo", survey_provider="credamo")
+        config = ExecutionConfig(
+            url="https://www.credamo.com/answer.html#/s/demo", survey_provider="credamo"
+        )
         runner, state, _ctx, scheduler = _build_runner(config=config)
         scheduler.acquire_values = [6, None]
-        monkeypatch.setattr(runner.http_submitter, "submit", lambda **_kwargs: asyncio.sleep(0, result=True))
+        monkeypatch.setattr(
+            runner.http_submitter, "submit", lambda **_kwargs: asyncio.sleep(0, result=True)
+        )
         monkeypatch.setattr(runner, "_prepare_round_context", lambda: asyncio.sleep(0, result=True))
-        monkeypatch.setattr(runner, "_select_session_proxy_and_ua", lambda: asyncio.sleep(0, result=(None, "UA")))
-        monkeypatch.setattr(runtime_loop, "update_http_submit_step", lambda state, thread, label: asyncio.sleep(0, result=state.update_thread_step(thread, 1, 4, status_text=label, running=True)))
+        monkeypatch.setattr(
+            runner, "_select_session_proxy_and_ua", lambda: asyncio.sleep(0, result=(None, "UA"))
+        )
+        monkeypatch.setattr(
+            runtime_loop,
+            "update_http_submit_step",
+            lambda state, thread, label: asyncio.sleep(
+                0, result=state.update_thread_step(thread, 1, 4, status_text=label, running=True)
+            ),
+        )
 
         await runner.run()
 
@@ -133,7 +161,9 @@ class AsyncRuntimeHttpRoundTests:
             runner.proxy_session.proxy_provider = "default"
             return "http://1.1.1.1:80", "UA"
 
-        monkeypatch.setattr(runner.http_submitter, "submit", lambda **_kwargs: asyncio.sleep(0, result=True))
+        monkeypatch.setattr(
+            runner.http_submitter, "submit", lambda **_kwargs: asyncio.sleep(0, result=True)
+        )
         monkeypatch.setattr(runner, "_prepare_round_context", lambda: asyncio.sleep(0, result=True))
         monkeypatch.setattr(runner, "_select_session_proxy_and_ua", select_proxy)
         monkeypatch.setattr(runtime_loop, "get_session_snapshot", lambda: {"user_id": 73952})
@@ -170,7 +200,9 @@ class AsyncRuntimeHttpRoundTests:
             reports.append(kwargs)
             return True
 
-        monkeypatch.setattr(runner, "_prepare_round_context", lambda: (_ for _ in ()).throw(RuntimeError("boom")))
+        monkeypatch.setattr(
+            runner, "_prepare_round_context", lambda: (_ for _ in ()).throw(RuntimeError("boom"))
+        )
         monkeypatch.setattr(runtime_loop, "get_session_snapshot", lambda: {"user_id": 73952})
         monkeypatch.setattr(runtime_loop, "report_submission_result_async", fake_report)
 

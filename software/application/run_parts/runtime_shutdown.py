@@ -24,8 +24,6 @@ def collect_unique_threads(candidates: Iterable[Any]) -> List[threading.Thread]:
 
 
 class RuntimeShutdownHelper:
-    
-
     def __init__(self, controller: Any) -> None:
         self.controller = controller
 
@@ -58,10 +56,9 @@ def clear_finished_thread(value: Optional[threading.Thread]) -> Optional[threadi
     return value
 
 
-
-
-
-def request_shutdown_for_close(service: RunApplicationService, timeout_seconds: float = 5.0) -> None:
+def request_shutdown_for_close(
+    service: RunApplicationService, timeout_seconds: float = 5.0
+) -> None:
     service._closing = True
     service._interactions.cancel_pending()
     with service._close_shutdown_lock:
@@ -146,4 +143,3 @@ def shutdown_for_close(service: RunApplicationService, timeout_seconds: float = 
             ", ".join(thread.name or "UnnamedThread" for thread in alive),
         )
     return not alive
-

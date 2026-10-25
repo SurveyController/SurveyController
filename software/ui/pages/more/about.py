@@ -44,8 +44,6 @@ from shiboken6 import isValid
 
 
 class AboutPage(ScrollArea):
-    
-
     _updateCheckFinished = Signal(object)
     _updateCheckError = Signal(str)
     _publishTimeLoaded = Signal(str)
@@ -85,7 +83,6 @@ class AboutPage(ScrollArea):
         content_layout.setSpacing(16)
         content_layout.setAlignment(Qt.AlignmentFlag.AlignTop)
 
-        
         hero_widget = QWidget()
         hero_layout = QVBoxLayout(hero_widget)
         hero_layout.setSpacing(10)
@@ -108,7 +105,6 @@ class AboutPage(ScrollArea):
         content_layout.addWidget(hero_widget)
         content_layout.addSpacing(10)
 
-        
         disclaimer_bar = FullWidthInfoBar(
             icon=InfoBarIcon.WARNING,
             title="",
@@ -124,11 +120,9 @@ class AboutPage(ScrollArea):
         disclaimer_bar.setMaximumWidth(16777215)
         content_layout.addWidget(disclaimer_bar)
 
-        
         cards_row = QHBoxLayout()
         cards_row.setSpacing(16)
 
-        
         version_card = CardWidget(self)
         version_layout = QVBoxLayout(version_card)
         version_layout.setContentsMargins(20, 16, 20, 16)
@@ -152,7 +146,6 @@ class AboutPage(ScrollArea):
         version_row.addWidget(self.update_btn)
         version_layout.addLayout(version_row)
 
-        
         links_card = CardWidget(self)
         links_layout = QVBoxLayout(links_card)
         links_layout.setContentsMargins(20, 16, 20, 16)
@@ -178,7 +171,6 @@ class AboutPage(ScrollArea):
 
         content_layout.addLayout(cards_row)
 
-        
         credit_card = CardWidget(self)
         credit_layout = QVBoxLayout(credit_card)
         credit_layout.setContentsMargins(20, 16, 20, 16)
@@ -190,13 +182,14 @@ class AboutPage(ScrollArea):
         license_layout.addStretch(1)
         credit_layout.addLayout(license_layout)
 
-        
         contributors_layout = QHBoxLayout()
         contributors_layout.addWidget(BodyLabel("贡献者：", self))
         contributor1_link = HyperlinkButton("https://github.com/hungryM0", "@HUNGRY_M0", self)
         contributor2_link = HyperlinkButton("https://github.com/shiaho777", "@shiaho777", self)
         contributor3_link = HyperlinkButton("https://github.com/BingBuLiang", "@BingBuLiang", self)
-        contributor4_link = HyperlinkButton("https://github.com/dAwn-Rebirth", "@dAwn-Rebirth", self)
+        contributor4_link = HyperlinkButton(
+            "https://github.com/dAwn-Rebirth", "@dAwn-Rebirth", self
+        )
         contributor5_link = HyperlinkButton("https://github.com/Moyuin-aka", "@Moyuin-aka", self)
         contributor6_link = HyperlinkButton("https://github.com/qintaiyang", "@qintaiyang", self)
         contributors_layout.addWidget(contributor1_link)
@@ -208,7 +201,6 @@ class AboutPage(ScrollArea):
         contributors_layout.addStretch(1)
         credit_layout.addLayout(contributors_layout)
 
-        
         terms_layout = QHBoxLayout()
         terms_layout.addWidget(BodyLabel("服务条款与隐私声明：", self))
         self.terms_btn = HyperlinkButton("", "查看详情", self)
@@ -219,7 +211,6 @@ class AboutPage(ScrollArea):
 
         content_layout.addWidget(credit_card)
 
-        
         footer_layout = QHBoxLayout()
         footer_layout.setSpacing(8)
         copyright_text = CaptionLabel("Copyright © 2026 HUNGRY_M0. All rights reserved.", self)
@@ -232,12 +223,9 @@ class AboutPage(ScrollArea):
         content_layout.addStretch(1)
 
         self.update_btn.clicked.connect(self._check_updates)
-        self.github_btn.clicked.connect(
-            lambda: webbrowser.open(REPOSITORY_URL)
-        )
+        self.github_btn.clicked.connect(lambda: webbrowser.open(REPOSITORY_URL))
         self.website_btn.clicked.connect(lambda: webbrowser.open("https://surveydoc.hungrym0.com/"))
 
-        
         self._load_publish_time()
 
     def _set_update_loading(self, loading: bool):
@@ -251,7 +239,7 @@ class AboutPage(ScrollArea):
 
     @Slot(object)
     def _on_update_result(self, update_info):
-        
+
         self._set_update_loading(False)
         win = self.window()
         status = update_info.get("status", "unknown") if update_info else "unknown"
@@ -297,7 +285,7 @@ class AboutPage(ScrollArea):
 
     @Slot(str)
     def _on_update_error(self, error_msg: str):
-        
+
         self._set_update_loading(False)
         InfoBar.error(
             "",
@@ -325,7 +313,7 @@ class AboutPage(ScrollArea):
         threading.Thread(target=_do_check, daemon=True).start()
 
     def _load_publish_time(self):
-        
+
         self._publishTimeLoaded.connect(
             self._on_publish_time_loaded, Qt.ConnectionType.QueuedConnection
         )
@@ -354,11 +342,11 @@ class AboutPage(ScrollArea):
 
     @Slot(str)
     def _on_publish_time_loaded(self, time_str: str):
-        
+
         self.publish_time_label.setText(f"({time_str})")
 
     def _show_terms_of_service(self):
-        
+
         dialog = getattr(self, "_terms_dialog", None)
         if dialog is not None and isValid(dialog):
             dialog.raise_()

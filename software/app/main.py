@@ -21,7 +21,7 @@ _FAULT_HANDLER_STREAM = None
 
 
 def _enable_fault_handler() -> None:
-    
+
     global _FAULT_HANDLER_STREAM
 
     if faulthandler.is_enabled():
@@ -59,7 +59,7 @@ def _disable_fault_handler() -> None:
 
 
 def _qt_message_handler(mode, context, message):
-    
+
     _ = context
     if "QFont::setPointSize" in message:
         return
@@ -94,15 +94,13 @@ def main():
     app.setApplicationVersion(APP_VERSION)
     install_qfluentwidgets_animation_guards()
 
-    
     font = QFont("Microsoft YaHei UI" if sys.platform == "win32" else "Sans Serif", 9)
     app.setFont(font)
 
-    
     http_client.prewarm()
 
-    
     from software.ui.shell.main_window import create_window
+
     window = create_window()
     window.show()
 
@@ -125,4 +123,3 @@ def main():
 
 if __name__ == "__main__":
     raise SystemExit(main())
-

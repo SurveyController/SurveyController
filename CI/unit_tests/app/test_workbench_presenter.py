@@ -274,7 +274,9 @@ def test_workbench_presenter_survey_parsed_updates_state_and_context() -> None:
     assert presenter.state.get_entries() == [entry]
     assert [(item.num, item.title) for item in dashboard.parse_success_calls[-1][0]] == [(1, "Q1")]
     assert dashboard.parse_success_calls[-1][1] == "Parsed"
-    assert [(item.num, item.title) for item in reverse_fill_page.parse_success_calls[-1][0]] == [(1, "Q1")]
+    assert [(item.num, item.title) for item in reverse_fill_page.parse_success_calls[-1][0]] == [
+        (1, "Q1")
+    ]
     assert reverse_fill_page.parse_success_calls[-1][1] == "Parsed"
     assert [(item.num, item.title) for item in strategy_page.questions_info] == [(1, "Q1")]
     assert strategy_page.dimension_groups == []

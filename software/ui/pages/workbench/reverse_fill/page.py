@@ -91,8 +91,6 @@ _FORMAT_CHOICES = [
 
 
 class ReverseFillPage(SurveyClipboardMixin, QWidget):
-    
-
     surveyUrlChanged = Signal(str)
     scroll_area: "ScrollArea"
     view: QWidget
@@ -304,7 +302,9 @@ class ReverseFillPage(SurveyClipboardMixin, QWidget):
         if self.controller.request_toggle_random_ip(bool(enabled)):
             return
         fallback_enabled = bool(
-            self.controller.get_runtime_snapshot().get("settings", {}).get("random_ip_enabled", False)
+            self.controller.get_runtime_snapshot()
+            .get("settings", {})
+            .get("random_ip_enabled", False)
         )
         self.random_ip_cb.blockSignals(True)
         self.random_ip_cb.setChecked(fallback_enabled)

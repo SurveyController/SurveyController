@@ -137,8 +137,13 @@ def _json_payload(response: Any, label: str) -> Mapping[str, Any]:
     if getattr(response, "is_error", False):
         message = ""
         if isinstance(payload, Mapping):
-            message = str(payload.get("message") or payload.get("msg") or payload.get("code") or "").strip()
-            if label == "提交" and classify_credamo_api_payload(payload) == CredamoSubmitResult.FAILED:
+            message = str(
+                payload.get("message") or payload.get("msg") or payload.get("code") or ""
+            ).strip()
+            if (
+                label == "提交"
+                and classify_credamo_api_payload(payload) == CredamoSubmitResult.FAILED
+            ):
                 raise ProviderSubmissionRejectedError(f"见数{label}失败：{message or payload}")
         if message:
             raise RuntimeError(f"见数{label}失败：{message}")
@@ -209,7 +214,9 @@ async def _build_actions(
         if stop_signal is not None and stop_signal.is_set():
             return []
         if bool(getattr(question, "unsupported", False)):
-            raise RuntimeError(f"见数第{question.num}题暂不支持：{question.unsupported_reason or question.type_code}")
+            raise RuntimeError(
+                f"见数第{question.num}题暂不支持：{question.unsupported_reason or question.type_code}"
+            )
 
     async def _build_action(question: SurveyQuestionMeta) -> AnswerAction | None:
         if stop_signal is not None and stop_signal.is_set():
@@ -338,7 +345,9 @@ async def brush_credamo_http(
         return False
     await update_http_submit_step(ctx, thread_name, "提交问卷")
     time_code = _new_time_code()
-    submit_headers = _request_headers(origin=origin, short_url=short_url, user_agent=user_agent_value)
+    submit_headers = _request_headers(
+        origin=origin, short_url=short_url, user_agent=user_agent_value
+    )
     async with _CredamoHttpSession() as init_session:
         init_data = await _init_answer(
             init_session,

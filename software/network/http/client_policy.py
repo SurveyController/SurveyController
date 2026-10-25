@@ -39,7 +39,9 @@ def normalize_timeout(timeout: Any) -> Any:
             connect, read = timeout
             connect_val = float(connect) if connect is not None else None
             read_val = float(read) if read is not None else None
-            return httpx.Timeout(connect=connect_val, read=read_val, write=read_val, pool=connect_val)
+            return httpx.Timeout(
+                connect=connect_val, read=read_val, write=read_val, pool=connect_val
+            )
         if len(timeout) == 4:
             connect, read, write, pool = timeout
             return httpx.Timeout(

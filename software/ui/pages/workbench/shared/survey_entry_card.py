@@ -17,8 +17,6 @@ from software.ui.widgets.paste_only_menu import PasteOnlyMenu
 
 
 class SurveyEntryCard(CardWidget):
-    
-
     def __init__(
         self,
         parent: QWidget | None = None,

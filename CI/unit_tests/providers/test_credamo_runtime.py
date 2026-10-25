@@ -94,7 +94,9 @@ async def test_credamo_http_runtime_uses_proxy_and_posts_json(monkeypatch) -> No
     monkeypatch.setattr(credamo_http, "_init_answer", fake_init)
     monkeypatch.setattr(credamo_http, "_save_answers", fake_save)
     monkeypatch.setattr(credamo_builders, "weighted_index", lambda _probs: 0)
-    monkeypatch.setattr(core_credamo_http, "sample_answer_duration_seconds", lambda *_args, **_kwargs: 70.0)
+    monkeypatch.setattr(
+        core_credamo_http, "sample_answer_duration_seconds", lambda *_args, **_kwargs: 70.0
+    )
 
     ok = await credamo_http.brush_credamo_http(
         config,

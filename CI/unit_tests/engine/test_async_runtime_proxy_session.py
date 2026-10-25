@@ -12,7 +12,9 @@ from .async_runtime_loop_fakes import _build_runner
 
 class AsyncRuntimeProxySessionTests:
     @pytest.mark.asyncio
-    async def test_select_session_proxy_and_ua_does_not_pre_acquire_proxy(self, monkeypatch) -> None:
+    async def test_select_session_proxy_and_ua_does_not_pre_acquire_proxy(
+        self, monkeypatch
+    ) -> None:
         config = ExecutionConfig(random_proxy_ip_enabled=True, survey_provider="wjx")
         state = ExecutionState(config=config)
         calls: list[str] = []
@@ -21,7 +23,12 @@ class AsyncRuntimeProxySessionTests:
             calls.append("select")
             return "http://1.1.1.1:80"
 
-        monkeypatch.setattr(proxy_session, "_select_proxy_for_session_async", fake_select_proxy_for_session_async, raising=False)
+        monkeypatch.setattr(
+            proxy_session,
+            "_select_proxy_for_session_async",
+            fake_select_proxy_for_session_async,
+            raising=False,
+        )
         monkeypatch.setattr(
             proxy_session,
             "_select_user_agent_for_session",

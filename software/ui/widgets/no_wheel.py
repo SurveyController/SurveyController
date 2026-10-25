@@ -14,8 +14,6 @@ SpinBox::down-button {
 
 
 class NoWheelSlider(Slider):
-    
-
     def wheelEvent(self, event: QWheelEvent) -> None:
         event.ignore()
 

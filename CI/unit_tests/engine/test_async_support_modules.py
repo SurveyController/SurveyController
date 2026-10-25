@@ -17,7 +17,13 @@ class AsyncStatusBusTests:
             dispatcher=lambda callback: callback(),
             throttle_seconds=0.0,
         )
-        patch_attrs((__import__("surveycore.core.engine.async_status_bus", fromlist=["time"]).time, "monotonic", lambda: 10.0))
+        patch_attrs(
+            (
+                __import__("surveycore.core.engine.async_status_bus", fromlist=["time"]).time,
+                "monotonic",
+                lambda: 10.0,
+            )
+        )
 
         bus.emit({"slot_id": "slot-1", "callback": lambda: delivered.append("ok")})
 
@@ -33,8 +39,20 @@ class AsyncStatusBusTests:
             throttle_seconds=0.1,
         )
 
-        bus.emit({"slot_id": "slot-1", "type": "progress", "callback": lambda: dispatched.append("first")})
-        bus.emit({"slot_id": "slot-1", "type": "progress", "callback": lambda: dispatched.append("second")})
+        bus.emit(
+            {
+                "slot_id": "slot-1",
+                "type": "progress",
+                "callback": lambda: dispatched.append("first"),
+            }
+        )
+        bus.emit(
+            {
+                "slot_id": "slot-1",
+                "type": "progress",
+                "callback": lambda: dispatched.append("second"),
+            }
+        )
 
         assert dispatched == ["dispatch", "first"]
 
@@ -48,8 +66,12 @@ class AsyncStatusBusTests:
             throttle_seconds=0.1,
         )
 
-        bus.emit({"slot_id": "slot-1", "type": "result", "callback": lambda: dispatched.append("first")})
-        bus.emit({"slot_id": "slot-1", "type": "result", "callback": lambda: dispatched.append("second")})
+        bus.emit(
+            {"slot_id": "slot-1", "type": "result", "callback": lambda: dispatched.append("first")}
+        )
+        bus.emit(
+            {"slot_id": "slot-1", "type": "result", "callback": lambda: dispatched.append("second")}
+        )
 
         assert dispatched == ["dispatch", "first", "dispatch", "second"]
 

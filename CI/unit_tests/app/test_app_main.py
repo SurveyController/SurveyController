@@ -54,7 +54,9 @@ def test_main_returns_exit_code_and_avoids_hard_exit(monkeypatch) -> None:
     )
     monkeypatch.setattr(main_module, "_enable_fault_handler", lambda: events.append("fault_on"))
     monkeypatch.setattr(main_module, "setup_logging", lambda: events.append("logging_on"))
-    monkeypatch.setattr(main_module, "qInstallMessageHandler", lambda _handler: events.append("qt_msg"))
+    monkeypatch.setattr(
+        main_module, "qInstallMessageHandler", lambda _handler: events.append("qt_msg")
+    )
     monkeypatch.setattr(
         main_module,
         "install_qfluentwidgets_animation_guards",

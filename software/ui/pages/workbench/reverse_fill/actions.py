@@ -168,9 +168,7 @@ def on_parse_clicked(page: Any) -> None:
         )
         return
     provider = detect_survey_provider(url)
-    if not (
-        provider in {SURVEY_PROVIDER_QQ, SURVEY_PROVIDER_CREDAMO} or is_wjx_survey_url(url)
-    ):
+    if not (provider in {SURVEY_PROVIDER_QQ, SURVEY_PROVIDER_CREDAMO} or is_wjx_survey_url(url)):
         page._toast("链接不是可解析的公开问卷", "error", duration=3000)
         return
 

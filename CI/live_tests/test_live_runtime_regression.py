@@ -13,13 +13,13 @@ ROOT_DIR = Path(__file__).resolve().parents[2]
 LIVE_URL_ENV = "SURVEY_CONTROLLER_LIVE_TEST_URL"
 INNER_TIMEOUT_SECONDS = "240"
 OUTER_TIMEOUT_SECONDS = 300
-TRANSIENT_EXTERNAL_FAILURE_PATTERNS = (
-    re.compile(r"HTTP 页面未返回可解析题目"),
-)
+TRANSIENT_EXTERNAL_FAILURE_PATTERNS = (re.compile(r"HTTP 页面未返回可解析题目"),)
 KNOWN_UNSUPPORTED_LIVE_CASE_PATTERNS = (
     re.compile(r"腾讯问卷当前版本暂不支持量表、矩阵量表题"),
     re.compile(r"当前版本暂不支持腾讯问卷(?:矩阵)?量表题"),
 )
+
+
 @dataclass(frozen=True)
 class LiveSurveyCase:
     name: str
@@ -44,7 +44,9 @@ def _build_child_env() -> dict[str, str]:
     env = os.environ.copy()
     current_python_path = env.get("PYTHONPATH", "")
     root_path = str(ROOT_DIR)
-    env["PYTHONPATH"] = root_path if not current_python_path else os.pathsep.join([root_path, current_python_path])
+    env["PYTHONPATH"] = (
+        root_path if not current_python_path else os.pathsep.join([root_path, current_python_path])
+    )
     env["PYTHONIOENCODING"] = "utf-8:replace"
     env["PYTHONUTF8"] = "1"
     return env

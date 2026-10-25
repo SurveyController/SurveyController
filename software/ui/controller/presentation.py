@@ -39,7 +39,12 @@ def runtime_status(snapshot: RuntimeSnapshot) -> str:
     failures = int(progress.get("consecutive_failures") or 0)
     quota_failures = int(progress.get("device_quota_fail_count") or 0)
     terminal = snapshot.get("terminal_stop") or {}
-    if terminal.get("category") in {"run_preparation_failed", "engine_start_failed", "engine_failed", "dispatch_failed"}:
+    if terminal.get("category") in {
+        "run_preparation_failed",
+        "engine_start_failed",
+        "engine_failed",
+        "dispatch_failed",
+    }:
         return str(terminal.get("message") or "后台运行内核异常退出，请查看日志")
     if not snapshot.get("running") and terminal.get("category") == "user_stopped" and target == 0:
         return "已停止"
@@ -79,9 +84,13 @@ def runtime_view(snapshot: RuntimeSnapshot) -> dict[str, Any]:
 def survey_view(snapshot: SurveySnapshot) -> dict[str, Any]:
     view: dict[str, Any] = dict(snapshot)
     if snapshot.get("phase") == "error":
-        view["parse_error"] = str(snapshot.get("parse_error") or _PARSE_ERRORS.get(
-            str(snapshot.get("error_code") or "parse_failed"), _PARSE_ERRORS["parse_failed"],
-        ))
+        view["parse_error"] = str(
+            snapshot.get("parse_error")
+            or _PARSE_ERRORS.get(
+                str(snapshot.get("error_code") or "parse_failed"),
+                _PARSE_ERRORS["parse_failed"],
+            )
+        )
     return view
 
 
@@ -93,5 +102,10 @@ def interaction_view(request: InteractionRequest) -> dict[str, Any]:
     detail = request.detail
     if request.code == "trial_failed" and detail:
         detail = f"领取试用失败：{detail}"
-    return {**event, "type": "dialog_message", "title": title,
-            "message": detail or default, "level": request.level}
+    return {
+        **event,
+        "type": "dialog_message",
+        "title": title,
+        "message": detail or default,
+        "level": request.level,
+    }

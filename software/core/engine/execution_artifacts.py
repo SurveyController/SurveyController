@@ -20,7 +20,11 @@ class PreparedExecutionArtifacts:
 
 class RuntimePreparationError(Exception):
     def __init__(
-        self, user_message: str, *, log_message: str = "", detailed: bool = False,
+        self,
+        user_message: str,
+        *,
+        log_message: str = "",
+        detailed: bool = False,
     ) -> None:
         super().__init__(str(user_message or "运行准备失败"))
         self.user_message = str(user_message or "运行准备失败")

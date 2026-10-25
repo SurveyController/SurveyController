@@ -13,7 +13,9 @@ from software.network.proxy.policy import source as proxy_source
 
 
 class _Response:
-    def __init__(self, text: str = "", payload: object | None = None, status_code: int = 200) -> None:
+    def __init__(
+        self, text: str = "", payload: object | None = None, status_code: int = 200
+    ) -> None:
         self.text = text
         self._payload = payload
         self.status_code = status_code
@@ -30,8 +32,14 @@ class _Response:
 
 class ProxyApiProviderTests:
     def test_status_payload_formats_online_offline_and_unknown_states(self) -> None:
-        assert provider.format_status_payload({"online": True}) == ("在线：系统正常运行中", "#228B22")
-        assert provider.format_status_payload({"online": False, "message": "维护中"}) == ("离线：维护中", "#cc0000")
+        assert provider.format_status_payload({"online": True}) == (
+            "在线：系统正常运行中",
+            "#228B22",
+        )
+        assert provider.format_status_payload({"online": False, "message": "维护中"}) == (
+            "离线：维护中",
+            "#cc0000",
+        )
         assert provider.format_status_payload([]) == ("未知：返回数据格式异常", "#666666")
 
     def test_parse_proxy_payload_deduplicates_nested_proxy_addresses(self) -> None:
@@ -53,9 +61,15 @@ class ProxyApiProviderTests:
         with pytest.raises(ValueError, match="无有效代理地址"):
             provider._parse_proxy_payload('{"items": []}')
 
-    def test_custom_api_validation_handles_scheme_network_errors_and_fatal_payloads(self, patch_attrs) -> None:
+    def test_custom_api_validation_handles_scheme_network_errors_and_fatal_payloads(
+        self, patch_attrs
+    ) -> None:
         assert provider.test_custom_proxy_api("") == (False, "API地址不能为空", [])
-        assert provider.test_custom_proxy_api("ftp://bad") == (False, "API地址必须以 http:// 或 https:// 开头", [])
+        assert provider.test_custom_proxy_api("ftp://bad") == (
+            False,
+            "API地址必须以 http:// 或 https:// 开头",
+            [],
+        )
 
         patch_attrs(
             (
@@ -64,7 +78,11 @@ class ProxyApiProviderTests:
                 lambda *_args, **_kwargs: _Response('{"code": 1, "message": "套餐余量不足"}'),
             )
         )
-        assert provider.test_custom_proxy_api("https://proxy.example/api") == (False, "套餐余量不足，请充值", [])
+        assert provider.test_custom_proxy_api("https://proxy.example/api") == (
+            False,
+            "套餐余量不足，请充值",
+            [],
+        )
 
     def test_custom_api_validation_returns_warning_and_proxies(self, patch_attrs) -> None:
         patch_attrs(
@@ -98,7 +116,9 @@ class ProxyApiProviderTests:
         assert warning == ""
         assert proxies == ["3.3.3.3:7000"]
 
-    def test_fetch_custom_proxy_batch_preserves_fixed_url_and_keeps_returned_batch(self, patch_attrs) -> None:
+    def test_fetch_custom_proxy_batch_preserves_fixed_url_and_keeps_returned_batch(
+        self, patch_attrs
+    ) -> None:
         original_source = proxy_source.get_proxy_source()
         original_override = proxy_source.get_custom_proxy_api_override()
         try:
@@ -115,13 +135,18 @@ class ProxyApiProviderTests:
             leases = asyncio.run(provider.fetch_proxy_batch_async(expected_count=2))
 
             assert calls == ["https://proxy.example/api?num=100&sign=abc"]
-            assert [lease.address for lease in leases] == ["http://4.4.4.4:8000", "http://5.5.5.5:8000"]
+            assert [lease.address for lease in leases] == [
+                "http://4.4.4.4:8000",
+                "http://5.5.5.5:8000",
+            ]
             assert all(isinstance(lease, ProxyLease) for lease in leases)
         finally:
             proxy_source.set_proxy_source(original_source)
             proxy_source.set_proxy_api_override(original_override)
 
-    def test_fetch_custom_proxy_batch_preserves_original_url_when_num_placeholder_missing(self, patch_attrs) -> None:
+    def test_fetch_custom_proxy_batch_preserves_original_url_when_num_placeholder_missing(
+        self, patch_attrs
+    ) -> None:
         original_source = proxy_source.get_proxy_source()
         original_override = proxy_source.get_custom_proxy_api_override()
         try:
@@ -143,7 +168,9 @@ class ProxyApiProviderTests:
             proxy_source.set_proxy_source(original_source)
             proxy_source.set_proxy_api_override(original_override)
 
-    def test_fetch_custom_proxy_batch_warns_when_returned_batch_exceeds_request_by_twenty_percent(self, patch_attrs, caplog) -> None:
+    def test_fetch_custom_proxy_batch_warns_when_returned_batch_exceeds_request_by_twenty_percent(
+        self, patch_attrs, caplog
+    ) -> None:
         original_source = proxy_source.get_proxy_source()
         original_override = proxy_source.get_custom_proxy_api_override()
         try:
@@ -158,7 +185,10 @@ class ProxyApiProviderTests:
             with caplog.at_level(logging.WARNING):
                 leases = asyncio.run(provider.fetch_proxy_batch_async(expected_count=1))
 
-            assert [lease.address for lease in leases] == ["http://4.4.4.4:8000", "http://5.5.5.5:8000"]
+            assert [lease.address for lease in leases] == [
+                "http://4.4.4.4:8000",
+                "http://5.5.5.5:8000",
+            ]
             assert "自定义代理API返回 2 个有效代理" in caplog.text
             assert "当前运行本轮请求 1 个" in caplog.text
         finally:
@@ -173,15 +203,23 @@ class ProxyApiProviderTests:
             proxy_source.set_proxy_api_override("https://proxy.example/api")
             stop_signal = threading.Event()
             popups: list[tuple[str, str]] = []
+
             async def fake_get(*_args, **_kwargs):
                 return _Response('{"code": 2, "message": "白名单错误"}')
+
             patch_attrs(
                 (provider.http_client, "aget", fake_get),
-                (provider, "log_popup_error", lambda title, message: popups.append((title, message))),
+                (
+                    provider,
+                    "log_popup_error",
+                    lambda title, message: popups.append((title, message)),
+                ),
             )
 
             with pytest.raises(provider.ProxyApiFatalError, match="白名单"):
-                asyncio.run(provider.fetch_proxy_batch_async(expected_count=1, stop_signal=stop_signal))
+                asyncio.run(
+                    provider.fetch_proxy_batch_async(expected_count=1, stop_signal=stop_signal)
+                )
 
             assert stop_signal.is_set()
             assert popups == [("代理API错误", "请先添加当前IP到代理商白名单")]
@@ -208,6 +246,7 @@ class ProxyApiProviderTests:
                     },
                 ],
             }
+
         patch_attrs(
             (provider, "get_proxy_source", lambda: provider.PROXY_SOURCE_DEFAULT),
             (provider, "is_custom_proxy_source", lambda _source: False),
@@ -230,11 +269,15 @@ class ProxyApiProviderTests:
     def test_area_quality_retry_payload_notifies_and_stops(self, patch_attrs) -> None:
         stop_signal = threading.Event()
         calls: list[tuple[str, str]] = []
-        patch_attrs((provider, "log_popup_error", lambda title, message: calls.append((title, message))))
+        patch_attrs(
+            (provider, "log_popup_error", lambda title, message: calls.append((title, message)))
+        )
 
         provider._handle_area_quality_failure(stop_signal)
 
         assert stop_signal.is_set()
         assert calls == [("地区代理不可用", "当前地区IP质量差，建议切换其他地区")]
-        assert provider._is_area_quality_retry_payload({"code": "-1", "status": "200", "message": "请重试", "data": None})
+        assert provider._is_area_quality_retry_payload(
+            {"code": "-1", "status": "200", "message": "请重试", "data": None}
+        )
         assert not provider._is_area_quality_retry_payload(SimpleNamespace())

@@ -42,22 +42,18 @@ from software.ui.helpers.fluent_tooltip import install_tooltip_filter
 
 
 class _OverlayWidget(QWidget):
-    
-
     def __init__(self, parent=None, on_click: Optional[Callable[[], None]] = None):
         super().__init__(parent)
         self._on_click = on_click
 
     def mousePressEvent(self, event):
-        
+
         if self._on_click:
             self._on_click()
         super().mousePressEvent(event)
 
 
 class ConfigDrawer(QWidget):
-    
-
     def __init__(self, parent=None, on_select: Optional[Callable[[str], None]] = None):
         super().__init__(parent)
         self.setObjectName("configDrawer")
@@ -133,7 +129,7 @@ class ConfigDrawer(QWidget):
         self.empty_label.setVisible(not has_items)
 
     def refresh(self):
-        
+
         configs_dir = get_user_config_directory()
         os.makedirs(configs_dir, exist_ok=True)
 
@@ -212,7 +208,7 @@ class ConfigDrawer(QWidget):
         """)
 
     def open_drawer(self):
-        
+
         self.refresh()
         self._apply_theme()
         host = self.parentWidget()
@@ -249,7 +245,7 @@ class ConfigDrawer(QWidget):
         self._is_open = True
 
     def close_drawer(self):
-        
+
         if not self.isVisible():
             return
         host = self.parentWidget()
@@ -285,7 +281,7 @@ class ConfigDrawer(QWidget):
         self._is_open = False
 
     def sync_to_parent(self):
-        
+
         host = self.parentWidget()
         if host is None:
             return
@@ -315,7 +311,7 @@ class ConfigDrawer(QWidget):
         self.hide()
 
     def _handle_item_triggered(self, item: QListWidgetItem):
-        
+
         if not item:
             return
         path = item.data(Qt.ItemDataRole.UserRole)

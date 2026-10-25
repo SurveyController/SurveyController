@@ -17,7 +17,7 @@ from shiboken6 import isValid
 
 
 def install_qfluentwidgets_animation_guards() -> None:
-    
+
     try:
         from qfluentwidgets import IndeterminateProgressBar
         from qfluentwidgets.components.widgets.info_bar import InfoBarManager
@@ -69,7 +69,7 @@ def install_qfluentwidgets_animation_guards() -> None:
 
 
 def _install_infobar_manager_guards(info_bar_manager_cls) -> None:
-    
+
     def _is_alive(obj) -> bool:
         if obj is None:
             return False
@@ -282,13 +282,11 @@ def _install_infobar_manager_guards(info_bar_manager_cls) -> None:
 
 
 def _install_top_position_guard(info_bar_manager_cls, prune_invalid_bars) -> None:
-    
+
     try:
         from qfluentwidgets import InfoBarPosition
 
-        top_manager_cls = getattr(info_bar_manager_cls, "managers", {}).get(
-            InfoBarPosition.TOP
-        )
+        top_manager_cls = getattr(info_bar_manager_cls, "managers", {}).get(InfoBarPosition.TOP)
     except Exception:
         top_manager_cls = None
 
@@ -332,7 +330,7 @@ def _install_top_position_guard(info_bar_manager_cls, prune_invalid_bars) -> Non
 
 
 def set_indeterminate_progress_ring_active(ring: Any, active: bool) -> None:
-    
+
     if ring is None:
         return
 
@@ -365,7 +363,7 @@ def set_indeterminate_progress_ring_active(ring: Any, active: bool) -> None:
 
 
 def resolve_mask_dialog_parent(parent: QWidget | None) -> QWidget:
-    
+
     if parent is not None and parent.width() > 0 and parent.height() > 0:
         return parent
 

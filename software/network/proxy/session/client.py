@@ -13,7 +13,12 @@ from .normalize import _to_non_negative_int, _to_non_negative_quota
 _LOG_BODY_PREVIEW_LIMIT = 320
 
 _SENSITIVE_PREVIEW_PATTERNS = (
-    (re.compile(r'("?(?:access_token|refresh_token|account|password)"?\s*:\s*")[^"]*(")', re.IGNORECASE), r"\1***\2"),
+    (
+        re.compile(
+            r'("?(?:access_token|refresh_token|account|password)"?\s*:\s*")[^"]*(")', re.IGNORECASE
+        ),
+        r"\1***\2",
+    ),
     (re.compile(r"(Authorization\s*:\s*Bearer\s+)[^\s]+", re.IGNORECASE), r"\1***"),
 )
 
@@ -27,6 +32,7 @@ def _build_headers() -> Dict[str, str]:
         **DEFAULT_HTTP_HEADERS,
     }
 
+
 def _preview_text(value: Any, *, limit: int = _LOG_BODY_PREVIEW_LIMIT) -> str:
     text = str(value or "").strip()
     if not text:
@@ -38,19 +44,23 @@ def _preview_text(value: Any, *, limit: int = _LOG_BODY_PREVIEW_LIMIT) -> str:
         return f"{text[:limit]}...(truncated)"
     return text
 
+
 def _response_content_type(response: Any) -> str:
     headers = getattr(response, "headers", {}) or {}
     return str(headers.get("Content-Type") or headers.get("content-type") or "").strip()
 
+
 def _response_header_value(response: Any, header_name: str) -> str:
     headers = getattr(response, "headers", {}) or {}
     return str(headers.get(header_name) or headers.get(str(header_name).lower()) or "").strip()
+
 
 def _response_body_preview(response: Any) -> str:
     try:
         return _preview_text(getattr(response, "text", ""))
     except Exception as exc:
         return f"<unavailable:{exc}>"
+
 
 def _log_extract_proxy_issue(
     message: str,
@@ -82,6 +92,7 @@ def _log_extract_proxy_issue(
         _response_body_preview(response) if response is not None else "<no-response>",
     )
 
+
 def _extract_error_payload(response: Any) -> RandomIPAuthError:
     retry_after = 0
     headers = getattr(response, "headers", {}) or {}
@@ -96,10 +107,17 @@ def _extract_error_payload(response: Any) -> RandomIPAuthError:
         payload = None
     if isinstance(payload, dict):
         detail = str(payload.get("detail") or "").strip()
-        retry_after = max(retry_after, _to_non_negative_int(payload.get("retry_after_seconds"), retry_after))
+        retry_after = max(
+            retry_after, _to_non_negative_int(payload.get("retry_after_seconds"), retry_after)
+        )
     if not detail:
         detail = f"http_{getattr(response, 'status_code', 0) or 0}"
-    return RandomIPAuthError(detail, status_code=int(getattr(response, "status_code", 0) or 0), retry_after_seconds=retry_after)
+    return RandomIPAuthError(
+        detail,
+        status_code=int(getattr(response, "status_code", 0) or 0),
+        retry_after_seconds=retry_after,
+    )
+
 
 def _network_error_detail(exc: BaseException) -> str:
     message = str(exc).strip()
@@ -107,6 +125,7 @@ def _network_error_detail(exc: BaseException) -> str:
     if message:
         return f"{exc_type}: {message}"
     return exc_type
+
 
 def _post_json(url: str, *, json_body: Dict[str, Any], timeout: float = 10) -> Any:
     from .auth import _endpoint_name
@@ -147,6 +166,7 @@ async def _apost_json(url: str, *, json_body: Dict[str, Any], timeout: float = 1
         )
         raise RandomIPAuthError(f"network_error:{detail}") from exc
 
+
 def _extract_proxy_item(data: Dict[str, Any]) -> Optional[Dict[str, Any]]:
     host = str(data.get("host") or "").strip()
     port = _to_non_negative_int(data.get("port"), 0)
@@ -162,11 +182,13 @@ def _extract_proxy_item(data: Dict[str, Any]) -> Optional[Dict[str, Any]]:
         "expire_at": str(data.get("expire_at") or "").strip(),
     }
 
+
 def _normalize_extract_provider(value: Any) -> str:
     provider = str(value or "").strip().lower()
     if provider in {"default", "idiot"}:
         return provider
     return ""
+
 
 def _parse_single_extract_payload(
     data: Dict[str, Any],
@@ -179,7 +201,12 @@ def _parse_single_extract_payload(
 
     item = _extract_proxy_item(data)
     if item is None:
-        _log_extract_proxy_issue("随机IP提取响应缺少 host/port/account/password", request_body=request_body, attempt=attempt, response=response)
+        _log_extract_proxy_issue(
+            "随机IP提取响应缺少 host/port/account/password",
+            request_body=request_body,
+            attempt=attempt,
+            response=response,
+        )
         raise RandomIPAuthError("invalid_response")
     quota_cost = _to_non_negative_quota(data.get("quota_cost"), 0.0)
     session = _apply_quota_payload(data, log_context="随机IP提取响应")
@@ -194,6 +221,7 @@ def _parse_single_extract_payload(
     )
     return item
 
+
 def _parse_batch_extract_payload(
     data: Dict[str, Any],
     *,
@@ -205,7 +233,12 @@ def _parse_batch_extract_payload(
 
     raw_items = data.get("items")
     if not isinstance(raw_items, list):
-        _log_extract_proxy_issue("随机IP批量提取响应缺少 items", request_body=request_body, attempt=attempt, response=response)
+        _log_extract_proxy_issue(
+            "随机IP批量提取响应缺少 items",
+            request_body=request_body,
+            attempt=attempt,
+            response=response,
+        )
         raise RandomIPAuthError("invalid_response")
 
     items: List[Dict[str, Any]] = []
@@ -216,11 +249,18 @@ def _parse_batch_extract_payload(
         if item is not None:
             items.append(item)
     if not items:
-        _log_extract_proxy_issue("随机IP批量提取响应中无有效 IP", request_body=request_body, attempt=attempt, response=response)
+        _log_extract_proxy_issue(
+            "随机IP批量提取响应中无有效 IP",
+            request_body=request_body,
+            attempt=attempt,
+            response=response,
+        )
         raise RandomIPAuthError("invalid_response")
 
     returned_count = max(1, _to_non_negative_int(data.get("returned_count"), len(items)))
-    requested_count = max(1, _to_non_negative_int(data.get("requested_count"), request_body.get("num", 1)))
+    requested_count = max(
+        1, _to_non_negative_int(data.get("requested_count"), request_body.get("num", 1))
+    )
     quota_cost_total = _to_non_negative_quota(data.get("quota_cost_total"), 0.0)
     session = _apply_quota_payload(data, log_context="随机IP批量提取响应")
     return {

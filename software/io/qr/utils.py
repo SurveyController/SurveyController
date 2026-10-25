@@ -5,7 +5,7 @@ import zxingcpp
 
 
 def decode_qrcode(image_source: object) -> Optional[str]:
-    
+
     try:
         result = zxingcpp.read_barcode(
             image_source,

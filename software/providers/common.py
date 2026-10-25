@@ -20,11 +20,21 @@ from surveycore.providers.common import (
 )
 
 __all__ = [
-    "SURVEY_PROVIDER_WJX", "SURVEY_PROVIDER_QQ", "SURVEY_PROVIDER_CREDAMO",
-    "SUPPORTED_SURVEY_PROVIDERS", "normalize_survey_provider", "detect_survey_provider",
-    "is_wjx_domain", "is_wjx_survey_url", "is_qq_survey_url", "is_credamo_survey_url",
-    "is_supported_survey_url", "normalize_survey_parse_url", "supports_answer_datetime_window",
-    "ensure_question_provider_fields", "ensure_questions_provider_fields",
+    "SURVEY_PROVIDER_WJX",
+    "SURVEY_PROVIDER_QQ",
+    "SURVEY_PROVIDER_CREDAMO",
+    "SUPPORTED_SURVEY_PROVIDERS",
+    "normalize_survey_provider",
+    "detect_survey_provider",
+    "is_wjx_domain",
+    "is_wjx_survey_url",
+    "is_qq_survey_url",
+    "is_credamo_survey_url",
+    "is_supported_survey_url",
+    "normalize_survey_parse_url",
+    "supports_answer_datetime_window",
+    "ensure_question_provider_fields",
+    "ensure_questions_provider_fields",
     "make_provider_question_key",
 ]
 
@@ -35,7 +45,9 @@ def normalize_survey_provider(value: Any, default: str = SURVEY_PROVIDER_WJX) ->
         provider = str(value or "").strip().lower()
     except Exception:
         provider = ""
-    return provider if provider in SUPPORTED_SURVEY_PROVIDERS else str(default or SURVEY_PROVIDER_WJX)
+    return (
+        provider if provider in SUPPORTED_SURVEY_PROVIDERS else str(default or SURVEY_PROVIDER_WJX)
+    )
 
 
 def detect_survey_provider(url_value: str, default: str = SURVEY_PROVIDER_WJX) -> str:

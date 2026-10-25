@@ -28,11 +28,15 @@ async def parse_credamo_survey(url: str) -> Tuple[List[Dict[str, Any]], str]:
     short_url = _noauth_short_url(_short_url_from_url(url))
     headers = _request_headers(origin=origin, short_url=short_url, user_agent=DEFAULT_USER_AGENT)
     async with _CredamoHttpSession() as session:
-        detail_data = await _fetch_detail(session, origin=origin, short_url=short_url, headers=headers)
+        detail_data = await _fetch_detail(
+            session, origin=origin, short_url=short_url, headers=headers
+        )
 
     questions: List[Dict[str, Any]] = []
     for index, raw_question in enumerate(_iter_raw_questions(detail_data), start=1):
-        normalized = _normalize_question(_raw_to_normalized_input(raw_question, fallback_num=index), fallback_num=index)
+        normalized = _normalize_question(
+            _raw_to_normalized_input(raw_question, fallback_num=index), fallback_num=index
+        )
         if _is_answerable_question(normalized):
             questions.append(normalized)
     if not questions:

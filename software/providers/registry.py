@@ -142,5 +142,3 @@ __all__ = [
     "fill_survey_http",
     "parse_survey",
 ]
-
-

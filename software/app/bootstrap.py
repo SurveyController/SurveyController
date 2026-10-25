@@ -68,7 +68,8 @@ def create_application_dependencies(
         return get_bool_from_qsettings(raw_value, True)
 
     return ApplicationDependencies(
-        runtime_engine=runtime_engine or AsyncEngineClient(
+        runtime_engine=runtime_engine
+        or AsyncEngineClient(
             AsyncRuntimeEngine(
                 app_version=APP_VERSION,
                 submission_report_enabled=submission_report_enabled,
@@ -79,9 +80,7 @@ def create_application_dependencies(
         execution_preparer=prepare_execution_artifacts,
         proxy_gateway=proxy_gateway if proxy_gateway is not None else PythonProxyGateway(),
         random_ip_health=(
-            random_ip_health
-            if random_ip_health is not None
-            else PythonRandomIpHealthAdapter()
+            random_ip_health if random_ip_health is not None else PythonRandomIpHealthAdapter()
         ),
         preference_store=selected_store,
         preferences=PreferencesService(selected_store),

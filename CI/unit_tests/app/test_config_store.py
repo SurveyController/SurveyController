@@ -35,13 +35,13 @@ class ConfigStoreTests:
     def test_load_config_reads_commented_json_payload(self, tmp_path: Path) -> None:
         path = tmp_path / "config.json"
         path.write_text(
-            f"""
-            {{
+            """
+            {
               // 用户手写注释
               "url": "https://www.wjx.cn/vm/demo.aspx",
               "target": "9",
               "threads": 3
-            }}
+            }
             """,
             encoding="utf-8",
         )
@@ -52,7 +52,9 @@ class ConfigStoreTests:
         assert config.target == 9
         assert config.threads == 3
 
-    def test_load_config_returns_default_when_missing_or_invalid_in_non_strict_mode(self, tmp_path: Path) -> None:
+    def test_load_config_returns_default_when_missing_or_invalid_in_non_strict_mode(
+        self, tmp_path: Path
+    ) -> None:
         missing = config_store.load_config(str(tmp_path / "missing.json"))
         assert isinstance(missing, RuntimeConfig)
         assert missing.url == ""
@@ -63,14 +65,18 @@ class ConfigStoreTests:
         assert isinstance(bad, RuntimeConfig)
         assert bad.url == ""
 
-    def test_load_config_raises_clear_error_for_invalid_json_in_strict_mode(self, tmp_path: Path) -> None:
+    def test_load_config_raises_clear_error_for_invalid_json_in_strict_mode(
+        self, tmp_path: Path
+    ) -> None:
         path = tmp_path / "bad.json"
         path.write_text("{bad json", encoding="utf-8")
 
         with pytest.raises(ValueError, match="读取配置失败"):
             config_store.load_config(str(path), strict=True)
 
-    def test_load_config_repairs_empty_default_config_in_non_strict_mode(self, tmp_path: Path) -> None:
+    def test_load_config_repairs_empty_default_config_in_non_strict_mode(
+        self, tmp_path: Path
+    ) -> None:
         default_path = tmp_path / "config.json"
         default_path.write_text("", encoding="utf-8")
 
@@ -94,7 +100,10 @@ class ConfigStoreTests:
 
         with (
             patch("software.io.config.store._default_config_path", return_value=str(default_path)),
-            patch("software.io.config.store.get_legacy_runtime_config_path", return_value=str(legacy_path)),
+            patch(
+                "software.io.config.store.get_legacy_runtime_config_path",
+                return_value=str(legacy_path),
+            ),
         ):
             config = config_store.load_config(strict=True)
 
@@ -114,7 +123,10 @@ class ConfigStoreTests:
 
         with (
             patch("software.io.config.store._default_config_path", return_value=str(default_path)),
-            patch("software.io.config.store.get_legacy_runtime_config_path", return_value=str(legacy_path)),
+            patch(
+                "software.io.config.store.get_legacy_runtime_config_path",
+                return_value=str(legacy_path),
+            ),
         ):
             config = config_store.load_config(strict=True)
 
@@ -132,7 +144,10 @@ class ConfigStoreTests:
 
         with (
             patch("software.io.config.store._default_config_path", return_value=str(default_path)),
-            patch("software.io.config.store.get_legacy_runtime_config_path", return_value=str(legacy_path)),
+            patch(
+                "software.io.config.store.get_legacy_runtime_config_path",
+                return_value=str(legacy_path),
+            ),
         ):
             saved_path = config_store.save_config(RuntimeConfig(url="https://new.test"))
 
@@ -149,7 +164,9 @@ class ConfigStoreTests:
 
     def test_load_config_ignores_unknown_keys_in_strict_mode(self, tmp_path: Path) -> None:
         path = tmp_path / "legacy.json"
-        path.write_text('{"url": "https://example.test", "random_proxy_api": "old"}', encoding="utf-8")
+        path.write_text(
+            '{"url": "https://example.test", "random_proxy_api": "old"}', encoding="utf-8"
+        )
 
         assert config_store.load_config(str(path), strict=True).url == "https://example.test"
 
@@ -177,7 +194,9 @@ class ConfigStoreTests:
 
         assert json.loads(path.read_text(encoding="utf-8"))["ai_api_key"] == "export-only"
 
-    def test_save_config_preserves_existing_file_when_atomic_replace_fails(self, tmp_path: Path) -> None:
+    def test_save_config_preserves_existing_file_when_atomic_replace_fails(
+        self, tmp_path: Path
+    ) -> None:
         path = tmp_path / "config.json"
         original_content = '{"url": "https://existing.test"}\n'
         path.write_text(original_content, encoding="utf-8")

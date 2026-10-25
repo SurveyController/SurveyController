@@ -45,4 +45,3 @@ def answer_datetime_window_to_epoch_ms(value: Any) -> tuple[int, int]:
 def has_configured_answer_datetime_window(value: Any) -> bool:
     start_text, end_text = normalize_answer_datetime_window(value)
     return bool(start_text and end_text)
-

@@ -50,8 +50,12 @@ class _FakeController(RandomIpRuntimeService):
             get_quota_snapshot=lambda: {"used_quota": 1, "total_quota": 5},
             get_counter_snapshot_local=lambda: (1, 5, False),
             load_session_for_startup=lambda: None,
-            sync_quota_snapshot=lambda **kwargs: asyncio.sleep(0, result={"used_quota": 1, "total_quota": 5}),
-            activate_trial=lambda: asyncio.sleep(0, result=SimpleNamespace(total_quota=5, used_quota=1)),
+            sync_quota_snapshot=lambda **kwargs: asyncio.sleep(
+                0, result={"used_quota": 1, "total_quota": 5}
+            ),
+            activate_trial=lambda: asyncio.sleep(
+                0, result=SimpleNamespace(total_quota=5, used_quota=1)
+            ),
             is_quota_exhausted=lambda snapshot: False,
             get_session_snapshot=lambda: {"authenticated": True},
             format_error=str,
@@ -126,7 +130,9 @@ class RunControllerRandomIPTests:
         )
         assert controller._get_counter_snapshot() == (3.0, 9.0, True)
 
-    def test_refresh_random_ip_counter_now_handles_auth_error_and_generic_error(self, monkeypatch) -> None:
+    def test_refresh_random_ip_counter_now_handles_auth_error_and_generic_error(
+        self, monkeypatch
+    ) -> None:
         controller = _FakeController()
         calls = {"count": 0}
 
@@ -159,15 +165,19 @@ class RunControllerRandomIPTests:
         monkeypatch.setattr(
             controller,
             "_get_counter_snapshot",
-            lambda: next(fallback_values)
-            if getattr(controller, "_fallback_once", False)
-            else (_ for _ in ()).throw(RuntimeError("boom")),
+            lambda: (
+                next(fallback_values)
+                if getattr(controller, "_fallback_once", False)
+                else (_ for _ in ()).throw(RuntimeError("boom"))
+            ),
         )
         controller._fallback_once = True
         controller._refresh_random_ip_counter_now(controller.adapter)
         assert controller.adapter.counters[-1] == (6.0, 11.0, False)
 
-    def test_sync_random_ip_counter_from_server_covers_success_and_failure(self, monkeypatch) -> None:
+    def test_sync_random_ip_counter_from_server_covers_success_and_failure(
+        self, monkeypatch
+    ) -> None:
         controller = _FakeController()
 
         monkeypatch.setattr(controller._proxy_gateway, "is_custom_api_active", lambda: False)
@@ -231,7 +241,9 @@ class RunControllerRandomIPTests:
         async def fake_ensure_random_ip_ready_async(_adapter):
             return True
 
-        monkeypatch.setattr(controller, "_ensure_random_ip_ready_async", fake_ensure_random_ip_ready_async)
+        monkeypatch.setattr(
+            controller, "_ensure_random_ip_ready_async", fake_ensure_random_ip_ready_async
+        )
         monkeypatch.setattr(
             controller._proxy_gateway,
             "get_counter_snapshot_local",
@@ -253,7 +265,9 @@ class RunControllerRandomIPTests:
         assert controller.adapter.counters[-1] == (2.0, 8.0, False)
 
         monkeypatch.setattr(controller._proxy_gateway, "is_quota_exhausted", lambda snapshot: True)
-        assert controller.submit_toggle_random_ip(True, adapter=controller.adapter).result() is False
+        assert (
+            controller.submit_toggle_random_ip(True, adapter=controller.adapter).result() is False
+        )
         assert controller.adapter.enabled is False
         assert controller.adapter.messages[-1][0] == "quota_exhausted"
 
@@ -265,10 +279,14 @@ class RunControllerRandomIPTests:
             "sync_quota_snapshot",
             fake_failed_sync_quota_snapshot_from_server_async,
         )
-        assert controller.submit_toggle_random_ip(True, adapter=controller.adapter).result() is False
+        assert (
+            controller.submit_toggle_random_ip(True, adapter=controller.adapter).result() is False
+        )
         assert controller.adapter.messages[-1][0] == "proxy_unavailable"
 
-        assert controller.submit_toggle_random_ip(False, adapter=controller.adapter).result() is False
+        assert (
+            controller.submit_toggle_random_ip(False, adapter=controller.adapter).result() is False
+        )
         assert controller.adapter.enabled is False
 
     def test_trial_ready_and_submission_path_are_async_only(self, monkeypatch) -> None:
@@ -279,7 +297,9 @@ class RunControllerRandomIPTests:
             "activate_trial",
             lambda: asyncio.sleep(0, result=SimpleNamespace(total_quota=5, used_quota=1)),
         )
-        ok, fallback = asyncio.run(controller._try_activate_random_ip_trial_async(controller.adapter))
+        ok, fallback = asyncio.run(
+            controller._try_activate_random_ip_trial_async(controller.adapter)
+        )
         assert (ok, fallback) == (True, False)
         assert controller.adapter.messages == []
 
@@ -291,7 +311,9 @@ class RunControllerRandomIPTests:
             "activate_trial",
             fake_activate_trial_async_already_claimed,
         )
-        ok, fallback = asyncio.run(controller._try_activate_random_ip_trial_async(controller.adapter))
+        ok, fallback = asyncio.run(
+            controller._try_activate_random_ip_trial_async(controller.adapter)
+        )
         assert (ok, fallback) == (False, True)
 
         monkeypatch.setattr(controller._proxy_gateway, "has_authenticated_session", lambda: False)
@@ -308,7 +330,9 @@ class RunControllerRandomIPTests:
         assert controller.adapter.open_quota_calls == 1
 
         monkeypatch.setattr(controller._proxy_gateway, "is_custom_api_active", lambda: False)
-        monkeypatch.setattr(controller._proxy_gateway, "get_session_snapshot", lambda: {"authenticated": False})
+        monkeypatch.setattr(
+            controller._proxy_gateway, "get_session_snapshot", lambda: {"authenticated": False}
+        )
         stop_signal = threading.Event()
         controller.handle_random_ip_submission(stop_signal=stop_signal, adapter=controller.adapter)
         controller.wait_random_ip_tasks()
@@ -316,7 +340,11 @@ class RunControllerRandomIPTests:
         assert controller.adapter.enabled is False
 
         controller.adapter.enabled = True
-        monkeypatch.setattr(controller._proxy_gateway, "get_session_snapshot", lambda: {"authenticated": True})
-        controller.handle_random_ip_submission(stop_signal=threading.Event(), adapter=controller.adapter)
+        monkeypatch.setattr(
+            controller._proxy_gateway, "get_session_snapshot", lambda: {"authenticated": True}
+        )
+        controller.handle_random_ip_submission(
+            stop_signal=threading.Event(), adapter=controller.adapter
+        )
         controller.wait_random_ip_tasks()
         assert controller.adapter.counters

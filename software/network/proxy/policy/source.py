@@ -29,7 +29,9 @@ from software.providers.common import (
 PROXY_SOURCE_BENEFIT = "benefit"
 PROXY_UPSTREAM_DEFAULT = "default"
 PROXY_UPSTREAM_BENEFIT = "idiot"
-_SUPPORTED_PROXY_SOURCES = frozenset({PROXY_SOURCE_DEFAULT, PROXY_SOURCE_BENEFIT, PROXY_SOURCE_CUSTOM})
+_SUPPORTED_PROXY_SOURCES = frozenset(
+    {PROXY_SOURCE_DEFAULT, PROXY_SOURCE_BENEFIT, PROXY_SOURCE_CUSTOM}
+)
 _OFFICIAL_PROXY_SOURCES = frozenset({PROXY_SOURCE_DEFAULT, PROXY_SOURCE_BENEFIT})
 
 _config_lock = threading.Lock()
@@ -39,24 +41,40 @@ _current_proxy_source: str = PROXY_SOURCE_DEFAULT
 _proxy_occupy_minute: int = 1
 
 _ORDINARY_POOL_PROVINCE_CODES: Set[str] = {
-    "110000", "120000", "130000", "140000", "150000", "210000", "220000",
-    "230000", "320000", "330000", "340000", "350000", "360000", "370000",
-    "410000", "420000", "430000", "440000", "460000", "500000", "510000",
-    "610000", "620000", "640000",
+    "110000",
+    "120000",
+    "130000",
+    "140000",
+    "150000",
+    "210000",
+    "220000",
+    "230000",
+    "320000",
+    "330000",
+    "340000",
+    "350000",
+    "360000",
+    "370000",
+    "410000",
+    "420000",
+    "430000",
+    "440000",
+    "460000",
+    "500000",
+    "510000",
+    "610000",
+    "620000",
+    "640000",
 }
 
 
 @dataclass(frozen=True)
 class ProxySettings:
-    
-
     source: str
     custom_api_url: str
     area_code: Optional[str]
     default_area_code: str
     occupy_minute: int
-
-
 
 
 def normalize_proxy_source(source: Optional[str]) -> str:
@@ -105,8 +123,6 @@ def get_proxy_upstream(source: Optional[str] = None) -> str:
     if current == PROXY_SOURCE_BENEFIT:
         return PROXY_UPSTREAM_BENEFIT
     return PROXY_UPSTREAM_DEFAULT
-
-
 
 
 def _map_answer_seconds_to_proxy_minute(total_seconds: int) -> int:
@@ -188,7 +204,11 @@ def set_proxy_occupy_minute_by_answer_duration(
     if isinstance(answer_duration_range_seconds, (list, tuple)):
         if len(answer_duration_range_seconds) >= 1:
             min_seconds = _to_non_negative_int(answer_duration_range_seconds[0], 0)
-        max_seconds = _to_non_negative_int(answer_duration_range_seconds[1], min_seconds) if len(answer_duration_range_seconds) >= 2 else min_seconds
+        max_seconds = (
+            _to_non_negative_int(answer_duration_range_seconds[1], min_seconds)
+            if len(answer_duration_range_seconds) >= 2
+            else min_seconds
+        )
     max_seconds = max(max_seconds, min_seconds)
     normalized_provider = str(survey_provider or "").strip().lower()
     minute = get_proxy_minute_by_answer_seconds(max_seconds, survey_provider=normalized_provider)
@@ -236,8 +256,6 @@ def get_proxy_occupy_minute() -> int:
     return minute
 
 
-
-
 def _validate_proxy_api_url(api_url: Optional[str]) -> str:
     try:
         cleaned = str(api_url or "").strip()
@@ -261,7 +279,12 @@ def _normalize_area_code(area_code: Optional[str]) -> str:
 
 
 def _is_province_level_area_code(area_code: str) -> bool:
-    return bool(area_code) and len(area_code) == 6 and area_code.isdigit() and area_code.endswith("0000")
+    return (
+        bool(area_code)
+        and len(area_code) == 6
+        and area_code.isdigit()
+        and area_code.endswith("0000")
+    )
 
 
 def _resolve_default_pool_by_area(area_code: Optional[str]) -> Optional[str]:
@@ -322,7 +345,7 @@ def set_proxy_api_override(api_url: Optional[str]) -> str:
 
 
 def get_proxy_settings() -> ProxySettings:
-    
+
     return ProxySettings(
         source=normalize_proxy_source(get_proxy_source()),
         custom_api_url=get_custom_proxy_api_override(),
@@ -332,8 +355,10 @@ def get_proxy_settings() -> ProxySettings:
     )
 
 
-def apply_proxy_source_settings(source: str, *, custom_api_url: Optional[str] = None) -> ProxySettings:
-    
+def apply_proxy_source_settings(
+    source: str, *, custom_api_url: Optional[str] = None
+) -> ProxySettings:
+
     normalized = normalize_proxy_source(source)
     if normalized == PROXY_SOURCE_CUSTOM:
         set_proxy_api_override(custom_api_url if custom_api_url else None)
@@ -344,17 +369,15 @@ def apply_proxy_source_settings(source: str, *, custom_api_url: Optional[str] = 
 
 
 def apply_proxy_area_code(area_code: Optional[str]) -> ProxySettings:
-    
+
     set_proxy_area_code(area_code)
     return get_proxy_settings()
 
 
 def apply_custom_proxy_api(custom_api_url: Optional[str]) -> ProxySettings:
-    
+
     set_proxy_api_override(custom_api_url if custom_api_url else None)
     return get_proxy_settings()
-
-
 
 
 def _to_non_negative_int(value: Any, default: int = 0) -> int:
@@ -363,5 +386,3 @@ def _to_non_negative_int(value: Any, default: int = 0) -> int:
     except Exception:
         return max(0, int(default))
     return max(0, parsed)
-
-

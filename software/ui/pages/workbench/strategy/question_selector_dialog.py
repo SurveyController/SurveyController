@@ -16,8 +16,6 @@ from software.ui.helpers.qfluent_compat import resolve_mask_dialog_parent
 
 
 class QuestionSelectorDialog(MessageBoxBase):
-    
-
     def __init__(
         self,
         title: str,
@@ -45,14 +43,12 @@ class QuestionSelectorDialog(MessageBoxBase):
         self.titleLabel = TitleLabel("选择要添加的题目", self.widget)
         self.tipLabel = BodyLabel("可以多选题目，支持搜索过滤", self.widget)
 
-        
         search_layout = QHBoxLayout()
         self.search_edit = LineEdit(self.widget)
         self.search_edit.setPlaceholderText("搜索题号或题干...")
         self.search_edit.textChanged.connect(self._on_search)
         search_layout.addWidget(self.search_edit)
 
-        
         self.table = TableWidget(self.widget)
         self.table.setColumnCount(4)
         self.table.setHorizontalHeaderLabels(["题号", "题干", "题型", "当前维度"])
@@ -68,7 +64,6 @@ class QuestionSelectorDialog(MessageBoxBase):
         header.setSectionResizeMode(2, header.ResizeMode.ResizeToContents)
         header.setSectionResizeMode(3, header.ResizeMode.ResizeToContents)
 
-        
         button_layout = QHBoxLayout()
         self.select_all_btn = PushButton("全选", self.widget)
         self.select_none_btn = PushButton("取消全选", self.widget)
@@ -79,7 +74,6 @@ class QuestionSelectorDialog(MessageBoxBase):
         self.select_all_btn.clicked.connect(self.table.selectAll)
         self.select_none_btn.clicked.connect(self.table.clearSelection)
 
-        
         self.viewLayout.addWidget(self.titleLabel)
         self.viewLayout.addWidget(self.tipLabel)
         self.viewLayout.addLayout(search_layout)
@@ -90,7 +84,7 @@ class QuestionSelectorDialog(MessageBoxBase):
         self.cancelButton.setText("取消")
 
     def _populate_table(self, filter_text: str = "") -> None:
-        
+
         self.table.setRowCount(0)
         filter_lower = filter_text.lower().strip()
 
@@ -100,7 +94,6 @@ class QuestionSelectorDialog(MessageBoxBase):
             type_label = str(question.get("type_label", ""))
             group_name = str(question.get("group_name", "未分组"))
 
-            
             if filter_lower:
                 if filter_lower not in question_num.lower() and filter_lower not in title.lower():
                     continue
@@ -115,17 +108,16 @@ class QuestionSelectorDialog(MessageBoxBase):
             self.table.setItem(row_index, 2, QTableWidgetItem(type_label))
             self.table.setItem(row_index, 3, QTableWidgetItem(group_name))
 
-            
             item = self.table.item(row_index, 0)
             if item is not None:
                 item.setData(Qt.ItemDataRole.UserRole, question.get("entry_index", -1))
 
     def _on_search(self, text: str) -> None:
-        
+
         self._populate_table(text)
 
     def validate(self) -> bool:
-        
+
         self._selected_indices = []
         selection = self.table.selectionModel()
         if selection is None:
@@ -142,5 +134,5 @@ class QuestionSelectorDialog(MessageBoxBase):
         return True
 
     def get_selected_indices(self) -> List[int]:
-        
+
         return sorted(set(self._selected_indices))

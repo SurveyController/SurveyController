@@ -15,8 +15,6 @@ JOINT_PRE_ANSWER_TIMEOUT = object()
 
 
 class AsyncRoundResources:
-    
-
     def __init__(
         self,
         *,

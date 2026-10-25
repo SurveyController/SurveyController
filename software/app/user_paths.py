@@ -48,7 +48,7 @@ def _get_standard_base_root(location: str, *fallback_parts: str) -> str:
 
 
 def get_roaming_app_data_root() -> str:
-    
+
     return _get_standard_base_root(
         "AppDataLocation",
         "AppData",
@@ -57,7 +57,7 @@ def get_roaming_app_data_root() -> str:
 
 
 def get_local_app_data_root() -> str:
-    
+
     return _get_standard_base_root(
         "AppLocalDataLocation",
         "AppData",
@@ -66,17 +66,17 @@ def get_local_app_data_root() -> str:
 
 
 def get_user_config_root() -> str:
-    
+
     return os.path.join(get_roaming_app_data_root(), _APP_NAME)
 
 
 def get_default_user_config_directory() -> str:
-    
+
     return os.path.join(get_user_config_root(), "configs")
 
 
 def resolve_user_config_directory(settings=None) -> str:
-    
+
     current_settings = settings or app_settings()
     configured_path = get_str_from_qsettings(
         current_settings.value(CONFIG_DIRECTORY_SETTING_KEY),
@@ -92,22 +92,22 @@ def get_user_config_directory(settings=None) -> str:
 
 
 def get_user_local_data_root() -> str:
-    
+
     return os.path.join(get_local_app_data_root(), _APP_NAME)
 
 
 def get_user_logs_directory() -> str:
-    
+
     return os.path.join(get_user_local_data_root(), "logs")
 
 
 def get_user_cache_directory() -> str:
-    
+
     return os.path.join(get_user_local_data_root(), "cache")
 
 
 def get_user_updates_directory() -> str:
-    
+
     return os.path.join(get_user_local_data_root(), "updates")
 
 
@@ -126,17 +126,17 @@ def get_legacy_runtime_config_path() -> str:
 
 
 def get_fatal_crash_log_path() -> str:
-    
+
     return os.path.join(get_user_logs_directory(), "fatal_crash.log")
 
 
 def get_last_session_log_path() -> str:
-    
+
     return os.path.join(get_user_logs_directory(), "last_session.log")
 
 
 def ensure_user_data_directories() -> tuple[str, ...]:
-    
+
     paths = (
         get_user_config_root(),
         get_user_config_directory(),

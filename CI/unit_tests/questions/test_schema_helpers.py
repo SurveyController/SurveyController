@@ -15,9 +15,13 @@ class SchemaHelperTests:
 
         assert _infer_option_count(entry) == 4
 
-    def test_infer_option_count_uses_explicit_option_count_then_weights_probabilities_and_texts(self) -> None:
+    def test_infer_option_count_uses_explicit_option_count_then_weights_probabilities_and_texts(
+        self,
+    ) -> None:
         explicit = QuestionEntry(question_type="single", probabilities=None, option_count=6)
-        weighted = QuestionEntry(question_type="single", probabilities=None, custom_weights=[1, 2, 3])
+        weighted = QuestionEntry(
+            question_type="single", probabilities=None, custom_weights=[1, 2, 3]
+        )
         probabilistic = QuestionEntry(question_type="single", probabilities=[0.2, 0.8])
         text_based = QuestionEntry(question_type="text", probabilities=None, texts=["a", "b", "c"])
 

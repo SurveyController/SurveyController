@@ -100,7 +100,9 @@ async def fill_survey(
 
 
 async def is_completion_page(driver: Any, provider: Optional[str] = None) -> bool:
-    return bool(await _get_legacy_browser_adapter(provider=provider).is_completion_page_async(driver))
+    return bool(
+        await _get_legacy_browser_adapter(provider=provider).is_completion_page_async(driver)
+    )
 
 
 async def submission_requires_verification(driver: Any, provider: Optional[str] = None) -> bool:

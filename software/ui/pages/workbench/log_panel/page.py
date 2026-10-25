@@ -33,23 +33,22 @@ from software.app.user_paths import (
 from software.ui.widgets.log_highlighter import LogHighlighter
 
 
-
 LOG_COLORS_DARK = {
-    "ERROR": "#ef4444",  
-    "WARN": "#eab308",  
-    "WARNING": "#eab308",  
-    "INFO": "#d1d5db",  
-    "OK": "#22c55e",  
-    "DEFAULT": "#9ca3af",  
+    "ERROR": "#ef4444",
+    "WARN": "#eab308",
+    "WARNING": "#eab308",
+    "INFO": "#d1d5db",
+    "OK": "#22c55e",
+    "DEFAULT": "#9ca3af",
 }
 
 LOG_COLORS_LIGHT = {
-    "ERROR": "#dc2626",  
-    "WARN": "#ca8a04",  
-    "WARNING": "#ca8a04",  
-    "INFO": "#374151",  
-    "OK": "#15803d",  
-    "DEFAULT": "#4b5563",  
+    "ERROR": "#dc2626",
+    "WARN": "#ca8a04",
+    "WARNING": "#ca8a04",
+    "INFO": "#374151",
+    "OK": "#15803d",
+    "DEFAULT": "#4b5563",
 }
 
 
@@ -58,14 +57,12 @@ class _LogRefreshBridge(QObject):
 
 
 class LogPage(QWidget):
-    
-
     def __init__(self, parent=None):
         super().__init__(parent)
         self._force_full_refresh = True
         self._last_seen_record = None
-        self._stick_to_bottom = True  
-        self._last_version = -1  
+        self._stick_to_bottom = True
+        self._last_version = -1
         self._refresh_pending = False
         self._refresh_bridge = _LogRefreshBridge(self)
         self._refresh_bridge.changed.connect(self._schedule_refresh)
@@ -82,7 +79,6 @@ class LogPage(QWidget):
         layout.setContentsMargins(16, 16, 16, 16)
         layout.setSpacing(12)
 
-        
         layout.addWidget(SubtitleLabel("日志", self))
 
         toolbar = QHBoxLayout()
@@ -93,7 +89,6 @@ class LogPage(QWidget):
         toolbar.addStretch(1)
         layout.addLayout(toolbar)
 
-        
         self.log_view = PlainTextEdit(self)
         self.log_view.setReadOnly(True)
         self.log_view.setTextInteractionFlags(
@@ -102,7 +97,6 @@ class LogPage(QWidget):
         )
         self.log_view.setPlaceholderText("日志输出会显示在这里...")
 
-        
         font = QFont("Consolas", 10)
         font.setStyleHint(QFont.StyleHint.Monospace)
         self.log_view.setFont(font)
@@ -121,7 +115,6 @@ class LogPage(QWidget):
             colors=self._resolve_log_colors(),
         )
 
-        
         self._apply_theme()
         qconfig.themeChanged.connect(self._apply_theme)
 
@@ -146,7 +139,9 @@ class LogPage(QWidget):
             LOG_BUFFER_HANDLER.remove_listener(self._listener_id)
             self._listener_id = 0
         except Exception as exc:
-            log_suppressed_exception("LogPage.closeEvent remove_listener", exc, level=logging.WARNING)
+            log_suppressed_exception(
+                "LogPage.closeEvent remove_listener", exc, level=logging.WARNING
+            )
         super().closeEvent(event)
 
     def _on_log_buffer_changed(self, _version: int) -> None:
@@ -165,26 +160,23 @@ class LogPage(QWidget):
         self.refresh_logs()
 
     def refresh_logs(self):
-        
-        
+
         if not self.isVisible():
             return
-        
+
         cursor = self.log_view.textCursor()
         if cursor.hasSelection():
             return
 
-        
         current_version = LOG_BUFFER_HANDLER.get_version()
         if current_version == self._last_version and not self._force_full_refresh:
-            return  
+            return
 
         scrollbar = self.log_view.verticalScrollBar()
         old_value = scrollbar.value()
         old_max = scrollbar.maximum()
         stick_to_bottom = self._stick_to_bottom
 
-        
         records = LOG_BUFFER_HANDLER.get_records()
         if not records:
             if self._force_full_refresh:
@@ -194,7 +186,6 @@ class LogPage(QWidget):
             self._last_version = current_version
             return
 
-        
         if not self._force_full_refresh and self._last_seen_record is not None:
             last_index = -1
             for idx, entry in enumerate(records):
@@ -204,14 +195,12 @@ class LogPage(QWidget):
             if last_index != -1 and last_index < len(records) - 1:
                 new_entries = records[last_index + 1 :]
 
-                
                 new_lines = []
                 for entry in new_entries:
                     text = entry.text if hasattr(entry, "text") else str(entry)
                     new_lines.append(text)
 
                 if new_lines:
-                    
                     self.log_view.appendPlainText("\n".join(new_lines))
 
                 self._last_seen_record = records[-1]
@@ -223,7 +212,6 @@ class LogPage(QWidget):
                     self._restore_scroll_position(scrollbar, old_value, old_max)
                 return
 
-        
         lines = []
         for entry in records:
             text = entry.text if hasattr(entry, "text") else str(entry)
@@ -234,7 +222,6 @@ class LogPage(QWidget):
         self._last_version = current_version
         self._force_full_refresh = False
 
-        
         if stick_to_bottom:
             self.log_view.moveCursor(QTextCursor.MoveOperation.End)
         else:
@@ -280,7 +267,7 @@ class LogPage(QWidget):
             )
 
     def _apply_theme(self):
-        
+
         if isDarkTheme():
             self.log_view.setStyleSheet("""
                 PlainTextEdit {
@@ -311,24 +298,22 @@ class LogPage(QWidget):
         return LOG_COLORS_DARK if isDarkTheme() else LOG_COLORS_LIGHT
 
     def _on_scrollbar_value_changed(self, value):
-        
+
         scrollbar = self.log_view.verticalScrollBar()
         self._stick_to_bottom = value >= scrollbar.maximum() - 2
 
     @staticmethod
     def _restore_scroll_position(scrollbar, old_value, old_max):
-        
+
         new_max = scrollbar.maximum()
         if new_max < old_max:
-            
             target = max(0, old_value - (old_max - new_max))
         else:
-            
             target = old_value
         scrollbar.setValue(min(max(target, 0), new_max))
 
     def _load_last_session_logs(self):
-        
+
         try:
             log_path = get_last_session_log_path()
             if os.path.exists(log_path):

@@ -12,7 +12,9 @@ from .async_engine_fakes import build_engine
 
 class AsyncRuntimeEngineProxyPrefetchTests:
     @pytest.mark.asyncio
-    async def test_run_without_waiting_slots_does_not_prefetch_proxy_pool(self, monkeypatch) -> None:
+    async def test_run_without_waiting_slots_does_not_prefetch_proxy_pool(
+        self, monkeypatch
+    ) -> None:
         engine = build_engine()
         config = ExecutionConfig(
             num_threads=2,
@@ -63,7 +65,9 @@ class AsyncRuntimeEngineProxyPrefetchTests:
         assert loading_calls == []
 
     @pytest.mark.asyncio
-    async def test_run_keeps_prefetching_proxy_pool_after_first_batch_is_consumed(self, monkeypatch) -> None:
+    async def test_run_keeps_prefetching_proxy_pool_after_first_batch_is_consumed(
+        self, monkeypatch
+    ) -> None:
         engine = build_engine()
         config = ExecutionConfig(
             num_threads=2,
@@ -83,7 +87,10 @@ class AsyncRuntimeEngineProxyPrefetchTests:
                     state.register_proxy_waiter()
                     deadline = asyncio.get_running_loop().time() + 1.0
                     try:
-                        while not state.config.proxy_ip_pool and asyncio.get_running_loop().time() < deadline:
+                        while (
+                            not state.config.proxy_ip_pool
+                            and asyncio.get_running_loop().time() < deadline
+                        ):
                             await asyncio.sleep(0.01)
                         with state.lock:
                             if state.config.proxy_ip_pool:
@@ -113,7 +120,11 @@ class AsyncRuntimeEngineProxyPrefetchTests:
         monkeypatch.setattr(async_engine, "AsyncScheduler", _FakeScheduler)
         monkeypatch.setattr(async_engine, "AsyncSlotRunner", _FakeRunner)
         monkeypatch.setattr(async_engine, "fetch_proxy_batch_async", fake_fetch_proxy_batch_async)
-        monkeypatch.setattr(async_engine, "wait_for_proxy_prefetch_cycle", lambda *_args, **_kwargs: asyncio.sleep(0, result=False))
+        monkeypatch.setattr(
+            async_engine,
+            "wait_for_proxy_prefetch_cycle",
+            lambda *_args, **_kwargs: asyncio.sleep(0, result=False),
+        )
 
         await engine._run(config=config, state=state, runtime_bridge=None)
 
@@ -203,7 +214,11 @@ class AsyncRuntimeEngineProxyPrefetchTests:
         monkeypatch.setattr(async_engine, "AsyncScheduler", _FakeScheduler)
         monkeypatch.setattr(async_engine, "AsyncSlotRunner", _FakeRunner)
         monkeypatch.setattr(async_engine, "fetch_proxy_batch_async", fake_fetch_proxy_batch_async)
-        monkeypatch.setattr(async_engine, "_acquire_proxy_fetch_lock_async", lambda *_args, **_kwargs: asyncio.sleep(0.02, result=True))
+        monkeypatch.setattr(
+            async_engine,
+            "_acquire_proxy_fetch_lock_async",
+            lambda *_args, **_kwargs: asyncio.sleep(0.02, result=True),
+        )
 
         def fake_recheck(_state):
             return 0 if list(state.config.proxy_ip_pool) else 1
@@ -217,7 +232,11 @@ class AsyncRuntimeEngineProxyPrefetchTests:
             return fake_recheck(_state)
 
         monkeypatch.setattr(async_engine, "resolve_proxy_prefetch_request_count", resolve_count)
-        monkeypatch.setattr(async_engine, "wait_for_proxy_prefetch_cycle", lambda *_args, **_kwargs: asyncio.sleep(0, result=False))
+        monkeypatch.setattr(
+            async_engine,
+            "wait_for_proxy_prefetch_cycle",
+            lambda *_args, **_kwargs: asyncio.sleep(0, result=False),
+        )
 
         await engine._run(config=config, state=state, runtime_bridge=None)
 

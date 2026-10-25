@@ -117,7 +117,11 @@ async def test_http_logic_terminate_marker_can_end_on_submit_page() -> None:
         )
 
     questions = [
-        _question(1, has_jump=True, jump_rules=[{"option_index": 1, "jumpto": 1, "terminates_survey": True}]),
+        _question(
+            1,
+            has_jump=True,
+            jump_rules=[{"option_index": 1, "jumpto": 1, "terminates_survey": True}],
+        ),
         _question(2),
     ]
 

@@ -50,8 +50,6 @@ def select_user_agent_from_ratios(
     devices: list[str] = []
     weights: list[int] = []
     for device_type, preset_keys in device_presets.items():
-        if not preset_keys:
-            continue
         try:
             weight = max(0, int((ratios or {}).get(device_type, 0) or 0))
         except (TypeError, ValueError):

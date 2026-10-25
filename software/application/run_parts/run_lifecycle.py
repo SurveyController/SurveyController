@@ -24,8 +24,12 @@ class RunLifecycleCoordinator:
         if service._closing:
             return
         previous_preparation = service._init_gate_thread
-        if service.running or service._starting or service._initializing or service._stopping or (
-            previous_preparation is not None and previous_preparation.is_alive()
+        if (
+            service.running
+            or service._starting
+            or service._initializing
+            or service._stopping
+            or (previous_preparation is not None and previous_preparation.is_alive())
         ):
             logging.warning("任务仍在运行或停止收尾中，忽略重复启动请求")
             return

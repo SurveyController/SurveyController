@@ -11,7 +11,12 @@ from software.app.question_media_adapter import fetch_question_media as fetch_qu
 from software.application.events import ApplicationEvent
 from software.application.models import RuntimeSnapshot, SurveySnapshot
 from software.application.interactions import InteractionBroker, InteractionRequest
-from software.ui.controller.presentation import interaction_view, runtime_status, runtime_view, survey_view
+from software.ui.controller.presentation import (
+    interaction_view,
+    runtime_status,
+    runtime_view,
+    survey_view,
+)
 from software.application.ports import ProxyOperationsPort
 from software.application.run_service import RunApplicationService
 from software.application.run_state_store import RunStateStore

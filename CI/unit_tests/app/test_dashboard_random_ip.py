@@ -245,7 +245,9 @@ class _FakeDashboard(DashboardRandomIPMixin):
 
 
 class DashboardRandomIPTests:
-    def test_counter_card_shows_remaining_quota_and_inverse_warning_colors(self, monkeypatch) -> None:
+    def test_counter_card_shows_remaining_quota_and_inverse_warning_colors(
+        self, monkeypatch
+    ) -> None:
         dashboard = _FakeDashboard()
 
         monkeypatch.setattr(
@@ -321,7 +323,11 @@ class DashboardRandomIPTests:
         assert dashboard.random_ip_status_timer.started == 1
         assert refresh_calls == ["refresh"]
 
-        dashboard.refresh_random_ip_heartbeat_async = DashboardRandomIPMixin.refresh_random_ip_heartbeat_async.__get__(dashboard, _FakeDashboard)
+        dashboard.refresh_random_ip_heartbeat_async = (
+            DashboardRandomIPMixin.refresh_random_ip_heartbeat_async.__get__(
+                dashboard, _FakeDashboard
+            )
+        )
         dashboard.refresh_random_ip_heartbeat_async()
         dashboard._random_ip_status_fetching = True
         dashboard.refresh_random_ip_heartbeat_async()

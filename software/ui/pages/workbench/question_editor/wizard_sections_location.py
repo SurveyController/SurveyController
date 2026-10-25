@@ -30,7 +30,9 @@ class WizardSectionsLocationMixin:
         card_layout: QVBoxLayout,
     ) -> None:
         self._has_content = True
-        saved_parts = [str(item or "").strip() for item in list(getattr(entry, "location_parts", []) or [])[:3]]
+        saved_parts = [
+            str(item or "").strip() for item in list(getattr(entry, "location_parts", []) or [])[:3]
+        ]
 
         container = QWidget(card)
         container.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Maximum)
@@ -53,7 +55,12 @@ class WizardSectionsLocationMixin:
         province_combo.addItem(AUTO_LOCATION_TEXT, userData="")
         for province in provinces:
             province_combo.addItem(
-                str(province.get("display_name") or _normalize_province_display_name(province.get("name")) or province.get("name") or "").strip(),
+                str(
+                    province.get("display_name")
+                    or _normalize_province_display_name(province.get("name"))
+                    or province.get("name")
+                    or ""
+                ).strip(),
                 userData=province,
             )
 
@@ -99,7 +106,9 @@ class WizardSectionsLocationMixin:
                         break
             area_combo.setCurrentIndex(target_index)
 
-        def populate_cities(province_data: Any, preferred_city: str = "", preferred_area: str = "") -> None:
+        def populate_cities(
+            province_data: Any, preferred_city: str = "", preferred_area: str = ""
+        ) -> None:
             city_combo.clear()
             city_combo.addItem(AUTO_LOCATION_TEXT, userData="")
             if isinstance(province_data, dict):

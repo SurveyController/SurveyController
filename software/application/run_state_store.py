@@ -22,8 +22,6 @@ def _deep_merge(base: Mapping[str, Any], patch: Mapping[str, Any]) -> Dict[str, 
 
 
 class RunStateStore:
-    
-
     def __init__(
         self,
         *,
@@ -89,10 +87,10 @@ class RunStateStore:
         }
 
     def get_runtime_snapshot(self) -> RuntimeSnapshot:
-        return cast(RuntimeSnapshot, deepcopy(self._runtime_snapshot))
+        return deepcopy(self._runtime_snapshot)
 
     def get_survey_snapshot(self) -> SurveySnapshot:
-        return cast(SurveySnapshot, deepcopy(self._survey_snapshot))
+        return deepcopy(self._survey_snapshot)
 
     def runtime_settings(self) -> Dict[str, Any]:
         return dict(self._runtime_snapshot.get("settings") or {})
@@ -114,7 +112,9 @@ class RunStateStore:
                 "enabled": bool(state.get("random_ip_enabled", False)),
             },
         }
-        self._set_runtime_snapshot(cast(RuntimeSnapshot, _deep_merge(self._runtime_snapshot, patch)), emit=emit and changed)
+        self._set_runtime_snapshot(
+            cast(RuntimeSnapshot, _deep_merge(self._runtime_snapshot, patch)), emit=emit and changed
+        )
         return dict(state)
 
     def sync_runtime_settings_from_config(
@@ -134,7 +134,9 @@ class RunStateStore:
                 "enabled": bool(state.get("random_ip_enabled", False)),
             },
         }
-        self._set_runtime_snapshot(cast(RuntimeSnapshot, _deep_merge(self._runtime_snapshot, patch)), emit=emit and changed)
+        self._set_runtime_snapshot(
+            cast(RuntimeSnapshot, _deep_merge(self._runtime_snapshot, patch)), emit=emit and changed
+        )
         return dict(state)
 
     def write_runtime_settings_to_config(self, config: RuntimeConfig) -> RuntimeConfig:

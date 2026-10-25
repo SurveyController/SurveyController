@@ -40,7 +40,10 @@ from surveycore.wjx.provider.http_runtime import (
 
 import software.network.http as http_client
 from software.core.config.user_agents import DEFAULT_USER_AGENT, USER_AGENT_PRESETS
-from software.core.ai.batch_runtime import assert_no_ai_placeholders_in_actions, prefill_ai_answers_for_questions
+from software.core.ai.batch_runtime import (
+    assert_no_ai_placeholders_in_actions,
+    prefill_ai_answers_for_questions,
+)
 from software.core.config.codec import UserAgentProfile
 from surveycore.core.persona.context import record_answer
 from surveycore.core.questions.distribution import record_pending_distribution_choice
@@ -102,7 +105,9 @@ def _record_action(ctx: ExecutionState, action: AnswerAction) -> None:
 
 
 async def _load_wjx_page(url: str, *, headers: dict[str, str], proxies: Any) -> str:
-    response = await http_client.aget(url, timeout=_WJX_PAGE_LOAD_TIMEOUT_SECONDS, headers=headers, proxies=proxies)
+    response = await http_client.aget(
+        url, timeout=_WJX_PAGE_LOAD_TIMEOUT_SECONDS, headers=headers, proxies=proxies
+    )
     response.raise_for_status()
     try:
         _raise_wjx_page_state_errors(response.text)
@@ -148,7 +153,9 @@ async def _build_action_plan(
         if stop_signal is not None and stop_signal.is_set():
             return HttpLogicPlan(actions=())
         if bool(getattr(question, "unsupported", False)):
-            raise RuntimeError(f"问卷星第{question.num}题暂不支持：{question.unsupported_reason or question.type_code}")
+            raise RuntimeError(
+                f"问卷星第{question.num}题暂不支持：{question.unsupported_reason or question.type_code}"
+            )
 
     async def _build_action(question: SurveyQuestionMeta) -> AnswerAction | None:
         if stop_signal is not None and stop_signal.is_set():
@@ -262,12 +269,16 @@ async def brush_wjx_http(
         submit_proxy_lease = None
         if submit_proxy_lease_factory is not None:
             submit_proxy_lease = await submit_proxy_lease_factory()
-            submit_proxy_address = str(getattr(submit_proxy_lease, "address", "") or "").strip() or None
+            submit_proxy_address = (
+                str(getattr(submit_proxy_lease, "address", "") or "").strip() or None
+            )
         if bool(getattr(config, "random_proxy_ip_enabled", False)) and not submit_proxy_address:
             raise SubmitProxyUnavailableError("提交前未获取到随机 IP")
         submit_proxies = _proxy_arg(submit_proxy_address)
         if str(submit_proxy_address or "").strip():
-            logging.debug("问卷星 HTTP 提交使用随机IP：%s", mask_proxy_for_log(submit_proxy_address))
+            logging.debug(
+                "问卷星 HTTP 提交使用随机IP：%s", mask_proxy_for_log(submit_proxy_address)
+            )
         response = await http_client.apost(
             submit_url,
             params=params,

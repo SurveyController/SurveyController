@@ -5,7 +5,7 @@ import concurrent.futures
 import logging
 import threading
 import time
-from typing import Any, Callable, Coroutine, Optional
+from typing import Any, Callable, Coroutine, Optional, TypeVar
 
 from surveycore.core.engine.async_events import AsyncRunContext
 from software.core.engine.async_runtime_loop import AsyncSlotRunner
@@ -15,7 +15,10 @@ from software.network.http.async_client import aclose_for_loop
 from software.network.http.client import close as close_sync_http_clients
 from surveycore.core.engine.async_scheduler import AsyncScheduler
 from surveycore.core.engine.async_status_bus import AsyncStatusBus
-from software.core.engine.runtime_control_port import RuntimeControlPort, on_random_ip_loading_changed
+from software.core.engine.runtime_control_port import (
+    RuntimeControlPort,
+    on_random_ip_loading_changed,
+)
 from software.core.task import ExecutionConfig, ExecutionState
 from software.network.proxy.api import fetch_proxy_batch_async
 from software.network.session_policy import (
@@ -28,6 +31,8 @@ from software.network.session_policy import (
 )
 from software.providers.registry import parse_survey
 from software.providers.contracts import ProviderParseResult
+
+_ResultT = TypeVar("_ResultT")
 
 
 def _format_seconds_range(value: Any) -> str:
@@ -49,8 +54,6 @@ def _format_proxy_source(source: Any) -> str:
 
 
 class AsyncRuntimeEngine:
-    
-
     def __init__(
         self,
         *,
@@ -92,7 +95,9 @@ class AsyncRuntimeEngine:
                         raise RuntimeError("AsyncRuntimeEngine 运行线程已退出")
                     wait_for_existing_loop = True
                 elif self._engine_state is not EngineState.OPEN:
-                    raise RuntimeError(f"AsyncRuntimeEngine 已关闭或正在关闭：{self._engine_state.value}")
+                    raise RuntimeError(
+                        f"AsyncRuntimeEngine 已关闭或正在关闭：{self._engine_state.value}"
+                    )
                 elif self._thread is not None and self._thread.is_alive():
                     return
 
@@ -126,7 +131,9 @@ class AsyncRuntimeEngine:
                             for task in pending:
                                 task.cancel()
                             if pending:
-                                _, pending = loop.run_until_complete(asyncio.wait(pending, timeout=1.0))
+                                _, pending = loop.run_until_complete(
+                                    asyncio.wait(pending, timeout=1.0)
+                                )
                             if pending:
                                 names = ", ".join(sorted(task.get_name() for task in pending))
                                 logging.warning("事件循环关闭后仍有任务未退出：%s", names)
@@ -169,26 +176,26 @@ class AsyncRuntimeEngine:
 
     def _mark_stopped(self, loop: asyncio.AbstractEventLoop | None = None) -> None:
         with self._lifecycle_lock:
-            if (
-                loop is None
-                or self._loop is loop
-                or self._thread is threading.current_thread()
-            ):
+            if loop is None or self._loop is loop or self._thread is threading.current_thread():
                 self._loop = None
                 self._thread = None
                 self._engine_state = EngineState.CLOSED
 
-    def _submit(self, coro: Any) -> concurrent.futures.Future[Any]:
+    def _submit(self, coro: Coroutine[Any, Any, _ResultT]) -> concurrent.futures.Future[_ResultT]:
         try:
             self.start()
             with self._lifecycle_lock:
                 if self._engine_state in {EngineState.STOPPING, EngineState.CLOSED}:
-                    raise RuntimeError(f"AsyncRuntimeEngine 不接受新任务：{self._engine_state.value}")
+                    raise RuntimeError(
+                        f"AsyncRuntimeEngine 不接受新任务：{self._engine_state.value}"
+                    )
                 loop = self._loop
                 if loop is None or loop.is_closed():
                     raise RuntimeError("AsyncRuntimeEngine loop 未启动")
                 if self._engine_state is not EngineState.RUNNING:
-                    raise RuntimeError(f"AsyncRuntimeEngine 不接受新任务：{self._engine_state.value}")
+                    raise RuntimeError(
+                        f"AsyncRuntimeEngine 不接受新任务：{self._engine_state.value}"
+                    )
                 return asyncio.run_coroutine_threadsafe(coro, loop)
         except Exception:
             close = getattr(coro, "close", None)
@@ -254,10 +261,14 @@ class AsyncRuntimeEngine:
                     if await wait_for_proxy_prefetch_cycle(state, state.stop_event):
                         return
                     continue
-                on_random_ip_loading_changed(runtime_bridge, True, f"正在准备代理 0/{request_count}")
+                on_random_ip_loading_changed(
+                    runtime_bridge, True, f"正在准备代理 0/{request_count}"
+                )
                 fetch_lock_acquired = False
                 try:
-                    fetch_lock_acquired = await _acquire_proxy_fetch_lock_async(state, state.stop_event)
+                    fetch_lock_acquired = await _acquire_proxy_fetch_lock_async(
+                        state, state.stop_event
+                    )
                     if not fetch_lock_acquired or state.stop_event.is_set() or stop_event.is_set():
                         return
                     request_count = resolve_proxy_prefetch_request_count(state)
@@ -307,7 +318,9 @@ class AsyncRuntimeEngine:
                         name=f"AsyncSlotRunner-{slot_index + 1}",
                     )
         except* Exception as exc_group:
-            errors = [exc for exc in exc_group.exceptions if not isinstance(exc, asyncio.CancelledError)]
+            errors = [
+                exc for exc in exc_group.exceptions if not isinstance(exc, asyncio.CancelledError)
+            ]
             if not errors:
                 raise
             if len(errors) == 1:
@@ -408,7 +421,9 @@ class AsyncRuntimeEngine:
             registry = self._ui_task_registry
             if registry is not None and not called_from_engine_thread:
                 try:
-                    drain_future = asyncio.run_coroutine_threadsafe(registry.drain(timeout=1.0), loop)
+                    drain_future = asyncio.run_coroutine_threadsafe(
+                        registry.drain(timeout=1.0), loop
+                    )
                     drain_future.result(timeout=max(0.0, deadline - time.monotonic()))
                 except Exception:
                     logging.warning("等待后台 UI 任务收尾失败", exc_info=True)
@@ -426,8 +441,6 @@ class AsyncRuntimeEngine:
 
 
 class AsyncEngineClient:
-    
-
     def __init__(self, engine: Optional[AsyncRuntimeEngine] = None) -> None:
         self._engine = engine or AsyncRuntimeEngine()
 

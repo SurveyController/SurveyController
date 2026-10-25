@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import asyncio
+import inspect
 import logging
 import threading
 from typing import Any, Callable, List, Optional
@@ -20,8 +22,6 @@ class BoolState:
 
 
 class RunRuntimePort(RuntimeControlPort):
-    
-
     def __init__(
         self,
         *,
@@ -114,6 +114,13 @@ class RunRuntimePort(RuntimeControlPort):
                 try:
                     mark_cleanup_done = getattr(driver, "mark_cleanup_done", None)
                     if callable(mark_cleanup_done) and not mark_cleanup_done():
+                        continue
+                    close_async = getattr(driver, "aclose", None)
+                    if callable(close_async):
+                        result = close_async()
+                        if inspect.isawaitable(result):
+                            asyncio.run(result)
+                        cleaned += 1
                         continue
                     quit_driver = getattr(driver, "quit", None)
                     if callable(quit_driver):

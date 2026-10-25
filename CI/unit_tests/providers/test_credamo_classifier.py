@@ -9,9 +9,18 @@ from credamo.provider import http_runtime as credamo_http
 
 
 def test_credamo_api_payload_classifier() -> None:
-    assert credamo_http.classify_credamo_api_payload({"success": True}) == credamo_http.CredamoSubmitResult.SUCCESS
-    assert credamo_http.classify_credamo_api_payload({"data": {}}) == credamo_http.CredamoSubmitResult.SUCCESS
-    assert credamo_http.classify_credamo_api_payload({"success": False}) == credamo_http.CredamoSubmitResult.FAILED
+    assert (
+        credamo_http.classify_credamo_api_payload({"success": True})
+        == credamo_http.CredamoSubmitResult.SUCCESS
+    )
+    assert (
+        credamo_http.classify_credamo_api_payload({"data": {}})
+        == credamo_http.CredamoSubmitResult.SUCCESS
+    )
+    assert (
+        credamo_http.classify_credamo_api_payload({"success": False})
+        == credamo_http.CredamoSubmitResult.FAILED
+    )
 
 
 @pytest.mark.asyncio
@@ -29,7 +38,9 @@ async def test_credamo_submit_failure_uses_submission_rejected_contract(is_error
 
     init_data = SimpleNamespace(answer_token="token", time_code="time")
 
-    with pytest.raises(ProviderSubmissionRejectedError, match="见数提交失败：答案格式无效") as rejected:
+    with pytest.raises(
+        ProviderSubmissionRejectedError, match="见数提交失败：答案格式无效"
+    ) as rejected:
         await credamo_http._save_answers(
             FakeSession(),
             origin="https://www.credamo.com",

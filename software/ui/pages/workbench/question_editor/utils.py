@@ -25,7 +25,7 @@ def _shorten_text(text: str, limit: int = 80) -> str:
 
 
 def _apply_label_color(label: QLabel, light: str, dark: str) -> None:
-    
+
     try:
         getattr(label, "setTextColor")(QColor(light), QColor(dark))
     except AttributeError:
@@ -37,7 +37,7 @@ def _apply_label_color(label: QLabel, light: str, dark: str) -> None:
 
 
 def _configure_wrapped_text_label(label: QLabel, width: int) -> None:
-    
+
     label.setWordWrap(True)
     label.setFixedWidth(width)
     label.setAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignTop)
@@ -45,7 +45,7 @@ def _configure_wrapped_text_label(label: QLabel, width: int) -> None:
 
 
 def _bind_slider_input(slider: NoWheelSlider, edit: LineEdit) -> None:
-    
+
     min_value = int(slider.minimum())
     max_value = int(slider.maximum())
     edit.setValidator(QIntValidator(min_value, max_value, edit))
@@ -159,7 +159,8 @@ def _build_entry_info_fallback(entry: QuestionEntry) -> SurveyQuestionMeta:
         "rows": int(max(1, getattr(entry, "rows", 1) or 1)),
         "is_location": bool(getattr(entry, "is_location", False)),
         "is_multi_text": str(getattr(entry, "question_type", "") or "").strip() == "multi_text",
-        "is_text_like": str(getattr(entry, "question_type", "") or "").strip() in {"text", "multi_text"}
+        "is_text_like": str(getattr(entry, "question_type", "") or "").strip()
+        in {"text", "multi_text"}
         and not bool(getattr(entry, "is_location", False)),
     }
     if info["question_type"] == "multi_text":
@@ -208,7 +209,7 @@ def build_entry_info_list(
     entries: Sequence[QuestionEntry],
     questions_info: Optional[Sequence[SurveyQuestionMeta | Mapping[str, Any]]],
 ) -> List[SurveyQuestionMeta]:
-    
+
     selectable_info: List[SurveyQuestionMeta] = []
     provider_map: Dict[Tuple[str, str], List[int]] = {}
     question_num_map: Dict[int, List[int]] = {}

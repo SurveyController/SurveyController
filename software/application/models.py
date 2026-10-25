@@ -60,4 +60,3 @@ class SurveySnapshot(TypedDict, total=False):
     error_code: str
     parse_error: str
     has_question_entries: bool
-

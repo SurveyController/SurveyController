@@ -31,7 +31,9 @@ class AsyncRuntimeLoopControlTests:
         assert await runner._sleep_or_stop(0.001) is False
 
     @pytest.mark.asyncio
-    async def test_resolve_dispatch_delay_seconds_covers_zero_fixed_and_random(self, monkeypatch) -> None:
+    async def test_resolve_dispatch_delay_seconds_covers_zero_fixed_and_random(
+        self, monkeypatch
+    ) -> None:
         config = ExecutionConfig(submit_interval_range_seconds=[0, 0], survey_provider="wjx")
         runner, _state, _ctx, _scheduler = _build_runner(config=config)
         assert runner._resolve_dispatch_delay_seconds() == 0.0

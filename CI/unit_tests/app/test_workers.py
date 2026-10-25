@@ -4,34 +4,44 @@ from unittest.mock import patch
 from software.ui.workers.ai_test_worker import ai_test_result
 from software.ui.workers.update_worker import UpdateCheckWorker
 
-class WorkerTests:
 
+class WorkerTests:
     def test_update_check_worker_emits_success_result(self) -> None:
         worker = UpdateCheckWorker()
         received: list[tuple[bool, dict]] = []
         worker.finished.connect(lambda has_update, payload: received.append((has_update, payload)))
-        fake_module = types.SimpleNamespace(UpdateManager=types.SimpleNamespace(check_updates=lambda: {'has_update': True, 'status': 'ok', 'version': '1.2.3'}))
-        with patch.dict('sys.modules', {'software.update.updater': fake_module}):
+        fake_module = types.SimpleNamespace(
+            UpdateManager=types.SimpleNamespace(
+                check_updates=lambda: {"has_update": True, "status": "ok", "version": "1.2.3"}
+            )
+        )
+        with patch.dict("sys.modules", {"software.update.updater": fake_module}):
             worker.run()
-        assert received == [(True, {'has_update': True, 'status': 'ok', 'version': '1.2.3'})]
+        assert received == [(True, {"has_update": True, "status": "ok", "version": "1.2.3"})]
 
     def test_update_check_worker_uses_fallback_when_dependency_returns_none(self) -> None:
         worker = UpdateCheckWorker()
         received: list[tuple[bool, dict]] = []
         worker.finished.connect(lambda has_update, payload: received.append((has_update, payload)))
-        fake_module = types.SimpleNamespace(UpdateManager=types.SimpleNamespace(check_updates=lambda: None))
-        with patch.dict('sys.modules', {'software.update.updater': fake_module}):
+        fake_module = types.SimpleNamespace(
+            UpdateManager=types.SimpleNamespace(check_updates=lambda: None)
+        )
+        with patch.dict("sys.modules", {"software.update.updater": fake_module}):
             worker.run()
-        assert received == [(False, {'has_update': False, 'status': 'unknown'})]
+        assert received == [(False, {"has_update": False, "status": "unknown"})]
 
     def test_update_check_worker_emits_safe_fallback_on_exception(self) -> None:
         worker = UpdateCheckWorker()
         received: list[tuple[bool, dict]] = []
         worker.finished.connect(lambda has_update, payload: received.append((has_update, payload)))
-        fake_module = types.SimpleNamespace(UpdateManager=types.SimpleNamespace(check_updates=lambda: (_ for _ in ()).throw(RuntimeError('network down'))))
-        with patch.dict('sys.modules', {'software.update.updater': fake_module}):
+        fake_module = types.SimpleNamespace(
+            UpdateManager=types.SimpleNamespace(
+                check_updates=lambda: (_ for _ in ()).throw(RuntimeError("network down"))
+            )
+        )
+        with patch.dict("sys.modules", {"software.update.updater": fake_module}):
             worker.run()
-        assert received == [(False, {'has_update': False, 'status': 'unknown'})]
+        assert received == [(False, {"has_update": False, "status": "unknown"})]
 
     def test_update_check_worker_skips_emit_when_thread_interrupted(self) -> None:
         worker = UpdateCheckWorker()
@@ -40,12 +50,12 @@ class WorkerTests:
         fake_thread = types.SimpleNamespace(isInterruptionRequested=lambda: True)
         fake_module = types.SimpleNamespace(
             UpdateManager=types.SimpleNamespace(
-                check_updates=lambda: {'has_update': True, 'status': 'ok', 'version': '1.2.3'}
+                check_updates=lambda: {"has_update": True, "status": "ok", "version": "1.2.3"}
             )
         )
         with (
-            patch.object(worker, 'thread', return_value=fake_thread),
-            patch.dict('sys.modules', {'software.update.updater': fake_module}),
+            patch.object(worker, "thread", return_value=fake_thread),
+            patch.dict("sys.modules", {"software.update.updater": fake_module}),
         ):
             worker.run()
         assert received == []

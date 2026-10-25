@@ -7,8 +7,6 @@ from qfluentwidgets import ElevatedCardWidget
 
 
 class ClickableElevatedCardWidget(ElevatedCardWidget):
-    
-
     backgroundClicked = Signal()
 
     def __init__(self, parent: QWidget | None = None) -> None:
@@ -19,7 +17,9 @@ class ClickableElevatedCardWidget(ElevatedCardWidget):
         self._ignored_click_widgets = [widget for widget in widgets if widget is not None]
 
     def mousePressEvent(self, e: QMouseEvent) -> None:
-        if e.button() == Qt.MouseButton.LeftButton and self._is_background_click(e.position().toPoint()):
+        if e.button() == Qt.MouseButton.LeftButton and self._is_background_click(
+            e.position().toPoint()
+        ):
             self.backgroundClicked.emit()
             e.accept()
             return

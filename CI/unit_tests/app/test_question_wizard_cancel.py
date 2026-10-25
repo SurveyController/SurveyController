@@ -33,6 +33,7 @@ class _FakeDashboard(DashboardEntriesMixin):
         self.runtime_page = SimpleNamespace(
             reliability_card=SimpleNamespace(switchButton=_FakeSwitchButton())
         )
+        self.controller = None
         self.toast_calls: list[tuple[str, str]] = []
 
     def _toast(self, text: str, level: str = "info", duration: int = 2000) -> None:

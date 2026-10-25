@@ -156,7 +156,7 @@ _WIZARD_META_RULES: Sequence[WizardApplyRule] = (
 
 
 def question_summary(entry: QuestionEntry) -> str:
-    
+
     bias = getattr(entry, "psycho_bias", "custom") or "custom"
     if (
         getattr(entry, "question_type", "") in PSYCHO_SUPPORTED_TYPES
@@ -171,7 +171,11 @@ def question_summary(entry: QuestionEntry) -> str:
 
     if entry.question_type in ("text", "multi_text"):
         if bool(getattr(entry, "is_location", False)):
-            parts = [part for part in list(getattr(entry, "location_parts", []) or []) if str(part or "").strip()]
+            parts = [
+                part
+                for part in list(getattr(entry, "location_parts", []) or [])
+                if str(part or "").strip()
+            ]
             return f"地区: {'-'.join(parts)}" if parts else "地区: 自动选择"
         if entry.question_type == "text":
             random_mode = str(getattr(entry, "text_random_mode", "none") or "none").strip().lower()
@@ -273,8 +277,6 @@ def _build_entry_row_signature(entry: QuestionEntry, index: int) -> tuple[str, s
 
 
 class DashboardEntriesMixin:
-    
-
     if TYPE_CHECKING:
         workbench_state: Any
         _toast: Any
@@ -328,7 +330,7 @@ class DashboardEntriesMixin:
             return False
         title = survey_title if survey_title is not None else self._survey_title
         reliability_mode_enabled = self.runtime_page.reliability_card.switchButton.isChecked()
-        media_fetcher = getattr(self.controller, "fetch_question_media", None)
+        media_fetcher = getattr(getattr(self, "controller", None), "fetch_question_media", None)
         dlg = QuestionWizardDialog(
             entries,
             info,
@@ -401,7 +403,9 @@ class DashboardEntriesMixin:
         entries = self.workbench_state.get_entries()
         table = self.entry_table
         previous_signatures = list(getattr(self, "_entry_table_signatures", []) or [])
-        current_signatures = [_build_entry_row_signature(entry, idx) for idx, entry in enumerate(entries)]
+        current_signatures = [
+            _build_entry_row_signature(entry, idx) for idx, entry in enumerate(entries)
+        ]
         previous_updates_enabled = table.updatesEnabled()
         previous_sorting_enabled = table.isSortingEnabled()
         table.setUpdatesEnabled(False)

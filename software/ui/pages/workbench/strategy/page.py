@@ -41,8 +41,6 @@ from .rule_dialog import (
 
 
 class ConditionRulePanel(QWidget):
-    
-
     changed = Signal()
 
     def __init__(self, parent=None):
@@ -345,8 +343,6 @@ class ConditionRulePanel(QWidget):
 
 
 class QuestionStrategyPage(ScrollArea):
-    
-
     strategyChanged = Signal()
 
     def __init__(self, parent=None):

@@ -17,8 +17,6 @@ from software.ui.widgets.setting_cards import set_widget_enabled_with_opacity
 
 
 class RandomIpToggleRow(QWidget):
-    
-
     def __init__(
         self,
         loading_label_cls: Any,

@@ -19,7 +19,9 @@ from software.core.engine.failure_reason import FailureReason
 from software.core.engine.run_stop_policy import RunStopPolicy
 from software.core.engine.runtime_control_port import RuntimeControlPort
 from software.core.engine.task_registry import TaskRegistry
-from software.core.engine.runtime_error_handlers import handle_ai_runtime_error as _handle_ai_runtime_error_impl
+from software.core.engine.runtime_error_handlers import (
+    handle_ai_runtime_error as _handle_ai_runtime_error_impl,
+)
 from software.core.engine.runtime_error_handlers import handle_submission_verification_error
 from software.core.engine.runtime_error_handlers import handle_survey_provider_unavailable_error
 from software.core.task import ExecutionConfig, ExecutionState
@@ -42,8 +44,6 @@ from surveycore.providers.http_progress import update_http_submit_step
 
 
 class AsyncSlotRunner:
-    
-
     def __init__(
         self,
         *,
@@ -101,7 +101,9 @@ class AsyncSlotRunner:
 
     def _update_step(self, status_text: str) -> None:
         try:
-            self.state.update_thread_step(self.slot_label, 0, 0, status_text=status_text, running=True)
+            self.state.update_thread_step(
+                self.slot_label, 0, 0, status_text=status_text, running=True
+            )
         except Exception:
             logging.info("更新 slot 步骤失败：%s", status_text, exc_info=True)
 
@@ -113,7 +115,9 @@ class AsyncSlotRunner:
         if self.run_context.stop_requested():
             return True
         with self.state.lock:
-            target_reached = bool(self.config.target_num > 0 and self.state.cur_num >= self.config.target_num)
+            target_reached = bool(
+                self.config.target_num > 0 and self.state.cur_num >= self.config.target_num
+            )
         if target_reached:
             self.stop_policy.trigger_target_reached_stop(self.stop_proxy)
             return True
@@ -186,7 +190,9 @@ class AsyncSlotRunner:
         if stopped:
             self.run_context.stop_event.set()
             return True
-        if self.config.random_proxy_ip_enabled and _record_bad_proxy_and_maybe_pause(self.state, self.runtime_bridge):
+        if self.config.random_proxy_ip_enabled and _record_bad_proxy_and_maybe_pause(
+            self.state, self.runtime_bridge
+        ):
             return True
         return False
 
@@ -199,7 +205,9 @@ class AsyncSlotRunner:
             state=self.state,
         )
 
-    async def _handle_submission_verification_error(self, exc: SubmissionVerificationRequiredError) -> bool:
+    async def _handle_submission_verification_error(
+        self, exc: SubmissionVerificationRequiredError
+    ) -> bool:
         if self.config.random_proxy_ip_enabled and self.proxy_session.proxy_address:
             try:
                 _mark_proxy_temporarily_bad(self.state, self.proxy_session.proxy_address)
@@ -225,7 +233,9 @@ class AsyncSlotRunner:
             state=self.state,
         )
 
-    async def _handle_survey_provider_unavailable_error(self, exc: SurveyProviderUnavailableAtRuntimeError) -> bool:
+    async def _handle_survey_provider_unavailable_error(
+        self, exc: SurveyProviderUnavailableAtRuntimeError
+    ) -> bool:
         return handle_survey_provider_unavailable_error(
             exc,
             self.stop_proxy,
@@ -313,7 +323,9 @@ class AsyncSlotRunner:
             try:
                 self.state.release_joint_sample(self.slot_label)
                 self.state.release_reverse_fill_sample(self.slot_label, requeue=True)
-                self.state.mark_thread_finished(self.slot_label, status_text=self._resolve_finished_status_text())
+                self.state.mark_thread_finished(
+                    self.slot_label, status_text=self._resolve_finished_status_text()
+                )
             except Exception:
                 logging.info("阻止纯 HTTP 提交后的收尾状态更新失败", exc_info=True)
             return
@@ -353,7 +365,10 @@ class AsyncSlotRunner:
                     logging.info("标记联合信效度槽位进入答题失败", exc_info=True)
                     marked_answering = False
                 if self._requires_joint_sample() and not marked_answering:
-                    logging.warning("会话[%s]进入 HTTP 答题前发现联合信效度槽位已释放，本轮放弃并重试", self.slot_label)
+                    logging.warning(
+                        "会话[%s]进入 HTTP 答题前发现联合信效度槽位已释放，本轮放弃并重试",
+                        self.slot_label,
+                    )
                     self._release_round_resources(requeue_reverse_fill=True)
                     dispatch_delay_seconds = JOINT_PRE_ANSWER_ATTEMPT_REQUEUE_DELAY_SECONDS
                     continue
@@ -367,7 +382,9 @@ class AsyncSlotRunner:
                         stop_signal=self.stop_proxy,
                         wait=bool(self.config.random_proxy_ip_enabled),
                     )
-                    self.proxy_session.set_current_submit_proxy(submit_proxy.address, provider=submit_proxy.provider)
+                    self.proxy_session.set_current_submit_proxy(
+                        submit_proxy.address, provider=submit_proxy.provider
+                    )
                     return submit_proxy
 
                 finished = await self.http_submitter.submit(
@@ -418,9 +435,7 @@ class AsyncSlotRunner:
                     should_requeue_dispatch = False
                     break
                 self._release_round_resources(requeue_reverse_fill=True)
-            except (
-                http_client.TransportError,
-            ) as exc:
+            except (http_client.TransportError,) as exc:
                 self._report_submission_result("failed")
                 if self._handle_http_transport_error(exc):
                     should_requeue_dispatch = False
@@ -444,7 +459,9 @@ class AsyncSlotRunner:
                 self._release_round_resources(requeue_reverse_fill=True)
             finally:
                 if self.proxy_session.proxy_address:
-                    release_submit_proxy(self.state, self.slot_label, self.proxy_session.proxy_address)
+                    release_submit_proxy(
+                        self.state, self.slot_label, self.proxy_session.proxy_address
+                    )
                 self._release_session_proxy()
                 await self.scheduler.release(
                     int(token_id),
@@ -454,7 +471,9 @@ class AsyncSlotRunner:
         try:
             self.state.release_joint_sample(self.slot_label)
             self.state.release_reverse_fill_sample(self.slot_label, requeue=True)
-            self.state.mark_thread_finished(self.slot_label, status_text=self._resolve_finished_status_text())
+            self.state.mark_thread_finished(
+                self.slot_label, status_text=self._resolve_finished_status_text()
+            )
         except Exception:
             logging.info("HTTP slot 收尾状态更新失败", exc_info=True)
 

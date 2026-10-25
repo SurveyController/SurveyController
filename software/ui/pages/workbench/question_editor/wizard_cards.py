@@ -101,7 +101,6 @@ class WizardCardsMixin:
     def _resolve_matrix_weights(
         self, entry: QuestionEntry, rows: int, columns: int
     ) -> List[List[float]]:
-        
 
         def _clean_row(raw_row: Any) -> Optional[List[float]]:
             if not isinstance(raw_row, (list, tuple)):
@@ -233,7 +232,9 @@ class WizardCardsMixin:
             self._make_badge(_get_entry_type_label(entry), "#0f6cbd", "#63b3ff", parent)
         ]
         badges.append(
-            self._make_badge("必答" if bool(info_entry.required) else "非必答", "#8a3ffc", "#c7a8ff", parent)
+            self._make_badge(
+                "必答" if bool(info_entry.required) else "非必答", "#8a3ffc", "#c7a8ff", parent
+            )
         )
 
         media_items = list(info_entry.question_media or [])
@@ -321,12 +322,18 @@ class WizardCardsMixin:
         entry: QuestionEntry,
         parent: QWidget,
     ) -> CardWidget:
-        
+
         info_entry = self._get_entry_info(idx)
         qnum = str(resolve_config_question_num(info_entry, idx + 1) or "")
         title_text = str(info_entry.get("title") or "").strip()
-        option_texts = [self._display_text_for_option(idx, i, str(text or "")) for i, text in enumerate(list(info_entry.get("option_texts") or []))]
-        row_texts = [self._display_text_for_row(idx, i, str(text or "")) for i, text in enumerate(list(info_entry.get("row_texts") or []))]
+        option_texts = [
+            self._display_text_for_option(idx, i, str(text or ""))
+            for i, text in enumerate(list(info_entry.get("option_texts") or []))
+        ]
+        row_texts = [
+            self._display_text_for_row(idx, i, str(text or ""))
+            for i, text in enumerate(list(info_entry.get("row_texts") or []))
+        ]
 
         card = CardWidget(parent)
         card.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Maximum)

@@ -13,7 +13,9 @@ from .async_engine_fakes import build_engine
 
 class AsyncRuntimeEngineRunTests:
     @pytest.mark.asyncio
-    async def test_run_starts_slots_and_closes_scheduler_when_runner_fails(self, monkeypatch) -> None:
+    async def test_run_starts_slots_and_closes_scheduler_when_runner_fails(
+        self, monkeypatch
+    ) -> None:
         engine = build_engine()
         config = ExecutionConfig(num_threads=2, target_num=5, survey_provider="wjx")
         state = ExecutionState(config=config)
@@ -47,7 +49,9 @@ class AsyncRuntimeEngineRunTests:
                 self.close_calls += 1
 
         monkeypatch.setattr(async_engine, "AsyncScheduler", _FakeScheduler)
-        monkeypatch.setattr(async_engine, "AsyncRunContext", lambda **kwargs: SimpleNamespace(**kwargs))
+        monkeypatch.setattr(
+            async_engine, "AsyncRunContext", lambda **kwargs: SimpleNamespace(**kwargs)
+        )
         monkeypatch.setattr(async_engine, "AsyncSlotRunner", _FakeRunner)
 
         with pytest.raises(RuntimeError, match="slot boom"):

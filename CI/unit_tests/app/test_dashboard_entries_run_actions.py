@@ -24,9 +24,15 @@ class _EntriesPage(DashboardEntriesMixin, DashboardRunActionsMixin):
     def __init__(self) -> None:
         self.entry_table = QTableWidget()
         self.entry_table.setColumnCount(4)
-        self.count_label = SimpleNamespace(text="", setText=lambda value: setattr(self.count_label, "text", value))
-        self.title_label = SimpleNamespace(text="", setText=lambda value: setattr(self.title_label, "text", value))
-        self.url_edit = SimpleNamespace(text=lambda: "https://www.wjx.cn/vm/demo.aspx", setText=MagicMock())
+        self.count_label = SimpleNamespace(
+            text="", setText=lambda value: setattr(self.count_label, "text", value)
+        )
+        self.title_label = SimpleNamespace(
+            text="", setText=lambda value: setattr(self.title_label, "text", value)
+        )
+        self.url_edit = SimpleNamespace(
+            text=lambda: "https://www.wjx.cn/vm/demo.aspx", setText=MagicMock()
+        )
         self.target_spin = SimpleNamespace(
             _value=1,
             value=lambda: self.target_spin._value,
@@ -38,7 +44,9 @@ class _EntriesPage(DashboardEntriesMixin, DashboardRunActionsMixin):
             _range=(1, 1),
             value=lambda: self.thread_spin._value,
             setValue=lambda value: setattr(self.thread_spin, "_value", value),
-            setRange=lambda minimum, maximum: setattr(self.thread_spin, "_range", (minimum, maximum)),
+            setRange=lambda minimum, maximum: setattr(
+                self.thread_spin, "_range", (minimum, maximum)
+            ),
             blockSignals=MagicMock(),
         )
         self.random_ip_cb = SimpleNamespace(
@@ -103,28 +111,71 @@ def test_question_summary_covers_text_matrix_choice_and_dimension_branches() -> 
         )
         == "地区: 北京-北京-东城区"
     )
-    assert question_summary(QuestionEntry("text", None, text_random_mode="name")) == "答案: 随机姓名"
-    assert question_summary(QuestionEntry("text", None, text_random_mode="mobile")) == "答案: 随机手机号"
-    assert question_summary(QuestionEntry("text", None, text_random_mode="id_card")) == "答案: 随机身份证号"
-    assert question_summary(QuestionEntry("text", None, text_random_mode="integer", text_random_int_range=[1, 9])) == "答案: 随机整数(1-9)"
-    assert question_summary(QuestionEntry("text", None, texts=["__RANDOM_NAME__", "x", "y"], ai_enabled=True)) == "答案: 随机姓名 | x (+1) | AI"
-    assert question_summary(QuestionEntry("text", None, texts=[], ai_enabled=True)) == "答案: 无 | AI"
-    assert question_summary(
-        QuestionEntry(
-            "multi_text",
-            None,
-            multi_text_blank_modes=["name", "mobile", "integer"],
-            multi_text_blank_int_ranges=[[], [], [3, 5]],
+    assert (
+        question_summary(QuestionEntry("text", None, text_random_mode="name")) == "答案: 随机姓名"
+    )
+    assert (
+        question_summary(QuestionEntry("text", None, text_random_mode="mobile"))
+        == "答案: 随机手机号"
+    )
+    assert (
+        question_summary(QuestionEntry("text", None, text_random_mode="id_card"))
+        == "答案: 随机身份证号"
+    )
+    assert (
+        question_summary(
+            QuestionEntry("text", None, text_random_mode="integer", text_random_int_range=[1, 9])
         )
-    ) == "填空1: 随机姓名 | 填空2: 随机手机号 (+1)"
-    assert question_summary(QuestionEntry("multi_text", None, multi_text_blank_ai_flags=[True])) == "填空1: AI"
-    assert question_summary(QuestionEntry("matrix", [[1, 2]], rows=2, option_count=3, custom_weights=[[1, 2]])) == "2 行 × 3 列 - 按行配比"
-    assert question_summary(QuestionEntry("matrix", None, rows=2, option_count=3)) == "2 行 × 3 列 - 完全随机"
+        == "答案: 随机整数(1-9)"
+    )
+    assert (
+        question_summary(
+            QuestionEntry("text", None, texts=["__RANDOM_NAME__", "x", "y"], ai_enabled=True)
+        )
+        == "答案: 随机姓名 | x (+1) | AI"
+    )
+    assert (
+        question_summary(QuestionEntry("text", None, texts=[], ai_enabled=True)) == "答案: 无 | AI"
+    )
+    assert (
+        question_summary(
+            QuestionEntry(
+                "multi_text",
+                None,
+                multi_text_blank_modes=["name", "mobile", "integer"],
+                multi_text_blank_int_ranges=[[], [], [3, 5]],
+            )
+        )
+        == "填空1: 随机姓名 | 填空2: 随机手机号 (+1)"
+    )
+    assert (
+        question_summary(QuestionEntry("multi_text", None, multi_text_blank_ai_flags=[True]))
+        == "填空1: AI"
+    )
+    assert (
+        question_summary(
+            QuestionEntry("matrix", [[1, 2]], rows=2, option_count=3, custom_weights=[[1, 2]])
+        )
+        == "2 行 × 3 列 - 按行配比"
+    )
+    assert (
+        question_summary(QuestionEntry("matrix", None, rows=2, option_count=3))
+        == "2 行 × 3 列 - 完全随机"
+    )
     assert question_summary(QuestionEntry("order", None)) == "排序题 - 自动随机排序"
-    assert question_summary(QuestionEntry("multiple", [1, 2], custom_weights=[10, 20, 30, 40, 50])) == "自定义概率: 10%,20%,30%,40%..."
-    assert question_summary(QuestionEntry("single", [1, 2], custom_weights=[1, 2])) == "自定义配比: 1,2"
+    assert (
+        question_summary(QuestionEntry("multiple", [1, 2], custom_weights=[10, 20, 30, 40, 50]))
+        == "自定义概率: 10%,20%,30%,40%..."
+    )
+    assert (
+        question_summary(QuestionEntry("single", [1, 2], custom_weights=[1, 2]))
+        == "自定义配比: 1,2"
+    )
     assert question_summary(QuestionEntry("multiple", -1, distribution_mode="custom")) == "完全随机"
-    assert question_summary(QuestionEntry("single", [1, 2], distribution_mode="custom")) == "自定义配比"
+    assert (
+        question_summary(QuestionEntry("single", [1, 2], distribution_mode="custom"))
+        == "自定义配比"
+    )
 
     psycho = QuestionEntry("scale", [1, 1], psycho_bias="left", dimension="体验")
     assert question_summary(psycho) == "倾向预设: 偏左"
@@ -182,7 +233,10 @@ def test_entry_dialog_actions_and_wizard_paths(monkeypatch, qtbot) -> None:
     page = _EntriesPage()
     qtbot.addWidget(page.entry_table)
     page.workbench_state.entries = [QuestionEntry("single", [1, 1]), QuestionEntry("text", None)]
-    page.workbench_state.entry_questions_info = [SurveyQuestionMeta(num=1, title="Q1"), SurveyQuestionMeta(num=2, title="Q2")]
+    page.workbench_state.entry_questions_info = [
+        SurveyQuestionMeta(num=1, title="Q1"),
+        SurveyQuestionMeta(num=2, title="Q2"),
+    ]
 
     page._show_add_question_dialog()
     assert page.entry_table.rowCount() == 2
@@ -196,7 +250,9 @@ def test_entry_dialog_actions_and_wizard_paths(monkeypatch, qtbot) -> None:
     assert page.toasts[-1] == ("未找到可编辑的题目", "warning")
 
     monkeypatch.setattr(page, "_checked_rows", lambda: [0, 0, 1])
-    monkeypatch.setattr(page, "run_question_wizard", lambda selected, info: len(selected) == 2 and len(info) == 2)
+    monkeypatch.setattr(
+        page, "run_question_wizard", lambda selected, info: len(selected) == 2 and len(info) == 2
+    )
     page._edit_selected_entries()
     assert page.entry_table.rowCount() == 2
 
@@ -296,7 +352,9 @@ def test_run_question_wizard_and_run_actions(monkeypatch, qtbot) -> None:
     monkeypatch.setattr(entries_module, "_WIZARD_TEXT_RULES", ())
     monkeypatch.setattr(entries_module, "_WIZARD_META_RULES", ())
     selected_entries = [QuestionEntry("single", [1, 1])]
-    assert page.run_question_wizard(selected_entries, [SurveyQuestionMeta(num=1, title="Q1")]) is True
+    assert (
+        page.run_question_wizard(selected_entries, [SurveyQuestionMeta(num=1, title="Q1")]) is True
+    )
     assert selected_entries[0].custom_weights == [3.0, 7.0]
 
     class _BadDialog(_AcceptedDialog):
@@ -306,12 +364,19 @@ def test_run_question_wizard_and_run_actions(monkeypatch, qtbot) -> None:
     monkeypatch.setattr(
         entries_module,
         "_WIZARD_DISTRIBUTION_RULES",
-        ((lambda _dlg: (_ for _ in ()).throw(ValueError("bad weights")), entries_module._apply_distribution_result),),
+        (
+            (
+                lambda _dlg: (_ for _ in ()).throw(ValueError("bad weights")),
+                entries_module._apply_distribution_result,
+            ),
+        ),
     )
     assert page.run_question_wizard([QuestionEntry("single", [1, 1])], [{}]) is False
     assert page.toasts[-1] == ("配置应用失败：bad weights", "error")
 
-    page.run_coordinator = SimpleNamespace(start=MagicMock(), build_config=MagicMock(return_value=RuntimeConfig(target=8)))
+    page.run_coordinator = SimpleNamespace(
+        start=MagicMock(), build_config=MagicMock(return_value=RuntimeConfig(target=8))
+    )
     page._on_start_clicked(enable_reverse_fill=True)
     page.run_coordinator.start.assert_called_once_with(
         enable_reverse_fill=True,
@@ -332,7 +397,9 @@ def test_run_question_wizard_and_run_actions(monkeypatch, qtbot) -> None:
     assert page.thread_spin._value == 9
     assert page.random_ip_cb._checked is True
 
-    cfg = RuntimeConfig(url="https://wjx.cn/vm/demo.aspx", target=4, threads=2, random_ip_enabled=True)
+    cfg = RuntimeConfig(
+        url="https://wjx.cn/vm/demo.aspx", target=4, threads=2, random_ip_enabled=True
+    )
     page.apply_config(cfg)
     assert page.url_edit.setText.call_args.args[0] == cfg.url
     assert page.toggle_states[-1] is True
@@ -343,7 +410,11 @@ def test_run_question_wizard_and_run_actions(monkeypatch, qtbot) -> None:
     assert built.answer_rules == [{"id": "r1"}]
     assert built.dimension_groups == ["体验"]
 
-    page._window = SimpleNamespace(runtime_page="runtime", switched=None, switchTo=lambda target: setattr(page._window, "switched", target))
+    page._window = SimpleNamespace(
+        runtime_page="runtime",
+        switched=None,
+        switchTo=lambda target: setattr(page._window, "switched", target),
+    )
     page._go_to_runtime_answer_duration()
     assert page._window.switched == "runtime"
     page.runtime_page.focus_answer_duration_setting.assert_called_once()

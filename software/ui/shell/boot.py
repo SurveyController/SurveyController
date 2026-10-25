@@ -22,8 +22,6 @@ __all__ = ["BootSplash", "create_boot_splash", "finish_boot_splash"]
 
 
 class BootSplash:
-    
-
     def __init__(self, window: QWidget):
         self.window = window
         self._boot_icon = self._resolve_boot_icon(window)
@@ -33,23 +31,19 @@ class BootSplash:
         self._icon_size = 64
         self._scale = 1.0
 
-        
         is_dark = isDarkTheme()
         self._title_color = "#ffffff" if is_dark else "#1f2937"
         self._version_color = "#a1a1aa" if is_dark else "#6b7280"
         self._badge_bg = "rgba(255, 255, 255, 0.1)" if is_dark else "rgba(0, 0, 0, 0.08)"
 
-        
         self.title_label = TitleLabel(self.splash_screen)
         self.title_label.setText("SurveyController")
         self.title_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
 
-        
         self.version_label = CaptionLabel(self.splash_screen)
         self.version_label.setText(f"v{APP_VERSION}")
         self.version_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
 
-        
         self.progress_bar = IndeterminateProgressBar(self.splash_screen)
         self.progress_bar.start()
         self.title_label.show()
@@ -59,14 +53,14 @@ class BootSplash:
         self.splash_screen.raise_()
 
     def _resolve_boot_icon(self, window: QWidget) -> QIcon:
-        
+
         icon_path = get_resource_path(os.path.join("assets", "icon.png"))
         if os.path.exists(icon_path):
             return QIcon(icon_path)
         return window.windowIcon()
 
     def _apply_scale(self, width: int, height: int):
-        
+
         base_width, base_height = 1180, 780
         width = max(width, 900)
         height = max(height, 640)
@@ -105,21 +99,18 @@ class BootSplash:
         self.version_label.adjustSize()
 
     def update_layout(self, width: int, height: int):
-        
+
         self.splash_screen.resize(width, height)
         self._apply_scale(width, height)
 
-        
         icon_bottom = height // 2 + self._icon_size // 2 + int(18 * self._scale)
         title_width = self.title_label.width()
         self.title_label.move((width - title_width) // 2, icon_bottom)
 
-        
         title_bottom = icon_bottom + self.title_label.height() + int(10 * self._scale)
         badge_width = self.version_label.width()
         self.version_label.move((width - badge_width) // 2, title_bottom)
 
-        
         bar_width = int(max(340, min(width * 0.34, 520)))
         bar_height = max(4, int(5 * self._scale))
         self.progress_bar.setGeometry(
@@ -130,7 +121,7 @@ class BootSplash:
         )
 
     def finish(self):
-        
+
         self._stop_finish_timer()
         self._stop_progress_bar()
         try:
@@ -139,7 +130,7 @@ class BootSplash:
             pass
 
     def cleanup(self):
-        
+
         self._stop_finish_timer()
         self._stop_progress_bar()
 
@@ -159,7 +150,7 @@ class BootSplash:
             pass
 
     def _stop_progress_bar(self) -> None:
-        
+
         try:
             if self.progress_bar.thread() is QThread.currentThread():
                 self.progress_bar.stop()
@@ -171,16 +162,15 @@ _boot_splash: Optional[BootSplash] = None
 
 
 def create_boot_splash(window: QWidget) -> BootSplash:
-    
+
     global _boot_splash
     _boot_splash = BootSplash(window)
     return _boot_splash
 
 
 def finish_boot_splash(delay_ms: int = 1500):
-    
+
     if _boot_splash:
-        
         _boot_splash._stop_finish_timer()
         _boot_splash._finish_timer = QTimer(_boot_splash.splash_screen)
         _boot_splash._finish_timer.setSingleShot(True)

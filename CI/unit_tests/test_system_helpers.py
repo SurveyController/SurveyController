@@ -19,7 +19,9 @@ class SystemHelpersTests:
         secure_store.delete_secret("")
 
     @pytest.mark.asyncio
-    async def test_prefetch_proxy_pool_passes_effective_url_and_minimum_count(self, patch_attrs) -> None:
+    async def test_prefetch_proxy_pool_passes_effective_url_and_minimum_count(
+        self, patch_attrs
+    ) -> None:
         calls: list[dict[str, object]] = []
 
         def fake_fetch(**kwargs):
@@ -27,6 +29,7 @@ class SystemHelpersTests:
             return ["lease"]
 
         import software.network.proxy.api as proxy_api
+
         async def fake_fetch_async(**kwargs):
             return fake_fetch(**kwargs)
 

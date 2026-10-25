@@ -122,7 +122,7 @@ def _strip_json_comments(raw_text: str) -> str:
 
 
 def load_config(path: Optional[str] = None, *, strict: bool = False) -> RuntimeConfig:
-    
+
     config_path = os.fspath(path or _default_config_read_path())
     if not os.path.exists(config_path):
         return RuntimeConfig()
@@ -172,7 +172,7 @@ def save_config(
     *,
     include_secrets: bool = False,
 ) -> str:
-    
+
     config_path = os.fspath(path or _default_config_path())
     os.makedirs(os.path.dirname(config_path) or ".", exist_ok=True)
     payload = serialize_runtime_config(config, include_secrets=include_secrets)
@@ -201,5 +201,3 @@ def save_config(
             pass
         raise
     return config_path
-
-

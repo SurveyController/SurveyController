@@ -2,8 +2,14 @@ import os
 import re
 from software.application.constants import STOP_FORCE_WAIT_SECONDS as _STOP_FORCE_WAIT_SECONDS
 from software.core.engine.constants import HTTP_MAX_THREADS as _HTTP_MAX_THREADS
-from software.core.config.user_agents import DEFAULT_USER_AGENT, USER_AGENT_PRESETS
-from software.core.text_constants import DEFAULT_FILL_TEXT, WHITESPACE_PATTERN
+from software.core.config.user_agents import (
+    DEFAULT_USER_AGENT as DEFAULT_USER_AGENT,
+    USER_AGENT_PRESETS as USER_AGENT_PRESETS,
+)
+from software.core.text_constants import (
+    DEFAULT_FILL_TEXT as DEFAULT_FILL_TEXT,
+    WHITESPACE_PATTERN,
+)
 from software.network.config import (
     AUTH_TRIAL_ENDPOINT,
     CARD_REDEEM_ENDPOINT,
@@ -23,7 +29,6 @@ from software.network.config import (
     STATUS_ENDPOINT,
     SUBMISSION_REPORT_ENDPOINT,
 )
-from software.network.http.defaults import DEFAULT_HTTP_HEADERS
 from software.app.settings_store import (
     CONFIG_DIRECTORY_SETTING_KEY as _CONFIG_DIRECTORY_SETTING_KEY,
     app_settings as _app_settings,
@@ -31,6 +36,29 @@ from software.app.settings_store import (
     get_int_from_qsettings as _get_int_from_qsettings,
     get_str_from_qsettings as _get_str_from_qsettings,
 )
+
+__all__ = [
+    "DEFAULT_USER_AGENT",
+    "USER_AGENT_PRESETS",
+    "DEFAULT_FILL_TEXT",
+    "AUTH_TRIAL_ENDPOINT",
+    "CARD_REDEEM_ENDPOINT",
+    "IP_EXTRACT_ENDPOINT",
+    "PROXY_HEALTH_CHECK_TIMEOUT",
+    "PROXY_HEALTH_CHECK_URL",
+    "PROXY_MAX_PROXIES",
+    "PROXY_MINUTE_OPTIONS",
+    "PROXY_POOL_ORDINARY",
+    "PROXY_POOL_QUALITY",
+    "PROXY_QUOTA_COST_MAP",
+    "PROXY_SOURCE_BENEFIT",
+    "PROXY_SOURCE_CUSTOM",
+    "PROXY_SOURCE_DEFAULT",
+    "PROXY_STATUS_TIMEOUT_SECONDS",
+    "PROXY_TTL_GRACE_SECONDS",
+    "STATUS_ENDPOINT",
+    "SUBMISSION_REPORT_ENDPOINT",
+]
 
 app_settings = _app_settings
 get_bool_from_qsettings = _get_bool_from_qsettings
@@ -48,9 +76,12 @@ DEFAULT_AUTO_SAVE_LOGS = True
 DEFAULT_AUTO_SAVE_LOG_RETENTION_COUNT = 10
 AUTO_SAVE_LOG_RETENTION_OPTIONS = (3, 5, 10, 20, 30, 50)
 
+
 def get_proxy_auth() -> str:
-    
+
     return os.environ.get("WJX_PROXY_AUTH", "")
+
+
 HTTP_MAX_THREADS = _HTTP_MAX_THREADS
 
 
@@ -61,7 +92,6 @@ LOG_REFRESH_INTERVAL_MS = 500
 
 
 APP_ICON_RELATIVE_PATH = "icon.ico"
-
 
 
 SUBMIT_INITIAL_DELAY = 0.35
@@ -103,7 +133,7 @@ PRESET_DIMENSIONS = [
     "服务质量",
     "产品质量",
 ]
-DIMENSION_UNGROUPED = "未分组"  
+DIMENSION_UNGROUPED = "未分组"
 
 
 _HTML_SPACE_RE = WHITESPACE_PATTERN
@@ -195,8 +225,12 @@ _CHINESE_MULTI_LIMIT_PATTERNS = (
 )
 
 _CHINESE_MULTI_RANGE_PATTERNS = (
-    re.compile(r"(?:请[选選择擇]?|可选|可選|需选|需選|选择|選擇|勾选|勾選)\s*(\d+)\s*(?:-|－|—|–|~|～|至|到)\s*(\d+)(?:\s*[个項项条])?"),
-    re.compile(r"至少\s*(\d+)\s*[个項项条]?(?:[^0-9]{0,6})(?:最多|至多|不超过|不超過)\s*(\d+)\s*[个項项条]?"),
+    re.compile(
+        r"(?:请[选選择擇]?|可选|可選|需选|需選|选择|選擇|勾选|勾選)\s*(\d+)\s*(?:-|－|—|–|~|～|至|到)\s*(\d+)(?:\s*[个項项条])?"
+    ),
+    re.compile(
+        r"至少\s*(\d+)\s*[个項项条]?(?:[^0-9]{0,6})(?:最多|至多|不超过|不超過)\s*(\d+)\s*[个項项条]?"
+    ),
     re.compile(r"(?:限选|限選)\s*(\d+)\s*(?:-|－|—|–|~|～|至|到)\s*(\d+)(?:\s*[个項项条])?"),
 )
 
@@ -210,8 +244,13 @@ _CHINESE_MULTI_MIN_PATTERNS = (
 )
 
 _ENGLISH_MULTI_LIMIT_PATTERNS = (
-    re.compile(r"(?:select|choose|pick)\s+(?:up\s+to|at\s+most|no\s+more\s+than)\s+(\d+)", re.IGNORECASE),
-    re.compile(r"(?:up\s+to|at\s+most|no\s+more\s+than)\s+(\d+)\s+(?:options?|choices?|items?)", re.IGNORECASE),
+    re.compile(
+        r"(?:select|choose|pick)\s+(?:up\s+to|at\s+most|no\s+more\s+than)\s+(\d+)", re.IGNORECASE
+    ),
+    re.compile(
+        r"(?:up\s+to|at\s+most|no\s+more\s+than)\s+(\d+)\s+(?:options?|choices?|items?)",
+        re.IGNORECASE,
+    ),
 )
 
 _ENGLISH_MULTI_RANGE_PATTERNS = (

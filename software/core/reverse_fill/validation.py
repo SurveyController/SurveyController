@@ -51,11 +51,17 @@ def _check_cancelled(cancel_check: CancellationCheck | None) -> None:
 
 
 def _detail_from_columns(columns: List[Any]) -> str:
-    headers = [str(getattr(column, "header", "") or "").strip() for column in list(columns or []) if str(getattr(column, "header", "") or "").strip()]
+    headers = [
+        str(getattr(column, "header", "") or "").strip()
+        for column in list(columns or [])
+        if str(getattr(column, "header", "") or "").strip()
+    ]
     return " / ".join(headers)
 
 
-def _regular_config_ready(entry: Optional[QuestionEntry], info: SurveyQuestionMeta | Dict[str, Any], expected_type: str) -> bool:
+def _regular_config_ready(
+    entry: Optional[QuestionEntry], info: SurveyQuestionMeta | Dict[str, Any], expected_type: str
+) -> bool:
     if entry is None:
         return False
     if str(getattr(entry, "question_type", "") or "").strip() != str(expected_type or "").strip():
@@ -78,8 +84,14 @@ def _question_issue(
 ) -> ReverseFillIssue:
     resolved_suggestion = str(suggestion or "").strip()
     if not resolved_suggestion:
-        resolved_suggestion = "已回退到当前题目的常规配置，可继续运行" if fallback_ready else "请先打开配置向导，把这题的常规配置补齐后再启动"
-    resolved_severity = str(severity or "").strip().lower() or ("warn" if fallback_ready else "block")
+        resolved_suggestion = (
+            "已回退到当前题目的常规配置，可继续运行"
+            if fallback_ready
+            else "请先打开配置向导，把这题的常规配置补齐后再启动"
+        )
+    resolved_severity = str(severity or "").strip().lower() or (
+        "warn" if fallback_ready else "block"
+    )
     return ReverseFillIssue(
         question_num=question_num,
         title=title,
@@ -102,7 +114,11 @@ def _build_question_plan(
     fallback_ready: bool,
     fallback_resolved: bool = False,
 ) -> ReverseFillQuestionPlan:
-    headers = [str(getattr(column, "header", "") or "").strip() for column in list(columns or []) if str(getattr(column, "header", "") or "").strip()]
+    headers = [
+        str(getattr(column, "header", "") or "").strip()
+        for column in list(columns or [])
+        if str(getattr(column, "header", "") or "").strip()
+    ]
     return ReverseFillQuestionPlan(
         question_num=question_num,
         title=title,
@@ -115,7 +131,9 @@ def _build_question_plan(
     )
 
 
-def _entry_differs_from_default(entry: Optional[QuestionEntry], default_entry: Optional[QuestionEntry]) -> bool:
+def _entry_differs_from_default(
+    entry: Optional[QuestionEntry], default_entry: Optional[QuestionEntry]
+) -> bool:
     if entry is None or default_entry is None:
         return False
     compare_fields = (
@@ -233,13 +251,14 @@ def build_reverse_fill_spec(
         _check_cancelled(cancellation_check)
         answers_by_row[int(row.data_row_number)] = {}
         if progress_callback is not None and (
-            row_index % row_progress_interval == 0
-            or row_index == len(selected_rows)
+            row_index % row_progress_interval == 0 or row_index == len(selected_rows)
         ):
             progress_callback("preparing", row_index, len(selected_rows))
 
     if available_rows <= 0:
-        issues.append(_build_no_sample_issue(start_row=normalized_start_row, total_samples=total_samples))
+        issues.append(
+            _build_no_sample_issue(start_row=normalized_start_row, total_samples=total_samples)
+        )
     elif target_num > 0 and target_num > available_rows:
         issues.append(_build_global_issue(target_num=target_num, available_samples=available_rows))
 
@@ -257,7 +276,9 @@ def build_reverse_fill_spec(
         question_type = infer_reverse_fill_question_type(info, entry)
         columns = list((export.question_columns or {}).get(question_num) or [])
         fallback_ready = _regular_config_ready(entry, info, question_type)
-        fallback_resolved = fallback_ready and _entry_differs_from_default(entry, default_entry_by_num.get(question_num))
+        fallback_resolved = fallback_ready and _entry_differs_from_default(
+            entry, default_entry_by_num.get(question_num)
+        )
 
         if bool(info.unsupported):
             reason = str(info.unsupported_reason or "当前程序暂不支持这道题").strip()
@@ -328,7 +349,9 @@ def build_reverse_fill_spec(
                     question_num=question_num,
                     title=title,
                     question_type=question_type,
-                    status=REVERSE_FILL_STATUS_FALLBACK if fallback_ready else REVERSE_FILL_STATUS_BLOCKED,
+                    status=REVERSE_FILL_STATUS_FALLBACK
+                    if fallback_ready
+                    else REVERSE_FILL_STATUS_BLOCKED,
                     columns=columns,
                     detail=reason,
                     fallback_ready=fallback_ready,
@@ -353,7 +376,9 @@ def build_reverse_fill_spec(
                     question_num=question_num,
                     title=title,
                     question_type=question_type,
-                    status=REVERSE_FILL_STATUS_FALLBACK if fallback_ready else REVERSE_FILL_STATUS_BLOCKED,
+                    status=REVERSE_FILL_STATUS_FALLBACK
+                    if fallback_ready
+                    else REVERSE_FILL_STATUS_BLOCKED,
                     columns=columns,
                     detail=reason,
                     fallback_ready=fallback_ready,
@@ -379,7 +404,9 @@ def build_reverse_fill_spec(
                     question_num=question_num,
                     title=title,
                     question_type=question_type,
-                    status=REVERSE_FILL_STATUS_FALLBACK if fallback_ready else REVERSE_FILL_STATUS_BLOCKED,
+                    status=REVERSE_FILL_STATUS_FALLBACK
+                    if fallback_ready
+                    else REVERSE_FILL_STATUS_BLOCKED,
                     columns=columns,
                     detail=reason,
                     fallback_ready=fallback_ready,
@@ -406,7 +433,9 @@ def build_reverse_fill_spec(
                         question_num=question_num,
                         title=title,
                         question_type=question_type,
-                        status=REVERSE_FILL_STATUS_FALLBACK if fallback_ready else REVERSE_FILL_STATUS_BLOCKED,
+                        status=REVERSE_FILL_STATUS_FALLBACK
+                        if fallback_ready
+                        else REVERSE_FILL_STATUS_BLOCKED,
                         columns=columns,
                         detail=reason,
                         fallback_ready=fallback_ready,
@@ -419,7 +448,9 @@ def build_reverse_fill_spec(
         if question_type == "multi_text":
             blank_labels = list(info.text_input_labels or [])
             if blank_labels and len(columns) != len(blank_labels):
-                reason = f"多项填空解析出 {len(blank_labels)} 个空，但 Excel 里只有 {len(columns)} 列"
+                reason = (
+                    f"多项填空解析出 {len(blank_labels)} 个空，但 Excel 里只有 {len(columns)} 列"
+                )
                 issues.append(
                     _question_issue(
                         question_num=question_num,
@@ -434,7 +465,9 @@ def build_reverse_fill_spec(
                         question_num=question_num,
                         title=title,
                         question_type=question_type,
-                        status=REVERSE_FILL_STATUS_FALLBACK if fallback_ready else REVERSE_FILL_STATUS_BLOCKED,
+                        status=REVERSE_FILL_STATUS_FALLBACK
+                        if fallback_ready
+                        else REVERSE_FILL_STATUS_BLOCKED,
                         columns=columns,
                         detail=reason,
                         fallback_ready=fallback_ready,
@@ -450,8 +483,7 @@ def build_reverse_fill_spec(
         for row_index, raw_row in enumerate(selected_rows, start=1):
             _check_cancelled(cancellation_check)
             if progress_callback is not None and (
-                row_index % row_progress_interval == 0
-                or row_index == len(selected_rows)
+                row_index % row_progress_interval == 0 or row_index == len(selected_rows)
             ):
                 progress_callback("samples", row_index, len(selected_rows))
             try:
@@ -459,14 +491,18 @@ def build_reverse_fill_spec(
                     answer = parse_choice_answer(
                         question_num=question_num,
                         question_type=question_type,
-                        raw_value=(raw_row.values_by_column or {}).get(int(ordered_columns[0].column_index)),
+                        raw_value=(raw_row.values_by_column or {}).get(
+                            int(ordered_columns[0].column_index)
+                        ),
                         export_format=export.selected_format,
                         option_texts=list(info.option_texts or []),
                     )
                 elif question_type == "text":
                     answer = parse_text_answer(
                         question_num=question_num,
-                        raw_value=(raw_row.values_by_column or {}).get(int(ordered_columns[0].column_index)),
+                        raw_value=(raw_row.values_by_column or {}).get(
+                            int(ordered_columns[0].column_index)
+                        ),
                     )
                 elif question_type == "multi_text":
                     answer = parse_multi_text_answer(
@@ -513,7 +549,9 @@ def build_reverse_fill_spec(
                     question_num=question_num,
                     title=title,
                     question_type=question_type,
-                    status=REVERSE_FILL_STATUS_FALLBACK if fallback_ready else REVERSE_FILL_STATUS_BLOCKED,
+                    status=REVERSE_FILL_STATUS_FALLBACK
+                    if fallback_ready
+                    else REVERSE_FILL_STATUS_BLOCKED,
                     columns=columns,
                     detail=reason,
                     fallback_ready=fallback_ready,
@@ -551,8 +589,7 @@ def build_reverse_fill_spec(
             )
         )
         if progress_callback is not None and (
-            row_index % row_progress_interval == 0
-            or row_index == len(selected_rows)
+            row_index % row_progress_interval == 0 or row_index == len(selected_rows)
         ):
             progress_callback("assembling", row_index, len(selected_rows))
 
@@ -563,7 +600,9 @@ def build_reverse_fill_spec(
     return ReverseFillSpec(
         source_path=os.path.abspath(str(source_path or "").strip()),
         selected_format=str(export.selected_format or REVERSE_FILL_FORMAT_AUTO),
-        detected_format=str(export.detected_format or export.selected_format or REVERSE_FILL_FORMAT_AUTO),
+        detected_format=str(
+            export.detected_format or export.selected_format or REVERSE_FILL_FORMAT_AUTO
+        ),
         start_row=normalized_start_row,
         total_samples=total_samples,
         available_samples=available_rows,
@@ -606,10 +645,15 @@ def build_enabled_reverse_fill_spec(
         return None
     spec = build_reverse_fill_spec(
         source_path=source_path,
-        survey_provider=str(getattr(config, "survey_provider", SURVEY_PROVIDER_WJX) or SURVEY_PROVIDER_WJX),
+        survey_provider=str(
+            getattr(config, "survey_provider", SURVEY_PROVIDER_WJX) or SURVEY_PROVIDER_WJX
+        ),
         questions_info=list(questions_info or []),
         question_entries=list(question_entries or []),
-        selected_format=str(getattr(config, "reverse_fill_format", REVERSE_FILL_FORMAT_AUTO) or REVERSE_FILL_FORMAT_AUTO),
+        selected_format=str(
+            getattr(config, "reverse_fill_format", REVERSE_FILL_FORMAT_AUTO)
+            or REVERSE_FILL_FORMAT_AUTO
+        ),
         start_row=max(1, int(getattr(config, "reverse_fill_start_row", 1) or 1)),
         target_num=max(0, int(getattr(config, "target", 0) or 0)),
         progress_callback=progress_callback,

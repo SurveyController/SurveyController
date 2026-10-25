@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import os
-from pathlib import Path
 
 from PySide6.QtCore import QCoreApplication, QStandardPaths
 
@@ -46,9 +45,13 @@ class UserPathsTests:
         assert user_paths.get_default_runtime_config_path() == str(
             config_root.parent / "configs" / "config.json"
         )
-        assert user_paths.get_legacy_runtime_config_path() == str(config_root.parent / "config.json")
+        assert user_paths.get_legacy_runtime_config_path() == str(
+            config_root.parent / "config.json"
+        )
 
-    def test_standard_roots_fall_back_to_home_when_qt_returns_empty(self, monkeypatch, tmp_path) -> None:
+    def test_standard_roots_fall_back_to_home_when_qt_returns_empty(
+        self, monkeypatch, tmp_path
+    ) -> None:
         monkeypatch.setattr(user_paths, "configure_qt_application_metadata", lambda: None)
         monkeypatch.setattr(QStandardPaths, "writableLocation", lambda _location: "")
         monkeypatch.setattr(user_paths.os.path, "expanduser", lambda _path: str(tmp_path))
@@ -56,13 +59,31 @@ class UserPathsTests:
         assert user_paths.get_roaming_app_data_root() == str(tmp_path / "AppData" / "Roaming")
         assert user_paths.get_local_app_data_root() == str(tmp_path / "AppData" / "Local")
 
-    def test_ensure_user_data_directories_creates_expected_tree(self, monkeypatch, tmp_path) -> None:
-        monkeypatch.setattr(user_paths, "get_user_config_root", lambda: str(tmp_path / "config-root"))
-        monkeypatch.setattr(user_paths, "get_user_config_directory", lambda: str(tmp_path / "config-root" / "configs"))
-        monkeypatch.setattr(user_paths, "get_user_local_data_root", lambda: str(tmp_path / "local-root"))
-        monkeypatch.setattr(user_paths, "get_user_logs_directory", lambda: str(tmp_path / "local-root" / "logs"))
-        monkeypatch.setattr(user_paths, "get_user_cache_directory", lambda: str(tmp_path / "local-root" / "cache"))
-        monkeypatch.setattr(user_paths, "get_user_updates_directory", lambda: str(tmp_path / "local-root" / "updates"))
+    def test_ensure_user_data_directories_creates_expected_tree(
+        self, monkeypatch, tmp_path
+    ) -> None:
+        monkeypatch.setattr(
+            user_paths, "get_user_config_root", lambda: str(tmp_path / "config-root")
+        )
+        monkeypatch.setattr(
+            user_paths,
+            "get_user_config_directory",
+            lambda: str(tmp_path / "config-root" / "configs"),
+        )
+        monkeypatch.setattr(
+            user_paths, "get_user_local_data_root", lambda: str(tmp_path / "local-root")
+        )
+        monkeypatch.setattr(
+            user_paths, "get_user_logs_directory", lambda: str(tmp_path / "local-root" / "logs")
+        )
+        monkeypatch.setattr(
+            user_paths, "get_user_cache_directory", lambda: str(tmp_path / "local-root" / "cache")
+        )
+        monkeypatch.setattr(
+            user_paths,
+            "get_user_updates_directory",
+            lambda: str(tmp_path / "local-root" / "updates"),
+        )
 
         created = user_paths.ensure_user_data_directories()
 
@@ -73,12 +94,20 @@ class UserPathsTests:
     def test_user_config_directory_can_follow_qsettings_override(self, tmp_path) -> None:
         override_dir = tmp_path / "custom-configs"
 
-        assert user_paths.resolve_user_config_directory(_FakeSettings(str(override_dir))) == str(override_dir.resolve())
+        assert user_paths.resolve_user_config_directory(_FakeSettings(str(override_dir))) == str(
+            override_dir.resolve()
+        )
 
-    def test_default_user_config_directory_uses_standard_config_root(self, monkeypatch, tmp_path) -> None:
-        monkeypatch.setattr(user_paths, "get_user_config_root", lambda: str(tmp_path / "SurveyController"))
+    def test_default_user_config_directory_uses_standard_config_root(
+        self, monkeypatch, tmp_path
+    ) -> None:
+        monkeypatch.setattr(
+            user_paths, "get_user_config_root", lambda: str(tmp_path / "SurveyController")
+        )
 
-        assert user_paths.get_default_user_config_directory() == str(tmp_path / "SurveyController" / "configs")
+        assert user_paths.get_default_user_config_directory() == str(
+            tmp_path / "SurveyController" / "configs"
+        )
 
     def test_default_runtime_config_path_follows_selected_config_directory(
         self,

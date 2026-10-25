@@ -60,7 +60,7 @@ class TaskRegistry:
         cancelled = len(pending) - len(still_pending)
         if cancelled:
             logging.warning("关闭时已取消 %d 个未完成后台任务", cancelled)
-        return len(still_pending)
+        return len(pending)
 
 
 __all__ = ["TaskRegistry"]

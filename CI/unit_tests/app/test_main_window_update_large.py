@@ -305,7 +305,9 @@ class MainWindowUpdateLargeTests:
             "app_settings",
             lambda: SimpleNamespace(value=lambda _key: True),
         )
-        monkeypatch.setattr(update_module, "get_bool_from_qsettings", lambda value, default: bool(value))
+        monkeypatch.setattr(
+            update_module, "get_bool_from_qsettings", lambda value, default: bool(value)
+        )
         window._check_update_on_startup()
         assert window._startup_update_check_timer is not None
         assert window._startup_update_check_timer.started_with == [800]
@@ -363,7 +365,9 @@ class MainWindowUpdateLargeTests:
         assert "unknown" in calls
         assert "check-preview" in calls
 
-    def test_title_bar_status_container_mount_and_clear(self, monkeypatch: pytest.MonkeyPatch) -> None:
+    def test_title_bar_status_container_mount_and_clear(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
         self._patch_widget_deps(monkeypatch)
         window = _FakeUpdateWindow()
 
@@ -380,7 +384,9 @@ class MainWindowUpdateLargeTests:
         assert badge.deleted == 1
         assert cast(Any, container).visible is False
 
-    def test_placeholder_and_badges_render_without_real_qt(self, monkeypatch: pytest.MonkeyPatch) -> None:
+    def test_placeholder_and_badges_render_without_real_qt(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
         self._patch_widget_deps(monkeypatch)
         window = _FakeUpdateWindow()
 
@@ -405,8 +411,16 @@ class MainWindowUpdateLargeTests:
         window = _FakeUpdateWindow()
         worker_module = SimpleNamespace(UpdateCheckWorker=_FakeWorker)
         thread_instances: list[_FakeThread] = []
-        monkeypatch.setattr(update_module, "QThread", lambda *_args, **_kwargs: thread_instances.append(_FakeThread()) or thread_instances[-1])
-        monkeypatch.setitem(__import__("sys").modules, "software.ui.workers.update_worker", worker_module)
+        monkeypatch.setattr(
+            update_module,
+            "QThread",
+            lambda *_args, **_kwargs: (
+                thread_instances.append(_FakeThread()) or thread_instances[-1]
+            ),
+        )
+        monkeypatch.setitem(
+            __import__("sys").modules, "software.ui.workers.update_worker", worker_module
+        )
         shown: list[str] = []
         cleared: list[str] = []
         window._show_update_checking_placeholder = lambda: shown.append("show")
@@ -424,7 +438,9 @@ class MainWindowUpdateLargeTests:
         assert thread_instances[0].quitted == 1
         assert thread_instances[0].wait_calls == [2500]
 
-    def test_update_notification_delegates_to_release_prompt(self, monkeypatch: pytest.MonkeyPatch) -> None:
+    def test_update_notification_delegates_to_release_prompt(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
         window = _FakeUpdateWindow()
         from software.update import updater
 

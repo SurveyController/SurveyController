@@ -32,7 +32,9 @@ def test_qsettings_adapter_keeps_existing_keys_and_python_values(tmp_path):
     old.setValue("ai/provider", "custom")
     old.setValue("window_topmost", True)
     old.sync()
-    preferences = PreferencesService(QSettingsPreferences(QSettings(path, QSettings.Format.IniFormat)))
+    preferences = PreferencesService(
+        QSettingsPreferences(QSettings(path, QSettings.Format.IniFormat))
+    )
     assert preferences.get("config_directory") == "D:/已有配置"
     assert preferences.get("ai/provider") == "custom"
     preferences.set("auto_save_log_retention_count", 20)
@@ -43,7 +45,10 @@ def test_qsettings_adapter_keeps_existing_keys_and_python_values(tmp_path):
 def test_configuration_adapter_reads_existing_python_json_and_preserves_strict_errors(tmp_path):
     path = tmp_path / "saved.json"
     config = RuntimeConfig(url="https://wj.qq.com/s2/demo", target=7, threads=3)
-    path.write_text("// existing Python config\n" + json.dumps(serialize_runtime_config(config)), encoding="utf-8")
+    path.write_text(
+        "// existing Python config\n" + json.dumps(serialize_runtime_config(config)),
+        encoding="utf-8",
+    )
     service = ConfigurationService(JsonConfigRepository())
     loaded = service.load(str(path), strict=True)
     assert loaded.target == 7
@@ -59,23 +64,30 @@ def test_configuration_adapter_reads_existing_python_json_and_preserves_strict_e
 
 def test_ai_adapter_uses_injected_preferences_and_existing_keys():
     from software.app.ai_settings_adapter import PythonAiSettingsAdapter
+
     store = FakePreferences()
     store.setValue("ai/provider", "custom")
-    store.setValue("ai/api_key", "fake-key")
+    store.setValue("ai/api_key", "legacy-key")
     store.setValue("ai/base_url", "https://example.test/v1")
     store.setValue("ai/model", "test-model")
-    create_application_dependencies(runtime_engine=FakeEngine(), cleanup_runner=FakeCleanup(), preference_store=store)
+    create_application_dependencies(
+        runtime_engine=FakeEngine(), cleanup_runner=FakeCleanup(), preference_store=store
+    )
     adapter = PythonAiSettingsAdapter()
+    assert adapter.get_settings()["api_key"] == ""
+    adapter.save_settings(api_key="fake-key")
     assert adapter.get_settings()["api_key"] == "fake-key"
     adapter.save_settings(model="next-model")
     assert store.values["ai/model"] == "next-model"
     adapter.reset_settings()
-    assert not any(key.startswith("ai/") for key in store.values)
+    assert store.values == {"ai/api_key": "legacy-key"}
 
 
 def test_qt_controller_preserves_queued_snapshot_and_event_order(qtbot):
     dependencies = create_application_dependencies(
-        runtime_engine=FakeEngine(), cleanup_runner=FakeCleanup(), preference_store=FakePreferences(),
+        runtime_engine=FakeEngine(),
+        cleanup_runner=FakeCleanup(),
+        preference_store=FakePreferences(),
     )
     controller = RunController(dependencies=dependencies)
     observed = []
@@ -83,7 +95,9 @@ def test_qt_controller_preserves_queued_snapshot_and_event_order(qtbot):
     controller.controllerEvent.connect(lambda event: observed.append(("event", event)))
 
     def worker():
-        controller._command_service.apply_runtime_patch({"phase": "initializing", "initialization": {"active": True, "stage": "preparing"}})
+        controller._command_service.apply_runtime_patch(
+            {"phase": "initializing", "initialization": {"active": True, "stage": "preparing"}}
+        )
         controller._command_service.emit_event(event_payload("cleanup_finished"))
 
     thread = threading.Thread(target=worker)
@@ -126,7 +140,9 @@ def test_controller_submits_random_ip_health_check_to_engine(monkeypatch) -> Non
 
 def test_qt_controller_responds_to_application_interaction(qtbot):
     dependencies = create_application_dependencies(
-        runtime_engine=FakeEngine(), cleanup_runner=FakeCleanup(), preference_store=FakePreferences(),
+        runtime_engine=FakeEngine(),
+        cleanup_runner=FakeCleanup(),
+        preference_store=FakePreferences(),
     )
     controller = RunController(dependencies=dependencies)
     events = []
@@ -140,18 +156,34 @@ def test_qt_controller_responds_to_application_interaction(qtbot):
     controller._command_service.shutdown_for_close(0)
 
 
-@pytest.mark.parametrize("phase,prefix", [
-    ("running", "已提交"), ("paused", "已暂停"), ("stopping", "正在停止"),
-    ("finished", "已提交"), ("failed", "已提交"),
-])
+@pytest.mark.parametrize(
+    "phase,prefix",
+    [
+        ("running", "已提交"),
+        ("paused", "已暂停"),
+        ("stopping", "正在停止"),
+        ("finished", "已提交"),
+        ("failed", "已提交"),
+    ],
+)
 def test_semantic_snapshot_maps_to_existing_page_data(phase, prefix):
     state = RunStateStore()
-    state.apply_runtime_patch({
-        "phase": phase, "running": phase in {"running", "paused", "stopping"},
-        "paused": phase == "paused", "stopping": phase == "stopping", "pause_reason": "等待",
-        "progress": {"current": 2, "target": 5, "consecutive_failures": 1, "device_quota_fail_count": 1},
-        "random_ip": {"loading": True, "loading_stage": "syncing_quota"},
-    })
+    state.apply_runtime_patch(
+        {
+            "phase": phase,
+            "running": phase in {"running", "paused", "stopping"},
+            "paused": phase == "paused",
+            "stopping": phase == "stopping",
+            "pause_reason": "等待",
+            "progress": {
+                "current": 2,
+                "target": 5,
+                "consecutive_failures": 1,
+                "device_quota_fail_count": 1,
+            },
+            "random_ip": {"loading": True, "loading_stage": "syncing_quota"},
+        }
+    )
     view = runtime_view(state.get_runtime_snapshot())
     assert view["status_text"].startswith(f"{prefix} 2/5 份")
     assert "设备限制拦截 1 次" in view["status_text"]
@@ -159,7 +191,10 @@ def test_semantic_snapshot_maps_to_existing_page_data(phase, prefix):
     if phase == "paused":
         assert view["status_text"].endswith(" | 等待")
     assert "status_text" not in state.get_runtime_snapshot()
-    assert survey_view({"phase": "error", "error_code": "url_required"})["parse_error"] == "请填写问卷链接"
+    assert (
+        survey_view({"phase": "error", "error_code": "url_required"})["parse_error"]
+        == "请填写问卷链接"
+    )
 
 
 def test_dispatch_signal_failure_cancels_queued_work_and_never_runs_on_worker(qtbot):

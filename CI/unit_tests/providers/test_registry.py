@@ -8,7 +8,11 @@ from software.core.task import ExecutionConfig, ExecutionState
 from software.network.session_policy import SubmitProxyUnavailableError
 from software.providers import deprecated_browser, registry
 from software.providers.adapter_base import CallableProviderAdapter, ProviderAdapterHooks
-from software.providers.common import SURVEY_PROVIDER_CREDAMO, SURVEY_PROVIDER_QQ, SURVEY_PROVIDER_WJX
+from software.providers.common import (
+    SURVEY_PROVIDER_CREDAMO,
+    SURVEY_PROVIDER_QQ,
+    SURVEY_PROVIDER_WJX,
+)
 from software.providers.contracts import (
     ProviderErrorCategory,
     ProviderParseResult,
@@ -58,7 +62,9 @@ async def test_fill_survey_uses_provider_run_context_and_selected_adapter() -> N
     state = ExecutionState(config=ExecutionConfig(survey_provider=SURVEY_PROVIDER_WJX))
     status_updates: list[tuple[str, bool]] = []
 
-    def _capture_update_thread_status(thread_name: str, status_text: str, *, running: bool | None = None) -> None:
+    def _capture_update_thread_status(
+        thread_name: str, status_text: str, *, running: bool | None = None
+    ) -> None:
         del thread_name
         status_updates.append((status_text, bool(running)))
 
@@ -100,7 +106,9 @@ async def test_fill_survey_http_routes_credamo_adapter() -> None:
         patch.object(
             adapter,
             "fill_survey_http_async",
-            new=AsyncMock(return_value=ProviderSubmissionResult(provider="credamo", submitted=True)),
+            new=AsyncMock(
+                return_value=ProviderSubmissionResult(provider="credamo", submitted=True)
+            ),
         ) as fill_mock,
         patch.object(registry, "provider_run_context", fake_provider_run_context),
     ):
@@ -252,7 +260,9 @@ async def test_handle_submission_verification_detected_uses_ctx_config_provider(
     ctx = SimpleNamespace(config=SimpleNamespace(survey_provider=SURVEY_PROVIDER_CREDAMO))
     adapter = registry._PROVIDER_REGISTRY[SURVEY_PROVIDER_CREDAMO]
 
-    with patch.object(adapter, "handle_submission_verification_detected_async", new=AsyncMock()) as handler_mock:
+    with patch.object(
+        adapter, "handle_submission_verification_detected_async", new=AsyncMock()
+    ) as handler_mock:
         await deprecated_browser.handle_submission_verification_detected(ctx, "stop")
 
     handler_mock.assert_awaited_once_with(ctx, "stop")
@@ -262,7 +272,9 @@ async def test_wait_for_submission_verification_routes_timeout_and_stop_signal()
     adapter = registry._PROVIDER_REGISTRY[SURVEY_PROVIDER_QQ]
     driver = object()
 
-    with patch.object(adapter, "wait_for_submission_verification_async", new=AsyncMock(return_value=True)) as wait_mock:
+    with patch.object(
+        adapter, "wait_for_submission_verification_async", new=AsyncMock(return_value=True)
+    ) as wait_mock:
         result = await deprecated_browser.wait_for_submission_verification(
             driver,
             provider=SURVEY_PROVIDER_QQ,
@@ -279,7 +291,9 @@ async def test_attempt_submission_recovery_routes_to_selected_provider() -> None
     driver = object()
     ctx = object()
 
-    with patch.object(adapter, "attempt_submission_recovery_async", new=AsyncMock(return_value=True)) as recovery_mock:
+    with patch.object(
+        adapter, "attempt_submission_recovery_async", new=AsyncMock(return_value=True)
+    ) as recovery_mock:
         result = await deprecated_browser.attempt_submission_recovery(
             driver,
             ctx,
@@ -299,7 +313,9 @@ def test_registry_exports_only_http_provider_entrypoints() -> None:
 
 
 async def test_provider_hook_rejects_non_async_return_value() -> None:
-    with patch("surveycore.providers.hooks._load_hook", return_value=lambda *_args, **_kwargs: True):
+    with patch(
+        "surveycore.providers.hooks._load_hook", return_value=lambda *_args, **_kwargs: True
+    ):
         hook = build_fill_http_hook(("fake.module", "sync_http_fill"))
         try:
             await hook(ExecutionConfig(), ExecutionState())

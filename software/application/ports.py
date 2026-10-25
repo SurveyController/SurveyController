@@ -7,6 +7,7 @@ from typing import TYPE_CHECKING, Any, Callable, Coroutine, Protocol
 
 from software.application.events import ApplicationEvent
 from software.application.interactions import InteractionRequest
+
 if TYPE_CHECKING:
     from software.core.engine.execution_artifacts import PreparedExecutionArtifacts
     from software.core.config.schema import RuntimeConfig
@@ -36,7 +37,9 @@ class RuntimeEnginePort(Protocol):
     def resume_run(self) -> None: ...
 
     def submit_ui_task(
-        self, task_name: str, coro_factory: Callable[[], Coroutine[Any, Any, Any]],
+        self,
+        task_name: str,
+        coro_factory: Callable[[], Coroutine[Any, Any, Any]],
     ) -> concurrent.futures.Future[Any]: ...
 
     def shutdown(self, *, timeout: float = 5.0) -> None: ...

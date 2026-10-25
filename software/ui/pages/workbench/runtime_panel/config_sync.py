@@ -153,7 +153,9 @@ class RuntimeConfigSyncMixin:
                 threads=max(self.MIN_THREADS, int(cfg.threads or self.MIN_THREADS)),
                 random_ip_enabled=bool(cfg.random_ip_enabled),
                 survey_provider=str(getattr(cfg, "survey_provider", "wjx") or "wjx"),
-                proxy_source=str(getattr(cfg, "proxy_source", PROXY_SOURCE_DEFAULT) or PROXY_SOURCE_DEFAULT),
+                proxy_source=str(
+                    getattr(cfg, "proxy_source", PROXY_SOURCE_DEFAULT) or PROXY_SOURCE_DEFAULT
+                ),
                 submit_interval=getattr(cfg, "submit_interval", (0, 0)),
                 answer_duration=getattr(cfg, "answer_duration", (60, 120)),
                 answer_datetime_window=getattr(cfg, "answer_datetime_window", ("", "")),

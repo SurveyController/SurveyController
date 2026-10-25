@@ -188,7 +188,9 @@ class ProviderContractsTests:
             }
         )
         plain_meta = ensure_survey_question_meta({"num": 2, "title": "普通题"})
-        unknown_meta = ensure_survey_question_meta({"num": 3, "title": "未知跳题", "has_jump": True})
+        unknown_meta = ensure_survey_question_meta(
+            {"num": 3, "title": "未知跳题", "has_jump": True}
+        )
 
         assert jump_meta.logic_parse_status == LOGIC_PARSE_STATUS_COMPLETE
         assert plain_meta.logic_parse_status == LOGIC_PARSE_STATUS_NONE
@@ -202,7 +204,9 @@ class ProviderContractsTests:
             (SURVEY_PROVIDER_CREDAMO, _build_credamo_question),
         ],
     )
-    def test_parser_outputs_share_same_normalized_contract(self, provider: str, question_builder) -> None:
+    def test_parser_outputs_share_same_normalized_contract(
+        self, provider: str, question_builder
+    ) -> None:
         question = question_builder()
 
         definition = build_survey_definition(provider, "  解析标题  ", [question])

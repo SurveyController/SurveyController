@@ -22,13 +22,19 @@ class AsyncRuntimeEngineStartupTests:
 
         assert engine.thread is thread
 
-    def test_start_initializes_background_loop_and_shutdown_clears_handles(self, monkeypatch) -> None:
+    def test_start_initializes_background_loop_and_shutdown_clears_handles(
+        self, monkeypatch
+    ) -> None:
         engine = build_engine()
         fake_loop = FakeLoop()
         real_all_tasks = asyncio.all_tasks
         monkeypatch.setattr(asyncio, "new_event_loop", lambda: fake_loop)
         monkeypatch.setattr(asyncio, "set_event_loop", lambda loop: None)
-        monkeypatch.setattr(asyncio, "all_tasks", lambda loop=None: set() if loop is fake_loop else real_all_tasks(loop))
+        monkeypatch.setattr(
+            asyncio,
+            "all_tasks",
+            lambda loop=None: set() if loop is fake_loop else real_all_tasks(loop),
+        )
         monkeypatch.setattr(async_engine.threading, "Thread", FakeThread)
         FakeThread.created.clear()
 

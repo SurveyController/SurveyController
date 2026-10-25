@@ -38,7 +38,7 @@ MULTIPLE_OPTION_WEIGHT_MAX = 100
 
 
 def _get_entry_type_label(entry: QuestionEntry) -> str:
-    
+
     if bool(getattr(entry, "is_location", False)):
         return TYPE_LABEL_MAP["location"]
     return TYPE_LABEL_MAP.get(entry.question_type, entry.question_type)

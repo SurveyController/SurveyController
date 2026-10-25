@@ -79,7 +79,9 @@ def test_format_random_ip_error_maps_backend_details(detail: str, expected: str)
 
 
 class RandomIPSessionAuthTests:
-    def test_ensure_loaded_builds_stable_device_id_and_reads_quota_from_settings(self, patch_attrs) -> None:
+    def test_ensure_loaded_builds_stable_device_id_and_reads_quota_from_settings(
+        self, patch_attrs
+    ) -> None:
         settings = _Settings()
         settings.values = {
             auth._settings_key("user_id"): "12",
@@ -172,7 +174,11 @@ class RandomIPSessionAuthTests:
 
     def test_clear_session_preserves_device_id_and_removes_quota_fields(self, patch_attrs) -> None:
         settings = _Settings()
-        _reset_auth_state(RandomIPSession(device_id="device-3", user_id=10, total_quota=1, used_quota=1, quota_known=True))
+        _reset_auth_state(
+            RandomIPSession(
+                device_id="device-3", user_id=10, total_quota=1, used_quota=1, quota_known=True
+            )
+        )
         patch_attrs((auth, "_get_settings", lambda: settings))
 
         auth.clear_session(reason="unit")
@@ -190,7 +196,9 @@ class RandomIPSessionAuthTests:
         session = auth._parse_session_payload(
             {"user_id": "15", "used_quota": 4},
             device_id="device-4",
-            fallback_session=RandomIPSession(user_id=15, remaining_quota=8, total_quota=10, used_quota=2, quota_known=True),
+            fallback_session=RandomIPSession(
+                user_id=15, remaining_quota=8, total_quota=10, used_quota=2, quota_known=True
+            ),
         )
 
         assert session.user_id == 15
@@ -199,7 +207,9 @@ class RandomIPSessionAuthTests:
         assert session.used_quota == 4.0
 
     def test_extract_proxy_builds_request_body_and_parses_batch_payload(self, patch_attrs) -> None:
-        _reset_auth_state(RandomIPSession(device_id="device-5", user_id=33, total_quota=10, quota_known=True))
+        _reset_auth_state(
+            RandomIPSession(device_id="device-5", user_id=33, total_quota=10, quota_known=True)
+        )
         posted: list[dict[str, object]] = []
 
         async def fake_post(_url: str, *, json_body: dict[str, object], timeout: float = 10):
@@ -222,7 +232,9 @@ class RandomIPSessionAuthTests:
         patch_attrs((auth, "_apost_json", fake_post))
 
         payload = asyncio.run(
-            auth.extract_proxy_async(minute=3, pool="quality", area="110100", num=2, upstream="benefit")
+            auth.extract_proxy_async(
+                minute=3, pool="quality", area="110100", num=2, upstream="benefit"
+            )
         )
 
         assert posted == [

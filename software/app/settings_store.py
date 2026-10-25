@@ -11,7 +11,7 @@ CONFIG_DIRECTORY_SETTING_KEY = "config_directory"
 
 
 def configure_qt_application_metadata() -> None:
-    
+
     from PySide6.QtCore import QCoreApplication
 
     if not QCoreApplication.organizationName():
@@ -23,7 +23,7 @@ def configure_qt_application_metadata() -> None:
 
 
 def app_settings() -> Any:
-    
+
     from PySide6.QtCore import QSettings
 
     isolated_settings_file = os.environ.get(_SETTINGS_FILE_ENV)
@@ -34,7 +34,7 @@ def app_settings() -> Any:
 
 
 def get_bool_from_qsettings(value: Any, default: bool = False) -> bool:
-    
+
     if value is None:
         return default
     if isinstance(value, bool):
@@ -51,7 +51,7 @@ def get_int_from_qsettings(
     minimum: int | None = None,
     maximum: int | None = None,
 ) -> int:
-    
+
     try:
         if value is None or value == "":
             result = int(default)
@@ -67,9 +67,8 @@ def get_int_from_qsettings(
 
 
 def get_str_from_qsettings(value: Any, default: str = "") -> str:
-    
+
     if value is None:
         return default
     text = str(value).strip()
     return text or default
-

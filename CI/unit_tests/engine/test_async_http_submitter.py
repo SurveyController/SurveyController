@@ -12,7 +12,9 @@ from software.providers.contracts import (
 
 
 @pytest.mark.asyncio
-async def test_submit_preserves_provider_failure_category_and_exception(monkeypatch, caplog) -> None:
+async def test_submit_preserves_provider_failure_category_and_exception(
+    monkeypatch, caplog
+) -> None:
     config = ExecutionConfig(survey_provider="wjx")
     exception = RuntimeError("代理不可用")
     failure = ProviderFailure(

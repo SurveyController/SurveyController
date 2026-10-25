@@ -15,4 +15,3 @@ __all__ = [
     "get_status",
     "test_custom_proxy_api",
 ]
-

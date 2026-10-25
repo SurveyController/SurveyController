@@ -10,8 +10,6 @@ MAX_ANSWER_DURATION_SECONDS = 30 * 60
 
 
 class RuntimeSettingsState:
-    
-
     DEFAULTS: Dict[str, Any] = {
         "target": 1,
         "threads": 1,

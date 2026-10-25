@@ -23,8 +23,6 @@ HTTP_RUNTIME_PROVIDERS = {
 
 
 class AsyncHttpSubmitter:
-    
-
     def __init__(self, *, config: ExecutionConfig, state: ExecutionState, slot_label: str) -> None:
         self.config = config
         self.state = state

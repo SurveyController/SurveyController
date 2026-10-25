@@ -15,7 +15,9 @@ from .async_runtime_loop_fakes import _build_runner
 
 class AsyncRuntimeProxyRetryTests:
     @pytest.mark.asyncio
-    async def test_run_random_proxy_enabled_acquires_proxy_only_at_submit(self, monkeypatch) -> None:
+    async def test_run_random_proxy_enabled_acquires_proxy_only_at_submit(
+        self, monkeypatch
+    ) -> None:
         config = ExecutionConfig(
             url="https://www.wjx.cn/vm/demo.aspx",
             survey_provider="wjx",
@@ -39,7 +41,9 @@ class AsyncRuntimeProxyRetryTests:
 
         monkeypatch.setattr(runner.http_submitter, "submit", fake_submit)
         monkeypatch.setattr(runner, "_prepare_round_context", fake_prepare)
-        monkeypatch.setattr(runner, "_select_session_proxy_and_ua", lambda: asyncio.sleep(0, result=(None, "UA")))
+        monkeypatch.setattr(
+            runner, "_select_session_proxy_and_ua", lambda: asyncio.sleep(0, result=(None, "UA"))
+        )
 
         await runner.run()
 
@@ -71,8 +75,13 @@ class AsyncRuntimeProxyRetryTests:
 
         monkeypatch.setattr(runner.http_submitter, "submit", fake_submit)
         monkeypatch.setattr(runner, "_prepare_round_context", lambda: asyncio.sleep(0, result=True))
-        monkeypatch.setattr(runner, "_select_session_proxy_and_ua", lambda: asyncio.sleep(0, result=(None, "UA")))
-        monkeypatch.setattr(runtime_loop, "_record_bad_proxy_and_maybe_pause", lambda *_args, **_kwargs: False)
+        monkeypatch.setattr(
+            runner, "_select_session_proxy_and_ua", lambda: asyncio.sleep(0, result=(None, "UA"))
+        )
+        monkeypatch.setattr(
+            runtime_loop, "_record_bad_proxy_and_maybe_pause", lambda *_args, **_kwargs: False
+        )
+
         async def fake_acquire_submit_proxy(*_args, **_kwargs):
             return SimpleNamespace(address=None, provider="unknown")
 
@@ -90,7 +99,9 @@ class AsyncRuntimeProxyRetryTests:
         assert scheduler.release_calls[0]["requeue"] is True
 
     @pytest.mark.asyncio
-    async def test_run_submission_verification_with_random_proxy_retries_next_ip(self, monkeypatch) -> None:
+    async def test_run_submission_verification_with_random_proxy_retries_next_ip(
+        self, monkeypatch
+    ) -> None:
         config = ExecutionConfig(
             url="https://www.wjx.cn/vm/demo.aspx",
             survey_provider="wjx",
@@ -102,7 +113,9 @@ class AsyncRuntimeProxyRetryTests:
         scheduler.acquire_values = [8, None]
 
         def fail_submit(**_kwargs):
-            raise SubmissionVerificationRequiredError("当前随机 IP 已被风控，正在更换随机 IP 重试。")
+            raise SubmissionVerificationRequiredError(
+                "当前随机 IP 已被风控，正在更换随机 IP 重试。"
+            )
 
         async def select_proxy():
             runner.proxy_session.proxy_address = "http://1.1.1.1:80"
@@ -118,7 +131,10 @@ class AsyncRuntimeProxyRetryTests:
         assert not ctx.stop_event.is_set()
         assert scheduler.release_calls[0]["requeue"] is True
         assert state.is_proxy_in_cooldown("http://1.1.1.1:80")
-        assert runner.stop_policy.failure_calls[0]["failure_reason"] == FailureReason.SUBMISSION_VERIFICATION_REQUIRED
+        assert (
+            runner.stop_policy.failure_calls[0]["failure_reason"]
+            == FailureReason.SUBMISSION_VERIFICATION_REQUIRED
+        )
         assert runner.stop_policy.failure_calls[0]["status_text"] == "触发验证，换IP"
         assert state.get_terminal_stop_snapshot()[0] == ""
 
@@ -133,7 +149,12 @@ class AsyncRuntimeProxyRetryTests:
         proxy_address = "http://1.1.1.1:80"
         runner.proxy_session.proxy_address = proxy_address
 
-        assert runner._handle_http_transport_error(runtime_loop.http_client.ConnectTimeout("proxy bad")) is False
+        assert (
+            runner._handle_http_transport_error(
+                runtime_loop.http_client.ConnectTimeout("proxy bad")
+            )
+            is False
+        )
 
         assert not state.is_proxy_in_cooldown(proxy_address)
         assert runner.stop_policy.failure_calls[0]["status_text"] == "代理连接失败"

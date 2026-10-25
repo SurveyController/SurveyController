@@ -158,7 +158,9 @@ class CallableProviderAdapter:
             )
         )
 
-    async def handle_submission_verification_detected_async(self, ctx: Any, stop_signal: Any) -> RuntimeActionResult:
+    async def handle_submission_verification_detected_async(
+        self, ctx: Any, stop_signal: Any
+    ) -> RuntimeActionResult:
         return ensure_runtime_action_result(
             await self._hooks.handle_submission_verification_detected(ctx, stop_signal)
         )

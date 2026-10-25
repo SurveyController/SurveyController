@@ -18,7 +18,7 @@ from software.ui.widgets.setting_cards import (
 
 
 def build_runtime_page_ui(page) -> None:
-    
+
     layout = QVBoxLayout(page.view)
     layout.setContentsMargins(24, 24, 24, 24)
     layout.setSpacing(20)

@@ -22,9 +22,7 @@ class AdaptiveFlowLayout(QLayout):
         self._h_spacing = max(0, int(hSpacing))
         self._v_spacing = max(0, int(vSpacing))
 
-    
-
-    def addItem(self, item: QLayoutItem) -> None:  
+    def addItem(self, item: QLayoutItem) -> None:
         self._items.append(item)
 
     def count(self) -> int:
@@ -68,7 +66,6 @@ class AdaptiveFlowLayout(QLayout):
         if not self._items:
             return QSize(width, height)
 
-        
         max_min_height = 0
         for item in self._items:
             size = item.minimumSize()
@@ -80,8 +77,6 @@ class AdaptiveFlowLayout(QLayout):
 
     def invalidate(self) -> None:
         super().invalidate()
-
-    
 
     def _effective_rect(self, rect: QRect) -> QRect:
         margins = self.contentsMargins()
@@ -100,8 +95,6 @@ class AdaptiveFlowLayout(QLayout):
         if available_width <= 0:
             return 1
 
-        
-        
         cols = (available_width + self._h_spacing) // (self._min_item_width + self._h_spacing)
         return max(1, int(cols))
 
@@ -113,11 +106,9 @@ class AdaptiveFlowLayout(QLayout):
         cols = self._column_count(r.width())
         rows = int(ceil(len(self._items) / cols))
 
-        
         total_spacing = self._h_spacing * (cols - 1)
         item_width = r.width() if cols == 1 else max(1, (r.width() - total_spacing) // cols)
 
-        
         row_heights: list[int] = [0] * rows
         for idx, item in enumerate(self._items):
             row = idx // cols
@@ -125,7 +116,6 @@ class AdaptiveFlowLayout(QLayout):
             min_h = item.minimumSize().height()
             row_heights[row] = max(row_heights[row], max(hint_h, min_h))
 
-        
         y = r.y()
         for row in range(rows):
             x = r.x()
@@ -146,7 +136,6 @@ class AdaptiveFlowLayout(QLayout):
             if row != rows - 1:
                 y += self._v_spacing
 
-        
         margins = self.contentsMargins()
         top = margins.top()
         bottom = margins.bottom()

@@ -198,7 +198,9 @@ def build_dashboard_page_ui(page: Any) -> None:
     page.random_ip_status_dot.setFixedSize(10, 10)
     page.random_ip_status_label = BodyLabel("", page.random_ip_status_row)
     page.random_ip_status_label.setStyleSheet("color: #6b6b6b; font-size: 12px;")
-    random_ip_status_layout.addWidget(page.random_ip_status_spinner, 0, Qt.AlignmentFlag.AlignVCenter)
+    random_ip_status_layout.addWidget(
+        page.random_ip_status_spinner, 0, Qt.AlignmentFlag.AlignVCenter
+    )
     random_ip_status_layout.addWidget(page.random_ip_status_dot, 0, Qt.AlignmentFlag.AlignVCenter)
     random_ip_status_layout.addWidget(page.random_ip_status_label, 0, Qt.AlignmentFlag.AlignVCenter)
     quota_layout.addWidget(page.random_ip_status_row, 0, Qt.AlignmentFlag.AlignHCenter)
@@ -333,7 +335,9 @@ def build_dashboard_page_ui(page: Any) -> None:
     progress_title_row.addWidget(SubtitleLabel("会话进度", page.thread_view_progress_card))
     progress_title_row.addStretch(1)
     progress_card_layout.addLayout(progress_title_row)
-    progress_card_layout.addWidget(page._build_thread_progress_panel(page.thread_view_progress_card), 1)
+    progress_card_layout.addWidget(
+        page._build_thread_progress_panel(page.thread_view_progress_card), 1
+    )
 
     page.thread_view_stack.addWidget(page.thread_view_question_card)
     page.thread_view_stack.addWidget(page.thread_view_progress_card)

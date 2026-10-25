@@ -8,7 +8,7 @@ import sys
 import textwrap
 
 from PySide6.QtCore import QCoreApplication, QEvent
-from PySide6.QtWidgets import QApplication, QScrollArea, QWidget
+from PySide6.QtWidgets import QApplication, QWidget
 from qfluentwidgets import ScrollArea as FluentScrollArea
 
 from CI.unit_tests.app.test_workbench_pages_smoke import _FakeController, _patch_page_dependencies
@@ -116,7 +116,9 @@ def test_feature_pages_do_not_import_native_qt_controls_directly() -> None:
     assert violations == {}
 
 
-def test_workbench_pages_fit_minimum_window_width_without_horizontal_overflow(monkeypatch, qtbot) -> None:
+def test_workbench_pages_fit_minimum_window_width_without_horizontal_overflow(
+    monkeypatch, qtbot
+) -> None:
     _patch_page_dependencies(monkeypatch)
     controller = _FakeController()
     runtime_page = RuntimePage(controller)
@@ -124,7 +126,9 @@ def test_workbench_pages_fit_minimum_window_width_without_horizontal_overflow(mo
     reverse_fill_page = ReverseFillPage(controller)
 
     state = WorkbenchState()
-    state.set_entries([], [SurveyQuestionMeta(num=1, title="Q1", type_code="3", option_texts=["A", "B"])])
+    state.set_entries(
+        [], [SurveyQuestionMeta(num=1, title="Q1", type_code="3", option_texts=["A", "B"])]
+    )
     dashboard_page = DashboardPage(controller, state, runtime_page, strategy_page)
 
     for page in (runtime_page, strategy_page, reverse_fill_page, dashboard_page):

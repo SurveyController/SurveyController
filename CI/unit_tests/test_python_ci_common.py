@@ -7,7 +7,9 @@ import pytest
 from CI.python_checks import common
 
 
-def test_run_unicode_escape_check_reports_ci_unicode_escape(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_run_unicode_escape_check_reports_ci_unicode_escape(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     ci_dir = tmp_path / "CI"
     ci_dir.mkdir()
     source_path = ci_dir / "demo.py"
@@ -51,7 +53,7 @@ def test_run_type_ignore_check_reports_suppression_comments(tmp_path: Path, monk
     assert [(issue["row"], issue["column"]) for issue in issues] == [
         (1, 14),
         (2, 3),
-        (3, 13),
+        (3, 14),
     ]
 
 

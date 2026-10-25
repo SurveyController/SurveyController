@@ -54,7 +54,7 @@ async def agenerate_answer(
     blank_count: Optional[int] = None,
     ctx: ExecutionState | None = None,
 ) -> Union[str, List[str]]:
-    
+
     config = get_ai_settings()
     readiness_error = get_ai_readiness_error(config)
     if readiness_error:
@@ -75,21 +75,33 @@ async def agenerate_answer(
             raise RuntimeError("自定义模式需要配置 Base URL")
         if not model:
             raise RuntimeError("自定义模式需要配置模型名称")
-        resolved_protocol, request_url, has_explicit_endpoint = _resolve_custom_endpoint(base_url, api_protocol)
+        resolved_protocol, request_url, has_explicit_endpoint = _resolve_custom_endpoint(
+            base_url, api_protocol
+        )
         if resolved_protocol == "responses":
-            return await acall_responses_api(request_url, api_key, model, question_title, system_prompt)
+            return await acall_responses_api(
+                request_url, api_key, model, question_title, system_prompt
+            )
         try:
-            return await acall_chat_completions(request_url, api_key, model, question_title, system_prompt)
+            return await acall_chat_completions(
+                request_url, api_key, model, question_title, system_prompt
+            )
         except Exception as exc:
-            if has_explicit_endpoint or api_protocol != "auto" or not _is_endpoint_mismatch_error(exc):
+            if (
+                has_explicit_endpoint
+                or api_protocol != "auto"
+                or not _is_endpoint_mismatch_error(exc)
+            ):
                 raise
             fallback_url = f"{_normalize_endpoint_url(base_url)}{_RESPONSES_SUFFIX}"
-            return await acall_responses_api(fallback_url, api_key, model, question_title, system_prompt)
+            return await acall_responses_api(
+                fallback_url, api_key, model, question_title, system_prompt
+            )
 
     provider_config = AI_PROVIDERS.get(provider)
     if not provider_config:
         raise RuntimeError(f"不支持的 AI 服务提供商: {provider}")
-    base_url = provider_config["base_url"]
+    base_url = str(provider_config["base_url"])
     model = str(config.get("model") or provider_config["default_model"])
 
     request_url = f"{_normalize_endpoint_url(base_url)}{_CHAT_COMPLETIONS_SUFFIX}"
@@ -97,7 +109,7 @@ async def agenerate_answer(
 
 
 async def atest_connection() -> str:
-    
+
     try:
         provider = get_ai_settings().get("provider")
         logger.info("AI 连接测试开始 | provider=%s", provider)

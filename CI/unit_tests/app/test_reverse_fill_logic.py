@@ -16,10 +16,26 @@ from software.ui.pages.workbench.reverse_fill import logic
 
 class ReverseFillLogicTests:
     def test_status_and_question_type_labels_cover_known_and_unknown_values(self) -> None:
-        assert logic.status_label_for_plan(SimpleNamespace(status=REVERSE_FILL_STATUS_REVERSE)) == "正常"
-        assert logic.status_label_for_plan(SimpleNamespace(status=REVERSE_FILL_STATUS_FALLBACK, fallback_resolved=True)) == "已处理"
-        assert logic.status_label_for_plan(SimpleNamespace(status=REVERSE_FILL_STATUS_FALLBACK, fallback_ready=True)) == "可回退"
-        assert logic.status_label_for_plan(SimpleNamespace(status=REVERSE_FILL_STATUS_BLOCKED)) == "不支持"
+        assert (
+            logic.status_label_for_plan(SimpleNamespace(status=REVERSE_FILL_STATUS_REVERSE))
+            == "正常"
+        )
+        assert (
+            logic.status_label_for_plan(
+                SimpleNamespace(status=REVERSE_FILL_STATUS_FALLBACK, fallback_resolved=True)
+            )
+            == "已处理"
+        )
+        assert (
+            logic.status_label_for_plan(
+                SimpleNamespace(status=REVERSE_FILL_STATUS_FALLBACK, fallback_ready=True)
+            )
+            == "可回退"
+        )
+        assert (
+            logic.status_label_for_plan(SimpleNamespace(status=REVERSE_FILL_STATUS_BLOCKED))
+            == "不支持"
+        )
         assert logic.status_label_for_plan(SimpleNamespace(status="custom")) == "custom"
         assert logic.status_badge_level_for_label("正常") == "success"
         assert logic.status_badge_level_for_label("可回退") == "warning"

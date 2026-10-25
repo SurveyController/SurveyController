@@ -82,7 +82,9 @@ def _build_ai_batch_items_for_actions(
                 )
                 item_question_map[item_id] = question_num
 
-        option_texts = [str(item or "").strip() for item in list(getattr(question, "option_texts", []) or [])]
+        option_texts = [
+            str(item or "").strip() for item in list(getattr(question, "option_texts", []) or [])
+        ]
         for option_index, fill_value in tuple(action.option_fill_texts or ()):
             if not is_ai_option_fill_placeholder(fill_value):
                 continue
@@ -90,7 +92,9 @@ def _build_ai_batch_items_for_actions(
             option_prompt = build_ai_option_fill_prompt(
                 question_title=str(getattr(question, "title", "") or ""),
                 question_number=question_num,
-                option_text=option_texts[normalized_option_index] if normalized_option_index < len(option_texts) else "",
+                option_text=option_texts[normalized_option_index]
+                if normalized_option_index < len(option_texts)
+                else "",
             )
             option_item_id = _item_id_for_option_fill(question_num, normalized_option_index)
             items.append(
@@ -113,7 +117,9 @@ def _resolved_answers_by_question_num(
         question_num = item_question_map.get(item_id)
         if question_num is None:
             continue
-        normalized = tuple(str(item or "").strip() for item in list(answers or []) if str(item or "").strip())
+        normalized = tuple(
+            str(item or "").strip() for item in list(answers or []) if str(item or "").strip()
+        )
         if normalized:
             resolved[int(question_num)] = normalized
     return resolved
@@ -128,7 +134,9 @@ def _resolved_option_fill_answers(
         option_key = item_option_fill_map.get(item_id)
         if option_key is None:
             continue
-        normalized_answers = [str(item or "").strip() for item in list(answers or []) if str(item or "").strip()]
+        normalized_answers = [
+            str(item or "").strip() for item in list(answers or []) if str(item or "").strip()
+        ]
         if normalized_answers:
             resolved[option_key] = normalized_answers[0]
     return resolved
@@ -214,7 +222,9 @@ def _rebuild_selected_texts(
     question: SurveyQuestionMeta | None,
     fill_map: Dict[int, str],
 ) -> tuple[str, ...]:
-    option_texts = [str(item or "").strip() for item in list(getattr(question, "option_texts", []) or [])]
+    option_texts = [
+        str(item or "").strip() for item in list(getattr(question, "option_texts", []) or [])
+    ]
     existing = list(action.selected_texts or ())
     rebuilt: list[str] = []
     for position, option_index in enumerate(tuple(action.selected_indices or ())):
@@ -260,7 +270,9 @@ def _apply_prefilled_answers_to_actions(
                 normalized_value = str(raw_value or "").strip()
                 if is_ai_option_fill_placeholder(normalized_value):
                     normalized_value = str(
-                        resolved_option_fill_answers.get((question_num, normalized_option_index), "")
+                        resolved_option_fill_answers.get(
+                            (question_num, normalized_option_index), ""
+                        )
                     ).strip()
                     changed = True
                 if normalized_value:
@@ -292,7 +304,9 @@ async def prefill_ai_answers_for_questions(
     if not actions:
         return AIPrefillSummary()
 
-    items, item_question_map, item_option_fill_map = _build_ai_batch_items_for_actions(questions, actions)
+    items, item_question_map, item_option_fill_map = _build_ai_batch_items_for_actions(
+        questions, actions
+    )
     if not items:
         return AIPrefillSummary()
 
@@ -331,7 +345,10 @@ def assert_no_ai_placeholders_in_actions(
         values = list(action.text_values or ())
         values.extend(value for _, value in tuple(action.option_fill_texts or ()))
         values.extend(action.selected_texts or ())
-        if any(is_ai_text_placeholder(value) or is_ai_option_fill_placeholder(value) for value in values):
+        if any(
+            is_ai_text_placeholder(value) or is_ai_option_fill_placeholder(value)
+            for value in values
+        ):
             question_num = int(getattr(action, "question_num", 0) or 0)
             if question_num > 0:
                 question_nums.add(question_num)

@@ -45,7 +45,9 @@ class AsyncRuntimeEngineDispatchTests:
         engine._loop = loop
         engine._run_future = DoneFuture(done=True)
         stop_event = SimpleNamespace(set=lambda: submitted.append("stop-event"))
-        pause_event = SimpleNamespace(set=lambda: submitted.append("pause"), clear=lambda: submitted.append("resume"))
+        pause_event = SimpleNamespace(
+            set=lambda: submitted.append("pause"), clear=lambda: submitted.append("resume")
+        )
         engine._stop_event = stop_event
         engine._pause_event = pause_event
         engine._state = state
@@ -55,7 +57,9 @@ class AsyncRuntimeEngineDispatchTests:
             return returned_futures.pop(0)
 
         monkeypatch.setattr(engine, "_submit", _fake_submit)
-        monkeypatch.setattr(async_engine, "parse_survey", lambda url: asyncio.sleep(0, result=f"parsed:{url}"))
+        monkeypatch.setattr(
+            async_engine, "parse_survey", lambda url: asyncio.sleep(0, result=f"parsed:{url}")
+        )
 
         future = engine.start_run(config=config, state=state, runtime_bridge=None)
         assert future is run_future
@@ -98,7 +102,9 @@ class AsyncRuntimeEngineDispatchTests:
             pause_run=lambda reason="": calls.append(("pause_run", reason)),
             resume_run=lambda: calls.append(("resume_run", None)),
             parse_survey=lambda url: calls.append(("parse_survey", url)) or future,
-            submit_ui_task=lambda task_name, coro_factory: calls.append(("submit_ui_task", task_name)) or future,
+            submit_ui_task=lambda task_name, coro_factory: (
+                calls.append(("submit_ui_task", task_name)) or future
+            ),
             shutdown=lambda timeout=5.0: calls.append(("shutdown", timeout)),
         )
         client = AsyncEngineClient(engine=engine)

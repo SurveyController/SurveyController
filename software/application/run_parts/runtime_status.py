@@ -85,7 +85,6 @@ def monitor_runtime(
             logging.debug("派发最终运行态快照失败", exc_info=True)
 
 
-
 def publish_runtime_snapshot(service: RunApplicationService) -> None:
     if service._initializing:
         service._state_store.apply_runtime_patch(
@@ -192,7 +191,6 @@ def publish_runtime_snapshot(service: RunApplicationService) -> None:
     if should_force_cleanup:
         service._completion_cleanup_done = True
         service._schedule_cleanup()
-
 
 
 def emit_terminal_notice(service: RunApplicationService) -> None:

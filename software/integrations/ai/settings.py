@@ -57,9 +57,8 @@ _SYSTEM_PROMPT_BASE = (
 )
 
 DEFAULT_SYSTEM_PROMPT_PROVIDER = (
-    _SYSTEM_PROMPT_BASE
-    + "\n\n多项填空补充规则：\n"
-      "6. 当题目有多个空位时，按空位顺序输出一个字符串，并使用 || 分隔每个答案（示例：答案1||答案2||答案3）"
+    _SYSTEM_PROMPT_BASE + "\n\n多项填空补充规则：\n"
+    "6. 当题目有多个空位时，按空位顺序输出一个字符串，并使用 || 分隔每个答案（示例：答案1||答案2||答案3）"
 )
 
 _DEFAULT_AI_SETTINGS: Dict[str, Any] = {
@@ -121,15 +120,23 @@ def _ensure_runtime_settings() -> Dict[str, Any]:
 def _load_ai_settings_from_store() -> Dict[str, Any]:
     settings = dict(_DEFAULT_AI_SETTINGS)
     store = _get_settings_store()
-    provider = str(store.value(f"{_AI_SETTINGS_KEY_PREFIX}provider", settings["provider"]) or "deepseek").strip()
+    provider = str(
+        store.value(f"{_AI_SETTINGS_KEY_PREFIX}provider", settings["provider"]) or "deepseek"
+    ).strip()
     settings["provider"] = provider if provider in AI_PROVIDERS else "deepseek"
     # API Key is deliberately process-local. Ignore any legacy QSettings value.
-    settings["base_url"] = str(store.value(f"{_AI_SETTINGS_KEY_PREFIX}base_url", settings["base_url"]) or "").strip()
+    settings["base_url"] = str(
+        store.value(f"{_AI_SETTINGS_KEY_PREFIX}base_url", settings["base_url"]) or ""
+    ).strip()
     settings["api_protocol"] = _normalize_custom_api_protocol(
         store.value(f"{_AI_SETTINGS_KEY_PREFIX}api_protocol", settings["api_protocol"])
     )
-    settings["model"] = str(store.value(f"{_AI_SETTINGS_KEY_PREFIX}model", settings["model"]) or "").strip()
-    prompt = str(store.value(f"{_AI_SETTINGS_KEY_PREFIX}system_prompt", settings["system_prompt"]) or "").strip()
+    settings["model"] = str(
+        store.value(f"{_AI_SETTINGS_KEY_PREFIX}model", settings["model"]) or ""
+    ).strip()
+    prompt = str(
+        store.value(f"{_AI_SETTINGS_KEY_PREFIX}system_prompt", settings["system_prompt"]) or ""
+    ).strip()
     settings["system_prompt"] = (
         DEFAULT_SYSTEM_PROMPT_PROVIDER if not prompt or prompt == _SYSTEM_PROMPT_BASE else prompt
     )
@@ -148,7 +155,7 @@ def _persist_ai_settings(settings: Dict[str, Any]) -> None:
 
 
 def get_ai_settings() -> Dict[str, Any]:
-    
+
     settings = dict(_ensure_runtime_settings())
     settings["ai_mode"] = AI_MODE_PROVIDER
     provider = str(settings.get("provider") or "deepseek").strip()
@@ -187,7 +194,7 @@ def save_ai_settings(
     model: Optional[str] = None,
     system_prompt: Optional[str] = None,
 ):
-    
+
     settings = _ensure_runtime_settings()
     # The parameter remains accepted for compatibility; only provider mode runs.
     del ai_mode
@@ -216,7 +223,7 @@ def save_ai_settings(
 
 
 def reset_ai_settings() -> None:
-    
+
     global _RUNTIME_AI_SETTINGS
     store = _get_settings_store()
     for key in (
@@ -233,7 +240,7 @@ def reset_ai_settings() -> None:
 
 
 def get_ai_readiness_error(config: Optional[Dict[str, Any]] = None) -> str:
-    
+
     settings = get_ai_settings() if config is None else dict(config)
     provider = str(settings.get("provider") or "deepseek").strip() or "deepseek"
     provider_config = AI_PROVIDERS.get(provider)
@@ -250,7 +257,9 @@ def get_ai_readiness_error(config: Optional[Dict[str, Any]] = None) -> str:
         if not str(settings.get("model") or "").strip():
             missing_fields.append("模型 ID")
     else:
-        resolved_model = str(settings.get("model") or provider_config.get("default_model") or "").strip()
+        resolved_model = str(
+            settings.get("model") or provider_config.get("default_model") or ""
+        ).strip()
         if not resolved_model:
             missing_fields.append("模型 ID")
 

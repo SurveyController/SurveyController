@@ -11,7 +11,11 @@ from software.application.configuration import ConfigurationService
 from software.application.constants import STOP_FORCE_WAIT_SECONDS
 from software.application.events import ApplicationEvent, event_payload
 from software.application.ports import (
-    CleanupRunnerPort, ExecutionPreparerPort, ProxyGatewayPort, RuntimeEnginePort, UserInteractionPort,
+    CleanupRunnerPort,
+    ExecutionPreparerPort,
+    ProxyGatewayPort,
+    RuntimeEnginePort,
+    UserInteractionPort,
 )
 from software.application.interactions import InteractionKind, InteractionRequest
 from software.core.config.schema import RuntimeConfig
@@ -144,8 +148,9 @@ class RunApplicationService(RandomIpRuntimeService):
 
     def apply_runtime_patch(self, patch: Dict[str, Any]) -> None:
         self._dispatch(
-            lambda payload=copy.deepcopy(patch): self._state_store.apply_runtime_patch(payload)
-            if not self._closing else None
+            lambda payload=copy.deepcopy(patch): (
+                self._state_store.apply_runtime_patch(payload) if not self._closing else None
+            )
         )
 
     def emit_event(self, payload: ApplicationEvent) -> None:
@@ -154,10 +159,14 @@ class RunApplicationService(RandomIpRuntimeService):
     def sync_random_ip_enabled(self, enabled: bool) -> None:
         self.runtime_port.set_random_ip_enabled(bool(enabled))
         self._dispatch(
-            lambda value=bool(enabled): self._state_store.update_runtime_settings(
-                random_ip_enabled=value,
-                lock_threads=self.threads_update_locked(),
-            ) if not self._closing else None
+            lambda value=bool(enabled): (
+                self._state_store.update_runtime_settings(
+                    random_ip_enabled=value,
+                    lock_threads=self.threads_update_locked(),
+                )
+                if not self._closing
+                else None
+            )
         )
 
     def sync_runtime_settings(self, settings: Dict[str, Any]) -> None:
@@ -173,7 +182,9 @@ class RunApplicationService(RandomIpRuntimeService):
             }
         )
 
-    def load_saved_config(self, path: Optional[str] = None, *, strict: bool = False) -> RuntimeConfig:
+    def load_saved_config(
+        self, path: Optional[str] = None, *, strict: bool = False
+    ) -> RuntimeConfig:
         cfg = self._configuration_service.load(path, strict=strict)
         self._last_loaded_config = cfg
         return cfg
@@ -241,16 +252,24 @@ class RunApplicationService(RandomIpRuntimeService):
         self.running = False
         stop_signal.set()
         self._prepared_execution_artifacts = None
-        self._state_store.apply_runtime_patch({
-            "phase": "failed", "running": False, "paused": False, "stopping": False,
-            "initialization": {"active": False, "stage": ""},
-            "terminal_stop": {"category": category, "failure_reason": "", "message": detail},
-        })
+        self._state_store.apply_runtime_patch(
+            {
+                "phase": "failed",
+                "running": False,
+                "paused": False,
+                "stopping": False,
+                "initialization": {"active": False, "stage": ""},
+                "terminal_stop": {"category": category, "failure_reason": "", "message": detail},
+            }
+        )
         self._schedule_cleanup()
         self.emit_event(event_payload("run_failed", code=category, detail=detail))
 
     def _complete_preparation(
-        self, config: RuntimeConfig, prepared: PreparedExecutionArtifacts, stop_signal: threading.Event,
+        self,
+        config: RuntimeConfig,
+        prepared: PreparedExecutionArtifacts,
+        stop_signal: threading.Event,
     ) -> None:
         if self._closing or stop_signal is not self.stop_event or stop_signal.is_set():
             return
@@ -303,7 +322,9 @@ class RunApplicationService(RandomIpRuntimeService):
                 "threads": {
                     "num_threads": worker_count,
                     "per_thread_target": int(
-                        math.ceil(float(max(0, execution_config.target_num or 0)) / float(worker_count))
+                        math.ceil(
+                            float(max(0, execution_config.target_num or 0)) / float(worker_count)
+                        )
                     )
                     if int(execution_config.target_num or 0) > 0
                     else 0,
@@ -339,7 +360,9 @@ class RunApplicationService(RandomIpRuntimeService):
         self._status_snapshot_monitor_thread = monitor
         monitor.start()
 
-    def _status_snapshot_monitor_loop(self, execution_state: ExecutionState, stop_signal: threading.Event) -> None:
+    def _status_snapshot_monitor_loop(
+        self, execution_state: ExecutionState, stop_signal: threading.Event
+    ) -> None:
         monitor_runtime(self, execution_state, stop_signal)
 
     def stop_run(self) -> None:
@@ -365,8 +388,12 @@ class RunApplicationService(RandomIpRuntimeService):
             execution_state.mark_terminal_stop("engine_failed", message=str(exc))
             failure = exc
         finally:
+
             def finish() -> None:
-                if self._execution_state is not execution_state or self.stop_event is not stop_signal:
+                if (
+                    self._execution_state is not execution_state
+                    or self.stop_event is not stop_signal
+                ):
                     return
                 if failure is not None and not self._closing:
                     self._emit_event(event_payload("run_failed", code="engine_failed"))
@@ -383,11 +410,21 @@ class RunApplicationService(RandomIpRuntimeService):
                     self._starting = False
                     self._initializing = False
                     self._stopping = False
-                    self._state_store.apply_runtime_patch({
-                        "phase": "failed", "running": False, "paused": False, "stopping": False,
-                        "initialization": {"active": False, "stage": ""},
-                        "terminal_stop": {"category": "dispatch_failed", "failure_reason": "", "message": ""},
-                    }, emit=False)
+                    self._state_store.apply_runtime_patch(
+                        {
+                            "phase": "failed",
+                            "running": False,
+                            "paused": False,
+                            "stopping": False,
+                            "initialization": {"active": False, "stage": ""},
+                            "terminal_stop": {
+                                "category": "dispatch_failed",
+                                "failure_reason": "",
+                                "message": "",
+                            },
+                        },
+                        emit=False,
+                    )
                     self._schedule_cleanup()
             finally:
                 if self._monitor_thread is threading.current_thread():
@@ -447,7 +484,6 @@ class RunApplicationService(RandomIpRuntimeService):
 
     def _emit_terminal_notice_if_needed(self) -> None:
         self._runtime_projection.emit_terminal_notice()
-
 
 
 __all__ = ["RunApplicationService"]

@@ -10,7 +10,10 @@ from software.application.interactions import InteractionBroker
 from software.application.run_service import RunApplicationService
 from software.application.run_state_store import RunStateStore
 from software.core.config.schema import RuntimeConfig
-from software.core.engine.execution_artifacts import PreparedExecutionArtifacts, RuntimePreparationError
+from software.core.engine.execution_artifacts import (
+    PreparedExecutionArtifacts,
+    RuntimePreparationError,
+)
 from software.core.task import ExecutionConfig
 
 
@@ -143,9 +146,13 @@ def prepare(
     if stop_signal is not None and stop_signal.is_set():
         raise RuntimePreparationError("运行准备已取消")
     return PreparedExecutionArtifacts(
-        execution_config_template=ExecutionConfig(target_num=config.target, num_threads=config.threads),
+        execution_config_template=ExecutionConfig(
+            target_num=config.target, num_threads=config.threads
+        ),
         survey_provider=config.survey_provider,
-        question_entries=[], questions_info=[], reverse_fill_spec=None,
+        question_entries=[],
+        questions_info=[],
+        reverse_fill_spec=None,
     )
 
 
@@ -161,10 +168,14 @@ class Harness:
         self.interactions = InteractionBroker(self.requests.append)
         self.state = RunStateStore(on_runtime_snapshot_changed=self.snapshots.append)
         self.service = RunApplicationService(
-            state_store=self.state, async_engine_client=self.engine,
-            execution_preparer=preparer, proxy_gateway=FakeProxy(),
-            configuration_service=ConfigurationService(self.repository), cleanup_runner=self.cleanup,
-            interactions=self.interactions, dispatch_async=self.callbacks.append,
+            state_store=self.state,
+            async_engine_client=self.engine,
+            execution_preparer=preparer,
+            proxy_gateway=FakeProxy(),
+            configuration_service=ConfigurationService(self.repository),
+            cleanup_runner=self.cleanup,
+            interactions=self.interactions,
+            dispatch_async=self.callbacks.append,
             emit_event=self.events.append,
         )
 

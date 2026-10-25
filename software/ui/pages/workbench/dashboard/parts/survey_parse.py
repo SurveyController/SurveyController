@@ -47,7 +47,7 @@ class DashboardSurveyParseMixin:
             )
             self._toast("请粘贴问卷链接", "warning")
             return
-        
+
         if not is_supported_survey_url(url):
             log_action(
                 "UI",
@@ -60,7 +60,7 @@ class DashboardSurveyParseMixin:
             )
             self._toast("仅支持问卷星、腾讯问卷与 Credamo 见数链接", "error")
             return
-        
+
         provider = detect_survey_provider(url)
         if not (
             provider in {SURVEY_PROVIDER_QQ, SURVEY_PROVIDER_CREDAMO} or is_wjx_survey_url(url)
@@ -76,7 +76,7 @@ class DashboardSurveyParseMixin:
             )
             self._toast("链接不是可解析的公开问卷", "error")
             return
-        
+
         self._toast("正在解析问卷...", "info", duration=-1, show_progress=True)
         self._open_wizard_after_parse = True
         self.controller.parse_survey(url)
@@ -90,9 +90,9 @@ class DashboardSurveyParseMixin:
         )
 
     def _on_survey_parsed(self, info: list, title: str):
-        
+
         _ = title
-        
+
         if self._progress_infobar:
             try:
                 self._progress_infobar.close()
@@ -133,8 +133,7 @@ class DashboardSurveyParseMixin:
         )
 
     def _on_survey_parse_failed(self, error_msg: str):
-        
-        
+
         if self._progress_infobar:
             try:
                 self._progress_infobar.close()
@@ -172,7 +171,6 @@ class DashboardSurveyParseMixin:
         elif "暂未开放" in text:
             self._toast(text, "warning", duration=2200)
         else:
-            
             self._toast(
                 f"解析失败：{text or '请确认链接有效且网络正常'}",
                 "error",

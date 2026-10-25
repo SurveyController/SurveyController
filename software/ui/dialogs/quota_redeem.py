@@ -39,8 +39,6 @@ from software.ui.helpers.proxy_access import (
 
 
 class QuotaRedeemDialog(MessageBoxBase):
-    
-
     _redeemFinished = Signal(bool, object)
     _SHOP_URL = "https://wzyp.cn/shop/surveycontroller"
     _SHOP_ICON_PATH = "assets/pay_ldxp_favicon.ico"
@@ -145,11 +143,16 @@ class QuotaRedeemDialog(MessageBoxBase):
 
     def eventFilter(self, obj, e) -> bool:
         yes_button = getattr(self, "yesButton", None)
-        if yes_button is not None and obj is yes_button and e.type() in {
-            QEvent.Type.Resize,
-            QEvent.Type.Show,
-            QEvent.Type.FontChange,
-        }:
+        if (
+            yes_button is not None
+            and obj is yes_button
+            and e.type()
+            in {
+                QEvent.Type.Resize,
+                QEvent.Type.Show,
+                QEvent.Type.FontChange,
+            }
+        ):
             self._layout_yes_button_spinner()
         return super().eventFilter(obj, e)
 
@@ -319,7 +322,7 @@ class QuotaRedeemDialog(MessageBoxBase):
 
 
 def load_shop_icon() -> QIcon | None:
-    
+
     icon_path = get_resource_path(QuotaRedeemDialog._SHOP_ICON_PATH)
     if not os.path.exists(icon_path):
         return None

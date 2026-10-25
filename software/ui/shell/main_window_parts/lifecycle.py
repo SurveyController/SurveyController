@@ -22,8 +22,6 @@ from software.logging.log_utils import (
 
 
 class MainWindowLifecycleMixin:
-    
-
     if TYPE_CHECKING:
         _async_dialog_refs: Any
         _boot_splash: Any

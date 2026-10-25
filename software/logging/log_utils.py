@@ -54,7 +54,7 @@ _LOG_LISTENER_ID = 0
 
 
 def _should_filter_noise(message: str) -> bool:
-    
+
     if message is None:
         return True
     text = str(message)
@@ -66,11 +66,13 @@ def _should_filter_noise(message: str) -> bool:
 
 
 def _safe_internal_log(message: str, exc: Optional[BaseException] = None) -> None:
-    
+
     try:
         ORIGINAL_STDERR.write(f"[LogInternal] {message}\n")
         if exc is not None:
-            ORIGINAL_STDERR.write("".join(traceback.format_exception(type(exc), exc, exc.__traceback__)))
+            ORIGINAL_STDERR.write(
+                "".join(traceback.format_exception(type(exc), exc, exc.__traceback__))
+            )
         ORIGINAL_STDERR.flush()
     except Exception:
         try:
@@ -86,14 +88,13 @@ def log_suppressed_exception(
     *,
     level: int = logging.INFO,
 ) -> None:
-    
+
     try:
         if exc is None:
             logging.log(level, "[Suppressed] %s", context)
         else:
             logging.log(level, "[Suppressed] %s: %s", context, exc, exc_info=True)
     except Exception as inner_exc:
-        
         _safe_internal_log("log_suppressed_exception failed", inner_exc)
 
 
@@ -103,7 +104,7 @@ def log_deduped_message(
     *,
     level: int = logging.INFO,
 ) -> bool:
-    
+
     normalized_key = str(key or "").strip()
     normalized_message = str(message or "").strip()
     if not normalized_key or not normalized_message:
@@ -121,7 +122,7 @@ def log_deduped_message(
 
 
 def reset_deduped_log_message(key: str) -> None:
-    
+
     normalized_key = str(key or "").strip()
     if not normalized_key:
         return
@@ -182,62 +183,49 @@ class LogBufferEntry:
 
 
 class LogBufferHandler(logging.Handler):
-    
-
-    
-    _ANSI_ESCAPE_PATTERN = re.compile(r'\x1b\[[0-9;]*m')
+    _ANSI_ESCAPE_PATTERN = re.compile(r"\x1b\[[0-9;]*m")
 
     def __init__(self, capacity: int = LOG_BUFFER_CAPACITY):
         super().__init__()
         self.capacity = capacity
 
-        
         self._queue: queue.Queue = queue.Queue(maxsize=max(1000, int(capacity or 0) * 4))
 
-        
         self._records: Deque[LogBufferEntry] = deque(maxlen=capacity if capacity else None)
         self._records_lock = threading.RLock()
 
-        
         self._version = 0
         self._version_lock = threading.Lock()
         self._listeners: dict[int, Callable[[int], None]] = {}
         self._listeners_lock = threading.Lock()
 
-        
         self._worker_thread: Optional[threading.Thread] = None
         self._stop_event = threading.Event()
 
         self.setFormatter(logging.Formatter(LOG_FORMAT, datefmt="%Y-%m-%d %H:%M:%S"))
 
-        
         self._start_worker()
 
     def _start_worker(self):
-        
+
         if self._worker_thread and self._worker_thread.is_alive():
             return
 
         self._stop_event.clear()
         self._worker_thread = threading.Thread(
-            target=self._worker_loop,
-            daemon=True,
-            name="LogBufferWorker"
+            target=self._worker_loop, daemon=True, name="LogBufferWorker"
         )
         self._worker_thread.start()
 
     def _worker_loop(self):
-        
+
         while not self._stop_event.is_set():
             try:
-                
                 batch = []
                 try:
-                    
                     record = self._queue.get(timeout=0.1)
                     batch.append(record)
 
-                    
                     while len(batch) < 100:
                         try:
                             record = self._queue.get_nowait()
@@ -247,74 +235,63 @@ class LogBufferHandler(logging.Handler):
                 except queue.Empty:
                     continue
 
-                
                 for record in batch:
                     self._process_record(record)
 
-                
                 with self._version_lock:
                     self._version += 1
                     current_version = self._version
                 self._notify_listeners(current_version)
 
             except Exception as exc:
-                
                 _safe_internal_log("LogBufferHandler worker loop failed", exc)
 
     def _process_record(self, record: logging.LogRecord):
-        
+
         try:
             original_level = record.levelname
             message = self.format(record)
 
-            
             if self._should_filter_sensitive(message):
                 return
-            
+
             if _should_filter_noise(message):
                 return
 
-            
             message = self._strip_ansi_codes(message)
 
-            
             category = self._determine_category(record, message)
 
-            
             display_text = self._apply_category_label(message, original_level, category)
 
-            
             entry = LogBufferEntry(text=display_text, category=category)
             with self._records_lock:
                 self._records.append(entry)
 
         except Exception as exc:
-            
             _safe_internal_log("LogBufferHandler process_record failed", exc)
 
     def emit(self, record: logging.LogRecord):
-        
+
         try:
-            
             self._queue.put_nowait(record)
         except queue.Full:
-            
             _safe_internal_log("LogBufferHandler queue full, dropping log")
         except Exception:
             self.handleError(record)
 
     def get_records(self, _try_lock: bool = False) -> List[LogBufferEntry]:
-        
+
         with self._records_lock:
             return list(self._records)
 
     def get_version(self) -> int:
-        
+
         with self._version_lock:
             return self._version
 
     def add_listener(self, listener: Callable[[int], None]) -> int:
-        
+
         global _LOG_LISTENER_ID
         if not callable(listener):
             return 0
@@ -340,16 +317,16 @@ class LogBufferHandler(logging.Handler):
                 _safe_internal_log("LogBufferHandler listener failed", exc)
 
     def stop(self):
-        
+
         self._stop_event.set()
         if self._worker_thread and self._worker_thread.is_alive():
             self._worker_thread.join(timeout=1.0)
 
     def flush_remaining(self):
-        
+
         try:
             processed = False
-            
+
             while not self._queue.empty():
                 try:
                     record = self._queue.get_nowait()
@@ -367,14 +344,14 @@ class LogBufferHandler(logging.Handler):
 
     @staticmethod
     def _strip_ansi_codes(text: str) -> str:
-        
+
         if not text:
             return text
-        return LogBufferHandler._ANSI_ESCAPE_PATTERN.sub('', text)
+        return LogBufferHandler._ANSI_ESCAPE_PATTERN.sub("", text)
 
     @staticmethod
     def _should_filter_sensitive(message: str) -> bool:
-        
+
         if not message:
             return False
         sensitive_patterns = [
@@ -433,7 +410,9 @@ class LogBufferHandler(logging.Handler):
         original_label = f"[{original_level.upper()}]"
         replacement_label = f"[{category.upper()}]"
 
-        deduped = LogBufferHandler._collapse_adjacent_label(message, original_label, replacement_label)
+        deduped = LogBufferHandler._collapse_adjacent_label(
+            message, original_label, replacement_label
+        )
         if deduped is not None:
             return deduped
 
@@ -444,24 +423,24 @@ class LogBufferHandler(logging.Handler):
         return message
 
     @staticmethod
-    def _collapse_adjacent_label(message: str, original_label: str, target_label: str) -> Optional[str]:
+    def _collapse_adjacent_label(
+        message: str, original_label: str, target_label: str
+    ) -> Optional[str]:
         if not message or not original_label or not target_label:
             return None
         index = message.find(original_label)
         if index == -1:
             return None
-        remainder = message[index + len(original_label):]
+        remainder = message[index + len(original_label) :]
         trimmed = remainder.lstrip()
         if not trimmed.startswith(target_label):
             return None
         whitespace = remainder[: len(remainder) - len(trimmed)]
-        suffix = trimmed[len(target_label):]
+        suffix = trimmed[len(target_label) :]
         return f"{message[:index]}{target_label}{whitespace}{suffix}"
 
 
 class AsyncFileHandler(logging.Handler):
-    
-
     _STOP = object()
 
     def __init__(self, filename: str, *, encoding: str = "utf-8", batch_size: int = 200):
@@ -614,7 +593,6 @@ def setup_logging():
         root_logger.addHandler(LOG_BUFFER_HANDLER)
     _ensure_session_log_handler(root_logger)
 
-    
     for noisy_logger in ("urllib3", "httpx", "httpcore"):
         logging.getLogger(noisy_logger).setLevel(logging.WARNING)
 
@@ -626,11 +604,11 @@ def setup_logging():
 
         def _handle_unhandled_exception(exc_type, exc_value, exc_traceback):
             if issubclass(exc_type, KeyboardInterrupt):
-                if ORIGINAL_EXCEPTHOOK:
+                if ORIGINAL_EXCEPTHOOK is not None:
                     ORIGINAL_EXCEPTHOOK(exc_type, exc_value, exc_traceback)
                 return
             root_logger.error("未处理的异常", exc_info=(exc_type, exc_value, exc_traceback))
-            if ORIGINAL_EXCEPTHOOK:
+            if ORIGINAL_EXCEPTHOOK is not None:
                 ORIGINAL_EXCEPTHOOK(exc_type, exc_value, exc_traceback)
 
         sys.excepthook = _handle_unhandled_exception
@@ -638,21 +616,25 @@ def setup_logging():
 
 
 def register_popup_handler(handler: Optional[Callable[[str, str, str], Any]]) -> None:
-    
+
     global _popup_handler
     _popup_handler = handler
 
 
 def _dispatch_popup(kind: str, title: str, message: str, default: Any = None) -> Any:
-    
+
     logging.log(
-        logging.INFO if kind in {"info", "confirm"} else logging.ERROR if kind == "error" else logging.WARNING,
+        logging.INFO
+        if kind in {"info", "confirm"}
+        else logging.ERROR
+        if kind == "error"
+        else logging.WARNING,
         f"[Popup {kind.upper()}] {title} | {message}",
     )
     if _popup_handler:
         try:
             return _popup_handler(kind, title, message)
-        except Exception:  
+        except Exception:
             logging.info("popup handler failed", exc_info=True)
     return default
 
@@ -672,10 +654,12 @@ def _ensure_logs_dir(runtime_directory: str) -> str:
 
 
 def get_auto_save_log_settings() -> tuple[bool, int]:
-    
+
     settings = app_settings()
-    enabled = get_bool_from_qsettings(settings.value(AUTO_SAVE_LOGS_SETTING_KEY), DEFAULT_AUTO_SAVE_LOGS)
-    max_keep = max(AUTO_SAVE_LOG_RETENTION_OPTIONS) if AUTO_SAVE_LOG_RETENTION_OPTIONS else DEFAULT_AUTO_SAVE_LOG_RETENTION_COUNT
+    enabled = get_bool_from_qsettings(
+        settings.value(AUTO_SAVE_LOGS_SETTING_KEY), DEFAULT_AUTO_SAVE_LOGS
+    )
+    max_keep = max(AUTO_SAVE_LOG_RETENTION_OPTIONS)
     keep_count = get_int_from_qsettings(
         settings.value(AUTO_SAVE_LOG_RETENTION_COUNT_SETTING_KEY),
         DEFAULT_AUTO_SAVE_LOG_RETENTION_COUNT,
@@ -686,7 +670,7 @@ def get_auto_save_log_settings() -> tuple[bool, int]:
 
 
 def prune_session_log_files(runtime_directory: str, keep_count: int) -> int:
-    
+
     logs_dir = _ensure_logs_dir(runtime_directory)
     keep_count = max(1, int(keep_count))
     candidates: list[tuple[float, str]] = []
@@ -713,7 +697,7 @@ def prune_session_log_files(runtime_directory: str, keep_count: int) -> int:
 
 
 def finalize_session_log_persistence(runtime_directory: str) -> None:
-    
+
     global _DELETE_SESSION_LOG_ON_SHUTDOWN
 
     enabled, keep_count = get_auto_save_log_settings()
@@ -735,7 +719,9 @@ def finalize_session_log_persistence(runtime_directory: str) -> None:
         if os.path.isfile(last_session_path):
             os.remove(last_session_path)
     except OSError as exc:
-        _safe_internal_log("finalize_session_log_persistence failed to remove last_session.log", exc)
+        _safe_internal_log(
+            "finalize_session_log_persistence failed to remove last_session.log", exc
+        )
 
 
 def save_log_records_to_file(
@@ -784,50 +770,52 @@ def export_full_log_to_file(
         if os.path.normcase(src) == os.path.normcase(dst):
             return file_path
         try:
-            with open(src, "r", encoding="utf-8") as source, open(dst, "w", encoding="utf-8") as target:
+            with (
+                open(src, "r", encoding="utf-8") as source,
+                open(dst, "w", encoding="utf-8") as target,
+            ):
                 shutil.copyfileobj(source, target)
             return file_path
         except Exception as exc:
-            _safe_internal_log("export_full_log_to_file fallback to buffer failed to read session log", exc)
+            _safe_internal_log(
+                "export_full_log_to_file fallback to buffer failed to read session log", exc
+            )
 
     records = fallback_records if fallback_records is not None else LOG_BUFFER_HANDLER.get_records()
     return save_log_records_to_file(records, runtime_directory, file_path)
 
 
 def log_popup_error(title: str, message: str, **kwargs: Any):
-    
+
     _ = kwargs
     return _dispatch_popup("error", title, message, default=False)
 
 
 def log_popup_warning(title: str, message: str, **kwargs: Any):
-    
+
     _ = kwargs
     return _dispatch_popup("warning", title, message, default=True)
 
 
 def log_popup_confirm(title: str, message: str, **kwargs: Any) -> bool:
-    
+
     _ = kwargs
     return bool(_dispatch_popup("confirm", title, message, default=False))
 
 
 def shutdown_logging():
-    
+
     try:
         session_log_path = str(_SESSION_LOG_PATH or "")
-        
+
         LOG_BUFFER_HANDLER.flush_remaining()
         flush_session_log_file()
 
-        
         LOG_BUFFER_HANDLER.stop()
 
-        
         sys.stdout = ORIGINAL_STDOUT
         sys.stderr = ORIGINAL_STDERR
 
-        
         root_logger = logging.getLogger()
         for handler in root_logger.handlers[:]:
             try:
@@ -835,12 +823,14 @@ def shutdown_logging():
                 root_logger.removeHandler(handler)
             except Exception:
                 pass
-        if _DELETE_SESSION_LOG_ON_SHUTDOWN and session_log_path and os.path.isfile(session_log_path):
+        if (
+            _DELETE_SESSION_LOG_ON_SHUTDOWN
+            and session_log_path
+            and os.path.isfile(session_log_path)
+        ):
             try:
                 os.remove(session_log_path)
             except OSError as exc:
                 _safe_internal_log("shutdown_logging failed to remove session log", exc)
     except Exception as exc:
         _safe_internal_log("shutdown_logging failed", exc)
-
-

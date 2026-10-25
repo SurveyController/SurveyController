@@ -12,8 +12,6 @@ from software.network.session_policy import (
 
 
 class AsyncProxySession:
-    
-
     def __init__(
         self,
         *,
@@ -48,7 +46,9 @@ class AsyncProxySession:
         ua_value = await self.select_user_agent()
         return None, ua_value
 
-    def set_current_submit_proxy(self, proxy_address: str | None, *, provider: str = "unknown") -> None:
+    def set_current_submit_proxy(
+        self, proxy_address: str | None, *, provider: str = "unknown"
+    ) -> None:
         self.proxy_address = str(proxy_address or "").strip() or None
         self.proxy_provider = str(provider or "unknown").strip() or "unknown"
 

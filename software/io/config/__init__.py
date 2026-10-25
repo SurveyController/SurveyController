@@ -33,4 +33,3 @@ __all__ = [
     "serialize_question_entry",
     "serialize_runtime_config",
 ]
-

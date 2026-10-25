@@ -5,11 +5,22 @@ from types import SimpleNamespace
 import pytest
 
 from surveycore.core.modes import duration_control
-from software.providers.common import SURVEY_PROVIDER_CREDAMO, SURVEY_PROVIDER_QQ, SURVEY_PROVIDER_WJX
+from software.providers.common import (
+    SURVEY_PROVIDER_CREDAMO,
+    SURVEY_PROVIDER_QQ,
+    SURVEY_PROVIDER_WJX,
+)
 
 
 class _Driver:
-    def __init__(self, *, url: str = "", div_text: str = "", page_text: str = "", action_visible: bool = False) -> None:
+    def __init__(
+        self,
+        *,
+        url: str = "",
+        div_text: str = "",
+        page_text: str = "",
+        action_visible: bool = False,
+    ) -> None:
         self._url = url
         self.div_text = div_text
         self.page_text = page_text
@@ -21,6 +32,7 @@ class _Driver:
 
     async def find_element(self, by, value):
         if (by, value) == ("id", "divdsc") and self.div_text:
+
             async def _is_displayed() -> bool:
                 return True
 
@@ -48,7 +60,9 @@ class DurationControlTests:
         assert duration_control.has_configured_answer_duration((3, 0))
 
     @pytest.mark.asyncio
-    async def test_simulate_answer_duration_delay_skips_when_unconfigured(self, patch_attrs) -> None:
+    async def test_simulate_answer_duration_delay_skips_when_unconfigured(
+        self, patch_attrs
+    ) -> None:
         slept: list[float] = []
 
         async def _fake_sleep_or_stop(_stop_signal, seconds: float) -> bool:
@@ -57,11 +71,15 @@ class DurationControlTests:
 
         patch_attrs((duration_control, "sleep_or_stop", _fake_sleep_or_stop))
 
-        assert not await duration_control.simulate_answer_duration_delay(answer_duration_range_seconds=(0, 0))
+        assert not await duration_control.simulate_answer_duration_delay(
+            answer_duration_range_seconds=(0, 0)
+        )
         assert slept == []
 
     @pytest.mark.asyncio
-    async def test_simulate_answer_duration_delay_uses_wait_on_stop_signal(self, make_mock_event, patch_attrs) -> None:
+    async def test_simulate_answer_duration_delay_uses_wait_on_stop_signal(
+        self, make_mock_event, patch_attrs
+    ) -> None:
         stop_signal = make_mock_event(wait_return=True, is_set=True)
         patch_attrs(
             (duration_control.random, "gauss", lambda center, _std: center),
@@ -77,7 +95,9 @@ class DurationControlTests:
         assert 20 <= waited <= 80
 
     @pytest.mark.asyncio
-    async def test_simulate_answer_duration_delay_expands_equal_bounds_and_sleeps(self, patch_attrs) -> None:
+    async def test_simulate_answer_duration_delay_expands_equal_bounds_and_sleeps(
+        self, patch_attrs
+    ) -> None:
         slept: list[float] = []
 
         async def _fake_sleep_or_stop(_stop_signal, seconds: float) -> bool:
@@ -89,7 +109,9 @@ class DurationControlTests:
             (duration_control, "sleep_or_stop", _fake_sleep_or_stop),
         )
 
-        assert not await duration_control.simulate_answer_duration_delay(answer_duration_range_seconds=(10, 10))
+        assert not await duration_control.simulate_answer_duration_delay(
+            answer_duration_range_seconds=(10, 10)
+        )
         assert slept == [10.0]
 
     def test_sample_answer_duration_seconds_keeps_qq_unclamped(self, patch_attrs) -> None:
@@ -116,7 +138,9 @@ class DurationControlTests:
         )
         assert waited == 250.0
 
-    def test_sample_answer_duration_seconds_uses_default_with_jitter_when_unconfigured(self, patch_attrs) -> None:
+    def test_sample_answer_duration_seconds_uses_default_with_jitter_when_unconfigured(
+        self, patch_attrs
+    ) -> None:
         patch_attrs((duration_control.random, "gauss", lambda center, _std: center))
         waited = duration_control.sample_answer_duration_seconds(
             (0, 0),
@@ -126,8 +150,12 @@ class DurationControlTests:
         assert waited == 90.0
 
     @pytest.mark.asyncio
-    async def test_completion_page_detects_complete_url_and_provider_signal(self, patch_attrs) -> None:
-        assert await duration_control.is_survey_completion_page(_Driver(url="https://example.com/complete"))
+    async def test_completion_page_detects_complete_url_and_provider_signal(
+        self, patch_attrs
+    ) -> None:
+        assert await duration_control.is_survey_completion_page(
+            _Driver(url="https://example.com/complete")
+        )
 
         patch_attrs(
             (
@@ -150,9 +178,15 @@ class DurationControlTests:
         assert await duration_control.is_survey_completion_page(_Driver(div_text="问卷提交成功"))
 
     @pytest.mark.asyncio
-    async def test_completion_page_uses_body_marker_only_when_no_action_button_visible(self) -> None:
-        assert await duration_control.is_survey_completion_page(_Driver(page_text="感谢您的参与", action_visible=False))
-        assert not await duration_control.is_survey_completion_page(_Driver(page_text="感谢您的参与", action_visible=True))
+    async def test_completion_page_uses_body_marker_only_when_no_action_button_visible(
+        self,
+    ) -> None:
+        assert await duration_control.is_survey_completion_page(
+            _Driver(page_text="感谢您的参与", action_visible=False)
+        )
+        assert not await duration_control.is_survey_completion_page(
+            _Driver(page_text="感谢您的参与", action_visible=True)
+        )
         assert not await duration_control.is_survey_completion_page(_Driver(page_text="继续填写"))
 
     @pytest.mark.asyncio
@@ -160,10 +194,14 @@ class DurationControlTests:
         driver = _Driver()
 
         assert not await duration_control.is_survey_completion_page(driver)
-        assert any("document.body && document.body.innerText" in script for script in driver.scripts)
+        assert any(
+            "document.body && document.body.innerText" in script for script in driver.scripts
+        )
 
     @pytest.mark.asyncio
-    async def test_completion_page_retries_navigation_transient_error_without_warning(self, patch_attrs) -> None:
+    async def test_completion_page_retries_navigation_transient_error_without_warning(
+        self, patch_attrs
+    ) -> None:
         class _NavigatingDriver(_Driver):
             def __init__(self) -> None:
                 super().__init__(page_text="感谢您的参与", action_visible=False)
@@ -184,7 +222,11 @@ class DurationControlTests:
 
         patch_attrs(
             (duration_control, "sleep_or_stop", _no_sleep),
-            (duration_control, "log_suppressed_exception", lambda context, *_args, **_kwargs: warnings.append(context)),
+            (
+                duration_control,
+                "log_suppressed_exception",
+                lambda context, *_args, **_kwargs: warnings.append(context),
+            ),
         )
 
         driver = _NavigatingDriver()

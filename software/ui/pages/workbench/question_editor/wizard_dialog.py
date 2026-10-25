@@ -53,8 +53,6 @@ _WIDGET_MAX_SIZE = 16777215
 
 
 class _CurrentPagePopUpStackedWidget(PopUpAniStackedWidget):
-    
-
     def hasHeightForWidth(self) -> bool:
         current = self.currentWidget()
         if current is not None:
@@ -94,8 +92,6 @@ class QuestionWizardDialog(
     WizardSectionsMixin,
     QDialog,
 ):
-    
-
     _PREFERRED_DIALOG_SIZE = QSize(1180, 840)
     _MIN_DIALOG_SIZE = QSize(900, 620)
 
@@ -477,9 +473,14 @@ class QuestionWizardDialog(
                 item.setSizeHint(0, QSize(0, 34))
                 item.setData(0, _TREE_INDEX_ROLE, idx)
                 page_item.addChild(item)
-                self._tree_widget.setItemWidget(item, 0, self._build_tree_question_widget(idx, self._tree_widget))
+                self._tree_widget.setItemWidget(
+                    item, 0, self._build_tree_question_widget(idx, self._tree_widget)
+                )
 
-                if self._current_view_mode == _VIEW_LOGIC and not self._logic_tree_state.has_unknown_logic:
+                if (
+                    self._current_view_mode == _VIEW_LOGIC
+                    and not self._logic_tree_state.has_unknown_logic
+                ):
                     for relation in self._logic_tree_state.relations.get(idx, []):
                         relation_item = QTreeWidgetItem([""])
                         relation_item.setSizeHint(0, QSize(0, 30))

@@ -173,7 +173,9 @@ class WjxHtmlParserTests:
         assert multi_text["is_text_like"]
         assert questions[2]["text_input_labels"] == ["项目评价", "请输入手机号"]
 
-    def test_parse_survey_questions_keeps_internal_num_when_explicit_display_num_matches_visible_order(self) -> None:
+    def test_parse_survey_questions_keeps_internal_num_when_explicit_display_num_matches_visible_order(
+        self,
+    ) -> None:
         html = """
         <html>
           <body>
@@ -199,7 +201,9 @@ class WjxHtmlParserTests:
         assert questions[0]["display_num"] == 1
         assert questions[0]["title"] == "请您对培训和实习进行简要评价： （最少30字）"
 
-    def test_parse_survey_questions_recalculates_display_num_when_previous_question_is_hidden(self) -> None:
+    def test_parse_survey_questions_recalculates_display_num_when_previous_question_is_hidden(
+        self,
+    ) -> None:
         html = """
         <html>
           <body>
@@ -271,7 +275,9 @@ class WjxHtmlParserTests:
         assert questions[0]["display_num"] == 20
         assert questions[1]["display_num"] == 1
 
-    def test_parse_survey_questions_matches_shifted_visible_numbering_after_hidden_question(self) -> None:
+    def test_parse_survey_questions_matches_shifted_visible_numbering_after_hidden_question(
+        self,
+    ) -> None:
         question_blocks = []
         for num in range(1, 20):
             question_blocks.append(
@@ -333,7 +339,7 @@ class WjxHtmlParserTests:
           <body>
             <div id="divQuestion">
               <fieldset>
-                {''.join(question_blocks)}
+                {"".join(question_blocks)}
               </fieldset>
             </div>
           </body>
@@ -348,7 +354,9 @@ class WjxHtmlParserTests:
         assert by_num[22]["display_num"] == 21
         assert by_num[23]["display_num"] == 22
 
-    def test_parse_survey_questions_marks_hidden_relation_minus_one_blocks_as_description(self) -> None:
+    def test_parse_survey_questions_marks_hidden_relation_minus_one_blocks_as_description(
+        self,
+    ) -> None:
         html = """
         <html>
           <body>
@@ -388,7 +396,9 @@ class WjxHtmlParserTests:
         assert questions[1]["display_num"] == 1
         assert not questions[1]["is_description"]
 
-    def test_parse_survey_questions_from_html_falls_back_to_nested_topic_divs_and_slider_matrix(self) -> None:
+    def test_parse_survey_questions_from_html_falls_back_to_nested_topic_divs_and_slider_matrix(
+        self,
+    ) -> None:
         html = """
         <html>
           <body>

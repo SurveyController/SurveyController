@@ -16,8 +16,6 @@ from software.core.task import ExecutionConfig, ExecutionState
 
 
 class RunStopPolicy:
-    
-
     def __init__(
         self,
         config: ExecutionConfig,
@@ -65,17 +63,23 @@ class RunStopPolicy:
         is_proxy_unavailable = failure_reason == FailureReason.PROXY_UNAVAILABLE
         with self.state.lock:
             if is_proxy_unavailable:
-                self.state.proxy_unavailable_fail_count = max(0, int(self.state.proxy_unavailable_fail_count or 0)) + 1
+                self.state.proxy_unavailable_fail_count = (
+                    max(0, int(self.state.proxy_unavailable_fail_count or 0)) + 1
+                )
                 consecutive_failures = int(self.state.proxy_unavailable_fail_count or 0)
             else:
                 self.state.cur_fail += 1
                 consecutive_failures = int(self.state.cur_fail or 0)
             if failure_reason == FailureReason.DEVICE_QUOTA_LIMIT:
-                self.state.device_quota_fail_count = max(0, int(self.state.device_quota_fail_count or 0)) + 1
+                self.state.device_quota_fail_count = (
+                    max(0, int(self.state.device_quota_fail_count or 0)) + 1
+                )
             message = str(log_message or "").strip()
             if message:
                 logging.warning("%s", message)
-            threshold_enabled = bool(self.config.stop_on_fail_enabled or force_stop_when_threshold_reached)
+            threshold_enabled = bool(
+                self.config.stop_on_fail_enabled or force_stop_when_threshold_reached
+            )
             if threshold_enabled:
                 logging.warning(
                     "已连续失败%s次，连续失败达到%s次将强制停止",
@@ -99,11 +103,15 @@ class RunStopPolicy:
                         if discarded:
                             logging.warning("反填样本第%s行已连续失败 2 次，已作废。", row_number)
                         else:
-                            logging.info("反填样本第%s行提交失败，已回队准备重试 1 次。", row_number)
+                            logging.info(
+                                "反填样本第%s行提交失败，已回队准备重试 1 次。", row_number
+                            )
                 else:
                     row_number = self.state.release_reverse_fill_sample(thread_name, requeue=True)
                     if row_number is not None:
-                        logging.info("反填样本第%s行已回队，本次失败不计入样本作废次数。", row_number)
+                        logging.info(
+                            "反填样本第%s行已回队，本次失败不计入样本作废次数。", row_number
+                        )
             except Exception:
                 logging.info("失败后回收反填样本失败", exc_info=True)
             try:
@@ -121,7 +129,9 @@ class RunStopPolicy:
             if stop_signal:
                 stop_signal.set()
             return True
-        threshold_enabled = bool(self.config.stop_on_fail_enabled or force_stop_when_threshold_reached)
+        threshold_enabled = bool(
+            self.config.stop_on_fail_enabled or force_stop_when_threshold_reached
+        )
         if threshold_enabled and consecutive_failures >= stop_threshold:
             logging.critical("连续失败次数过多，强制停止，请检查配置是否正确")
             self.state.mark_terminal_stop(
@@ -162,7 +172,9 @@ class RunStopPolicy:
                     time.strftime("%H:%M:%S", time.localtime(time.time())),
                 )
                 if previous_consecutive_failures > 0:
-                    logging.info("提交成功，连续失败计数已清零（重置前=%s）", previous_consecutive_failures)
+                    logging.info(
+                        "提交成功，连续失败计数已清零（重置前=%s）", previous_consecutive_failures
+                    )
                 should_handle_random_ip = self.config.random_proxy_ip_enabled
                 if self.config.target_num > 0 and self.state.cur_num >= self.config.target_num:
                     trigger_target_stop = True

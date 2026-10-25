@@ -6,8 +6,6 @@ from PySide6.QtCore import QObject, Signal, Slot
 
 
 class UpdateCheckWorker(QObject):
-    
-
     finished = Signal(bool, dict)
 
     def _is_interrupted(self) -> bool:

@@ -104,9 +104,13 @@ class _DashboardDouble(DashboardSurveyParseMixin, DashboardConfigIOMixin):
 def test_dashboard_parse_blocks_empty_unsupported_and_invalid_urls(monkeypatch) -> None:
     page = _DashboardDouble()
     monkeypatch.setattr(survey_parse_module, "log_action", lambda *_args, **_kwargs: None)
-    monkeypatch.setattr(survey_parse_module, "is_supported_survey_url", lambda url: url.startswith("supported"))
+    monkeypatch.setattr(
+        survey_parse_module, "is_supported_survey_url", lambda url: url.startswith("supported")
+    )
     monkeypatch.setattr(survey_parse_module, "detect_survey_provider", lambda _url: "wjx")
-    monkeypatch.setattr(survey_parse_module, "is_wjx_survey_url", lambda url: url.endswith("/survey"))
+    monkeypatch.setattr(
+        survey_parse_module, "is_wjx_survey_url", lambda url: url.endswith("/survey")
+    )
 
     page.url_edit = SimpleNamespace(text=lambda: "")
     page._on_parse_clicked()
@@ -165,7 +169,9 @@ def test_dashboard_parse_result_closes_progress_and_maps_errors(monkeypatch) -> 
         assert page._open_wizard_after_parse is False
 
 
-def test_dashboard_config_drawer_load_cancel_missing_and_workbench_paths(monkeypatch, tmp_path) -> None:
+def test_dashboard_config_drawer_load_cancel_missing_and_workbench_paths(
+    monkeypatch, tmp_path
+) -> None:
     page = _DashboardDouble()
     monkeypatch.setattr(config_io_module, "log_action", lambda *_args, **_kwargs: None)
     monkeypatch.setattr(config_io_module, "get_user_config_directory", lambda: str(tmp_path))
@@ -173,7 +179,9 @@ def test_dashboard_config_drawer_load_cancel_missing_and_workbench_paths(monkeyp
     page._on_show_config_list()
     page.config_drawer.open_drawer.assert_called_once()
 
-    monkeypatch.setattr(config_io_module.QFileDialog, "getOpenFileName", lambda *_args, **_kwargs: ("", ""))
+    monkeypatch.setattr(
+        config_io_module.QFileDialog, "getOpenFileName", lambda *_args, **_kwargs: ("", "")
+    )
     page._on_load_config()
     assert not page.controller.load_saved_config.called
 
@@ -242,12 +250,18 @@ def test_dashboard_config_load_and_save_without_workbench(monkeypatch, tmp_path)
     assert page.toasts[-1][0] == "该配置文件损坏，请输入问卷链接/二维码重新配置"
     page.controller.load_saved_config.side_effect = None
 
-    monkeypatch.setattr(config_io_module.QFileDialog, "getSaveFileName", lambda *_args, **_kwargs: ("", ""))
+    monkeypatch.setattr(
+        config_io_module.QFileDialog, "getSaveFileName", lambda *_args, **_kwargs: ("", "")
+    )
     page._on_save_config()
     assert not page.controller.save_current_config.called
 
     save_path = tmp_path / "saved.json"
-    monkeypatch.setattr(config_io_module.QFileDialog, "getSaveFileName", lambda *_args, **_kwargs: (str(save_path), ""))
+    monkeypatch.setattr(
+        config_io_module.QFileDialog,
+        "getSaveFileName",
+        lambda *_args, **_kwargs: (str(save_path), ""),
+    )
     page._on_save_config()
     page.controller.save_current_config.assert_called_once()
     assert page.controller.save_current_config.call_args.args[0] == str(save_path)
@@ -268,7 +282,9 @@ def test_dashboard_save_uses_workbench_snapshot_when_available(monkeypatch, tmp_
         lambda *_args, **_kwargs: (str(tmp_path / "saved.json"), ""),
     )
     snapshot = RuntimeConfig(target=9, threads=1)
-    page._window = _FakeWindow(SimpleNamespace(build_current_config_snapshot=MagicMock(return_value=snapshot)))
+    page._window = _FakeWindow(
+        SimpleNamespace(build_current_config_snapshot=MagicMock(return_value=snapshot))
+    )
 
     page._on_save_config()
 

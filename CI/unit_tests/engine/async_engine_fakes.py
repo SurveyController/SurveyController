@@ -63,7 +63,9 @@ class FakeThread:
 
 
 class DoneFuture:
-    def __init__(self, *, done: bool = True, result_value=None, result_error: Exception | None = None) -> None:
+    def __init__(
+        self, *, done: bool = True, result_value=None, result_error: Exception | None = None
+    ) -> None:
         self._done = done
         self._result_value = result_value
         self._result_error = result_error
