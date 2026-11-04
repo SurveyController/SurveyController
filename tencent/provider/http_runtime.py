@@ -26,7 +26,7 @@ from surveycore.tencent.provider.http_runtime import (
     _question_answer as _question_answer,
     _question_signature as _question_signature,
     _question_types_compatible as _question_types_compatible,
-    _raise_qq_submit_failed as _raise_qq_submit_failed,
+    _raise_qq_submit_failed as _raise_qq_submit_failed_legacy,
     _raw_questions_by_id as _raw_questions_by_id,
     _safe_int as _safe_int,
     _score_question_answer as _score_question_answer,
@@ -36,8 +36,11 @@ from surveycore.tencent.provider.http_runtime import (
 )
 
 import software.network.http as http_client
-from software.app.config import DEFAULT_HTTP_HEADERS, DEFAULT_USER_AGENT
-from software.core.ai.batch_runtime import assert_no_ai_placeholders_in_actions, prefill_ai_answers_for_questions
+from software.core.config.user_agents import DEFAULT_USER_AGENT
+from software.core.ai.batch_runtime import (
+    assert_no_ai_placeholders_in_actions,
+    prefill_ai_answers_for_questions,
+)
 from software.core.config.codec import UserAgentProfile
 from surveycore.core.modes.duration_control import sample_answer_duration_seconds
 from surveycore.core.persona.context import record_answer
@@ -47,8 +50,11 @@ from surveycore.providers.answering import AnswerAction
 from surveycore.providers.answering.recording import record_answer_action
 from surveycore.providers.http_logic import build_http_logic_plan
 from surveycore.providers.http_progress import update_http_submit_step
-from software.network.session_policy import SubmitProxyUnavailableError, mark_submit_proxy_success, release_submit_proxy
+from software.network.session_policy import SubmitProxyUnavailableError, mark_submit_proxy_success
+from software.network.http.defaults import DEFAULT_HTTP_HEADERS
 from surveycore.providers.contracts import SurveyQuestionMeta
+from surveycore.providers.errors import SubmissionVerificationRequiredError
+from software.providers.contracts import ProviderSubmissionRejectedError
 from tencent.provider.answering_builders import build_answer_action
 from tencent.provider.parser import (
     _build_qq_api_headers,
@@ -57,6 +63,15 @@ from tencent.provider.parser import (
     _extract_qq_identifiers,
     _request_qq_api,
 )
+
+
+def _raise_qq_submit_failed(payload: Mapping[str, Any]) -> None:
+    try:
+        _raise_qq_submit_failed_legacy(payload)
+    except SubmissionVerificationRequiredError:
+        raise
+    except RuntimeError as exc:
+        raise ProviderSubmissionRejectedError(str(exc)) from exc
 
 
 _QQ_SUBMIT_TIMEOUT_SECONDS = 30
@@ -85,7 +100,9 @@ async def _fetch_submit_source(
     headers: dict[str, str],
     proxies: Any,
 ) -> tuple[str, dict[str, Any], list[Any]]:
-    session_payload = await _request_qq_api(survey_id, "session", hash_value=hash_value, headers=headers, proxies=proxies)
+    session_payload = await _request_qq_api(
+        survey_id, "session", hash_value=hash_value, headers=headers, proxies=proxies
+    )
     session_data = _ensure_qq_api_ok(session_payload, "session")
     answer_session_id = str(session_data.get("answer_session_id") or "").strip()
     if answer_session_id:
@@ -178,7 +195,9 @@ async def brush_qq_http(
             if stop_signal is not None and stop_signal.is_set():
                 return False
             if bool(getattr(question, "unsupported", False)):
-                raise RuntimeError(f"腾讯问卷第{question.num}题暂不支持：{question.unsupported_reason or question.type_code}")
+                raise RuntimeError(
+                    f"腾讯问卷第{question.num}题暂不支持：{question.unsupported_reason or question.type_code}"
+                )
 
         async def _build_action(question: SurveyQuestionMeta) -> AnswerAction | None:
             if stop_signal is not None and stop_signal.is_set():
@@ -216,14 +235,20 @@ async def brush_qq_http(
         for raw_question in raw_questions:
             if stop_signal is not None and stop_signal.is_set():
                 return False
-            question_id = str(raw_question.get("id") or "").strip() if isinstance(raw_question, Mapping) else ""
+            question_id = (
+                str(raw_question.get("id") or "").strip()
+                if isinstance(raw_question, Mapping)
+                else ""
+            )
             if not question_id:
                 continue
             action = action_by_question_id.get(question_id)
             if action is None:
                 continue
             raw_source = raw_by_id.get(question_id, raw_question)
-            page_id = str((raw_source.get("page_id") if isinstance(raw_source, Mapping) else "") or "").strip()
+            page_id = str(
+                (raw_source.get("page_id") if isinstance(raw_source, Mapping) else "") or ""
+            ).strip()
             if not page_id:
                 raise RuntimeError(f"腾讯问卷第{int(action.question_num or 0)}题缺少 page_id")
             question_answer = _question_answer(raw_source, action)
@@ -293,26 +318,25 @@ async def brush_qq_http(
         submit_proxy_lease = None
         if submit_proxy_lease_factory is not None:
             submit_proxy_lease = await submit_proxy_lease_factory()
-            submit_proxy_address = str(getattr(submit_proxy_lease, "address", "") or "").strip() or None
+            submit_proxy_address = (
+                str(getattr(submit_proxy_lease, "address", "") or "").strip() or None
+            )
         if bool(getattr(config, "random_proxy_ip_enabled", False)) and not submit_proxy_address:
             raise SubmitProxyUnavailableError("提交前未获取到随机 IP")
         submit_proxies = _proxy_arg(submit_proxy_address)
-        try:
-            response = await http_client.apost(
-                f"https://wj.qq.com/api/v2/respondent/surveys/{survey_id}/answers",
-                params={"pv_uid": str(uuid.uuid4()), "hash": hash_value, "_": str(int(time.time() * 1000))},
-                json=submit_body,
-                headers=submit_headers,
-                timeout=_QQ_SUBMIT_TIMEOUT_SECONDS,
-                proxies=submit_proxies,
-            )
-            response.raise_for_status()
-            if submit_proxy_address and thread_name:
-                release_submit_proxy(ctx, thread_name, submit_proxy_address)
-        except Exception:
-            if submit_proxy_address and thread_name:
-                release_submit_proxy(ctx, thread_name, submit_proxy_address)
-            raise
+        response = await http_client.apost(
+            f"https://wj.qq.com/api/v2/respondent/surveys/{survey_id}/answers",
+            params={
+                "pv_uid": str(uuid.uuid4()),
+                "hash": hash_value,
+                "_": str(int(time.time() * 1000)),
+            },
+            json=submit_body,
+            headers=submit_headers,
+            timeout=_QQ_SUBMIT_TIMEOUT_SECONDS,
+            proxies=submit_proxies,
+        )
+        response.raise_for_status()
         await update_http_submit_step(ctx, thread_name, "校验结果")
         payload = response.json()
         if not isinstance(payload, dict):

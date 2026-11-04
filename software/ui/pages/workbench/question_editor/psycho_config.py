@@ -3,7 +3,6 @@ from typing import Any, List
 from surveycore.core.psychometrics.ordinal_options import infer_ordinal_option_mapping
 
 
-
 PSYCHO_SUPPORTED_TYPES = {"scale", "score", "dropdown", "matrix"}
 
 
@@ -16,22 +15,21 @@ BIAS_PRESET_CHOICES = [
 
 
 def build_bias_weights(option_count: int, bias: str) -> List[float]:
-    
+
     import math
 
     count = max(1, int(option_count or 1))
     if count == 1:
         return [100.0]
-    
+
     if bias == "left":
         linear = [1.0 - i / (count - 1) for i in range(count)]
     elif bias == "right":
         linear = [i / (count - 1) for i in range(count)]
     else:
-        
         center = (count - 1) / 2.0
         linear = [1.0 - abs(i - center) / center for i in range(count)]
-    
+
     power = 3 if bias == "center" else 8
     raw = [math.pow(v, power) for v in linear]
     max_val = max(raw)

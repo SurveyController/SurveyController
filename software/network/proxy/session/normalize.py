@@ -14,6 +14,7 @@ def _to_non_negative_int(value: Any, default: int = 0) -> int:
         return max(0, int(default))
     return max(0, parsed)
 
+
 def _to_decimal(value: Any) -> Optional[Decimal]:
     if isinstance(value, Decimal):
         parsed = value
@@ -32,6 +33,7 @@ def _to_decimal(value: Any) -> Optional[Decimal]:
         return None
     return parsed
 
+
 def _to_non_negative_quota(value: Any, default: float = 0.0) -> float:
     parsed = _to_decimal(value)
     if parsed is None:
@@ -41,6 +43,7 @@ def _to_non_negative_quota(value: Any, default: float = 0.0) -> float:
     if parsed < 0:
         return 0.0
     return float(parsed)
+
 
 def _to_optional_non_negative_quota(value: Any) -> Optional[float]:
     if value is None:
@@ -52,18 +55,23 @@ def _to_optional_non_negative_quota(value: Any) -> Optional[float]:
         return None
     return float(parsed)
 
+
 def format_quota_value(value: Any) -> str:
     parsed = _to_decimal(value)
     if parsed is None or parsed < 0:
         parsed = Decimal("0")
-    normalized = parsed.quantize(Decimal(1)) if parsed == parsed.to_integral() else parsed.normalize()
+    normalized = (
+        parsed.quantize(Decimal(1)) if parsed == parsed.to_integral() else parsed.normalize()
+    )
     text = format(normalized, "f")
     if "." in text:
         text = text.rstrip("0").rstrip(".")
     return text or "0"
 
+
 def _quota_equals(left: Any, right: Any, *, epsilon: float = 1e-9) -> bool:
     return abs(_to_non_negative_quota(left, 0.0) - _to_non_negative_quota(right, 0.0)) <= epsilon
+
 
 def _is_valid_user_id(value: Any) -> bool:
     try:
@@ -71,10 +79,12 @@ def _is_valid_user_id(value: Any) -> bool:
     except Exception:
         return False
 
+
 def _require_valid_user_id(value: Any) -> int:
     if not _is_valid_user_id(value):
         raise RandomIPAuthError("invalid_response:user_id_invalid")
     return int(value)
+
 
 def _to_optional_bool(value: Any) -> Optional[bool]:
     if value is None:
@@ -90,8 +100,12 @@ def _to_optional_bool(value: Any) -> Optional[bool]:
         return False
     return None
 
+
 def _can_trust_quota_numbers(*, total_quota: float, used_quota: float) -> bool:
-    return _to_non_negative_quota(total_quota, 0.0) > 0 or _to_non_negative_quota(used_quota, 0.0) > 0
+    return (
+        _to_non_negative_quota(total_quota, 0.0) > 0 or _to_non_negative_quota(used_quota, 0.0) > 0
+    )
+
 
 def _normalize_quota_known(
     *,
@@ -106,10 +120,12 @@ def _normalize_quota_known(
         return False
     return _can_trust_quota_numbers(total_quota=total_quota, used_quota=used_quota)
 
+
 def _session_state_name(session: RandomIPSession) -> str:
     if _is_valid_user_id(session.user_id):
         return "ready"
     return "anonymous"
+
 
 def _mask_identifier(value: Any, *, keep: int = 6) -> str:
     text = str(value or "").strip()
@@ -118,6 +134,7 @@ def _mask_identifier(value: Any, *, keep: int = 6) -> str:
     if len(text) <= keep:
         return text
     return f"{text[:keep]}***"
+
 
 def _session_log_fields(session: RandomIPSession) -> str:
     remaining_quota, total_quota, used_quota = _normalize_quota_state(
@@ -134,6 +151,7 @@ def _session_log_fields(session: RandomIPSession) -> str:
         f"used={format_quota_value(used_quota)} "
         f"quota_known={bool(session.quota_known)}"
     )
+
 
 def _normalize_quota_state(
     *,
@@ -160,7 +178,10 @@ def _normalize_quota_state(
     remaining = total
     return remaining, total, used
 
-def _read_payload_quota_number(data: Dict[str, Any], key: str, *, log_context: str) -> Optional[float]:
+
+def _read_payload_quota_number(
+    data: Dict[str, Any], key: str, *, log_context: str
+) -> Optional[float]:
     if key not in data:
         return None
     value = data.get(key)
@@ -169,6 +190,7 @@ def _read_payload_quota_number(data: Dict[str, Any], key: str, *, log_context: s
         return parsed
     logging.warning("%s 中的额度字段无效：field=%s value=%r", log_context, key, value)
     return None
+
 
 def _resolve_quota_from_payload(
     data: Dict[str, Any],
@@ -221,14 +243,23 @@ def _resolve_quota_from_payload(
         candidate_remaining, candidate_total, candidate_used = candidate
         if _can_trust_quota_numbers(total_quota=candidate_total, used_quota=candidate_used):
             return candidate_remaining, candidate_total, candidate_used, True
-        logging.warning("%s 返回了 0/0 额度，保留本地额度并标记待校验：keys=%s", log_context, quota_keys)
+        logging.warning(
+            "%s 返回了 0/0 额度，保留本地额度并标记待校验：keys=%s", log_context, quota_keys
+        )
         return fallback_remaining, fallback_total, fallback_used, False
 
     if valid_count <= 0:
-        logging.warning("%s 未返回可信额度字段，保留本地额度并标记待校验：keys=%s", log_context, quota_keys)
+        logging.warning(
+            "%s 未返回可信额度字段，保留本地额度并标记待校验：keys=%s", log_context, quota_keys
+        )
     else:
-        logging.warning("%s 只返回了部分额度字段且本地无可信额度，保留本地额度并标记待校验：keys=%s", log_context, quota_keys)
+        logging.warning(
+            "%s 只返回了部分额度字段且本地无可信额度，保留本地额度并标记待校验：keys=%s",
+            log_context,
+            quota_keys,
+        )
     return fallback_remaining, fallback_total, fallback_used, False
+
 
 def _build_quota_snapshot(session: RandomIPSession) -> Dict[str, Any]:
     remaining_quota, total_quota, used_quota = _normalize_quota_state(

@@ -1,0 +1,3 @@
+HTTP_MAX_THREADS = 64
+
+__all__ = ["HTTP_MAX_THREADS"]

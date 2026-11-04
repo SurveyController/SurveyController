@@ -27,7 +27,7 @@ def _add_dll_directories(paths: list[str]) -> None:
 
 
 def prepare_frozen_runtime() -> None:
-    
+
     if not getattr(sys, "frozen", False):
         return
 
@@ -36,9 +36,7 @@ def prepare_frozen_runtime() -> None:
     shiboken6_dir = os.path.join(app_dir, "shiboken6")
     qt_libexec_dir = os.path.join(pyside6_dir, "Qt", "libexec")
 
-    dll_search_dirs = _iter_existing_directories(
-        (pyside6_dir, qt_libexec_dir, shiboken6_dir)
-    )
+    dll_search_dirs = _iter_existing_directories((pyside6_dir, qt_libexec_dir, shiboken6_dir))
     _prepend_path_entries(dll_search_dirs)
     _add_dll_directories(dll_search_dirs)
 

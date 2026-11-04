@@ -7,8 +7,6 @@ from qfluentwidgets import ToolTipFilter, ToolTipPosition
 
 
 class FluentToolTipFilter(ToolTipFilter):
-    
-
     def __init__(
         self,
         parent: QWidget,
@@ -35,7 +33,7 @@ def install_tooltip_filter(
     show_delay: int = 300,
     show_on_disabled: bool = True,
 ) -> Optional[FluentToolTipFilter]:
-    
+
     if widget is None:
         return None
 
@@ -66,7 +64,7 @@ def install_tooltip_filters(
     show_delay: int = 300,
     show_on_disabled: bool = True,
 ) -> None:
-    
+
     for widget in widgets:
         install_tooltip_filter(
             widget,

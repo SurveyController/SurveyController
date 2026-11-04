@@ -25,19 +25,16 @@ if TYPE_CHECKING:
 
 
 class MainWindowLazyPagesMixin:
-    
-
     if TYPE_CHECKING:
-        
         dashboard: DashboardPage
         runtime_page: RuntimePage
         strategy_page: QuestionStrategyPage
         reverse_fill_page: ReverseFillPage
         stackedWidget: QStackedWidget
-        navigationInterface: Any  
+        navigationInterface: Any
         addSubInterface: Any
         switchTo: Any
-        close: Any  
+        close: Any
 
     def _init_navigation(self):
         self.addSubInterface(
@@ -72,7 +69,7 @@ class MainWindowLazyPagesMixin:
             onClick=lambda: self._switch_to_lazy_page("logs", self._get_log_page()),
             position=NavigationItemPosition.TOP,
         )
-        
+
         self.navigationInterface.addItem(
             routeKey="community",
             icon=FluentIcon.CHAT,
@@ -80,7 +77,7 @@ class MainWindowLazyPagesMixin:
             onClick=lambda: self._switch_to_lazy_page("community", self._get_community_page()),
             position=NavigationItemPosition.BOTTOM,
         )
-        
+
         self.navigationInterface.addItem(
             routeKey="settings",
             icon=FluentIcon.SETTING,
@@ -88,7 +85,7 @@ class MainWindowLazyPagesMixin:
             onClick=lambda: self._switch_to_lazy_page("settings", self._get_settings_page()),
             position=NavigationItemPosition.BOTTOM,
         )
-        
+
         self.navigationInterface.addItem(
             routeKey="about_menu",
             icon=FluentIcon.MORE,
@@ -135,7 +132,7 @@ class MainWindowLazyPagesMixin:
             logging.info("同步懒加载页面侧边栏高亮失败", exc_info=True)
 
     def _get_log_page(self):
-        
+
         if self._log_page is None:
             from software.ui.pages.workbench.log_panel.page import LogPage
 
@@ -144,16 +141,20 @@ class MainWindowLazyPagesMixin:
         return self._log_page
 
     def _get_settings_page(self):
-        
+
         if self._settings_page is None:
             from software.ui.pages.settings.settings import SettingsPage
 
-            self._settings_page = SettingsPage(self)
+            self._settings_page = SettingsPage(
+                self,
+                ai_settings=getattr(getattr(self, "controller", None), "ai_settings", None),
+                preferences=getattr(getattr(self, "controller", None), "preferences", None),
+            )
             self._settings_page.setObjectName("settings")
         return self._settings_page
 
     def _get_community_page(self):
-        
+
         if self._community_page is None:
             from software.ui.pages.community import CommunityPage
 
@@ -162,7 +163,7 @@ class MainWindowLazyPagesMixin:
         return self._community_page
 
     def _get_about_page(self):
-        
+
         if self._about_page is None:
             from software.ui.pages.more.about import AboutPage
 
@@ -172,19 +173,8 @@ class MainWindowLazyPagesMixin:
                 self.stackedWidget.addWidget(self._about_page)
         return self._about_page
 
-    def _get_ip_usage_page(self):
-        
-        if self._ip_usage_page is None:
-            from software.ui.pages.more.ip_usage_page import IpUsagePage
-
-            self._ip_usage_page = IpUsagePage(self)
-            self._ip_usage_page.setObjectName("ip_usage")
-            if self.stackedWidget.indexOf(self._ip_usage_page) == -1:
-                self.stackedWidget.addWidget(self._ip_usage_page)
-        return self._ip_usage_page
-
     def _get_donate_page(self):
-        
+
         if self._donate_page is None:
             from software.ui.pages.more.donate import DonatePage
 
@@ -195,60 +185,46 @@ class MainWindowLazyPagesMixin:
         return self._donate_page
 
     def _show_about_menu(self):
-        
-        from software.app.version import __VERSION__
+
+        from software.app.app_info import APP_VERSION
 
         menu = RoundMenu(parent=self)
 
-        
-        version_action = Action(FluentIcon.INFO, f"SurveyController v{__VERSION__}")
+        version_action = Action(FluentIcon.INFO, f"SurveyController v{APP_VERSION}")
         version_action.setEnabled(False)
         menu.addAction(version_action)
 
         menu.addSeparator()
 
-        
         changelog_action = Action(FluentIcon.HISTORY, "更新日志")
         changelog_action.triggered.connect(self._open_changelog_releases)
         menu.addAction(changelog_action)
 
-        
         tutorial_action = Action(FluentIcon.LIBRARY, "使用教程")
         tutorial_action.triggered.connect(self._open_usage_tutorial)
         menu.addAction(tutorial_action)
 
-        
-        ip_usage_action = Action(FluentIcon.CALENDAR, "IP 使用记录")
-        ip_usage_action.triggered.connect(
-            lambda: self._switch_to_more_page(self._get_ip_usage_page())
-        )
-        menu.addAction(ip_usage_action)
-
-        
         donate_action = Action(FluentIcon.HEART, "捐助")
         donate_action.triggered.connect(lambda: self._switch_to_more_page(self._get_donate_page()))
         menu.addAction(donate_action)
 
-        
         about_action = Action(FluentIcon.INFO, "关于")
         about_action.triggered.connect(lambda: self._switch_to_more_page(self._get_about_page()))
         menu.addAction(about_action)
 
         menu.addSeparator()
 
-        
         quit_action = Action(FluentIcon.CLOSE, "退出程序")
         quit_action.triggered.connect(self.close)
         menu.addAction(quit_action)
 
-        
         nav_item = self.navigationInterface.widget("about_menu")
         if nav_item:
             pos = nav_item.mapToGlobal(nav_item.rect().topRight())
             menu.exec(pos, aniType=MenuAnimationType.DROP_DOWN)
 
     def _switch_to_more_page(self, page):
-        
+
         self.switchTo(page)
         try:
             self.navigationInterface.setCurrentItem("about_menu")
@@ -256,7 +232,7 @@ class MainWindowLazyPagesMixin:
             logging.info("同步更多侧边栏高亮失败", exc_info=True)
 
     def _open_changelog_releases(self) -> None:
-        from software.app.version import GITHUB_RELEASES_PAGE_URL
+        from software.app.project_links import GITHUB_RELEASES_PAGE_URL
 
         webbrowser.open(GITHUB_RELEASES_PAGE_URL)
 

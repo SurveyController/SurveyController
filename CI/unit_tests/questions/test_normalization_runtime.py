@@ -40,7 +40,9 @@ class NormalizationRuntimeTests:
                 dimension="满意度",
                 psycho_bias="positive",
             ),
-            QuestionEntry("multiple", [25, 75], option_count=2, question_num=3, option_fill_texts=["A", "B"]),
+            QuestionEntry(
+                "multiple", [25, 75], option_count=2, question_num=3, option_fill_texts=["A", "B"]
+            ),
             QuestionEntry(
                 "matrix",
                 [[1, 0, 0], [0, 2, 0]],
@@ -52,10 +54,19 @@ class NormalizationRuntimeTests:
             ),
             QuestionEntry("scale", [1, 3], option_count=2, question_num=5, psycho_bias="negative"),
             QuestionEntry("score", [2, 2], option_count=2, question_num=6),
-            QuestionEntry("slider", [75], option_count=1, question_num=7, distribution_mode="custom"),
+            QuestionEntry(
+                "slider", [75], option_count=1, question_num=7, distribution_mode="custom"
+            ),
             QuestionEntry("slider", -1, option_count=1, question_num=8, distribution_mode="random"),
             QuestionEntry("order", -1, question_num=9),
-            QuestionEntry("text", [1, 3], texts=["甲", "乙"], question_num=10, ai_enabled=True, question_title="填空"),
+            QuestionEntry(
+                "text",
+                [1, 3],
+                texts=["甲", "乙"],
+                question_num=10,
+                ai_enabled=True,
+                question_title="填空",
+            ),
             QuestionEntry(
                 "multi_text",
                 -1,
@@ -135,7 +146,9 @@ class NormalizationRuntimeTests:
             "credamo:5:question-1": ("scale", 1),
         }
 
-    def test_configure_probabilities_assigns_global_reliability_dimension_when_none_explicit(self) -> None:
+    def test_configure_probabilities_assigns_global_reliability_dimension_when_none_explicit(
+        self,
+    ) -> None:
         ctx = SimpleNamespace()
         entries = [
             QuestionEntry("dropdown", [1, 1], option_count=2, question_num=1),
@@ -203,10 +216,19 @@ class NormalizationRuntimeTests:
         ("entry", "message"),
         [
             (QuestionEntry("single", [0, 0], option_count=2, question_num=1), "所有选项配比均为 0"),
-            (QuestionEntry("dropdown", [0, 0], option_count=2, question_num=2), "所有选项配比均为 0"),
-            (QuestionEntry("matrix", [[1, 0], [0, 0]], rows=2, option_count=2, question_num=3), "第 2 行配比全部为 0"),
+            (
+                QuestionEntry("dropdown", [0, 0], option_count=2, question_num=2),
+                "所有选项配比均为 0",
+            ),
+            (
+                QuestionEntry("matrix", [[1, 0], [0, 0]], rows=2, option_count=2, question_num=3),
+                "第 2 行配比全部为 0",
+            ),
             (QuestionEntry("matrix", [0, 0], rows=1, option_count=2, question_num=4), "矩阵题"),
-            (QuestionEntry("multiple", -1, option_count=2, question_num=5), "多选题必须提供概率列表"),
+            (
+                QuestionEntry("multiple", -1, option_count=2, question_num=5),
+                "多选题必须提供概率列表",
+            ),
             (QuestionEntry("text", -1, texts=[], question_num=6), "填空题至少需要一个候选答案"),
             (
                 QuestionEntry(
@@ -242,7 +264,9 @@ class NormalizationRuntimeTests:
             ),
         ],
     )
-    def test_configure_probabilities_rejects_invalid_configs(self, entry: QuestionEntry, message: str) -> None:
+    def test_configure_probabilities_rejects_invalid_configs(
+        self, entry: QuestionEntry, message: str
+    ) -> None:
         with pytest.raises(ValueError, match=message):
             configure_probabilities([entry], SimpleNamespace())
 
@@ -254,10 +278,21 @@ class NormalizationRuntimeTests:
             (_TEXT_RANDOM_ID_CARD, _TEXT_RANDOM_ID_CARD_TOKEN),
         ],
     )
-    def test_text_random_modes_override_ai_and_candidate_text(self, mode: str, expected: str) -> None:
+    def test_text_random_modes_override_ai_and_candidate_text(
+        self, mode: str, expected: str
+    ) -> None:
         ctx = SimpleNamespace()
         configure_probabilities(
-            [QuestionEntry("text", -1, texts=["原值"], question_num=1, ai_enabled=True, text_random_mode=mode)],
+            [
+                QuestionEntry(
+                    "text",
+                    -1,
+                    texts=["原值"],
+                    question_num=1,
+                    ai_enabled=True,
+                    text_random_mode=mode,
+                )
+            ],
             ctx,
         )
 

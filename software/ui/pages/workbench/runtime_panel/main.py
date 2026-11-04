@@ -35,8 +35,6 @@ class RuntimePage(
     RuntimeProxySyncMixin,
     ScrollArea,
 ):
-    
-
     MIN_THREADS = 1
     HTTP_MAX_THREADS = HTTP_MAX_THREADS
     SUBMIT_INTERVAL_MAX_SECONDS = 300

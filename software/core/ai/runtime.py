@@ -7,7 +7,7 @@ from software.core.task import ExecutionState
 from software.logging.log_utils import log_suppressed_exception
 
 from software.integrations.ai.client import agenerate_answer
-from software.app.config import _HTML_SPACE_RE
+from software.core.text_constants import WHITESPACE_PATTERN
 
 
 class AIRuntimeError(RuntimeError):
@@ -47,12 +47,10 @@ def is_ai_timeout_runtime_error(error: object) -> bool:
     return False
 
 
-
-
 def _normalize_text(value: Optional[str]) -> str:
     if not value:
         return ""
-    return _HTML_SPACE_RE.sub(" ", str(value)).strip()
+    return WHITESPACE_PATTERN.sub(" ", str(value)).strip()
 
 
 def _cleanup_question_title(raw_title: str) -> str:
@@ -81,6 +79,7 @@ def build_ai_question_prompt(
 
     try:
         from surveycore.core.persona.context import build_ai_context_prompt
+
         context_prompt = build_ai_context_prompt()
         if context_prompt:
             return f"{context_prompt}\n\n请回答以下问卷问题：{title}"
@@ -186,6 +185,3 @@ async def agenerate_ai_answer(
     if last_error is not None:
         raise AIRuntimeError(f"AI 调用失败：{last_error}") from last_error
     raise AIRuntimeError("AI 调用失败：未知错误")
-
-
-

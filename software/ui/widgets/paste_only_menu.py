@@ -6,8 +6,6 @@ from qfluentwidgets import Action, FluentIcon, LineEdit, RoundMenu
 
 
 class PasteOnlyMenu(QObject):
-    
-
     def eventFilter(self, watched, event):
         if event.type() == QEvent.Type.ContextMenu and isinstance(watched, LineEdit):
             if isinstance(event, QContextMenuEvent):

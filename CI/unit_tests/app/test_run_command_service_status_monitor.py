@@ -5,11 +5,11 @@ import time
 from typing import Any
 
 from software.core.task import ExecutionState
-from software.ui.controller.run_command_service import RunCommandService
+from software.application.run_service import RunApplicationService
 
 
 def test_status_snapshot_monitor_publishes_thread_progress_changes() -> None:
-    service = object.__new__(RunCommandService)
+    service = object.__new__(RunApplicationService)
     state = ExecutionState()
     service._execution_state = state
     snapshots: list[list[dict[str, Any]]] = []
@@ -20,7 +20,7 @@ def test_status_snapshot_monitor_publishes_thread_progress_changes() -> None:
     def emit_status_snapshot() -> None:
         snapshots.append(state.snapshot_thread_progress())
 
-    service._dispatch_to_ui_async = dispatch
+    service._dispatch = dispatch
     service.emit_status_snapshot = emit_status_snapshot
     stop_signal = threading.Event()
 

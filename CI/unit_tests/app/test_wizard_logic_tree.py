@@ -18,9 +18,7 @@ def test_build_logic_tree_state_builds_inbound_outbound_and_search_text() -> Non
             page=1,
             option_texts=["A", "B"],
             has_dependent_display_logic=True,
-            controls_display_targets=[
-                {"condition_option_indices": [0], "target_question_num": 2}
-            ],
+            controls_display_targets=[{"condition_option_indices": [0], "target_question_num": 2}],
             has_jump=True,
             jump_rules=[{"option_index": 1, "jumpto": 9}],
             logic_parse_status=LOGIC_PARSE_STATUS_COMPLETE,
@@ -31,9 +29,7 @@ def test_build_logic_tree_state_builds_inbound_outbound_and_search_text() -> Non
             page=1,
             option_texts=["是", "否"],
             has_display_condition=True,
-            display_conditions=[
-                {"condition_question_num": 1, "condition_option_indices": [0]}
-            ],
+            display_conditions=[{"condition_question_num": 1, "condition_option_indices": [0]}],
             logic_parse_status=LOGIC_PARSE_STATUS_COMPLETE,
         ),
     ]
@@ -52,7 +48,9 @@ def test_build_logic_tree_state_builds_inbound_outbound_and_search_text() -> Non
 
 def test_build_logic_tree_state_marks_unknown_logic() -> None:
     info = [
-        SurveyQuestionMeta(num=1, title="普通题", page=1, logic_parse_status=LOGIC_PARSE_STATUS_UNKNOWN)
+        SurveyQuestionMeta(
+            num=1, title="普通题", page=1, logic_parse_status=LOGIC_PARSE_STATUS_UNKNOWN
+        )
     ]
 
     state = build_logic_tree_state(info)

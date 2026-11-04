@@ -29,8 +29,6 @@ ENTRY_DRAG_MIME = "application/x-surveycontroller-dimension-entries"
 
 
 class DimensionEntryTable(TableWidget):
-    
-
     entriesDropped = Signal(list, object)
 
     def __init__(self, group_name: str, parent=None):
@@ -203,12 +201,10 @@ class DimensionEntryTable(TableWidget):
 
 
 class DimensionSectionWidget(QWidget):
-    
-
     renameRequested = Signal(str)
     deleteRequested = Signal(str)
     entriesDropped = Signal(list, object)
-    addQuestionsRequested = Signal(str)  
+    addQuestionsRequested = Signal(str)
 
     def __init__(self, group_name: str, parent=None):
         super().__init__(parent)
@@ -276,7 +272,6 @@ class DimensionSectionWidget(QWidget):
             """
         )
 
-        
         self.add_questions_btn = PushButton("添加题目", self)
         self.add_questions_btn.setIcon(FluentIcon.ADD)
         self.add_questions_btn.clicked.connect(

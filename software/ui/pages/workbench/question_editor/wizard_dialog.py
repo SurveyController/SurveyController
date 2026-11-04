@@ -39,6 +39,7 @@ from . import wizard_result_builder
 from .wizard_search import WizardSearchMixin
 from .wizard_sections import WizardSectionsMixin
 from .wizard_state import WizardRuntimeState, bind_runtime_state
+from .question_media_preview import MediaFetcher
 
 _VIEW_LOGIC = "logic"
 _VIEW_SEQUENTIAL = "sequential"
@@ -52,8 +53,6 @@ _WIDGET_MAX_SIZE = 16777215
 
 
 class _CurrentPagePopUpStackedWidget(PopUpAniStackedWidget):
-    
-
     def hasHeightForWidth(self) -> bool:
         current = self.currentWidget()
         if current is not None:
@@ -93,8 +92,6 @@ class QuestionWizardDialog(
     WizardSectionsMixin,
     QDialog,
 ):
-    
-
     _PREFERRED_DIALOG_SIZE = QSize(1180, 840)
     _MIN_DIALOG_SIZE = QSize(900, 620)
 
@@ -105,6 +102,8 @@ class QuestionWizardDialog(
         survey_title: Optional[str] = None,
         parent=None,
         reliability_mode_enabled: bool = True,
+        *,
+        media_fetcher: MediaFetcher | None = None,
     ):
         super().__init__(parent)
         self.setAttribute(Qt.WidgetAttribute.WA_DeleteOnClose, False)
@@ -119,6 +118,7 @@ class QuestionWizardDialog(
         self.info = build_entry_info_list(self.entries, raw_info)
         self._logic_tree_state = build_logic_tree_state(self.info)
         self.reliability_mode_enabled = reliability_mode_enabled
+        self.media_fetcher = media_fetcher
 
         bind_runtime_state(self, WizardRuntimeState())
         self._entry_snapshots: List[QuestionEntry] = [copy.deepcopy(entry) for entry in entries]
@@ -473,9 +473,14 @@ class QuestionWizardDialog(
                 item.setSizeHint(0, QSize(0, 34))
                 item.setData(0, _TREE_INDEX_ROLE, idx)
                 page_item.addChild(item)
-                self._tree_widget.setItemWidget(item, 0, self._build_tree_question_widget(idx, self._tree_widget))
+                self._tree_widget.setItemWidget(
+                    item, 0, self._build_tree_question_widget(idx, self._tree_widget)
+                )
 
-                if self._current_view_mode == _VIEW_LOGIC and not self._logic_tree_state.has_unknown_logic:
+                if (
+                    self._current_view_mode == _VIEW_LOGIC
+                    and not self._logic_tree_state.has_unknown_logic
+                ):
                     for relation in self._logic_tree_state.relations.get(idx, []):
                         relation_item = QTreeWidgetItem([""])
                         relation_item.setSizeHint(0, QSize(0, 30))

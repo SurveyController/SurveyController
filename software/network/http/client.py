@@ -1,17 +1,22 @@
 from __future__ import annotations
 
-import atexit
 import logging
 import threading
 import time
 from dataclasses import dataclass
-from typing import Any, Dict, Iterator, Literal, Optional, Tuple, Union, overload
-from urllib.parse import urlsplit
+from typing import Any, Dict, Iterator, Literal, Optional, Union, cast, overload
 
 import httpx
 from packaging.version import InvalidVersion, Version
 
 from software.logging.log_utils import log_suppressed_exception
+from software.network.http.client_policy import (
+    CLIENT_LIMITS as _CLIENT_LIMITS,
+    CLIENT_TTL_SECONDS as _CLIENT_TTL,
+    MAX_CLIENTS as _MAX_CLIENTS,
+    normalize_timeout as _normalize_timeout,
+    resolve_proxy as _resolve_proxy,
+)
 
 
 _MIN_HTTPX_VERSION = Version("0.27.0")
@@ -35,9 +40,6 @@ def _ensure_supported_httpx() -> None:
 _ensure_supported_httpx()
 
 
-_CLIENT_LIMITS = httpx.Limits(max_connections=20, max_keepalive_connections=10)
-_MAX_CLIENTS = 20
-_CLIENT_TTL = 300
 _PREWARM_LOCK = threading.Lock()
 _PREWARMED = False
 
@@ -69,8 +71,6 @@ class _ClientEntry:
 
 
 class _StreamResponse:
-    
-
     def __init__(
         self,
         response: httpx.Response,
@@ -119,20 +119,22 @@ class _StreamResponse:
         try:
             self._stream_ctx.__exit__(None, None, None)
         except Exception as exc:
-            log_suppressed_exception("_StreamResponse.close stream_ctx.__exit__", exc, level=logging.WARNING)
+            log_suppressed_exception(
+                "_StreamResponse.close stream_ctx.__exit__", exc, level=logging.WARNING
+            )
         finally:
             try:
                 self._release()
             except Exception as exc:
-                log_suppressed_exception("_StreamResponse.close release()", exc, level=logging.WARNING)
+                log_suppressed_exception(
+                    "_StreamResponse.close release()", exc, level=logging.WARNING
+                )
 
-    def __del__(self) -> None:  
+    def __del__(self) -> None:
         self.close()
 
 
 class _SyncClientManager:
-    
-
     def __init__(self) -> None:
         self._lock = threading.RLock()
         self._clients: Dict[_ClientKey, _ClientEntry] = {}
@@ -170,9 +172,7 @@ class _SyncClientManager:
 
     def _evict_oldest_idle_client_locked(self) -> Optional[httpx.Client]:
         idle_items = [
-            (key, entry)
-            for key, entry in self._clients.items()
-            if entry.active_requests <= 0
+            (key, entry) for key, entry in self._clients.items() if entry.active_requests <= 0
         ]
         if not idle_items:
             return None
@@ -185,7 +185,9 @@ class _SyncClientManager:
             try:
                 client.close()
             except Exception as exc:
-                log_suppressed_exception("_SyncClientManager._close_clients client.close()", exc, level=logging.WARNING)
+                log_suppressed_exception(
+                    "_SyncClientManager._close_clients client.close()", exc, level=logging.WARNING
+                )
 
     def acquire(
         self,
@@ -310,54 +312,11 @@ class _SyncClientManager:
         self._close_clients(clients)
 
 
-def _resolve_proxy(proxies: Any, url: str) -> Tuple[Optional[str], bool]:
-    
-    if proxies is None:
-        return None, True
-    if proxies == {}:
-        return None, False
-    if isinstance(proxies, str):
-        return proxies, False
-    if isinstance(proxies, dict):
-        scheme = urlsplit(url).scheme.lower()
-        http_proxy = proxies.get("http") or proxies.get("http://")
-        https_proxy = proxies.get("https") or proxies.get("https://")
-        if not http_proxy and not https_proxy:
-            return None, False
-        if scheme == "https":
-            return str(https_proxy or http_proxy), False
-        return str(http_proxy or https_proxy), False
-    return None, False
-
-
-def _normalize_timeout(timeout: Any) -> Any:
-    
-    if timeout is None:
-        return None
-    if isinstance(timeout, (int, float)):
-        return float(timeout)
-    if isinstance(timeout, tuple):
-        if len(timeout) == 2:
-            connect, read = timeout
-            connect_val = float(connect) if connect is not None else None
-            read_val = float(read) if read is not None else None
-            return httpx.Timeout(connect=connect_val, read=read_val, write=read_val, pool=connect_val)
-        if len(timeout) == 4:
-            connect, read, write, pool = timeout
-            return httpx.Timeout(
-                connect=float(connect) if connect is not None else None,
-                read=float(read) if read is not None else None,
-                write=float(write) if write is not None else None,
-                pool=float(pool) if pool is not None else None,
-            )
-    return timeout
-
-
 _client_manager = _SyncClientManager()
 
 
 def prewarm() -> None:
-    
+
     global _PREWARMED
 
     if _PREWARMED:
@@ -368,7 +327,6 @@ def prewarm() -> None:
             return
         temp_client: httpx.Client | None = None
         try:
-            
             temp_client = httpx.Client(
                 timeout=None,
                 limits=_CLIENT_LIMITS,
@@ -377,34 +335,37 @@ def prewarm() -> None:
             )
             _PREWARMED = True
         except Exception as exc:
-            log_suppressed_exception("http_client.prewarm httpx.Client()", exc, level=logging.WARNING)
+            log_suppressed_exception(
+                "http_client.prewarm httpx.Client()", exc, level=logging.WARNING
+            )
         finally:
             if temp_client is not None:
                 try:
                     temp_client.close()
                 except Exception as exc:
-                    log_suppressed_exception("http_client.prewarm temp_client.close()", exc, level=logging.WARNING)
+                    log_suppressed_exception(
+                        "http_client.prewarm temp_client.close()", exc, level=logging.WARNING
+                    )
 
 
 def close() -> None:
-    
+
     try:
         _client_manager.close()
     except Exception as exc:
-        log_suppressed_exception("http_client.close _client_manager.close()", exc, level=logging.WARNING)
-
-
-atexit.register(close)
-
-
-@overload
-def request(method: str, url: str, *, stream: Literal[True], **kwargs: Any) -> _StreamResponse:
-    ...
+        log_suppressed_exception(
+            "http_client.close _client_manager.close()", exc, level=logging.WARNING
+        )
 
 
 @overload
-def request(method: str, url: str, *, stream: Literal[False] = False, **kwargs: Any) -> httpx.Response:
-    ...
+def request(method: str, url: str, *, stream: Literal[True], **kwargs: Any) -> _StreamResponse: ...
+
+
+@overload
+def request(
+    method: str, url: str, *, stream: Literal[False] = False, **kwargs: Any
+) -> httpx.Response: ...
 
 
 def request(method: str, url: str, **kwargs: Any) -> httpx.Response | _StreamResponse:
@@ -412,57 +373,48 @@ def request(method: str, url: str, **kwargs: Any) -> httpx.Response | _StreamRes
 
 
 @overload
-def get(url: str, *, stream: Literal[True], **kwargs: Any) -> _StreamResponse:
-    ...
+def get(url: str, *, stream: Literal[True], **kwargs: Any) -> _StreamResponse: ...
 
 
 @overload
-def get(url: str, *, stream: Literal[False] = False, **kwargs: Any) -> httpx.Response:
-    ...
+def get(url: str, *, stream: Literal[False] = False, **kwargs: Any) -> httpx.Response: ...
 
 
 def get(url: str, **kwargs: Any) -> httpx.Response | _StreamResponse:
-    return request("GET", url, **kwargs)
+    return cast(httpx.Response | _StreamResponse, request("GET", url, **kwargs))
 
 
 @overload
-def post(url: str, *, stream: Literal[True], **kwargs: Any) -> _StreamResponse:
-    ...
+def post(url: str, *, stream: Literal[True], **kwargs: Any) -> _StreamResponse: ...
 
 
 @overload
-def post(url: str, *, stream: Literal[False] = False, **kwargs: Any) -> httpx.Response:
-    ...
+def post(url: str, *, stream: Literal[False] = False, **kwargs: Any) -> httpx.Response: ...
 
 
 def post(url: str, **kwargs: Any) -> httpx.Response | _StreamResponse:
-    return request("POST", url, **kwargs)
+    return cast(httpx.Response | _StreamResponse, request("POST", url, **kwargs))
 
 
 @overload
-def put(url: str, *, stream: Literal[True], **kwargs: Any) -> _StreamResponse:
-    ...
+def put(url: str, *, stream: Literal[True], **kwargs: Any) -> _StreamResponse: ...
 
 
 @overload
-def put(url: str, *, stream: Literal[False] = False, **kwargs: Any) -> httpx.Response:
-    ...
+def put(url: str, *, stream: Literal[False] = False, **kwargs: Any) -> httpx.Response: ...
 
 
 def put(url: str, **kwargs: Any) -> httpx.Response | _StreamResponse:
-    return request("PUT", url, **kwargs)
+    return cast(httpx.Response | _StreamResponse, request("PUT", url, **kwargs))
 
 
 @overload
-def delete(url: str, *, stream: Literal[True], **kwargs: Any) -> _StreamResponse:
-    ...
+def delete(url: str, *, stream: Literal[True], **kwargs: Any) -> _StreamResponse: ...
 
 
 @overload
-def delete(url: str, *, stream: Literal[False] = False, **kwargs: Any) -> httpx.Response:
-    ...
+def delete(url: str, *, stream: Literal[False] = False, **kwargs: Any) -> httpx.Response: ...
 
 
 def delete(url: str, **kwargs: Any) -> httpx.Response | _StreamResponse:
-    return request("DELETE", url, **kwargs)
-
+    return cast(httpx.Response | _StreamResponse, request("DELETE", url, **kwargs))

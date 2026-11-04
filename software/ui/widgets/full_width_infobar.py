@@ -4,8 +4,6 @@ from qfluentwidgets import InfoBar
 
 
 class FullWidthInfoBar(InfoBar):
-    
-
     def __init__(self, *args, **kwargs):
         self._syncing = False
         self._parent_filter_installed = False

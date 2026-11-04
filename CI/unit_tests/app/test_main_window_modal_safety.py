@@ -85,7 +85,6 @@ class _FakeLifecycleWindow(MainWindowLifecycleMixin):
             stop=lambda: self._record("quota_timer")
         )
         self._boot_splash = SimpleNamespace(cleanup=lambda: self._record("boot_splash"))
-        self._contact_dialog = SimpleNamespace(close=lambda: self._record("contact_dialog"))
         self._quota_redeem_dialog = SimpleNamespace(close=lambda: self._record("quota_dialog"))
         self._log_page = SimpleNamespace(
             _refresh_timer=SimpleNamespace(stop=lambda: self._record("log_timer"))
@@ -380,7 +379,9 @@ class MainWindowModalSafetyTests:
 
         window = _FakeDialogsWindow()
         monkeypatch.setattr(qt_widgets, "QSystemTrayIcon", _FakeTrayIcon, raising=False)
-        with patch.object(window, "_should_show_task_result_system_notification", return_value=True):
+        with patch.object(
+            window, "_should_show_task_result_system_notification", return_value=True
+        ):
             window.show_task_result_system_notification("标题", "内容")
             tray = window._task_result_tray_icon
             window.show_task_result_system_notification("标题2", "内容2")
@@ -456,7 +457,6 @@ class MainWindowModalSafetyTests:
             "shutdown",
             "boot_splash",
             "log_timer",
-            "contact_dialog",
             "quota_dialog",
             "async1",
             "async2",
@@ -500,7 +500,7 @@ class MainWindowModalSafetyTests:
             patch("software.ui.shell.main_window_parts.lifecycle.os.makedirs"),
         ):
             assert MainWindowLifecycleMixin._save_config_via_dialog(window, "cfg") is True
-        save_mock.assert_called_once_with("cfg", "D:/cfg.json")
+        save_mock.assert_called_once_with("cfg", "D:/cfg.json", include_secrets=True)
 
         with (
             patch(
@@ -554,11 +554,11 @@ class MainWindowModalSafetyTests:
         assert ("groups", ["dim1"]) in window.cleanup_events
         assert "refresh_counter" in window.cleanup_events
 
-        with patch(
-            "software.ui.shell.main_window_parts.lifecycle.get_session_snapshot",
-            return_value={"authenticated": True, "user_id": 7},
-        ):
-            MainWindowLifecycleMixin._refresh_title_random_ip_user_id(window)
+        window.controller.get_proxy_session_snapshot = lambda: {
+            "authenticated": True,
+            "user_id": 7,
+        }
+        MainWindowLifecycleMixin._refresh_title_random_ip_user_id(window)
         assert "(7)" in window.titleBar.titleLabel.text
         assert window.titleBar.titleLabel.adjusted == 1
 

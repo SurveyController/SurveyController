@@ -2,15 +2,12 @@ from __future__ import annotations
 
 import logging
 import threading
-import time
+from concurrent.futures import Future
 from typing import TYPE_CHECKING, Any, Optional, cast
 from PySide6.QtGui import QColor
 from qfluentwidgets import themeColor
 
-import software.network.http as http_client
-
 from software.ui.dialogs.quota_redeem import load_shop_icon
-from software.app.config import DEFAULT_HTTP_HEADERS, IP_EXTRACT_ENDPOINT
 from software.logging.log_utils import log_suppressed_exception
 from software.ui.helpers.qfluent_compat import set_indeterminate_progress_ring_active
 from software.ui.helpers.proxy_access import (
@@ -22,8 +19,6 @@ from software.ui.helpers.proxy_access import (
     has_unknown_local_quota,
     is_quota_exhausted,
 )
-
-_RANDOM_IP_HEALTH_TIMEOUT_SECONDS = 5
 
 if TYPE_CHECKING:
     from qfluentwidgets import (
@@ -41,10 +36,7 @@ if TYPE_CHECKING:
 
 
 class DashboardRandomIPMixin:
-    
-
     if TYPE_CHECKING:
-        
         card_btn: PushButton
         random_ip_row: RandomIpToggleRow
         random_ip_usage_ring: ProgressRing
@@ -66,7 +58,7 @@ class DashboardRandomIPMixin:
         _ip_balance_fetch_interval_sec: float
         _random_ip_status_fetch_lock: threading.Lock
         _random_ip_status_fetching: bool
-        _ipBalanceChecked: Any  
+        _ipBalanceChecked: Any
         _randomIpHeartbeatUpdated: Any
         random_ip_status_dot: Any
         random_ip_status_spinner: Any
@@ -81,10 +73,10 @@ class DashboardRandomIPMixin:
             duration: int = 2000,
             show_progress: bool = False,
         ) -> Any: ...
-        def window(self) -> Any: ...  
+        def window(self) -> Any: ...
 
     def _init_random_ip_status_refresh(self) -> None:
-        
+
         try:
             from PySide6.QtCore import QTimer
         except Exception as exc:
@@ -103,7 +95,7 @@ class DashboardRandomIPMixin:
         self.refresh_random_ip_heartbeat_async()
 
     def refresh_random_ip_heartbeat_async(self) -> None:
-        
+
         lock = getattr(self, "_random_ip_status_fetch_lock", None)
         if lock is None:
             return
@@ -113,27 +105,35 @@ class DashboardRandomIPMixin:
             self._random_ip_status_fetching = True
         self._apply_random_ip_heartbeat_loading()
 
-        threading.Thread(
-            target=self._run_random_ip_heartbeat_fetch,
-            daemon=True,
-            name="DashboardRandomIpHeartbeat",
-        ).start()
-
-    def _run_random_ip_heartbeat_fetch(self) -> None:
-        payload = None
         try:
-            payload = self._fetch_random_ip_heartbeat_status()
+            future = self.controller.submit_random_ip_health_check()
         except Exception as exc:
-            logging.warning("随机IP服务状态检查失败，已按未知状态处理：%s", exc)
+            self._finish_random_ip_heartbeat(None, exc)
+            return
+        future.add_done_callback(self._on_random_ip_heartbeat_completed)
+
+    def _on_random_ip_heartbeat_completed(self, future: Future[Any]) -> None:
+        try:
+            payload = future.result()
+        except Exception as exc:
+            self._finish_random_ip_heartbeat(None, exc)
+        else:
+            self._finish_random_ip_heartbeat(payload, None)
+
+    def _finish_random_ip_heartbeat(
+        self,
+        payload: Any,
+        error: Exception | None,
+    ) -> None:
+        if error is not None:
+            logging.warning("随机IP服务状态检查失败，已按未知状态处理：%s", error)
             payload = {
                 "level": "warning",
                 "text": "HTTP 0",
-                "tooltip": f"随机IP提取接口请求失败：{exc}",
+                "tooltip": f"随机IP提取接口请求失败：{error}",
             }
-        finally:
-            with self._random_ip_status_fetch_lock:
-                self._random_ip_status_fetching = False
-
+        with self._random_ip_status_fetch_lock:
+            self._random_ip_status_fetching = False
         try:
             if bool(getattr(self, "_is_closing", False)):
                 return
@@ -147,37 +147,10 @@ class DashboardRandomIPMixin:
             self._randomIpHeartbeatUpdated.emit(payload or {})
         except Exception as exc:
             log_suppressed_exception(
-                "_run_random_ip_heartbeat_fetch emit",
+                "_finish_random_ip_heartbeat emit",
                 exc,
                 level=logging.WARNING,
             )
-
-    def _fetch_random_ip_heartbeat_status(self) -> dict[str, str]:
-        headers = {
-            **DEFAULT_HTTP_HEADERS,
-            "X-Health-Token": "status-rzib9lqpuk3httr4",
-            "Content-Type": "application/json",
-        }
-        started = time.perf_counter()
-        response = http_client.post(
-            IP_EXTRACT_ENDPOINT,
-            json={},
-            timeout=_RANDOM_IP_HEALTH_TIMEOUT_SECONDS,
-            headers=headers,
-        )
-        elapsed_ms = max(1, int(round((time.perf_counter() - started) * 1000)))
-        status_code = int(getattr(response, "status_code", 0) or 0)
-        if 200 <= status_code < 300:
-            return {
-                "level": "success",
-                "text": f"服务正常 {elapsed_ms} ms",
-                "tooltip": f"随机IP提取接口返回 HTTP {status_code}，耗时 {elapsed_ms} ms。",
-            }
-        return {
-            "level": "error",
-            "text": f"异常 {status_code or 0}",
-            "tooltip": f"随机IP提取接口返回 HTTP {status_code or 0}，耗时 {elapsed_ms} ms。",
-        }
 
     def _apply_random_ip_heartbeat_status(self, payload: Any) -> None:
         data = payload if isinstance(payload, dict) else {}
@@ -220,7 +193,7 @@ class DashboardRandomIPMixin:
             )
 
     def _sync_random_ip_toggle_presentation(self, enabled: bool) -> None:
-        
+
         try:
             self.random_ip_row.sync_toggle_presentation(enabled)
         except Exception as exc:
@@ -262,9 +235,7 @@ class DashboardRandomIPMixin:
         if authenticated:
             self.card_btn.setToolTip("通常情况下，1额度即提交1份问卷")
         else:
-            self.card_btn.setToolTip(
-                "先勾选随机IP领取试用账号，之后才能在这里兑换额度卡密"
-            )
+            self.card_btn.setToolTip("先勾选随机IP领取试用账号，之后才能在这里兑换额度卡密")
 
         if custom_api:
             self._sync_random_ip_usage_ring(mode="paused", percent=0, format_text="自定义")
@@ -340,7 +311,7 @@ class DashboardRandomIPMixin:
             )
 
     def _refresh_ip_cost_infobar(self) -> None:
-        
+
         try:
             _, _, custom_api = get_random_ip_counter_snapshot_local()
         except Exception:
@@ -350,7 +321,7 @@ class DashboardRandomIPMixin:
     def _set_ip_cost_infobar_state(
         self, *, title: str, content: str = "", show_adjust_link: bool = False
     ) -> None:
-        
+
         if not self._ip_cost_infobar:
             return
 
@@ -402,29 +373,17 @@ class DashboardRandomIPMixin:
             return
 
         fallback_enabled = bool(
-            self.controller.get_runtime_snapshot().get("settings", {}).get("random_ip_enabled", False)
+            self.controller.get_runtime_snapshot()
+            .get("settings", {})
+            .get("random_ip_enabled", False)
         )
         self.random_ip_cb.blockSignals(True)
         self.random_ip_cb.setChecked(fallback_enabled)
         self.random_ip_cb.blockSignals(False)
         self._sync_random_ip_toggle_presentation(fallback_enabled)
 
-    def _open_contact_dialog(self, default_type: str = "报错反馈", lock_message_type: bool = False):
-        
-        win = self.window()
-        if hasattr(win, "_open_contact_dialog"):
-            try:
-                return cast(Any, win)._open_contact_dialog(default_type, lock_message_type)
-            except Exception as exc:
-                log_suppressed_exception(
-                    "_open_contact_dialog passthrough",
-                    exc,
-                    level=logging.WARNING,
-                )
-        raise RuntimeError("主窗口不支持联系开发者弹窗")
-
     def _open_quota_redeem_dialog(self) -> bool:
-        
+
         win = self.window()
         if hasattr(win, "_open_quota_redeem_dialog"):
             try:
@@ -438,7 +397,7 @@ class DashboardRandomIPMixin:
         raise RuntimeError("主窗口不支持额度兑换弹窗")
 
     def _on_request_quota_clicked(self):
-        
+
         self._open_quota_redeem_dialog()
 
     def _on_ip_low_infobar_closed(self):
@@ -447,7 +406,7 @@ class DashboardRandomIPMixin:
             self._ip_low_infobar.hide()
 
     def _update_ip_low_infobar(self, count: float, limit: float, custom_api: bool):
-        
+
         if not self._ip_low_infobar:
             return
         if custom_api:
@@ -465,7 +424,7 @@ class DashboardRandomIPMixin:
         self._on_ip_balance_checked(remaining if remaining <= threshold else threshold + 1)
 
     def _on_ip_balance_checked(self, remaining_ip: float):
-        
+
         if not self._ip_low_infobar:
             return
         threshold = max(

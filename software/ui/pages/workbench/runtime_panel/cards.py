@@ -37,8 +37,6 @@ from software.ui.widgets.setting_cards import set_widget_enabled_with_opacity
 
 
 class RandomUASettingCard(ExpandGroupSettingCard):
-    
-
     def __init__(self, parent=None):
         super().__init__(
             FluentIcon.ROBOT,
@@ -91,17 +89,15 @@ class RandomUASettingCard(ExpandGroupSettingCard):
         set_widget_enabled_with_opacity(self._groupContainer, bool(enabled))
 
     def getRatios(self) -> dict:
-        
+
         return self.ratioSlider.getValues()
 
     def setRatios(self, ratios: dict):
-        
+
         self.ratioSlider.setValues(ratios)
 
 
 class ReliabilitySettingCard(ExpandGroupSettingCard):
-    
-
     def __init__(self, parent=None):
         super().__init__(
             FluentIcon.CERTIFICATE,
@@ -150,7 +146,6 @@ class ReliabilitySettingCard(ExpandGroupSettingCard):
         self._sync_enabled(False)
 
     def _sync_enabled(self, enabled: bool) -> None:
-        
 
         set_widget_enabled_with_opacity(self._groupContainer, bool(enabled))
 
@@ -161,12 +156,11 @@ class ReliabilitySettingCard(ExpandGroupSettingCard):
         self.switchButton.setChecked(bool(checked))
 
     def get_alpha(self) -> float:
-        
 
         return normalize_target_alpha((self.alphaEdit.text() or "").strip())
 
     def set_alpha(self, value: float) -> None:
-        
+
         num = normalize_target_alpha(value)
         text = f"{num:.2f}".rstrip("0").rstrip(".")
         if not text:
@@ -176,8 +170,6 @@ class ReliabilitySettingCard(ExpandGroupSettingCard):
 
 
 class DurationMinuteFormatter(PickerColumnFormatter):
-    
-
     def encode(self, value):
         text = str(value or "").strip()
         if text.endswith("分"):
@@ -189,8 +181,6 @@ class DurationMinuteFormatter(PickerColumnFormatter):
 
 
 class DurationSecondFormatter(DigitFormatter):
-    
-
     def encode(self, value):
         text = str(value or "").strip()
         if text.endswith("秒"):
@@ -202,8 +192,6 @@ class DurationSecondFormatter(DigitFormatter):
 
 
 class DurationTimePicker(TimePickerBase):
-    
-
     def __init__(self, parent=None, max_seconds: int = 86399):
         super().__init__(parent=parent, showSeconds=True)
         self.max_seconds = max(0, int(max_seconds or 0))
@@ -247,8 +235,6 @@ class DurationTimePicker(TimePickerBase):
 
 
 class ZhHourMinuteTimePicker(TimePickerBase):
-    
-
     def __init__(self, parent=None):
         super().__init__(parent=parent, showSeconds=False)
         self.addColumn("时", range(0, 24), 120, formatter=DigitFormatter())
@@ -288,8 +274,6 @@ class ZhHourMinuteTimePicker(TimePickerBase):
 
 
 class TimeRangeSettingCard(OptionsSettingCard):
-    
-
     valueChanged = Signal(int)
     rangeChanged = Signal(tuple)
 
@@ -416,25 +400,25 @@ class TimeRangeSettingCard(OptionsSettingCard):
         self.endPicker.setEnabled(arg__1)
 
     def getValue(self) -> int:
-        
+
         return self.getRange()[0]
 
     def getRange(self) -> tuple[int, int]:
-        
+
         start = self.startPicker.getDurationSeconds()
         end = self.endPicker.getDurationSeconds()
         self._current_range = self._normalize_range(start, end)
         return self._current_range
 
     def setValue(self, value: int):
-        
+
         if isinstance(value, str):
             OptionsSettingCard.setValue(self, value)
             return
         self.setRange((value, value))
 
     def setRange(self, value_range):
-        
+
         if isinstance(value_range, (list, tuple)):
             start = value_range[0] if len(value_range) >= 1 else 0
             end = value_range[1] if len(value_range) >= 2 else start
@@ -462,8 +446,6 @@ class TimeRangeSettingCard(OptionsSettingCard):
 
 
 class AnswerDateTimeWindowSettingCard(OptionsSettingCard):
-    
-
     CREDAMO_BADGE_COLOR = "#1f4f99"
 
     datetimeWindowChanged = Signal(tuple)
@@ -697,9 +679,7 @@ class AnswerDateTimeWindowSettingCard(OptionsSettingCard):
             self.endDatePicker.blockSignals(False)
             self.endTimePicker.blockSignals(False)
         self._apply_future_limit()
-        self._datetime_window = (
-            *self._compose_datetime_window(),
-        )
+        self._datetime_window = (*self._compose_datetime_window(),)
         if self._datetime_window != previous:
             self.datetimeWindowChanged.emit(self._datetime_window)
 

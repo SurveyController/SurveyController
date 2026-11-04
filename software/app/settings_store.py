@@ -3,8 +3,6 @@ from __future__ import annotations
 import os
 from typing import Any
 
-from PySide6.QtCore import QCoreApplication, QSettings
-
 _SETTINGS_ORG = "SurveyController"
 _SETTINGS_APP = "Settings"
 _SETTINGS_DOMAIN = "surveycontroller.app"
@@ -13,7 +11,9 @@ CONFIG_DIRECTORY_SETTING_KEY = "config_directory"
 
 
 def configure_qt_application_metadata() -> None:
-    
+
+    from PySide6.QtCore import QCoreApplication
+
     if not QCoreApplication.organizationName():
         QCoreApplication.setOrganizationName(_SETTINGS_ORG)
     if not QCoreApplication.organizationDomain():
@@ -22,8 +22,10 @@ def configure_qt_application_metadata() -> None:
         QCoreApplication.setApplicationName(_SETTINGS_APP)
 
 
-def app_settings() -> QSettings:
-    
+def app_settings() -> Any:
+
+    from PySide6.QtCore import QSettings
+
     isolated_settings_file = os.environ.get(_SETTINGS_FILE_ENV)
     if isolated_settings_file:
         return QSettings(isolated_settings_file, QSettings.Format.IniFormat)
@@ -32,7 +34,7 @@ def app_settings() -> QSettings:
 
 
 def get_bool_from_qsettings(value: Any, default: bool = False) -> bool:
-    
+
     if value is None:
         return default
     if isinstance(value, bool):
@@ -49,7 +51,7 @@ def get_int_from_qsettings(
     minimum: int | None = None,
     maximum: int | None = None,
 ) -> int:
-    
+
     try:
         if value is None or value == "":
             result = int(default)
@@ -65,9 +67,8 @@ def get_int_from_qsettings(
 
 
 def get_str_from_qsettings(value: Any, default: str = "") -> str:
-    
+
     if value is None:
         return default
     text = str(value).strip()
     return text or default
-

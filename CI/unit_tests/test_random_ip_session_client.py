@@ -7,7 +7,14 @@ from software.network.proxy.session.models import RandomIPAuthError, RandomIPSes
 
 
 class _Response:
-    def __init__(self, payload: object = None, *, status_code: int = 200, headers: dict[str, str] | None = None, text: str = "") -> None:
+    def __init__(
+        self,
+        payload: object = None,
+        *,
+        status_code: int = 200,
+        headers: dict[str, str] | None = None,
+        text: str = "",
+    ) -> None:
         self._payload = payload
         self.status_code = status_code
         self.headers = headers or {}
@@ -44,7 +51,10 @@ class RandomIPSessionClientTests:
         assert error.status_code == 429
         assert error.retry_after_seconds == 9
 
-        assert client._extract_error_payload(_Response(ValueError("bad json"), status_code=503)).detail == "http_503"
+        assert (
+            client._extract_error_payload(_Response(ValueError("bad json"), status_code=503)).detail
+            == "http_503"
+        )
 
     def test_post_json_and_apost_json_wrap_network_errors(self, monkeypatch) -> None:
         monkeypatch.setattr(client, "_build_headers", lambda: {"X-Test": "1"})
@@ -54,7 +64,9 @@ class RandomIPSessionClientTests:
             return (url, kwargs)
 
         monkeypatch.setattr(client.http_client, "apost", _apost)
-        monkeypatch.setattr("software.network.proxy.session.auth._endpoint_name", lambda url: f"endpoint:{url}")
+        monkeypatch.setattr(
+            "software.network.proxy.session.auth._endpoint_name", lambda url: f"endpoint:{url}"
+        )
 
         assert client._post_json("https://api.test/x", json_body={"a": 1}, timeout=12) == (
             "https://api.test/x",
@@ -63,12 +75,18 @@ class RandomIPSessionClientTests:
 
         import asyncio
 
-        assert asyncio.run(client._apost_json("https://api.test/y", json_body={"b": 2}, timeout=13)) == (
+        assert asyncio.run(
+            client._apost_json("https://api.test/y", json_body={"b": 2}, timeout=13)
+        ) == (
             "https://api.test/y",
             {"json": {"b": 2}, "headers": {"X-Test": "1"}, "timeout": 13},
         )
 
-        monkeypatch.setattr(client.http_client, "post", lambda *_args, **_kwargs: (_ for _ in ()).throw(RuntimeError("timeout")))
+        monkeypatch.setattr(
+            client.http_client,
+            "post",
+            lambda *_args, **_kwargs: (_ for _ in ()).throw(RuntimeError("timeout")),
+        )
         with pytest.raises(RandomIPAuthError, match="network_error:RuntimeError: timeout"):
             client._post_json("https://api.test/fail", json_body={})
 
@@ -76,13 +94,19 @@ class RandomIPSessionClientTests:
             def __str__(self) -> str:
                 return ""
 
-        monkeypatch.setattr(client.http_client, "post", lambda *_args, **_kwargs: (_ for _ in ()).throw(EmptyNetworkError()))
+        monkeypatch.setattr(
+            client.http_client,
+            "post",
+            lambda *_args, **_kwargs: (_ for _ in ()).throw(EmptyNetworkError()),
+        )
         with pytest.raises(RandomIPAuthError, match="network_error:EmptyNetworkError"):
             client._post_json("https://api.test/empty-fail", json_body={})
 
     def test_parse_extract_payloads_cover_success_and_invalid_paths(self, monkeypatch) -> None:
         logged: list[str] = []
-        monkeypatch.setattr(client, "_log_extract_proxy_issue", lambda message, **_kwargs: logged.append(message))
+        monkeypatch.setattr(
+            client, "_log_extract_proxy_issue", lambda message, **_kwargs: logged.append(message)
+        )
         monkeypatch.setattr(
             "software.network.proxy.session.auth._apply_quota_payload",
             lambda data, **_kwargs: RandomIPSession(
@@ -159,9 +183,13 @@ class RandomIPSessionClientTests:
         }
 
         with pytest.raises(RandomIPAuthError, match="invalid_response"):
-            client._parse_single_extract_payload({}, request_body={}, attempt=1, response=_Response())
+            client._parse_single_extract_payload(
+                {}, request_body={}, attempt=1, response=_Response()
+            )
         with pytest.raises(RandomIPAuthError, match="invalid_response"):
-            client._parse_batch_extract_payload({"items": []}, request_body={}, attempt=1, response=_Response())
+            client._parse_batch_extract_payload(
+                {"items": []}, request_body={}, attempt=1, response=_Response()
+            )
         assert logged == [
             "随机IP提取响应缺少 host/port/account/password",
             "随机IP批量提取响应中无有效 IP",

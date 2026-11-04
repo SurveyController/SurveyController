@@ -15,12 +15,12 @@ ROOT_DIR = Path(__file__).resolve().parents[2]
 if str(ROOT_DIR) not in sys.path:
     sys.path.insert(0, str(ROOT_DIR))
 
-from software.core.config.schema import RuntimeConfig  
-from software.core.engine.async_engine import AsyncEngineClient  
+from software.core.config.schema import RuntimeConfig
+from software.core.engine.async_engine import AsyncEngineClient
 from surveycore.core.questions.config import build_default_question_entries
-from software.core.task import ExecutionState  
-from software.providers.registry import parse_survey  
-from software.ui.controller.run_controller_parts.runtime_preparation import prepare_execution_artifacts  
+from software.core.task import ExecutionState
+from software.providers.registry import parse_survey
+from software.core.engine.runtime_preparation import prepare_execution_artifacts
 
 
 def _iter_exception_messages(exc: BaseException) -> list[str]:
@@ -51,7 +51,12 @@ def _build_live_test_config(url: str) -> RuntimeConfig:
     if not normalized_url:
         raise ValueError("问卷链接为空")
 
-    definition = asyncio.run(parse_survey(normalized_url))
+    result = asyncio.run(parse_survey(normalized_url))
+    if result.failure is not None:
+        raise result.failure.exception
+    definition = result.definition
+    if definition is None:
+        raise RuntimeError("Provider 返回了空的解析结果")
     questions_info = [question for question in definition.questions if not question.is_description]
     question_entries = build_default_question_entries(
         questions_info,
@@ -82,6 +87,19 @@ def main() -> int:
     parser.add_argument("--url", required=True)
     parser.add_argument("--timeout", type=float, default=180.0)
     args = parser.parse_args()
+
+    from software.app.settings_store import app_settings
+    from software.app.user_paths import (
+        get_default_runtime_config_path,
+        get_legacy_runtime_config_path,
+    )
+    from software.io.runtime_environment import configure_runtime_environment
+
+    configure_runtime_environment(
+        app_settings,
+        get_default_runtime_config_path,
+        get_legacy_runtime_config_path,
+    )
 
     try:
         logging.disable(logging.CRITICAL)

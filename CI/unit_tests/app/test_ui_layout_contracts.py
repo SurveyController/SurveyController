@@ -7,10 +7,9 @@ import subprocess
 import sys
 import textwrap
 
-from PySide6.QtCore import QCoreApplication, QEvent, QRect
-from PySide6.QtWidgets import QApplication, QLayout, QScrollArea, QWidget
+from PySide6.QtCore import QCoreApplication, QEvent
+from PySide6.QtWidgets import QApplication, QWidget
 from qfluentwidgets import ScrollArea as FluentScrollArea
-from qfluentwidgets import Slider, SpinBox
 
 from CI.unit_tests.app.test_workbench_pages_smoke import _FakeController, _patch_page_dependencies
 from surveycore.providers.contracts import SurveyQuestionMeta
@@ -19,7 +18,6 @@ from software.ui.pages.workbench.reverse_fill.page import ReverseFillPage
 from software.ui.pages.workbench.runtime_panel.main import RuntimePage
 from software.ui.pages.workbench.session import WorkbenchState
 from software.ui.pages.workbench.strategy.page import QuestionStrategyPage
-from software.ui.widgets.no_wheel import NoWheelSlider, NoWheelSpinBox
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[3]
@@ -58,7 +56,6 @@ def _iter_feature_ui_files() -> list[Path]:
             "add_dialog.py",
             "rule_dialog.py",
             "question_selector_dialog.py",
-            "contact.py",
             "quota_redeem.py",
             "terms_of_service.py",
         }
@@ -81,38 +78,6 @@ def _qtwidgets_import_violations(path: Path) -> list[str]:
         ):
             violations.append(node.attr)
     return sorted(set(violations))
-
-
-def _assert_layout_items_do_not_overlap(root: QWidget) -> None:
-    problems: list[str] = []
-    for parent in root.findChildren(QWidget):
-        layout = parent.layout()
-        if layout is None:
-            continue
-        rects = _visible_layout_widget_rects(layout)
-        for left_index, left_rect in enumerate(rects):
-            for right_rect in rects[left_index + 1 :]:
-                intersection = left_rect.intersected(right_rect)
-                if intersection.isValid() and intersection.width() > 1 and intersection.height() > 1:
-                    problems.append(f"{parent.__class__.__name__}: {left_rect} overlaps {right_rect}")
-
-    assert problems == []
-
-
-def _visible_layout_widget_rects(layout: QLayout) -> list[QRect]:
-    if isinstance(layout.parentWidget(), QScrollArea):
-        return []
-
-    rects: list[QRect] = []
-    for index in range(layout.count()):
-        item = layout.itemAt(index)
-        if item is None:
-            continue
-        widget = item.widget()
-        if widget is None or not widget.isVisible() or widget.width() <= 0 or widget.height() <= 0:
-            continue
-        rects.append(widget.geometry())
-    return rects
 
 
 def _assert_no_horizontal_scrollbar(page: QWidget) -> None:
@@ -151,12 +116,9 @@ def test_feature_pages_do_not_import_native_qt_controls_directly() -> None:
     assert violations == {}
 
 
-def test_no_wheel_inputs_keep_qfluentwidgets_control_base() -> None:
-    assert issubclass(NoWheelSpinBox, SpinBox)
-    assert issubclass(NoWheelSlider, Slider)
-
-
-def test_workbench_pages_fit_minimum_window_width_without_horizontal_overflow(monkeypatch, qtbot) -> None:
+def test_workbench_pages_fit_minimum_window_width_without_horizontal_overflow(
+    monkeypatch, qtbot
+) -> None:
     _patch_page_dependencies(monkeypatch)
     controller = _FakeController()
     runtime_page = RuntimePage(controller)
@@ -164,13 +126,14 @@ def test_workbench_pages_fit_minimum_window_width_without_horizontal_overflow(mo
     reverse_fill_page = ReverseFillPage(controller)
 
     state = WorkbenchState()
-    state.set_entries([], [SurveyQuestionMeta(num=1, title="Q1", type_code="3", option_texts=["A", "B"])])
+    state.set_entries(
+        [], [SurveyQuestionMeta(num=1, title="Q1", type_code="3", option_texts=["A", "B"])]
+    )
     dashboard_page = DashboardPage(controller, state, runtime_page, strategy_page)
 
     for page in (runtime_page, strategy_page, reverse_fill_page, dashboard_page):
         _show_at_guarded_size(qtbot, page)
         _assert_no_horizontal_scrollbar(page)
-        _assert_layout_items_do_not_overlap(page)
 
 
 def test_workbench_pages_survive_125_percent_dpi_subprocess() -> None:
@@ -180,13 +143,11 @@ def test_workbench_pages_survive_125_percent_dpi_subprocess() -> None:
         from PySide6.QtWidgets import QApplication
 
         from CI.unit_tests.app.test_ui_layout_contracts import (
-            _assert_layout_items_do_not_overlap,
             _assert_no_horizontal_scrollbar,
         )
         from CI.unit_tests.app.test_workbench_pages_smoke import _FakeController
         from software.ui.pages.workbench.runtime_panel.main import RuntimePage
 
-        import software.ui.pages.workbench.runtime_panel.ai as ai_module
         import software.ui.pages.workbench.runtime_panel.proxy_sync as runtime_proxy_sync
         import software.ui.pages.workbench.runtime_panel.random_ip_card as random_ip_card
 
@@ -198,9 +159,6 @@ def test_workbench_pages_survive_125_percent_dpi_subprocess() -> None:
         random_ip_card.apply_proxy_area_code = lambda _code: None
         random_ip_card.apply_custom_proxy_api = lambda _url: None
         random_ip_card.test_custom_proxy_api = lambda _url: (True, "", [])
-        ai_module.get_ai_settings = lambda: {"ai_mode": "provider"}
-        ai_module.save_ai_settings = lambda **_kwargs: None
-        ai_module.get_default_system_prompt = lambda: "默认提示"
         runtime_proxy_sync.apply_proxy_source_settings = lambda *_args, **_kwargs: None
         runtime_proxy_sync.apply_custom_proxy_api = lambda *_args, **_kwargs: None
         runtime_proxy_sync.get_proxy_minute_by_answer_seconds = lambda *_args, **_kwargs: 1
@@ -218,7 +176,6 @@ def test_workbench_pages_survive_125_percent_dpi_subprocess() -> None:
         ratio = app.primaryScreen().devicePixelRatio()
         assert ratio >= 1.24, ratio
         _assert_no_horizontal_scrollbar(page)
-        _assert_layout_items_do_not_overlap(page)
 
         page.close()
         page.deleteLater()

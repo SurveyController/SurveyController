@@ -31,7 +31,9 @@ def test_build_ai_batch_items_includes_only_action_matched_ai_items() -> None:
         ),
     ]
 
-    items, item_question_map, item_option_fill_map = batch_runtime._build_ai_batch_items_for_actions(questions, actions)
+    items, item_question_map, item_option_fill_map = (
+        batch_runtime._build_ai_batch_items_for_actions(questions, actions)
+    )
 
     assert [item.item_id for item in items] == ["q1_opt0", "q2"]
     assert item_question_map == {"q2": 2}
@@ -87,7 +89,9 @@ async def test_prefill_provider_ai_answers_for_questions_replaces_placeholders(m
 
 
 @pytest.mark.asyncio
-async def test_prefill_provider_ai_answers_for_questions_raises_when_incomplete(monkeypatch) -> None:
+async def test_prefill_provider_ai_answers_for_questions_raises_when_incomplete(
+    monkeypatch,
+) -> None:
     config = ExecutionConfig(survey_provider="wjx")
     config.ai_mode = "provider"
     state = ExecutionState(config=config)

@@ -10,8 +10,6 @@ from qfluentwidgets import (
 
 
 class DashboardActionCard(CardWidget):
-    
-
     openRequested = Signal()
 
     def __init__(
@@ -63,8 +61,6 @@ class DashboardActionCard(CardWidget):
 
 
 class RuntimeSettingsHintCard(DashboardActionCard):
-    
-
     def __init__(self, parent=None):
         super().__init__(
             title="运行参数",

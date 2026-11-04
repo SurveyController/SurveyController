@@ -9,7 +9,9 @@ from software.ui.pages.workbench.question_editor.constants import _get_entry_typ
 from software.ui.pages.workbench.question_editor.location_options import AUTO_LOCATION_TEXT
 from software.ui.pages.workbench.question_editor.wizard_cards import WizardCardsMixin
 from software.ui.pages.workbench.question_editor.wizard_logic_tree import LogicTreeState
-from software.ui.pages.workbench.question_editor.wizard_sections_location import WizardSectionsLocationMixin
+from software.ui.pages.workbench.question_editor.wizard_sections_location import (
+    WizardSectionsLocationMixin,
+)
 
 
 class _Host(WizardCardsMixin, WizardSectionsLocationMixin):
@@ -22,9 +24,26 @@ class _Host(WizardCardsMixin, WizardSectionsLocationMixin):
                 option_texts=["甲", ""],
                 row_texts=["", "第二行"],
                 question_media=[
-                    {"kind": "image", "scope": "title", "source_url": "https://example.com/title.png", "label": ""},
-                    {"kind": "image", "scope": "option", "index": 1, "source_url": "https://example.com/opt.png", "label": ""},
-                    {"kind": "image", "scope": "row", "index": 0, "source_url": "https://example.com/row.png", "label": ""},
+                    {
+                        "kind": "image",
+                        "scope": "title",
+                        "source_url": "https://example.com/title.png",
+                        "label": "",
+                    },
+                    {
+                        "kind": "image",
+                        "scope": "option",
+                        "index": 1,
+                        "source_url": "https://example.com/opt.png",
+                        "label": "",
+                    },
+                    {
+                        "kind": "image",
+                        "scope": "row",
+                        "index": 0,
+                        "source_url": "https://example.com/row.png",
+                        "label": "",
+                    },
                 ],
                 slider_min="3",
                 slider_max="2",
@@ -47,7 +66,9 @@ class _Host(WizardCardsMixin, WizardSectionsLocationMixin):
         self.option_fill_state_map = {}
         self.attached_select_slider_map = {}
         self.bias_preset_map = {}
-        self._entry_snapshots = [QuestionEntry("single", [9, 8], question_num=88, attached_option_selects=[{"x": 1}])]
+        self._entry_snapshots = [
+            QuestionEntry("single", [9, 8], question_num=88, attached_option_selects=[{"x": 1}])
+        ]
         self._logic_tree_state = LogicTreeState(
             has_unknown_logic=False,
             inbound_summary={0: "来自第1题"},
@@ -61,7 +82,9 @@ class _Host(WizardCardsMixin, WizardSectionsLocationMixin):
         return {}
 
     def _refresh_ratio_preview_label(self, label, sliders, option_names, prefix: str) -> None:
-        label.setText(f"{prefix}{','.join(option_names)}={sum(slider.value() for slider in sliders)}")
+        label.setText(
+            f"{prefix}{','.join(option_names)}={sum(slider.value() for slider in sliders)}"
+        )
 
 
 class WizardCardsHelperTests:
@@ -70,8 +93,13 @@ class WizardCardsHelperTests:
         parent = QWidget()
         qtbot.addWidget(parent)
 
-        assert host._resolve_matrix_weights(QuestionEntry("matrix", [[0, 2], [3]], custom_weights=[[1, -2, 9]], rows=2), 2, 2) == [[1.0, 0.0], [1.0, 0.0]]
-        assert host._resolve_matrix_weights(QuestionEntry("matrix", [0, 0, 3], rows=2), 2, 2) == [[1.0, 1.0], [1.0, 1.0]]
+        assert host._resolve_matrix_weights(
+            QuestionEntry("matrix", [[0, 2], [3]], custom_weights=[[1, -2, 9]], rows=2), 2, 2
+        ) == [[1.0, 0.0], [1.0, 0.0]]
+        assert host._resolve_matrix_weights(QuestionEntry("matrix", [0, 0, 3], rows=2), 2, 2) == [
+            [1.0, 1.0],
+            [1.0, 1.0],
+        ]
         assert host._format_question_label(0) == "第11题"
         assert host._format_compact_question_label(0) == "11."
         assert host._media_items_for(0, "title")[0]["scope"] == "title"
@@ -79,10 +107,22 @@ class WizardCardsHelperTests:
         assert host._display_text_for_row(0, 0, "") == "第 1 行"
         assert host._inbound_summary_for(0) == "来自第1题"
         assert host._outbound_summary_for(0) == "跳到第2题"
-        assert host._resolve_slider_bounds(0, QuestionEntry("slider", [1], custom_weights=[8])) == (3, 8)
+        assert host._resolve_slider_bounds(0, QuestionEntry("slider", [1], custom_weights=[8])) == (
+            3,
+            8,
+        )
 
-        badges = host._build_header_badges(0, QuestionEntry("single", [1], question_num=11), host.info[0], parent)
-        assert [badge.text() for badge in badges] == ["单选题", "必答", "图片题", "条件显示", "控制后续", "跳题"]
+        badges = host._build_header_badges(
+            0, QuestionEntry("single", [1], question_num=11), host.info[0], parent
+        )
+        assert [badge.text() for badge in badges] == [
+            "单选题",
+            "必答",
+            "图片题",
+            "条件显示",
+            "控制后续",
+            "跳题",
+        ]
 
         host.entries[0].question_num = 999
         host.entries[0].attached_option_selects = []

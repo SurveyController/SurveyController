@@ -42,7 +42,6 @@ class WizardRuntimeState:
 
 
 def bind_runtime_state(owner: Any, state: WizardRuntimeState) -> None:
-    
 
     owner._runtime_state = state
     owner.slider_map = state.slider_map

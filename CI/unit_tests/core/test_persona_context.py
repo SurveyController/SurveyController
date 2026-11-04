@@ -4,7 +4,9 @@ from surveycore.core.persona import context
 
 
 class _Persona:
-    def __init__(self, keyword_map: dict[str, list[str]] | None = None, description: str = "测试画像") -> None:
+    def __init__(
+        self, keyword_map: dict[str, list[str]] | None = None, description: str = "测试画像"
+    ) -> None:
         self.keyword_map = keyword_map or {}
         self.description = description
 
@@ -27,7 +29,9 @@ class PersonaContextTests:
         assert answered[1].selected_texts == ["喜欢"]
         assert answered[2].row_answers == {3: [1]}
 
-    def test_apply_persona_boost_returns_copy_when_no_persona_or_keywords(self, patch_attrs) -> None:
+    def test_apply_persona_boost_returns_copy_when_no_persona_or_keywords(
+        self, patch_attrs
+    ) -> None:
         patch_attrs((context, "get_current_persona", lambda: None))
         weights = [1.0, 2.0]
 
@@ -48,7 +52,9 @@ class PersonaContextTests:
 
     def test_build_ai_context_prompt_includes_persona_and_recent_answers(self, patch_attrs) -> None:
         context.reset_context()
-        patch_attrs((context, "get_current_persona", lambda: _Persona(description="25岁，北京用户")))
+        patch_attrs(
+            (context, "get_current_persona", lambda: _Persona(description="25岁，北京用户"))
+        )
         for idx in range(1, 13):
             context.record_answer(idx, "single", selected_texts=[f"选项{idx}"])
         context.record_answer(13, "text", text_answer="这是一段很长的填空内容" * 5)

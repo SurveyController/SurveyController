@@ -50,19 +50,36 @@ def isolate_qsettings(monkeypatch: pytest.MonkeyPatch, tmp_path) -> None:
     monkeypatch.setenv("SURVEYCONTROLLER_QSETTINGS_FILE", os.fspath(settings_file))
 
     from software.integrations.ai import settings as ai_settings
+    from software.app.settings_store import app_settings
+    from software.app.user_paths import (
+        get_default_runtime_config_path,
+        get_legacy_runtime_config_path,
+    )
+    from software.io.runtime_environment import configure_runtime_environment
 
+    configure_runtime_environment(
+        app_settings,
+        get_default_runtime_config_path,
+        get_legacy_runtime_config_path,
+    )
+    ai_settings.configure_ai_settings_store(app_settings)
     ai_settings._RUNTIME_AI_SETTINGS = None
 
     yield
 
     ai_settings._RUNTIME_AI_SETTINGS = None
+    ai_settings.configure_ai_settings_store(None)
 
 
 @pytest.fixture(autouse=True)
 def isolate_system_clipboard(monkeypatch: pytest.MonkeyPatch) -> None:
     fake_clipboard = _InMemoryClipboard()
-    monkeypatch.setattr(QApplication, "clipboard", staticmethod(lambda *_args, **_kwargs: fake_clipboard))
-    monkeypatch.setattr(QGuiApplication, "clipboard", staticmethod(lambda *_args, **_kwargs: fake_clipboard))
+    monkeypatch.setattr(
+        QApplication, "clipboard", staticmethod(lambda *_args, **_kwargs: fake_clipboard)
+    )
+    monkeypatch.setattr(
+        QGuiApplication, "clipboard", staticmethod(lambda *_args, **_kwargs: fake_clipboard)
+    )
     yield
 
 

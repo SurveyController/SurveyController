@@ -33,7 +33,9 @@ class LogicTreeState:
     relations: Dict[int, List[LogicRelation]] = field(default_factory=dict)
 
 
-def _normalize_info_list(info_list: Sequence[SurveyQuestionMeta | Dict[str, Any]]) -> List[SurveyQuestionMeta]:
+def _normalize_info_list(
+    info_list: Sequence[SurveyQuestionMeta | Dict[str, Any]],
+) -> List[SurveyQuestionMeta]:
     normalized: List[SurveyQuestionMeta] = []
     for index, item in enumerate(info_list or [], start=1):
         normalized.append(ensure_survey_question_meta(item or {}, index=index))
@@ -128,7 +130,11 @@ def _build_display_inbound_segments(
                 ),
                 None,
             )
-            source_info = info_list[source_index] if source_index is not None else ensure_survey_question_meta({})
+            source_info = (
+                info_list[source_index]
+                if source_index is not None
+                else ensure_survey_question_meta({})
+            )
             option_text = _format_option_text(
                 source_info,
                 list(condition.get("condition_option_indices") or []),
@@ -249,8 +255,12 @@ def build_logic_tree_state(
     state.relations = _merge_relations(display_relations, jump_relations)
 
     for index, info in enumerate(info_list):
-        inbound_segments = list(display_inbound.get(index) or []) + list(jump_inbound.get(index) or [])
-        state.inbound_summary[index] = "；".join(inbound_segments) if inbound_segments else "始终显示"
+        inbound_segments = list(display_inbound.get(index) or []) + list(
+            jump_inbound.get(index) or []
+        )
+        state.inbound_summary[index] = (
+            "；".join(inbound_segments) if inbound_segments else "始终显示"
+        )
 
         outbound_segments: List[str] = []
         relation_items = list(state.relations.get(index) or [])
@@ -267,7 +277,9 @@ def build_logic_tree_state(
             labels: List[str] = []
             max_question_num = max((int(item.num or 0) for item in info_list), default=0)
             for target_num in jump_targets:
-                labels.append("结束" if target_num > max_question_num else _format_question_ref(target_num))
+                labels.append(
+                    "结束" if target_num > max_question_num else _format_question_ref(target_num)
+                )
             outbound_segments.append(f"跳转 {'、'.join(labels)}")
         state.outbound_summary[index] = "；".join(outbound_segments) if outbound_segments else "无"
 

@@ -31,7 +31,9 @@ class PersonaGeneratorTests:
     def test_persona_defaults_return_empty_mapping_and_generic_description(self) -> None:
         persona = Persona()
 
-        assert persona.to_keyword_map() == {"no_children": ["无子女", "无孩子", "未育", "没有孩子", "没有小孩"]}
+        assert persona.to_keyword_map() == {
+            "no_children": ["无子女", "无孩子", "未育", "没有孩子", "没有小孩"]
+        }
         assert persona.to_description() == "一名普通用户"
 
     def test_generate_persona_respects_young_student_constraints(self, monkeypatch) -> None:

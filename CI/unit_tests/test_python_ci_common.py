@@ -7,7 +7,9 @@ import pytest
 from CI.python_checks import common
 
 
-def test_run_unicode_escape_check_reports_ci_unicode_escape(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_run_unicode_escape_check_reports_ci_unicode_escape(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     ci_dir = tmp_path / "CI"
     ci_dir.mkdir()
     source_path = ci_dir / "demo.py"
@@ -31,5 +33,36 @@ def test_run_unicode_escape_check_skips_non_ci_targets(tmp_path: Path, monkeypat
 
     monkeypatch.setattr(common, "UNICODE_ESCAPE_SCAN_ROOTS", (tmp_path / "CI",))
     issues = common.run_unicode_escape_check([software_dir])
+
+    assert issues == []
+
+
+def test_run_type_ignore_check_reports_suppression_comments(tmp_path: Path, monkeypatch) -> None:
+    source_path = tmp_path / "demo.py"
+    source_path.write_text(
+        "value = 1  # type: ignore[assignment]\n"
+        "# pyright: strict\n"
+        "other = 2  # ty: ignore[invalid-assignment]\n",
+        encoding="utf-8",
+    )
+
+    monkeypatch.setattr(common, "TYPE_IGNORE_SCAN_ROOTS", (tmp_path,))
+    monkeypatch.setattr(common, "TYPE_IGNORE_SCAN_FILES", ())
+    issues = common.run_type_ignore_check([tmp_path])
+
+    assert [(issue["row"], issue["column"]) for issue in issues] == [
+        (1, 14),
+        (2, 3),
+        (3, 14),
+    ]
+
+
+def test_run_type_ignore_check_ignores_marker_text_in_strings(tmp_path: Path, monkeypatch) -> None:
+    source_path = tmp_path / "demo.py"
+    source_path.write_text('directive = "# type: ignore[assignment]"\n', encoding="utf-8")
+
+    monkeypatch.setattr(common, "TYPE_IGNORE_SCAN_ROOTS", (tmp_path,))
+    monkeypatch.setattr(common, "TYPE_IGNORE_SCAN_FILES", ())
+    issues = common.run_type_ignore_check([tmp_path])
 
     assert issues == []

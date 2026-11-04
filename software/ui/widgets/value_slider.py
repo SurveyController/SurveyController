@@ -4,8 +4,6 @@ from qfluentwidgets import BodyLabel, Slider
 
 
 class ValueSlider(QWidget):
-    
-
     valueChanged = Signal(int)
 
     def __init__(

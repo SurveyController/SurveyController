@@ -104,10 +104,16 @@ class RuntimeProxySyncMixin:
 
     def _current_survey_provider(self) -> str:
         try:
-            return str(
-                self.controller.get_runtime_snapshot().get("settings", {}).get("survey_provider")
-                or "wjx"
-            ).strip().lower()
+            return (
+                str(
+                    self.controller.get_runtime_snapshot()
+                    .get("settings", {})
+                    .get("survey_provider")
+                    or "wjx"
+                )
+                .strip()
+                .lower()
+            )
         except Exception:
             return "wjx"
 

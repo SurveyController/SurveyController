@@ -127,11 +127,20 @@ def _build_file_picker(page, layout: QVBoxLayout) -> None:
     file_layout.addLayout(input_row)
 
     info_row = QHBoxLayout()
-    info_row.setSpacing(24)
+    info_row.setSpacing(12)
     page.detected_format_label = BodyLabel("检测结果：等待校验事件", page.file_panel)
+    page.detected_format_label.setWordWrap(True)
     page.state_hint_label = CaptionLabel("暂无有效数据装载", page.file_panel)
-    info_row.addWidget(page.detected_format_label)
-    info_row.addWidget(page.state_hint_label)
+    page.state_hint_label.setWordWrap(True)
+    page.cancel_preview_btn = PushButton(
+        FluentIcon.CANCEL_MEDIUM,
+        "取消预检",
+        page.file_panel,
+    )
+    page.cancel_preview_btn.hide()
+    info_row.addWidget(page.detected_format_label, 0)
+    info_row.addWidget(page.state_hint_label, 1)
+    info_row.addWidget(page.cancel_preview_btn)
     info_row.addStretch(1)
     file_layout.addLayout(info_row)
 

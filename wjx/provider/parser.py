@@ -10,7 +10,6 @@ from surveycore.providers.errors import (
     SurveyPausedError,
     SurveyStoppedError,
 )
-from surveycore.wjx.provider.html_parser import _normalize_html_text
 from surveycore.wjx.provider.parser import (
     ENTERPRISE_UNAVAILABLE_SURVEY_ERROR_MESSAGE,
     NOT_OPEN_SURVEY_ERROR_MESSAGE,
@@ -26,9 +25,10 @@ from surveycore.wjx.provider.parser import (
     is_paused_survey_page,
     is_stopped_survey_page,
 )
+from software.providers.surveycore_compat import _normalize_html_text
 
 import software.network.http as http_client
-from software.app.config import DEFAULT_HTTP_HEADERS
+from software.network.http.defaults import DEFAULT_HTTP_HEADERS
 
 
 async def parse_wjx_survey(url: str) -> Tuple[List[Dict[str, Any]], str]:

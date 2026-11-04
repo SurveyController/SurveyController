@@ -1,6 +1,5 @@
 import os
 import webbrowser
-from typing import Any, cast
 
 from PySide6.QtCore import Qt, QSize, QUrl
 from PySide6.QtGui import QPixmap, QPainter, QPainterPath, QDesktopServices
@@ -23,18 +22,12 @@ from qfluentwidgets import (
     ImageLabel,
 )
 
-from software.app.config import STATUS_ENDPOINT
-from software.app.version import GITHUB_OWNER, GITHUB_REPO
+from software.app.project_links import REPOSITORY_URL
 from software.app.runtime_paths import get_assets_directory
-from software.ui.helpers.proxy_access import format_status_payload
 from software.ui.widgets.adaptive_flow_layout import AdaptiveFlowLayout
-
-_GITHUB_URL = f"https://github.com/{GITHUB_OWNER}/{GITHUB_REPO}"
 
 
 class CommunityPage(ScrollArea):
-    
-
     def __init__(self, parent=None):
         super().__init__(parent)
         self.view = QWidget(self)
@@ -48,8 +41,6 @@ class CommunityPage(ScrollArea):
         self.enableTransparentBackground()
 
         self._build_ui()
-
-    
 
     def _build_ui(self):
         root_layout = QVBoxLayout(self.view)
@@ -67,14 +58,12 @@ class CommunityPage(ScrollArea):
         cl.setSpacing(20)
         cl.setAlignment(Qt.AlignmentFlag.AlignTop)
 
-        
         page_title = SubtitleLabel("社区", self.content_widget)
         page_title.setStyleSheet("font-size: 28px; font-weight: bold; letter-spacing: 2px;")
         cl.addWidget(page_title)
 
         cl.addSpacing(8)
 
-        
         grid_widget = QWidget(self.content_widget)
         card_layout = AdaptiveFlowLayout(
             grid_widget,
@@ -84,12 +73,8 @@ class CommunityPage(ScrollArea):
         )
         card_layout.setContentsMargins(0, 0, 0, 0)
 
-        
         self.qq_card = self._build_qq_card()
         card_layout.addWidget(self.qq_card)
-
-        self.contact_card = self._build_contact_card()
-        card_layout.addWidget(self.contact_card)
 
         self.contribute_card = self._build_contribute_card()
         card_layout.addWidget(self.contribute_card)
@@ -99,7 +84,6 @@ class CommunityPage(ScrollArea):
 
         cl.addWidget(grid_widget)
 
-        
         footer = CaptionLabel(
             "欢迎加入社区，一起让这个项目变得更好",
             self.content_widget,
@@ -111,17 +95,14 @@ class CommunityPage(ScrollArea):
 
         cl.addStretch(1)
 
-    
-
     def _create_grid_card(self, title: str, icon=None) -> tuple[ElevatedCardWidget, QVBoxLayout]:
-        
+
         card = ElevatedCardWidget(self.content_widget)
         layout = QVBoxLayout(card)
         layout.setContentsMargins(20, 20, 20, 20)
         layout.setSpacing(14)
         layout.setAlignment(Qt.AlignmentFlag.AlignTop)
 
-        
         title_layout = QHBoxLayout()
         title_layout.setSpacing(8)
         title_layout.setContentsMargins(0, 0, 0, 0)
@@ -140,7 +121,7 @@ class CommunityPage(ScrollArea):
         return card, layout
 
     def _setup_card_button(self, button: PushButton):
-        
+
         button.setFixedHeight(36)
         button.setIconSize(QSize(16, 16))
         button.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
@@ -152,7 +133,7 @@ class CommunityPage(ScrollArea):
         primary_button: PushButton,
         secondary_button: PushButton | None = None,
     ) -> QWidget:
-        
+
         action_bar = QWidget(parent)
 
         layout = QVBoxLayout(action_bar)
@@ -171,8 +152,6 @@ class CommunityPage(ScrollArea):
         layout.addLayout(button_row)
         return action_bar
 
-    
-
     def _build_qq_card(self) -> ElevatedCardWidget:
         card, layout = self._create_grid_card("QQ 群交流", FluentIcon.CHAT)
 
@@ -185,7 +164,7 @@ class CommunityPage(ScrollArea):
         text_layout.setSpacing(8)
 
         desc = BodyLabel(
-            "扫码加入 QQ 交流群，实时获取最新版本、反馈问题、交流使用经验、订阅最新的服务情况",
+            "加入 QQ 交流群，交流使用问题和建议，查看版本与服务动态。",
             card,
         )
         desc.setWordWrap(True)
@@ -194,7 +173,6 @@ class CommunityPage(ScrollArea):
         text_layout.addStretch(1)
         content_row.addLayout(text_layout, 1)
 
-        
         self.qq_qr_label = ImageLabel(card)
         self.qq_qr_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.qq_qr_label.setFixedSize(144, 144)
@@ -223,7 +201,7 @@ class CommunityPage(ScrollArea):
         return card
 
     def _load_qr_image(self):
-        
+
         try:
             path = self._resolve_qq_qr_path()
             self._qq_qr_path = path
@@ -248,7 +226,7 @@ class CommunityPage(ScrollArea):
             self._set_missing_qr_state()
 
     def _resolve_qq_qr_path(self) -> str:
-        
+
         assets_dir = get_assets_directory()
         for filename in ("community_qr.png", "community_qr.jpg", "community_qr.jpeg"):
             path = os.path.join(assets_dir, filename)
@@ -257,7 +235,7 @@ class CommunityPage(ScrollArea):
         return ""
 
     def _set_missing_qr_state(self, *, disable_button: bool = True) -> None:
-        
+
         self._qq_pixmap = None
         if disable_button:
             self._qq_qr_path = ""
@@ -267,7 +245,7 @@ class CommunityPage(ScrollArea):
             self.qq_preview_btn.setEnabled(not disable_button)
 
     def _round_pixmap(self, pixmap: QPixmap, radius: int = 8) -> QPixmap:
-        
+
         if pixmap.isNull():
             return pixmap
         output = QPixmap(pixmap.size())
@@ -282,62 +260,17 @@ class CommunityPage(ScrollArea):
         return output
 
     def _open_qq_qr_image(self):
-        
+
         path = self._qq_qr_path or self._resolve_qq_qr_path()
         if path:
             self._qq_qr_path = path
             QDesktopServices.openUrl(QUrl.fromLocalFile(path))
 
-    
-
-    def _build_contact_card(self) -> ElevatedCardWidget:
-        card, layout = self._create_grid_card("联系开发者", FluentIcon.SEND)
-
-        desc = BodyLabel(
-            "遇到问题？有建议？不想加 QQ 群？\n可以直接在此处与我们沟通，我们会尽快回复。",
-            card,
-        )
-        desc.setWordWrap(True)
-        desc.setStyleSheet("font-size: 13px; line-height: 1.6; color: #999;")
-        layout.addWidget(desc)
-        layout.addStretch(1)
-
-        btn = PushButton("发送消息", card)
-        btn.setIcon(FluentIcon.SEND)
-        self._setup_card_button(btn)
-        btn.clicked.connect(self._open_contact_dialog)
-
-        action_bar = self._create_action_bar(
-            card,
-            btn,
-        )
-        layout.addWidget(action_bar)
-
-        return card
-
-    def _open_contact_dialog(self):
-        
-        window = self.window()
-        if hasattr(window, "_open_contact_dialog"):
-            cast(Any, window)._open_contact_dialog()
-            return
-
-        from software.ui.dialogs.contact import ContactDialog
-
-        dialog = ContactDialog(
-            self,
-            status_endpoint=STATUS_ENDPOINT,
-            status_formatter=format_status_payload,
-        )
-        dialog.exec()
-
-    
-
     def _build_contribute_card(self) -> ElevatedCardWidget:
         card, layout = self._create_grid_card("参与贡献", FluentIcon.DEVELOPER_TOOLS)
 
         desc = BodyLabel(
-            "我们接受开发、设计、测试、提供创新性想法、反馈报错等任何贡献形式\n相信我们能够一起把项目做得更好。",
+            "欢迎参与开发、设计、测试，也欢迎提出改进建议。",
             card,
         )
         desc.setWordWrap(True)
@@ -348,7 +281,7 @@ class CommunityPage(ScrollArea):
         repo_btn = PushButton("仓库主页", card)
         repo_btn.setIcon(FluentIcon.GITHUB)
         self._setup_card_button(repo_btn)
-        repo_btn.clicked.connect(lambda: webbrowser.open(_GITHUB_URL))
+        repo_btn.clicked.connect(lambda: webbrowser.open(REPOSITORY_URL))
 
         action_bar = self._create_action_bar(
             card,
@@ -357,8 +290,6 @@ class CommunityPage(ScrollArea):
         layout.addWidget(action_bar)
 
         return card
-
-    
 
     def _build_license_card(self) -> ElevatedCardWidget:
         card, layout = self._create_grid_card("开源许可", FluentIcon.CERTIFICATE)
@@ -379,7 +310,7 @@ class CommunityPage(ScrollArea):
         license_btn = PushButton("查看协议", card)
         license_btn.setIcon(FluentIcon.INFO)
         self._setup_card_button(license_btn)
-        license_btn.clicked.connect(lambda: webbrowser.open(f"{_GITHUB_URL}/blob/main/LICENSE"))
+        license_btn.clicked.connect(lambda: webbrowser.open(f"{REPOSITORY_URL}/blob/main/LICENSE"))
 
         action_bar = self._create_action_bar(
             card,

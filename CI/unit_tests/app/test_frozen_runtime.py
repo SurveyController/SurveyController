@@ -30,9 +30,16 @@ class FrozenRuntimeTests:
 
         with (
             patch.object(frozen_runtime.sys, "frozen", True, create=True),
-            patch.object(frozen_runtime.sys, "executable", "D:/App/lib/SurveyController.exe", create=True),
+            patch.object(
+                frozen_runtime.sys, "executable", "D:/App/lib/SurveyController.exe", create=True
+            ),
             patch.object(frozen_runtime.os.path, "isdir", side_effect=_isdir),
-            patch.object(frozen_runtime.os, "add_dll_directory", side_effect=lambda path: added_dirs.append(path.replace("\\", "/")), create=True),
+            patch.object(
+                frozen_runtime.os,
+                "add_dll_directory",
+                side_effect=lambda path: added_dirs.append(path.replace("\\", "/")),
+                create=True,
+            ),
         ):
             frozen_runtime.prepare_frozen_runtime()
 
@@ -45,7 +52,10 @@ class FrozenRuntimeTests:
             ]
         )
         assert frozen_runtime.os.environ["PATH"].replace("\\", "/").startswith(expected_prefix)
-        assert frozen_runtime.os.environ["QT_PLUGIN_PATH"].replace("\\", "/") == "D:/App/lib/PySide6/plugins"
+        assert (
+            frozen_runtime.os.environ["QT_PLUGIN_PATH"].replace("\\", "/")
+            == "D:/App/lib/PySide6/plugins"
+        )
         assert added_dirs == [
             "D:/App/lib/PySide6",
             "D:/App/lib/PySide6/Qt/libexec",

@@ -11,6 +11,7 @@ from surveycore.providers.errors import (
     SubmissionVerificationRequiredError,
     SurveyProviderUnavailableAtRuntimeError,
 )
+
 AI_FILL_FAIL_THRESHOLD = 5
 SUBMISSION_VERIFICATION_STOP_CATEGORY = "submission_verification"
 SURVEY_PROVIDER_UNAVAILABLE_STOP_CATEGORY = "survey_provider_unavailable"
@@ -28,11 +29,15 @@ def handle_ai_runtime_error(
     if is_ai_timeout_runtime_error(exc):
         logging.warning("AI 调用超时，本轮丢弃并继续下一轮：%s", exc)
         status_text = "AI超时"
-        log_message = f"AI调用超时，本轮按失败处理；连续达到 {AI_FILL_FAIL_THRESHOLD} 次才停止：{exc}"
+        log_message = (
+            f"AI调用超时，本轮按失败处理；连续达到 {AI_FILL_FAIL_THRESHOLD} 次才停止：{exc}"
+        )
     else:
         logging.warning("AI 填空失败，本轮丢弃并继续下一轮：%s", exc, exc_info=True)
         status_text = "AI失败"
-        log_message = f"AI填空失败，本轮按失败处理；连续达到 {AI_FILL_FAIL_THRESHOLD} 次才停止：{exc}"
+        log_message = (
+            f"AI填空失败，本轮按失败处理；连续达到 {AI_FILL_FAIL_THRESHOLD} 次才停止：{exc}"
+        )
 
     stopped = stop_policy.record_failure(
         stop_signal,
@@ -77,11 +82,13 @@ def handle_proxy_connection_error(
         ):
             return True
         return False
-    return stop_policy.record_failure(
-        stop_signal,
-        thread_name=thread_name,
-        failure_reason=FailureReason.PROXY_UNAVAILABLE,
-        consume_reverse_fill_attempt=False,
+    return bool(
+        stop_policy.record_failure(
+            stop_signal,
+            thread_name=thread_name,
+            failure_reason=FailureReason.PROXY_UNAVAILABLE,
+            consume_reverse_fill_attempt=False,
+        )
     )
 
 

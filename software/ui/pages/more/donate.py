@@ -22,8 +22,6 @@ from software.app.runtime_paths import get_resource_path
 
 
 class DonatePage(ScrollArea):
-    
-
     def __init__(self, parent=None):
         super().__init__(parent)
         self.view = QWidget(self)
@@ -41,18 +39,15 @@ class DonatePage(ScrollArea):
         layout.setSpacing(16)
         layout.setAlignment(Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignHCenter)
 
-        
         title = TitleLabel("支持作者", self)
         layout.addWidget(title, 0, Qt.AlignmentFlag.AlignHCenter)
 
-        
         desc = BodyLabel("如果这个项目对你有帮助，欢迎请作者喝杯奶茶~", self)
         desc.setStyleSheet("color: #606060;")
         layout.addWidget(desc, 0, Qt.AlignmentFlag.AlignHCenter)
 
         layout.addSpacing(10)
 
-        
         self.qr_row = QBoxLayout(QBoxLayout.Direction.LeftToRight)
         self.qr_row.setSpacing(16)
         self.qr_row.setAlignment(Qt.AlignmentFlag.AlignHCenter)
@@ -71,7 +66,6 @@ class DonatePage(ScrollArea):
 
         layout.addSpacing(16)
 
-        
         thanks = BodyLabel("感谢每一位支持者，你们的鼓励是我持续更新的动力！", self)
         thanks.setStyleSheet("color: #606060;")
         layout.addWidget(thanks, 0, Qt.AlignmentFlag.AlignHCenter)
@@ -89,19 +83,16 @@ class DonatePage(ScrollArea):
     ) -> CardWidget:
         card = CardWidget(self)
 
-        
         main_layout = QHBoxLayout(card)
         main_layout.setContentsMargins(0, 0, 0, 0)
         main_layout.setSpacing(0)
 
-        
         if brand_color:
             accent_bar = QWidget(card)
             accent_bar.setFixedWidth(4)
             accent_bar.setStyleSheet(f"background-color: {brand_color};")
             main_layout.addWidget(accent_bar)
 
-        
         content_widget = QWidget(card)
         card_layout = QVBoxLayout(content_widget)
         card_layout.setContentsMargins(24, 20, 24, 20)

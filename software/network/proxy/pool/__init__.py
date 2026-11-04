@@ -21,4 +21,3 @@ __all__ = [
     "prefetch_proxy_pool",
     "proxy_lease_has_sufficient_ttl",
 ]
-

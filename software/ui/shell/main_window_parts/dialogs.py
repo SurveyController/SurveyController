@@ -19,8 +19,6 @@ from software.logging.action_logger import log_action
 
 
 class MainWindowDialogsMixin:
-    
-
     _UI_DISPATCH_TIMEOUT_SECONDS = 5.0
 
     if TYPE_CHECKING:
@@ -34,7 +32,7 @@ class MainWindowDialogsMixin:
         def windowIcon(self) -> QIcon: ...
 
     def _qt_timer_context(self) -> QObject:
-        
+
         return cast(QObject, self)
 
     def _dispatch_to_ui(self, func: Callable[[], Any]) -> Any:
@@ -115,7 +113,7 @@ class MainWindowDialogsMixin:
         except Exception:
             return False
         try:
-            window = cast(Any, self.window())
+            window = self.window()
             if window is not None and hasattr(window, "isActiveWindow") and window.isActiveWindow():
                 return True
         except Exception:
@@ -180,7 +178,6 @@ class MainWindowDialogsMixin:
         dialog.destroyed.connect(_cleanup)
 
     def show_confirm_dialog(self, title: str, message: str) -> bool:
-        
 
         def _show():
             log_action(
@@ -214,7 +211,7 @@ class MainWindowDialogsMixin:
         yes_text: str,
         cancel_text: str,
     ) -> bool:
-        
+
         def _show() -> bool:
             log_action(
                 "DIALOG",
@@ -241,7 +238,7 @@ class MainWindowDialogsMixin:
         return bool(self._dispatch_to_ui(_show))
 
     def show_message_dialog(self, title: str, message: str, *, level: str = "info") -> None:
-        
+
         _ = level
 
         def _show():
