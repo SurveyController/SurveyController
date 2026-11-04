@@ -7,7 +7,11 @@ from typing import Any
 from qfluentwidgets import IndeterminateProgressRing, InfoBar, InfoBarPosition
 
 from software.logging.log_utils import log_suppressed_exception
-from software.ui.helpers.message_bar import replace_message_bar, reposition_message_bar, show_message_bar
+from software.ui.helpers.message_bar import (
+    replace_message_bar,
+    reposition_message_bar,
+    show_message_bar,
+)
 
 
 @dataclass

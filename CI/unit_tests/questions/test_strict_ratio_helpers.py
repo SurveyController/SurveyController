@@ -40,4 +40,3 @@ class StrictRatioHelperTests:
         assert groups == [[0, 2], [1]]
         assert abs(sum(adjusted) - 1.0) < 1e-9
         assert adjusted[1] <= adjusted[0]
-

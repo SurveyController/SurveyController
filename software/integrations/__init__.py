@@ -19,4 +19,3 @@ __all__ = [
     "save_ai_settings",
     "atest_connection",
 ]
-

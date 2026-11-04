@@ -13,7 +13,9 @@ class RuntimeControlPort(Protocol):
     def on_random_ip_loading_changed(self, loading: bool, message: str = "") -> None: ...
 
 
-def wait_if_paused(runtime_port: RuntimeControlPort | None, stop_signal: Optional[StopSignalLike]) -> None:
+def wait_if_paused(
+    runtime_port: RuntimeControlPort | None, stop_signal: Optional[StopSignalLike]
+) -> None:
     if runtime_port is None:
         return
     runtime_port.wait_if_paused(stop_signal)

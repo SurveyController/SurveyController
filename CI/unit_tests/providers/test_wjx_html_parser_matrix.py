@@ -7,7 +7,9 @@ from surveycore.wjx.provider import html_parser_matrix
 
 class WjxHtmlParserMatrixTests:
     def test_postprocess_matrix_option_texts_deduplicates_and_normalizes(self) -> None:
-        assert html_parser_matrix._postprocess_matrix_option_texts(["  好  ", "", "好", "一般"]) == ["好", "一般"]
+        assert html_parser_matrix._postprocess_matrix_option_texts(
+            ["  好  ", "", "好", "一般"]
+        ) == ["好", "一般"]
 
     def test_collect_matrix_option_texts_prefers_table_rowindex_and_header(self) -> None:
         html = """
@@ -22,7 +24,9 @@ class WjxHtmlParserMatrixTests:
         soup = BeautifulSoup(html, "html.parser")
         question_div = soup.find(id="div3")
 
-        rows, options, row_texts = html_parser_matrix._collect_matrix_option_texts(soup, question_div, 3)
+        rows, options, row_texts = html_parser_matrix._collect_matrix_option_texts(
+            soup, question_div, 3
+        )
 
         assert rows == 2
         assert options == ["差", "好"]
@@ -42,13 +46,17 @@ class WjxHtmlParserMatrixTests:
         soup = BeautifulSoup(html, "html.parser")
         question_div = soup.find(id="div5")
 
-        rows, options, row_texts = html_parser_matrix._collect_matrix_option_texts(soup, question_div, 5)
+        rows, options, row_texts = html_parser_matrix._collect_matrix_option_texts(
+            soup, question_div, 5
+        )
 
         assert rows == 2
         assert options == ["1", "2"]
         assert row_texts == ["行一", "行二"]
 
-    def test_collect_matrix_option_texts_handles_split_row_titles_without_rotating_headers(self) -> None:
+    def test_collect_matrix_option_texts_handles_split_row_titles_without_rotating_headers(
+        self,
+    ) -> None:
         html = """
         <div id="div27">
           <table id="divRefTab27">
@@ -81,7 +89,9 @@ class WjxHtmlParserMatrixTests:
         soup = BeautifulSoup(html, "html.parser")
         question_div = soup.find(id="div27")
 
-        rows, options, row_texts = html_parser_matrix._collect_matrix_option_texts(soup, question_div, 27)
+        rows, options, row_texts = html_parser_matrix._collect_matrix_option_texts(
+            soup, question_div, 27
+        )
 
         assert rows == 2
         assert options == ["1分", "2分", "3分", "4分", "5分"]
@@ -108,7 +118,9 @@ class WjxHtmlParserMatrixTests:
         assert html_parser_matrix._question_div_looks_like_slider_matrix(question_div)
         assert html_parser_matrix._format_slider_matrix_value(3.0) == "3"
         assert html_parser_matrix._format_slider_matrix_value(3.5) == "3.5"
-        assert html_parser_matrix._build_slider_matrix_option_texts_from_input(question_div.select("input.ui-slider-input")[0]) == ["1", "3", "5"]
+        assert html_parser_matrix._build_slider_matrix_option_texts_from_input(
+            question_div.select("input.ui-slider-input")[0]
+        ) == ["1", "3", "5"]
 
         rows, options, row_texts = html_parser_matrix._collect_slider_matrix_metadata(question_div)
         assert rows == 2

@@ -25,6 +25,7 @@ class _FakeController(QObject):
 
     def __init__(self) -> None:
         super().__init__()
+        self.ai_settings = _FakeAiSettings()
         self.running = False
         self._starting = False
         self.adapter = object()
@@ -87,11 +88,56 @@ class _FakeController(QObject):
         return None
 
 
+class _FakeAiSettings:
+    providers = {
+        "deepseek": {
+            "label": "DeepSeek",
+            "recommended_models": ["deepseek-flash", "deepseek-v4-pro"],
+            "default_model": "deepseek-flash",
+        },
+        "custom": {
+            "label": "OpenAI 兼容",
+            "recommended_models": [],
+            "default_model": "",
+        },
+    }
+
+    def __init__(self) -> None:
+        self.settings = {
+            "ai_mode": "provider",
+            "provider": "deepseek",
+            "api_key": "",
+            "base_url": "",
+            "api_protocol": "auto",
+            "model": "",
+            "system_prompt": "默认提示",
+        }
+        self.writes: list[dict] = []
+
+    def default_system_prompt(self) -> str:
+        return "默认提示"
+
+    def get_settings(self) -> dict:
+        return dict(self.settings)
+
+    def save_settings(self, **values) -> None:
+        self.writes.append(dict(values))
+        self.settings.update(values)
+
+    def reset_settings(self) -> None:
+        self.settings.clear()
+
+    def readiness_error(self, config=None) -> str:
+        return ""
+
+    async def test_connection(self) -> str:
+        return "连接成功"
+
+
 def _patch_page_dependencies(monkeypatch) -> None:
     import software.ui.pages.workbench.dashboard.page as dashboard_module
     import software.ui.pages.workbench.dashboard.parts.progress as progress_module
     import software.ui.pages.workbench.dashboard.parts.random_ip as dash_random_ip
-    import software.ui.pages.workbench.runtime_panel.ai as ai_module
     import software.ui.pages.workbench.runtime_panel.proxy_sync as runtime_proxy_sync
     import software.ui.pages.workbench.runtime_panel.random_ip_card as random_ip_card
     import software.ui.pages.workbench.shared.clipboard as clipboard_module
@@ -103,8 +149,12 @@ def _patch_page_dependencies(monkeypatch) -> None:
             {"code": "110000", "name": "北京", "cities": [{"code": "110100", "name": "北京"}]}
         ],
     )
-    monkeypatch.setattr(random_ip_card, "load_supported_area_codes", lambda: ({"110000", "110100"}, False))
-    monkeypatch.setattr(random_ip_card, "load_benefit_supported_areas", lambda force_refresh=False: [])
+    monkeypatch.setattr(
+        random_ip_card, "load_supported_area_codes", lambda: ({"110000", "110100"}, False)
+    )
+    monkeypatch.setattr(
+        random_ip_card, "load_benefit_supported_areas", lambda force_refresh=False: []
+    )
     proxy_settings = SimpleNamespace(
         source="default",
         custom_api_url="",
@@ -116,19 +166,26 @@ def _patch_page_dependencies(monkeypatch) -> None:
     monkeypatch.setattr(random_ip_card, "apply_custom_proxy_api", lambda _url: None)
     monkeypatch.setattr(random_ip_card, "test_custom_proxy_api", lambda _url: (True, "", []))
 
-    monkeypatch.setattr(ai_module, "get_ai_settings", lambda: {"ai_mode": "provider"})
-    monkeypatch.setattr(ai_module, "save_ai_settings", lambda **_kwargs: None)
-    monkeypatch.setattr(ai_module, "get_default_system_prompt", lambda: "默认提示")
-    monkeypatch.setattr(runtime_proxy_sync, "apply_proxy_source_settings", lambda *_args, **_kwargs: None)
-    monkeypatch.setattr(runtime_proxy_sync, "apply_custom_proxy_api", lambda *_args, **_kwargs: None)
-    monkeypatch.setattr(runtime_proxy_sync, "get_proxy_minute_by_answer_seconds", lambda *_args, **_kwargs: 1)
+    monkeypatch.setattr(
+        runtime_proxy_sync, "apply_proxy_source_settings", lambda *_args, **_kwargs: None
+    )
+    monkeypatch.setattr(
+        runtime_proxy_sync, "apply_custom_proxy_api", lambda *_args, **_kwargs: None
+    )
+    monkeypatch.setattr(
+        runtime_proxy_sync, "get_proxy_minute_by_answer_seconds", lambda *_args, **_kwargs: 1
+    )
     monkeypatch.setattr(dashboard_module, "load_shop_icon", lambda: None)
     monkeypatch.setattr(dash_random_ip, "load_shop_icon", lambda: None)
     monkeypatch.setattr(dash_random_ip, "get_session_snapshot", lambda: {"authenticated": False})
     monkeypatch.setattr(dash_random_ip, "has_authenticated_session", lambda: False)
-    monkeypatch.setattr(dash_random_ip, "get_random_ip_counter_snapshot_local", lambda: (0, 0, False))
+    monkeypatch.setattr(
+        dash_random_ip, "get_random_ip_counter_snapshot_local", lambda: (0, 0, False)
+    )
     monkeypatch.setattr(DashboardPage, "_init_random_ip_status_refresh", lambda self: None)
-    monkeypatch.setattr(clipboard_module.SurveyClipboardMixin, "_on_clipboard_changed", lambda self: None)
+    monkeypatch.setattr(
+        clipboard_module.SurveyClipboardMixin, "_on_clipboard_changed", lambda self: None
+    )
     monkeypatch.setattr(progress_module, "log_action", lambda *_args, **_kwargs: None)
 
 
@@ -155,11 +212,13 @@ def test_runtime_page_builds_and_syncs_config_without_network(monkeypatch, qtbot
     assert not hasattr(page.ai_section, "ai_free_mode_bar")
 
 
-@pytest.mark.parametrize("provider,model", [("custom", "test-model"), ("deepseek", "deepseek-v4-pro")])
-def test_runtime_ai_preserves_saved_model_when_loading_legacy_config(monkeypatch, qtbot, provider, model) -> None:
+@pytest.mark.parametrize(
+    "provider,model", [("custom", "test-model"), ("deepseek", "deepseek-v4-pro")]
+)
+def test_runtime_ai_preserves_saved_model_when_loading_legacy_config(
+    monkeypatch, qtbot, provider, model
+) -> None:
     _patch_page_dependencies(monkeypatch)
-    import software.ui.pages.workbench.runtime_panel.ai as ai_module
-
     saved = {
         "ai_mode": "free",
         "provider": provider,
@@ -168,13 +227,12 @@ def test_runtime_ai_preserves_saved_model_when_loading_legacy_config(monkeypatch
         "model": model,
         "system_prompt": "用户提示词",
     }
-    monkeypatch.setattr(ai_module, "get_ai_settings", lambda: dict(saved))
-    writes = []
-    monkeypatch.setattr(ai_module, "save_ai_settings", lambda **kwargs: writes.append(kwargs))
-    page = RuntimePage(_FakeController())
+    controller = _FakeController()
+    controller.ai_settings.settings = dict(saved)
+    page = RuntimePage(controller)
     qtbot.addWidget(page)
     assert page.ai_section._get_current_model_value() == model
-    assert writes == []
+    assert controller.ai_settings.writes == []
 
     cfg = RuntimeConfig(ai_mode="free")
     page.apply_config(cfg)
@@ -447,7 +505,9 @@ def test_dashboard_thread_progress_switches_to_current_step_immediately(
     assert row["step_busy_bar"].isVisible() is True
 
 
-def test_dashboard_thread_progress_shows_progress_bar_after_thread_finishes(monkeypatch, qtbot) -> None:
+def test_dashboard_thread_progress_shows_progress_bar_after_thread_finishes(
+    monkeypatch, qtbot
+) -> None:
     _patch_page_dependencies(monkeypatch)
     controller = _FakeController()
     runtime_page = RuntimePage(controller)

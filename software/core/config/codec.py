@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import copy
 import logging
-import random
 from dataclasses import asdict, fields
 from typing import Any, Dict, List, Optional, Tuple
 
@@ -30,7 +29,9 @@ from surveycore.providers.contracts import (
     serialize_survey_question_metas,
 )
 from software.logging.log_utils import log_suppressed_exception
-from software.app.config import USER_AGENT_PRESETS
+from software.core.config.user_agents import (
+    select_user_agent_from_ratios,
+)
 from surveycore.core.user_agent import UserAgentProfile
 
 _TEXT_RANDOM_MODES = {"none", "name", "mobile", "id_card", "integer"}
@@ -43,15 +44,9 @@ _REVERSE_FILL_FORMATS = {
 DEFAULT_ANSWER_DURATION_RANGE_SECONDS = (60, 120)
 MAX_ANSWER_DURATION_SECONDS = 30 * 60
 _DEFAULT_RANDOM_UA_RATIOS = {"wechat": 33, "mobile": 33, "pc": 34}
-_USER_AGENT_DEVICE_TO_PRESET_KEYS = {
-    "wechat": ["wechat_android"],
-    "mobile": ["mobile_android"],
-    "pc": ["pc_web"],
-}
 
 
 __all__ = [
-    "CURRENT_CONFIG_SCHEMA_VERSION",
     "UserAgentProfile",
     "_select_user_agent_from_ratios",
     "serialize_question_entry",
@@ -62,11 +57,9 @@ __all__ = [
     "normalize_runtime_config_payload",
     "serialize_runtime_config",
     "deserialize_runtime_config",
-    "_ensure_supported_config_payload",
 ]
 
 _CONFIG_CORRUPTED_MESSAGE = "该配置文件损坏，请输入问卷链接/二维码重新配置"
-CURRENT_CONFIG_SCHEMA_VERSION = 6
 
 _QUESTION_ENTRY_FIELDS = {
     "question_type",
@@ -179,36 +172,7 @@ def _select_user_agent_from_ratios(
     *,
     rng: Any = None,
 ) -> Optional[UserAgentProfile]:
-    chooser = rng or random
-    devices: List[str] = []
-    weights: List[int] = []
-    for device_type, ua_keys in _USER_AGENT_DEVICE_TO_PRESET_KEYS.items():
-        if not ua_keys:
-            continue
-        weight = max(0, _coerce_int((ratios or {}).get(device_type), 0))
-        if weight > 0:
-            devices.append(device_type)
-            weights.append(weight)
-    if not devices:
-        return None
-
-    device_type = chooser.choices(devices, weights=weights, k=1)[0]
-    ua_keys = _USER_AGENT_DEVICE_TO_PRESET_KEYS.get(device_type, [])
-    if not ua_keys:
-        return None
-
-    key = chooser.choice(ua_keys)
-    preset = USER_AGENT_PRESETS.get(key) or {}
-    ua = str(preset.get("ua") or "").strip()
-    label = str(preset.get("label") or "").strip()
-    if not ua:
-        return None
-    return UserAgentProfile(
-        category=str(device_type or "").strip(),
-        preset_key=str(key or "").strip(),
-        ua=ua,
-        label=label,
-    )
+    return select_user_agent_from_ratios(ratios, rng=rng)
 
 
 def _prob_config_is_unset(value: Any) -> bool:
@@ -362,11 +326,19 @@ def serialize_question_entry(entry) -> Dict[str, Any]:
         "provider_question_id": str(getattr(entry, "provider_question_id", None) or ""),
         "provider_page_id": str(getattr(entry, "provider_page_id", None) or ""),
         "ai_enabled": bool(getattr(entry, "ai_enabled", False)),
-        "multi_text_blank_modes": _normalize_multi_text_blank_modes(getattr(entry, "multi_text_blank_modes", [])),
-        "multi_text_blank_ai_flags": _normalize_multi_text_blank_ai_flags(getattr(entry, "multi_text_blank_ai_flags", [])),
-        "multi_text_blank_int_ranges": _normalize_multi_text_blank_int_ranges(getattr(entry, "multi_text_blank_int_ranges", [])),
+        "multi_text_blank_modes": _normalize_multi_text_blank_modes(
+            getattr(entry, "multi_text_blank_modes", [])
+        ),
+        "multi_text_blank_ai_flags": _normalize_multi_text_blank_ai_flags(
+            getattr(entry, "multi_text_blank_ai_flags", [])
+        ),
+        "multi_text_blank_int_ranges": _normalize_multi_text_blank_int_ranges(
+            getattr(entry, "multi_text_blank_int_ranges", [])
+        ),
         "text_random_mode": str(getattr(entry, "text_random_mode", "none") or "none"),
-        "text_random_int_range": _normalize_random_int_range(getattr(entry, "text_random_int_range", [])),
+        "text_random_int_range": _normalize_random_int_range(
+            getattr(entry, "text_random_int_range", [])
+        ),
         "option_fill_texts": entry.option_fill_texts,
         "fillable_option_indices": entry.fillable_option_indices,
         "attached_option_selects": list(getattr(entry, "attached_option_selects", []) or []),
@@ -388,13 +360,21 @@ def deserialize_question_entry(data: Dict[str, Any]):
 
     unknown_keys = set(data or {}) - _QUESTION_ENTRY_FIELDS
     if unknown_keys:
-        raise ValueError(f"{_CONFIG_CORRUPTED_MESSAGE}：题目配置包含不支持的字段（{', '.join(sorted(unknown_keys))}）")
+        logging.warning("忽略题目配置中的未知字段：%s", ", ".join(sorted(unknown_keys)))
     mode_raw = data.get("distribution_mode") or "random"
     probabilities = data.get("probabilities")
     custom_weights = data.get("custom_weights")
-    if mode_raw == "custom" and _prob_config_is_unset(probabilities) and _custom_weights_has_positive(custom_weights):
+    if (
+        mode_raw == "custom"
+        and _prob_config_is_unset(probabilities)
+        and _custom_weights_has_positive(custom_weights)
+    ):
         probabilities = custom_weights
-    if mode_raw == "custom" and (custom_weights is None or custom_weights == []) and isinstance(probabilities, list):
+    if (
+        mode_raw == "custom"
+        and (custom_weights is None or custom_weights == [])
+        and isinstance(probabilities, list)
+    ):
         custom_weights = list(probabilities)
     return QuestionEntry(
         question_type=data.get("question_type") or "text",
@@ -413,9 +393,15 @@ def deserialize_question_entry(data: Dict[str, Any]):
         provider_question_id=str(data.get("provider_question_id") or "").strip() or None,
         provider_page_id=str(data.get("provider_page_id") or "").strip() or None,
         ai_enabled=bool(data.get("ai_enabled", False)),
-        multi_text_blank_modes=_normalize_multi_text_blank_modes(data.get("multi_text_blank_modes")),
-        multi_text_blank_ai_flags=_normalize_multi_text_blank_ai_flags(data.get("multi_text_blank_ai_flags")),
-        multi_text_blank_int_ranges=_normalize_multi_text_blank_int_ranges(data.get("multi_text_blank_int_ranges")),
+        multi_text_blank_modes=_normalize_multi_text_blank_modes(
+            data.get("multi_text_blank_modes")
+        ),
+        multi_text_blank_ai_flags=_normalize_multi_text_blank_ai_flags(
+            data.get("multi_text_blank_ai_flags")
+        ),
+        multi_text_blank_int_ranges=_normalize_multi_text_blank_int_ranges(
+            data.get("multi_text_blank_int_ranges")
+        ),
         text_random_mode=str(data.get("text_random_mode") or "none"),
         text_random_int_range=_normalize_random_int_range(data.get("text_random_int_range")),
         option_fill_texts=data.get("option_fill_texts"),
@@ -438,7 +424,9 @@ def clone_question_entries(entries: Any) -> List[Any]:
     return cloned
 
 
-def clone_questions_info(questions: Any, *, default_provider: str = SURVEY_PROVIDER_WJX) -> List[SurveyQuestionMeta]:
+def clone_questions_info(
+    questions: Any, *, default_provider: str = SURVEY_PROVIDER_WJX
+) -> List[SurveyQuestionMeta]:
     return clone_survey_question_metas(questions or [], default_provider=default_provider)
 
 
@@ -454,8 +442,14 @@ def build_runtime_config_snapshot(
         default=detect_survey_provider(getattr(snapshot, "url", "")),
     )
     snapshot.survey_provider = default_provider
-    entry_source = question_entries if question_entries is not None else getattr(snapshot, "question_entries", [])
-    info_source = questions_info if questions_info is not None else getattr(snapshot, "questions_info", [])
+    entry_source = (
+        question_entries
+        if question_entries is not None
+        else getattr(snapshot, "question_entries", [])
+    )
+    info_source = (
+        questions_info if questions_info is not None else getattr(snapshot, "questions_info", [])
+    )
     snapshot.question_entries = clone_question_entries(entry_source)
     snapshot.questions_info = clone_questions_info(info_source, default_provider=default_provider)
     snapshot.answer_rules = copy.deepcopy(list(getattr(snapshot, "answer_rules", []) or []))
@@ -465,7 +459,6 @@ def build_runtime_config_snapshot(
 
 
 def normalize_runtime_config_payload(raw: Dict[str, Any]) -> RuntimeConfig:
-    
 
     def _as_int(value: Any, default: int = 0) -> int:
         try:
@@ -510,7 +503,7 @@ def normalize_runtime_config_payload(raw: Dict[str, Any]) -> RuntimeConfig:
     config = RuntimeConfig()
     unknown_keys = set(raw or {}) - _RUNTIME_CONFIG_FIELDS
     if unknown_keys:
-        raise ValueError(f"{_CONFIG_CORRUPTED_MESSAGE}：配置包含不支持的字段（{', '.join(sorted(unknown_keys))}）")
+        logging.warning("忽略配置中的未知字段：%s", ", ".join(sorted(unknown_keys)))
     config.url = str(raw.get("url") or "")
     config.survey_title = str(raw.get("survey_title") or "")
     config.survey_provider = normalize_survey_provider(
@@ -544,7 +537,9 @@ def normalize_runtime_config_payload(raw: Dict[str, Any]) -> RuntimeConfig:
     config.reverse_fill_source_path = str(raw.get("reverse_fill_source_path") or "")
     config.reverse_fill_format = _reverse_fill_format(raw.get("reverse_fill_format"))
     config.reverse_fill_start_row = max(1, _as_int(raw.get("reverse_fill_start_row"), 1))
-    config.reverse_fill_threads = max(1, _as_int(raw.get("reverse_fill_threads"), config.threads or 1))
+    config.reverse_fill_threads = max(
+        1, _as_int(raw.get("reverse_fill_threads"), config.threads or 1)
+    )
     config.answer_rules = []
     config.dimension_groups = _normalize_dimension_groups(raw.get("dimension_groups"))
     raw_rules = raw.get("answer_rules")
@@ -581,7 +576,8 @@ def normalize_runtime_config_payload(raw: Dict[str, Any]) -> RuntimeConfig:
         if (
             config.survey_provider != SURVEY_PROVIDER_WJX
             and getattr(entry, "provider_question_id", None)
-            and normalize_survey_provider(getattr(entry, "survey_provider", None)) == SURVEY_PROVIDER_WJX
+            and normalize_survey_provider(getattr(entry, "survey_provider", None))
+            == SURVEY_PROVIDER_WJX
         ):
             entry.survey_provider = config.survey_provider
         config.question_entries.append(entry)
@@ -592,8 +588,9 @@ def normalize_runtime_config_payload(raw: Dict[str, Any]) -> RuntimeConfig:
             if isinstance(item, dict):
                 unknown_question_keys = set(item) - _SURVEY_QUESTION_META_FIELDS
                 if unknown_question_keys:
-                    raise ValueError(
-                        f"{_CONFIG_CORRUPTED_MESSAGE}：题目元数据包含不支持的字段（{', '.join(sorted(unknown_question_keys))}）"
+                    logging.warning(
+                        "忽略题目元数据中的未知字段：%s",
+                        ", ".join(sorted(unknown_question_keys)),
                     )
         normalized_questions = ensure_questions_provider_fields(
             questions_info_data,
@@ -609,12 +606,11 @@ def normalize_runtime_config_payload(raw: Dict[str, Any]) -> RuntimeConfig:
     return config
 
 
-def _ensure_supported_config_payload(payload: Dict[str, Any], *, config_path: str) -> Dict[str, Any]:
-    del config_path
-    return dict(payload)
-
-
-def serialize_runtime_config(config: RuntimeConfig) -> Dict[str, Any]:
+def serialize_runtime_config(
+    config: RuntimeConfig,
+    *,
+    include_secrets: bool = False,
+) -> Dict[str, Any]:
     payload: Dict[str, Any] = asdict(config)
     payload["ai_mode"] = "provider"
     payload["question_entries"] = [
@@ -622,10 +618,10 @@ def serialize_runtime_config(config: RuntimeConfig) -> Dict[str, Any]:
     ]
     payload["questions_info"] = serialize_survey_question_metas(config.questions_info or [])
     payload.pop("_ai_config_present", None)
+    if not include_secrets:
+        payload.pop("ai_api_key", None)
     return payload
 
 
 def deserialize_runtime_config(payload: Dict[str, Any]) -> RuntimeConfig:
     return normalize_runtime_config_payload(payload)
-
-

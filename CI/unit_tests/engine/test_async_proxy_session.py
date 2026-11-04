@@ -17,7 +17,12 @@ class AsyncProxySessionTests:
             calls.append("select")
             return "http://1.1.1.1:8000"
 
-        monkeypatch.setattr(proxy_session_module, "_select_proxy_for_session_async", fake_select_proxy, raising=False)
+        monkeypatch.setattr(
+            proxy_session_module,
+            "_select_proxy_for_session_async",
+            fake_select_proxy,
+            raising=False,
+        )
 
         config = ExecutionConfig(random_proxy_ip_enabled=True, proxy_source="custom")
         state = ExecutionState(config=config)
@@ -67,7 +72,12 @@ class AsyncProxySessionTests:
             calls.append("select")
             return "http://1.1.1.1:8000"
 
-        monkeypatch.setattr(proxy_session_module, "_select_proxy_for_session_async", fake_select_proxy, raising=False)
+        monkeypatch.setattr(
+            proxy_session_module,
+            "_select_proxy_for_session_async",
+            fake_select_proxy,
+            raising=False,
+        )
 
         config = ExecutionConfig(random_proxy_ip_enabled=True, proxy_source="default")
         state = ExecutionState(config=config, stop_event=threading.Event())

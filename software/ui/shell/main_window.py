@@ -10,7 +10,6 @@ from PySide6.QtCore import QPoint, Qt, QTimer, QEvent, Slot
 from PySide6.QtGui import QIcon, QGuiApplication
 from PySide6.QtWidgets import QDialog, QStackedWidget, QWidget
 from qfluentwidgets import (
-    FluentWindow,
     InfoBar,
     InfoBarPosition,
     MSFluentWindow,
@@ -23,9 +22,9 @@ from qfluentwidgets import (
 )
 from shiboken6 import isValid
 
-from software.ui.dialogs.contact import ContactDialog
 from software.ui.dialogs.quota_redeem import QuotaRedeemDialog
 
+from software.app.bootstrap import create_application_dependencies
 from software.ui.controller.run_controller import RunController
 from software.ui.pages.workbench.presenter import WorkbenchPresenter
 from software.ui.shell.main_window_parts.dialogs import MainWindowDialogsMixin
@@ -39,7 +38,6 @@ from software.ui.shell.main_window_parts.update import MainWindowUpdateMixin
 from software.app.config import (
     APP_ICON_RELATIVE_PATH,
     NAVIGATION_TEXT_VISIBLE_SETTING_KEY,
-    STATUS_ENDPOINT,
     app_settings,
     get_bool_from_qsettings,
 )
@@ -50,23 +48,18 @@ from software.ui.shell.startup_tutorial import (
 )
 from software.logging.action_logger import log_action
 from software.logging.log_utils import register_popup_handler
-from software.app.version import __VERSION__
-from software.network.proxy import (
-    format_status_payload,
-)
+from software.app.app_info import APP_VERSION
 from software.app.runtime_paths import get_resource_path
 
 from software.ui.shell.boot import create_boot_splash, finish_boot_splash
 
-_BaseFluentWindow = MSFluentWindow if sys.platform == "win32" else FluentWindow
+_BaseFluentWindow = MSFluentWindow
 
 
 class _ImportCheckWindow(QWidget):
-    
-
     def __init__(self):
         super().__init__()
-        self.setWindowTitle(f"SurveyController v{__VERSION__}")
+        self.setWindowTitle(f"SurveyController v{APP_VERSION}")
         self.navigationInterface = object()
         self.stackedWidget = QStackedWidget(self)
         self.workbench = SimpleNamespace()
@@ -80,7 +73,7 @@ class _ImportCheckWindow(QWidget):
 
 
 def _should_use_import_check_window() -> bool:
-    if sys.platform != "darwin":
+    if sys.platform != "win32":
         return False
     return str(os.environ.get(MainWindow._IMPORT_CHECK_ENV, "") or "").strip() == "1"
 
@@ -92,11 +85,8 @@ class MainWindow(
     MainWindowUpdateMixin,
     _BaseFluentWindow,
 ):
-    
-
     _IMPORT_CHECK_ENV = "WJX_IMPORT_CHECK"
 
-    
     def __init__(self, parent=None):
         self._boot_splash = None
         self._import_check_mode = (
@@ -112,13 +102,10 @@ class MainWindow(
         qconfig.themeChanged.connect(self._on_theme_changed)
         self._skip_save_on_close = False
         self._async_dialog_refs = []
-        self._contact_dialog = None
-        self._contact_dialog_active = False
         self._quota_redeem_dialog = None
         self._quota_redeem_dialog_active = False
         self._startup_update_check_timer = None
         self._startup_update_check_completed = False
-        self._startup_update_check_suspended = False
         self._startup_update_notification_timer = None
         self._startup_update_pending_info = None
         self._startup_post_init_done = False
@@ -133,7 +120,7 @@ class MainWindow(
         )
         self._random_ip_quota_auto_sync_timer.timeout.connect(self._sync_random_ip_quota_silently)
 
-        self._base_window_title = f"SurveyController v{__VERSION__}"
+        self._base_window_title = f"SurveyController v{APP_VERSION}"
         self.setWindowTitle(self._base_window_title)
         icon_path = get_resource_path(os.path.join("assets", "icon.png"))
         if not os.path.exists(icon_path):
@@ -144,16 +131,17 @@ class MainWindow(
         self._apply_default_window_size()
         self._enable_window_material_effect()
 
-        
         settings = app_settings()
         if get_bool_from_qsettings(settings.value("window_topmost"), False):
             self.apply_topmost_state(True, show=False)
 
-        
         if not self._import_check_mode:
             self._boot_splash = create_boot_splash(self)
 
-        self.controller = RunController(self)
+        self.controller = RunController(
+            self,
+            dependencies=create_application_dependencies(),
+        )
         self.workbench = WorkbenchPresenter(controller=self.controller, host=self)
         self.workbench_state = self.workbench.state
         self.runtime_page = self.workbench.runtime_page
@@ -162,18 +150,16 @@ class MainWindow(
         self.run_coordinator = self.workbench.run_coordinator
         self.reverse_fill_page = self.workbench.reverse_fill_page
 
-        
         self._log_page = None
         self._community_page = None
         self._about_page = None
         self._donate_page = None
-        self._ip_usage_page = None
         self._settings_page = None
         self._last_logged_page = ""
 
         self._init_navigation()
         self.stackedWidget.currentChanged.connect(self._on_stack_widget_changed)
-        
+
         QTimer.singleShot(0, self._configure_navigation_interface)
         self._bind_controller_signals()
         self._refresh_title_random_ip_user_id()
@@ -185,7 +171,6 @@ class MainWindow(
             finish_boot_splash(1500)
             QTimer.singleShot(0, self._run_post_init_tasks)
 
-        
         self._latest_badge = None
         self._outdated_badge = None
         self._preview_badge = None
@@ -193,14 +178,14 @@ class MainWindow(
         self._update_checking_spinner = None
 
     def _apply_theme_mode(self, theme_mode: Theme):
-        
+
         try:
             setTheme(theme_mode, save=False, lazy=False)
         except Exception:
             logging.info("应用主题模式失败", exc_info=True)
 
     def _enable_window_material_effect(self):
-        
+
         if not sys.platform.startswith("win"):
             return
         if not hasattr(self, "setMicaEffectEnabled"):
@@ -211,13 +196,13 @@ class MainWindow(
             logging.info("启用窗口材质效果失败", exc_info=True)
 
     def _read_navigation_text_visible_setting(self) -> bool:
-        
+
         settings = app_settings()
         stored_value = settings.value(NAVIGATION_TEXT_VISIBLE_SETTING_KEY)
         return get_bool_from_qsettings(stored_value, True)
 
     def _configure_navigation_interface(self):
-        
+
         nav = getattr(self, "navigationInterface", None)
         if nav is None:
             return
@@ -228,7 +213,7 @@ class MainWindow(
             logging.info("应用导航栏显示偏好失败", exc_info=True)
 
     def _apply_default_window_size(self):
-        
+
         fallback_width, fallback_height = 1100, 780
         try:
             screen = self.screen() or QGuiApplication.primaryScreen()
@@ -252,7 +237,7 @@ class MainWindow(
             self.resize(fallback_width, fallback_height)
 
     def _on_theme_changed(self, _theme: Theme):
-        
+
         self._enable_window_material_effect()
         try:
             drawer = getattr(getattr(self, "dashboard", None), "config_drawer", None)
@@ -262,7 +247,7 @@ class MainWindow(
             logging.info("主题变更后刷新组件失败", exc_info=True)
 
     def changeEvent(self, e):
-        
+
         super().changeEvent(e)
         watched_events = {
             QEvent.Type.ApplicationPaletteChange,
@@ -287,25 +272,24 @@ class MainWindow(
             theme_mode = Theme.AUTO
         if theme_mode != Theme.AUTO:
             return
-        
-        
+
         from qfluentwidgets.common.style_sheet import updateStyleSheet
 
         old_theme = qconfig.theme
-        qconfig.theme = Theme.AUTO  
+        qconfig.theme = Theme.AUTO
         if qconfig.theme != old_theme:
             updateStyleSheet()
             qconfig.themeChangedFinished.emit()
             qconfig._cfg.themeChanged.emit(Theme.AUTO)
 
     def resizeEvent(self, e):
-        
+
         super().resizeEvent(e)
         if self._boot_splash:
             self._boot_splash.update_layout(self.width(), self.height())
 
     def closeEvent(self, e):
-        
+
         if getattr(self, "_close_request_confirmed", False):
             self._finalize_confirmed_close()
             e.accept()
@@ -345,102 +329,19 @@ class MainWindow(
             )
             self._last_logged_page = current_name
 
-    def _open_contact_dialog(self, default_type: str = "报错反馈", lock_message_type: bool = False):
-        dialog = getattr(self, "_contact_dialog", None)
-        if dialog is not None and isValid(dialog):
-            try:
-                dialog.raise_()
-                dialog.activateWindow()
-            except Exception:
-                logging.info("联系开发者窗口前置失败", exc_info=True)
-            return False
-
-        log_action(
-            "UI",
-            "open_contact_dialog",
-            "contact_dialog",
-            "main_window",
-            result="shown",
-            payload={"locked_type": bool(lock_message_type)},
-        )
-        dlg = ContactDialog(
-            self,
-            default_type=default_type,
-            lock_message_type=lock_message_type,
-            status_endpoint=STATUS_ENDPOINT,
-            status_formatter=format_status_payload,
-        )
-        open_non_blocking = str(default_type or "").strip() == "报错反馈"
-        self._contact_dialog = dlg
-        self._contact_dialog_active = True
-        self._set_startup_update_check_suspended(True)
-        dlg.setProperty("_lock_message_type", bool(lock_message_type))
-        dlg.finished.connect(self._on_contact_dialog_finished_event)
-        dlg.destroyed.connect(self._on_contact_dialog_destroyed_event)
-        if open_non_blocking:
-            dlg.open()
-            try:
-                dlg.raise_()
-                dlg.activateWindow()
-            except Exception:
-                logging.info("异步打开联系开发者窗口后前置失败", exc_info=True)
-            return False
-        return dlg.exec() == QDialog.DialogCode.Accepted
-
-    def _on_contact_dialog_finished(
-        self, dialog: QDialog, result: int, lock_message_type: bool
-    ) -> None:
-        accepted = int(result) == int(QDialog.DialogCode.Accepted)
-        log_action(
-            "UI",
-            "open_contact_dialog",
-            "contact_dialog",
-            "main_window",
-            result="submitted" if accepted else "cancelled",
-            payload={"locked_type": bool(lock_message_type)},
-        )
-        self._on_contact_dialog_destroyed(dialog)
-
-    @Slot(int)
-    def _on_contact_dialog_finished_event(self, result: int) -> None:
-        dialog = self.sender()
-        if not isinstance(dialog, QDialog):
-            return
-        lock_message_type = bool(dialog.property("_lock_message_type"))
-        self._on_contact_dialog_finished(dialog, result, lock_message_type)
-
-    def _on_contact_dialog_destroyed(self, dialog: QDialog) -> None:
-        current_dialog = getattr(self, "_contact_dialog", None)
-        if current_dialog is dialog:
-            self._contact_dialog = None
-            self._contact_dialog_active = False
-            self._set_startup_update_check_suspended(False)
-
-    @Slot()
-    def _on_contact_dialog_destroyed_event(self, *_args) -> None:
-        dialog = getattr(self, "_contact_dialog", None)
-        if isinstance(dialog, QDialog):
-            self._on_contact_dialog_destroyed(dialog)
-
     def _show_dialog_message(self, title: str, message: str, level: str = "info") -> None:
         self.show_message_dialog(title, message, level=level)
-
-    def _prompt_quick_bug_report(self) -> None:
-        confirmed = self.show_confirm_dialog(
-            "运行异常",
-            "本次运行因异常提前终止，是否打开报错反馈？\n\n遇到问题请提交完整的日志文件，而不是发送这个页面的截图",
-        )
-        if confirmed:
-            self._open_contact_dialog(default_type="报错反馈", lock_message_type=True)
 
     def _notify_ai_unstable(self) -> None:
         self._toast("AI 填空连续失败，请稍后再试", "warning", duration=3500)
 
     def _notify_submission_verification(self, message: str) -> None:
-        self._toast(str(message or "提交触发智能验证，请启用随机 IP 后再试"), "warning", duration=4500)
+        self._toast(
+            str(message or "提交触发智能验证，请启用随机 IP 后再试"), "warning", duration=4500
+        )
 
     def _center_on_screen(self):
-        
+
         try:
             screen = self.screen() or QGuiApplication.primaryScreen()
             if not screen:
@@ -512,12 +413,20 @@ class MainWindow(
         )
         pos = self.mapToGlobal(local_pos)
         try:
-            screen = self.screen() or QGuiApplication.screenAt(pos) or QGuiApplication.primaryScreen()
+            screen = (
+                self.screen() or QGuiApplication.screenAt(pos) or QGuiApplication.primaryScreen()
+            )
             if screen is None:
                 return pos
             available = screen.availableGeometry()
-            x = min(max(pos.x(), available.left() + margin), available.right() - int(hint_width) - margin + 1)
-            y = min(max(pos.y(), available.top() + margin), available.bottom() - int(hint_height) - margin + 1)
+            x = min(
+                max(pos.x(), available.left() + margin),
+                available.right() - int(hint_width) - margin + 1,
+            )
+            y = min(
+                max(pos.y(), available.top() + margin),
+                available.bottom() - int(hint_height) - margin + 1,
+            )
             return QPoint(x, y)
         except Exception:
             logging.info("计算启动教程提示位置失败", exc_info=True)
@@ -576,7 +485,7 @@ class MainWindow(
         self._clear_startup_tutorial_refs()
 
     def apply_topmost_state(self, checked: bool, show: bool = False):
-        
+
         flags = self.windowFlags()
         already_checked = bool(flags & Qt.WindowType.WindowStaysOnTopHint)
         if already_checked == checked:
@@ -635,7 +544,6 @@ class MainWindow(
 
         register_popup_handler(handler)
 
-    
     @Slot(list, str)
     def _on_survey_parsed(self, info: list, title: str):
         self.workbench.on_survey_parsed(info, title)
@@ -656,20 +564,21 @@ class MainWindow(
         if event_type == "run_failed":
             self._on_run_failed(str((event or {}).get("message") or ""))
             return
-        if event_type == "dialog_message":
-            self._show_dialog_message(
-                str((event or {}).get("title") or ""),
-                str((event or {}).get("message") or ""),
-                str((event or {}).get("level") or "info"),
-            )
-            return
-        if event_type == "open_quota_request_form":
-            accepted = self._open_quota_request_form()
-            if accepted and bool((event or {}).get("retry_enable_random_ip")):
-                self.controller.request_toggle_random_ip(True)
-            return
-        if event_type == "quick_bug_report_suggested":
-            self._prompt_quick_bug_report()
+        if event_type in {"dialog_message", "open_quota_request_form"}:
+            accepted = False
+            try:
+                if event_type == "dialog_message":
+                    self._show_dialog_message(
+                        str(event.get("title") or ""),
+                        str(event.get("message") or ""),
+                        str(event.get("level") or "info"),
+                    )
+                elif event_type == "open_quota_request_form":
+                    accepted = self._open_quota_request_form()
+            finally:
+                request_id = str(event.get("request_id") or "")
+                if request_id:
+                    self.controller.respond_to_interaction(request_id, accepted)
             return
         if event_type == "ai_unstable":
             self._notify_ai_unstable()
@@ -694,7 +603,7 @@ class MainWindow(
                 logging.info("额度兑换窗口前置失败", exc_info=True)
             return False
 
-        dlg = QuotaRedeemDialog(self)
+        dlg = QuotaRedeemDialog(self, submit_async_task=self.controller.submit_ui_task)
         self._quota_redeem_dialog = dlg
         self._quota_redeem_dialog_active = True
         dlg.finished.connect(self._on_quota_redeem_dialog_finished_event)
@@ -753,7 +662,7 @@ class MainWindow(
 
 
 def create_window() -> MainWindow:
-    
+
     if _should_use_import_check_window():
         return cast(MainWindow, _ImportCheckWindow())
     return MainWindow()

@@ -3,7 +3,17 @@ from __future__ import annotations
 from pathlib import Path
 from types import SimpleNamespace
 
-from PySide6.QtCore import QByteArray, QBuffer, QEvent, QIODevice, QMimeData, QPoint, QPointF, QUrl, Qt
+from PySide6.QtCore import (
+    QByteArray,
+    QBuffer,
+    QEvent,
+    QIODevice,
+    QMimeData,
+    QPoint,
+    QPointF,
+    QUrl,
+    Qt,
+)
 from PySide6.QtGui import QColor, QDragEnterEvent, QDropEvent, QImage, QKeyEvent
 from PySide6.QtWidgets import QApplication, QWidget
 
@@ -15,7 +25,9 @@ class _ClipboardHost(SurveyClipboardMixin, QWidget):
     def __init__(self) -> None:
         super().__init__()
         self.link_card = QWidget(self)
-        self.url_edit = SimpleNamespace(text="", setText=lambda value: setattr(self.url_edit, "text", value))
+        self.url_edit = SimpleNamespace(
+            text="", setText=lambda value: setattr(self.url_edit, "text", value)
+        )
         self._link_entry_widgets = (self.link_card,)
         self._clipboard_parse_ticket = 0
         self.toasts: list[tuple[str, str]] = []
@@ -60,12 +72,16 @@ def test_clipboard_extracts_qimage_encoded_bytes_and_clipboard_fallback(qtbot, t
     assert isinstance(host._extract_image_from_clipboard(encoded_mime), QImage)
 
     dib_mime = QMimeData()
-    dib_mime.setData('application/x-qt-windows-mime;value="DeviceIndependentBitmap"', _bmp_dib_bytes(image))
+    dib_mime.setData(
+        'application/x-qt-windows-mime;value="DeviceIndependentBitmap"', _bmp_dib_bytes(image)
+    )
     assert isinstance(host._extract_image_from_clipboard(dib_mime), QImage)
 
     empty_mime = QMimeData()
     QApplication.clipboard().setImage(image)
-    assert isinstance(host._extract_image_from_clipboard(empty_mime, QApplication.clipboard()), QImage)
+    assert isinstance(
+        host._extract_image_from_clipboard(empty_mime, QApplication.clipboard()), QImage
+    )
 
     assert host._extract_qimage(QImage()) is None
     assert host._extract_image_from_clipboard(QMimeData()) is None
@@ -75,17 +91,25 @@ def test_clipboard_process_qrcode_success_empty_and_exception(monkeypatch, qtbot
     host = _ClipboardHost()
     qtbot.addWidget(host)
 
-    monkeypatch.setattr(clipboard_module, "decode_qrcode", lambda source: f"https://wjx.cn/{source}")
-    host._process_qrcode_image("ok.png")
+    def decode(source):
+        assert isinstance(source, memoryview)
+        return "https://wjx.cn/ok.png"
+
+    monkeypatch.setattr(clipboard_module, "decode_qrcode", decode)
+    host._process_qrcode_image(_image())
     assert host.url_edit.text == "https://wjx.cn/ok.png"
     assert host.parse_calls == 1
 
     monkeypatch.setattr(clipboard_module, "decode_qrcode", lambda _source: "")
-    host._process_qrcode_image("empty.png")
+    host._process_qrcode_image(_image())
     assert host.toasts[-1] == ("未能识别二维码中的链接", "error")
 
-    monkeypatch.setattr(clipboard_module, "decode_qrcode", lambda _source: (_ for _ in ()).throw(RuntimeError("bad")))
-    host._process_qrcode_image("bad.png")
+    monkeypatch.setattr(
+        clipboard_module,
+        "decode_qrcode",
+        lambda _source: (_ for _ in ()).throw(RuntimeError("bad")),
+    )
+    host._process_qrcode_image(_image())
     assert host.toasts[-1] == ("处理二维码图片失败：bad", "error")
 
 
@@ -162,11 +186,15 @@ def test_clipboard_schedule_try_and_file_picker(monkeypatch, qtbot, tmp_path) ->
     path = tmp_path / "qr.jpg"
     path.write_text("x", encoding="utf-8")
     monkeypatch.setattr(clipboard_module, "get_user_local_data_root", lambda: str(tmp_path))
-    monkeypatch.setattr(clipboard_module.QFileDialog, "getOpenFileName", lambda *_args, **_kwargs: (str(path), ""))
+    monkeypatch.setattr(
+        clipboard_module.QFileDialog, "getOpenFileName", lambda *_args, **_kwargs: (str(path), "")
+    )
     host._on_qr_clicked()
     assert processed[-1] == str(path)
 
-    monkeypatch.setattr(clipboard_module.QFileDialog, "getOpenFileName", lambda *_args, **_kwargs: ("", ""))
+    monkeypatch.setattr(
+        clipboard_module.QFileDialog, "getOpenFileName", lambda *_args, **_kwargs: ("", "")
+    )
     before = len(processed)
     host._on_qr_clicked()
     assert len(processed) == before

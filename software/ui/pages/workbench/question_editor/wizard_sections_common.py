@@ -16,7 +16,7 @@ from surveycore.providers.contracts import SurveyQuestionMeta
 from software.ui.helpers.ai_fill import ensure_ai_ready
 from software.ui.widgets.no_wheel import NoWheelSlider
 
-from .question_media_preview import QuestionMediaThumbnail
+from .question_media_preview import MediaFetcher, QuestionMediaThumbnail
 from .utils import _shorten_text
 
 _TEXT_RANDOM_NONE = "none"
@@ -37,7 +37,7 @@ _TEXT_RANDOM_ID_CARD_TOKEN = "__RANDOM_ID_CARD__"
 
 
 def _apply_ai_label_state_style(label: BodyLabel) -> None:
-    
+
     active_color = "#f5f5f5" if isDarkTheme() else "#202020"
     disabled_color = "#7f7f7f" if isDarkTheme() else "#9a9a9a"
     label.setStyleSheet(
@@ -52,6 +52,7 @@ class WizardSectionsCommonMixin:
         text_random_mode_map: Dict[int, str]
         ai_check_map: Dict[int, Any]
         ai_label_map: Dict[int, BodyLabel]
+        media_fetcher: MediaFetcher | None
         text_random_list_radio_map: Dict[int, Any]
         text_random_name_check_map: Dict[int, Any]
         text_random_mobile_check_map: Dict[int, Any]
@@ -61,7 +62,9 @@ class WizardSectionsCommonMixin:
         text_random_int_max_edit_map: Dict[int, LineEdit]
 
         def _get_entry_info(self, idx: int) -> SurveyQuestionMeta: ...
-        def _media_items_for(self, idx: int, scope: str, index: int | None = None) -> List[Dict[str, Any]]: ...
+        def _media_items_for(
+            self, idx: int, scope: str, index: int | None = None
+        ) -> List[Dict[str, Any]]: ...
 
     @staticmethod
     def _compute_ratio_percentages(values: List[Any]) -> List[float]:
@@ -147,7 +150,14 @@ class WizardSectionsCommonMixin:
             media_column.setContentsMargins(0, 0, 0, 0)
             media_column.setSpacing(6)
             for item in media_items:
-                media_column.addWidget(QuestionMediaThumbnail(item, fixed_size=48, parent=container))
+                media_column.addWidget(
+                    QuestionMediaThumbnail(
+                        item,
+                        fixed_size=48,
+                        media_fetcher=self.media_fetcher,
+                        parent=container,
+                    )
+                )
             media_column.addStretch(1)
             layout.addLayout(media_column)
 

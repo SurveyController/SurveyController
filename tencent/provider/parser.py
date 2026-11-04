@@ -21,7 +21,7 @@ from surveycore.tencent.provider.parser import (
 )
 
 import software.network.http as http_client
-from software.app.config import DEFAULT_HTTP_HEADERS
+from software.network.http.defaults import DEFAULT_HTTP_HEADERS
 
 
 def _build_qq_api_headers(page_url: str) -> Dict[str, str]:
@@ -101,7 +101,9 @@ async def _fetch_qq_locale_payload(
     return meta_data, questions
 
 
-async def _fetch_qq_survey_via_http(survey_id: str, hash_value: str) -> Tuple[List[Dict[str, Any]], str]:
+async def _fetch_qq_survey_via_http(
+    survey_id: str, hash_value: str
+) -> Tuple[List[Dict[str, Any]], str]:
     page_url = _build_qq_survey_page_url(survey_id, hash_value)
     headers = _build_qq_api_headers(page_url)
 
@@ -116,7 +118,9 @@ async def _fetch_qq_survey_via_http(survey_id: str, hash_value: str) -> Tuple[Li
     last_error: Optional[Exception] = None
     for locale in _QQ_HTTP_LOCALES:
         try:
-            meta_data, questions = await _fetch_qq_locale_payload(survey_id, hash_value, headers, locale)
+            meta_data, questions = await _fetch_qq_locale_payload(
+                survey_id, hash_value, headers, locale
+            )
             return _build_qq_parse_result(
                 questions,
                 raw_title=meta_data.get("title") or "",

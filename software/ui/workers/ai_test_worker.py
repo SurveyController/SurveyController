@@ -1,19 +1,8 @@
-from PySide6.QtCore import QObject, Signal
+def ai_test_result(result: str | None = None, error: Exception | None = None) -> tuple[bool, str]:
+    if error is not None:
+        return False, f"连接失败: {error}"
+    message = str(result or "")
+    return message.startswith("连接成功"), message
 
-from software.core.engine.async_engine import AsyncRuntimeEngine
-from software.integrations.ai import atest_connection
 
-
-class AITestWorker(QObject):
-    finished = Signal(bool, str)
-
-    def run(self):
-        engine = AsyncRuntimeEngine()
-        try:
-            result = engine.submit_ui_task("ai_test_connection", atest_connection).result()
-            success = result.startswith("连接成功")
-            self.finished.emit(success, result)
-        except Exception as exc:
-            self.finished.emit(False, f"连接失败: {exc}")
-        finally:
-            engine.shutdown(timeout=2.0)
+__all__ = ["ai_test_result"]

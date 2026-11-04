@@ -9,10 +9,14 @@ class _FakeApp:
     def __init__(self, argv) -> None:
         self.argv = list(argv)
         self.font = None
+        self.application_version = ""
         self.exec_calls = 0
 
     def setFont(self, font) -> None:
         self.font = font
+
+    def setApplicationVersion(self, version: str) -> None:
+        self.application_version = version
 
     def exec(self) -> int:
         self.exec_calls += 1
@@ -22,6 +26,7 @@ class _FakeApp:
 class _FakeWindow:
     def __init__(self) -> None:
         self.shown = 0
+        self.controller = SimpleNamespace(wait_for_shutdown=lambda **_kwargs: True)
 
     def show(self) -> None:
         self.shown += 1
@@ -30,6 +35,12 @@ class _FakeWindow:
 def test_main_returns_exit_code_and_avoids_hard_exit(monkeypatch) -> None:
     events: list[str] = []
     fake_window = _FakeWindow()
+
+    def wait_for_shutdown(**_kwargs):
+        events.append("shutdown_wait")
+        return True
+
+    fake_window.controller.wait_for_shutdown = wait_for_shutdown
 
     monkeypatch.setattr(
         main_module,
@@ -43,7 +54,9 @@ def test_main_returns_exit_code_and_avoids_hard_exit(monkeypatch) -> None:
     )
     monkeypatch.setattr(main_module, "_enable_fault_handler", lambda: events.append("fault_on"))
     monkeypatch.setattr(main_module, "setup_logging", lambda: events.append("logging_on"))
-    monkeypatch.setattr(main_module, "qInstallMessageHandler", lambda _handler: events.append("qt_msg"))
+    monkeypatch.setattr(
+        main_module, "qInstallMessageHandler", lambda _handler: events.append("qt_msg")
+    )
     monkeypatch.setattr(
         main_module,
         "install_qfluentwidgets_animation_guards",
@@ -79,6 +92,7 @@ def test_main_returns_exit_code_and_avoids_hard_exit(monkeypatch) -> None:
 
     assert exit_code == 7
     assert fake_app.exec_calls == 1
+    assert fake_app.application_version == main_module.APP_VERSION
     assert fake_window.shown == 1
     assert events == [
         "metadata",
@@ -88,6 +102,7 @@ def test_main_returns_exit_code_and_avoids_hard_exit(monkeypatch) -> None:
         "qt_msg",
         "guards",
         "prewarm",
+        "shutdown_wait",
         "logging_off",
         "fault_off",
     ]

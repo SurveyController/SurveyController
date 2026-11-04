@@ -78,7 +78,6 @@ class WizardSectionsTextMixin:
     ) -> None:
         self._has_content = True
 
-        
         is_multi_text = False
         blank_count = 1
         info_entry = self._get_entry_info(idx)
@@ -88,7 +87,6 @@ class WizardSectionsTextMixin:
             is_multi_text = True
             blank_count = max(1, text_input_count)
 
-        
         if is_multi_text:
             self._build_multi_text_matrix_input(idx, entry, card, card_layout, blank_count)
             return
@@ -299,10 +297,9 @@ class WizardSectionsTextMixin:
         card_layout: QVBoxLayout,
         blank_count: int,
     ) -> None:
-        
+
         from surveycore.core.questions.text_shared import MULTI_TEXT_DELIMITER
 
-        
         header_widget = QWidget(card)
         header_widget.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Maximum)
         header_layout = QHBoxLayout(header_widget)
@@ -325,7 +322,6 @@ class WizardSectionsTextMixin:
 
         card_layout.addWidget(header_widget)
 
-        
         rows_container = QWidget(card)
         rows_container.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Maximum)
         rows_layout = QVBoxLayout(rows_container)
@@ -420,13 +416,11 @@ class WizardSectionsTextMixin:
         _apply_label_color(section_label, "#666666", "#bfbfbf")
         card_layout.addWidget(section_label)
 
-        
         blank_radio_groups: List[QButtonGroup] = []
         blank_mode_radios: List[Dict[str, RadioButton]] = []
         blank_ai_checkboxes: List[SwitchButton] = []
         blank_integer_range_edits: List[Tuple[LineEdit, LineEdit]] = []
 
-        
         saved_modes = getattr(entry, "multi_text_blank_modes", None) or []
         if not isinstance(saved_modes, list):
             saved_modes = []
@@ -505,7 +499,6 @@ class WizardSectionsTextMixin:
             mode_row.addStretch(1)
             blank_layout.addLayout(mode_row)
 
-            
             ai_cb = SwitchButton(card, IndicatorPosition.RIGHT)
             ai_cb.setOnText("")
             ai_cb.setOffText("")
@@ -544,7 +537,6 @@ class WizardSectionsTextMixin:
             )
             blank_integer_range_edits.append((range_min_edit, range_max_edit))
 
-            
             def make_sync_func(col_idx, radios, ai_checkbox, edits_list, int_range_edits):
                 def sync_column_state():
                     mode_id = radios["list"].group().checkedId()
@@ -552,7 +544,6 @@ class WizardSectionsTextMixin:
                     use_list = mode_id == 0 and not ai_enabled
                     use_integer_range = mode_id == 4 and not ai_enabled
 
-                    
                     for row in edits_list:
                         if col_idx < len(row):
                             row[col_idx].setEnabled(use_list)
@@ -560,7 +551,6 @@ class WizardSectionsTextMixin:
                     for edit in int_range_edits:
                         edit.setEnabled(use_integer_range)
 
-                    
                     if ai_enabled:
                         radios["list"].setEnabled(False)
                         radios["name"].setEnabled(False)
@@ -589,10 +579,9 @@ class WizardSectionsTextMixin:
                     cb, checked, f
                 )
             )
-            
+
             sync_func()
 
-        
         if not hasattr(self, "multi_text_blank_radio_groups"):
             self.multi_text_blank_radio_groups = {}
         if not hasattr(self, "multi_text_blank_ai_checkboxes"):
@@ -603,7 +592,6 @@ class WizardSectionsTextMixin:
         self.multi_text_blank_ai_checkboxes[idx] = blank_ai_checkboxes
         self.multi_text_blank_integer_range_edits[idx] = blank_integer_range_edits
 
-        
         def update_add_btn_state():
             all_ai = all(blank_ai_checkboxes[i].isChecked() for i in range(blank_count))
             add_btn.setEnabled(not all_ai)
@@ -611,5 +599,4 @@ class WizardSectionsTextMixin:
         for _ai_cb in blank_ai_checkboxes:
             _ai_cb.checkedChanged.connect(lambda _checked, f=update_add_btn_state: f())
 
-        
         update_add_btn_state()

@@ -1,4 +1,4 @@
-from typing import TYPE_CHECKING, Any, Dict, List
+from typing import TYPE_CHECKING, Any, Dict, List, cast
 
 from PySide6.QtCore import (
     QByteArray,
@@ -101,7 +101,6 @@ class WizardSectionsSliderMixin:
             slider_min, slider_max = self._resolve_slider_bounds(idx, entry)
         options = max(1, int(entry.option_count or 1))
 
-        
         _preset_seg = None
         if entry_supports_psycho_presets(entry, option_texts):
             preset_row = QHBoxLayout()
@@ -131,7 +130,7 @@ class WizardSectionsSliderMixin:
                 raw_weights = entry.probabilities
             else:
                 raw_weights = []
-        weights = list(raw_weights or [])
+        weights = cast(List[float], list(raw_weights or []))
         if len(weights) < options:
             weights += [default_weight] * (options - len(weights))
 
@@ -219,7 +218,7 @@ class WizardSectionsSliderMixin:
                 int(
                     min(
                         slider.maximum(),
-                        max(slider.minimum(), weights[opt_idx]),
+                        max(slider.minimum(), int(weights[opt_idx])),
                     )
                 )
             )
@@ -438,7 +437,6 @@ class WizardSectionsSliderMixin:
                 slider.valueChanged.connect(_update_option_preview)
             _update_option_preview()
 
-        
         if _preset_seg is not None:
             _applying_preset = [False]
 

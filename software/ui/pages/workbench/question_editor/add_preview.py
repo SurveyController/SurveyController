@@ -31,9 +31,6 @@ from .utils import _apply_label_color, _bind_slider_input
 
 
 class AddPreviewMixin:
-    
-
-    
     if TYPE_CHECKING:
         _entry_index: int
         answer_count_label: Any

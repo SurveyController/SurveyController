@@ -18,7 +18,7 @@ from software.ui.widgets.setting_cards import (
 
 
 def build_runtime_page_ui(page) -> None:
-    
+
     layout = QVBoxLayout(page.view)
     layout.setContentsMargins(24, 24, 24, 24)
     layout.setSpacing(20)
@@ -87,6 +87,10 @@ def build_runtime_page_ui(page) -> None:
         time_group.addSettingCard(card)
     layout.addWidget(time_group)
 
-    page.ai_section = RuntimeAISection(page.view, page)
+    page.ai_section = RuntimeAISection(
+        page.view,
+        page,
+        ai_settings=page.controller.ai_settings,
+    )
     page.ai_section.bind_to_layout(layout)
     layout.addStretch(1)

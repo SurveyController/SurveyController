@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import base64
 import ctypes
-import importlib
 import logging
 import sys
 from ctypes import wintypes
@@ -11,21 +10,10 @@ from typing import Any, Optional, cast
 
 if sys.platform == "win32":
     import winreg
-else:  
+else:
     winreg = None
 
-try:  
-    keyring = importlib.import_module("keyring")
-    _keyring_errors = importlib.import_module("keyring.errors")
-    KeyringError = cast(type[Exception], getattr(_keyring_errors, "KeyringError"))
-    PasswordDeleteError = cast(type[Exception], getattr(_keyring_errors, "PasswordDeleteError"))
-except Exception:  
-    keyring = None
-    KeyringError = Exception
-    PasswordDeleteError = Exception
-
 _REGISTRY_PATH = r"Software\SurveyController\SecureStore"
-_KEYRING_SERVICE = "SurveyController"
 _win_error = cast(Any, getattr(ctypes, "WinError", OSError))
 
 
@@ -148,32 +136,6 @@ def _delete_secret_windows(name: str) -> None:
         reg.DeleteValue(reg_key, name)
 
 
-def _read_secret_macos(name: str) -> SecretReadResult:
-    if keyring is None:
-        return SecretReadResult(status="unsupported")
-    try:
-        value = keyring.get_password(_KEYRING_SERVICE, name)
-    except KeyringError as exc:
-        return SecretReadResult(status="open_failed", error=str(exc))
-    except Exception as exc:
-        return SecretReadResult(status="backend_error", error=str(exc))
-    if value is None:
-        return SecretReadResult(status="not_found")
-    return SecretReadResult(value=str(value), exists=True, status="ok")
-
-
-def _set_secret_macos(name: str, value: str) -> None:
-    if keyring is None:
-        raise RuntimeError("unsupported")
-    keyring.set_password(_KEYRING_SERVICE, name, str(value))
-
-
-def _delete_secret_macos(name: str) -> None:
-    if keyring is None:
-        raise RuntimeError("unsupported")
-    keyring.delete_password(_KEYRING_SERVICE, name)
-
-
 def set_secret(key: str, value: Optional[str]) -> None:
     name = _normalize_key(key)
     if not name:
@@ -185,12 +147,6 @@ def set_secret(key: str, value: Optional[str]) -> None:
         if sys.platform == "win32":
             _set_secret_windows(name, str(value))
             return
-        if sys.platform == "darwin":
-            _set_secret_macos(name, str(value))
-            return
-    except KeyringError as exc:
-        logging.warning("安全存储写入失败：key=%s status=write_failed error=%s", name, exc)
-        return
     except Exception as exc:
         logging.warning("安全存储写入失败：key=%s status=backend_error error=%s", name, exc)
         return
@@ -202,8 +158,6 @@ def read_secret(key: str) -> SecretReadResult:
         return SecretReadResult(status="invalid_key")
     if sys.platform == "win32":
         return _read_secret_windows(name)
-    if sys.platform == "darwin":
-        return _read_secret_macos(name)
     return SecretReadResult(status="unsupported")
 
 
@@ -215,16 +169,7 @@ def delete_secret(key: str) -> None:
         if sys.platform == "win32":
             _delete_secret_windows(name)
             return
-        if sys.platform == "darwin":
-            _delete_secret_macos(name)
-            return
     except FileNotFoundError:
-        return
-    except PasswordDeleteError:
-        return
-    except KeyringError as exc:
-        logging.warning("安全存储删除失败：key=%s status=delete_failed error=%s", name, exc)
-    except OSError:
         return
     except Exception as exc:
         logging.warning("安全存储删除失败：key=%s status=backend_error error=%s", name, exc)

@@ -46,14 +46,23 @@ def test_rule_dialog_helpers_normalize_mixed_values() -> None:
     assert to_int("bad", 5) == 5
     assert to_int_list(["2", -1, "x", 2, 0]) == [0, 2]
     assert normalize_question_type_code(None) == ""
-    assert build_question_label(SurveyQuestionMeta(num=1, title="", type_code="5", is_rating=True)) == "第1题 [评价题]"
+    assert (
+        build_question_label(SurveyQuestionMeta(num=1, title="", type_code="5", is_rating=True))
+        == "第1题 [评价题]"
+    )
 
 
 def test_question_selector_filters_and_returns_unique_selected_indices(qtbot) -> None:
     dialog = QuestionSelectorDialog(
         "添加题目",
         [
-            {"question_num": 1, "title": "年龄", "type_label": "填空", "group_name": "人口", "entry_index": 3},
+            {
+                "question_num": 1,
+                "title": "年龄",
+                "type_label": "填空",
+                "group_name": "人口",
+                "entry_index": 3,
+            },
             {"question_num": 2, "title": "满意度", "type_label": "单选", "entry_index": 1},
             {"question_num": 3, "title": "满意度复核", "type_label": "单选", "entry_index": 1},
         ],
@@ -105,7 +114,9 @@ def test_condition_rule_dialog_builds_valid_rule_and_preserves_existing_id(qtbot
 
 def test_condition_rule_dialog_matrix_rows_and_validation_failures(monkeypatch, qtbot) -> None:
     warnings: list[str] = []
-    monkeypatch.setattr(ConditionRuleDialog, "_warn", lambda self, message: warnings.append(message))
+    monkeypatch.setattr(
+        ConditionRuleDialog, "_warn", lambda self, message: warnings.append(message)
+    )
     parent = _dialog_parent(qtbot)
     dialog = ConditionRuleDialog(_questions(), parent=parent)
 

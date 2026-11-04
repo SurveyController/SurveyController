@@ -104,12 +104,17 @@ def test_wizard_result_builder_collects_normal_results(qtbot) -> None:
     host = _Host()
     host.slider_map = {0: [_Slider(10), _Slider(-3)]}
     host.matrix_row_slider_map = {1: [[_Slider(0), _Slider(5)], [_Slider(2), _Slider(0)]]}
-    host.text_edit_map = {0: [_line(" A "), _line("")], 1: [[_line("r1"), _line("c2")], [_line(""), _line("")]]}
+    host.text_edit_map = {
+        0: [_line(" A "), _line("")],
+        1: [[_line("r1"), _line("c2")], [_line(""), _line("")]],
+    }
     host.text_random_mode_map = {0: "none", 1: "integer"}
     host.text_random_int_min_edit_map = {1: _line("3")}
     host.text_random_int_max_edit_map = {1: _line("7")}
     host.multi_text_blank_radio_groups = {2: [_radio_group(1), _radio_group(4), _radio_group(0)]}
-    host.multi_text_blank_integer_range_edits = {2: [(_line(""), _line("")), (_line("1"), _line("9"))]}
+    host.multi_text_blank_integer_range_edits = {
+        2: [(_line(""), _line("")), (_line("1"), _line("9"))]
+    }
     host.multi_text_blank_ai_checkboxes = {2: [_Check(True), _Check(False)]}
     host.ai_check_map = {0: _Check(True), 1: _Check(True)}
     host.attached_select_slider_map = {
@@ -185,7 +190,9 @@ def test_wizard_result_builder_rejects_zero_weight_groups() -> None:
         assert "第1行配比不能全为0" in str(exc)
 
     host.matrix_row_slider_map = {}
-    host.attached_select_slider_map = {0: [{"option_index": 2, "option_text": "", "sliders": [_Slider(0)]}]}
+    host.attached_select_slider_map = {
+        0: [{"option_index": 2, "option_text": "", "sliders": [_Slider(0)]}]
+    }
     try:
         builder.get_attached_select_results(host)
         raise AssertionError("expected ValueError")
@@ -208,7 +215,9 @@ def test_wizard_validation_random_integer_and_weights(qtbot) -> None:
     assert "填空1随机整数范围未填写完整" in host.errors[-1][0]
 
     host = _Host()
-    host.option_fill_state_map = {0: {2: {"group": _radio_group(4), "min_edit": _line(""), "max_edit": _line("9")}}}
+    host.option_fill_state_map = {
+        0: {2: {"group": _radio_group(4), "min_edit": _line(""), "max_edit": _line("9")}}
+    }
     assert validation.validate_random_integer_inputs(host) is False
     assert "第3个附加填空随机整数范围未填写完整" in host.errors[-1][0]
 

@@ -22,8 +22,6 @@ from software.ui.pages.workbench.strategy.page import QuestionStrategyPage
 
 
 class WorkbenchPresenter:
-    
-
     def __init__(self, *, controller: Any, host: Any) -> None:
         self.controller = controller
         self.host = host
@@ -248,7 +246,9 @@ class WorkbenchPresenter:
             "device_quota_fail_count": int(progress.get("device_quota_fail_count") or 0),
             "initializing": bool((snapshot or {}).get("initialization", {}).get("active")),
             "initializing_text": str((snapshot or {}).get("initialization", {}).get("text") or ""),
-            "initialization_logs": list((snapshot or {}).get("initialization", {}).get("logs") or []),
+            "initialization_logs": list(
+                (snapshot or {}).get("initialization", {}).get("logs") or []
+            ),
         }
         self.dashboard.update_thread_progress(thread_payload)
         pause_state = (paused, pause_reason if paused else "")

@@ -24,7 +24,7 @@ from .constants import (
     SLIDER_TARGET_MAX,
     _get_entry_type_label,
 )
-from .question_media_preview import QuestionMediaStrip
+from .question_media_preview import MediaFetcher, QuestionMediaStrip
 from .utils import _apply_label_color, _shorten_text, resolve_config_question_num
 from .wizard_validation import (
     validate_before_accept,
@@ -48,6 +48,7 @@ class WizardCardsMixin:
         bias_preset_map: Dict[int, Any]
         _entry_snapshots: List[QuestionEntry]
         _logic_tree_state: Any
+        media_fetcher: MediaFetcher | None
 
         def _navigate_to_question(self, question_idx: int, animate: bool = False) -> None: ...
         def get_multi_text_blank_modes(self) -> Dict[int, List[str]]: ...
@@ -100,7 +101,6 @@ class WizardCardsMixin:
     def _resolve_matrix_weights(
         self, entry: QuestionEntry, rows: int, columns: int
     ) -> List[List[float]]:
-        
 
         def _clean_row(raw_row: Any) -> Optional[List[float]]:
             if not isinstance(raw_row, (list, tuple)):
@@ -232,7 +232,9 @@ class WizardCardsMixin:
             self._make_badge(_get_entry_type_label(entry), "#0f6cbd", "#63b3ff", parent)
         ]
         badges.append(
-            self._make_badge("必答" if bool(info_entry.required) else "非必答", "#8a3ffc", "#c7a8ff", parent)
+            self._make_badge(
+                "必答" if bool(info_entry.required) else "非必答", "#8a3ffc", "#c7a8ff", parent
+            )
         )
 
         media_items = list(info_entry.question_media or [])
@@ -320,12 +322,18 @@ class WizardCardsMixin:
         entry: QuestionEntry,
         parent: QWidget,
     ) -> CardWidget:
-        
+
         info_entry = self._get_entry_info(idx)
         qnum = str(resolve_config_question_num(info_entry, idx + 1) or "")
         title_text = str(info_entry.get("title") or "").strip()
-        option_texts = [self._display_text_for_option(idx, i, str(text or "")) for i, text in enumerate(list(info_entry.get("option_texts") or []))]
-        row_texts = [self._display_text_for_row(idx, i, str(text or "")) for i, text in enumerate(list(info_entry.get("row_texts") or []))]
+        option_texts = [
+            self._display_text_for_option(idx, i, str(text or ""))
+            for i, text in enumerate(list(info_entry.get("option_texts") or []))
+        ]
+        row_texts = [
+            self._display_text_for_row(idx, i, str(text or ""))
+            for i, text in enumerate(list(info_entry.get("row_texts") or []))
+        ]
 
         card = CardWidget(parent)
         card.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Maximum)
@@ -363,6 +371,7 @@ class WizardCardsMixin:
                     title_media,
                     fixed_size=96,
                     show_item_labels=False,
+                    media_fetcher=self.media_fetcher,
                     parent=card,
                 )
             )

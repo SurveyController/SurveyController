@@ -4,20 +4,9 @@ import logging
 from typing import Any, Optional
 
 import software.network.http as http_client
-from software.app.config import (
-    SUBMISSION_REPORT_ENDPOINT,
-    SUBMISSION_REPORT_TELEMETRY_SETTING_KEY,
-    app_settings,
-    get_bool_from_qsettings,
-)
-from software.app.version import __VERSION__
+from software.network.config import SUBMISSION_REPORT_ENDPOINT
 from software.network.proxy.policy.source import PROXY_SOURCE_BENEFIT, PROXY_SOURCE_DEFAULT
 from software.network.proxy.session import get_device_id
-
-
-def is_submission_report_telemetry_enabled() -> bool:
-    settings = app_settings()
-    return get_bool_from_qsettings(settings.value(SUBMISSION_REPORT_TELEMETRY_SETTING_KEY), True)
 
 
 def _normalize_proxy_provider(proxy_provider: Any) -> str:
@@ -42,9 +31,10 @@ async def report_submission_result_async(
     survey_url: str,
     result: str,
     proxy_provider: Any,
+    enabled: bool = True,
     client_version: Optional[str] = None,
 ) -> bool:
-    if not is_submission_report_telemetry_enabled():
+    if not enabled:
         return False
 
     try:
@@ -59,7 +49,7 @@ async def report_submission_result_async(
         "survey_url": str(survey_url or "").strip(),
         "result": str(result or "").strip().lower(),
         "proxy_provider": _normalize_proxy_provider(proxy_provider),
-        "client_version": str(client_version or __VERSION__).strip(),
+        "client_version": str(client_version or "").strip(),
     }
 
     try:
@@ -77,6 +67,5 @@ async def report_submission_result_async(
 
 
 __all__ = [
-    "is_submission_report_telemetry_enabled",
     "report_submission_result_async",
 ]

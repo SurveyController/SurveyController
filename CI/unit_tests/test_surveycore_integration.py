@@ -136,7 +136,11 @@ def test_library_answers_commit_shared_samples_and_keep_application_proxy_state(
         reverse_fill_spec=spec,
     )
     configure_probabilities(
-        [QuestionEntry("single", [75, 25], option_count=2, question_num=1, distribution_mode="custom")],
+        [
+            QuestionEntry(
+                "single", [75, 25], option_count=2, question_num=1, distribution_mode="custom"
+            )
+        ],
         config,
         reliability_mode_enabled=False,
     )

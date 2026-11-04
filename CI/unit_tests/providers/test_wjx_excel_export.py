@@ -50,7 +50,9 @@ class WjxExcelExportTests:
         assert export.raw_rows[0].worksheet_row_number == 2
         assert export.raw_rows[0].values_by_column == {2: 2, 3: "张三"}
 
-    def test_load_wjx_excel_export_detects_sequence_format_from_option_suffix(self, tmp_path: Path) -> None:
+    def test_load_wjx_excel_export_detects_sequence_format_from_option_suffix(
+        self, tmp_path: Path
+    ) -> None:
         path = _write_workbook(
             tmp_path / "sequence.xlsx",
             [["1、(选项1)", "1、(选项2)"], [1, 2]],
@@ -60,7 +62,9 @@ class WjxExcelExportTests:
 
         assert export.detected_format == REVERSE_FILL_FORMAT_WJX_SEQUENCE
 
-    def test_load_wjx_excel_export_detects_text_format_for_numeric_strings(self, tmp_path: Path) -> None:
+    def test_load_wjx_excel_export_detects_text_format_for_numeric_strings(
+        self, tmp_path: Path
+    ) -> None:
         path = _write_workbook(tmp_path / "text.xlsx", [["1、满意度"], ["4"]])
 
         export = load_wjx_excel_export(str(path))
@@ -75,7 +79,9 @@ class WjxExcelExportTests:
         assert export.detected_format == REVERSE_FILL_FORMAT_WJX_SCORE
         assert export.selected_format == REVERSE_FILL_FORMAT_WJX_TEXT
 
-    def test_load_wjx_excel_export_keeps_unknown_preferred_format_for_later_validation(self, tmp_path: Path) -> None:
+    def test_load_wjx_excel_export_keeps_unknown_preferred_format_for_later_validation(
+        self, tmp_path: Path
+    ) -> None:
         path = _write_workbook(tmp_path / "unknown.xlsx", [["1、满意度"], [5]])
 
         export = load_wjx_excel_export(str(path), preferred_format="custom_format")
@@ -90,7 +96,9 @@ class WjxExcelExportTests:
         with pytest.raises(ValueError, match="Excel 文件不存在"):
             load_wjx_excel_export(str(tmp_path / "missing.xlsx"))
 
-    def test_load_wjx_excel_export_rejects_empty_header_and_closes_workbook(self, tmp_path: Path) -> None:
+    def test_load_wjx_excel_export_rejects_empty_header_and_closes_workbook(
+        self, tmp_path: Path
+    ) -> None:
         path = _write_workbook(tmp_path / "empty_header.xlsx", [])
 
         with pytest.raises(ValueError, match="Excel 缺少表头"):
@@ -104,9 +112,12 @@ class WjxExcelExportTests:
         worksheet = SimpleNamespace(iter_rows=MagicMock(side_effect=RuntimeError("reader failed")))
         workbook.__getitem__.return_value = worksheet
 
-        with patch("os.path.exists", return_value=True), patch(
-            "openpyxl.load_workbook",
-            return_value=workbook,
+        with (
+            patch("os.path.exists", return_value=True),
+            patch(
+                "openpyxl.load_workbook",
+                return_value=workbook,
+            ),
         ):
             with pytest.raises(RuntimeError, match="reader failed"):
                 load_wjx_excel_export(str(path), preferred_format=REVERSE_FILL_FORMAT_AUTO)

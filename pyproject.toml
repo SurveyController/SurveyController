@@ -1,40 +1,69 @@
 [project]
 name = "surveycontroller"
-version = "3.2.0"
+version = "4.0.8"
 description = "SurveyController desktop application"
 readme = "README.md"
-requires-python = ">=3.13.16"
+requires-python = ">=3.13.17"
 dependencies = [
     "beautifulsoup4>=4.15.0",
     "httpx>=0.27,<1",
-    "keyring>=25,<26; sys_platform == 'darwin'",
     "openpyxl",
     "packaging",
-    "PySide6==6.11.1",
-    "PySide6-Fluent-Widgets==1.11.2",
+    "PySide6==6.12.0",
+    "PySide6-Fluent-Widgets==1.11.3",
     "surveycore-py",
     "zxing-cpp",
 ]
 
 [dependency-groups]
 dev = [
-    "pyright>=1.1.410",
+    "ty==0.0.95",
+    "hypothesis>=6.130.0",
     "pytest",
     "pytest-asyncio",
     "pytest-cov",
     "pytest-qt>=4.5.0",
-    "ruff>=0.15.17",
+    "ruff>=0.17.1",
 ]
 build = [
-    "nuitka>=4.1.2,<5",
+    "nuitka>=4.3,<5",
 ]
 
 [tool.uv]
 package = false
 default-groups = ["dev"]
+exclude-dependencies = [
+    { package = { name = "pyside6", version = "6.12.0" }, dependencies = [
+        "pyside6-pdf",
+        "pyside6-webengine",
+    ] },
+]
 
 [tool.uv.sources]
 surveycore-py = { git = "https://github.com/SurveyController/surveycore-py", rev = "6c3c72bde24db8133800c7185fd9aeceb627acf9" }
 
 [tool.ruff]
 line-length = 100
+target-version = "py313"
+
+[tool.ruff.lint]
+select = ["E4", "E7", "E9", "F", "I", "UP", "B", "ASYNC", "SIM", "PERF", "RUF"]
+
+[tool.ty.environment]
+python-version = "3.13"
+
+[tool.ty.src]
+include = ["SurveyController.py", "software", "wjx", "tencent", "credamo"]
+
+[[tool.ty.overrides]]
+include = ["software/core/**", "software/application/**", "software/network/**"]
+
+[tool.ty.overrides.rules]
+dynamic-function-decorator-return = "error"
+missing-type-argument = "error"
+possibly-unresolved-reference = "warn"
+unsound-return-statement = "error"
+
+[tool.coverage.run]
+branch = true
+source = ["software", "wjx", "tencent", "credamo"]

@@ -57,7 +57,7 @@ from surveycore.credamo.provider.http_runtime import (
 )
 
 import httpx
-from software.app.config import DEFAULT_HTTP_HEADERS, DEFAULT_USER_AGENT
+from software.core.config.user_agents import DEFAULT_USER_AGENT
 from software.core.config.codec import UserAgentProfile
 from surveycore.core.persona.context import record_answer
 from surveycore.core.questions.distribution import record_pending_distribution_choice
@@ -67,7 +67,9 @@ from surveycore.providers.answering.recording import record_answer_action
 from surveycore.providers.contracts import SurveyQuestionMeta
 from surveycore.providers.http_logic import build_http_logic_plan
 from surveycore.providers.http_progress import update_http_submit_step
-from software.network.session_policy import SubmitProxyUnavailableError, mark_submit_proxy_success, release_submit_proxy
+from software.network.session_policy import SubmitProxyUnavailableError, mark_submit_proxy_success
+from software.network.http.defaults import DEFAULT_HTTP_HEADERS
+from software.providers.contracts import ProviderSubmissionRejectedError
 
 from surveycore.credamo.provider.answering_builders import build_answer_action
 
@@ -135,7 +137,14 @@ def _json_payload(response: Any, label: str) -> Mapping[str, Any]:
     if getattr(response, "is_error", False):
         message = ""
         if isinstance(payload, Mapping):
-            message = str(payload.get("message") or payload.get("msg") or payload.get("code") or "").strip()
+            message = str(
+                payload.get("message") or payload.get("msg") or payload.get("code") or ""
+            ).strip()
+            if (
+                label == "提交"
+                and classify_credamo_api_payload(payload) == CredamoSubmitResult.FAILED
+            ):
+                raise ProviderSubmissionRejectedError(f"见数{label}失败：{message or payload}")
         if message:
             raise RuntimeError(f"见数{label}失败：{message}")
         response.raise_for_status()
@@ -205,7 +214,9 @@ async def _build_actions(
         if stop_signal is not None and stop_signal.is_set():
             return []
         if bool(getattr(question, "unsupported", False)):
-            raise RuntimeError(f"见数第{question.num}题暂不支持：{question.unsupported_reason or question.type_code}")
+            raise RuntimeError(
+                f"见数第{question.num}题暂不支持：{question.unsupported_reason or question.type_code}"
+            )
 
     async def _build_action(question: SurveyQuestionMeta) -> AnswerAction | None:
         if stop_signal is not None and stop_signal.is_set():
@@ -268,7 +279,12 @@ async def _save_answers(
         timeout=_CREDAMO_REQUEST_TIMEOUT_SECONDS,
     )
     payload = _json_payload(response, "提交")
-    return _ensure_api_ok(payload, "提交")
+    try:
+        return _ensure_api_ok(payload, "提交")
+    except RuntimeError as exc:
+        if classify_credamo_api_payload(payload) != CredamoSubmitResult.FAILED:
+            raise
+        raise ProviderSubmissionRejectedError(str(exc)) from exc
 
 
 async def brush_credamo_http(
@@ -329,7 +345,9 @@ async def brush_credamo_http(
         return False
     await update_http_submit_step(ctx, thread_name, "提交问卷")
     time_code = _new_time_code()
-    submit_headers = _request_headers(origin=origin, short_url=short_url, user_agent=user_agent_value)
+    submit_headers = _request_headers(
+        origin=origin, short_url=short_url, user_agent=user_agent_value
+    )
     async with _CredamoHttpSession() as init_session:
         init_data = await _init_answer(
             init_session,
@@ -359,22 +377,15 @@ async def brush_credamo_http(
         submit_proxy_address = str(getattr(submit_proxy_lease, "address", "") or "").strip() or None
     if bool(getattr(config, "random_proxy_ip_enabled", False)) and not submit_proxy_address:
         raise SubmitProxyUnavailableError("提交前未获取到随机 IP")
-    try:
-        async with _CredamoHttpSession(submit_proxy_address) as submit_session:
-            await _save_answers(
-                submit_session,
-                origin=origin,
-                short_url=short_url,
-                init_data=init_data,
-                body=body,
-                user_agent=user_agent_value,
-            )
-        if submit_proxy_address and thread_name:
-            release_submit_proxy(ctx, thread_name, submit_proxy_address)
-    except Exception:
-        if submit_proxy_address and thread_name:
-            release_submit_proxy(ctx, thread_name, submit_proxy_address)
-        raise
+    async with _CredamoHttpSession(submit_proxy_address) as submit_session:
+        await _save_answers(
+            submit_session,
+            origin=origin,
+            short_url=short_url,
+            init_data=init_data,
+            body=body,
+            user_agent=user_agent_value,
+        )
     mark_submit_proxy_success(ctx, submit_proxy_address)
     await update_http_submit_step(ctx, thread_name, "校验结果")
     return True

@@ -45,7 +45,9 @@ def _path_endswith(path: str, suffix: str) -> bool:
 
 def _replace_path_suffix(parts, suffix: str) -> str:
     normalized_path = (parts.path or "").rstrip("/")
-    return urlunsplit((parts.scheme, parts.netloc, normalized_path + suffix, parts.query, parts.fragment))
+    return urlunsplit(
+        (parts.scheme, parts.netloc, normalized_path + suffix, parts.query, parts.fragment)
+    )
 
 
 def _resolve_custom_endpoint(base_url: str, api_protocol: str) -> tuple[str, str, bool]:
@@ -149,7 +151,15 @@ def _extract_json_dict(response: Any) -> Dict[str, Any]:
 
 
 def _should_retry_ai_request(exc: Exception) -> bool:
-    if isinstance(exc, (http_client.Timeout, http_client.ConnectTimeout, http_client.ReadTimeout, http_client.ConnectionError)):
+    if isinstance(
+        exc,
+        (
+            http_client.Timeout,
+            http_client.ConnectTimeout,
+            http_client.ReadTimeout,
+            http_client.ConnectionError,
+        ),
+    ):
         return True
     if isinstance(exc, http_client.RequestException) and not isinstance(exc, http_client.HTTPError):
         return True
@@ -161,7 +171,9 @@ def _should_retry_ai_request(exc: Exception) -> bool:
 
 
 def _is_ai_timeout_exception(exc: Exception) -> bool:
-    return isinstance(exc, (http_client.Timeout, http_client.ConnectTimeout, http_client.ReadTimeout))
+    return isinstance(
+        exc, (http_client.Timeout, http_client.ConnectTimeout, http_client.ReadTimeout)
+    )
 
 
 async def _aexecute_ai_request_with_retry(
@@ -214,7 +226,9 @@ async def acall_chat_completions(
     try:
         response = await _aexecute_ai_request_with_retry(
             "chat_completions",
-            lambda: http_client.apost(url, headers=headers, json=payload, timeout=timeout, proxies={}),
+            lambda: http_client.apost(
+                url, headers=headers, json=payload, timeout=timeout, proxies={}
+            ),
         )
         response.raise_for_status()
         return _extract_chat_completion_text(response.json())
@@ -244,7 +258,9 @@ async def acall_responses_api(
     try:
         response = await _aexecute_ai_request_with_retry(
             "responses",
-            lambda: http_client.apost(url, headers=headers, json=payload, timeout=timeout, proxies={}),
+            lambda: http_client.apost(
+                url, headers=headers, json=payload, timeout=timeout, proxies={}
+            ),
         )
         response.raise_for_status()
         return _extract_responses_text(response.json())

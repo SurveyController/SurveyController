@@ -10,6 +10,7 @@ from PySide6.QtWidgets import QFileDialog, QWidget
 
 from software.app.user_paths import get_user_local_data_root
 from software.io.qr.utils import decode_qrcode
+from software.ui.adapters.qr_image import qr_pixel_buffer
 from software.logging.log_utils import log_suppressed_exception
 
 
@@ -24,7 +25,9 @@ def _decode_windows_dib(raw_data: bytes) -> Optional[QImage]:
     bit_count_offset = 10 if header_size == 12 else 14
     if len(raw_data) < bit_count_offset + 2:
         return None
-    bit_count = int.from_bytes(raw_data[bit_count_offset:bit_count_offset + 2], "little", signed=False)
+    bit_count = int.from_bytes(
+        raw_data[bit_count_offset : bit_count_offset + 2], "little", signed=False
+    )
 
     compression = 0
     colors_used = 0
@@ -57,8 +60,6 @@ def _decode_windows_dib(raw_data: bytes) -> Optional[QImage]:
 
 
 class SurveyClipboardMixin:
-    
-
     if TYPE_CHECKING:
         from typing import Any
 
@@ -251,7 +252,11 @@ class SurveyClipboardMixin:
 
     def _process_qrcode_image(self, image_source):
         try:
-            url = decode_qrcode(image_source)
+            pixels = qr_pixel_buffer(image_source)
+            if pixels is None:
+                self._toast("未能识别二维码中的链接", "error")
+                return
+            url = decode_qrcode(pixels)
             if not url:
                 self._toast("未能识别二维码中的链接", "error")
                 return

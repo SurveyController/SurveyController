@@ -16,8 +16,5 @@ def _wait_if_paused(gui_instance: Optional[Any], stop_signal: Optional[threading
 
 
 async def _sleep_with_stop(stop_signal: Optional[Any], seconds: float) -> bool:
-    
+
     return bool(await sleep_or_stop(stop_signal, seconds))
-
-
-

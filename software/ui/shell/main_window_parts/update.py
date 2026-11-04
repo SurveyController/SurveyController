@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import logging
-import re
 from typing import TYPE_CHECKING, cast
 
 from PySide6.QtCore import QObject, QThread, QTimer, Qt
@@ -11,17 +10,16 @@ from qfluentwidgets import (
     IndeterminateProgressRing,
     InfoBadge,
 )
+from packaging.version import Version
 
 from software.app.config import app_settings, get_bool_from_qsettings
-from software.app.version import __VERSION__
+from software.app.app_info import APP_VERSION
 from software.ui.helpers.qfluent_compat import (
     set_indeterminate_progress_ring_active,
 )
 
 
 class MainWindowUpdateMixin:
-    
-
     if TYPE_CHECKING:
         from typing import Any
 
@@ -38,21 +36,15 @@ class MainWindowUpdateMixin:
         _update_check_worker: Any
         _startup_update_check_timer: Any
         _startup_update_check_completed: bool
-        _startup_update_check_suspended: bool
         _startup_update_notification_timer: Any
         _startup_update_pending_info: Any
 
     @staticmethod
     def _is_preview_version() -> bool:
-        version_text = str(__VERSION__ or "").strip().lower()
-        if not version_text:
-            return False
-        if any(token in version_text for token in ("alpha", "beta", "rc", "pre", "preview", "dev")):
-            return True
-        return bool(re.search(r"\d(?:a|b)\d*$", version_text))
+        return Version(APP_VERSION).is_prerelease
 
     def _check_update_on_startup(self):
-        
+
         settings = app_settings()
         if not get_bool_from_qsettings(settings.value("auto_check_update"), True):
             self._startup_update_check_completed = True
@@ -95,25 +87,8 @@ class MainWindowUpdateMixin:
         if notification_timer is not None:
             notification_timer.stop()
 
-    def _set_startup_update_check_suspended(self, suspended: bool) -> None:
-        self._startup_update_check_suspended = bool(suspended)
-        if suspended:
-            return
-        if getattr(self, "_startup_update_pending_info", None):
-            timer = getattr(self, "_startup_update_notification_timer", None)
-            if timer is None or not timer.isActive():
-                self._schedule_startup_update_notification(600)
-            return
-        if not getattr(self, "_startup_update_check_completed", False):
-            timer = getattr(self, "_startup_update_check_timer", None)
-            if timer is None or not timer.isActive():
-                self._schedule_startup_update_check(1200)
-
     def _on_startup_update_check_timeout(self) -> None:
         if getattr(self, "_startup_update_check_completed", False):
-            return
-        if getattr(self, "_startup_update_check_suspended", False):
-            self._schedule_startup_update_check(3000)
             return
         self._start_update_check_worker()
 
@@ -130,8 +105,6 @@ class MainWindowUpdateMixin:
             return False
 
     def _can_show_startup_update_notification(self) -> bool:
-        if getattr(self, "_startup_update_check_suspended", False):
-            return False
         if not getattr(self, "_startup_update_pending_info", None):
             return False
         try:
@@ -208,7 +181,7 @@ class MainWindowUpdateMixin:
             self._clear_update_check_worker_refs()
 
     def _on_update_checked(self, has_update: bool, update_info: dict):
-        
+
         self._startup_update_check_completed = True
         self._clear_update_checking_placeholder()
         status = update_info.get("status", "unknown") if update_info else "unknown"
@@ -222,19 +195,18 @@ class MainWindowUpdateMixin:
             self._apply_version_status_badge(status)
 
     def _apply_version_status_badge(self, status: str):
-        
+
         if status == "latest":
             self._check_preview_version()
             self._show_latest_version_badge()
         elif status == "preview":
             self._show_preview_badge()
         else:
-            
             self._check_preview_version()
             self._show_unknown_badge()
 
     def _ensure_title_bar_status_container(self) -> QWidget | None:
-        
+
         container = getattr(self, "_title_bar_status_container", None)
         if container is not None:
             return container
@@ -249,7 +221,7 @@ class MainWindowUpdateMixin:
         host_layout = QHBoxLayout(container)
         host_layout.setContentsMargins(0, 0, 0, 0)
         host_layout.setSpacing(0)
-        
+
         host_layout.setAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignBottom)
 
         title_label = getattr(title_bar, "titleLabel", None)
@@ -275,7 +247,7 @@ class MainWindowUpdateMixin:
         return container
 
     def _mount_title_bar_status_widget(self, widget: QWidget) -> bool:
-        
+
         container = self._ensure_title_bar_status_container()
         host_layout = getattr(self, "_title_bar_status_layout", None)
         if container is None or host_layout is None:
@@ -293,7 +265,7 @@ class MainWindowUpdateMixin:
         return True
 
     def _clear_title_bar_status_widget(self, widget: QWidget | None) -> None:
-        
+
         if widget is None:
             return
 
@@ -309,7 +281,7 @@ class MainWindowUpdateMixin:
             container.hide()
 
     def _show_update_checking_placeholder(self):
-        
+
         if self._update_checking_spinner:
             return
         for attr in (
@@ -353,12 +325,12 @@ class MainWindowUpdateMixin:
         self._update_checking_spinner = None
 
     def _show_update_notification(self):
-        
+
         self._show_outdated_badge()
         QTimer.singleShot(0, cast(QObject, self), self._do_show_update_notification)
 
     def _do_show_update_notification(self):
-        
+
         if not getattr(self, "update_info", None):
             return
         from software.update.updater import show_update_notification
@@ -366,18 +338,16 @@ class MainWindowUpdateMixin:
         show_update_notification(self)
 
     def _show_latest_version_badge(self):
-        
-        
+
         if self._preview_badge:
             return
         if self._latest_badge:
             return
         try:
-            
             self._latest_badge = InfoBadge.custom(
                 "最新",
-                QColor("#10b981"),  
-                QColor("#34d399"),  
+                QColor("#10b981"),
+                QColor("#34d399"),
                 parent=self._ensure_title_bar_status_container() or self.titleBar,
             )
             if not self._mount_title_bar_status_widget(self._latest_badge):
@@ -387,8 +357,7 @@ class MainWindowUpdateMixin:
             logging.info("显示最新版徽章失败", exc_info=True)
 
     def _show_unknown_badge(self):
-        
-        
+
         if self._preview_badge:
             return
         if getattr(self, "_unknown_badge", None):
@@ -396,8 +365,8 @@ class MainWindowUpdateMixin:
         try:
             self._unknown_badge = InfoBadge.custom(
                 "未知",
-                QColor("#6b7280"),  
-                QColor("#9ca3af"),  
+                QColor("#6b7280"),
+                QColor("#9ca3af"),
                 parent=self._ensure_title_bar_status_container() or self.titleBar,
             )
             if not self._mount_title_bar_status_widget(self._unknown_badge):
@@ -407,10 +376,10 @@ class MainWindowUpdateMixin:
             logging.info("显示未知状态徽章失败", exc_info=True)
 
     def _show_outdated_badge(self):
-        
+
         if self._outdated_badge:
             return
-        
+
         if self._preview_badge:
             try:
                 self._clear_title_bar_status_widget(self._preview_badge)
@@ -418,11 +387,10 @@ class MainWindowUpdateMixin:
             except Exception:
                 logging.info("清理预览版徽章失败", exc_info=True)
         try:
-            
             self._outdated_badge = InfoBadge.custom(
                 "过时",
-                QColor("#ef4444"),  
-                QColor("#fd3c3c"),  
+                QColor("#ef4444"),
+                QColor("#fd3c3c"),
                 parent=self._ensure_title_bar_status_container() or self.titleBar,
             )
             if not self._mount_title_bar_status_widget(self._outdated_badge):
@@ -432,25 +400,24 @@ class MainWindowUpdateMixin:
             logging.info("显示可更新徽章失败", exc_info=True)
 
     def _check_preview_version(self):
-        
+
         if self._is_preview_version():
             self._show_preview_badge()
 
     def _show_preview_badge(self):
-        
+
         if self._preview_badge:
             if self._update_checking_spinner:
                 self._clear_update_checking_placeholder()
             return
         try:
-            
             if self._update_checking_spinner:
                 self._clear_update_checking_placeholder()
-            
+
             self._preview_badge = InfoBadge.custom(
                 "预览",
-                QColor("#f59e0b"),  
-                QColor("#fbbf24"),  
+                QColor("#f59e0b"),
+                QColor("#fbbf24"),
                 parent=self._ensure_title_bar_status_container() or self.titleBar,
             )
             if not self._mount_title_bar_status_widget(self._preview_badge):

@@ -38,11 +38,15 @@ def _presenter() -> WorkbenchPresenter:
     )
     controller.get_survey_snapshot = lambda: {"question_entries": controller.question_entries}
     controller.replace_question_entries = MagicMock(
-        side_effect=lambda entries, **_kwargs: setattr(controller, "question_entries", list(entries or []))
+        side_effect=lambda entries, **_kwargs: setattr(
+            controller, "question_entries", list(entries or [])
+        )
     )
     p = WorkbenchPresenter.__new__(WorkbenchPresenter)
     p.controller = controller
-    p.host = SimpleNamespace(toasts=[], _toast=lambda text, level="info": p.host.toasts.append((text, level)))
+    p.host = SimpleNamespace(
+        toasts=[], _toast=lambda text, level="info": p.host.toasts.append((text, level))
+    )
     p.state = WorkbenchState()
     p.runtime_page = SimpleNamespace(apply_config=MagicMock())
     p.strategy_page = SimpleNamespace(
@@ -159,7 +163,11 @@ def test_workbench_run_coordinator_blocks_restarts_and_builds_config(monkeypatch
     state.set_entries([QuestionEntry("single", [1, 1])], [])
     dashboard._last_progress = 100
     coordinator.set_reverse_fill_target(5)
-    reverse_page = SimpleNamespace(update_config=MagicMock(side_effect=lambda cfg: setattr(cfg, "reverse_fill_source_path", "data.xlsx")))
+    reverse_page = SimpleNamespace(
+        update_config=MagicMock(
+            side_effect=lambda cfg: setattr(cfg, "reverse_fill_source_path", "data.xlsx")
+        )
+    )
     coordinator.bind_reverse_fill_page(reverse_page)
     assert coordinator.start(enable_reverse_fill=True) is True
     cfg = controller.start_run.call_args.args[0]

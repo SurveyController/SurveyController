@@ -39,6 +39,7 @@ from software.ui.pages.workbench.session import WorkbenchState
 
 _COMPAT_LOAD_SHOP_ICON = load_shop_icon
 
+
 class DashboardPage(
     SurveyClipboardMixin,
     DashboardSurveyParseMixin,
@@ -49,12 +50,11 @@ class DashboardPage(
     DashboardProgressMixin,
     QWidget,
 ):
-    
-
     thread_slider: Any
 
-    _ipBalanceChecked = Signal(float)  
-    _randomIpHeartbeatUpdated = Signal(object)  
+    _ipBalanceChecked = Signal(float)
+    _randomIpHeartbeatUpdated = Signal(object)
+
     def __init__(
         self,
         controller: RunController,
@@ -81,7 +81,7 @@ class DashboardPage(
         self._ip_benefit_infobar: Optional[FullWidthInfoBar] = None
         self._ip_low_infobar_dismissed = False
         self._ip_low_threshold = 5000
-        self._api_balance_cache: Optional[float] = None  
+        self._api_balance_cache: Optional[float] = None
         self._ip_balance_fetch_lock = threading.Lock()
         self._ip_balance_fetching = False
         self._last_ip_balance_fetch_ts = 0.0

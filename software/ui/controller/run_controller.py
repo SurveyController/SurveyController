@@ -1,18 +1,28 @@
 from __future__ import annotations
 
-from typing import Any, Callable, Optional
+from collections.abc import Coroutine
+from concurrent.futures import Future
+from typing import Any, Callable, Optional, cast
 
 from PySide6.QtCore import QObject, Signal, Slot
 
+from software.app.bootstrap import ApplicationDependencies, create_application_dependencies
+from software.app.question_media_adapter import fetch_question_media as fetch_question_media_bytes
+from software.application.events import ApplicationEvent
+from software.application.models import RuntimeSnapshot, SurveySnapshot
+from software.application.interactions import InteractionBroker, InteractionRequest
+from software.ui.controller.presentation import (
+    interaction_view,
+    runtime_status,
+    runtime_view,
+    survey_view,
+)
+from software.application.ports import ProxyOperationsPort
+from software.application.run_service import RunApplicationService
+from software.application.run_state_store import RunStateStore
+from software.application.survey_parse_service import SurveyParseService
 from software.core.config.codec import build_runtime_config_snapshot
 from software.core.config.schema import RuntimeConfig
-from software.core.engine.async_engine import AsyncEngineClient
-from software.core.engine.cleanup import CleanupRunner
-from software.io.config.store import save_config
-from software.system.power_management import SystemSleepBlocker
-from software.ui.controller.run_command_service import RunCommandService
-from software.ui.controller.run_state_store import RunStateStore
-from software.ui.controller.survey_parse_service import SurveyParseService
 from software.ui.controller.ui_dispatcher import UiCallbackDispatcher
 
 
@@ -22,25 +32,37 @@ class RunController(QObject):
     controllerEvent = Signal(dict)
     _uiCallbackQueued = Signal()
 
-    def __init__(self, parent=None):
+    def __init__(
+        self,
+        parent=None,
+        *,
+        dependencies: ApplicationDependencies | None = None,
+    ):
         super().__init__(parent)
+        self.dependencies = dependencies or create_application_dependencies()
         self._ui_dispatcher = UiCallbackDispatcher(self._uiCallbackQueued.emit)
         self._uiCallbackQueued.connect(self._drain_ui_callbacks)
-        self._async_engine_client = AsyncEngineClient()
-        self._cleanup_runner = CleanupRunner()
-        self._sleep_blocker = SystemSleepBlocker()
+        self._async_engine_client = self.dependencies.runtime_engine
+        self._cleanup_runner = self.dependencies.cleanup_runner
+        self.preferences = self.dependencies.preferences
+        self.ai_settings = self.dependencies.ai_settings
         self._state_store = RunStateStore(
             on_runtime_snapshot_changed=self._emit_runtime_snapshot,
             on_survey_snapshot_changed=self._emit_survey_snapshot,
         )
-        self._command_service = RunCommandService(
+        self._interactions = InteractionBroker(self._publish_interaction)
+        self._command_service = RunApplicationService(
             state_store=self._state_store,
             async_engine_client=self._async_engine_client,
+            execution_preparer=self.dependencies.execution_preparer,
+            proxy_gateway=self.dependencies.proxy_gateway,
+            configuration_service=self.dependencies.configuration,
             cleanup_runner=self._cleanup_runner,
-            sleep_blocker=self._sleep_blocker,
+            interactions=self._interactions,
             dispatch_async=self._dispatch_to_ui_async,
             emit_event=self._emit_controller_event,
         )
+        self.proxy_operations: ProxyOperationsPort = self._command_service
         self._parse_service = SurveyParseService(
             async_engine_client=self._async_engine_client,
             state_store=self._state_store,
@@ -59,8 +81,28 @@ class RunController(QObject):
     def _dispatch_to_ui_async(self, callback: Callable[[], Any]) -> None:
         self._ui_dispatcher.dispatch_async(callback)
 
-    def _emit_runtime_snapshot(self, snapshot: dict[str, Any]) -> None:
-        self.runtimeSnapshotChanged.emit(dict(snapshot))
+    _format_runtime_status = staticmethod(runtime_status)
+    _runtime_snapshot_view = staticmethod(runtime_view)
+
+    def _publish_interaction(self, request: InteractionRequest) -> None:
+        def publish() -> None:
+            if self._command_service._closing:
+                self._interactions.resolve(request.request_id, False)
+                return
+            try:
+                self.controllerEvent.emit(interaction_view(request))
+            except Exception:
+                self._interactions.resolve(request.request_id, False)
+                raise
+
+        self._dispatch_to_ui_async(publish)
+
+    def respond_to_interaction(self, request_id: str, accepted: bool) -> None:
+        self._interactions.resolve(request_id, accepted)
+
+    def _emit_runtime_snapshot(self, snapshot: RuntimeSnapshot) -> None:
+        view = self._runtime_snapshot_view(snapshot)
+        self.runtimeSnapshotChanged.emit(dict(view))
         random_ip = snapshot.get("random_ip") or {}
         if callable(self.on_ip_counter):
             try:
@@ -72,11 +114,14 @@ class RunController(QObject):
             except Exception:
                 pass
 
-    def _emit_survey_snapshot(self, snapshot: dict[str, Any]) -> None:
-        self.surveySnapshotChanged.emit(dict(snapshot))
+    def _emit_survey_snapshot(self, snapshot: SurveySnapshot) -> None:
+        self.surveySnapshotChanged.emit(survey_view(snapshot))
 
-    def _emit_controller_event(self, event: dict[str, Any]) -> None:
-        self.controllerEvent.emit(dict(event))
+    def _emit_controller_event(self, event: ApplicationEvent) -> None:
+        payload = event.to_dict()
+        if payload.get("type") == "run_failed":
+            payload["message"] = str(payload.get("detail") or "后台运行内核异常退出，请查看日志")
+        self.controllerEvent.emit(payload)
 
     @property
     def running(self) -> bool:
@@ -94,10 +139,10 @@ class RunController(QObject):
         return self._command_service.is_initializing()
 
     def get_runtime_snapshot(self) -> dict[str, Any]:
-        return self._state_store.get_runtime_snapshot()
+        return self._runtime_snapshot_view(self._state_store.get_runtime_snapshot())
 
     def get_survey_snapshot(self) -> dict[str, Any]:
-        return self._state_store.get_survey_snapshot()
+        return survey_view(self._state_store.get_survey_snapshot())
 
     def get_runtime_ui_state(self) -> dict[str, Any]:
         return dict(self.get_runtime_snapshot().get("settings") or {})
@@ -120,7 +165,7 @@ class RunController(QObject):
         self._command_service.sync_runtime_settings(self.get_runtime_snapshot().get("settings", {}))
         return cfg
 
-    def replace_question_entries(self, entries: Any, questions_info: Any = None) -> dict[str, Any]:
+    def replace_question_entries(self, entries: Any, questions_info: Any = None) -> SurveySnapshot:
         return self._state_store.replace_question_entries(
             entries,
             questions_info=questions_info,
@@ -135,17 +180,52 @@ class RunController(QObject):
     def parse_survey(self, url: str) -> None:
         self._parse_service.parse_survey(url)
 
+    def submit_ui_task(
+        self,
+        task_name: str,
+        coro_factory: Callable[[], Coroutine[Any, Any, Any]],
+    ) -> Future[Any]:
+        return self._async_engine_client.submit_ui_task(task_name, coro_factory)
+
+    def submit_random_ip_health_check(self) -> Future[dict[str, str]]:
+        return cast(
+            Future[dict[str, str]],
+            self.submit_ui_task(
+                "random-ip-health-check",
+                self.dependencies.random_ip_health.check,
+            ),
+        )
+
+    def fetch_question_media(self, source_url: str) -> Future[bytes]:
+        return cast(
+            Future[bytes],
+            self.submit_ui_task(
+                "question-media-thumbnail",
+                lambda: fetch_question_media_bytes(source_url),
+            ),
+        )
+
+    def get_proxy_session_snapshot(self) -> dict[str, Any]:
+        return self.dependencies.proxy_gateway.get_session_snapshot()
+
     def start_run(self, cfg: RuntimeConfig) -> None:
         self._command_service.start_run(cfg)
 
     def stop_run(self) -> None:
         self._command_service.stop_run()
 
+    def pause_run(self, reason: str = "") -> None:
+        self._command_service.pause_run(reason)
+
     def resume_run(self) -> None:
         self._command_service.resume_run()
 
     def request_shutdown_for_close(self, timeout_seconds: float = 5.0) -> None:
+        self._parse_service.close()
         self._command_service.request_shutdown_for_close(timeout_seconds=timeout_seconds)
+
+    def wait_for_shutdown(self, timeout_seconds: float = 5.0) -> bool:
+        return self._command_service.wait_for_shutdown(timeout_seconds=timeout_seconds)
 
     def request_toggle_random_ip(
         self,
@@ -153,13 +233,13 @@ class RunController(QObject):
         *,
         on_done: Optional[Callable[[bool], None]] = None,
     ) -> bool:
-        return self._command_service.request_toggle_random_ip(
+        return self.proxy_operations.request_toggle_random_ip(
             bool(enabled),
             on_done=on_done,
         )
 
     def refresh_random_ip_counter(self) -> None:
-        self._command_service.refresh_random_ip_counter()
+        self.proxy_operations.refresh_random_ip_counter()
 
     def sync_random_ip_counter_from_server(
         self,
@@ -167,7 +247,7 @@ class RunController(QObject):
         silent: bool = True,
         min_interval_seconds: float = 0.0,
     ) -> None:
-        self._command_service.sync_random_ip_counter_from_server(
+        self.proxy_operations.sync_random_ip_counter_from_server(
             silent=silent,
             min_interval_seconds=min_interval_seconds,
         )
@@ -182,16 +262,27 @@ class RunController(QObject):
         self.hydrate_from_config(cfg)
         return cfg
 
-    def save_config(self, cfg: RuntimeConfig, path: Optional[str] = None) -> str:
+    def save_config(
+        self,
+        cfg: RuntimeConfig,
+        path: Optional[str] = None,
+        *,
+        include_secrets: bool = False,
+    ) -> str:
         self.config = cfg
         self.hydrate_from_config(cfg)
-        return self._command_service.save_config(cfg, path)
+        return self._command_service.save_config(
+            cfg,
+            path,
+            include_secrets=include_secrets,
+        )
 
     def save_current_config(
         self,
         path: Optional[str] = None,
         *,
         config: Optional[RuntimeConfig] = None,
+        include_secrets: bool = False,
     ) -> str:
         cfg = config or build_runtime_config_snapshot(
             RuntimeConfig(),
@@ -206,7 +297,11 @@ class RunController(QObject):
         cfg.questions_info = list(snapshot.get("questions_info") or [])
         cfg.question_entries = list(snapshot.get("question_entries") or [])
         self.config = cfg
-        return save_config(cfg, path)
+        return self.dependencies.configuration.save(
+            cfg,
+            path,
+            include_secrets=include_secrets,
+        )
 
 
 __all__ = ["RunController"]

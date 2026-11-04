@@ -34,7 +34,9 @@ class RuntimeErrorHandlerTests:
 
     def test_ai_runtime_error_stops_on_fifth_failure(self) -> None:
         config = ExecutionConfig(fail_threshold=5, stop_on_fail_enabled=True)
-        state = ExecutionState(config=config, cur_fail=runtime_error_handlers.AI_FILL_FAIL_THRESHOLD - 1)
+        state = ExecutionState(
+            config=config, cur_fail=runtime_error_handlers.AI_FILL_FAIL_THRESHOLD - 1
+        )
         policy = RunStopPolicy(config, state)
         stop_signal = threading.Event()
 
@@ -57,7 +59,9 @@ class RuntimeErrorHandlerTests:
         stop_signal = threading.Event()
 
         stopped = runtime_error_handlers.handle_submission_verification_error(
-            SubmissionVerificationRequiredError("问卷星触发智能验证，当前链路已停止。请启用随机 IP 后再提交。"),
+            SubmissionVerificationRequiredError(
+                "问卷星触发智能验证，当前链路已停止。请启用随机 IP 后再提交。"
+            ),
             stop_signal,
             thread_name="Worker-1",
             state=state,
@@ -66,5 +70,8 @@ class RuntimeErrorHandlerTests:
         assert stopped
         assert stop_signal.is_set()
         assert state.get_terminal_stop_snapshot()[0] == "submission_verification"
-        assert state.get_terminal_stop_snapshot()[1] == FailureReason.SUBMISSION_VERIFICATION_REQUIRED.value
+        assert (
+            state.get_terminal_stop_snapshot()[1]
+            == FailureReason.SUBMISSION_VERIFICATION_REQUIRED.value
+        )
         assert "启用随机 IP" in state.get_terminal_stop_snapshot()[2]

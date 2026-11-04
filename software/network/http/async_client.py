@@ -1,20 +1,25 @@
 from __future__ import annotations
 
 import asyncio
-import atexit
 import logging
 import threading
 import time
 from dataclasses import dataclass
-from typing import Any, Literal, overload
+from typing import Any, Literal, cast, overload
 
 import httpx
 
 from software.logging.log_utils import log_suppressed_exception
-from software.network.http.client import _CLIENT_LIMITS, _normalize_timeout, _resolve_proxy
+from software.network.http.client_policy import (
+    CLIENT_LIMITS,
+    CLIENT_TTL_SECONDS,
+    MAX_CLIENTS,
+    normalize_timeout,
+    resolve_proxy,
+)
 
-_MAX_CLIENTS = 20
-_CLIENT_TTL = 300
+_MAX_CLIENTS = MAX_CLIENTS
+_CLIENT_TTL = CLIENT_TTL_SECONDS
 
 
 @dataclass(frozen=True)
@@ -33,8 +38,6 @@ class _AsyncClientEntry:
 
 
 class _AsyncStreamResponse:
-    
-
     def __init__(self, response: httpx.Response, stream_ctx: Any, release: Any) -> None:
         self._response = response
         self._stream_ctx = stream_ctx
@@ -81,17 +84,19 @@ class _AsyncStreamResponse:
             try:
                 await self._release()
             except Exception as exc:
-                log_suppressed_exception("_AsyncStreamResponse.aclose release()", exc, level=logging.WARNING)
+                log_suppressed_exception(
+                    "_AsyncStreamResponse.aclose release()", exc, level=logging.WARNING
+                )
 
 
 class _AsyncClientManager:
-    
-
     def __init__(self) -> None:
         self._lock = threading.RLock()
         self._clients: dict[tuple[int, _AsyncClientKey], _AsyncClientEntry] = {}
 
-    def _make_storage_key(self, loop: asyncio.AbstractEventLoop, key: _AsyncClientKey) -> tuple[int, _AsyncClientKey]:
+    def _make_storage_key(
+        self, loop: asyncio.AbstractEventLoop, key: _AsyncClientKey
+    ) -> tuple[int, _AsyncClientKey]:
         return id(loop), key
 
     def _create_client(
@@ -108,7 +113,7 @@ class _AsyncClientManager:
             proxy=proxy,
             follow_redirects=follow_redirects,
             trust_env=trust_env,
-            limits=_CLIENT_LIMITS,
+            limits=CLIENT_LIMITS,
         )
 
     def _select_stale_clients_locked(self) -> list[httpx.AsyncClient]:
@@ -142,7 +147,9 @@ class _AsyncClientManager:
             try:
                 await client.aclose()
             except Exception as exc:
-                log_suppressed_exception("_AsyncClientManager._close_clients client.aclose()", exc, level=logging.WARNING)
+                log_suppressed_exception(
+                    "_AsyncClientManager._close_clients client.aclose()", exc, level=logging.WARNING
+                )
 
     def acquire(
         self,
@@ -196,13 +203,15 @@ class _AsyncClientManager:
         if clients_to_close:
             await self._close_clients(clients_to_close)
 
-    async def request(self, method: str, url: str, **kwargs: Any) -> httpx.Response | _AsyncStreamResponse:
+    async def request(
+        self, method: str, url: str, **kwargs: Any
+    ) -> httpx.Response | _AsyncStreamResponse:
         stream = bool(kwargs.pop("stream", False))
         allow_redirects = bool(kwargs.pop("allow_redirects", True))
         verify = kwargs.pop("verify", True)
         proxies = kwargs.pop("proxies", None)
-        proxy, trust_env = _resolve_proxy(proxies, url)
-        timeout = _normalize_timeout(kwargs.pop("timeout", None))
+        proxy, trust_env = resolve_proxy(proxies, url)
+        timeout = normalize_timeout(kwargs.pop("timeout", None))
         loop = asyncio.get_running_loop()
         storage_key, entry, clients_to_close = self.acquire(
             loop=loop,
@@ -226,39 +235,31 @@ class _AsyncClientManager:
         finally:
             await self.release(storage_key)
 
-    async def close(self) -> None:
+    async def close_for_loop(self, loop: asyncio.AbstractEventLoop) -> None:
+        loop_id = id(loop)
         with self._lock:
-            clients = [entry.client for entry in self._clients.values()]
-            self._clients.clear()
+            storage_keys = [key for key in self._clients if key[0] == loop_id]
+            clients = [self._clients.pop(key).client for key in storage_keys]
         await self._close_clients(clients)
 
 
 _client_manager = _AsyncClientManager()
 
 
-def close() -> None:
-    try:
-        try:
-            loop = asyncio.get_running_loop()
-        except RuntimeError:
-            asyncio.run(_client_manager.close())
-            return
-        loop.create_task(_client_manager.close())
-    except Exception as exc:
-        log_suppressed_exception("async_http_client.close _client_manager.close()", exc, level=logging.WARNING)
-
-
-atexit.register(close)
+async def aclose_for_loop(loop: asyncio.AbstractEventLoop | None = None) -> None:
+    await _client_manager.close_for_loop(loop or asyncio.get_running_loop())
 
 
 @overload
-async def request(method: str, url: str, *, stream: Literal[True], **kwargs: Any) -> _AsyncStreamResponse:
-    ...
+async def request(
+    method: str, url: str, *, stream: Literal[True], **kwargs: Any
+) -> _AsyncStreamResponse: ...
 
 
 @overload
-async def request(method: str, url: str, *, stream: Literal[False] = False, **kwargs: Any) -> httpx.Response:
-    ...
+async def request(
+    method: str, url: str, *, stream: Literal[False] = False, **kwargs: Any
+) -> httpx.Response: ...
 
 
 async def request(method: str, url: str, **kwargs: Any) -> httpx.Response | _AsyncStreamResponse:
@@ -266,63 +267,54 @@ async def request(method: str, url: str, **kwargs: Any) -> httpx.Response | _Asy
 
 
 @overload
-async def get(url: str, *, stream: Literal[True], **kwargs: Any) -> _AsyncStreamResponse:
-    ...
+async def get(url: str, *, stream: Literal[True], **kwargs: Any) -> _AsyncStreamResponse: ...
 
 
 @overload
-async def get(url: str, *, stream: Literal[False] = False, **kwargs: Any) -> httpx.Response:
-    ...
+async def get(url: str, *, stream: Literal[False] = False, **kwargs: Any) -> httpx.Response: ...
 
 
 async def get(url: str, **kwargs: Any) -> httpx.Response | _AsyncStreamResponse:
-    return await request("GET", url, **kwargs)
+    return cast(httpx.Response | _AsyncStreamResponse, await request("GET", url, **kwargs))
 
 
 @overload
-async def post(url: str, *, stream: Literal[True], **kwargs: Any) -> _AsyncStreamResponse:
-    ...
+async def post(url: str, *, stream: Literal[True], **kwargs: Any) -> _AsyncStreamResponse: ...
 
 
 @overload
-async def post(url: str, *, stream: Literal[False] = False, **kwargs: Any) -> httpx.Response:
-    ...
+async def post(url: str, *, stream: Literal[False] = False, **kwargs: Any) -> httpx.Response: ...
 
 
 async def post(url: str, **kwargs: Any) -> httpx.Response | _AsyncStreamResponse:
-    return await request("POST", url, **kwargs)
+    return cast(httpx.Response | _AsyncStreamResponse, await request("POST", url, **kwargs))
 
 
 @overload
-async def put(url: str, *, stream: Literal[True], **kwargs: Any) -> _AsyncStreamResponse:
-    ...
+async def put(url: str, *, stream: Literal[True], **kwargs: Any) -> _AsyncStreamResponse: ...
 
 
 @overload
-async def put(url: str, *, stream: Literal[False] = False, **kwargs: Any) -> httpx.Response:
-    ...
+async def put(url: str, *, stream: Literal[False] = False, **kwargs: Any) -> httpx.Response: ...
 
 
 async def put(url: str, **kwargs: Any) -> httpx.Response | _AsyncStreamResponse:
-    return await request("PUT", url, **kwargs)
+    return cast(httpx.Response | _AsyncStreamResponse, await request("PUT", url, **kwargs))
 
 
 @overload
-async def delete(url: str, *, stream: Literal[True], **kwargs: Any) -> _AsyncStreamResponse:
-    ...
+async def delete(url: str, *, stream: Literal[True], **kwargs: Any) -> _AsyncStreamResponse: ...
 
 
 @overload
-async def delete(url: str, *, stream: Literal[False] = False, **kwargs: Any) -> httpx.Response:
-    ...
+async def delete(url: str, *, stream: Literal[False] = False, **kwargs: Any) -> httpx.Response: ...
 
 
 async def delete(url: str, **kwargs: Any) -> httpx.Response | _AsyncStreamResponse:
-    return await request("DELETE", url, **kwargs)
+    return cast(httpx.Response | _AsyncStreamResponse, await request("DELETE", url, **kwargs))
 
 
 __all__ = [
-    "close",
     "delete",
     "get",
     "post",

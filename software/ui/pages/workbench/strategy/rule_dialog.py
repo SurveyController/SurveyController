@@ -92,8 +92,6 @@ def build_question_label(question: SurveyQuestionMeta) -> str:
 
 
 class ConditionRuleDialog(MessageBoxBase):
-    
-
     def __init__(
         self,
         questions_info: List[SurveyQuestionMeta],

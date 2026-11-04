@@ -2,8 +2,6 @@ from __future__ import annotations
 
 import os
 
-from PySide6.QtCore import QCoreApplication, QStandardPaths
-
 from software.app.path_utils import normalize_filesystem_path
 from software.app.settings_store import (
     CONFIG_DIRECTORY_SETTING_KEY,
@@ -20,6 +18,8 @@ def _normalize_path(path: str) -> str:
 
 
 def _strip_qt_app_suffix(path: str) -> str:
+    from PySide6.QtCore import QCoreApplication
+
     normalized = _normalize_path(path)
     if not normalized:
         return normalized
@@ -34,9 +34,12 @@ def _strip_qt_app_suffix(path: str) -> str:
     return current
 
 
-def _get_standard_base_root(location: QStandardPaths.StandardLocation, *fallback_parts: str) -> str:
+def _get_standard_base_root(location: str, *fallback_parts: str) -> str:
+    from PySide6.QtCore import QStandardPaths
+
     configure_qt_application_metadata()
-    path = str(QStandardPaths.writableLocation(location) or "").strip()
+    standard_location = getattr(QStandardPaths.StandardLocation, location)
+    path = str(QStandardPaths.writableLocation(standard_location) or "").strip()
     if path:
         stripped = _strip_qt_app_suffix(path)
         if stripped:
@@ -45,35 +48,35 @@ def _get_standard_base_root(location: QStandardPaths.StandardLocation, *fallback
 
 
 def get_roaming_app_data_root() -> str:
-    
+
     return _get_standard_base_root(
-        QStandardPaths.StandardLocation.AppDataLocation,
+        "AppDataLocation",
         "AppData",
         "Roaming",
     )
 
 
 def get_local_app_data_root() -> str:
-    
+
     return _get_standard_base_root(
-        QStandardPaths.StandardLocation.AppLocalDataLocation,
+        "AppLocalDataLocation",
         "AppData",
         "Local",
     )
 
 
 def get_user_config_root() -> str:
-    
+
     return os.path.join(get_roaming_app_data_root(), _APP_NAME)
 
 
 def get_default_user_config_directory() -> str:
-    
+
     return os.path.join(get_user_config_root(), "configs")
 
 
 def resolve_user_config_directory(settings=None) -> str:
-    
+
     current_settings = settings or app_settings()
     configured_path = get_str_from_qsettings(
         current_settings.value(CONFIG_DIRECTORY_SETTING_KEY),
@@ -84,48 +87,56 @@ def resolve_user_config_directory(settings=None) -> str:
     return _normalize_path(os.path.expanduser(configured_path))
 
 
-def get_user_config_directory() -> str:
-    
-    return resolve_user_config_directory()
+def get_user_config_directory(settings=None) -> str:
+    return resolve_user_config_directory(settings)
 
 
 def get_user_local_data_root() -> str:
-    
+
     return os.path.join(get_local_app_data_root(), _APP_NAME)
 
 
 def get_user_logs_directory() -> str:
-    
+
     return os.path.join(get_user_local_data_root(), "logs")
 
 
 def get_user_cache_directory() -> str:
-    
+
     return os.path.join(get_user_local_data_root(), "cache")
 
 
 def get_user_updates_directory() -> str:
-    
+
     return os.path.join(get_user_local_data_root(), "updates")
 
 
-def get_default_runtime_config_path() -> str:
-    
+def get_default_runtime_config_path(settings=None) -> str:
+    config_path = os.path.join(get_user_config_directory(settings), "config.json")
+    if os.path.normcase(os.path.abspath(config_path)) == os.path.normcase(
+        os.path.abspath(get_legacy_runtime_config_path())
+    ):
+        return os.path.join(os.path.dirname(config_path), "runtime-config.json")
+    return config_path
+
+
+def get_legacy_runtime_config_path() -> str:
+    """Return the pre-unification default path for read-only recovery."""
     return os.path.join(get_user_config_root(), "config.json")
 
 
 def get_fatal_crash_log_path() -> str:
-    
+
     return os.path.join(get_user_logs_directory(), "fatal_crash.log")
 
 
 def get_last_session_log_path() -> str:
-    
+
     return os.path.join(get_user_logs_directory(), "last_session.log")
 
 
 def ensure_user_data_directories() -> tuple[str, ...]:
-    
+
     paths = (
         get_user_config_root(),
         get_user_config_directory(),
@@ -144,6 +155,7 @@ __all__ = [
     "get_default_runtime_config_path",
     "get_default_user_config_directory",
     "get_fatal_crash_log_path",
+    "get_legacy_runtime_config_path",
     "get_last_session_log_path",
     "get_local_app_data_root",
     "get_roaming_app_data_root",

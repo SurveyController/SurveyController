@@ -10,6 +10,7 @@ class RandomIPAuthError(RuntimeError):
         self.retry_after_seconds = max(0, int(retry_after_seconds or 0))
         super().__init__(self.detail)
 
+
 @dataclass
 class RandomIPSession:
     device_id: str = ""

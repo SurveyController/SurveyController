@@ -4,7 +4,13 @@ from typing import Any, cast
 
 from PySide6.QtCore import QModelIndex, QPersistentModelIndex, QRectF, QSize, Qt
 from PySide6.QtGui import QPainter, QTextDocument
-from PySide6.QtWidgets import QApplication, QAbstractItemView, QListView, QStyle, QStyleOptionViewItem
+from PySide6.QtWidgets import (
+    QApplication,
+    QAbstractItemView,
+    QListView,
+    QStyle,
+    QStyleOptionViewItem,
+)
 from qfluentwidgets import ListWidget, isDarkTheme
 from qfluentwidgets.components.widgets.list_view import ListItemDelegate
 
@@ -15,8 +21,6 @@ SEARCH_RESULT_DETAIL_ROLE = SEARCH_RESULT_INDEX_ROLE + 2
 
 
 class QuestionSearchCompleterDelegate(ListItemDelegate):
-    
-
     def __init__(self, parent: QAbstractItemView) -> None:
         super().__init__(cast(QListView, cast(Any, parent)))
 

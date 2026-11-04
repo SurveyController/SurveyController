@@ -11,8 +11,6 @@ from surveycore.core.engine.stop_signal import StopSignalLike
 
 @dataclass
 class ProxyLease:
-    
-
     address: str = ""
     expire_at: str = ""
     expire_ts: float = 0.0
@@ -21,6 +19,7 @@ class ProxyLease:
 
 
 if TYPE_CHECKING:
+
     class _ProxyRuntimeHost(Protocol):
         lock: threading.Lock
         proxy_waiting_threads: int
@@ -32,8 +31,12 @@ if TYPE_CHECKING:
         _runtime_async_event_loop: Optional[asyncio.AbstractEventLoop]
         _runtime_change_seq: int
 
-        def _purge_expired_proxy_cooldowns_locked(self, *, now_ts: Optional[float] = None) -> None: ...
-        def _is_proxy_in_cooldown_locked(self, proxy_address: str, *, now_ts: Optional[float] = None) -> bool: ...
+        def _purge_expired_proxy_cooldowns_locked(
+            self, *, now_ts: Optional[float] = None
+        ) -> None: ...
+        def _is_proxy_in_cooldown_locked(
+            self, proxy_address: str, *, now_ts: Optional[float] = None
+        ) -> bool: ...
         def active_proxy_addresses_locked(self, *, exclude_thread_name: str = "") -> set[str]: ...
         def successful_proxy_addresses_locked(self) -> set[str]: ...
         def notify_runtime_change(self) -> None: ...
@@ -71,7 +74,9 @@ class ProxyRuntimeMixin:
         for address in expired:
             self.proxy_cooldown_until_by_address.pop(address, None)
 
-    def purge_expired_proxy_cooldowns(self: "_ProxyRuntimeHost", *, now_ts: Optional[float] = None) -> None:
+    def purge_expired_proxy_cooldowns(
+        self: "_ProxyRuntimeHost", *, now_ts: Optional[float] = None
+    ) -> None:
         with self.lock:
             self._purge_expired_proxy_cooldowns_locked(now_ts=now_ts)
 
@@ -174,7 +179,9 @@ class ProxyRuntimeMixin:
         if not normalized:
             return False
         with self.lock:
-            return normalized in self.active_proxy_addresses_locked(exclude_thread_name=exclude_thread_name)
+            return normalized in self.active_proxy_addresses_locked(
+                exclude_thread_name=exclude_thread_name
+            )
 
     def mark_successful_proxy_address(self: "_ProxyRuntimeHost", proxy_address: str) -> bool:
         normalized = str(proxy_address or "").strip()

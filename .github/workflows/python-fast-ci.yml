@@ -5,7 +5,7 @@ on:
   push:
     branches:
       - "**"
-    tags-ignore:
+    tags:
       - "v*"
 
 permissions:
@@ -21,20 +21,16 @@ concurrency:
 jobs:
   static-checks:
     name: Static Checks
-    runs-on: ${{ matrix.os }}
-    strategy:
-      fail-fast: false
-      matrix:
-        os: [windows-latest, macos-latest]
+    runs-on: windows-latest
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v5
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Set up uv
-        uses: astral-sh/setup-uv@08807647e7069bb48b6ef5acd8ec9567f424441b # v8.1.0
+        uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
         with:
-          python-version: "3.13.16"
+          python-version: "3.13.17"
           enable-cache: true
           cache-dependency-glob: |
             pyproject.toml
@@ -43,33 +39,39 @@ jobs:
       - name: Install dependencies
         run: uv sync --locked
 
+      - name: Validate application version and release tag
+        shell: pwsh
+        run: |
+          $metadataArgs = @("run", "python", "-m", "CI.build_tools.app_metadata", "--output", "build/metadata/build-info.json")
+          if ($env:GITHUB_REF_TYPE -eq "tag") {
+            $metadataArgs += @("--release-tag", $env:GITHUB_REF_NAME)
+          }
+          & uv @metadataArgs
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
       - name: Run compile check
         run: uv run python -m CI.python_checks.compile_check
 
-      - name: Run Ruff check
+      - name: Run Ruff lint and format checks
         run: uv run python -m CI.python_checks.ruff_check
 
-      - name: Run Pyright check
-        run: uv run python -m CI.python_checks.pyright_check
+      - name: Run ty check
+        run: uv run python -m CI.python_checks.ty_check
 
   unit-tests:
     name: Unit Tests
-    runs-on: ${{ matrix.os }}
-    strategy:
-      fail-fast: false
-      matrix:
-        os: [windows-latest, macos-latest]
+    runs-on: windows-latest
     env:
       SURVEY_CONTROLLER_UNIT_TEST_TIMEOUT_SECONDS: "300"
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v5
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Set up uv
-        uses: astral-sh/setup-uv@08807647e7069bb48b6ef5acd8ec9567f424441b # v8.1.0
+        uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
         with:
-          python-version: "3.13.16"
+          python-version: "3.13.17"
           enable-cache: true
           cache-dependency-glob: |
             pyproject.toml

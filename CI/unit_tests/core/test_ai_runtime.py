@@ -7,7 +7,9 @@ from software.core.ai import runtime as ai_runtime
 
 class AiRuntimeTests:
     @pytest.mark.asyncio
-    async def test_agenerate_ai_answer_retries_up_to_three_times_after_initial_try(self, monkeypatch) -> None:
+    async def test_agenerate_ai_answer_retries_up_to_three_times_after_initial_try(
+        self, monkeypatch
+    ) -> None:
         calls: list[int] = []
 
         async def _raise(*_args, **_kwargs):
