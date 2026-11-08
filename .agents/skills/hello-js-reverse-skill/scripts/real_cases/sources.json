@@ -1,0 +1,48 @@
+[
+  {
+    "name": "KProtect",
+    "repository": "https://github.com/yang-zhongtian/KProtect",
+    "commit": "da4ea8a3095a14dbb7cdf3126cb9cc2e076fdf2a",
+    "url": "https://codeload.github.com/yang-zhongtian/KProtect/tar.gz/da4ea8a3095a14dbb7cdf3126cb9cc2e076fdf2a",
+    "archive": "KProtect-da4ea8a3095a14dbb7cdf3126cb9cc2e076fdf2a.tar.gz",
+    "sha256": "d252888560d4c08c76ea5d07526d221ad60cb4094ebcecc8a19f62c53395d88b",
+    "destination": "vm-cff/upstream/KProtect",
+    "license": "GPL-3.0 (root package: GPL-3.0-or-later)",
+    "license_file": "LICENSE.md"
+  },
+  {
+    "name": "javascript-obfuscator",
+    "repository": "https://github.com/javascript-obfuscator/javascript-obfuscator",
+    "commit": "828a190cf80a86227ef77be38e99aad9838aed70",
+    "url": "https://codeload.github.com/javascript-obfuscator/javascript-obfuscator/tar.gz/828a190cf80a86227ef77be38e99aad9838aed70",
+    "archive": "javascript-obfuscator-828a190cf80a86227ef77be38e99aad9838aed70.tar.gz",
+    "sha256": "08daef3f712ab361626f338a422e754d8cc94c273aaa35791b3caa4183dafc7f",
+    "destination": "vm-cff/upstream/javascript-obfuscator",
+    "license": "BSD-2-Clause",
+    "license_file": "LICENSE.BSD"
+  },
+  {
+    "name": "crypto-js",
+    "version": "4.2.0",
+    "repository": "https://github.com/brix/crypto-js",
+    "commit": "808f499ec789fcd68416328a40b8735a5c962116",
+    "url": "https://codeload.github.com/brix/crypto-js/tar.gz/808f499ec789fcd68416328a40b8735a5c962116",
+    "archive": "crypto-js-808f499ec789fcd68416328a40b8735a5c962116.tar.gz",
+    "sha256": "b4d1ee983bd1dc29848e45914ffd34e9c04c871e77ec3d2a3dc9e10ba3698c16",
+    "destination": "crypto-fingerprint/vendor/crypto-js-source",
+    "license": "MIT",
+    "license_file": "LICENSE"
+  },
+  {
+    "name": "fingerprintjs",
+    "version": "5.2.0",
+    "repository": "https://github.com/fingerprintjs/fingerprintjs",
+    "commit": "e196578ba35362fdf15647e013d66ac28b3c9fb5",
+    "url": "https://codeload.github.com/fingerprintjs/fingerprintjs/tar.gz/e196578ba35362fdf15647e013d66ac28b3c9fb5",
+    "archive": "fingerprintjs-e196578ba35362fdf15647e013d66ac28b3c9fb5.tar.gz",
+    "sha256": "6fa4b733f838fba8316d378147e4e3eec9b7d830ca50edb528872a635f3241a2",
+    "destination": "crypto-fingerprint/vendor/fingerprintjs-source",
+    "license": "MIT",
+    "license_file": "LICENSE"
+  }
+]

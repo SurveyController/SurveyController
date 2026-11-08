@@ -1,0 +1,1272 @@
+{
+  "schema_version": 1,
+  "mcp_version": "1.8.0",
+  "tools": [
+    {
+      "name": "check_environment",
+      "parameters": {
+        "properties": {},
+        "title": "check_environmentArguments",
+        "type": "object"
+      }
+    },
+    {
+      "name": "click",
+      "parameters": {
+        "properties": {
+          "selector": {
+            "title": "Selector",
+            "type": "string"
+          }
+        },
+        "required": [
+          "selector"
+        ],
+        "title": "clickArguments",
+        "type": "object"
+      }
+    },
+    {
+      "name": "close_browser",
+      "parameters": {
+        "properties": {},
+        "title": "close_browserArguments",
+        "type": "object"
+      }
+    },
+    {
+      "name": "compare_env",
+      "parameters": {
+        "properties": {
+          "properties": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Properties"
+          }
+        },
+        "title": "compare_envArguments",
+        "type": "object"
+      }
+    },
+    {
+      "name": "compare_network_requests",
+      "parameters": {
+        "properties": {
+          "request_ids": {
+            "items": {
+              "type": "integer"
+            },
+            "title": "Request Ids",
+            "type": "array"
+          },
+          "include_headers": {
+            "default": true,
+            "title": "Include Headers",
+            "type": "boolean"
+          },
+          "include_body": {
+            "default": true,
+            "title": "Include Body",
+            "type": "boolean"
+          },
+          "max_value_chars": {
+            "default": 200,
+            "title": "Max Value Chars",
+            "type": "integer"
+          },
+          "max_fields": {
+            "default": 100,
+            "title": "Max Fields",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "request_ids"
+        ],
+        "title": "compare_network_requestsArguments",
+        "type": "object"
+      }
+    },
+    {
+      "name": "cookies",
+      "parameters": {
+        "properties": {
+          "action": {
+            "title": "Action",
+            "type": "string"
+          },
+          "domain": {
+            "type": "string",
+            "title": "Domain"
+          },
+          "cookies_list": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "type": "array",
+            "title": "Cookies List"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          }
+        },
+        "required": [
+          "action"
+        ],
+        "title": "cookiesArguments",
+        "type": "object"
+      }
+    },
+    {
+      "name": "evaluate_js",
+      "parameters": {
+        "properties": {
+          "expression": {
+            "title": "Expression",
+            "type": "string"
+          },
+          "await_promise": {
+            "default": true,
+            "title": "Await Promise",
+            "type": "boolean"
+          },
+          "world": {
+            "default": "isolated",
+            "title": "World",
+            "type": "string"
+          },
+          "frame_url": {
+            "type": "string",
+            "title": "Frame Url"
+          },
+          "frame_name": {
+            "type": "string",
+            "title": "Frame Name"
+          },
+          "frame_index": {
+            "type": "integer",
+            "title": "Frame Index"
+          },
+          "result_format": {
+            "default": "auto",
+            "title": "Result Format",
+            "type": "string"
+          }
+        },
+        "required": [
+          "expression"
+        ],
+        "title": "evaluate_jsArguments",
+        "type": "object"
+      }
+    },
+    {
+      "name": "export_network_capture",
+      "parameters": {
+        "properties": {
+          "save_path": {
+            "title": "Save Path",
+            "type": "string"
+          },
+          "include_body": {
+            "default": false,
+            "title": "Include Body",
+            "type": "boolean"
+          },
+          "include_sensitive": {
+            "default": false,
+            "title": "Include Sensitive",
+            "type": "boolean"
+          },
+          "url_filter": {
+            "type": "string",
+            "title": "Url Filter"
+          }
+        },
+        "required": [
+          "save_path"
+        ],
+        "title": "export_network_captureArguments",
+        "type": "object"
+      }
+    },
+    {
+      "name": "export_state",
+      "parameters": {
+        "properties": {
+          "save_path": {
+            "title": "Save Path",
+            "type": "string"
+          }
+        },
+        "required": [
+          "save_path"
+        ],
+        "title": "export_stateArguments",
+        "type": "object"
+      }
+    },
+    {
+      "name": "get_console_logs",
+      "parameters": {
+        "properties": {
+          "level": {
+            "type": "string",
+            "title": "Level"
+          },
+          "keyword": {
+            "type": "string",
+            "title": "Keyword"
+          },
+          "clear": {
+            "default": false,
+            "title": "Clear",
+            "type": "boolean"
+          }
+        },
+        "title": "get_console_logsArguments",
+        "type": "object"
+      }
+    },
+    {
+      "name": "get_network_request",
+      "parameters": {
+        "properties": {
+          "request_id": {
+            "title": "Request Id",
+            "type": "integer"
+          },
+          "include_body": {
+            "default": false,
+            "title": "Include Body",
+            "type": "boolean"
+          },
+          "include_headers": {
+            "default": true,
+            "title": "Include Headers",
+            "type": "boolean"
+          },
+          "max_body_size": {
+            "default": 5000,
+            "title": "Max Body Size",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "request_id"
+        ],
+        "title": "get_network_requestArguments",
+        "type": "object"
+      }
+    },
+    {
+      "name": "get_page_info",
+      "parameters": {
+        "properties": {},
+        "title": "get_page_infoArguments",
+        "type": "object"
+      }
+    },
+    {
+      "name": "get_request_initiator",
+      "parameters": {
+        "properties": {
+          "request_id": {
+            "title": "Request Id",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "request_id"
+        ],
+        "title": "get_request_initiatorArguments",
+        "type": "object"
+      }
+    },
+    {
+      "name": "get_storage",
+      "parameters": {
+        "properties": {
+          "storage_type": {
+            "default": "local",
+            "title": "Storage Type",
+            "type": "string"
+          }
+        },
+        "title": "get_storageArguments",
+        "type": "object"
+      }
+    },
+    {
+      "name": "get_trace_data",
+      "parameters": {
+        "properties": {
+          "function_path": {
+            "type": "string",
+            "title": "Function Path"
+          },
+          "clear": {
+            "default": false,
+            "title": "Clear",
+            "type": "boolean"
+          },
+          "include_persistent": {
+            "default": true,
+            "title": "Include Persistent",
+            "type": "boolean"
+          },
+          "world": {
+            "default": "isolated",
+            "title": "World",
+            "type": "string"
+          },
+          "frame_url": {
+            "type": "string",
+            "title": "Frame Url"
+          },
+          "frame_name": {
+            "type": "string",
+            "title": "Frame Name"
+          },
+          "frame_index": {
+            "type": "integer",
+            "title": "Frame Index"
+          }
+        },
+        "title": "get_trace_dataArguments",
+        "type": "object"
+      }
+    },
+    {
+      "name": "hook_function",
+      "parameters": {
+        "properties": {
+          "function_path": {
+            "title": "Function Path",
+            "type": "string"
+          },
+          "mode": {
+            "default": "intercept",
+            "title": "Mode",
+            "type": "string"
+          },
+          "hook_code": {
+            "default": "",
+            "title": "Hook Code",
+            "type": "string"
+          },
+          "position": {
+            "default": "before",
+            "title": "Position",
+            "type": "string"
+          },
+          "non_overridable": {
+            "default": false,
+            "title": "Non Overridable",
+            "type": "boolean"
+          },
+          "persistent": {
+            "default": false,
+            "title": "Persistent",
+            "type": "boolean"
+          },
+          "log_args": {
+            "default": true,
+            "title": "Log Args",
+            "type": "boolean"
+          },
+          "log_return": {
+            "default": true,
+            "title": "Log Return",
+            "type": "boolean"
+          },
+          "log_stack": {
+            "default": false,
+            "title": "Log Stack",
+            "type": "boolean"
+          },
+          "max_captures": {
+            "default": 50,
+            "title": "Max Captures",
+            "type": "integer"
+          },
+          "world": {
+            "default": "isolated",
+            "title": "World",
+            "type": "string"
+          },
+          "wait_timeout_ms": {
+            "type": "integer",
+            "title": "Wait Timeout Ms"
+          },
+          "poll_interval_ms": {
+            "default": 50,
+            "title": "Poll Interval Ms",
+            "type": "integer"
+          },
+          "watch_assignments": {
+            "type": "boolean",
+            "title": "Watch Assignments"
+          },
+          "frame_url": {
+            "type": "string",
+            "title": "Frame Url"
+          },
+          "frame_name": {
+            "type": "string",
+            "title": "Frame Name"
+          },
+          "frame_index": {
+            "type": "integer",
+            "title": "Frame Index"
+          },
+          "serialization": {
+            "default": "json",
+            "title": "Serialization",
+            "type": "string"
+          }
+        },
+        "required": [
+          "function_path"
+        ],
+        "title": "hook_functionArguments",
+        "type": "object"
+      }
+    },
+    {
+      "name": "hook_jsvmp_interpreter",
+      "parameters": {
+        "properties": {
+          "script_url": {
+            "default": "",
+            "title": "Script Url",
+            "type": "string"
+          },
+          "persistent": {
+            "default": true,
+            "title": "Persistent",
+            "type": "boolean"
+          },
+          "mode": {
+            "default": "proxy",
+            "title": "Mode",
+            "type": "string"
+          },
+          "track_calls": {
+            "default": true,
+            "title": "Track Calls",
+            "type": "boolean"
+          },
+          "track_props": {
+            "default": true,
+            "title": "Track Props",
+            "type": "boolean"
+          },
+          "track_reflect": {
+            "default": true,
+            "title": "Track Reflect",
+            "type": "boolean"
+          },
+          "proxy_objects": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Proxy Objects"
+          },
+          "max_entries": {
+            "default": 10000,
+            "title": "Max Entries",
+            "type": "integer"
+          }
+        },
+        "title": "hook_jsvmp_interpreterArguments",
+        "type": "object"
+      }
+    },
+    {
+      "name": "import_state",
+      "parameters": {
+        "properties": {
+          "state_path": {
+            "title": "State Path",
+            "type": "string"
+          }
+        },
+        "required": [
+          "state_path"
+        ],
+        "title": "import_stateArguments",
+        "type": "object"
+      }
+    },
+    {
+      "name": "inject_hook_preset",
+      "parameters": {
+        "properties": {
+          "preset": {
+            "title": "Preset",
+            "type": "string"
+          },
+          "persistent": {
+            "default": true,
+            "title": "Persistent",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "preset"
+        ],
+        "title": "inject_hook_presetArguments",
+        "type": "object"
+      }
+    },
+    {
+      "name": "instrumentation",
+      "parameters": {
+        "properties": {
+          "action": {
+            "title": "Action",
+            "type": "string"
+          },
+          "url_pattern": {
+            "default": "",
+            "title": "Url Pattern",
+            "type": "string"
+          },
+          "mode": {
+            "default": "ast",
+            "title": "Mode",
+            "type": "string"
+          },
+          "tag": {
+            "default": "vmp",
+            "title": "Tag",
+            "type": "string"
+          },
+          "rewrite_member_access": {
+            "default": true,
+            "title": "Rewrite Member Access",
+            "type": "boolean"
+          },
+          "rewrite_calls": {
+            "default": true,
+            "title": "Rewrite Calls",
+            "type": "boolean"
+          },
+          "max_rewrites": {
+            "default": 20000,
+            "title": "Max Rewrites",
+            "type": "integer"
+          },
+          "fallback_on_error": {
+            "default": true,
+            "title": "Fallback On Error",
+            "type": "boolean"
+          },
+          "ignore_csp": {
+            "default": false,
+            "title": "Ignore Csp",
+            "type": "boolean"
+          },
+          "clear_log": {
+            "default": true,
+            "title": "Clear Log",
+            "type": "boolean"
+          },
+          "wait_until": {
+            "default": "load",
+            "title": "Wait Until",
+            "type": "string"
+          },
+          "tag_filter": {
+            "type": "string",
+            "title": "Tag Filter"
+          },
+          "type_filter": {
+            "type": "string",
+            "title": "Type Filter"
+          },
+          "key_filter": {
+            "type": "string",
+            "title": "Key Filter"
+          },
+          "limit": {
+            "default": 500,
+            "title": "Limit",
+            "type": "integer"
+          },
+          "clear": {
+            "default": false,
+            "title": "Clear",
+            "type": "boolean"
+          },
+          "filter_property_names": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Filter Property Names"
+          },
+          "filter_object_names": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Filter Object Names"
+          },
+          "max_file_size": {
+            "default": 200000,
+            "title": "Max File Size",
+            "type": "integer"
+          },
+          "on_oversized": {
+            "default": "selective",
+            "title": "On Oversized",
+            "type": "string"
+          },
+          "include_source_site": {
+            "default": false,
+            "title": "Include Source Site",
+            "type": "boolean"
+          },
+          "frame_url": {
+            "type": "string",
+            "title": "Frame Url"
+          },
+          "frame_name": {
+            "type": "string",
+            "title": "Frame Name"
+          },
+          "frame_index": {
+            "type": "integer",
+            "title": "Frame Index"
+          }
+        },
+        "required": [
+          "action"
+        ],
+        "title": "instrumentationArguments",
+        "type": "object"
+      }
+    },
+    {
+      "name": "intercept_request",
+      "parameters": {
+        "properties": {
+          "url_pattern": {
+            "title": "Url Pattern",
+            "type": "string"
+          },
+          "action": {
+            "default": "log",
+            "title": "Action",
+            "type": "string"
+          },
+          "modify_headers": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Modify Headers"
+          },
+          "modify_body": {
+            "type": "string",
+            "title": "Modify Body"
+          },
+          "mock_response": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Mock Response"
+          }
+        },
+        "required": [
+          "url_pattern"
+        ],
+        "title": "intercept_requestArguments",
+        "type": "object"
+      }
+    },
+    {
+      "name": "launch_browser",
+      "parameters": {
+        "properties": {
+          "headless": {
+            "default": false,
+            "title": "Headless",
+            "type": "boolean"
+          },
+          "os_type": {
+            "default": "auto",
+            "title": "Os Type",
+            "type": "string"
+          },
+          "locale": {
+            "default": "auto",
+            "title": "Locale",
+            "type": "string"
+          },
+          "proxy": {
+            "type": "string",
+            "title": "Proxy"
+          },
+          "humanize": {
+            "default": false,
+            "title": "Humanize",
+            "type": "boolean"
+          },
+          "geoip": {
+            "default": false,
+            "title": "Geoip",
+            "type": "boolean"
+          },
+          "block_images": {
+            "default": false,
+            "title": "Block Images",
+            "type": "boolean"
+          },
+          "block_webrtc": {
+            "default": false,
+            "title": "Block Webrtc",
+            "type": "boolean"
+          },
+          "enable_trace": {
+            "default": false,
+            "title": "Enable Trace",
+            "type": "boolean"
+          },
+          "trace_objects": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Trace Objects"
+          },
+          "trace_max_events": {
+            "default": 100000,
+            "title": "Trace Max Events",
+            "type": "integer"
+          },
+          "ws_endpoint": {
+            "type": "string",
+            "title": "Ws Endpoint"
+          },
+          "browser_version": {
+            "type": "string",
+            "title": "Browser Version"
+          }
+        },
+        "title": "launch_browserArguments",
+        "type": "object"
+      }
+    },
+    {
+      "name": "list_network_requests",
+      "parameters": {
+        "properties": {
+          "url_filter": {
+            "type": "string",
+            "title": "Url Filter"
+          },
+          "url_contains_domain": {
+            "type": "string",
+            "title": "Url Contains Domain"
+          },
+          "method": {
+            "type": "string",
+            "title": "Method"
+          },
+          "resource_type": {
+            "type": "string",
+            "title": "Resource Type"
+          },
+          "status_code": {
+            "type": "integer",
+            "title": "Status Code"
+          },
+          "limit": {
+            "type": "integer",
+            "title": "Limit"
+          },
+          "after_id": {
+            "type": "integer",
+            "title": "After Id"
+          }
+        },
+        "title": "list_network_requestsArguments",
+        "type": "object"
+      }
+    },
+    {
+      "name": "list_trace_files",
+      "parameters": {
+        "properties": {
+          "limit": {
+            "default": 20,
+            "title": "Limit",
+            "type": "integer"
+          }
+        },
+        "title": "list_trace_filesArguments",
+        "type": "object"
+      }
+    },
+    {
+      "name": "navigate",
+      "parameters": {
+        "properties": {
+          "url": {
+            "title": "Url",
+            "type": "string"
+          },
+          "wait_until": {
+            "default": "load",
+            "title": "Wait Until",
+            "type": "string"
+          },
+          "pre_inject_hooks": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Pre Inject Hooks"
+          },
+          "collect_response_chain": {
+            "default": true,
+            "title": "Collect Response Chain",
+            "type": "boolean"
+          },
+          "clear_network_capture": {
+            "default": true,
+            "title": "Clear Network Capture",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "url"
+        ],
+        "title": "navigateArguments",
+        "type": "object"
+      }
+    },
+    {
+      "name": "network_capture",
+      "parameters": {
+        "properties": {
+          "action": {
+            "title": "Action",
+            "type": "string"
+          },
+          "url_pattern": {
+            "default": "**/*",
+            "title": "Url Pattern",
+            "type": "string"
+          },
+          "capture_body": {
+            "default": false,
+            "title": "Capture Body",
+            "type": "boolean"
+          },
+          "max_body_size": {
+            "default": 200000,
+            "title": "Max Body Size",
+            "type": "integer"
+          },
+          "wait_timeout_ms": {
+            "default": 0,
+            "title": "Wait Timeout Ms",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "action"
+        ],
+        "title": "network_captureArguments",
+        "type": "object"
+      }
+    },
+    {
+      "name": "query_trace_file",
+      "parameters": {
+        "properties": {
+          "file_path": {
+            "title": "File Path",
+            "type": "string"
+          },
+          "mode": {
+            "default": "summary",
+            "title": "Mode",
+            "type": "string"
+          },
+          "filter_object": {
+            "type": "string",
+            "title": "Filter Object"
+          },
+          "search_query": {
+            "type": "string",
+            "title": "Search Query"
+          },
+          "filter_kind": {
+            "type": "string",
+            "title": "Filter Kind"
+          },
+          "filter_site": {
+            "type": "string",
+            "title": "Filter Site"
+          },
+          "limit": {
+            "default": 1000,
+            "title": "Limit",
+            "type": "integer"
+          },
+          "bucket_ms": {
+            "default": 500,
+            "title": "Bucket Ms",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "file_path"
+        ],
+        "title": "query_trace_fileArguments",
+        "type": "object"
+      }
+    },
+    {
+      "name": "reload",
+      "parameters": {
+        "properties": {
+          "wait_until": {
+            "default": "load",
+            "title": "Wait Until",
+            "type": "string"
+          }
+        },
+        "title": "reloadArguments",
+        "type": "object"
+      }
+    },
+    {
+      "name": "remove_hooks",
+      "parameters": {
+        "properties": {
+          "keep_persistent": {
+            "default": false,
+            "title": "Keep Persistent",
+            "type": "boolean"
+          }
+        },
+        "title": "remove_hooksArguments",
+        "type": "object"
+      }
+    },
+    {
+      "name": "reset_browser_state",
+      "parameters": {
+        "properties": {
+          "clear_persistent_hooks": {
+            "default": true,
+            "title": "Clear Persistent Hooks",
+            "type": "boolean"
+          },
+          "clear_network_capture": {
+            "default": true,
+            "title": "Clear Network Capture",
+            "type": "boolean"
+          },
+          "clear_active_routes": {
+            "default": true,
+            "title": "Clear Active Routes",
+            "type": "boolean"
+          },
+          "stop_engine_trace": {
+            "default": true,
+            "title": "Stop Engine Trace",
+            "type": "boolean"
+          },
+          "clear_cookies": {
+            "default": false,
+            "title": "Clear Cookies",
+            "type": "boolean"
+          },
+          "clear_storage": {
+            "default": false,
+            "title": "Clear Storage",
+            "type": "boolean"
+          }
+        },
+        "title": "reset_browser_stateArguments",
+        "type": "object"
+      }
+    },
+    {
+      "name": "save_response_body",
+      "parameters": {
+        "properties": {
+          "request_id": {
+            "title": "Request Id",
+            "type": "integer"
+          },
+          "save_path": {
+            "title": "Save Path",
+            "type": "string"
+          },
+          "allow_partial": {
+            "default": false,
+            "title": "Allow Partial",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "request_id",
+          "save_path"
+        ],
+        "title": "save_response_bodyArguments",
+        "type": "object"
+      }
+    },
+    {
+      "name": "scripts",
+      "parameters": {
+        "properties": {
+          "action": {
+            "title": "Action",
+            "type": "string"
+          },
+          "url": {
+            "type": "string",
+            "title": "Url"
+          },
+          "save_path": {
+            "type": "string",
+            "title": "Save Path"
+          }
+        },
+        "required": [
+          "action"
+        ],
+        "title": "scriptsArguments",
+        "type": "object"
+      }
+    },
+    {
+      "name": "search_code",
+      "parameters": {
+        "properties": {
+          "keyword": {
+            "title": "Keyword",
+            "type": "string"
+          },
+          "script_url": {
+            "type": "string",
+            "title": "Script Url"
+          },
+          "context_chars": {
+            "default": 200,
+            "title": "Context Chars",
+            "type": "integer"
+          },
+          "context_lines": {
+            "default": 3,
+            "title": "Context Lines",
+            "type": "integer"
+          },
+          "max_results": {
+            "default": 200,
+            "title": "Max Results",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "keyword"
+        ],
+        "title": "search_codeArguments",
+        "type": "object"
+      }
+    },
+    {
+      "name": "take_screenshot",
+      "parameters": {
+        "properties": {
+          "full_page": {
+            "default": false,
+            "title": "Full Page",
+            "type": "boolean"
+          },
+          "selector": {
+            "type": "string",
+            "title": "Selector"
+          }
+        },
+        "title": "take_screenshotArguments",
+        "type": "object"
+      }
+    },
+    {
+      "name": "take_snapshot",
+      "parameters": {
+        "properties": {
+          "timeout_ms": {
+            "default": 5000,
+            "title": "Timeout Ms",
+            "type": "integer"
+          },
+          "max_nodes": {
+            "default": 1000,
+            "title": "Max Nodes",
+            "type": "integer"
+          }
+        },
+        "title": "take_snapshotArguments",
+        "type": "object"
+      }
+    },
+    {
+      "name": "trace_property_access",
+      "parameters": {
+        "properties": {
+          "duration": {
+            "default": 10,
+            "title": "Duration",
+            "type": "integer"
+          },
+          "action": {
+            "default": "capture",
+            "title": "Action",
+            "type": "string"
+          },
+          "mode": {
+            "default": "summary",
+            "title": "Mode",
+            "type": "string"
+          },
+          "filter_object": {
+            "type": "string",
+            "title": "Filter Object"
+          },
+          "search_query": {
+            "type": "string",
+            "title": "Search Query"
+          },
+          "filter_kind": {
+            "type": "string",
+            "title": "Filter Kind"
+          },
+          "filter_site": {
+            "type": "string",
+            "title": "Filter Site"
+          },
+          "limit": {
+            "default": 1000,
+            "title": "Limit",
+            "type": "integer"
+          },
+          "bucket_ms": {
+            "default": 500,
+            "title": "Bucket Ms",
+            "type": "integer"
+          },
+          "collect_values": {
+            "default": false,
+            "title": "Collect Values",
+            "type": "boolean"
+          }
+        },
+        "title": "trace_property_accessArguments",
+        "type": "object"
+      }
+    },
+    {
+      "name": "type_text",
+      "parameters": {
+        "properties": {
+          "selector": {
+            "title": "Selector",
+            "type": "string"
+          },
+          "text": {
+            "title": "Text",
+            "type": "string"
+          },
+          "delay": {
+            "default": 50,
+            "title": "Delay",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "selector",
+          "text"
+        ],
+        "title": "type_textArguments",
+        "type": "object"
+      }
+    },
+    {
+      "name": "verify_signer_offline",
+      "parameters": {
+        "properties": {
+          "signer_code": {
+            "title": "Signer Code",
+            "type": "string"
+          },
+          "samples": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "title": "Samples",
+            "type": "array"
+          },
+          "compare_params": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Compare Params"
+          },
+          "runtime": {
+            "default": "browser",
+            "title": "Runtime",
+            "type": "string"
+          },
+          "timeout_ms": {
+            "default": 10000,
+            "title": "Timeout Ms",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "signer_code",
+          "samples"
+        ],
+        "title": "verify_signer_offlineArguments",
+        "type": "object"
+      }
+    },
+    {
+      "name": "wait_for",
+      "parameters": {
+        "properties": {
+          "selector": {
+            "type": "string",
+            "title": "Selector"
+          },
+          "url_pattern": {
+            "type": "string",
+            "title": "Url Pattern"
+          },
+          "timeout": {
+            "default": 30000,
+            "title": "Timeout",
+            "type": "integer"
+          }
+        },
+        "title": "wait_forArguments",
+        "type": "object"
+      }
+    }
+  ]
+}

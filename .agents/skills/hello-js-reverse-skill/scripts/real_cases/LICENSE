@@ -1,0 +1,16 @@
+SPDX-License-Identifier: CC0-1.0
+
+The task-authored preparation/validation programs, business inputs, protocol
+adapters, tests, documentation, and dependency recipes in this directory are
+dedicated to the public domain under CC0 1.0 Universal.
+
+To the extent possible under law, the authors waive all copyright and related
+or neighboring rights to these task-authored materials. They are provided
+without warranty. The full CC0 legal instrument is available at:
+https://creativecommons.org/publicdomain/zero/1.0/legalcode
+
+This dedication does NOT apply to downloaded upstream source, npm dependencies,
+or generated bundles containing upstream code. Those materials retain their
+original copyrights and licenses. They are acquired only when the user runs
+prepare.py and are never included in these Skill resources. See sources.json
+and README.md; a prepared output retains original license texts and sources.

@@ -1,0 +1,584 @@
+# 路径 B：环境复现 — jsdom/vm 沙箱六步法
+
+目录：[一、核心思想](#一核心思想) · [二、步骤 0.5：确认签名函数入口](#二步骤-05确认签名函数入口v270-新增) · [三、步骤 1：Camoufox 环境指纹采集](#三步骤-1camoufox-环境指纹采集) · [四、步骤 2：jsdom 环境采集](#四步骤-2jsdom-环境采集) · [五、步骤 3：读值差异](#五步骤-3读值差异) · [六、步骤 4：patchEnvironment() 实现](#六步骤-4patchenvironment-实现) · [七、步骤 5：内部验证（win.eval）](#七步骤-5内部验证wineval) · [八、步骤 6：端到端验证](#八步骤-6端到端验证) · [九、环境复现还原策略表](#九环境复现还原策略表) · [十、Firefox vs Chrome 变体差异](#十firefox-vs-chrome-变体差异) · [十一、常见踩坑与解决](#十一常见踩坑与解决) · [十二、路径 B 要点](#十二路径-b-要点)
+
+> **触发条件**：问题路由指向路线 R3（jsdom/vm 沙箱运行原始 SDK）时读此文档
+>
+> **前置要求**：已用来源替换实验确认问题在本地值，见 [问题路由](problem-routing.md#链路-e本地值能生成但不被接受)
+>
+> **方法总览**：入口定位、状态回放和生命周期见 [原始 SDK 运行](original-sdk-runtime.md)。本文只讲 jsdom/vm 这条实现路线的操作步骤，补丁项都是候选，以当前 SDK 的读值为准
+
+---
+
+## 一、核心思想
+
+不分析 JSVMP 内部算法，而是在 jsdom 中完整运行原始 JSVMP 字节码，通过「读值 → 对比 → 补丁」让 SDK 读到与基线一致的环境，再截获生成的值。能生成只到 S1，是否被接受要在线验证。
+
+### 适用条件
+
+- JSVMP 与浏览器环境深度绑定（环境指纹参与签名哈希）
+- JSVMP 劫持了请求链路（XHR/fetch 拦截器），签名在内部完成
+- 算法不可直接提取（字节码保护 + 自定义算法）
+- jsdom 可以成功加载并执行 JSVMP 脚本
+
+---
+
+## 二、步骤 0.5：确认签名函数入口（v2.7.0 新增）
+
+> ⚠️ 跳过此步骤可能导致：只 Hook 了 XHR 漏掉 fetch 通道的签名、初始化配置缺失导致拦截器不触发、误以为签名函数不存在而走了更复杂的路径。
+
+### MCP 操作
+
+```
+search_code(keyword="<调用栈里的函数名或参数名>", script_url='<VMP脚本URL>')
+→ 是否有导出的出值函数
+
+search_code(keyword="XMLHttpRequest.prototype.open", script_url='<VMP脚本URL>')
+
+→ 是否劫持 XHR
+
+search_code(keyword="window.fetch", script_url='<VMP脚本URL>')
+
+→ 是否劫持 fetch
+
+search_code(keyword="<页面初始化调用里的配置字段>", script_url='<VMP脚本URL>')
+→ 是否需要配置驱动的初始化
+```
+
+### 判定结果与后续路径
+
+| 判定 | 签名入口类型 | 后续策略 |
+|------|-------------|----------|
+| 仅 XHR 拦截器 | 单通道截获 | Hook XHR.open 即可 |
+| XHR + fetch 双通道拦截 | 双通道截获 | 需同时 Hook 两个通道 |
+| 导出函数 + 拦截器 | 优先直接调用 | 优先调用导出函数，拦截器作为备选 |
+| 含配置驱动的初始化 | 需配置初始化 | 业务路径可能要通过初始化配置注册，照页面真实调用传入 |
+
+---
+
+## 三、步骤 1：Camoufox 环境指纹采集
+
+### 目标
+
+用 Camoufox 反检测浏览器采集真实浏览器的完整环境指纹，作为 jsdom 补丁的基准。
+
+### MCP 操作
+
+```
+launch_browser({headless: false, os_type: "macos", locale: "zh-CN"})
+navigate({url: "目标页面", wait_until: "domcontentloaded"})
+compare_env()
+→ 采集固定 JS 环境基线（navigator/screen/timezone）；其他属性用
+  `properties` 或分批 `evaluate_js` 扩展
+```
+
+若目标 SDK 将函数或状态挂到页面主世界，浏览器基准采集必须显式使用
+`evaluate_js(..., world="main")`；先从 `get_page_info().frames` 确认实际 Frame，
+避免把隔离上下文的 `undefined` 或错误 Frame 当成环境缺项。
+
+如 `check_environment()` 返回兼容的 reverse.5 selector，可按 SKILL.md Phase 3
+另启定制版并执行 `trace_property_access(action="start")` → 目标行为 →
+`action="stop"`。它只覆盖当前构建声明的固定 Gecko 原生点（reverse.5 为 77 点）：命中可提高补丁优先级，未命中
+不能排除属性使用，仍需 `compare_env` 与分批 `evaluate_js` 补全证据。
+
+### 分批采集细粒度环境值（4-5 批次）
+
+> ⚠️ 单次 evaluate_js 代码太长会报错，必须分批采集
+
+#### 批次 A：navigator 属性（24 项）
+
+```
+evaluate_js(`JSON.stringify({
+  userAgent: navigator.userAgent,
+  platform: navigator.platform,
+  language: navigator.language,
+  languages: navigator.languages,
+  cookieEnabled: navigator.cookieEnabled,
+  doNotTrack: navigator.doNotTrack,
+  hardwareConcurrency: navigator.hardwareConcurrency,
+  maxTouchPoints: navigator.maxTouchPoints,
+  vendor: navigator.vendor,
+  vendorSub: navigator.vendorSub,
+  productSub: navigator.productSub,
+  appVersion: navigator.appVersion,
+  appName: navigator.appName,
+  appCodeName: navigator.appCodeName,
+  onLine: navigator.onLine,
+  webdriver: navigator.webdriver,
+  pdfViewerEnabled: navigator.pdfViewerEnabled,
+  deviceMemory: navigator.deviceMemory,
+  plugins_length: navigator.plugins.length,
+  mimeTypes_length: navigator.mimeTypes.length,
+  connection: navigator.connection ? {
+    effectiveType: navigator.connection.effectiveType,
+    downlink: navigator.connection.downlink,
+    rtt: navigator.connection.rtt
+  } : null,
+  userAgentData: navigator.userAgentData ? {
+    brands: navigator.userAgentData.brands,
+    mobile: navigator.userAgentData.mobile,
+    platform: navigator.userAgentData.platform
+  } : null,
+  getBattery: typeof navigator.getBattery,
+  mediaDevices: typeof navigator.mediaDevices
+})`)
+```
+
+#### 批次 B：screen + window 属性（25 项）
+
+```
+evaluate_js(`JSON.stringify({
+  screen_width: screen.width,
+  screen_height: screen.height,
+  screen_availWidth: screen.availWidth,
+  screen_availHeight: screen.availHeight,
+  screen_colorDepth: screen.colorDepth,
+  screen_pixelDepth: screen.pixelDepth,
+  screen_orientation: screen.orientation ? screen.orientation.type : null,
+  window_innerWidth: window.innerWidth,
+  window_innerHeight: window.innerHeight,
+  window_outerWidth: window.outerWidth,
+  window_outerHeight: window.outerHeight,
+  window_devicePixelRatio: window.devicePixelRatio,
+  window_screenX: window.screenX,
+  window_screenY: window.screenY,
+  chrome_exists: typeof window.chrome,
+  chrome_runtime: window.chrome ? typeof window.chrome.runtime : null,
+  Notification: typeof window.Notification,
+  Worker: typeof window.Worker,
+  SharedWorker: typeof window.SharedWorker,
+  RTCPeerConnection: typeof window.RTCPeerConnection,
+  AudioContext: typeof window.AudioContext,
+  OfflineAudioContext: typeof window.OfflineAudioContext,
+  fetch_exists: typeof window.fetch,
+  matchMedia: typeof window.matchMedia,
+  indexedDB: typeof window.indexedDB
+})`)
+```
+
+#### 批次 C：document + performance + toString + Function.toString（28 项）
+
+```
+evaluate_js(`JSON.stringify({
+  doc_hasFocus: document.hasFocus(),
+  doc_readyState: document.readyState,
+  doc_visibilityState: document.visibilityState,
+  doc_hidden: document.hidden,
+  doc_characterSet: document.characterSet,
+  doc_compatMode: document.compatMode,
+  doc_contentType: document.contentType,
+  doc_designMode: document.designMode,
+  doc_referrer: document.referrer,
+  doc_title: document.title,
+  doc_domain: document.domain,
+  doc_cookie_type: typeof document.cookie,
+  perf_timing: typeof performance.timing,
+  perf_navigation: typeof performance.navigation,
+  perf_now: typeof performance.now,
+  perf_memory: typeof performance.memory,
+  fn_toString_createElement: document.createElement.toString(),
+  fn_toString_getElementById: document.getElementById.toString(),
+  fn_toString_querySelector: document.querySelector.toString(),
+  fn_toString_addEventListener: EventTarget.prototype.addEventListener.toString(),
+  fn_toString_fetch: typeof window.fetch === 'function' ? window.fetch.toString() : null,
+  fn_toString_setTimeout: window.setTimeout.toString(),
+  obj_toString_document: Object.prototype.toString.call(document),
+  obj_toString_window: Object.prototype.toString.call(window),
+  obj_toString_navigator: Object.prototype.toString.call(navigator),
+  obj_toString_screen: Object.prototype.toString.call(screen),
+  symbol_toStringTag_doc: document[Symbol.toStringTag],
+  symbol_toStringTag_screen: screen[Symbol.toStringTag]
+})`)
+```
+
+#### 批次 D：DOM 布局 + Canvas + WebGL + Audio（指纹检测类）
+
+```
+evaluate_js(`(function(){
+  var d = document.createElement('div');
+  d.style.cssText = 'width:100px;height:100px;position:absolute;left:-9999px';
+  document.body.appendChild(d);
+  var layout = {
+    offsetHeight: d.offsetHeight,
+    offsetWidth: d.offsetWidth,
+    clientHeight: d.clientHeight,
+    clientWidth: d.clientWidth,
+    rect: d.getBoundingClientRect()
+  };
+  document.body.removeChild(d);
+
+  var canvas = document.createElement('canvas');
+  var ctx = canvas.getContext('2d');
+  ctx.textBaseline = 'top';
+  ctx.font = '14px Arial';
+  ctx.fillText('test', 2, 2);
+  var canvasData = canvas.toDataURL();
+
+  var gl = document.createElement('canvas').getContext('webgl');
+  var webglInfo = gl ? {
+    vendor: gl.getParameter(gl.VENDOR),
+    renderer: gl.getParameter(gl.RENDERER),
+    version: gl.getParameter(gl.VERSION)
+  } : null;
+
+  return JSON.stringify({
+    layout: layout,
+    canvas_hash: canvasData.length,
+    webgl: webglInfo,
+    audioContext: typeof AudioContext,
+    offlineAudioContext: typeof OfflineAudioContext
+  });
+})()`)
+```
+
+### 注意事项
+
+- Camoufox 的 C++ 引擎级指纹伪装提供「干净基准」，比普通 Chrome 更可靠
+- `compare_env` 不覆盖 Function.prototype.toString / Symbol.toStringTag / DOM 布局等细粒度检测，这些必须通过 evaluate_js 手动采集
+- 采集代码模板参考 cases/ 经验案例中的「浏览器指纹采集方法」段
+
+---
+
+## 四、步骤 2：jsdom 环境采集
+
+### 目标
+
+在本地 Node.js 中创建 jsdom 实例，执行与步骤 1 完全相同的采集代码。
+
+### 实现
+
+```javascript
+const { JSDOM } = require('jsdom');
+const dom = new JSDOM('<!DOCTYPE html><html><body></body></html>', {
+  url: '目标URL',
+  pretendToBeVisual: true,
+  runScripts: 'dangerously'
+});
+const win = dom.window;
+
+// 在 win.eval() 中运行与步骤 1 完全相同的采集脚本
+// 批次 A
+const navResult = win.eval(`JSON.stringify({
+  userAgent: navigator.userAgent,
+  platform: navigator.platform,
+  // ... 与步骤 1 批次 A 完全相同
+})`);
+
+// 批次 B、C、D 同理
+```
+
+### 关键点
+
+- jsdom 实例的 `url` 参数必须设为目标 URL（影响 document.URL / document.domain）
+- `pretendToBeVisual: true` 使 `requestAnimationFrame` 可用
+- `runScripts: 'dangerously'` 允许执行脚本（环境复现必需）
+
+---
+
+## 五、步骤 3：读值差异
+
+下面按常见程度列出候选，分组不代表服务端规则。先用 Trace 确认 SDK 实际读取，只处理读到且与基线不同的项，判读方法见 [读值差异](original-sdk-runtime.md#读值差异)。
+
+#### 常见候选：原生性与自动化标记
+
+| 检测项 | 浏览器值 | jsdom 默认值 | 影响 |
+|--------|----------|-------------|------|
+| `Function.prototype.toString` | `function createElement() { [native code] }` | 暴露 jsdom 实际 JS 代码 | 直接暴露非浏览器环境 |
+| `navigator.plugins.length` | 5（典型值） | 0 | 插件数为 0 = 非浏览器 |
+| `navigator.webdriver` | `false` | `undefined` | webdriver 检测 |
+| `document.hasFocus()` | `true` | `false` | 焦点检测 |
+| DOM `offsetHeight/Width` | 非零值 | 0 | 布局检测 |
+
+#### 常见候选：对象标签与性能
+
+| 检测项 | 浏览器值 | jsdom 默认值 |
+|--------|----------|-------------|
+| `Object.prototype.toString.call(document)` | `[object HTMLDocument]` | `[object Document]` |
+| `window.chrome` | `{runtime: {...}, ...}` | `undefined` |
+| `navigator.userAgentData` | `{brands: [...], ...}` | `undefined` |
+| `performance.timing/navigation` | 完整对象 | 缺失 |
+| `Symbol.toStringTag` | 正确标签 | 不正确 |
+
+#### 常见候选：API 存在性
+
+```
+window.Notification / Worker / SharedWorker / RTCPeerConnection
+window.AudioContext / OfflineAudioContext / fetch
+window.matchMedia / indexedDB / caches / visualViewport
+navigator.connection / getBattery / deviceMemory
+```
+
+### 参考
+
+完整的差异表和修复代码模板见 references/jsdom-env-patches.md。
+
+---
+
+## 六、步骤 4：patchEnvironment() 实现
+
+### 修复优先级排序
+
+按以下优先级逐项修复，每修一项立即验证：
+
+#### ① markNative 三层防御（最高优先级）
+
+```
+核心问题：jsdom 所有 DOM 方法的 toString() 会暴露实际 JS 代码
+解决方案：WeakSet + 源码正则 + 实例覆写 + 50+ 原型链扫描
+
+三层防御：
+  Layer 1: WeakSet 记录所有需要伪装的函数引用
+  Layer 2: 源码模式正则匹配（function X() { [native code] }）
+  Layer 3: 实例级覆写 toString（兜底）
+
+⚠️ Firefox vs Chrome 格式差异：
+  Chrome: "function createElement() { [native code] }"
+  Firefox: "function createElement() {\n    [native code]\n}"
+  → Camoufox 基于 Firefox 内核，必须使用 Firefox 格式
+```
+
+#### ② navigator 补丁
+
+```
+修复项：
+  - plugins: 完整 PluginArray/Plugin/MimeType 对象树（length=5）
+  - webdriver: false
+  - userAgentData: {brands: [...], mobile: false, platform: "macOS"}
+  - connection: {effectiveType: "4g", downlink: 10, rtt: 50}
+  - 每个属性经 markNative 处理
+```
+
+#### ③ window 补丁
+
+```
+修复项：
+  - chrome 对象: {runtime: {}, app: {}, ...}
+  - 30+ API 存根: Notification / Worker / SharedWorker / RTCPeerConnection /
+    AudioContext / OfflineAudioContext / fetch / matchMedia / indexedDB / caches /
+    visualViewport 等
+  - 每个存根经 markNative 处理
+```
+
+#### ④ document + performance 补丁
+
+```
+修复项：
+  - hasFocus(): 始终返回 true
+  - readyState: "complete"
+  - visibilityState: "visible"
+  - hidden: false
+  - performance.timing: 完整 PerformanceTiming 对象
+  - performance.navigation: {type: 0, redirectCount: 0}
+```
+
+#### ⑤ DOM 布局属性
+
+```
+修复项：
+  - offsetHeight/offsetWidth: 返回非零值
+  - clientHeight/clientWidth: 返回非零值
+  - getBoundingClientRect(): 返回合理的 DOMRect
+  - scrollHeight/scrollWidth: 返回非零值
+```
+
+#### ⑥ Symbol.toStringTag 全面修复
+
+```
+修复项：
+  - document → "HTMLDocument"（而非 "Document"）
+  - screen → "Screen"
+  - navigator → "Navigator"
+  - window → "Window"
+  - 通过 Object.defineProperty 设置 Symbol.toStringTag
+```
+
+### 完整代码模板
+
+参考 references/jsdom-env-patches.md 获取每个修复模块的完整实现代码。
+
+---
+
+## 七、步骤 5：内部验证（win.eval）
+
+### 目标
+
+从 jsdom 内部（win.eval）验证所有检测点通过。
+
+### 关键
+
+验证代码必须在 jsdom 的 window 上下文中执行（win.eval），因为 JSVMP 看到的就是这个上下文。
+
+### 验证代码
+
+```javascript
+const result = win.eval(`JSON.stringify({
+  fnToString: document.createElement.toString(),
+  plugins: navigator.plugins.length,
+  webdriver: navigator.webdriver,
+  hasFocus: document.hasFocus(),
+  chromeExists: typeof window.chrome,
+  docTag: Object.prototype.toString.call(document),
+  offsetTest: (function(){
+    var d = document.createElement('div');
+    d.style.cssText = 'width:100px;height:100px';
+    document.body.appendChild(d);
+    var h = d.offsetHeight;
+    document.body.removeChild(d);
+    return h;
+  })()
+})`);
+
+// 预期结果：
+// fnToString 包含 [native code]（Firefox 格式含换行）
+// plugins = 5
+// webdriver = false
+// hasFocus = true
+// chromeExists = 'object'
+// docTag = '[object HTMLDocument]'
+// offsetTest > 0
+```
+
+### 验证清单
+
+| 检测项 | 预期值 | 不通过时的修复模块 |
+|--------|--------|-------------------|
+| `document.createElement.toString()` | 含 `[native code]` | markNative 三层防御 |
+| `navigator.plugins.length` | 5 | navigator 补丁 |
+| `navigator.webdriver` | `false` | navigator 补丁 |
+| `document.hasFocus()` | `true` | document 补丁 |
+| `typeof window.chrome` | `'object'` | window 补丁 |
+| `Object.prototype.toString.call(document)` | `'[object HTMLDocument]'` | Symbol.toStringTag 修复 |
+| `div.offsetHeight` | > 0 | DOM 布局属性 |
+
+---
+
+## 八、步骤 6：端到端验证
+
+### 目标
+
+在 jsdom 中加载完整 JSVMP 脚本，触发签名生成，用截获的签名值发起真实接口请求。
+
+### 验证流程
+
+```
+1. 在 jsdom 中加载完整 JSVMP 脚本并触发签名生成
+2. 用截获的签名值发起真实接口请求
+3. 确认返回有效数据（非空 body / 非错误码）
+4. 连续多次请求验证稳定性（至少 5 次）
+```
+
+### 注意事项
+
+- ⚠️ 服务端可能静默拒绝（返回 HTTP 200 + 空 body，不报错）— 这是环境检测失败的信号
+- 连续 5 次请求全部返回有效数据才算通过
+- 如果间歇性失败，检查是否有时间戳相关的环境值未补齐
+
+---
+
+## 九、环境复现还原策略表
+
+| 情况 | 策略 | 实现方式 |
+|------|------|---------|
+| JSVMP 劫持 XHR，在拦截器中追加签名 | 「喂入-截出」（feed-intercept） | jsdom + XHR Hook → 在 jsdom 内发 XHR，拦截器自动追加签名，Hook 截获 |
+| JSVMP 导出签名函数到 window | 直接调用导出函数 | jsdom 加载 JSVMP → `win.签名函数(参数)` → 获取签名 |
+| JSVMP + 预热初始化（如 SdkGlueInit） | 完整初始化链路 | jsdom 依次加载所有脚本 → 调用初始化函数 → 再触发签名生成 |
+| JSVMP + 初始化配置 | 配置驱动初始化 | 照页面真实调用传入配置 → 注册业务路径 → 拦截器才会触发 |
+| 双签名（URL 参数 + header） | 双通道截获 | 同时 Hook XHR.open（URL 签名）+ XHR.setRequestHeader（header 签名） |
+
+---
+
+## 十、Firefox vs Chrome 变体差异
+
+> Camoufox 基于 Firefox 内核，与 Chrome 在多个环境值上存在差异。jsdom 补丁必须匹配采集基准浏览器的格式。
+
+### 关键差异
+
+| 检测项 | Chrome 格式 | Firefox (Camoufox) 格式 |
+|--------|------------|------------------------|
+| `Function.prototype.toString` (native) | `"function name() { [native code] }"` | `"function name() {\n    [native code]\n}"` |
+| `navigator.vendor` | `"Google Inc."` | `""` |
+| `navigator.vendorSub` | `""` | `""` |
+| `navigator.productSub` | `"20030107"` | `"20100101"` |
+| `window.chrome` | 完整对象 | `undefined`（需补丁） |
+| `navigator.userAgentData` | 完整对象 | `undefined`（Firefox 不支持） |
+
+### 修复策略
+
+- 如果目标站点的 JSVMP 是在 Chrome 环境下开发的，可能期望 Chrome 格式
+- 但 Camoufox 采集的基准是 Firefox 格式
+- **原则**：以 Camoufox 采集的基准为准，因为 Camoufox 的 C++ 引擎级伪装能通过反检测
+- 如果服务端明确校验 Chrome 特征（如 `window.chrome` 必须存在），则需要额外补丁
+
+---
+
+## 十一、常见踩坑与解决
+
+### 坑 1：Canvas 存根不够真实
+
+```
+问题：jsdom 的 canvas 返回空白数据，指纹哈希不匹配
+解决：使用 node-canvas 或 @napi-rs/canvas 提供真实 Canvas 实现
+      或者从 Camoufox 采集 canvas 指纹后硬编码返回值
+```
+
+### 坑 2：native code 多行格式
+
+```
+问题：markNative 输出了 Chrome 单行格式，但 Camoufox 基准是 Firefox 多行格式
+解决：将 markNative 的返回值从
+      "function name() { [native code] }"
+      改为
+      "function name() {\n    [native code]\n}"
+```
+
+### 坑 3：Symbol.toStringTag 遗漏
+
+```
+问题：Object.prototype.toString.call(document) 返回 [object Document] 而非 [object HTMLDocument]
+解决：Object.defineProperty(Document.prototype, Symbol.toStringTag, {
+        get: () => 'HTMLDocument', configurable: true
+      })
+```
+
+### 坑 4：jsdom 环境补丁必须在 JSVMP 脚本加载前完成
+
+```
+问题：JSVMP 在加载时就读取环境值，补丁打晚了无效
+解决：确保 patchEnvironment() 在任何 JSVMP 脚本 eval 之前执行
+      XHR Hook 的安装顺序也决定能否截获最终 URL
+```
+
+### 坑 5：服务端静默拒绝
+
+```
+问题：返回 HTTP 200 + 空 body（不报错），看起来请求成功但没数据
+信号：只说明请求没到 S3，原因可能在会话、时效、请求形态或环境
+解决：先按链路 B 做来源替换，确认问题在本地值后再回到步骤 3
+```
+
+### 坑 6：初始化配置缺失
+
+```
+问题：拦截器不触发，值不生成
+信号：SDK 版本之间初始化入参可能不同
+解决：Hook 页面真实的初始化调用，照原样传入配置
+      确认配置里注册的路径覆盖目标接口
+```
+
+---
+
+## 十二、路径 B 要点
+
+1. **先确认问题在本地值** — 否则补环境是在修错的地方
+2. **先确认入口** — 避免漏通道或走错入口
+3. **按读值补，不按清单补** — 别处的补丁清单只是候选
+4. **环境对比要分批采集** — 单次 evaluate_js 代码太长会报错
+5. **补丁在 SDK 加载前完成** — 加载顺序影响结果，SDK 可能在首次读取后缓存
+6. **native code 格式要匹配基线浏览器** — Firefox 与 Chrome 不同
+7. **补丁持续不收敛就上移路线** — 考虑 [浏览器级运行时](original-sdk-runtime.md#选运行时)
+
+---
+
+> **环境补丁代码模板**：references/jsdom-env-patches.md
+> **历史案例**：见 [cases/README.md](../cases/README.md)，结论只适用于其记录的版本和日期
+> **完整工作流**：[问题路由](problem-routing.md)

@@ -1,4 +1,0 @@
-interface:
-  display_name: "Question Parser Rules"
-  short_description: "SurveyController 题型解析与字段映射"
-  default_prompt: "Use $question-parser-rules to adapt SurveyController question parsers, metadata fields, and answer model mappings."

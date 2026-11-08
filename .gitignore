@@ -1,7 +1,6 @@
 *.code-workspace
 .claude/
 .ruff_cache/
-.codex/environments/
 .venv/
 .coverage
 coverage.xml
