@@ -20,7 +20,7 @@ from software.core.engine.runtime_control_port import (
     on_random_ip_loading_changed,
 )
 from software.core.task import ExecutionConfig, ExecutionState
-from software.network.proxy.api import fetch_proxy_batch_async
+from software.network.proxy.api import ProxyApiFatalError, fetch_proxy_batch_async
 from software.network.session_policy import (
     _acquire_proxy_fetch_lock_async,
     merge_prefetched_proxy_leases,
@@ -69,9 +69,11 @@ class AsyncRuntimeEngine:
         self._loop_ready = threading.Event()
         self._start_lock = threading.Lock()
         self._lifecycle_lock = threading.Lock()
+        self._run_lock = threading.Lock()
         self._run_future: Optional[concurrent.futures.Future[Any]] = None
         self._stop_event: Optional[asyncio.Event] = None
         self._pause_event: Optional[asyncio.Event] = None
+        self._pause_requested = False
         self._engine_state = EngineState.OPEN
         self._ui_task_registry: TaskRegistry | None = None
         self._state: Optional[ExecutionState] = None
@@ -210,11 +212,21 @@ class AsyncRuntimeEngine:
         state: ExecutionState,
         runtime_bridge: RuntimeControlPort | None = None,
     ) -> concurrent.futures.Future[Any]:
-        if self._run_future is not None and not self._run_future.done():
-            raise RuntimeError("任务已在运行中")
-        future = self._submit(self._run(config=config, state=state, runtime_bridge=runtime_bridge))
-        self._run_future = future
-        return future
+        with self._run_lock:
+            if self._run_future is not None and not self._run_future.done():
+                raise RuntimeError("任务已在运行中")
+            state.stop_event.clear()
+            self._state = state
+            self._pause_requested = False
+            try:
+                future = self._submit(
+                    self._run(config=config, state=state, runtime_bridge=runtime_bridge)
+                )
+            except Exception:
+                self._state = None
+                raise
+            self._run_future = future
+            return future
 
     async def _run(
         self,
@@ -223,13 +235,20 @@ class AsyncRuntimeEngine:
         state: ExecutionState,
         runtime_bridge: RuntimeControlPort | None = None,
     ) -> None:
-        self._stop_event = asyncio.Event()
-        self._pause_event = asyncio.Event()
-        self._state = state
-        state.stop_event.clear()
+        with self._run_lock:
+            self._stop_event = asyncio.Event()
+            self._pause_event = asyncio.Event()
+            self._state = state
+            if state.stop_event.is_set():
+                self._stop_event.set()
+            if self._pause_requested:
+                self._pause_event.set()
         worker_count = max(1, int(config.num_threads or 1))
         state.ensure_worker_threads(worker_count, prefix="Slot")
-        scheduler = AsyncScheduler(concurrency=worker_count)
+        active_slot_count = worker_count
+        if config.target_num > 0:
+            active_slot_count = min(worker_count, max(1, config.target_num - state.cur_num))
+        scheduler = AsyncScheduler(concurrency=active_slot_count)
         task_registry = TaskRegistry()
         run_context = AsyncRunContext(
             state=state,
@@ -287,6 +306,15 @@ class AsyncRuntimeEngine:
                             True,
                             f"正在准备代理 {min(merged_count, request_count)}/{request_count}",
                         )
+                except ProxyApiFatalError as exc:
+                    state.mark_terminal_stop(
+                        "proxy_api_error",
+                        failure_reason="proxy_unavailable",
+                        message=str(exc),
+                    )
+                    state.stop_event.set()
+                    stop_event.set()
+                    return
                 except Exception:
                     logging.info("随机IP异步预热失败", exc_info=True)
                 finally:
@@ -302,7 +330,7 @@ class AsyncRuntimeEngine:
         prefetch_task = asyncio.create_task(_prefetch_proxy_pool(), name="AsyncProxyPrefetch")
         try:
             async with asyncio.TaskGroup() as task_group:
-                for slot_index in range(worker_count):
+                for slot_index in range(active_slot_count):
                     task_group.create_task(
                         AsyncSlotRunner(
                             slot_id=slot_index + 1,
@@ -336,31 +364,33 @@ class AsyncRuntimeEngine:
                 logging.warning("任务结束时有 %d 个后台任务超时取消", dropped)
             await scheduler.close()
             state.stop_event.set()
-            self._stop_event = None
-            self._pause_event = None
-            self._state = None
+            with self._run_lock:
+                self._stop_event = None
+                self._pause_event = None
+                self._pause_requested = False
+                self._state = None
 
     def stop_run(self) -> None:
-        stop_event = self._stop_event
-        state = self._state
-        if state is not None:
-            try:
+        with self._run_lock:
+            stop_event = self._stop_event
+            state = self._state
+            if state is not None:
                 state.stop_event.set()
-            except Exception:
-                logging.debug("设置 ExecutionState.stop_event 失败", exc_info=True)
+            future = self._run_future
+            if future is not None and future.done():
+                self._run_future = None
         loop = self._loop
         if loop is not None and stop_event is not None and not loop.is_closed():
             try:
                 loop.call_soon_threadsafe(stop_event.set)
             except RuntimeError:
                 logging.debug("AsyncRuntimeEngine loop 已关闭，忽略 stop 信号", exc_info=True)
-        future = self._run_future
-        if future is not None and future.done():
-            self._run_future = None
 
     def pause_run(self, reason: str = "") -> None:
         del reason
-        pause_event = self._pause_event
+        with self._run_lock:
+            self._pause_requested = True
+            pause_event = self._pause_event
         loop = self._loop
         if loop is not None and pause_event is not None and not loop.is_closed():
             try:
@@ -369,7 +399,9 @@ class AsyncRuntimeEngine:
                 logging.debug("AsyncRuntimeEngine loop 已关闭，忽略 pause 信号", exc_info=True)
 
     def resume_run(self) -> None:
-        pause_event = self._pause_event
+        with self._run_lock:
+            self._pause_requested = False
+            pause_event = self._pause_event
         loop = self._loop
         if loop is not None and pause_event is not None and not loop.is_closed():
             try:

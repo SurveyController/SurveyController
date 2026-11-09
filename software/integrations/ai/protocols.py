@@ -223,14 +223,16 @@ async def acall_chat_completions(
         "max_tokens": 200,
         "temperature": 0.7,
     }
-    try:
-        response = await _aexecute_ai_request_with_retry(
-            "chat_completions",
-            lambda: http_client.apost(
-                url, headers=headers, json=payload, timeout=timeout, proxies={}
-            ),
+
+    async def request():
+        response = await http_client.apost(
+            url, headers=headers, json=payload, timeout=timeout, proxies={}
         )
         response.raise_for_status()
+        return response
+
+    try:
+        response = await _aexecute_ai_request_with_retry("chat_completions", request)
         return _extract_chat_completion_text(response.json())
     except Exception as exc:
         raise RuntimeError(f"API 调用失败: {exc}") from exc
@@ -255,14 +257,16 @@ async def acall_responses_api(
         "max_output_tokens": 200,
         "temperature": 0.7,
     }
-    try:
-        response = await _aexecute_ai_request_with_retry(
-            "responses",
-            lambda: http_client.apost(
-                url, headers=headers, json=payload, timeout=timeout, proxies={}
-            ),
+
+    async def request():
+        response = await http_client.apost(
+            url, headers=headers, json=payload, timeout=timeout, proxies={}
         )
         response.raise_for_status()
+        return response
+
+    try:
+        response = await _aexecute_ai_request_with_retry("responses", request)
         return _extract_responses_text(response.json())
     except Exception as exc:
         raise RuntimeError(f"API 调用失败: {exc}") from exc

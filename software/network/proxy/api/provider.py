@@ -8,6 +8,7 @@ from typing import Any, List, Optional, Set
 import software.network.http as http_client
 from software.core.task import ProxyLease
 from software.network.proxy.session.auth import extract_proxy_async, format_random_ip_error
+from software.network.proxy.session.models import RandomIPAuthError
 from software.network.http.defaults import DEFAULT_HTTP_HEADERS
 from software.network.config import (
     PROXY_MAX_PROXIES,
@@ -63,6 +64,30 @@ _FATAL_PATTERNS = [
     (r"身份未认证", "请先完成实名认证"),
     (r"用户被禁用", "账号已被禁用，请联系代理商"),
 ]
+
+_FATAL_AUTH_DETAILS = frozenset(
+    {
+        "insufficient_quota",
+        "not_authenticated",
+        "session_changed",
+        "invalid_user_id",
+        "user_id_required",
+        "unauthorized",
+        "device_banned",
+        "user_banned",
+        "user_expired",
+        "device_owned_by_other_user",
+        "device_id_required",
+        "invalid_request_body",
+        "minute_not_allowed",
+        "pool_not_allowed",
+        "area_not_allowed",
+        "invalid_area",
+        "invalid_upstream",
+        "minute_not_supported_for_idiot",
+        "invalid_area_for_idiot",
+    }
+)
 
 
 class AreaProxyQualityError(RuntimeError):
@@ -402,6 +427,8 @@ async def fetch_proxy_batch_async(
                     continue
             except Exception as exc:
                 message = format_random_ip_error(exc)
+                if isinstance(exc, RandomIPAuthError) and exc.detail in _FATAL_AUTH_DETAILS:
+                    raise ProxyApiFatalError(message) from exc
                 errors.append(message)
                 break
         if not fetched:

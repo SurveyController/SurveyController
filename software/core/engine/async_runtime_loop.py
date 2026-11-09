@@ -25,6 +25,7 @@ from software.core.engine.runtime_error_handlers import (
 from software.core.engine.runtime_error_handlers import handle_submission_verification_error
 from software.core.engine.runtime_error_handlers import handle_survey_provider_unavailable_error
 from software.core.task import ExecutionConfig, ExecutionState
+from software.providers.contracts import ProviderSubmissionRejectedError
 from surveycore.providers.errors import (
     SubmissionVerificationRequiredError,
     SurveyProviderUnavailableAtRuntimeError,
@@ -39,6 +40,7 @@ from software.network.session_policy import (
     release_submit_proxy,
 )
 from software.network.proxy.session import get_session_snapshot
+from software.network.proxy.api import ProxyApiFatalError
 from software.network.submission_report import report_submission_result_async
 from surveycore.providers.http_progress import update_http_submit_step
 
@@ -132,6 +134,32 @@ class AsyncSlotRunner:
             return True
         except asyncio.TimeoutError:
             return self.run_context.stop_requested()
+
+    async def _acquire_dispatch_token(self) -> int | None:
+        acquire_task = asyncio.create_task(self.scheduler.acquire())
+        stop_task = asyncio.create_task(self.run_context.stop_event.wait())
+        try:
+            try:
+                await asyncio.wait((acquire_task, stop_task), return_when=asyncio.FIRST_COMPLETED)
+            finally:
+                for task in (acquire_task, stop_task):
+                    if not task.done():
+                        task.cancel()
+                await asyncio.gather(acquire_task, stop_task, return_exceptions=True)
+        except asyncio.CancelledError:
+            if not acquire_task.cancelled() and acquire_task.exception() is None:
+                token_id = acquire_task.result()
+                if token_id is not None:
+                    await self.scheduler.release(token_id, requeue=False)
+            raise
+        if acquire_task.cancelled():
+            return None
+        token_id = acquire_task.result()
+        if self.run_context.stop_requested():
+            if token_id is not None:
+                await self.scheduler.release(token_id, requeue=False)
+            return None
+        return token_id
 
     def _resolve_dispatch_delay_seconds(self) -> float:
         min_wait, max_wait = self.config.submit_interval_range_seconds
@@ -334,7 +362,7 @@ class AsyncSlotRunner:
         while True:
             if await self._should_stop_loop():
                 break
-            token_id = await self.scheduler.acquire()
+            token_id = await self._acquire_dispatch_token()
             if token_id is None:
                 break
             should_requeue_dispatch = True
@@ -394,7 +422,7 @@ class AsyncSlotRunner:
                     user_agent_profile=ua_profile,
                     submit_proxy_lease_factory=submit_proxy_lease_factory,
                 )
-                if self.run_context.stop_requested() or not finished:
+                if not finished:
                     self._release_round_resources(requeue_reverse_fill=True)
                     if self.run_context.stop_requested():
                         should_requeue_dispatch = False
@@ -403,12 +431,27 @@ class AsyncSlotRunner:
 
                 should_stop = self._mark_http_submit_success()
                 self._report_submission_result("success")
-                if should_stop:
+                if should_stop or self.run_context.stop_requested():
                     should_requeue_dispatch = False
+                    break
+                with self.state.lock:
+                    should_requeue_dispatch = bool(
+                        self.config.target_num <= 0
+                        or self.config.target_num - self.state.cur_num
+                        >= max(1, int(self.config.num_threads or 1))
+                    )
+                if not should_requeue_dispatch:
                     break
                 dispatch_delay_seconds = self._resolve_dispatch_delay_seconds()
                 if dispatch_delay_seconds > 0:
                     self._update_step("等待提交间隔")
+            except asyncio.CancelledError:
+                should_requeue_dispatch = False
+                raise
+            except ProxyApiFatalError:
+                self.run_context.stop_event.set()
+                should_requeue_dispatch = False
+                break
             except SubmitProxyUnavailableError as exc:
                 self._release_round_resources(requeue_reverse_fill=True)
                 if self._handle_proxy_unavailable(
@@ -452,7 +495,7 @@ class AsyncSlotRunner:
                     thread_name=self.slot_label,
                     failure_reason=FailureReason.FILL_FAILED,
                     log_message=f"HTTP 提交失败，本轮按失败处理：{exc}",
-                    consume_reverse_fill_attempt=False,
+                    consume_reverse_fill_attempt=isinstance(exc, ProviderSubmissionRejectedError),
                 ):
                     should_requeue_dispatch = False
                     break
@@ -468,20 +511,19 @@ class AsyncSlotRunner:
                     requeue=bool(should_requeue_dispatch and not self.run_context.stop_requested()),
                     delay_seconds=dispatch_delay_seconds,
                 )
+
+    async def run(self) -> None:
         try:
+            if not self._uses_http_runtime():
+                self._block_http_runtime(self._resolve_http_runtime_block_reason())
+                return
+            await self._run_http_runtime()
+        finally:
             self.state.release_joint_sample(self.slot_label)
             self.state.release_reverse_fill_sample(self.slot_label, requeue=True)
             self.state.mark_thread_finished(
                 self.slot_label, status_text=self._resolve_finished_status_text()
             )
-        except Exception:
-            logging.info("HTTP slot 收尾状态更新失败", exc_info=True)
-
-    async def run(self) -> None:
-        if not self._uses_http_runtime():
-            self._block_http_runtime(self._resolve_http_runtime_block_reason())
-            return
-        await self._run_http_runtime()
 
 
 __all__ = ["AsyncSlotRunner"]

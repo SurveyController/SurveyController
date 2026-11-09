@@ -183,6 +183,10 @@ class SurveyParseService:
         future.add_done_callback(_on_done)
 
     def hydrate_from_config(self, cfg: RuntimeConfig) -> None:
+        self._generation += 1
+        if self._parse_future is not None:
+            self._parse_future.cancel()
+            self._parse_future = None
         self._state_store.hydrate_from_config(cfg)
 
     def replace_question_entries(self, entries: Any, *, questions_info: Any = None) -> None:

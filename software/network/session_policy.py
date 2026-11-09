@@ -10,7 +10,7 @@ from software.core.engine.runtime_ui_bridge import RuntimeUiBridge
 from software.core.task import ExecutionState, ProxyLease
 from software.network.config import PROXY_MAX_PROXIES
 from software.network.proxy.pool import coerce_proxy_lease, mask_proxy_for_log
-from software.network.proxy.api import fetch_proxy_batch_async
+from software.network.proxy.api import ProxyApiFatalError, fetch_proxy_batch_async
 from software.network.proxy import get_proxy_required_ttl_seconds, proxy_lease_has_sufficient_ttl
 from software.core.config.user_agents import select_user_agent_from_ratios
 from surveycore.core.user_agent import UserAgentProfile
@@ -419,6 +419,16 @@ async def _select_proxy_for_session_async(
                             expected_count=request_num,
                             stop_signal=ctx.stop_event,
                         )
+                    except ProxyApiFatalError as exc:
+                        ctx.mark_terminal_stop(
+                            "proxy_api_error",
+                            failure_reason="proxy_unavailable",
+                            message=str(exc),
+                        )
+                        ctx.stop_event.set()
+                        if stop_signal is not None:
+                            stop_signal.set()
+                        raise
                     except Exception as exc:
                         logging.warning(f"获取随机代理失败：{exc}")
                         fetched = None

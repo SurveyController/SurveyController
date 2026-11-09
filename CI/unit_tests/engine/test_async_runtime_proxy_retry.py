@@ -19,6 +19,7 @@ class AsyncRuntimeProxyRetryTests:
         self, monkeypatch
     ) -> None:
         config = ExecutionConfig(
+            target_num=3,
             url="https://www.wjx.cn/vm/demo.aspx",
             survey_provider="wjx",
             random_proxy_ip_enabled=True,

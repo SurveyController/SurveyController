@@ -1,6 +1,7 @@
 *.code-workspace
 .claude/
 .ruff_cache/
+.agents/skills/surveycore-py-maintenance/
 .venv/
 .coverage
 coverage.xml

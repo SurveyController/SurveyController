@@ -51,6 +51,7 @@ _session_lock = threading.RLock()
 _session_loaded = False
 
 _session = RandomIPSession()
+_session_revision = 0
 
 
 def _get_settings() -> Any:
@@ -202,11 +203,18 @@ def _verify_persisted_session(session: RandomIPSession) -> None:
 
 
 def _set_session(
-    new_session: RandomIPSession, *, verify_auth_persistence: bool = False
+    new_session: RandomIPSession,
+    *,
+    verify_auth_persistence: bool = False,
+    expected_revision: int | None = None,
 ) -> RandomIPSession:
-    global _session
+    global _session, _session_revision
     with _session_lock:
         _ensure_loaded()
+        if expected_revision is not None and expected_revision != _session_revision:
+            if not _has_complete_session(_session):
+                raise RandomIPAuthError("session_changed")
+            return replace(_session)
         previous_session = _session
         normalized_remaining, normalized_total, normalized_used = _normalize_quota_state(
             remaining_quota=new_session.remaining_quota,
@@ -230,6 +238,7 @@ def _set_session(
             _persist_session_locked()
             if verify_auth_persistence:
                 _verify_persisted_session(candidate)
+            _session_revision += 1
             return _session
         except Exception:
             _session = previous_session
@@ -247,11 +256,12 @@ def get_device_id() -> str:
 
 
 def clear_session(*, reason: str = "unspecified") -> None:
-    global _session
+    global _session, _session_revision
     with _session_lock:
         _ensure_loaded()
         previous_session = _session
         _session = RandomIPSession(device_id=_session.device_id)
+        _session_revision += 1
         settings = _get_settings()
         settings.remove(_settings_key("user_id"))
         settings.remove(_settings_key("remaining_quota"))
@@ -375,6 +385,8 @@ def format_random_ip_error(exc: BaseException) -> str:
         return "上游代理服务拒绝了请求，请稍后重试"
     if detail == "not_authenticated":
         return "请先领取免费试用或兑换额度后再使用随机IP"
+    if detail == "session_changed":
+        return "随机IP会话已更新，请重试"
     if detail.startswith("network_error:"):
         return f"网络请求失败：{detail.split(':', 1)[1].strip()}"
     if detail == "invalid_response:user_id_invalid":
@@ -439,6 +451,9 @@ def _parse_session_response(
 
 
 async def activate_trial_async() -> RandomIPSession:
+    with _session_lock:
+        _ensure_loaded()
+        session_revision = _session_revision
     logging.info("随机IP试用领取开始：endpoint=%s", _endpoint_name(AUTH_TRIAL_ENDPOINT))
     response = await _apost_json(AUTH_TRIAL_ENDPOINT, json_body={})
     if int(getattr(response, "status_code", 0) or 0) != 200:
@@ -452,7 +467,9 @@ async def activate_trial_async() -> RandomIPSession:
         raise error
     session = _parse_session_response(response)
     try:
-        persisted = _set_session(session, verify_auth_persistence=True)
+        persisted = _set_session(
+            session, verify_auth_persistence=True, expected_revision=session_revision
+        )
         _log_session_event(logging.INFO, "试用领取成功并已保存", persisted)
         return persisted
     except RandomIPAuthError as exc:
@@ -477,7 +494,9 @@ async def extract_proxy_async(
     num: int = 1,
     upstream: str = "default",
 ) -> Dict[str, Any]:
-    session = _require_authenticated_session()
+    with _session_lock:
+        session = _require_authenticated_session()
+        session_revision = _session_revision
     body: Dict[str, Any] = {
         "user_id": int(session.user_id),
         "minute": int(minute),
@@ -522,12 +541,14 @@ async def extract_proxy_async(
                 request_body=body,
                 attempt=1,
                 response=response,
+                expected_revision=session_revision,
             )
         return _parse_single_extract_payload(
             data,
             request_body=body,
             attempt=1,
             response=response,
+            expected_revision=session_revision,
         )
     error = _extract_error_payload(response)
     _log_extract_proxy_issue(
@@ -545,7 +566,9 @@ def get_fresh_quota_snapshot() -> Dict[str, Any]:
 
 
 async def sync_quota_snapshot_from_server_async(*, emit_logs: bool = True) -> Dict[str, Any]:
-    session = _require_authenticated_session()
+    with _session_lock:
+        session = _require_authenticated_session()
+        session_revision = _session_revision
     if emit_logs:
         logging.info(
             "随机IP额度服务端同步开始：endpoint=%s user_id=%s",
@@ -564,14 +587,19 @@ async def sync_quota_snapshot_from_server_async(*, emit_logs: bool = True) -> Di
             )
         raise error
     refreshed = _parse_session_response(response, fallback_session=session)
-    persisted = _set_session(refreshed, verify_auth_persistence=True)
+    persisted = _set_session(
+        refreshed, verify_auth_persistence=True, expected_revision=session_revision
+    )
     if emit_logs:
         _log_session_event(logging.INFO, "随机IP额度已与服务端同步", persisted)
     return _build_quota_snapshot(persisted)
 
 
 def _apply_quota_payload(
-    data: Dict[str, Any], *, log_context: str = "随机IP额度响应"
+    data: Dict[str, Any],
+    *,
+    log_context: str = "随机IP额度响应",
+    expected_revision: int | None = None,
 ) -> RandomIPSession:
     session = _read_session()
     normalized_remaining, normalized_total, normalized_used, quota_known = (
@@ -588,11 +616,13 @@ def _apply_quota_payload(
         used_quota=normalized_used,
         quota_known=quota_known,
     )
-    return _set_session(updated)
+    return _set_session(updated, expected_revision=expected_revision)
 
 
 async def redeem_card_async(card_code: str) -> Dict[str, Any]:
-    session = _require_authenticated_session()
+    with _session_lock:
+        session = _require_authenticated_session()
+        session_revision = _session_revision
     normalized_card_code = str(card_code or "").strip()
     response = await _apost_json(
         CARD_REDEEM_ENDPOINT,
@@ -610,7 +640,11 @@ async def redeem_card_async(card_code: str) -> Dict[str, Any]:
     if not isinstance(data, dict):
         raise RandomIPAuthError("invalid_response")
 
-    updated_session = _apply_quota_payload(data, log_context="随机IP额度卡密兑换响应")
+    updated_session = _apply_quota_payload(
+        data,
+        log_context="随机IP额度卡密兑换响应",
+        expected_revision=session_revision,
+    )
     redeemed = bool(data.get("redeemed"))
     card_quota = _to_non_negative_quota(data.get("card_quota"), 0.0)
     detail = str(data.get("detail") or "").strip()

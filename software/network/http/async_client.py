@@ -226,7 +226,7 @@ class _AsyncClientManager:
             stream_ctx = entry.client.stream(method, url, timeout=timeout, **kwargs)
             try:
                 response = await stream_ctx.__aenter__()
-            except Exception:
+            except BaseException:
                 await self.release(storage_key)
                 raise
             return _AsyncStreamResponse(response, stream_ctx, lambda: self.release(storage_key))

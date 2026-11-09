@@ -196,6 +196,7 @@ def _parse_single_extract_payload(
     request_body: Dict[str, Any],
     attempt: int,
     response: Any,
+    expected_revision: int | None = None,
 ) -> Dict[str, Any]:
     from .auth import _apply_quota_payload
 
@@ -209,7 +210,9 @@ def _parse_single_extract_payload(
         )
         raise RandomIPAuthError("invalid_response")
     quota_cost = _to_non_negative_quota(data.get("quota_cost"), 0.0)
-    session = _apply_quota_payload(data, log_context="随机IP提取响应")
+    session = _apply_quota_payload(
+        data, log_context="随机IP提取响应", expected_revision=expected_revision
+    )
     item.update(
         {
             "quota_cost": quota_cost,
@@ -228,6 +231,7 @@ def _parse_batch_extract_payload(
     request_body: Dict[str, Any],
     attempt: int,
     response: Any,
+    expected_revision: int | None = None,
 ) -> Dict[str, Any]:
     from .auth import _apply_quota_payload
 
@@ -262,7 +266,9 @@ def _parse_batch_extract_payload(
         1, _to_non_negative_int(data.get("requested_count"), request_body.get("num", 1))
     )
     quota_cost_total = _to_non_negative_quota(data.get("quota_cost_total"), 0.0)
-    session = _apply_quota_payload(data, log_context="随机IP批量提取响应")
+    session = _apply_quota_payload(
+        data, log_context="随机IP批量提取响应", expected_revision=expected_revision
+    )
     return {
         "items": items,
         "requested_count": requested_count,

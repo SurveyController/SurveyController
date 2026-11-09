@@ -161,7 +161,7 @@ class RunController(QObject):
 
     def hydrate_from_config(self, cfg: RuntimeConfig) -> RuntimeConfig:
         self.config = cfg
-        self._state_store.hydrate_from_config(cfg)
+        self._parse_service.hydrate_from_config(cfg)
         self._command_service.sync_runtime_settings(self.get_runtime_snapshot().get("settings", {}))
         return cfg
 
