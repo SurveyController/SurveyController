@@ -8,7 +8,7 @@
     "test": "node scripts/verify.cjs"
   },
   "dependencies": {
-    "@babel/core": "7.24.5",
+    "@babel/core": "7.29.13",
     "@babel/parser": "7.24.5",
     "@babel/preset-env": "7.24.5",
     "@types/babel__core": "7.20.5",
