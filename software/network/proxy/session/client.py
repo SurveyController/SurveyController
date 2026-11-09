@@ -9,7 +9,6 @@ from software.network.http.defaults import DEFAULT_HTTP_HEADERS
 from .models import RandomIPAuthError
 from .normalize import _to_non_negative_int, _to_non_negative_quota
 
-
 _LOG_BODY_PREVIEW_LIMIT = 320
 
 _SENSITIVE_PREVIEW_PATTERNS = (

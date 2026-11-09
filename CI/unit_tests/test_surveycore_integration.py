@@ -234,7 +234,6 @@ def test_installed_core_resources_and_version_support_id_card_generation() -> No
     assert id_card[:17].isdigit()
     assert id_card[:6] in area_codes
     datetime.strptime(id_card[6:14], "%Y%m%d")
-    # GB 11643 的 MOD 11-2 校验关系，独立于核心库的生成函数。
     weights = (7, 9, 10, 5, 8, 4, 2, 1, 6, 3, 7, 9, 10, 5, 8, 4, 2)
     checksum = sum(int(digit) * weight for digit, weight in zip(id_card[:17], weights, strict=True))
     assert id_card[-1] == "10X98765432"[checksum % 11]

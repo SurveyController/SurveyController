@@ -53,7 +53,6 @@ APPEARANCE_SWITCHES = (
     ),
 )
 
-
 BEHAVIOR_SWITCHES = (
     SwitchCardDefinition(
         attr_name="ask_save_card",
@@ -89,7 +88,6 @@ BEHAVIOR_SWITCHES = (
         handler_name="_on_submission_report_telemetry_toggled",
     ),
 )
-
 
 UPDATE_SWITCHES = (
     SwitchCardDefinition(

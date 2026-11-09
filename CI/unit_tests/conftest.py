@@ -164,46 +164,11 @@ def make_mock_event():
 
 
 @pytest.fixture
-def make_stop_policy_mock():
-    def factory(
-        *,
-        record_success_return: bool = False,
-        record_failure_return: bool = False,
-    ) -> MagicMock:
-        policy = MagicMock()
-        policy.record_success.return_value = record_success_return
-        policy.record_failure.return_value = record_failure_return
-        return policy
-
-    return factory
-
-
-@pytest.fixture
 def make_gui_mock():
     def factory(*method_names: str) -> SimpleNamespace:
         return SimpleNamespace(
             **{name: MagicMock() for name in method_names},
         )
-
-    return factory
-
-
-@pytest.fixture
-def make_http_response():
-    def factory(*, json_payload: Any | None = None) -> MagicMock:
-        response = MagicMock()
-        response.json.return_value = {} if json_payload is None else json_payload
-        return response
-
-    return factory
-
-
-@pytest.fixture
-def make_settings_mock():
-    def factory(*, value_return: Any = None) -> MagicMock:
-        settings = MagicMock()
-        settings.value.return_value = value_return
-        return settings
 
     return factory
 

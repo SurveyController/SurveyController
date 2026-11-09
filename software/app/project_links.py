@@ -1,5 +1,3 @@
-"""Project identity and public repository links, independent of application versions."""
-
 GITHUB_OWNER = "SurveyController"
 GITHUB_REPO = "SurveyController"
 

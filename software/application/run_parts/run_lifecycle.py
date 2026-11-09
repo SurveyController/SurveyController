@@ -14,8 +14,6 @@ if TYPE_CHECKING:
 
 
 class RunLifecycleCoordinator:
-    """Coordinate run transitions while keeping adapters on the service facade."""
-
     def __init__(self, service: RunApplicationService) -> None:
         self._service = service
 

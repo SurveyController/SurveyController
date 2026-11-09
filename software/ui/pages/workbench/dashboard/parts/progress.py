@@ -97,7 +97,6 @@ def _thread_progress_signature(
 THREAD_STEP_MIN_VISIBLE_MS = 0
 THREAD_STEP_ANIMATION_MS = 140
 
-
 if TYPE_CHECKING:
     from software.ui.controller.run_controller import RunController
 

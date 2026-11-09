@@ -1,5 +1,3 @@
-"""Centralized imports for private helpers from the pinned surveycore package."""
-
 from surveycore.core.questions.schema import _infer_option_count as _infer_option_count
 from surveycore.wjx.provider.html_parser import _normalize_html_text as _normalize_html_text
 from surveycore.wjx.provider.questions import multiple_rules as _wjx_multiple_rules

@@ -7,8 +7,6 @@ from software.app.settings_store import app_settings
 
 
 class QSettingsPreferences:
-    """Adapter exposing the existing QSettings store through a stable object."""
-
     def __init__(self, settings: Any | None = None) -> None:
         self._provided = settings
         self._local = local()
@@ -17,7 +15,6 @@ class QSettingsPreferences:
     def _settings(self) -> Any:
         if self._provided is not None:
             return self._provided
-        # QSettings supports independent objects per thread, not one shared instance.
         if not hasattr(self._local, "settings"):
             self._local.settings = app_settings()
         return self._local.settings

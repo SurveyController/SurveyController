@@ -6,7 +6,6 @@ from typing import Any, cast
 from software.logging.action_logger import log_action
 from software.logging.log_utils import log_suppressed_exception
 
-
 from PySide6.QtCore import Signal, Qt, Slot
 from PySide6.QtGui import QIcon
 from PySide6.QtWidgets import (

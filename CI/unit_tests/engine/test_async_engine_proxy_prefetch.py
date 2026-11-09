@@ -7,7 +7,7 @@ import pytest
 import software.core.engine.async_engine as async_engine
 from software.core.task import ExecutionConfig, ExecutionState, ProxyLease
 
-from .async_engine_fakes import build_engine
+from CI.unit_tests.engine.async_engine_fakes import build_engine
 
 
 class AsyncRuntimeEngineProxyPrefetchTests:

@@ -38,7 +38,7 @@ from surveycore.providers.contracts import SurveyQuestionMeta, ensure_survey_que
 
 
 class ReverseFillValidationCancelled(RuntimeError):
-    """Raised when a caller cancels cooperative reverse-fill validation."""
+    pass
 
 
 ProgressCallback = Callable[[str, int, int], None]

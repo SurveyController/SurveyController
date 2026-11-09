@@ -1,5 +1,3 @@
-"""Deprecated browser-provider hooks retained for compatibility."""
-
 from __future__ import annotations
 
 from typing import Any, Optional, Protocol, cast

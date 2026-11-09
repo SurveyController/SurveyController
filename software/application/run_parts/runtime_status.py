@@ -16,8 +16,6 @@ STATUS_SNAPSHOT_MIN_INTERVAL_SECONDS = 0.15
 
 
 class RuntimeProjection:
-    """Translate runtime state into application snapshots and terminal events."""
-
     def __init__(self, service: RunApplicationService) -> None:
         self._service = service
 

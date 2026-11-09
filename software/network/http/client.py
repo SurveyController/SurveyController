@@ -18,7 +18,6 @@ from software.network.http.client_policy import (
     resolve_proxy as _resolve_proxy,
 )
 
-
 _MIN_HTTPX_VERSION = Version("0.27.0")
 
 
@@ -39,10 +38,8 @@ def _ensure_supported_httpx() -> None:
 
 _ensure_supported_httpx()
 
-
 _PREWARM_LOCK = threading.Lock()
 _PREWARMED = False
-
 
 RequestException = httpx.HTTPError
 TransportError = httpx.TransportError

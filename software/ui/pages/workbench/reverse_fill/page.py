@@ -81,7 +81,6 @@ if TYPE_CHECKING:
         TogglePushButton,
     )
 
-
 _FORMAT_CHOICES = [
     (REVERSE_FILL_FORMAT_AUTO, "自动识别 (推荐)"),
     (REVERSE_FILL_FORMAT_WJX_SEQUENCE, "问卷星按序号"),

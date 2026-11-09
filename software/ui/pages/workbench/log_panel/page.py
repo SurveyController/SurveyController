@@ -32,7 +32,6 @@ from software.app.user_paths import (
 )
 from software.ui.widgets.log_highlighter import LogHighlighter
 
-
 LOG_COLORS_DARK = {
     "ERROR": "#ef4444",
     "WARN": "#eab308",

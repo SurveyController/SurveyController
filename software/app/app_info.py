@@ -1,5 +1,3 @@
-"""Read the application version once from source metadata or the packaged snapshot."""
-
 from __future__ import annotations
 
 import json
@@ -23,7 +21,6 @@ def _validated_version(value: object, source: Path) -> str:
 
 
 def read_project_version(project_file: Path) -> str:
-    """Read the sole maintained version from project.version."""
     with project_file.open("rb") as stream:
         metadata = tomllib.load(stream)
     project = metadata.get("project")
@@ -43,5 +40,4 @@ def _load_app_version() -> str:
     return read_project_version(module_file.parents[2] / "pyproject.toml")
 
 
-# Module imports cache this value; running binaries never consult the source checkout.
 APP_VERSION = _load_app_version()

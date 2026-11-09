@@ -9,7 +9,6 @@ coverage.xml
 desktop.ini
 AGENTS.md
 
-# 编译环境
 /build/
 /dist/
 /Setup/*.exe
@@ -19,7 +18,6 @@ AGENTS.md
 /Setup/build-standalone.ps1
 /Releases/
 
-# 运行环境
 __pycache__/
 .pytest_cache/
 .pytest_tmp/

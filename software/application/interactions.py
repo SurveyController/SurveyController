@@ -34,8 +34,6 @@ class InteractionRequest:
 
 
 class InteractionBroker:
-    """Correlate requests and replies without blocking an engine or GUI thread."""
-
     def __init__(self, publish: Callable[[InteractionRequest], None]) -> None:
         self._publish = publish
         self._lock = Lock()

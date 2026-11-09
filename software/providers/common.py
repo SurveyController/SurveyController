@@ -40,7 +40,6 @@ __all__ = [
 
 
 def normalize_survey_provider(value: Any, default: str = SURVEY_PROVIDER_WJX) -> str:
-    """保持桌面应用现有的未知平台默认值。"""
     try:
         provider = str(value or "").strip().lower()
     except Exception:

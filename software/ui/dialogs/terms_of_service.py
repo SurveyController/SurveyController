@@ -4,7 +4,6 @@ from qfluentwidgets import MessageBoxBase, TextBrowser, TitleLabel
 
 from software.app.runtime_paths import get_resource_path
 
-
 LEGAL_TEXT_FILES = (
     "software/assets/legal/service_terms.txt",
     "software/assets/legal/privacy_statement.txt",

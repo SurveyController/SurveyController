@@ -14,7 +14,6 @@ from .utils import _apply_label_color
 
 _MEDIA_REQUEST_COUNTER = count(1)
 
-
 MediaFetcher = Callable[[str], Future[bytes]]
 
 

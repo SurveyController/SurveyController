@@ -6,7 +6,7 @@ from software.core.task import ExecutionConfig, ExecutionState
 from surveycore.providers.contracts import SurveyQuestionMeta
 from tencent.provider import answering_builders as qq_builders
 
-from .http_runtime_fakes import _async_result
+from CI.unit_tests.providers.http_runtime_fakes import _async_result
 
 
 @pytest.mark.asyncio

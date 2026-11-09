@@ -2,7 +2,6 @@ from typing import Dict
 
 from surveycore.core.questions.config import QuestionEntry
 
-
 TYPE_CHOICES = [
     ("single", "单选题"),
     ("multiple", "多选题"),
@@ -16,7 +15,6 @@ TYPE_CHOICES = [
     ("order", "排序题"),
     ("location", "地区题"),
 ]
-
 
 STRATEGY_CHOICES = [
     ("random", "完全随机"),

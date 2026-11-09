@@ -5,7 +5,6 @@ from typing import Any
 from software.application.interactions import InteractionKind, InteractionRequest
 from software.application.models import RuntimeSnapshot, SurveySnapshot
 
-
 _PROXY_NOTICES = {
     "proxy_auth_error": ("随机IP账号状态异常", ""),
     "proxy_sync_failed": ("随机IP同步失败", ""),

@@ -2,7 +2,6 @@ from __future__ import annotations
 import logging
 from software.logging.log_utils import log_suppressed_exception
 
-
 import os
 from datetime import datetime
 from typing import Callable, List, Optional

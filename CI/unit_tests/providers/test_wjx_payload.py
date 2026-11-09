@@ -8,7 +8,7 @@ from surveycore.providers.contracts import SurveyQuestionMeta
 from surveycore.wjx.provider import http_runtime as core_wjx_http
 from wjx.provider import http_runtime as wjx_http
 
-from .http_runtime_fakes import _FakeResponse
+from CI.unit_tests.providers.http_runtime_fakes import _FakeResponse
 
 
 def test_wjx_submitdata_formats_common_actions() -> None:

@@ -10,7 +10,7 @@ import software.core.engine.async_round_resources as round_resources
 from software.core.task import ExecutionConfig, ExecutionState
 from surveycore.providers.contracts import SurveyQuestionMeta
 
-from .async_runtime_loop_fakes import _build_runner
+from CI.unit_tests.engine.async_runtime_loop_fakes import _build_runner
 
 
 class AsyncRuntimeHttpRoundTests:

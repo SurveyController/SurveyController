@@ -2,7 +2,6 @@ from typing import Any, Optional, cast
 import logging
 from software.logging.log_utils import log_suppressed_exception
 
-
 from concurrent.futures import Future
 
 from PySide6.QtCore import QObject, Qt, Signal

@@ -124,7 +124,6 @@ def _load_ai_settings_from_store() -> Dict[str, Any]:
         store.value(f"{_AI_SETTINGS_KEY_PREFIX}provider", settings["provider"]) or "deepseek"
     ).strip()
     settings["provider"] = provider if provider in AI_PROVIDERS else "deepseek"
-    # API Key is deliberately process-local. Ignore any legacy QSettings value.
     settings["base_url"] = str(
         store.value(f"{_AI_SETTINGS_KEY_PREFIX}base_url", settings["base_url"]) or ""
     ).strip()
@@ -167,7 +166,6 @@ def get_ai_settings() -> Dict[str, Any]:
 
 
 def update_ai_session(config: Dict[str, Any]) -> Dict[str, Any]:
-    """Replace process-local AI configuration while persisting only preferences."""
     global _RUNTIME_AI_SETTINGS
     normalized = dict(_DEFAULT_AI_SETTINGS)
     normalized.update(config)
@@ -196,7 +194,6 @@ def save_ai_settings(
 ):
 
     settings = _ensure_runtime_settings()
-    # The parameter remains accepted for compatibility; only provider mode runs.
     del ai_mode
     if provider is not None:
         settings["provider"] = str(provider)

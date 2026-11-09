@@ -14,7 +14,6 @@ from PySide6.QtWidgets import (
 from qfluentwidgets import ListWidget, isDarkTheme
 from qfluentwidgets.components.widgets.list_view import ListItemDelegate
 
-
 SEARCH_RESULT_INDEX_ROLE = int(Qt.ItemDataRole.UserRole) + 1
 SEARCH_RESULT_TITLE_ROLE = SEARCH_RESULT_INDEX_ROLE + 1
 SEARCH_RESULT_DETAIL_ROLE = SEARCH_RESULT_INDEX_ROLE + 2

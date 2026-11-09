@@ -2,9 +2,7 @@ from typing import Any, List
 
 from surveycore.core.psychometrics.ordinal_options import infer_ordinal_option_mapping
 
-
 PSYCHO_SUPPORTED_TYPES = {"scale", "score", "dropdown", "matrix"}
-
 
 BIAS_PRESET_CHOICES = [
     ("left", "偏左"),

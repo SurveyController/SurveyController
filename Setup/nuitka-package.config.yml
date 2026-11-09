@@ -1,5 +1,3 @@
-# Backport the PySide6 probe lifetime fix missing from Nuitka 4.3.
-# https://github.com/Nuitka/Nuitka/commit/ffc265f0de662eca73855fd34045b1a3f10aea72
 - module-name: 'PySide6'
   implicit-imports:
     - when: 'version("nuitka") == (4, 3)'

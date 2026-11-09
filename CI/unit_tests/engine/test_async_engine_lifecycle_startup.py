@@ -6,7 +6,7 @@ import pytest
 
 import software.core.engine.async_engine as async_engine
 
-from .async_engine_fakes import FakeLoop, FakeThread, build_engine
+from CI.unit_tests.engine.async_engine_fakes import FakeLoop, FakeThread, build_engine
 
 
 class AsyncRuntimeEngineStartupTests:

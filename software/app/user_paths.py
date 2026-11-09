@@ -121,7 +121,6 @@ def get_default_runtime_config_path(settings=None) -> str:
 
 
 def get_legacy_runtime_config_path() -> str:
-    """Return the pre-unification default path for read-only recovery."""
     return os.path.join(get_user_config_root(), "config.json")
 
 

@@ -13,8 +13,6 @@ from software.core.engine.execution_artifacts import (
 
 
 class PreparationJob:
-    """Run blocking execution preparation off the caller thread."""
-
     def __init__(
         self,
         *,

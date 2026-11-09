@@ -10,7 +10,7 @@ from surveycore.core.persona.context import get_answered, reset_context
 from surveycore.core.questions import consistency
 from software.core.ai import batch_runtime
 
-from .http_runtime_fakes import _async_result
+from CI.unit_tests.providers.http_runtime_fakes import _async_result
 
 
 @pytest.mark.asyncio

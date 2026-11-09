@@ -45,7 +45,6 @@ DEFAULT_ANSWER_DURATION_RANGE_SECONDS = (60, 120)
 MAX_ANSWER_DURATION_SECONDS = 30 * 60
 _DEFAULT_RANDOM_UA_RATIOS = {"wechat": 33, "mobile": 33, "pc": 34}
 
-
 __all__ = [
     "UserAgentProfile",
     "_select_user_agent_from_ratios",

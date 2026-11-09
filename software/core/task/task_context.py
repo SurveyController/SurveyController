@@ -17,8 +17,6 @@ __all__ = ["ExecutionConfig", "ExecutionState", "ProxyLease", "ThreadProgressSta
 
 @dataclass
 class ExecutionConfig(CoreExecutionConfig):
-    """核心配置增加桌面应用管理的代理租约。"""
-
     random_proxy_ip_enabled: bool = False
     proxy_source: str = "default"
     proxy_ip_pool: list[ProxyLease] | deque[ProxyLease] = field(default_factory=deque)
@@ -29,8 +27,6 @@ class ExecutionConfig(CoreExecutionConfig):
 
 @dataclass
 class ExecutionState(ProxyRuntimeMixin, CoreExecutionState):
-    """共享核心样本状态，保留应用代理池及异步唤醒语义。"""
-
     config: CoreExecutionConfig = field(default_factory=ExecutionConfig)
     device_quota_fail_count: int = 0
     proxy_waiting_threads: int = 0
@@ -40,7 +36,6 @@ class ExecutionState(ProxyRuntimeMixin, CoreExecutionState):
     _runtime_async_event: Any = field(default=None, init=False, repr=False)
     _runtime_async_event_loop: Any = field(default=None, init=False, repr=False)
 
-    # 锁定核心库仍使用旧缓存名；复用其锁与线程隔离，不接入免费服务。
     set_ai_prefill_answers = CoreExecutionState.set_free_ai_prefill_answers
     get_ai_prefill_answer = CoreExecutionState.get_free_ai_prefill_answer
     clear_ai_prefill_answers = CoreExecutionState.clear_free_ai_prefill_answers

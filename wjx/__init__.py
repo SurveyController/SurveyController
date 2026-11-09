@@ -1,1 +1,0 @@
-"""Wenjuanxing application provider adapters."""

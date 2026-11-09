@@ -12,7 +12,6 @@ from qfluentwidgets import (
     StrongBodyLabel,
 )
 
-
 TUTORIAL_DOC_URL = "https://surveydoc.hungrym0.com/"
 STARTUP_TUTORIAL_HINT_SEEN_SETTING_KEY = "startup_tutorial_hint_seen"
 

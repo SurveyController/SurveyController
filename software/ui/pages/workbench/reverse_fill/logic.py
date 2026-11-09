@@ -10,7 +10,6 @@ from surveycore.core.reverse_fill.schema import (
     ReverseFillSpec,
 )
 
-
 _STATUS_LABELS = {
     "reverse": "正常",
     "reverse_fill": "正常",

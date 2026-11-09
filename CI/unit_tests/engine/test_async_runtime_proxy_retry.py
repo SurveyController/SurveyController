@@ -10,7 +10,7 @@ from software.core.engine.failure_reason import FailureReason
 from software.core.task import ExecutionConfig, ProxyLease
 from surveycore.providers.errors import SubmissionVerificationRequiredError
 
-from .async_runtime_loop_fakes import _build_runner
+from CI.unit_tests.engine.async_runtime_loop_fakes import _build_runner
 
 
 class AsyncRuntimeProxyRetryTests:

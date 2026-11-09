@@ -10,7 +10,7 @@ from surveycore.credamo.provider import http_runtime as core_credamo_http
 from surveycore.providers.contracts import SurveyQuestionMeta
 from credamo.provider import http_runtime as credamo_http
 
-from .http_runtime_fakes import _FakeResponse
+from CI.unit_tests.providers.http_runtime_fakes import _FakeResponse
 
 
 @pytest.mark.asyncio

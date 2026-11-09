@@ -25,7 +25,6 @@ from software.ui.pages.workbench.strategy.utils import entry_dimension_label
 _TEXT_RANDOM_NAME_TOKEN = "__RANDOM_NAME__"
 _TEXT_RANDOM_MOBILE_TOKEN = "__RANDOM_MOBILE__"
 
-
 _TEXT_RANDOM_ID_CARD_TOKEN = "__RANDOM_ID_CARD__"
 
 WizardResultGetter = Callable[[QuestionWizardDialog], Dict[int, Any]]

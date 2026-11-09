@@ -11,7 +11,7 @@ from surveycore.providers.errors import (
 from software.providers.contracts import ProviderSubmissionRejectedError
 from wjx.provider import http_runtime as wjx_http
 
-from .http_runtime_fakes import _FakeResponse
+from CI.unit_tests.providers.http_runtime_fakes import _FakeResponse
 
 
 def test_wjx_submit_rejected_message_includes_question_title_and_display_num() -> None:

@@ -333,8 +333,6 @@ class RunApplicationService(RandomIpRuntimeService):
         )
         self._start_status_snapshot_monitor(execution_state)
 
-        # AsyncRuntimeEngine owns its loop thread and is shut down through its port.
-        # Keep this list for application-owned worker threads only.
         self.worker_threads = []
         monitor = threading.Thread(
             target=self._wait_for_async_run,

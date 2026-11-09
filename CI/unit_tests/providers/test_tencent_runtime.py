@@ -9,7 +9,7 @@ from surveycore.providers.answering import AnswerAction
 from surveycore.providers.contracts import SurveyQuestionMeta
 from tencent.provider import http_runtime as qq_http
 
-from .http_runtime_fakes import _FakeResponse
+from CI.unit_tests.providers.http_runtime_fakes import _FakeResponse
 
 
 @pytest.mark.asyncio

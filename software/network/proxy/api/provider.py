@@ -23,7 +23,6 @@ from software.logging.log_utils import (
     log_suppressed_exception,
 )
 
-
 from software.network.proxy.policy.source import (
     PROXY_SOURCE_BENEFIT,
     PROXY_UPSTREAM_BENEFIT,
@@ -39,7 +38,6 @@ from software.network.proxy.policy.source import (
     is_custom_proxy_source,
     is_official_proxy_source,
 )
-
 
 from software.network.proxy.pool.pool import (
     _build_default_proxy_lease,

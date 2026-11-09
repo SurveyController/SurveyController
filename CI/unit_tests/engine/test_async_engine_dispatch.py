@@ -10,7 +10,7 @@ import software.core.engine.async_engine as async_engine
 from software.core.engine.async_engine import AsyncEngineClient
 from software.core.task import ExecutionConfig, ExecutionState
 
-from .async_engine_fakes import DoneFuture, FakeLoop, build_engine
+from CI.unit_tests.engine.async_engine_fakes import DoneFuture, FakeLoop, build_engine
 
 
 class AsyncRuntimeEngineDispatchTests:

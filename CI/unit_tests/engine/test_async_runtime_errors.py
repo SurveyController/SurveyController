@@ -13,7 +13,7 @@ from surveycore.providers.errors import (
     SurveyProviderUnavailableAtRuntimeError,
 )
 
-from .async_runtime_loop_fakes import _build_runner
+from CI.unit_tests.engine.async_runtime_loop_fakes import _build_runner
 
 
 class AsyncRuntimeErrorsTests:

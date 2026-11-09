@@ -24,7 +24,6 @@ from software.app.config import (
 )
 from software.app.user_paths import get_user_logs_directory
 
-
 ORIGINAL_STDOUT = sys.stdout
 ORIGINAL_STDERR = sys.stderr
 ORIGINAL_EXCEPTHOOK = sys.excepthook

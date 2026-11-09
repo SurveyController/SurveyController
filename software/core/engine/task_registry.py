@@ -7,8 +7,6 @@ from typing import Any
 
 
 class TaskRegistry:
-    """Owns detached asyncio tasks on one event loop."""
-
     def __init__(self) -> None:
         self._tasks: set[asyncio.Task[Any]] = set()
         self._accepting = True

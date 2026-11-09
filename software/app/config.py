@@ -84,15 +84,12 @@ def get_proxy_auth() -> str:
 
 HTTP_MAX_THREADS = _HTTP_MAX_THREADS
 
-
 LOG_FORMAT = "%(asctime)s [%(levelname)s] %(message)s"
 LOG_BUFFER_CAPACITY = 2000
 LOG_DIR_NAME = "logs"
 LOG_REFRESH_INTERVAL_MS = 500
 
-
 APP_ICON_RELATIVE_PATH = "icon.ico"
-
 
 SUBMIT_INITIAL_DELAY = 0.35
 
@@ -105,7 +102,6 @@ POST_SUBMIT_URL_POLL_INTERVAL = 0.05
 POST_SUBMIT_CLOSE_GRACE_SECONDS = 0.8
 
 STOP_FORCE_WAIT_SECONDS = _STOP_FORCE_WAIT_SECONDS
-
 
 QUESTION_TYPE_LABELS = {
     "radio": "单选题",
@@ -136,11 +132,9 @@ PRESET_DIMENSIONS = [
 ]
 DIMENSION_UNGROUPED = "未分组"
 
-
 _HTML_SPACE_RE = WHITESPACE_PATTERN
 _LNGLAT_PATTERN = re.compile(r"^\s*-?\d+(?:\.\d+)?\s*,\s*-?\d+(?:\.\d+)?\s*$")
 _INVALID_FILENAME_CHARS_RE = re.compile(r'[\\/:*?"<>|]+')
-
 
 _MULTI_LIMIT_ATTRIBUTE_NAMES = (
     "max",

@@ -27,7 +27,7 @@ from CI.python_checks.common import (
     run_unicode_escape_check,
     run_unit_tests,
     run_window_smoke_check,
-)  # noqa: E402
+)
 
 
 def parse_args() -> argparse.Namespace:

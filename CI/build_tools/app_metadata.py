@@ -1,5 +1,3 @@
-"""Generate the version snapshot and Windows packaging values from pyproject.toml."""
-
 from __future__ import annotations
 
 import argparse

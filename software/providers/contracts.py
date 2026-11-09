@@ -22,7 +22,7 @@ class ProviderErrorCategory(StrEnum):
 
 
 class ProviderSubmissionRejectedError(RuntimeError):
-    """A provider explicitly rejected a submitted response."""
+    pass
 
 
 @dataclass(frozen=True)

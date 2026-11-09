@@ -7,7 +7,7 @@ import pytest
 import software.core.engine.async_proxy_session as proxy_session
 from software.core.task import ExecutionConfig, ExecutionState
 
-from .async_runtime_loop_fakes import _build_runner
+from CI.unit_tests.engine.async_runtime_loop_fakes import _build_runner
 
 
 class AsyncRuntimeProxySessionTests:

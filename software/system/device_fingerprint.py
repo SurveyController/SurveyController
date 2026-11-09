@@ -16,8 +16,6 @@ def build_stable_device_id() -> str:
     if value:
         return value
 
-    # Migrate one existing identifier from the legacy DPAPI store, then keep
-    # the runtime on the ordinary application settings path.
     legacy = read_secret(_DEVICE_SECRET_KEY)
     value = str(legacy.value or "").strip()
     if value:
