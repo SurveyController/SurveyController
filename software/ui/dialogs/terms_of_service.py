@@ -1,11 +1,6 @@
 from PySide6.QtCore import Qt, QSize
 from PySide6.QtGui import QGuiApplication
-from qfluentwidgets import (
-    ScrollArea,
-    BodyLabel,
-    TitleLabel,
-    MessageBoxBase,
-)
+from qfluentwidgets import MessageBoxBase, TextBrowser, TitleLabel
 
 from software.app.runtime_paths import get_resource_path
 
@@ -27,7 +22,12 @@ def _read_legal_text(relative_path: str) -> str:
 
 
 def _load_terms_content() -> str:
-    sections = [_read_legal_text(path) for path in LEGAL_TEXT_FILES]
+    sections = []
+    for path in LEGAL_TEXT_FILES:
+        lines = _read_legal_text(path).splitlines()
+        sections.append(
+            "\n".join(line for line in lines if not (line.strip() and set(line.strip()) == {"─"}))
+        )
     return "\n\n".join(section for section in sections if section).strip()
 
 
@@ -46,8 +46,8 @@ def _resolve_dialog_size(parent) -> QSize:
             base_width = 1280
             base_height = 800
 
-    width = min(1000, max(860, int(base_width * 0.78)))
-    height = min(700, max(620, int(base_height * 0.78)))
+    width = min(920, max(680, int(base_width * 0.78)))
+    height = min(680, max(520, int(base_height * 0.78)))
     return QSize(width, height)
 
 
@@ -58,30 +58,19 @@ class TermsOfServiceDialog(MessageBoxBase):
         self.setWindowTitle("服务条款")
 
         self.titleLabel = TitleLabel("服务条款与隐私声明", self.widget)
-        self.titleLabel.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.titleLabel.setAlignment(Qt.AlignmentFlag.AlignLeft)
 
-        self.scrollArea = ScrollArea(self.widget)
-        self.scrollArea.setWidgetResizable(True)
-        self.scrollArea.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
-
-        self.contentWidget = BodyLabel(self.widget)
-        self.contentWidget.setWordWrap(True)
-        self.contentWidget.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
-        self.contentWidget.setText(_load_terms_content())
-        self.contentWidget.setStyleSheet(
-            """
-            BodyLabel {
-                font-family: 'Consolas', 'Courier New', monospace;
-                font-size: 15px;
-                line-height: 1.6;
-                padding: 12px;
-            }
-            """
-        )
-
-        self.scrollArea.setWidget(self.contentWidget)
+        self.contentBrowser = TextBrowser(self.widget)
+        self.contentBrowser.setReadOnly(True)
+        self.contentBrowser.setOpenExternalLinks(False)
+        self.contentBrowser.setOpenLinks(False)
+        self.contentBrowser.setLineWrapMode(self.contentBrowser.LineWrapMode.WidgetWidth)
+        self.contentBrowser.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        self.contentBrowser.setDocumentTitle("服务条款与隐私声明")
+        self.contentBrowser.document().setDocumentMargin(8)
+        self.contentBrowser.setPlainText(_load_terms_content())
         self.viewLayout.addWidget(self.titleLabel)
-        self.viewLayout.addWidget(self.scrollArea, 1)
+        self.viewLayout.addWidget(self.contentBrowser, 1)
 
         self.yesButton.setText("关闭")
         self.hideCancelButton()

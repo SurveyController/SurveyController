@@ -31,6 +31,7 @@ from qfluentwidgets import (
     CardWidget,
     StrongBodyLabel,
     FluentIcon,
+    FlowLayout,
 )
 
 from software.app.app_info import APP_VERSION
@@ -182,8 +183,11 @@ class AboutPage(ScrollArea):
         license_layout.addStretch(1)
         credit_layout.addLayout(license_layout)
 
-        contributors_layout = QVBoxLayout()
-        contributors_layout.addWidget(BodyLabel("贡献者：", self))
+        contributors_widget = QWidget(credit_card)
+        contributors_layout = QVBoxLayout(contributors_widget)
+        contributors_layout.setContentsMargins(0, 0, 0, 0)
+        contributors_layout.setSpacing(6)
+        contributors_layout.addWidget(BodyLabel("贡献者：", contributors_widget))
         contributors = (
             ("https://github.com/hungryM0", "@HUNGRY_M0"),
             ("https://github.com/shiaho777", "@shiaho777"),
@@ -192,10 +196,15 @@ class AboutPage(ScrollArea):
             ("https://github.com/qintaiyang", "@qintaiyang"),
             ("https://github.com/Quchaosheng", "@Quchaosheng"),
         )
+        links_widget = QWidget(contributors_widget)
+        links_layout = FlowLayout(links_widget, needAni=False, isTight=True)
+        links_layout.setContentsMargins(0, 0, 0, 0)
+        links_layout.setHorizontalSpacing(8)
+        links_layout.setVerticalSpacing(4)
         for url, label in contributors:
-            contributors_layout.addWidget(HyperlinkButton(url, label, self))
-        contributors_layout.addStretch(1)
-        credit_layout.addLayout(contributors_layout)
+            links_layout.addWidget(HyperlinkButton(url, label, links_widget))
+        contributors_layout.addWidget(links_widget)
+        credit_layout.addWidget(contributors_widget)
 
         terms_layout = QHBoxLayout()
         terms_layout.addWidget(BodyLabel("服务条款与隐私声明：", self))
