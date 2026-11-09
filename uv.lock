@@ -19,19 +19,6 @@ wheels = [
 ]
 
 [[package]]
-name = "beautifulsoup4"
-version = "4.15.0"
-source = { registry = "https://pypi.org/simple" }
-dependencies = [
-    { name = "soupsieve" },
-    { name = "typing-extensions" },
-]
-sdist = { url = "https://files.pythonhosted.org/packages/43/65/318323f98dbee45d42dff61d8f047181bc6f2268a9068cfad035a46be5af/beautifulsoup4-4.15.0.tar.gz", hash = "sha256:288e3ca7d54b06f2ac191970bc275c1939cb46d450b255bf6718b04aa37ab4f7", size = 632571, upload-time = "2026-06-07T16:44:20.453Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/88/c6/92fcd42f1ba33e1184263f25bfabf3d27c383410470f169e4b8163bf9c17/beautifulsoup4-4.15.0-py3-none-any.whl", hash = "sha256:d6f88de62e1d4e38ecb1077eb9724cd0eff29d2a08ca16a401e9b9e93f117cf9", size = 109924, upload-time = "2026-06-07T16:44:21.566Z" },
-]
-
-[[package]]
 name = "certifi"
 version = "2026.10.19"
 source = { registry = "https://pypi.org/simple" }
@@ -3388,20 +3375,10 @@ wheels = [
 ]
 
 [[package]]
-name = "soupsieve"
-version = "3.0.4"
-source = { registry = "https://pypi.org/simple" }
-sdist = { url = "https://files.pythonhosted.org/packages/19/63/0b6bae54546aed98d72f12d09df57b19a287f01c84d22047fa2e23772ab9/soupsieve-3.0.4.tar.gz", hash = "sha256:924fab84ae21604c19e175e1f39815eb6fa83ba23836e09e9de180925e5bc4c0", size = 119017, upload-time = "2026-10-22T00:45:26.362Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/07/66/473f7ca0be0b06e38ee8c85ee2db184e3981bd769fac2e7c19c8a8865211/soupsieve-3.0.4-py3-none-any.whl", hash = "sha256:8412826614f9c632227067d0985aeb9f584bd15efc852955430e097a9fe7afbf", size = 42458, upload-time = "2026-10-22T00:45:24.843Z" },
-]
-
-[[package]]
 name = "surveycontroller"
 version = "4.0.8"
 source = { virtual = "." }
 dependencies = [
-    { name = "beautifulsoup4" },
     { name = "httpx" },
     { name = "openpyxl" },
     { name = "packaging" },
@@ -3427,13 +3404,12 @@ dev = [
 
 [package.metadata]
 requires-dist = [
-    { name = "beautifulsoup4", specifier = ">=4.15.0" },
     { name = "httpx", specifier = ">=0.27,<1" },
     { name = "openpyxl" },
     { name = "packaging" },
     { name = "pyside6", specifier = "==6.12.0" },
     { name = "pyside6-fluent-widgets", specifier = "==1.11.3" },
-    { name = "surveycore-py", git = "https://github.com/SurveyController/surveycore-py?rev=e5758e901d5df44c2d17f37d7e2c1fbf051005e9" },
+    { name = "surveycore-py", specifier = "==0.2.0" },
     { name = "zxing-cpp" },
 ]
 
@@ -3452,10 +3428,14 @@ dev = [
 [[package]]
 name = "surveycore-py"
 version = "0.2.0"
-source = { git = "https://github.com/SurveyController/surveycore-py?rev=e5758e901d5df44c2d17f37d7e2c1fbf051005e9#e5758e901d5df44c2d17f37d7e2c1fbf051005e9" }
+source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "httpx" },
     { name = "selectolax" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/71/07/9fa0f7d163f63cf28a755719fc3d2a70ae3c6469bbc08073069ebf81d1b8/surveycore_py-0.2.0.tar.gz", hash = "sha256:f2be9c454b51dd7f599bf0369cdb61e09444b9d9a33a77da63849f5bd3781b14", size = 173546, upload-time = "2026-11-09T09:59:24.054Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/92/8d/70acb78a224d2596038069914d9a27f1283753bbc85fa052057c7cde4b47/surveycore_py-0.2.0-py3-none-any.whl", hash = "sha256:98dd9d95e18c644f92bed1282c28c545ece9bf258863638b76bae7065f68df24", size = 213054, upload-time = "2026-11-09T09:59:22.803Z" },
 ]
 
 [[package]]

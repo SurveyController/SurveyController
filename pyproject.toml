@@ -5,13 +5,12 @@ description = "SurveyController desktop application"
 readme = "README.md"
 requires-python = ">=3.13.17"
 dependencies = [
-    "beautifulsoup4>=4.15.0",
     "httpx>=0.27,<1",
     "openpyxl",
     "packaging",
     "PySide6==6.12.0",
     "PySide6-Fluent-Widgets==1.11.3",
-    "surveycore-py",
+    "surveycore-py==0.2.0",
     "zxing-cpp",
 ]
 
@@ -38,9 +37,6 @@ exclude-dependencies = [
         "pyside6-webengine",
     ] },
 ]
-
-[tool.uv.sources]
-surveycore-py = { git = "https://github.com/SurveyController/surveycore-py", rev = "e5758e901d5df44c2d17f37d7e2c1fbf051005e9" }
 
 [tool.ruff]
 line-length = 100
