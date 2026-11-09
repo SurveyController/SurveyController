@@ -7,6 +7,7 @@ from PySide6.QtGui import QImage
 from qfluentwidgets import BodyLabel, InfoBadge, PushButton, ScrollArea
 from PySide6.QtWidgets import QDialog, QTreeWidgetItem
 
+from software.core.config.codec import deserialize_question_entry, serialize_question_entry
 from software.app.config import DEFAULT_FILL_TEXT
 from surveycore.core.questions.config import QuestionEntry
 from surveycore.providers.contracts import (
@@ -136,6 +137,49 @@ def test_question_wizard_dialog_tree_uses_compact_question_label_and_type_badge(
     relation_labels = [label.text() for label in relation_row.findChildren(BodyLabel)]
     assert relation_badges == ["跳题"]
     assert relation_labels == ["选中“A” -> 结束"]
+
+
+def test_multilevel_dropdown_card_edits_complete_path_weights(qtbot) -> None:
+    entry = QuestionEntry(
+        question_type="multilevel_dropdown",
+        probabilities=[1, 1],
+        option_count=2,
+        distribution_mode="custom",
+        custom_weights=[1, 1],
+        question_num=1,
+    )
+    info = [
+        SurveyQuestionMeta(
+            num=1,
+            title="地区",
+            type_code="7",
+            provider_type="multilevel_dropdown",
+            option_texts=["省‐市‐区A", "省‐市‐区B"],
+        )
+    ]
+    dlg = QuestionWizardDialog([entry], info, "多级题")
+    qtbot.addWidget(dlg)
+    dlg.show()
+    qtbot.waitUntil(lambda: bool(dlg.slider_map))
+
+    sliders = dlg.slider_map[0]
+    sliders[0].setValue(0)
+    sliders[1].setValue(100)
+
+    dlg.accept()
+    assert dlg.result() == QDialog.DialogCode.Accepted
+    assert dlg.get_results()[0] == [0, 100]
+    entry.custom_weights = dlg.get_results()[0]
+    entry.probabilities = entry.custom_weights
+    entry.distribution_mode = "custom"
+    restored = deserialize_question_entry(serialize_question_entry(entry))
+    assert restored.question_type == "multilevel_dropdown"
+    assert restored.custom_weights == [0, 100]
+    path_labels = {"省‐市‐区A", "省‐市‐区B"}
+    displayed_paths = {
+        label.text() for label in dlg.findChildren(BodyLabel) if label.text() in path_labels
+    }
+    assert displayed_paths == path_labels
 
 
 def test_question_wizard_dialog_tree_marks_display_relation_and_expands(qtbot) -> None:

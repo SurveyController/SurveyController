@@ -375,6 +375,46 @@ def test_parse_filters_descriptions_and_updates_provider(provider, url):
     assert state.get_survey_snapshot()["parse_error"] == "暂停中"
 
 
+def test_parse_builds_multilevel_dropdown_entry_from_provider_metadata():
+    state, engine = RunStateStore(), FakeEngine()
+    service = SurveyParseService(
+        async_engine_client=engine,
+        state_store=state,
+        emit_event=lambda event: None,
+        dispatch_async=lambda callback: callback(),
+    )
+    question = SurveyQuestionMeta(
+        num=1,
+        title="地区",
+        type_code="7",
+        provider="wjx",
+        provider_type="multilevel_dropdown",
+        options=2,
+        option_texts=["省‐市‐区A", "省‐市‐区B"],
+        provider_page_raw={
+            "submit_values": ["省‐市‐区A", "省‐市‐区B"],
+            "level_labels": ["省", "市", "区"],
+        },
+    )
+
+    service.parse_survey("https://v.wjx.cn/vm/demo.aspx")
+    engine.parse_future.set_result(
+        ProviderParseResult(
+            provider="wjx",
+            definition=SurveyDefinition(provider="wjx", title="问卷", questions=[question]),
+        )
+    )
+
+    entry = state.get_survey_snapshot()["question_entries"][0]
+    assert entry.question_type == "multilevel_dropdown"
+    assert entry.option_count == 2
+    assert entry.probabilities == -1
+    assert entry.custom_weights is None
+    info = state.get_survey_snapshot()["questions_info"][0]
+    assert info.option_texts == ["省‐市‐区A", "省‐市‐区B"]
+    assert info.provider_page_raw["submit_values"] == ["省‐市‐区A", "省‐市‐区B"]
+
+
 def test_delayed_cleanup_remains_bound_to_finished_run():
     harness = Harness()
     first_closed, second_closed = [], []

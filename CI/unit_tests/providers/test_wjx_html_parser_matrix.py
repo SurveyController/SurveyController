@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from bs4 import BeautifulSoup
+from selectolax.lexbor import LexborHTMLParser
 
 from surveycore.wjx.provider import html_parser_matrix
 
@@ -21,8 +21,8 @@ class WjxHtmlParserMatrixTests:
           </table>
         </div>
         """
-        soup = BeautifulSoup(html, "html.parser")
-        question_div = soup.find(id="div3")
+        soup = LexborHTMLParser(html)
+        question_div = soup.css_first("#div3")
 
         rows, options, row_texts = html_parser_matrix._collect_matrix_option_texts(
             soup, question_div, 3
@@ -43,8 +43,8 @@ class WjxHtmlParserMatrixTests:
           <input name="q5_2_2" />
         </div>
         """
-        soup = BeautifulSoup(html, "html.parser")
-        question_div = soup.find(id="div5")
+        soup = LexborHTMLParser(html)
+        question_div = soup.css_first("#div5")
 
         rows, options, row_texts = html_parser_matrix._collect_matrix_option_texts(
             soup, question_div, 5
@@ -86,8 +86,8 @@ class WjxHtmlParserMatrixTests:
           </table>
         </div>
         """
-        soup = BeautifulSoup(html, "html.parser")
-        question_div = soup.find(id="div27")
+        soup = LexborHTMLParser(html)
+        question_div = soup.css_first("#div27")
 
         rows, options, row_texts = html_parser_matrix._collect_matrix_option_texts(
             soup, question_div, 27
@@ -111,15 +111,15 @@ class WjxHtmlParserMatrixTests:
           <div class="rangeslider"></div>
         </div>
         """
-        soup = BeautifulSoup(html, "html.parser")
-        question_div = soup.find(id="div8")
+        soup = LexborHTMLParser(html)
+        question_div = soup.css_first("#div8")
 
         assert html_parser_matrix._extract_slider_range(question_div, 8) == (1.0, 5.0, 0.5)
         assert html_parser_matrix._question_div_looks_like_slider_matrix(question_div)
         assert html_parser_matrix._format_slider_matrix_value(3.0) == "3"
         assert html_parser_matrix._format_slider_matrix_value(3.5) == "3.5"
         assert html_parser_matrix._build_slider_matrix_option_texts_from_input(
-            question_div.select("input.ui-slider-input")[0]
+            question_div.css("input.ui-slider-input")[0]
         ) == ["1", "3", "5"]
 
         rows, options, row_texts = html_parser_matrix._collect_slider_matrix_metadata(question_div)

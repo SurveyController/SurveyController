@@ -3,6 +3,7 @@ from __future__ import annotations
 import copy
 import logging
 import threading
+from dataclasses import replace
 from typing import Any, List, Optional, Tuple, cast
 
 from software.core.engine.constants import HTTP_MAX_THREADS
@@ -258,7 +259,13 @@ def prepare_execution_artifacts(
     )
     questions_info_inputs = cast(List[SurveyQuestionMeta | dict[str, Any]], list(questions_info))
 
-    validation_error = validate_question_config(question_entries, questions_info_inputs)
+    runtime_question_entries = [
+        replace(entry, question_type="dropdown")
+        if entry.question_type == "multilevel_dropdown"
+        else entry
+        for entry in question_entries
+    ]
+    validation_error = validate_question_config(runtime_question_entries, questions_info_inputs)
     if validation_error:
         raise RuntimePreparationError(
             f"题目配置存在冲突，无法启动：\n\n{validation_error}",
@@ -298,7 +305,7 @@ def prepare_execution_artifacts(
 
     try:
         configure_probabilities(
-            question_entries,
+            runtime_question_entries,
             ctx=execution_config,
             reliability_mode_enabled=bool(getattr(config, "reliability_mode_enabled", True)),
         )

@@ -42,6 +42,7 @@ class ReverseFillLogicTests:
         assert logic.status_badge_level_for_label("不支持") == "error"
         assert logic.status_badge_level_for_label("custom") == "info"
         assert logic.question_type_label("single") == "单选题"
+        assert logic.question_type_label("multilevel_dropdown") == "多级下拉题"
         assert logic.question_type_label("Custom") == "Custom"
         assert logic.question_type_label("") == ""
 

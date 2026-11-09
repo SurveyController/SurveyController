@@ -113,6 +113,7 @@ QUESTION_TYPE_LABELS = {
     "textarea": "简答题",
     "input": "填空题",
     "dropdown": "下拉题",
+    "multilevel_dropdown": "多级下拉题",
     "slider": "滑块题",
     "order": "排序题",
     "score": "评价题",

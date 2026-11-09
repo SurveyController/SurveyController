@@ -7,12 +7,20 @@ from PySide6.QtWidgets import QApplication
 
 from software.app.config import DEFAULT_FILL_TEXT
 from software.ui.pages.workbench.question_editor.add_dialog import QuestionAddDialog
+from software.ui.pages.workbench.question_editor.constants import TYPE_CHOICES
 
 
 @pytest.fixture(scope="module", autouse=True)
 def _app():
     app = QApplication.instance() or QApplication([])
     yield app
+
+
+def _select_type(dialog: QuestionAddDialog, question_type: str) -> None:
+    label = dict(TYPE_CHOICES)[question_type]
+    index = dialog.type_combo.findText(label)
+    assert index >= 0
+    dialog.type_combo.setCurrentIndex(index)
 
 
 class QuestionAddDialogLargeTests:
@@ -22,7 +30,7 @@ class QuestionAddDialogLargeTests:
             lambda _parent: False,
         )
         dialog = QuestionAddDialog([])
-        dialog.type_combo.setCurrentIndex(2)
+        _select_type(dialog, "text")
         assert dialog._resolve_q_type() == "text"
         assert not dialog.answer_count_widget.isHidden()
         assert dialog.option_row_widget.isHidden()
@@ -49,20 +57,18 @@ class QuestionAddDialogLargeTests:
 
     def test_multi_text_falls_back_to_default_fill_text(self) -> None:
         dialog = QuestionAddDialog([])
-        dialog.type_combo.setCurrentIndex(2)
+        _select_type(dialog, "text")
         dialog.text_add_btn.click()
         for edit in dialog._text_edits:
             edit.setText("")
-        dialog.type_combo.setCurrentText("多项填空题")
-        dialog.type_combo.setCurrentIndex(2)
+        _select_type(dialog, "text")
         dialog._text_answers = []
         entry = dialog._build_entry()
         assert entry.texts == [DEFAULT_FILL_TEXT]
 
     def test_slider_and_random_strategy_hide_option_count(self) -> None:
         dialog = QuestionAddDialog([])
-        dialog.type_combo.setCurrentText("滑块题")
-        dialog.type_combo.setCurrentIndex(7)
+        _select_type(dialog, "slider")
         assert dialog._resolve_q_type() == "slider"
         assert not dialog.option_row_widget.isVisible()
         assert dialog.option_spin.value() == 1
@@ -76,7 +82,7 @@ class QuestionAddDialogLargeTests:
 
     def test_custom_multiple_strategy_builds_custom_weights(self) -> None:
         dialog = QuestionAddDialog([])
-        dialog.type_combo.setCurrentIndex(1)
+        _select_type(dialog, "multiple")
         dialog.strategy_combo.setCurrentIndex(1)
         dialog.option_spin.setValue(3)
         dialog._slider_values = [5.0, 55.0, 105.0]
@@ -88,7 +94,7 @@ class QuestionAddDialogLargeTests:
 
     def test_custom_slider_target_keeps_100_cap(self) -> None:
         dialog = QuestionAddDialog([])
-        dialog.type_combo.setCurrentIndex(7)
+        _select_type(dialog, "slider")
         dialog.strategy_combo.setCurrentIndex(1)
         dialog._slider_values = [188.0]
         entry = dialog._build_entry()
@@ -98,7 +104,7 @@ class QuestionAddDialogLargeTests:
 
     def test_order_entry_ignores_strategy_weights(self) -> None:
         dialog = QuestionAddDialog([])
-        dialog.type_combo.setCurrentIndex(8)
+        _select_type(dialog, "order")
         dialog.option_spin.setValue(5)
         entry = dialog._build_entry()
         assert entry.question_type == "order"
@@ -120,7 +126,7 @@ class QuestionAddDialogLargeTests:
 
     def test_matrix_preview_and_custom_matrix_entry(self) -> None:
         dialog = QuestionAddDialog([])
-        dialog.type_combo.setCurrentIndex(4)
+        _select_type(dialog, "matrix")
         dialog.option_spin.setValue(3)
         dialog.row_count_spin.setValue(2)
         dialog.matrix_strategy_combo.setCurrentIndex(1)
@@ -141,8 +147,8 @@ class QuestionAddDialogLargeTests:
     def test_sync_base_visibility_restores_option_backup(self) -> None:
         dialog = QuestionAddDialog([])
         dialog.option_spin.setValue(6)
-        dialog.type_combo.setCurrentIndex(7)
+        _select_type(dialog, "slider")
         assert dialog._option_backup == 6
-        dialog.type_combo.setCurrentIndex(0)
+        _select_type(dialog, "single")
         assert not dialog.option_row_widget.isHidden()
         assert dialog.option_spin.value() == 6

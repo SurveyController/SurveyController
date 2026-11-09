@@ -26,9 +26,11 @@
 2. **Fluent 界面** - 无需复杂配置，通过可视化UI完成所有操作
 3. **支持二维码解析** - 拖入问卷二维码图片自动转链接
 4. **定制答案比例** - 支持自定义各选项权重与多选题命中概率分布
-5. **指定ip地区** - 支持随机IP或指定特定地区IP提交
-6. **配置导入导出** - 保存配置文件便于后续复用，跨设备同步
-7. **AI 主观题作答** - 填空题自动生成作答内容，需自行配置服务商与 API Key，由 [@dAwn-Rebirth](https://github.com/dAwn-Rebirth) 和 [@LING71671](https://github.com/LING71671) 贡献
+5. **多选反填** - 支持从反填样本恢复多选题答案
+6. **多级下拉权重** - 支持为完整下拉路径配置选项占比
+7. **指定ip地区** - 支持随机IP或指定特定地区IP提交
+8. **配置导入导出** - 保存配置文件便于后续复用，跨设备同步
+9. **AI 主观题作答** - 填空题自动生成作答内容，需自行配置服务商与 API Key，由 [@dAwn-Rebirth](https://github.com/dAwn-Rebirth) 和 [@LING71671](https://github.com/LING71671) 贡献
 
 ## 开始使用
 
@@ -178,9 +180,6 @@ sequenceDiagram
   <a href="https://github.com/dAwn-Rebirth">
     <img src="https://github.com/dAwn-Rebirth.png" width="50" height="50" alt="dAwn-Rebirth" style="border-radius: 50%;" />
   </a>
-  <a href="https://github.com/Moyuin-aka">
-    <img src="https://github.com/Moyuin-aka.png" width="50" height="50" alt="Moyuin-aka" style="border-radius: 50%;" />
-  </a>
   <a href="https://github.com/zioug">
     <img src="https://github.com/zioug.png" width="50" height="50" alt="zioug" style="border-radius: 50%;" />
   </a>
@@ -189,6 +188,9 @@ sequenceDiagram
   </a>
   <a href="https://github.com/LING71671">
     <img src="https://github.com/LING71671.png" width="50" height="50" alt="LING71671" style="border-radius: 50%;" />
+  </a>
+  <a href="https://github.com/Quchaosheng">
+    <img src="https://github.com/Quchaosheng.png" width="50" height="50" alt="Quchaosheng" style="border-radius: 50%;" />
   </a>
 </div>
 

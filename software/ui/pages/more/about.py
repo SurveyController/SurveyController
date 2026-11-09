@@ -182,22 +182,18 @@ class AboutPage(ScrollArea):
         license_layout.addStretch(1)
         credit_layout.addLayout(license_layout)
 
-        contributors_layout = QHBoxLayout()
+        contributors_layout = QVBoxLayout()
         contributors_layout.addWidget(BodyLabel("贡献者：", self))
-        contributor1_link = HyperlinkButton("https://github.com/hungryM0", "@HUNGRY_M0", self)
-        contributor2_link = HyperlinkButton("https://github.com/shiaho777", "@shiaho777", self)
-        contributor3_link = HyperlinkButton("https://github.com/BingBuLiang", "@BingBuLiang", self)
-        contributor4_link = HyperlinkButton(
-            "https://github.com/dAwn-Rebirth", "@dAwn-Rebirth", self
+        contributors = (
+            ("https://github.com/hungryM0", "@HUNGRY_M0"),
+            ("https://github.com/shiaho777", "@shiaho777"),
+            ("https://github.com/BingBuLiang", "@BingBuLiang"),
+            ("https://github.com/dAwn-Rebirth", "@dAwn-Rebirth"),
+            ("https://github.com/qintaiyang", "@qintaiyang"),
+            ("https://github.com/Quchaosheng", "@Quchaosheng"),
         )
-        contributor5_link = HyperlinkButton("https://github.com/Moyuin-aka", "@Moyuin-aka", self)
-        contributor6_link = HyperlinkButton("https://github.com/qintaiyang", "@qintaiyang", self)
-        contributors_layout.addWidget(contributor1_link)
-        contributors_layout.addWidget(contributor2_link)
-        contributors_layout.addWidget(contributor3_link)
-        contributors_layout.addWidget(contributor4_link)
-        contributors_layout.addWidget(contributor5_link)
-        contributors_layout.addWidget(contributor6_link)
+        for url, label in contributors:
+            contributors_layout.addWidget(HyperlinkButton(url, label, self))
         contributors_layout.addStretch(1)
         credit_layout.addLayout(contributors_layout)
 

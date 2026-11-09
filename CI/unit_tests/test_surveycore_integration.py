@@ -222,7 +222,7 @@ def test_application_target_counts_successful_submissions_after_failures() -> No
 
 
 def test_installed_core_resources_and_version_support_id_card_generation() -> None:
-    assert surveycore.__version__ == version("surveycore-py") == "0.1.0"
+    assert surveycore.__version__ == version("surveycore-py")
     _load_id_card_area_codes.cache_clear()
     area_codes = _load_id_card_area_codes()
     assert len(area_codes) >= 300

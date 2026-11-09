@@ -1,14 +1,36 @@
 from __future__ import annotations
 
-from bs4 import BeautifulSoup
+from selectolax.lexbor import LexborHTMLParser
 
 from surveycore.wjx.provider import html_parser_choice
 from surveycore.wjx.provider import html_parser_common
 from surveycore.wjx.provider import html_parser_rules
 
 
-def _soup(html: str) -> BeautifulSoup:
-    return BeautifulSoup(html, "html.parser")
+class _Document:
+    def __init__(self, html: str) -> None:
+        self._parser = LexborHTMLParser(html)
+
+    def __getattr__(self, name: str):
+        if name in {"div", "input", "textarea", "select"}:
+            return self._parser.css_first(name)
+        raise AttributeError(name)
+
+    def find(self, name: str):
+        return self._parser.css_first(name)
+
+    def css(self, selector: str):
+        return self._parser.css(selector)
+
+    def css_first(self, selector: str):
+        return self._parser.css_first(selector)
+
+    def __str__(self) -> str:
+        return self._parser.html
+
+
+def _soup(html: str) -> _Document:
+    return _Document(html)
 
 
 class WjxHtmlParserHelperTests:
@@ -126,7 +148,7 @@ class WjxHtmlParserHelperTests:
             </div>
             """
         )
-        assert html_parser_common._count_text_inputs_in_soup(soup.div) == 5
+        assert html_parser_common._count_text_inputs(soup.div) == 5
         assert html_parser_common._extract_text_input_labels(soup.div) == [
             "姓名",
             "性别",
@@ -163,14 +185,14 @@ class WjxHtmlParserHelperTests:
         ).div
         rating_count_div = _soup("<div><ul class='modlen5'><li></li></ul></div>").div
 
-        assert html_parser_common._soup_question_looks_like_description(description_div, "3")
-        assert not html_parser_common._soup_question_looks_like_description(
+        assert html_parser_common._question_looks_like_description(description_div, "3")
+        assert not html_parser_common._question_looks_like_description(
             _soup("<div><input type='radio'/></div>").div, "3"
         )
-        assert html_parser_common._soup_question_looks_like_reorder(reorder_div)
-        assert html_parser_common._soup_question_looks_like_numeric_scale(scale_div)
-        assert not html_parser_common._soup_question_looks_like_rating(scale_div)
-        assert html_parser_common._soup_question_looks_like_rating(rating_div)
+        assert html_parser_common._question_looks_like_reorder(reorder_div)
+        assert html_parser_common._question_looks_like_numeric_scale(scale_div)
+        assert not html_parser_common._question_looks_like_rating(scale_div)
+        assert html_parser_common._question_looks_like_rating(rating_div)
         assert html_parser_common._extract_rating_option_count(rating_count_div) == 5
 
     def test_dval_scale_with_blank_rate_icons_is_not_rating(self) -> None:
@@ -190,16 +212,16 @@ class WjxHtmlParserHelperTests:
             """
         ).div
 
-        assert html_parser_common._soup_question_looks_like_numeric_scale(scale_div)
-        assert not html_parser_common._soup_question_looks_like_rating(scale_div)
+        assert html_parser_common._question_looks_like_numeric_scale(scale_div)
+        assert not html_parser_common._question_looks_like_rating(scale_div)
 
     def test_required_and_select_placeholder_helpers(self) -> None:
         question_div = _soup("<div req='1'><div class='topichtml'>题目</div></div>").div
         heading_required = _soup("<div><div class='topichtml'>* 必答题</div></div>").div
         selector_required = _soup("<div><span class='required'></span></div>").div
-        assert html_parser_common._soup_question_is_required(question_div)
-        assert html_parser_common._soup_question_is_required(heading_required)
-        assert html_parser_common._soup_question_is_required(selector_required)
+        assert html_parser_common._question_is_required(question_div)
+        assert html_parser_common._question_is_required(heading_required)
+        assert html_parser_common._question_is_required(selector_required)
         assert html_parser_common._text_looks_like_select_placeholder(" 请选择省份 ")
         assert html_parser_common._is_select_placeholder_option(0, "", "请选择")
         assert not html_parser_common._is_select_placeholder_option(1, "1", "北京")
@@ -328,18 +350,18 @@ class WjxHtmlParserHelperTests:
         assert not html_parser_choice._verify_text_indicates_location("province")
         assert not html_parser_choice._verify_text_indicates_location("area")
         assert not html_parser_choice._verify_text_indicates_location("普通文本")
-        assert html_parser_choice._soup_question_is_location(location_div)
-        assert html_parser_choice._soup_question_is_location(
+        assert html_parser_choice._question_is_location(location_div)
+        assert html_parser_choice._question_is_location(
             _soup("<div><input verify='省市区' onclick='openCityBox(this,3,event,1);' /></div>").div
         )
-        assert html_parser_choice._soup_question_is_location(
+        assert html_parser_choice._question_is_location(
             _soup("<div><input onclick='openCityBox(this,3,event,1);' /></div>").div
         )
-        assert not html_parser_choice._soup_question_is_location(
+        assert not html_parser_choice._question_is_location(
             _soup("<div><input verify='city' /></div>").div
         )
         assert (
-            html_parser_common._count_text_inputs_in_soup(_soup(f"<div>{location_input}</div>").div)
+            html_parser_common._count_text_inputs(_soup(f"<div>{location_input.html}</div>").div)
             == 0
         )
         assert html_parser_choice._collect_select_option_texts(soup.div, soup, 7) == [

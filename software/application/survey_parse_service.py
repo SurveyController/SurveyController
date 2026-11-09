@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from dataclasses import replace
+
 import concurrent.futures
 import logging
 from typing import Any, Callable
@@ -95,6 +97,17 @@ class SurveyParseService:
                 survey_url=normalized_url,
                 existing_entries=current_entries,
             )
+            multilevel_nums = {
+                int(question.num or 0)
+                for question in info
+                if question.provider_type == "multilevel_dropdown"
+            }
+            entries = [
+                replace(entry, question_type="multilevel_dropdown")
+                if int(entry.question_num or 0) in multilevel_nums
+                else entry
+                for entry in entries
+            ]
             self._state_store.apply_survey_patch(
                 {
                     "phase": "ready",

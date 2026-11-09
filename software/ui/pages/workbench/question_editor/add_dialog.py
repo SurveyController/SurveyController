@@ -375,7 +375,9 @@ class QuestionAddDialog(AddPreviewMixin, MessageBoxBase):
                 option_count = 1
             else:
                 max_weight = (
-                    MULTIPLE_OPTION_WEIGHT_MAX if q_type == "multiple" else ANSWER_WEIGHT_MAX
+                    MULTIPLE_OPTION_WEIGHT_MAX
+                    if q_type in ("multiple", "multilevel_dropdown")
+                    else ANSWER_WEIGHT_MAX
                 )
                 custom_weights = [
                     float(max(ANSWER_WEIGHT_MIN, min(max_weight, v)))

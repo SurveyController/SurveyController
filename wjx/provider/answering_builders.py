@@ -38,6 +38,7 @@ from surveycore.core.questions.strict_ratio import (
 from surveycore.core.questions.tendency import get_tendency_index
 from surveycore.core.questions.utils import normalize_droplist_probs, weighted_index
 from surveycore.core.reverse_fill.runtime import resolve_current_reverse_fill_answer
+from surveycore.core.reverse_fill.actions import build_reverse_fill_action
 from surveycore.core.reverse_fill.schema import (
     REVERSE_FILL_KIND_CHOICE,
     REVERSE_FILL_KIND_MULTI_TEXT,
@@ -51,6 +52,7 @@ from surveycore.providers.answering.selection import (
     valid_forced_choice_index as _valid_forced_choice_index,
 )
 from surveycore.providers.contracts import SurveyQuestionMeta
+from surveycore.wjx.provider.multilevel import multilevel_answer_action
 from software.providers.surveycore_compat import _normalize_selected_indices
 
 
@@ -239,16 +241,19 @@ async def _build_wjx_dropdown_action(
         if selected_text and fill_value
         else (fill_value or selected_text)
     ]
-    return AnswerAction(
-        question_num=current,
-        kind="select",
-        selected_indices=(selected_index,),
-        option_fill_texts=((selected_index, fill_value),) if fill_value else (),
-        selected_texts=tuple(selected_texts),
-        record_type="dropdown",
-        pending_distribution_choices=((selected_index, option_count, None),)
-        if forced_index is None and (strict_ratio or has_reliability_dimension)
-        else (),
+    return multilevel_answer_action(
+        AnswerAction(
+            question_num=current,
+            kind="select",
+            selected_indices=(selected_index,),
+            option_fill_texts=((selected_index, fill_value),) if fill_value else (),
+            selected_texts=tuple(selected_texts),
+            record_type="dropdown",
+            pending_distribution_choices=((selected_index, option_count, None),)
+            if forced_index is None and (strict_ratio or has_reliability_dimension)
+            else (),
+        ),
+        question,
     )
 
 
@@ -550,7 +555,13 @@ async def build_answer_action(
     if not config_entry:
         return None
     entry_type, config_index = config_entry
-    if entry_type == "single":
+    runtime_entry_type = "dropdown" if entry_type == "multilevel_dropdown" else entry_type
+    reverse_fill_answer = ctx.get_reverse_fill_answer(int(question.num), thread_name or None)
+    if reverse_fill_answer is not None:
+        return multilevel_answer_action(
+            build_reverse_fill_action(reverse_fill_answer, question, runtime_entry_type), question
+        )
+    if runtime_entry_type == "single":
         return await _build_wjx_single_action(
             driver,
             question,
@@ -560,7 +571,7 @@ async def build_answer_action(
             thread_name=thread_name,
             allow_ai_placeholder=allow_ai_placeholder,
         )
-    if entry_type == "multiple":
+    if runtime_entry_type == "multiple":
         return await _build_wjx_multiple_action(
             driver,
             question,
@@ -569,7 +580,7 @@ async def build_answer_action(
             thread_name=thread_name,
             allow_ai_placeholder=allow_ai_placeholder,
         )
-    if entry_type == "dropdown":
+    if runtime_entry_type == "dropdown":
         return await _build_wjx_dropdown_action(
             driver,
             question,
@@ -579,7 +590,7 @@ async def build_answer_action(
             thread_name=thread_name,
             allow_ai_placeholder=allow_ai_placeholder,
         )
-    if entry_type in {"text", "multi_text"}:
+    if runtime_entry_type in {"text", "multi_text"}:
         return await _build_wjx_text_action(
             driver,
             question,
@@ -588,9 +599,9 @@ async def build_answer_action(
             thread_name=thread_name,
             allow_ai_placeholder=allow_ai_placeholder,
         )
-    if entry_type == "location":
+    if runtime_entry_type == "location":
         return None
-    if entry_type == "matrix":
+    if runtime_entry_type == "matrix":
         return await _build_wjx_matrix_action(
             question,
             config_index,
@@ -598,7 +609,7 @@ async def build_answer_action(
             psycho_plan=psycho_plan,
             thread_name=thread_name,
         )
-    if entry_type == "scale":
+    if runtime_entry_type == "scale":
         return await _build_wjx_score_like_action(
             driver,
             question,
@@ -608,7 +619,7 @@ async def build_answer_action(
             answer_type="scale",
             thread_name=thread_name,
         )
-    if entry_type == "score":
+    if runtime_entry_type == "score":
         return await _build_wjx_score_like_action(
             driver,
             question,
@@ -618,8 +629,8 @@ async def build_answer_action(
             answer_type="score",
             thread_name=thread_name,
         )
-    if entry_type == "slider":
+    if runtime_entry_type == "slider":
         return await _build_wjx_slider_action(question, config_index, ctx)
-    if entry_type == "order":
+    if runtime_entry_type == "order":
         return await _build_wjx_order_action(driver, question)
     return None

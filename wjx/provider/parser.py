@@ -2,7 +2,9 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import re
 from typing import Any, Dict, List, Tuple
+from urllib.parse import urljoin
 
 from surveycore.providers.errors import (
     SurveyEnterpriseUnavailableError,
@@ -25,10 +27,54 @@ from surveycore.wjx.provider.parser import (
     is_paused_survey_page,
     is_stopped_survey_page,
 )
+from surveycore.wjx.provider.multilevel import MULTILEVEL_DROPDOWN, parse_multilevel_options
 from software.providers.surveycore_compat import _normalize_html_text
 
 import software.network.http as http_client
 from software.network.http.defaults import DEFAULT_HTTP_HEADERS
+
+
+async def _load_multilevel_options(questions: List[Dict[str, Any]], html: str, url: str) -> None:
+    targets = [q for q in questions if q.get("provider_type") == MULTILEVEL_DROPDOWN]
+    if not targets:
+        return
+    scripts = "\n".join(re.findall(r"<script[^>]*>(.*?)</script>", html, re.IGNORECASE | re.DOTALL))
+    activity = re.search(r"\bvar\s+activityId\s*=\s*(?:DecodeId\((\d+)\)|(\d+))", scripts)
+    if activity is None:
+        raise ValueError("问卷星多级下拉缺少 activityId")
+    if activity.group(1):
+        decoder = re.search(
+            r"function\s+DecodeId\([^)]*\)\s*\{\s*return\s+\w+\s*\^\s*(\d+)",
+            scripts,
+        )
+        if decoder is None:
+            raise ValueError("问卷星多级下拉无法解析 activityId")
+        activity_id = int(activity.group(1)) ^ int(decoder.group(1))
+    else:
+        activity_id = int(activity.group(2))
+    for question in targets:
+        metadata = question.get("provider_page_raw") or {}
+        params = {
+            "activityid": str(activity_id),
+            "ct": "5",
+            "pos": str(question["num"]),
+        }
+        cid = str(metadata.get("cid") or "")
+        if cid:
+            params["cid"] = cid
+        response = await http_client.aget(
+            urljoin(url, "/joinnew/setmenuselnew.aspx"),
+            params=params,
+            headers={**DEFAULT_HTTP_HEADERS, "Referer": url},
+            timeout=12,
+            proxies={},
+        )
+        response.raise_for_status()
+        options = parse_multilevel_options(response.text, encoded=bool(cid))
+        question["option_texts"] = options.pop("option_texts")
+        question["options"] = len(question["option_texts"])
+        metadata.update(options)
+        question["provider_page_raw"] = metadata
 
 
 async def parse_wjx_survey(url: str) -> Tuple[List[Dict[str, Any]], str]:
@@ -41,6 +87,7 @@ async def parse_wjx_survey(url: str) -> Tuple[List[Dict[str, Any]], str]:
             resp.raise_for_status()
             info, title = _parse_wjx_html(resp.text)
             if info:
+                await _load_multilevel_options(info, resp.text, url)
                 break
             if attempt >= _PARSE_RETRY_ATTEMPTS:
                 break

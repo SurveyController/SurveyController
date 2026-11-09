@@ -4,6 +4,7 @@ import logging
 import random
 import time
 import uuid
+from dataclasses import replace
 from typing import Any
 
 from surveycore.wjx.provider.http_runtime import (
@@ -34,6 +35,7 @@ from surveycore.wjx.provider.http_runtime import (
     _submit_domain as _submit_domain,
     _submitdata_answer as _submitdata_answer,
     _submitdata_from_actions as _submitdata_from_actions,
+    _extract_empty_gapfill_question_numbers as _extract_empty_gapfill_question_numbers,
     classify_wjx_submit_response as classify_wjx_submit_response,
     is_wjx_submission_verification_response as is_wjx_submission_verification_response,
 )
@@ -42,6 +44,8 @@ import software.network.http as http_client
 from software.core.config.user_agents import DEFAULT_USER_AGENT, USER_AGENT_PRESETS
 from software.core.ai.batch_runtime import (
     assert_no_ai_placeholders_in_actions,
+    is_ai_option_fill_placeholder,
+    is_ai_text_placeholder,
     prefill_ai_answers_for_questions,
 )
 from software.core.config.codec import UserAgentProfile
@@ -94,13 +98,19 @@ def _resolve_user_agent(user_agent: str | None) -> str:
     return str(DEFAULT_USER_AGENT or USER_AGENT_PRESETS.get("pc_web", {}).get("ua") or "").strip()
 
 
-def _record_action(ctx: ExecutionState, action: AnswerAction) -> None:
+def _record_action(ctx: ExecutionState, action: AnswerAction, thread_name: str = "") -> None:
+    values = list(action.text_values or ()) + [value for _, value in action.option_fill_texts]
+    if any(
+        is_ai_text_placeholder(value) or is_ai_option_fill_placeholder(value) for value in values
+    ):
+        action = replace(action, pending_distribution_choices=())
     record_answer_action(
         ctx,
         action,
         record_answer_fn=record_answer,
         record_pending_distribution_choice_fn=record_pending_distribution_choice,
         default_fill_text="",
+        thread_name=thread_name,
     )
 
 
@@ -160,7 +170,7 @@ async def _build_action_plan(
     async def _build_action(question: SurveyQuestionMeta) -> AnswerAction | None:
         if stop_signal is not None and stop_signal.is_set():
             return None
-        return await build_answer_action(
+        action = await build_answer_action(
             None,
             question,
             ctx,
@@ -168,18 +178,26 @@ async def _build_action_plan(
             thread_name=thread_name,
             allow_ai_placeholder=True,
         )
+        if action is not None:
+            _record_action(ctx, action, thread_name)
+        return action
 
     plan = await build_http_logic_plan(
         questions,
         build_action=_build_action,
     )
     actions = list(plan.actions)
+    original_actions = {int(action.question_num or 0): action for action in actions}
     await prefill_ai_answers_for_questions(
         questions,
         actions,
         ctx,
         thread_name=thread_name,
     )
+    for action in actions:
+        before = original_actions.get(int(action.question_num or 0))
+        if before is not None and action != before:
+            _record_action(ctx, action, thread_name)
     return HttpLogicPlan(
         actions=tuple(actions),
         skipped_question_nums=plan.skipped_question_nums,
@@ -223,12 +241,11 @@ async def brush_wjx_http(
         if not actions:
             return False
         assert_no_ai_placeholders_in_actions(actions, provider_label="问卷星")
-        for action in actions:
-            _record_action(ctx, action)
         submitdata = _submitdata_from_actions(
             actions,
             questions=_question_items(config),
             skipped_question_nums=plan.skipped_question_nums,
+            empty_question_nums=_extract_empty_gapfill_question_numbers(page_html),
         )
         if not bool(getattr(config, "submit_enabled", True)):
             logging.info("问卷星 HTTP 单测已生成答案，未提交。")
@@ -272,6 +289,8 @@ async def brush_wjx_http(
             submit_proxy_address = (
                 str(getattr(submit_proxy_lease, "address", "") or "").strip() or None
             )
+        if stop_signal is not None and stop_signal.is_set():
+            return False
         if bool(getattr(config, "random_proxy_ip_enabled", False)) and not submit_proxy_address:
             raise SubmitProxyUnavailableError("提交前未获取到随机 IP")
         submit_proxies = _proxy_arg(submit_proxy_address)

@@ -497,6 +497,19 @@ def build_reverse_fill_spec(
                         export_format=export.selected_format,
                         option_texts=list(info.option_texts or []),
                     )
+                elif question_type == "multiple":
+                    from surveycore.core.reverse_fill.actions import build_reverse_fill_action
+                    from surveycore.core.reverse_fill.parser import parse_multiple_row_answer
+
+                    answer = parse_multiple_row_answer(
+                        question_num=question_num,
+                        ordered_columns=ordered_columns,
+                        raw_row=raw_row,
+                        export_format=export.selected_format,
+                        option_texts=list(info.option_texts or []),
+                    )
+                    if answer is not None:
+                        build_reverse_fill_action(answer, info, question_type)
                 elif question_type == "text":
                     answer = parse_text_answer(
                         question_num=question_num,
@@ -527,7 +540,9 @@ def build_reverse_fill_spec(
                 break
 
         if parse_errors:
-            if question_type in {"single", "dropdown", "scale", "score", "matrix"}:
+            if question_type == "multiple":
+                reason = "多选题的选项列、0/1 标记或选择数量与问卷要求不匹配"
+            elif question_type in {"single", "dropdown", "scale", "score", "matrix"}:
                 if export.selected_format == REVERSE_FILL_FORMAT_WJX_SEQUENCE:
                     reason = "这道题在样本中出现了超范围序号或 V1 不支持的复合值"
                 else:

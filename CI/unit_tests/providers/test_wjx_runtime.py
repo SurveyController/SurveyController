@@ -119,7 +119,7 @@ async def test_wjx_http_runtime_uses_default_pc_ua_when_user_agent_is_not_explic
     captured: dict[str, object] = {}
 
     async def fake_load(*_args, **_kwargs):
-        return None
+        return "<html><body></body></html>"
 
     async def fake_build_action(*_args, **_kwargs):
         return AnswerAction(
@@ -161,7 +161,7 @@ async def test_wjx_http_runtime_uses_mobile_channel_for_mobile_profile(monkeypat
     captured: dict[str, object] = {}
 
     async def fake_load(*_args, **_kwargs):
-        return None
+        return "<html><body></body></html>"
 
     async def fake_build_action(*_args, **_kwargs):
         return AnswerAction(
@@ -204,7 +204,7 @@ async def test_wjx_http_runtime_uses_pc_channel_for_pc_profile(monkeypatch) -> N
     captured: dict[str, object] = {}
 
     async def fake_load(*_args, **_kwargs):
-        return None
+        return "<html><body></body></html>"
 
     async def fake_build_action(*_args, **_kwargs):
         return AnswerAction(

@@ -27,6 +27,7 @@ _QUESTION_TYPE_LABELS = {
     "single": "单选题",
     "multiple": "多选题",
     "dropdown": "下拉选择题",
+    "multilevel_dropdown": "多级下拉题",
     "scale": "量表题",
     "score": "评价题",
     "text": "填空题",

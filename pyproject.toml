@@ -40,7 +40,7 @@ exclude-dependencies = [
 ]
 
 [tool.uv.sources]
-surveycore-py = { git = "https://github.com/SurveyController/surveycore-py", rev = "6c3c72bde24db8133800c7185fd9aeceb627acf9" }
+surveycore-py = { git = "https://github.com/SurveyController/surveycore-py", rev = "e5758e901d5df44c2d17f37d7e2c1fbf051005e9" }
 
 [tool.ruff]
 line-length = 100

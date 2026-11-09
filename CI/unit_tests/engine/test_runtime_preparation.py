@@ -10,6 +10,9 @@ from software.core.engine.runtime_preparation import (
     RuntimePreparationError,
     prepare_execution_artifacts,
 )
+from software.core.task import ExecutionState
+from wjx.provider import answering_builders as wjx_builders
+from wjx.provider import http_runtime as wjx_http
 
 
 class _FakeHttpResponse:
@@ -70,6 +73,79 @@ class RuntimePreparationTests:
 
         with pytest.raises(RuntimePreparationError, match="运行准备已取消"):
             prepare_execution_artifacts(self._build_config(), stop_signal=stop_signal)
+
+    @pytest.mark.asyncio
+    async def test_prepare_execution_artifacts_maps_multilevel_dropdown_runtime(
+        self, monkeypatch
+    ) -> None:
+        config = RuntimeConfig()
+        config.url = "https://www.wjx.cn/vm/demo.aspx"
+        config.survey_provider = "wjx"
+        config.question_entries = [
+            QuestionEntry(
+                question_type="multilevel_dropdown",
+                probabilities=[1.0, 2.0, 3.0],
+                option_count=3,
+                question_num=1,
+                question_title="地区",
+            )
+        ]
+        config.questions_info = [
+            {
+                "num": 1,
+                "title": "地区",
+                "type_code": "7",
+                "provider_type": "multilevel_dropdown",
+                "provider_page_raw": {"submit_values": ["甲‐乙", "甲‐丙", "丁‐戊"]},
+                "option_texts": ["甲‐乙", "甲‐丙", "丁‐戊"],
+                "options": 3,
+            }
+        ]
+        with patch("software.core.engine.runtime_preparation._verify_wjx_survey_is_answerable"):
+            prepared = prepare_execution_artifacts(config)
+        runtime_config = prepared.execution_config_template
+        assert prepared.question_entries[0].question_type == "multilevel_dropdown"
+        assert runtime_config.question_config_index_map[1] == ("dropdown", 0)
+        assert runtime_config.droplist_prob == [[1 / 6, 1 / 3, 1 / 2]]
+        assert runtime_config.questions_metadata[1].provider_page_raw["submit_values"] == [
+            "甲‐乙",
+            "甲‐丙",
+            "丁‐戊",
+        ]
+        runtime_config.questions_metadata[1].provider_type = "multilevel_dropdown"
+        runtime_config.questions_metadata[1].forced_option_index = 0
+
+        async def resolve_texts(*_args):
+            return ["甲‐乙", "甲‐丙", "丁‐戊"]
+
+        monkeypatch.setattr(wjx_builders, "_resolve_runtime_option_texts", resolve_texts)
+        monkeypatch.setattr(wjx_builders, "weighted_index", lambda _probabilities: 0)
+        state = ExecutionState(config=runtime_config)
+        action = await wjx_builders.build_answer_action(
+            None, runtime_config.questions_metadata[1], state, psycho_plan=None
+        )
+        assert action is not None
+        assert action.kind == "text"
+        assert action.text_values == ("甲‐乙",)
+        assert wjx_http._submitdata_answer(action) == "甲‐乙"
+
+    def test_prepare_execution_artifacts_rejects_zero_multilevel_weights(self) -> None:
+        config = RuntimeConfig()
+        config.url = "https://www.wjx.cn/vm/demo.aspx"
+        config.survey_provider = "wjx"
+        config.question_entries = [
+            QuestionEntry(
+                question_type="multilevel_dropdown",
+                probabilities=[0.0, 0.0],
+                option_count=2,
+                question_num=1,
+                question_title="地区",
+            )
+        ]
+        config.questions_info = [{"num": 1, "title": "地区", "type_code": "7", "options": 2}]
+        with patch("software.core.engine.runtime_preparation._verify_wjx_survey_is_answerable"):
+            with pytest.raises(RuntimePreparationError, match="配置存在冲突"):
+                prepare_execution_artifacts(config)
 
     def test_prepare_execution_artifacts_rejects_validation_error(self) -> None:
         config = self._build_config()

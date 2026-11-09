@@ -142,6 +142,8 @@ class AddPreviewMixin:
             self._rebuild_matrix_preview(card, card_layout, option_count, rows)
         elif q_type == "order":
             self._rebuild_order_preview(card, card_layout, option_count)
+        elif q_type == "multilevel_dropdown":
+            self._rebuild_slider_preview(card, card_layout, q_type, option_count)
         else:
             self._rebuild_slider_preview(card, card_layout, q_type, option_count)
 
@@ -315,6 +317,7 @@ class AddPreviewMixin:
         option_count: int,
     ) -> None:
         is_multiple = q_type == "multiple"
+        is_multilevel_dropdown = q_type == "multilevel_dropdown"
         is_slider = q_type == "slider"
         strategy = self._resolve_strategy()
         if is_slider and strategy == "random":
@@ -323,6 +326,8 @@ class AddPreviewMixin:
             hint_text = f"滑块题：此处数值代表填写时的目标值，会做小幅抖动避免每份相同（默认 {SLIDER_TARGET_MIN}-{SLIDER_TARGET_MAX}）"
         elif is_multiple:
             hint_text = "每个滑块的值对应的是选项的命中概率（%）"
+        elif q_type == "multilevel_dropdown":
+            hint_text = "每条完整路径对应一个选项，可设置各路径的选择占比"
         elif strategy == "random":
             hint_text = "当前为完全随机，切换为自定义配比可编辑。"
         else:
@@ -363,7 +368,7 @@ class AddPreviewMixin:
             slider = NoWheelSlider(Qt.Orientation.Horizontal, opt_widget)
             if is_slider:
                 slider.setRange(SLIDER_TARGET_MIN, SLIDER_TARGET_MAX)
-            elif is_multiple:
+            elif is_multiple or is_multilevel_dropdown:
                 slider.setRange(ANSWER_WEIGHT_MIN, MULTIPLE_OPTION_WEIGHT_MAX)
             else:
                 slider.setRange(ANSWER_WEIGHT_MIN, ANSWER_WEIGHT_MAX)

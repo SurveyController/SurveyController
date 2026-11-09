@@ -1,4 +1,6 @@
 from __future__ import annotations
+import pytest
+
 from surveycore.core.reverse_fill.runtime import resolve_current_reverse_fill_answer
 from surveycore.core.reverse_fill.schema import (
     REVERSE_FILL_KIND_CHOICE,
@@ -99,26 +101,28 @@ class ReverseFillRuntimeStateTests:
         assert answer.choice_index == 1
         assert state.get_reverse_fill_answer(1, "Worker-3") is None
 
-    def test_resolve_current_reverse_fill_answer_filters_invalid_contexts(self) -> None:
+    def test_resolve_current_reverse_fill_answer_uses_optional_worker(self) -> None:
         expected = ReverseFillAnswer(question_num=1, kind=REVERSE_FILL_KIND_CHOICE, choice_index=0)
 
         class _ValidCtx:
-            def get_reverse_fill_answer(self, _question_num: int) -> ReverseFillAnswer:
+            def get_reverse_fill_answer(
+                self, _question_num: int, _thread_name: str | None = None
+            ) -> ReverseFillAnswer:
                 return expected
 
-        class _BadValueCtx:
-            def get_reverse_fill_answer(self, _question_num: int) -> str:
-                return "not-an-answer"
-
         class _ErrorCtx:
-            def get_reverse_fill_answer(self, _question_num: int) -> ReverseFillAnswer:
+            def get_reverse_fill_answer(
+                self, _question_num: int, _thread_name: str | None = None
+            ) -> ReverseFillAnswer:
                 raise RuntimeError("boom")
 
         assert resolve_current_reverse_fill_answer(_ValidCtx(), 1) is expected
-        assert resolve_current_reverse_fill_answer(_BadValueCtx(), 1) is None
-        assert resolve_current_reverse_fill_answer(_ErrorCtx(), 1) is None
-        assert resolve_current_reverse_fill_answer(object(), 1) is None
-        assert resolve_current_reverse_fill_answer(None, 1) is None
+        with pytest.raises(RuntimeError, match="boom"):
+            resolve_current_reverse_fill_answer(_ErrorCtx(), 1)
+        with pytest.raises(AttributeError):
+            resolve_current_reverse_fill_answer(object(), 1)
+        with pytest.raises(AttributeError):
+            resolve_current_reverse_fill_answer(None, 1)
 
     def test_resolve_current_reverse_fill_answer_can_use_explicit_thread(self) -> None:
         expected = ReverseFillAnswer(question_num=1, kind=REVERSE_FILL_KIND_CHOICE, choice_index=1)

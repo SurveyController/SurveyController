@@ -4,6 +4,7 @@ import asyncio
 import logging
 import time
 import uuid
+from dataclasses import replace
 from collections import OrderedDict
 from typing import Any, Mapping
 
@@ -39,6 +40,8 @@ import software.network.http as http_client
 from software.core.config.user_agents import DEFAULT_USER_AGENT
 from software.core.ai.batch_runtime import (
     assert_no_ai_placeholders_in_actions,
+    is_ai_option_fill_placeholder,
+    is_ai_text_placeholder,
     prefill_ai_answers_for_questions,
 )
 from software.core.config.codec import UserAgentProfile
@@ -83,13 +86,19 @@ def _headers(page_url: str, user_agent: str | None = None) -> dict[str, str]:
     return headers
 
 
-def _record_action(ctx: ExecutionState, action: AnswerAction) -> None:
+def _record_action(ctx: ExecutionState, action: AnswerAction, thread_name: str = "") -> None:
+    values = list(action.text_values or ()) + [value for _, value in action.option_fill_texts]
+    if any(
+        is_ai_text_placeholder(value) or is_ai_option_fill_placeholder(value) for value in values
+    ):
+        action = replace(action, pending_distribution_choices=())
     record_answer_action(
         ctx,
         action,
         record_answer_fn=record_answer,
         record_pending_distribution_choice_fn=record_pending_distribution_choice,
         default_fill_text="",
+        thread_name=thread_name,
     )
 
 
@@ -202,7 +211,7 @@ async def brush_qq_http(
         async def _build_action(question: SurveyQuestionMeta) -> AnswerAction | None:
             if stop_signal is not None and stop_signal.is_set():
                 return None
-            return await build_answer_action(
+            action = await build_answer_action(
                 None,
                 question,
                 ctx,
@@ -210,18 +219,26 @@ async def brush_qq_http(
                 thread_name=thread_name,
                 allow_ai_placeholder=True,
             )
+            if action is not None:
+                _record_action(ctx, action, thread_name)
+            return action
 
         plan = await build_http_logic_plan(
             questions,
             build_action=_build_action,
         )
         actions = list(plan.actions)
+        original_actions = {int(action.question_num or 0): action for action in actions}
         await prefill_ai_answers_for_questions(
             questions,
             actions,
             ctx,
             thread_name=thread_name,
         )
+        for action in actions:
+            before = original_actions.get(int(action.question_num or 0))
+            if before is not None and action != before:
+                _record_action(ctx, action, thread_name)
         assert_no_ai_placeholders_in_actions(actions, provider_label="腾讯问卷")
         action_by_question_id = {
             str(action.question_id or "").strip(): action
@@ -259,9 +276,6 @@ async def brush_qq_http(
 
         if not page_questions:
             raise RuntimeError("腾讯问卷没有生成可提交答案")
-
-        for action in actions:
-            _record_action(ctx, action)
 
         try:
             duration = int(
@@ -321,6 +335,8 @@ async def brush_qq_http(
             submit_proxy_address = (
                 str(getattr(submit_proxy_lease, "address", "") or "").strip() or None
             )
+        if stop_signal is not None and stop_signal.is_set():
+            return False
         if bool(getattr(config, "random_proxy_ip_enabled", False)) and not submit_proxy_address:
             raise SubmitProxyUnavailableError("提交前未获取到随机 IP")
         submit_proxies = _proxy_arg(submit_proxy_address)

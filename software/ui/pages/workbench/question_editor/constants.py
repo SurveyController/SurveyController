@@ -8,6 +8,7 @@ TYPE_CHOICES = [
     ("multiple", "多选题"),
     ("text", "填空题"),
     ("dropdown", "下拉题"),
+    ("multilevel_dropdown", "多级下拉题"),
     ("matrix", "矩阵题"),
     ("scale", "量表题"),
     ("score", "评价题"),
@@ -26,6 +27,7 @@ TYPE_LABEL_MAP: Dict[str, str] = dict(TYPE_CHOICES)
 TYPE_LABEL_MAP.update(
     {
         "multi_text": "多项填空题",
+        "multilevel_dropdown": "多级下拉题",
         "location": "地区题",
     }
 )

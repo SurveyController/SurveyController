@@ -208,6 +208,7 @@ async def _build_actions(
     raw_by_num: Mapping[int, Mapping[str, Any]],
     psycho_plan: Any,
     stop_signal: Any,
+    thread_name: str = "",
 ) -> list[AnswerAction]:
     questions = _question_items(config, raw_by_num)
     for question in questions:
@@ -225,7 +226,7 @@ async def _build_actions(
         if entry is None:
             return None
         entry_type, config_index = entry
-        return build_answer_action(
+        action = build_answer_action(
             root_index=int(getattr(question, "num", 0) or 0) - 1,
             question_num=int(getattr(question, "num", 0) or 0),
             entry_type=str(entry_type or ""),
@@ -234,6 +235,9 @@ async def _build_actions(
             question_meta=question,
             psycho_plan=psycho_plan,
         )
+        if action is not None:
+            _record_action(ctx, action, thread_name)
+        return action
 
     plan = await build_http_logic_plan(
         questions,
@@ -242,13 +246,14 @@ async def _build_actions(
     return list(plan.actions)
 
 
-def _record_action(ctx: ExecutionState, action: AnswerAction) -> None:
+def _record_action(ctx: ExecutionState, action: AnswerAction, thread_name: str = "") -> None:
     record_answer_action(
         ctx,
         action,
         record_answer_fn=record_answer,
         record_pending_distribution_choice_fn=record_pending_distribution_choice,
         default_fill_text="",
+        thread_name=thread_name,
     )
 
 
@@ -330,12 +335,10 @@ async def brush_credamo_http(
             raw_by_num=raw_by_num,
             psycho_plan=psycho_plan,
             stop_signal=stop_signal,
+            thread_name=thread_name,
         )
         if not actions:
             return False
-        for action in actions:
-            _record_action(ctx, action)
-
         duration_seconds = _sample_duration_seconds(config)
         if not bool(getattr(config, "submit_enabled", True)):
             logging.info("见数 HTTP 单测已生成答案，未提交。")
@@ -375,6 +378,8 @@ async def brush_credamo_http(
     if submit_proxy_lease_factory is not None:
         submit_proxy_lease = await submit_proxy_lease_factory()
         submit_proxy_address = str(getattr(submit_proxy_lease, "address", "") or "").strip() or None
+    if stop_signal is not None and stop_signal.is_set():
+        return False
     if bool(getattr(config, "random_proxy_ip_enabled", False)) and not submit_proxy_address:
         raise SubmitProxyUnavailableError("提交前未获取到随机 IP")
     async with _CredamoHttpSession(submit_proxy_address) as submit_session:
