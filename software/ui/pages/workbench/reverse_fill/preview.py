@@ -295,7 +295,7 @@ def refresh_preview(page: Any) -> None:
         else:
             hint = ""
 
-        page.detected_format_label.setText("验证结果：未接通目标流")
+        page.detected_format_label.setText("验证结果：等待导入问卷")
         page.state_hint_label.setText(hint)
         clear_tables(page)
         return

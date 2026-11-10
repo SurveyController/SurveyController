@@ -75,7 +75,6 @@ if TYPE_CHECKING:
     from software.ui.widgets.no_wheel import NoWheelSpinBox
     from qfluentwidgets import (
         IndeterminateProgressBar,
-        InfoBadge,
         ScrollArea,
         SimpleCardWidget,
         TogglePushButton,
@@ -96,7 +95,6 @@ class ReverseFillPage(SurveyClipboardMixin, QWidget):
     link_card: "SurveyEntryCard"
     file_panel: "SimpleCardWidget"
     table_panel: "SimpleCardWidget"
-    preview_badge: "InfoBadge"
     qr_btn: QToolButton
     url_edit: LineEdit
     parse_btn: PrimaryPushButton

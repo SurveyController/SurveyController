@@ -73,5 +73,7 @@ class RandomIpToggleRow(QWidget):
         set_indeterminate_progress_ring_active(self.loading_ring, active)
         self.loading_label.setVisible(active)
         self.loading_label.setText(text)
+        if active and self.toggle_button.hasFocus():
+            self.toggle_button.clearFocus()
         set_widget_enabled_with_opacity(self.toggle_button, not active)
         self.sync_toggle_presentation(self.toggle_button.isChecked())

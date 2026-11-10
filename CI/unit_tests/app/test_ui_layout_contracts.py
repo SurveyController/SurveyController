@@ -7,7 +7,7 @@ import subprocess
 import sys
 import textwrap
 
-from PySide6.QtCore import QCoreApplication, QEvent
+from PySide6.QtCore import QCoreApplication, QEvent, Qt
 from PySide6.QtWidgets import QApplication, QWidget
 from qfluentwidgets import ScrollArea as FluentScrollArea
 
@@ -134,6 +134,36 @@ def test_workbench_pages_fit_minimum_window_width_without_horizontal_overflow(
     for page in (runtime_page, strategy_page, reverse_fill_page, dashboard_page):
         _show_at_guarded_size(qtbot, page)
         _assert_no_horizontal_scrollbar(page)
+
+
+def test_reverse_fill_random_ip_loading_preserves_layout_and_scroll_position(
+    monkeypatch, qtbot
+) -> None:
+    _patch_page_dependencies(monkeypatch)
+    page = ReverseFillPage(_FakeController())
+    _show_at_guarded_size(qtbot, page)
+    scrollbar = page.scroll_area.verticalScrollBar()
+    scrollbar.setValue(0)
+    card_geometry = page.file_panel.geometry()
+    label = page.detected_format_label
+
+    assert not label.wordWrap()
+    assert label.width() >= label.fontMetrics().horizontalAdvance(label.text())
+
+    qtbot.mouseClick(page.random_ip_cb, Qt.MouseButton.LeftButton)
+    assert page.random_ip_cb.hasFocus()
+    page.set_random_ip_loading(True, "正在获取随机 IP...")
+    qtbot.wait(80)
+
+    assert scrollbar.value() == 0
+    assert page.file_panel.geometry() == card_geometry
+    _assert_no_horizontal_scrollbar(page)
+
+    page.set_random_ip_loading(False)
+    qtbot.wait(80)
+
+    assert scrollbar.value() == 0
+    assert page.file_panel.geometry() == card_geometry
 
 
 def test_workbench_pages_survive_125_percent_dpi_subprocess() -> None:

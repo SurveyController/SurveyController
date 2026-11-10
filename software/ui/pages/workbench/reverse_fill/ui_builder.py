@@ -1,14 +1,12 @@
 from __future__ import annotations
 
 from PySide6.QtCore import Qt
-from PySide6.QtGui import QColor
 from PySide6.QtWidgets import QHBoxLayout, QVBoxLayout, QWidget
 from qfluentwidgets import (
     BodyLabel,
     CaptionLabel,
     FluentIcon,
     IconWidget,
-    InfoBadge,
     IndeterminateProgressBar,
     LineEdit,
     PrimaryPushButton,
@@ -67,13 +65,6 @@ def _build_title_area(page, layout: QVBoxLayout) -> None:
     title_row_layout.setSpacing(10)
 
     title_row_layout.addWidget(SubtitleLabel("Excel 反填", title_row))
-    page.preview_badge = InfoBadge.custom(
-        "预览",
-        QColor("#fbbf24"),
-        QColor("#f59e0b"),
-        parent=title_row,
-    )
-    title_row_layout.addWidget(page.preview_badge)
     title_row_layout.addStretch(1)
     layout.addWidget(title_row)
     layout.addSpacing(4)
@@ -129,7 +120,7 @@ def _build_file_picker(page, layout: QVBoxLayout) -> None:
     info_row = QHBoxLayout()
     info_row.setSpacing(12)
     page.detected_format_label = BodyLabel("检测结果：等待校验事件", page.file_panel)
-    page.detected_format_label.setWordWrap(True)
+    page.detected_format_label.setWordWrap(False)
     page.state_hint_label = CaptionLabel("暂无有效数据装载", page.file_panel)
     page.state_hint_label.setWordWrap(True)
     page.cancel_preview_btn = PushButton(
