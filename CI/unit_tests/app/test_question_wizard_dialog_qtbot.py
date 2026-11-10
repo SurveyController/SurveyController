@@ -160,11 +160,13 @@ def test_multilevel_dropdown_card_edits_complete_path_weights(qtbot) -> None:
     dlg = QuestionWizardDialog([entry], info, "多级题")
     qtbot.addWidget(dlg)
     dlg.show()
-    qtbot.waitUntil(lambda: bool(dlg.slider_map))
+    qtbot.waitUntil(lambda: bool(dlg.multilevel_map))
 
-    sliders = dlg.slider_map[0]
-    sliders[0].setValue(0)
-    sliders[1].setValue(100)
+    editor = dlg.multilevel_map[0]
+    assert 0 not in dlg.slider_map
+    editor.paths.select([0], False)
+    editor._refresh()
+    editor.distribution.sliders[1].setValue(10000)
 
     dlg.accept()
     assert dlg.result() == QDialog.DialogCode.Accepted
@@ -175,11 +177,7 @@ def test_multilevel_dropdown_card_edits_complete_path_weights(qtbot) -> None:
     restored = deserialize_question_entry(serialize_question_entry(entry))
     assert restored.question_type == "multilevel_dropdown"
     assert restored.custom_weights == [0, 100]
-    path_labels = {"省‐市‐区A", "省‐市‐区B"}
-    displayed_paths = {
-        label.text() for label in dlg.findChildren(BodyLabel) if label.text() in path_labels
-    }
-    assert displayed_paths == path_labels
+    assert editor.paths.selected == {1}
 
 
 def test_question_wizard_dialog_tree_marks_display_relation_and_expands(qtbot) -> None:
@@ -346,6 +344,18 @@ def test_question_wizard_dialog_detail_keeps_visible_content_width(qtbot) -> Non
     dlg._select_question(1)
     qtbot.waitUntil(lambda: 1 in dlg._entry_card_widgets)
     assert dlg._detail_stack.currentWidget() is dlg._question_cards[1]
+
+
+def test_short_question_card_fills_detail_viewport(qtbot) -> None:
+    info = [SurveyQuestionMeta(num=1, title="短题", option_texts=["A", "B"])]
+    dlg = QuestionWizardDialog(_build_entries()[:1], info)
+    qtbot.addWidget(dlg)
+    dlg.show()
+    qtbot.wait(20)
+    dlg._sync_detail_content_width()
+    qtbot.waitUntil(
+        lambda: dlg._entry_card_widgets[0].height() >= dlg._detail_scroll.viewport().height() - 2
+    )
 
 
 def test_question_wizard_dialog_detail_height_follows_current_question(qtbot) -> None:

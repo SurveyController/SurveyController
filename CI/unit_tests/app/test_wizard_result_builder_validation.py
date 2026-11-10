@@ -48,6 +48,7 @@ class _Segment:
 class _Host:
     def __init__(self) -> None:
         self.slider_map = {}
+        self.multilevel_map = {}
         self.matrix_row_slider_map = {}
         self.text_edit_map = {}
         self.location_combo_map = {}

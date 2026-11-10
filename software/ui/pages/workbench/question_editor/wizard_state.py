@@ -8,12 +8,15 @@ from qfluentwidgets import BodyLabel, LineEdit, PushButton, RadioButton, SwitchB
 
 from software.ui.widgets.no_wheel import NoWheelSlider
 
+from .multilevel_editor import MultilevelDropdownEditor
+
 TextEditsValue = list[LineEdit] | list[list[LineEdit]]
 
 
 @dataclass(slots=True)
 class WizardRuntimeState:
     slider_map: dict[int, list[NoWheelSlider]] = field(default_factory=dict)
+    multilevel_map: dict[int, MultilevelDropdownEditor] = field(default_factory=dict)
     matrix_row_slider_map: dict[int, list[list[NoWheelSlider]]] = field(default_factory=dict)
     text_edit_map: dict[int, TextEditsValue] = field(default_factory=dict)
     ai_check_map: dict[int, SwitchButton] = field(default_factory=dict)
@@ -45,6 +48,7 @@ def bind_runtime_state(owner: Any, state: WizardRuntimeState) -> None:
 
     owner._runtime_state = state
     owner.slider_map = state.slider_map
+    owner.multilevel_map = state.multilevel_map
     owner.matrix_row_slider_map = state.matrix_row_slider_map
     owner.text_edit_map = state.text_edit_map
     owner.ai_check_map = state.ai_check_map

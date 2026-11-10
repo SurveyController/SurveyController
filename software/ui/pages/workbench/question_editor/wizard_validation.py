@@ -10,6 +10,7 @@ from surveycore.providers.contracts import SurveyQuestionMeta
 from software.ui.widgets.no_wheel import NoWheelSlider
 
 from .utils import _shorten_text
+from .multilevel_editor import MultilevelDropdownEditor
 
 
 class WizardValidationHost(Protocol):
@@ -19,6 +20,7 @@ class WizardValidationHost(Protocol):
     multi_text_blank_integer_range_edits: Dict[int, List[Tuple[LineEdit, LineEdit]]]
     option_fill_state_map: Dict[int, Dict[int, Dict[str, Any]]]
     slider_map: Dict[int, List[NoWheelSlider]]
+    multilevel_map: Dict[int, MultilevelDropdownEditor]
     matrix_row_slider_map: Dict[int, List[List[NoWheelSlider]]]
     attached_select_slider_map: Dict[int, List[Dict[str, Any]]]
     entries: List[Any]
@@ -92,6 +94,13 @@ def validate_random_integer_inputs(host: WizardValidationHost) -> bool:
 
 
 def validate_non_zero_weights(host: WizardValidationHost) -> bool:
+    for idx, editor in host.multilevel_map.items():
+        message = editor.validation_message()
+        if message:
+            host._show_validation_error(
+                f"{host._format_question_label(idx)}：{message}。", idx, editor
+            )
+            return False
     for idx, sliders in host.slider_map.items():
         weights = [max(0, slider.value()) for slider in sliders]
         if weights and not any(weight > 0 for weight in weights):

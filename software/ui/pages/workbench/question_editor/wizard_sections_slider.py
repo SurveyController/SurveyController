@@ -136,7 +136,6 @@ class WizardSectionsSliderMixin:
 
         sliders: List[NoWheelSlider] = []
         is_multiple = entry.question_type == "multiple"
-        is_multilevel_dropdown = entry.question_type == "multilevel_dropdown"
 
         jump_map: Dict[int, int] = {}
         info_entry = self._get_entry_info(idx)
@@ -211,7 +210,7 @@ class WizardSectionsSliderMixin:
             slider = NoWheelSlider(Qt.Orientation.Horizontal, card)
             if entry.question_type == "slider":
                 slider.setRange(slider_min, slider_max)
-            elif is_multiple or is_multilevel_dropdown:
+            elif is_multiple:
                 slider.setRange(ANSWER_WEIGHT_MIN, MULTIPLE_OPTION_WEIGHT_MAX)
             else:
                 slider.setRange(ANSWER_WEIGHT_MIN, ANSWER_WEIGHT_MAX)
@@ -415,7 +414,7 @@ class WizardSectionsSliderMixin:
         if option_fill_states:
             self.option_fill_state_map[idx] = option_fill_states
 
-        if entry.question_type in ("single", "dropdown", "multilevel_dropdown", "scale", "score"):
+        if entry.question_type in ("single", "dropdown", "scale", "score"):
             ratio_preview_label = BodyLabel("", card)
             ratio_preview_label.setWordWrap(True)
             ratio_preview_label.setSizePolicy(

@@ -15,6 +15,8 @@ from surveycore.core.questions.utils import (
 from surveycore.providers.contracts import SurveyQuestionMeta
 from software.ui.widgets.no_wheel import NoWheelSlider
 
+from .multilevel_editor import MultilevelDropdownEditor
+
 from .wizard_sections import (
     _TEXT_RANDOM_ID_CARD,
     _TEXT_RANDOM_ID_CARD_TOKEN,
@@ -33,6 +35,7 @@ AttachedSelectConfig = Dict[str, Any]
 
 class WizardResultSource(Protocol):
     slider_map: Dict[int, List[NoWheelSlider]]
+    multilevel_map: Dict[int, MultilevelDropdownEditor]
     matrix_row_slider_map: Dict[int, List[List[NoWheelSlider]]]
     text_edit_map: Dict[int, TextEditsValue]
     location_combo_map: Dict[int, List[Any]]
@@ -52,6 +55,8 @@ class WizardResultSource(Protocol):
 
 def get_results(source: WizardResultSource) -> Dict[int, Any]:
     result: Dict[int, Any] = {}
+    for idx, editor in source.multilevel_map.items():
+        result[idx] = editor.get_weights()
     for idx, sliders in source.slider_map.items():
         weights = [max(0, slider.value()) for slider in sliders]
         if weights and not any(weight > 0 for weight in weights):

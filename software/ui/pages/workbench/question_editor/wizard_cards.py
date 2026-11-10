@@ -25,6 +25,7 @@ from .constants import (
     _get_entry_type_label,
 )
 from .question_media_preview import MediaFetcher, QuestionMediaStrip
+from .multilevel_editor import MultilevelDropdownEditor
 from .utils import _apply_label_color, _shorten_text, resolve_config_question_num
 from .wizard_validation import (
     validate_before_accept,
@@ -38,6 +39,7 @@ class WizardCardsMixin:
         info: List[SurveyQuestionMeta]
         entries: List[QuestionEntry]
         slider_map: Dict[int, List[NoWheelSlider]]
+        multilevel_map: Dict[int, MultilevelDropdownEditor]
         matrix_row_slider_map: Dict[int, List[List[NoWheelSlider]]]
         text_random_mode_map: Dict[int, str]
         text_random_int_min_edit_map: Dict[int, LineEdit]
@@ -228,14 +230,10 @@ class WizardCardsMixin:
         info_entry: SurveyQuestionMeta,
         parent: QWidget,
     ) -> List[InfoBadge]:
-        badges: List[InfoBadge] = [
-            self._make_badge(_get_entry_type_label(entry), "#0f6cbd", "#63b3ff", parent)
+        badge_specs = [
+            (_get_entry_type_label(entry), "#0f6cbd", "#63b3ff"),
+            ("必答" if bool(info_entry.required) else "非必答", "#8a3ffc", "#c7a8ff"),
         ]
-        badges.append(
-            self._make_badge(
-                "必答" if bool(info_entry.required) else "非必答", "#8a3ffc", "#c7a8ff", parent
-            )
-        )
 
         media_items = list(info_entry.question_media or [])
         has_option_media = any(
@@ -247,14 +245,14 @@ class WizardCardsMixin:
             for item in media_items
         )
         if self._media_items_for(idx, "title") or has_option_media or has_row_media:
-            badges.append(self._make_badge("图片题", "#0f766e", "#4fd1c5", parent))
+            badge_specs.append(("图片题", "#0f766e", "#4fd1c5"))
         if bool(info_entry.has_display_condition):
-            badges.append(self._make_badge("条件显示", "#166534", "#4ade80", parent))
+            badge_specs.append(("条件显示", "#166534", "#4ade80"))
         if bool(info_entry.has_dependent_display_logic):
-            badges.append(self._make_badge("控制后续", "#0f766e", "#67e8f9", parent))
+            badge_specs.append(("控制后续", "#0f766e", "#67e8f9"))
         if bool(info_entry.has_jump):
-            badges.append(self._make_badge("跳题", "#b45309", "#fbbf24", parent))
-        return badges
+            badge_specs.append(("跳题", "#b45309", "#fbbf24"))
+        return [self._make_badge(text, light, dark, parent) for text, light, dark in badge_specs]
 
     def _show_validation_error(
         self, message: str, idx: int, focus_widget: Optional[QWidget] = None
@@ -336,7 +334,7 @@ class WizardCardsMixin:
         ]
 
         card = CardWidget(parent)
-        card.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Maximum)
+        card.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
         card_layout = QVBoxLayout(card)
         card_layout.setContentsMargins(14, 12, 14, 12)
         card_layout.setSpacing(6)
@@ -348,7 +346,8 @@ class WizardCardsMixin:
         title_row.setContentsMargins(0, 0, 0, 0)
         title_row.setSpacing(10)
         title = SubtitleLabel(f"{qnum or idx + 1}.", card)
-        title.setStyleSheet("font-size: 16px; font-weight: 600;")
+        if entry.question_type != "multilevel_dropdown":
+            title.setStyleSheet("font-size: 16px; font-weight: 600;")
         title_row.addWidget(title)
         for badge in header_badges:
             title_row.addWidget(badge, 0, Qt.AlignmentFlag.AlignLeft)
@@ -359,8 +358,9 @@ class WizardCardsMixin:
             desc = BodyLabel(title_text, card)
             desc.setWordWrap(True)
             desc.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Maximum)
-            desc.setStyleSheet("font-size: 13px;")
-            _apply_label_color(desc, "#444444", "#e0e0e0")
+            if entry.question_type != "multilevel_dropdown":
+                desc.setStyleSheet("font-size: 13px;")
+                _apply_label_color(desc, "#444444", "#e0e0e0")
             card_layout.addWidget(desc)
 
         title_media = self._media_items_for(idx, "title")
@@ -386,10 +386,17 @@ class WizardCardsMixin:
             self._build_matrix_section(idx, entry, card, card_layout, option_texts, row_texts)
         elif entry.question_type == "order":
             self._build_order_section(idx, card, card_layout, option_texts)
+        elif entry.question_type == "multilevel_dropdown":
+            self._has_content = True
+            editor = MultilevelDropdownEditor(entry, option_texts, card)
+            self.multilevel_map[idx] = editor
+            card_layout.addWidget(editor, 1)
         else:
             self._build_slider_section(idx, entry, card, card_layout, option_texts)
 
         self._build_attached_select_section(idx, entry, card, card_layout)
+        if entry.question_type != "multilevel_dropdown":
+            card_layout.addStretch(1)
         return card
 
     def _build_attached_select_section(
