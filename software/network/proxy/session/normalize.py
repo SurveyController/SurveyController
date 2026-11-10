@@ -127,32 +127,6 @@ def _session_state_name(session: RandomIPSession) -> str:
     return "anonymous"
 
 
-def _mask_identifier(value: Any, *, keep: int = 6) -> str:
-    text = str(value or "").strip()
-    if not text:
-        return "-"
-    if len(text) <= keep:
-        return text
-    return f"{text[:keep]}***"
-
-
-def _session_log_fields(session: RandomIPSession) -> str:
-    remaining_quota, total_quota, used_quota = _normalize_quota_state(
-        remaining_quota=session.remaining_quota,
-        total_quota=session.total_quota,
-        used_quota=session.used_quota,
-    )
-    return (
-        f"state={_session_state_name(session)} "
-        f"user_id={int(session.user_id or 0)} "
-        f"device={_mask_identifier(session.device_id)} "
-        f"remaining={format_quota_value(remaining_quota)} "
-        f"total={format_quota_value(total_quota)} "
-        f"used={format_quota_value(used_quota)} "
-        f"quota_known={bool(session.quota_known)}"
-    )
-
-
 def _normalize_quota_state(
     *,
     remaining_quota: Any = None,

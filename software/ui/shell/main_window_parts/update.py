@@ -151,7 +151,7 @@ class MainWindowUpdateMixin:
         self._update_check_thread = thread
         thread.start()
 
-        logging.info("已启动后台更新检查")
+        logging.debug("已启动后台更新检查")
 
     def _clear_update_check_worker_refs(self):
         self._update_check_thread = None

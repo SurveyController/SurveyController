@@ -31,7 +31,6 @@ from .normalize import (
     _quota_equals,
     _require_valid_user_id,
     _resolve_quota_from_payload,
-    _session_log_fields,
     _session_state_name,
     _to_non_negative_int,
     _to_non_negative_quota,
@@ -66,17 +65,6 @@ def _has_complete_session(session: RandomIPSession) -> bool:
     return _is_valid_user_id(session.user_id)
 
 
-def _log_session_event(
-    level: int, message: str, session: Optional[RandomIPSession] = None, **fields: Any
-) -> None:
-    parts = [message]
-    if session is not None:
-        parts.append(_session_log_fields(session))
-    for key, value in fields.items():
-        parts.append(f"{key}={value}")
-    logging.log(level, "随机IP会话：%s", " | ".join(parts))
-
-
 def _endpoint_name(url: str) -> str:
     parsed = urlsplit(str(url or ""))
     host = str(parsed.netloc or "").strip() or "-"
@@ -100,7 +88,6 @@ def _ensure_loaded() -> None:
             return
         settings = _get_settings()
         device_id = str(settings.value(_settings_key("device_id")) or "").strip()
-        device_from = "settings" if device_id else "generated"
         if not device_id:
             device_id = build_stable_device_id()
             settings.setValue(_settings_key("device_id"), device_id)
@@ -137,13 +124,7 @@ def _ensure_loaded() -> None:
         )
         _session = loaded_session
         _session_loaded = True
-        _log_session_event(
-            logging.INFO,
-            "启动加载完成",
-            loaded_session,
-            device_from=device_from,
-            settings_user_id=loaded_user_id,
-        )
+        logging.debug("随机IP本地会话已加载")
 
 
 def _persist_session_locked() -> None:
@@ -259,7 +240,6 @@ def clear_session(*, reason: str = "unspecified") -> None:
     global _session, _session_revision
     with _session_lock:
         _ensure_loaded()
-        previous_session = _session
         _session = RandomIPSession(device_id=_session.device_id)
         _session_revision += 1
         settings = _get_settings()
@@ -269,7 +249,7 @@ def clear_session(*, reason: str = "unspecified") -> None:
         settings.remove(_settings_key("used_quota"))
         settings.remove(_settings_key("quota_known"))
         settings.sync()
-        _log_session_event(logging.WARNING, "本地会话已清空", previous_session, reason=reason)
+        logging.warning("随机IP本地会话已清空：%s", reason)
 
 
 def has_authenticated_session() -> bool:
@@ -454,15 +434,13 @@ async def activate_trial_async() -> RandomIPSession:
     with _session_lock:
         _ensure_loaded()
         session_revision = _session_revision
-    logging.info("随机IP试用领取开始：endpoint=%s", _endpoint_name(AUTH_TRIAL_ENDPOINT))
+    logging.debug("正在领取随机IP试用")
     response = await _apost_json(AUTH_TRIAL_ENDPOINT, json_body={})
     if int(getattr(response, "status_code", 0) or 0) != 200:
         error = _extract_error_payload(response)
         logging.warning(
-            "随机IP试用领取失败：endpoint=%s status=%s detail=%s",
-            _endpoint_name(AUTH_TRIAL_ENDPOINT),
-            int(getattr(response, "status_code", 0) or 0),
-            error.detail,
+            "随机IP试用领取失败：%s",
+            format_random_ip_error(error),
         )
         raise error
     session = _parse_session_response(response)
@@ -470,7 +448,7 @@ async def activate_trial_async() -> RandomIPSession:
         persisted = _set_session(
             session, verify_auth_persistence=True, expected_revision=session_revision
         )
-        _log_session_event(logging.INFO, "试用领取成功并已保存", persisted)
+        logging.info("随机IP试用领取成功")
         return persisted
     except RandomIPAuthError as exc:
         if exc.detail.startswith(_SESSION_PERSIST_FAILED_DETAIL):
@@ -570,20 +548,14 @@ async def sync_quota_snapshot_from_server_async(*, emit_logs: bool = True) -> Di
         session = _require_authenticated_session()
         session_revision = _session_revision
     if emit_logs:
-        logging.info(
-            "随机IP额度服务端同步开始：endpoint=%s user_id=%s",
-            _endpoint_name(AUTH_TRIAL_ENDPOINT),
-            int(session.user_id or 0),
-        )
+        logging.debug("正在同步随机IP额度")
     response = await _apost_json(AUTH_TRIAL_ENDPOINT, json_body={})
     if int(getattr(response, "status_code", 0) or 0) != 200:
         error = _extract_error_payload(response)
         if emit_logs:
             logging.warning(
-                "随机IP额度服务端同步失败：endpoint=%s status=%s detail=%s",
-                _endpoint_name(AUTH_TRIAL_ENDPOINT),
-                int(getattr(response, "status_code", 0) or 0),
-                error.detail,
+                "随机IP额度同步失败：%s",
+                format_random_ip_error(error),
             )
         raise error
     refreshed = _parse_session_response(response, fallback_session=session)
@@ -591,7 +563,7 @@ async def sync_quota_snapshot_from_server_async(*, emit_logs: bool = True) -> Di
         refreshed, verify_auth_persistence=True, expected_revision=session_revision
     )
     if emit_logs:
-        _log_session_event(logging.INFO, "随机IP额度已与服务端同步", persisted)
+        logging.debug("随机IP额度已同步")
     return _build_quota_snapshot(persisted)
 
 

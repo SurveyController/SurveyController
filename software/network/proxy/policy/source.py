@@ -92,7 +92,7 @@ def set_proxy_source(source: str) -> None:
     normalized = normalize_proxy_source(source)
     with _config_lock:
         _current_proxy_source = normalized
-    logging.info(f"代理源已切换为: {normalized}")
+    logging.debug("代理源已切换为: %s", normalized)
 
 
 def get_proxy_source() -> str:
