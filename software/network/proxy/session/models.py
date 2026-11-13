@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 
 class RandomIPAuthError(RuntimeError):
@@ -15,6 +15,7 @@ class RandomIPAuthError(RuntimeError):
 class RandomIPSession:
     device_id: str = ""
     user_id: int = 0
+    access_token: str = field(default="", repr=False)
     remaining_quota: float = 0.0
     total_quota: float = 0.0
     used_quota: float = 0.0

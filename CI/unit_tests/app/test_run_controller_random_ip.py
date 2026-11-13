@@ -53,7 +53,7 @@ class _FakeController(RandomIpRuntimeService):
             sync_quota_snapshot=lambda **kwargs: asyncio.sleep(
                 0, result={"used_quota": 1, "total_quota": 5}
             ),
-            activate_trial=lambda: asyncio.sleep(
+            ensure_authenticated_session=lambda: asyncio.sleep(
                 0, result=SimpleNamespace(total_quota=5, used_quota=1)
             ),
             is_quota_exhausted=lambda snapshot: False,
@@ -81,9 +81,9 @@ class _FakeController(RandomIpRuntimeService):
     def notify_random_ip_loading(self, loading: bool, message: str = "") -> None:
         self.loading_events.append((bool(loading), str(message)))
 
-    def refresh_random_ip_counter(self, *, adapter=None) -> None:
+    def refresh_random_ip_counter(self, *, adapter=None, connect_legacy=False) -> None:
         self.refresh_calls.append(adapter)
-        super().refresh_random_ip_counter(adapter=adapter)
+        super().refresh_random_ip_counter(adapter=adapter, connect_legacy=connect_legacy)
 
     def parent(self):
         return self._parent
@@ -226,6 +226,28 @@ class RunControllerRandomIPTests:
         assert controller.adapter.messages[-1][0] == "proxy_sync_failed"
         assert controller.adapter.counters[-1] == (9.0, 15.0, False)
 
+    def test_invalid_access_token_does_not_trigger_automatic_reconnection(
+        self, monkeypatch
+    ) -> None:
+        controller = _FakeController()
+        monkeypatch.setattr(controller._proxy_gateway, "is_custom_api_active", lambda: False)
+        monkeypatch.setattr(controller._proxy_gateway, "has_authenticated_session", lambda: True)
+
+        async def invalid_token(**_kwargs):
+            raise ProxyAuthenticationError("invalid_access_token")
+
+        monkeypatch.setattr(controller._proxy_gateway, "sync_quota_snapshot", invalid_token)
+        monkeypatch.setattr(
+            controller._proxy_gateway,
+            "ensure_authenticated_session",
+            lambda: (_ for _ in ()).throw(AssertionError("sync must not reconnect")),
+        )
+
+        controller.sync_random_ip_counter_from_server(adapter=controller.adapter)
+        controller.wait_random_ip_tasks()
+
+        assert controller.adapter.counters[-1] == (1.0, 5.0, False)
+
     def test_submit_toggle_random_ip_covers_custom_api_success_quota_exhausted_and_failure(
         self, monkeypatch
     ) -> None:
@@ -289,45 +311,39 @@ class RunControllerRandomIPTests:
         )
         assert controller.adapter.enabled is False
 
-    def test_trial_ready_and_submission_path_are_async_only(self, monkeypatch) -> None:
+    def test_account_connection_and_submission_path_are_async_only(self, monkeypatch) -> None:
         controller = _FakeController()
 
         monkeypatch.setattr(
             controller._proxy_gateway,
-            "activate_trial",
+            "ensure_authenticated_session",
             lambda: asyncio.sleep(0, result=SimpleNamespace(total_quota=5, used_quota=1)),
         )
         ok, fallback = asyncio.run(
-            controller._try_activate_random_ip_trial_async(controller.adapter)
+            controller._try_connect_random_ip_account_async(controller.adapter)
         )
         assert (ok, fallback) == (True, False)
         assert controller.adapter.messages == []
 
-        async def fake_activate_trial_async_already_claimed():
-            raise ProxyAuthenticationError("trial_already_claimed")
+        async def failed_connection():
+            raise ProxyAuthenticationError("invalid_legacy_session")
 
         monkeypatch.setattr(
             controller._proxy_gateway,
-            "activate_trial",
-            fake_activate_trial_async_already_claimed,
+            "ensure_authenticated_session",
+            failed_connection,
         )
         ok, fallback = asyncio.run(
-            controller._try_activate_random_ip_trial_async(controller.adapter)
+            controller._try_connect_random_ip_account_async(controller.adapter)
         )
-        assert (ok, fallback) == (False, True)
+        assert (ok, fallback) == (False, False)
 
         monkeypatch.setattr(controller._proxy_gateway, "has_authenticated_session", lambda: False)
-
-        async def fake_try_activate_random_ip_trial_async(_adapter):
-            return False, True
-
         monkeypatch.setattr(
-            controller,
-            "_try_activate_random_ip_trial_async",
-            fake_try_activate_random_ip_trial_async,
+            controller._proxy_gateway, "ensure_authenticated_session", failed_connection
         )
-        assert asyncio.run(controller._ensure_random_ip_ready_async(controller.adapter)) is True
-        assert controller.adapter.open_quota_calls == 1
+        assert asyncio.run(controller._ensure_random_ip_ready_async(controller.adapter)) is False
+        assert controller.adapter.open_quota_calls == 0
 
         monkeypatch.setattr(controller._proxy_gateway, "is_custom_api_active", lambda: False)
         monkeypatch.setattr(
@@ -348,3 +364,19 @@ class RunControllerRandomIPTests:
         )
         controller.wait_random_ip_tasks()
         assert controller.adapter.counters
+
+    def test_startup_refresh_can_connect_legacy_account(self, monkeypatch) -> None:
+        controller = _FakeController()
+        connected = []
+        monkeypatch.setattr(controller._proxy_gateway, "is_custom_api_active", lambda: False)
+        monkeypatch.setattr(controller._proxy_gateway, "has_authenticated_session", lambda: False)
+
+        async def connect():
+            connected.append(True)
+            return SimpleNamespace(total_quota=5, used_quota=1)
+
+        monkeypatch.setattr(controller._proxy_gateway, "ensure_authenticated_session", connect)
+        controller.refresh_random_ip_counter(adapter=controller.adapter, connect_legacy=True)
+        controller.wait_random_ip_tasks()
+
+        assert connected == [True]

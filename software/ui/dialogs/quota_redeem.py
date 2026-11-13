@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import logging
 import os
+import re
 from collections.abc import Callable, Coroutine
 from concurrent.futures import Future
 from typing import Any
@@ -30,6 +31,7 @@ from software.app.runtime_paths import get_resource_path
 from software.ui.helpers.qfluent_compat import set_indeterminate_progress_ring_active
 from software.ui.helpers.proxy_access import (
     RandomIPAuthError,
+    ensure_authenticated_session_async,
     format_quota_value,
     format_random_ip_error,
     get_session_snapshot,
@@ -95,7 +97,7 @@ class QuotaRedeemDialog(MessageBoxBase):
         self.cardCodeEdit = LineEdit(self.formCard)
         self.cardCodeEdit.setPlaceholderText("请输入卡密")
         self.cardCodeEdit.setClearButtonEnabled(True)
-        self.cardCodeEdit.setMaxLength(128)
+        self.cardCodeEdit.setMaxLength(16)
 
         store_row = QWidget(self.formCard)
         store_layout = QHBoxLayout(store_row)
@@ -161,16 +163,15 @@ class QuotaRedeemDialog(MessageBoxBase):
         if self._redeeming:
             self._show_pending_warning()
             return False
-        if not has_authenticated_session():
+        if not has_authenticated_session() and not get_session_snapshot().get("has_valid_user_id"):
             InfoBar.warning(
                 "",
-                "请先去测试随机ip是否真的可用，再来兑换卡密",
+                "本机没有可恢复的随机IP账户，当前暂不支持新账户开通",
                 parent=self,
                 position=InfoBarPosition.TOP,
                 duration=2600,
             )
             return False
-
         card_code = str(self.cardCodeEdit.text() or "").strip()
         if not card_code:
             InfoBar.warning(
@@ -179,6 +180,15 @@ class QuotaRedeemDialog(MessageBoxBase):
                 parent=self,
                 position=InfoBarPosition.TOP,
                 duration=2000,
+            )
+            return False
+        if re.fullmatch(r"[a-z0-9]{16}", card_code) is None:
+            InfoBar.warning(
+                "",
+                "卡密格式应为16位小写字母或数字",
+                parent=self,
+                position=InfoBarPosition.TOP,
+                duration=2200,
             )
             return False
 
@@ -197,7 +207,7 @@ class QuotaRedeemDialog(MessageBoxBase):
         try:
             future = self._submit_async_task(
                 "quota_card_redemption",
-                lambda: redeem_card_async(card_code),
+                lambda: self._redeem_after_account_connection(card_code),
             )
         except Exception as exc:
             self._redeemFinished.emit(False, exc)
@@ -212,6 +222,10 @@ class QuotaRedeemDialog(MessageBoxBase):
         future.add_done_callback(_on_redeem_done)
         return False
 
+    async def _redeem_after_account_connection(self, card_code: str) -> dict[str, Any]:
+        await ensure_authenticated_session_async()
+        return await redeem_card_async(card_code)
+
     def reject(self) -> None:
         if self._redeeming:
             self._show_pending_warning()
@@ -222,9 +236,12 @@ class QuotaRedeemDialog(MessageBoxBase):
         self._apply_account_hint_style()
         snapshot = get_session_snapshot()
         if not has_authenticated_session():
-            self.accountHintLabel.setText(
-                "请先启用一次随机 IP，经测试确认随机 IP 可用后再来兑换卡密"
+            text = (
+                "将尝试连接本机保存的旧随机IP账户"
+                if snapshot.get("has_valid_user_id")
+                else "本机没有可恢复的随机IP账户，当前暂不支持新账户开通"
             )
+            self.accountHintLabel.setText(text)
             return
         user_id = int(snapshot.get("user_id") or 0)
         self.accountHintLabel.setText(f"用户 ID：{user_id}")

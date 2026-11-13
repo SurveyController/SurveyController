@@ -100,7 +100,7 @@ class _FakeLifecycleWindow(MainWindowLifecycleMixin):
             _starting=False,
             is_initializing=lambda: False,
             stop_run=lambda: self._record("stop_run"),
-            refresh_random_ip_counter=lambda: self._record("refresh_counter"),
+            refresh_random_ip_counter=lambda **_kwargs: self._record("refresh_counter"),
             load_saved_config=lambda strict=False: SimpleNamespace(
                 question_entries=["q1"],
                 questions_info=["info1"],

@@ -8,15 +8,13 @@ from software.application.models import RuntimeSnapshot, SurveySnapshot
 _PROXY_NOTICES = {
     "proxy_auth_error": ("随机IP账号状态异常", ""),
     "proxy_sync_failed": ("随机IP同步失败", ""),
-    "trial_claimed": ("试用已领取", ""),
-    "trial_failed": ("领取试用失败", ""),
-    "quota_required": ("需要补充额度", "请先兑换随机IP额度后再使用。"),
+    "account_connection_failed": ("随机IP账户连接失败", ""),
     "proxy_unavailable": ("随机IP暂不可用", ""),
     "quota_exhausted": ("提示", "随机IP已用额度已达到上限，请先补充额度后再启用。"),
 }
 _LOADING_STAGES = {
     "processing": "正在处理...",
-    "claiming_trial": "正在领取试用...",
+    "connecting_account": "正在连接随机IP账户...",
     "syncing_quota": "正在同步服务端额度...",
 }
 _PARSE_ERRORS = {
@@ -99,8 +97,8 @@ def interaction_view(request: InteractionRequest) -> dict[str, Any]:
         return {**event, "type": "open_quota_request_form"}
     title, default = _PROXY_NOTICES.get(request.code, ("提示", ""))
     detail = request.detail
-    if request.code == "trial_failed" and detail:
-        detail = f"领取试用失败：{detail}"
+    if request.code == "account_connection_failed" and detail:
+        detail = f"随机IP账户连接失败：{detail}"
     return {
         **event,
         "type": "dialog_message",

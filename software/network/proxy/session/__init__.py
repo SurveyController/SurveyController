@@ -1,10 +1,10 @@
 from software.network.proxy.session.auth import (
     RandomIPAuthError,
-    activate_trial_async,
+    ensure_authenticated_session_async,
     extract_proxy_async,
-    format_quota_value,
     format_random_ip_error,
     get_device_id,
+    get_authenticated_session,
     get_fresh_quota_snapshot,
     get_quota_snapshot,
     get_session_snapshot,
@@ -13,16 +13,19 @@ from software.network.proxy.session.auth import (
     is_quota_exhausted,
     load_session_for_startup,
     redeem_card_async,
+    invalidate_access_token,
     sync_quota_snapshot_from_server_async,
 )
+from software.network.proxy.session.normalize import format_quota_value
 
 __all__ = [
     "RandomIPAuthError",
-    "activate_trial_async",
+    "ensure_authenticated_session_async",
     "extract_proxy_async",
     "format_quota_value",
     "format_random_ip_error",
     "get_device_id",
+    "get_authenticated_session",
     "get_fresh_quota_snapshot",
     "get_quota_snapshot",
     "get_session_snapshot",
@@ -31,5 +34,6 @@ __all__ = [
     "is_quota_exhausted",
     "load_session_for_startup",
     "redeem_card_async",
+    "invalidate_access_token",
     "sync_quota_snapshot_from_server_async",
 ]

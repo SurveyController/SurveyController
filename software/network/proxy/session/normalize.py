@@ -118,12 +118,16 @@ def _normalize_quota_known(
         return False
     if quota_known is False:
         return False
-    return _can_trust_quota_numbers(total_quota=total_quota, used_quota=used_quota)
+    return quota_known is True or _can_trust_quota_numbers(
+        total_quota=total_quota, used_quota=used_quota
+    )
 
 
 def _session_state_name(session: RandomIPSession) -> str:
-    if _is_valid_user_id(session.user_id):
+    if _is_valid_user_id(session.user_id) and session.access_token:
         return "ready"
+    if _is_valid_user_id(session.user_id):
+        return "legacy"
     return "anonymous"
 
 
@@ -141,7 +145,7 @@ def _normalize_quota_state(
     if has_used:
         used = _to_non_negative_quota(used_quota, 0.0)
         total = max(total, used)
-        remaining = max(0.0, total - used)
+        remaining = min(remaining, total) if has_remaining else max(0.0, total - used)
         return remaining, total, used
     if has_remaining:
         total = max(total, remaining)
@@ -215,12 +219,7 @@ def _resolve_quota_from_payload(
 
     if candidate is not None:
         candidate_remaining, candidate_total, candidate_used = candidate
-        if _can_trust_quota_numbers(total_quota=candidate_total, used_quota=candidate_used):
-            return candidate_remaining, candidate_total, candidate_used, True
-        logging.warning(
-            "%s 返回了 0/0 额度，保留本地额度并标记待校验：keys=%s", log_context, quota_keys
-        )
-        return fallback_remaining, fallback_total, fallback_used, False
+        return candidate_remaining, candidate_total, candidate_used, True
 
     if valid_count <= 0:
         logging.warning(

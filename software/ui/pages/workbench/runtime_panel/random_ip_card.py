@@ -11,7 +11,6 @@ from qfluentwidgets import (
     EditableComboBox,
     ExpandGroupSettingCard,
     FluentIcon,
-    HyperlinkButton,
     IconInfoBadge,
     IndicatorPosition,
     IndeterminateProgressRing,
@@ -159,15 +158,6 @@ class RandomIPSettingCard(ExpandGroupSettingCard):
         source_row.addWidget(BodyLabel("代理源", self._groupContainer))
         source_row.addStretch(1)
 
-        self.proxyTrialLink = HyperlinkButton(
-            FluentIcon.LINK,
-            "https://www.ipzan.com?pid=v6bf6iabg",
-            "API免费试用",
-            self._groupContainer,
-        )
-        self.proxyTrialLink.hide()
-        source_row.addWidget(self.proxyTrialLink)
-
         self.proxyCombo = ComboBox(self._groupContainer)
         self.proxyCombo.addItem("默认", userData=_PROXY_SOURCE_DEFAULT)
         self.proxyCombo.addItem("限时福利", userData=_PROXY_SOURCE_BENEFIT)
@@ -278,7 +268,6 @@ class RandomIPSettingCard(ExpandGroupSettingCard):
         source = self._get_selected_source()
         current_area = self.get_area_code()
         self.customApiRow.setVisible(source == _PROXY_SOURCE_CUSTOM)
-        self.proxyTrialLink.setVisible(source == _PROXY_SOURCE_CUSTOM)
         self.benefitHintLabel.setVisible(source == _PROXY_SOURCE_BENEFIT)
         self.areaRow.setVisible(source in {_PROXY_SOURCE_DEFAULT, _PROXY_SOURCE_BENEFIT})
         if source == _PROXY_SOURCE_CUSTOM:

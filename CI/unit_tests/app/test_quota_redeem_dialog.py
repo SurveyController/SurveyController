@@ -120,7 +120,7 @@ class QuotaRedeemDialogTests:
 
         assert dialog.validate() is False
         assert info_bar.calls[0][0] == "warning"
-        assert "测试随机ip是否真的可用" in info_bar.calls[0][1][1]
+        assert "不支持新账户开通" in info_bar.calls[0][1][1]
 
     def test_validate_with_empty_card_code_shows_warning(
         self,
@@ -140,7 +140,7 @@ class QuotaRedeemDialogTests:
         self,
         monkeypatch: pytest.MonkeyPatch,
     ) -> None:
-        dialog = _FakeDialog(card_code="CARD-001")
+        dialog = _FakeDialog(card_code="a" * 16)
         monkeypatch.setattr(quota_redeem, "MessageBox", _FakeMessageBox)
         monkeypatch.setattr(quota_redeem, "has_authenticated_session", lambda: True)
         monkeypatch.setattr(quota_redeem, "get_session_snapshot", lambda: {"user_id": 7})
@@ -154,7 +154,7 @@ class QuotaRedeemDialogTests:
         self,
         monkeypatch: pytest.MonkeyPatch,
     ) -> None:
-        dialog = _FakeDialog(card_code="CARD-001")
+        dialog = _FakeDialog(card_code="a" * 16)
         monkeypatch.setattr(quota_redeem, "MessageBox", _FakeMessageBox)
         monkeypatch.setattr(_FakeMessageBox, "next_exec_result", True)
         monkeypatch.setattr(quota_redeem, "has_authenticated_session", lambda: True)
@@ -182,7 +182,7 @@ class QuotaRedeemDialogTests:
         monkeypatch.setattr(quota_redeem, "has_authenticated_session", lambda: False)
 
         dialog._refresh_account_hint()
-        assert "请先启用一次随机 IP" in dialog.accountHintLabel.text()
+        assert "不支持新账户开通" in dialog.accountHintLabel.text()
 
         monkeypatch.setattr(quota_redeem, "get_session_snapshot", lambda: {"user_id": 42})
         monkeypatch.setattr(quota_redeem, "has_authenticated_session", lambda: True)
@@ -193,7 +193,7 @@ class QuotaRedeemDialogTests:
         self,
         monkeypatch: pytest.MonkeyPatch,
     ) -> None:
-        dialog = _FakeDialog(card_code="CARD-001")
+        dialog = _FakeDialog(card_code="a" * 16)
         info_bar = _FakeInfoBar()
         monkeypatch.setattr(quota_redeem, "InfoBar", info_bar)
         monkeypatch.setattr(quota_redeem, "has_authenticated_session", lambda: True)

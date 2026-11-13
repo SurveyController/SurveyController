@@ -14,7 +14,8 @@ _LOG_BODY_PREVIEW_LIMIT = 320
 _SENSITIVE_PREVIEW_PATTERNS = (
     (
         re.compile(
-            r'("?(?:access_token|refresh_token|account|password)"?\s*:\s*")[^"]*(")', re.IGNORECASE
+            r'("?(?:access_token|refresh_token|account|password|card_code|redeem_card_code)"?\s*:\s*")[^"]*(")',
+            re.IGNORECASE,
         ),
         r"\1***\2",
     ),
@@ -22,14 +23,16 @@ _SENSITIVE_PREVIEW_PATTERNS = (
 )
 
 
-def _build_headers() -> Dict[str, str]:
-    from .auth import get_device_id
-
-    return {
+def _build_headers(*, access_token: str = "", device_id: str = "") -> Dict[str, str]:
+    headers = {
         "Content-Type": "application/json",
-        "X-Device-ID": get_device_id(),
         **DEFAULT_HTTP_HEADERS,
     }
+    if access_token:
+        headers["Authorization"] = f"Bearer {access_token}"
+    if device_id:
+        headers["X-Device-ID"] = device_id
+    return headers
 
 
 def _preview_text(value: Any, *, limit: int = _LOG_BODY_PREVIEW_LIMIT) -> str:
@@ -92,7 +95,9 @@ def _log_extract_proxy_issue(
     )
 
 
-def _extract_error_payload(response: Any) -> RandomIPAuthError:
+def _extract_error_payload(
+    response: Any, *, sensitive_values: tuple[str, ...] = ()
+) -> RandomIPAuthError:
     retry_after = 0
     headers = getattr(response, "headers", {}) or {}
     try:
@@ -111,6 +116,9 @@ def _extract_error_payload(response: Any) -> RandomIPAuthError:
         )
     if not detail:
         detail = f"http_{getattr(response, 'status_code', 0) or 0}"
+    for value in sensitive_values:
+        if value:
+            detail = detail.replace(value, "***")
     return RandomIPAuthError(
         detail,
         status_code=int(getattr(response, "status_code", 0) or 0),
@@ -126,14 +134,20 @@ def _network_error_detail(exc: BaseException) -> str:
     return exc_type
 
 
-def _post_json(url: str, *, json_body: Dict[str, Any], timeout: float = 10) -> Any:
+def _post_json(
+    url: str,
+    *,
+    json_body: Dict[str, Any],
+    headers: Optional[Dict[str, str]] = None,
+    timeout: float = 10,
+) -> Any:
     from .auth import _endpoint_name
 
     try:
         return http_client.post(
             url,
             json=json_body,
-            headers=_build_headers(),
+            headers=headers or _build_headers(),
             timeout=timeout,
         )
     except Exception as exc:
@@ -146,16 +160,37 @@ def _post_json(url: str, *, json_body: Dict[str, Any], timeout: float = 10) -> A
         raise RandomIPAuthError(f"network_error:{detail}") from exc
 
 
-async def _apost_json(url: str, *, json_body: Dict[str, Any], timeout: float = 10) -> Any:
+async def _apost_json(
+    url: str,
+    *,
+    json_body: Dict[str, Any],
+    headers: Optional[Dict[str, str]] = None,
+    timeout: float = 10,
+) -> Any:
     from .auth import _endpoint_name
 
     try:
         return await http_client.apost(
             url,
             json=json_body,
-            headers=_build_headers(),
+            headers=headers or _build_headers(),
             timeout=timeout,
         )
+    except Exception as exc:
+        detail = _network_error_detail(exc)
+        logging.warning(
+            "随机IP异步请求失败：endpoint=%s error=%s",
+            _endpoint_name(url),
+            detail,
+        )
+        raise RandomIPAuthError(f"network_error:{detail}") from exc
+
+
+async def _aget_json(url: str, *, headers: Dict[str, str], timeout: float = 10) -> Any:
+    from .auth import _endpoint_name
+
+    try:
+        return await http_client.aget(url, headers=headers, timeout=timeout)
     except Exception as exc:
         detail = _network_error_detail(exc)
         logging.warning(

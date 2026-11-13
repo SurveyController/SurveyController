@@ -87,9 +87,13 @@ class RandomIpRuntimeService:
         return future
 
     def _resolve_counter_snapshot_values(self, snapshot: Dict[str, Any]) -> tuple[float, float]:
+        total = max(0.0, float(snapshot.get("total_quota") or 0.0))
+        if "remaining_quota" not in snapshot:
+            return max(0.0, float(snapshot.get("used_quota") or 0.0)), total
+        remaining = max(0.0, float(snapshot.get("remaining_quota") or 0.0))
         return (
-            max(0.0, float(snapshot.get("used_quota") or 0.0)),
-            max(0.0, float(snapshot.get("total_quota") or 0.0)),
+            max(0.0, total - remaining),
+            total,
         )
 
     def _show_random_ip_message(
@@ -187,10 +191,27 @@ class RandomIpRuntimeService:
             bool(custom_api or local_custom_api),
         )
 
-    def _refresh_random_ip_counter_now(self, adapter: Optional[Any]) -> None:
+    def _refresh_random_ip_counter_now(
+        self, adapter: Optional[Any], *, connect_legacy: bool = False
+    ) -> None:
         if not adapter:
             return
         self._proxy_gateway.load_session_for_startup()
+        if (
+            connect_legacy
+            and not self._proxy_gateway.is_custom_api_active()
+            and not self._proxy_gateway.has_authenticated_session()
+        ):
+            try:
+                asyncio.get_running_loop()
+            except RuntimeError:
+                try:
+                    asyncio.run(self._proxy_gateway.ensure_authenticated_session())
+                except Exception as connection_error:
+                    logging.info(
+                        "随机IP账户自动连接失败：%s",
+                        self._proxy_gateway.format_error(connection_error),
+                    )
         try:
             used, total, custom_api = self._get_counter_snapshot()
         except ProxyAuthenticationError as exc:
@@ -214,7 +235,9 @@ class RandomIpRuntimeService:
             raise RuntimeError("异步引擎未初始化")
         return engine_client.submit_ui_task(task_name, coro_factory)
 
-    def refresh_random_ip_counter(self, *, adapter: Optional[Any] = None) -> None:
+    def refresh_random_ip_counter(
+        self, *, adapter: Optional[Any] = None, connect_legacy: bool = False
+    ) -> None:
         if not self._proxy_callbacks_active():
             return
         adapter = adapter or getattr(self, "adapter", None)
@@ -223,7 +246,7 @@ class RandomIpRuntimeService:
         try:
             self._submit_random_ip_background_task(
                 "refresh_random_ip_counter",
-                lambda: self._refresh_random_ip_counter_now(adapter),
+                lambda: self._refresh_random_ip_counter_now(adapter, connect_legacy=connect_legacy),
             )
         except Exception:
             logging.info("提交随机IP计数刷新任务失败", exc_info=True)
@@ -256,10 +279,19 @@ class RandomIpRuntimeService:
             )
             if not silent:
                 self._show_random_ip_message(adapter, "proxy_sync_failed", message, level="warning")
-            try:
-                self._refresh_random_ip_counter_now(adapter)
-            except Exception:
-                logging.info("同步失败后回退随机IP本地额度显示失败", exc_info=True)
+            if isinstance(exc, ProxyAuthenticationError) and exc.detail == "invalid_access_token":
+                try:
+                    used, total, custom_api = self._get_counter_snapshot()
+                    self._apply_random_ip_counter(
+                        adapter, used=used, total=total, custom_api=custom_api
+                    )
+                except Exception:
+                    logging.info("同步失败后更新本地额度显示失败", exc_info=True)
+            else:
+                try:
+                    self._refresh_random_ip_counter_now(adapter)
+                except Exception:
+                    logging.info("同步失败后回退随机IP本地额度显示失败", exc_info=True)
         finally:
             self._finish_random_ip_server_sync(succeeded=succeeded)
 
@@ -315,26 +347,23 @@ class RandomIpRuntimeService:
         except Exception:
             logging.info("提交随机IP额度同步任务失败", exc_info=True)
 
-    async def _try_activate_random_ip_trial_async(
+    async def _try_connect_random_ip_account_async(
         self,
         adapter: Optional[Any],
     ) -> tuple[bool, bool]:
         try:
-            self._set_random_ip_loading(adapter, True, "claiming_trial")
-            session = await self._proxy_gateway.activate_trial()
+            self._set_random_ip_loading(adapter, True, "connecting_account")
+            session = await self._proxy_gateway.ensure_authenticated_session()
         except ProxyAuthenticationError as exc:
             message = self._proxy_gateway.format_error(exc)
-            if exc.detail in {
-                "trial_already_claimed",
-                "trial_already_used",
-                "device_trial_already_claimed",
-            }:
-                self._show_random_ip_message(adapter, "trial_claimed", message, level="warning")
-                return False, True
-            self._show_random_ip_message(adapter, "trial_failed", message, level="error")
+            self._show_random_ip_message(
+                adapter, "account_connection_failed", message, level="error"
+            )
             return False, False
         except Exception as exc:
-            self._show_random_ip_message(adapter, "trial_failed", str(exc), level="error")
+            self._show_random_ip_message(
+                adapter, "account_connection_failed", str(exc), level="error"
+            )
             return False, False
         finally:
             self._set_random_ip_loading(adapter, False, "")
@@ -347,24 +376,10 @@ class RandomIpRuntimeService:
     async def _ensure_random_ip_ready_async(self, adapter: Optional[Any]) -> bool:
         if self._proxy_gateway.has_authenticated_session():
             return True
-        activated, should_fallback_to_form = await self._try_activate_random_ip_trial_async(adapter)
-        if activated:
+        connected, _ = await self._try_connect_random_ip_account_async(adapter)
+        if connected:
             return True
-        if not should_fallback_to_form:
-            return False
-        if not adapter:
-            return False
-        try:
-            return bool(await asyncio.wrap_future(adapter.request_quota()))
-        except Exception:
-            logging.info("打开随机IP额度兑换入口失败", exc_info=True)
-            self._show_random_ip_message(
-                adapter,
-                "quota_required",
-                "",
-                level="warning",
-            )
-            return False
+        return False
 
     async def _toggle_random_ip_async(self, enabled: bool, adapter: Optional[Any]) -> bool:
         adapter = adapter or getattr(self, "adapter", None)

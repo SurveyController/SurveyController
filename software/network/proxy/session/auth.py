@@ -1,12 +1,16 @@
 from __future__ import annotations
 
+import asyncio
 import logging
+import re
 import threading
-from urllib.parse import urlsplit
+from concurrent.futures import Future
 from dataclasses import replace
-from typing import Any, Dict, List, Optional
+from urllib.parse import urlsplit
+from typing import Any, Dict, Optional
 
 from software.network.config import (
+    AUTH_SESSION_ENDPOINT,
     AUTH_TRIAL_ENDPOINT,
     CARD_REDEEM_ENDPOINT,
     IP_EXTRACT_ENDPOINT,
@@ -15,7 +19,10 @@ from software.io.runtime_environment import preference_store as app_settings
 from software.logging.log_utils import log_suppressed_exception
 from software.system.device_fingerprint import build_stable_device_id
 
+from . import store
 from .client import (
+    _aget_json,
+    _build_headers,
     _apost_json,
     _extract_error_payload,
     _log_extract_proxy_issue,
@@ -28,17 +35,12 @@ from .normalize import (
     _is_valid_user_id,
     _normalize_quota_known,
     _normalize_quota_state,
-    _quota_equals,
     _require_valid_user_id,
     _resolve_quota_from_payload,
     _session_state_name,
     _to_non_negative_int,
     _to_non_negative_quota,
-    _to_optional_bool,
-    format_quota_value,
 )
-
-_SESSION_PREFIX = "random_ip_auth/"
 
 _SESSION_PERSIST_FAILED_DETAIL = "session_persist_failed"
 _EXTRACT_REQUEST_BASE_TIMEOUT_SECONDS = 10.0
@@ -51,18 +53,18 @@ _session_loaded = False
 
 _session = RandomIPSession()
 _session_revision = 0
+_authentication_future: Future[RandomIPSession] | None = None
 
 
 def _get_settings() -> Any:
     return app_settings()
 
 
-def _settings_key(name: str) -> str:
-    return f"{_SESSION_PREFIX}{name}"
+_settings_key = store.settings_key
 
 
 def _has_complete_session(session: RandomIPSession) -> bool:
-    return _is_valid_user_id(session.user_id)
+    return _is_valid_user_id(session.user_id) and bool(session.access_token)
 
 
 def _endpoint_name(url: str) -> str:
@@ -84,103 +86,9 @@ def _extract_request_timeout_seconds(num: int) -> float:
 def _ensure_loaded() -> None:
     global _session_loaded, _session
     with _session_lock:
-        if _session_loaded:
-            return
-        settings = _get_settings()
-        device_id = str(settings.value(_settings_key("device_id")) or "").strip()
-        if not device_id:
-            device_id = build_stable_device_id()
-            settings.setValue(_settings_key("device_id"), device_id)
-            settings.sync()
-        loaded_user_id = _to_non_negative_int(settings.value(_settings_key("user_id")), 0)
-        loaded_remaining_quota = _to_non_negative_quota(
-            settings.value(_settings_key("remaining_quota")), 0.0
-        )
-        loaded_total_quota = _to_non_negative_quota(
-            settings.value(_settings_key("total_quota")), loaded_remaining_quota
-        )
-        loaded_used_quota = _to_non_negative_quota(
-            settings.value(_settings_key("used_quota")),
-            max(0.0, loaded_total_quota - loaded_remaining_quota),
-        )
-        loaded_quota_known = _to_optional_bool(settings.value(_settings_key("quota_known")))
-        normalized_remaining, normalized_total, normalized_used = _normalize_quota_state(
-            remaining_quota=loaded_remaining_quota,
-            total_quota=loaded_total_quota,
-            used_quota=loaded_used_quota,
-        )
-        loaded_session = RandomIPSession(
-            device_id=device_id,
-            user_id=loaded_user_id,
-            remaining_quota=normalized_remaining,
-            total_quota=normalized_total,
-            used_quota=normalized_used,
-            quota_known=_normalize_quota_known(
-                user_id=loaded_user_id,
-                total_quota=normalized_total,
-                used_quota=normalized_used,
-                quota_known=loaded_quota_known,
-            ),
-        )
-        _session = loaded_session
-        _session_loaded = True
-        logging.debug("随机IP本地会话已加载")
-
-
-def _persist_session_locked() -> None:
-    settings = _get_settings()
-    settings.setValue(_settings_key("device_id"), str(_session.device_id or "").strip())
-    settings.setValue(_settings_key("user_id"), int(_session.user_id or 0))
-    settings.setValue(
-        _settings_key("remaining_quota"), format_quota_value(_session.remaining_quota)
-    )
-    settings.setValue(_settings_key("total_quota"), format_quota_value(_session.total_quota))
-    settings.setValue(_settings_key("used_quota"), format_quota_value(_session.used_quota))
-    settings.setValue(_settings_key("quota_known"), bool(_session.quota_known))
-    settings.sync()
-
-
-def _verify_persisted_session(session: RandomIPSession) -> None:
-    settings = _get_settings()
-    failures: List[str] = []
-    expected_device_id = str(session.device_id or "").strip()
-    expected_user_id = int(session.user_id or 0)
-    expected_remaining_quota = _to_non_negative_quota(session.remaining_quota, 0.0)
-    expected_total_quota = _to_non_negative_quota(session.total_quota, 0.0)
-    expected_used_quota = _to_non_negative_quota(session.used_quota, 0.0)
-    expected_quota_known = bool(session.quota_known)
-
-    persisted_device_id = str(settings.value(_settings_key("device_id")) or "").strip()
-    if persisted_device_id != expected_device_id:
-        failures.append("settings.device_id")
-
-    persisted_user_id = _to_non_negative_int(settings.value(_settings_key("user_id")), -1)
-    if persisted_user_id != expected_user_id:
-        failures.append("settings.user_id")
-
-    persisted_remaining_quota = _to_non_negative_quota(
-        settings.value(_settings_key("remaining_quota")), -1.0
-    )
-    if not _quota_equals(persisted_remaining_quota, expected_remaining_quota):
-        failures.append("settings.remaining_quota")
-
-    persisted_total_quota = _to_non_negative_quota(
-        settings.value(_settings_key("total_quota")), -1.0
-    )
-    if not _quota_equals(persisted_total_quota, expected_total_quota):
-        failures.append("settings.total_quota")
-
-    persisted_used_quota = _to_non_negative_quota(settings.value(_settings_key("used_quota")), -1.0)
-    if not _quota_equals(persisted_used_quota, expected_used_quota):
-        failures.append("settings.used_quota")
-
-    persisted_quota_known = _to_optional_bool(settings.value(_settings_key("quota_known")))
-    if persisted_quota_known is None or bool(persisted_quota_known) != expected_quota_known:
-        failures.append("settings.quota_known")
-
-    if failures:
-        logging.error("随机IP会话持久化校验失败：%s", ", ".join(failures))
-        raise RandomIPAuthError(f"{_SESSION_PERSIST_FAILED_DETAIL}:{','.join(failures)}")
+        if not _session_loaded:
+            _session = store.load_session(_get_settings(), build_stable_device_id)
+            _session_loaded = True
 
 
 def _set_session(
@@ -216,13 +124,16 @@ def _set_session(
         )
         _session = candidate
         try:
-            _persist_session_locked()
-            if verify_auth_persistence:
-                _verify_persisted_session(candidate)
+            store.persist_session(_get_settings(), candidate, verify=verify_auth_persistence)
+            if candidate.access_token != previous_session.access_token:
+                store.persist_access_token(candidate.access_token)
             _session_revision += 1
             return _session
         except Exception:
             _session = previous_session
+            store.persist_session(_get_settings(), previous_session)
+            if candidate.access_token != previous_session.access_token:
+                store.persist_access_token(previous_session.access_token)
             raise
 
 
@@ -242,13 +153,7 @@ def clear_session(*, reason: str = "unspecified") -> None:
         _ensure_loaded()
         _session = RandomIPSession(device_id=_session.device_id)
         _session_revision += 1
-        settings = _get_settings()
-        settings.remove(_settings_key("user_id"))
-        settings.remove(_settings_key("remaining_quota"))
-        settings.remove(_settings_key("total_quota"))
-        settings.remove(_settings_key("used_quota"))
-        settings.remove(_settings_key("quota_known"))
-        settings.sync()
+        store.clear_session(_get_settings())
         logging.warning("随机IP本地会话已清空：%s", reason)
 
 
@@ -268,7 +173,7 @@ def get_session_snapshot() -> Dict[str, Any]:
         "total_quota": quota["total_quota"],
         "used_quota": quota["used_quota"],
         "quota_known": bool(quota.get("quota_known")),
-        "has_access_token": False,
+        "has_access_token": bool(session.access_token),
         "has_refresh_token": False,
         "has_valid_user_id": _is_valid_user_id(session.user_id),
         "session_state": _session_state_name(session),
@@ -294,9 +199,7 @@ def is_quota_exhausted(snapshot: Optional[Dict[str, Any]] = None) -> bool:
         return False
     if "quota_known" in payload and not bool(payload.get("quota_known")):
         return False
-    total_quota = _to_non_negative_quota(payload.get("total_quota"), 0.0)
-    used_quota = _to_non_negative_quota(payload.get("used_quota"), 0.0)
-    return total_quota > 0 and used_quota >= total_quota
+    return _to_non_negative_quota(payload.get("remaining_quota"), 0.0) <= 0
 
 
 def format_random_ip_error(exc: BaseException) -> str:
@@ -307,18 +210,14 @@ def format_random_ip_error(exc: BaseException) -> str:
         return "设备标识缺失，请重启软件后重试"
     if detail == "invalid_request_body":
         return "请求格式不正确，请更新客户端后重试"
-    if detail in {"trial_already_claimed", "trial_already_used", "device_trial_already_claimed"}:
-        return "当前设备已领取过免费试用，请前往申请随机IP额度"
-    if detail == "trial_ip_rate_limited":
-        return "当前网络领取试用过于频繁，请稍后再试"
-    if detail == "trial_activate_failed":
-        return "服务端创建试用账号失败，请稍后再试"
-    if detail == "trial_rate_limited":
-        if exc.retry_after_seconds > 0:
-            return f"领取试用过于频繁，请 {exc.retry_after_seconds} 秒后再试"
-        return "领取试用过于频繁，请稍后再试"
-    if detail.startswith(_SESSION_PERSIST_FAILED_DETAIL):
-        return "随机IP账号信息没能安全保存到本机，当前会话已停止使用。请重新领取试用或通过社区 QQ 群获取帮助。"
+    if detail.startswith(_SESSION_PERSIST_FAILED_DETAIL) or detail == "session_store_unavailable":
+        return "随机IP账号信息没能安全保存或读取，请重启软件重试或通过社区 QQ 群获取帮助"
+    if detail in {"invalid_legacy_session", "device_not_bound"}:
+        return "本机旧账户与设备记录无法匹配，请通过社区 QQ 群获取帮助"
+    if detail == "invalid_access_token":
+        return "随机IP登录已失效，请重新启用随机IP连接账户"
+    if detail == "token_exchange_rate_limited":
+        return "账户连接过于频繁，请稍后重试"
     if detail == "device_banned":
         return "当前设备已被封禁，请通过社区 QQ 群获取帮助"
     if detail == "user_banned":
@@ -328,11 +227,11 @@ def format_random_ip_error(exc: BaseException) -> str:
     if detail == "device_owned_by_other_user":
         return "当前设备绑定的随机IP账号与本机记录不一致，请通过社区 QQ 群获取帮助"
     if detail == "user_id_required":
-        return "本机缺少随机IP用户ID，请重新领取试用后再试"
+        return "本机缺少随机IP用户ID，请通过社区 QQ 群获取帮助"
     if detail == "invalid_user_id":
-        return "本机保存的随机IP用户ID无效，请重新领取试用或通过社区 QQ 群获取帮助"
+        return "本机保存的随机IP用户ID无效，请重新连接账户或通过社区 QQ 群获取帮助"
     if detail == "unauthorized":
-        return "随机IP账号校验失败，请重新领取试用或通过社区 QQ 群获取帮助"
+        return "随机IP账号校验失败，请重新连接账户或通过社区 QQ 群获取帮助"
     if detail == "minute_not_allowed":
         return "代理时长参数不被后端接受，请更新客户端"
     if detail == "pool_not_allowed":
@@ -364,7 +263,7 @@ def format_random_ip_error(exc: BaseException) -> str:
     if detail == "upstream_rejected":
         return "上游代理服务拒绝了请求，请稍后重试"
     if detail == "not_authenticated":
-        return "请先领取免费试用或兑换额度后再使用随机IP"
+        return "本机没有可恢复的随机IP账户，当前暂不支持新账户开通"
     if detail == "session_changed":
         return "随机IP会话已更新，请重试"
     if detail.startswith("network_error:"):
@@ -399,6 +298,8 @@ def _parse_session_payload(
             ",".join(sorted(str(k) for k in data.keys())),
         )
         raise RandomIPAuthError("invalid_response:user_id_invalid")
+    if fallback.user_id and _require_valid_user_id(raw_user_id) != fallback.user_id:
+        raise RandomIPAuthError("invalid_response:user_id_mismatch")
     normalized_remaining, normalized_total, normalized_used, quota_known = (
         _resolve_quota_from_payload(
             data,
@@ -409,6 +310,7 @@ def _parse_session_payload(
     session = RandomIPSession(
         device_id=device_id,
         user_id=_require_valid_user_id(raw_user_id),
+        access_token=fallback.access_token,
         remaining_quota=normalized_remaining,
         total_quota=normalized_total,
         used_quota=normalized_used,
@@ -422,39 +324,97 @@ def _parse_session_response(
 ) -> RandomIPSession:
     try:
         data = response.json()
-    except Exception as exc:
-        raise RandomIPAuthError(f"invalid_response:{exc}") from exc
+    except Exception:
+        raise RandomIPAuthError("invalid_response") from None
     if not isinstance(data, dict):
         raise RandomIPAuthError("invalid_response")
     device_id = fallback_session.device_id if fallback_session is not None else get_device_id()
     return _parse_session_payload(data, device_id=device_id, fallback_session=fallback_session)
 
 
-async def activate_trial_async() -> RandomIPSession:
+async def ensure_authenticated_session_async() -> RandomIPSession:
+    global _authentication_future
     with _session_lock:
-        _ensure_loaded()
+        session = _read_session()
+        if _has_complete_session(session):
+            return session
+        if not _is_valid_user_id(session.user_id) or not session.device_id:
+            raise RandomIPAuthError("not_authenticated")
+        owner = _authentication_future is None
+        if owner:
+            _authentication_future = Future()
+        pending = _authentication_future
         session_revision = _session_revision
-    logging.debug("正在领取随机IP试用")
-    response = await _apost_json(AUTH_TRIAL_ENDPOINT, json_body={})
-    if int(getattr(response, "status_code", 0) or 0) != 200:
-        error = _extract_error_payload(response)
-        logging.warning(
-            "随机IP试用领取失败：%s",
-            format_random_ip_error(error),
-        )
-        raise error
-    session = _parse_session_response(response)
+    assert pending is not None
+    if not owner:
+        return replace(await asyncio.shield(asyncio.wrap_future(pending)))
     try:
-        persisted = _set_session(
-            session, verify_auth_persistence=True, expected_revision=session_revision
+        response = await _apost_json(
+            AUTH_TRIAL_ENDPOINT,
+            json_body={"user_id": session.user_id},
+            headers=_build_headers(device_id=session.device_id),
         )
-        logging.info("随机IP试用领取成功")
-        return persisted
-    except RandomIPAuthError as exc:
-        if exc.detail.startswith(_SESSION_PERSIST_FAILED_DETAIL):
-            clear_session(reason="trial_persist_failed")
-        logging.warning("随机IP试用领取后保存失败：detail=%s", exc.detail)
+        if response.status_code != 200:
+            raise _extract_error_payload(response)
+        data = response.json()
+        if not isinstance(data, dict):
+            raise RandomIPAuthError("invalid_response")
+        token = data.get("access_token")
+        if (
+            not isinstance(token, str)
+            or len(token) < 64
+            or not token.isascii()
+            or any(char.isspace() for char in token)
+            or data.get("token_type") != "Bearer"
+        ):
+            raise RandomIPAuthError("invalid_response:access_token")
+        candidate = _parse_session_payload(
+            data, device_id=session.device_id, fallback_session=session
+        )
+        candidate.access_token = token
+        result = _set_session(
+            candidate, verify_auth_persistence=True, expected_revision=session_revision
+        )
+        pending.set_result(result)
+        return replace(result)
+    except BaseException as exc:
+        pending.set_exception(exc)
+        pending.exception()
         raise
+    finally:
+        with _session_lock:
+            if _authentication_future is pending:
+                _authentication_future = None
+
+
+def invalidate_access_token(session: RandomIPSession) -> None:
+    with _session_lock:
+        current = _read_session()
+        if (
+            current.user_id == session.user_id
+            and current.device_id == session.device_id
+            and current.access_token == session.access_token
+        ):
+            _set_session(replace(current, access_token=""))
+
+
+def _response_error(
+    response: Any,
+    session: RandomIPSession,
+    *,
+    sensitive_values: tuple[str, ...] = (),
+) -> RandomIPAuthError:
+    error = _extract_error_payload(
+        response,
+        sensitive_values=(session.access_token, *sensitive_values),
+    )
+    if error.detail == "invalid_access_token":
+        invalidate_access_token(session)
+    return error
+
+
+def get_authenticated_session() -> RandomIPSession:
+    return _require_authenticated_session()
 
 
 def _require_authenticated_session() -> RandomIPSession:
@@ -494,6 +454,7 @@ async def extract_proxy_async(
         response = await _apost_json(
             IP_EXTRACT_ENDPOINT,
             json_body=body,
+            headers=_build_headers(access_token=session.access_token),
             timeout=_extract_request_timeout_seconds(request_num),
         )
     except RandomIPAuthError as exc:
@@ -507,7 +468,7 @@ async def extract_proxy_async(
             _log_extract_proxy_issue(
                 "随机IP提取响应解析失败", request_body=body, attempt=1, response=response, error=exc
             )
-            raise RandomIPAuthError(f"invalid_response:{exc}") from exc
+            raise RandomIPAuthError("invalid_response") from None
         if not isinstance(data, dict):
             _log_extract_proxy_issue(
                 "随机IP提取响应结构异常", request_body=body, attempt=1, response=response
@@ -528,7 +489,7 @@ async def extract_proxy_async(
             response=response,
             expected_revision=session_revision,
         )
-    error = _extract_error_payload(response)
+    error = _response_error(response, session)
     _log_extract_proxy_issue(
         "随机IP提取失败", request_body=body, attempt=1, response=response, error=error
     )
@@ -549,9 +510,11 @@ async def sync_quota_snapshot_from_server_async(*, emit_logs: bool = True) -> Di
         session_revision = _session_revision
     if emit_logs:
         logging.debug("正在同步随机IP额度")
-    response = await _apost_json(AUTH_TRIAL_ENDPOINT, json_body={})
-    if int(getattr(response, "status_code", 0) or 0) != 200:
-        error = _extract_error_payload(response)
+    response = await _aget_json(
+        AUTH_SESSION_ENDPOINT, headers=_build_headers(access_token=session.access_token)
+    )
+    if response.status_code != 200:
+        error = _response_error(response, session)
         if emit_logs:
             logging.warning(
                 "随机IP额度同步失败：%s",
@@ -596,19 +559,19 @@ async def redeem_card_async(card_code: str) -> Dict[str, Any]:
         session = _require_authenticated_session()
         session_revision = _session_revision
     normalized_card_code = str(card_code or "").strip()
+    if re.fullmatch(r"[a-z0-9]{16}", normalized_card_code) is None:
+        raise RandomIPAuthError("invalid_redeem_card_code")
     response = await _apost_json(
         CARD_REDEEM_ENDPOINT,
-        json_body={
-            "user_id": int(session.user_id),
-            "card_code": normalized_card_code,
-        },
+        json_body={"card_code": normalized_card_code},
+        headers=_build_headers(access_token=session.access_token),
     )
     if int(getattr(response, "status_code", 0) or 0) != 200:
-        raise _extract_error_payload(response)
+        raise _response_error(response, session, sensitive_values=(normalized_card_code,))
     try:
         data = response.json()
-    except Exception as exc:
-        raise RandomIPAuthError(f"invalid_response:{exc}") from exc
+    except Exception:
+        raise RandomIPAuthError("invalid_response") from None
     if not isinstance(data, dict):
         raise RandomIPAuthError("invalid_response")
 

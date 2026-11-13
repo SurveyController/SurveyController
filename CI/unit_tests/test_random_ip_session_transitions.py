@@ -5,7 +5,7 @@ from types import SimpleNamespace
 
 import pytest
 
-from software.network.config import AUTH_TRIAL_ENDPOINT
+from software.network.config import AUTH_SESSION_ENDPOINT
 from software.network.proxy.session import auth
 from software.network.proxy.session.models import RandomIPAuthError, RandomIPSession
 
@@ -20,6 +20,7 @@ def session_settings(monkeypatch):
         sync=lambda: None,
     )
     monkeypatch.setattr(auth, "_get_settings", lambda: settings)
+    monkeypatch.setattr(auth.store, "persist_access_token", lambda _token: None)
     monkeypatch.setattr(auth, "_session_loaded", True)
     monkeypatch.setattr(auth, "_session_revision", 0)
     monkeypatch.setattr(
@@ -28,6 +29,7 @@ def session_settings(monkeypatch):
         RandomIPSession(
             device_id="unit-device",
             user_id=17,
+            access_token="t" * 64,
             remaining_quota=1,
             total_quota=1,
             used_quota=0,
@@ -49,7 +51,7 @@ async def test_late_sync_does_not_restore_quota_consumed_by_extraction(
     finish_sync = asyncio.Event()
 
     async def post(url, **_kwargs):
-        if url == AUTH_TRIAL_ENDPOINT:
+        if url == AUTH_SESSION_ENDPOINT:
             sync_started.set()
             await finish_sync.wait()
             return response({"user_id": 17, "total_quota": 1, "used_quota": 0})
@@ -65,6 +67,7 @@ async def test_late_sync_does_not_restore_quota_consumed_by_extraction(
         )
 
     monkeypatch.setattr(auth, "_apost_json", post)
+    monkeypatch.setattr(auth, "_aget_json", post)
     sync_task = asyncio.create_task(auth.sync_quota_snapshot_from_server_async(emit_logs=False))
     await sync_started.wait()
     await auth.extract_proxy_async(minute=1, pool="quality", area=None)
@@ -78,7 +81,7 @@ async def test_late_sync_does_not_restore_quota_consumed_by_extraction(
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("operation", ["sync", "extract", "extract_batch", "redeem", "activate"])
+@pytest.mark.parametrize("operation", ["sync", "extract", "extract_batch", "redeem"])
 @pytest.mark.parametrize("replacement_user_id", [0, 17, 23])
 async def test_old_response_does_not_restore_or_overwrite_changed_session(
     session_settings, monkeypatch, operation, replacement_user_id
@@ -111,14 +114,14 @@ async def test_old_response_does_not_restore_or_overwrite_changed_session(
         )
 
     monkeypatch.setattr(auth, "_apost_json", post)
+    monkeypatch.setattr(auth, "_aget_json", post)
     operations = {
         "sync": lambda: auth.sync_quota_snapshot_from_server_async(emit_logs=False),
         "extract": lambda: auth.extract_proxy_async(minute=1, pool="quality", area=None),
         "extract_batch": lambda: auth.extract_proxy_async(
             minute=1, pool="quality", area=None, num=2
         ),
-        "redeem": lambda: auth.redeem_card_async("unit-card"),
-        "activate": auth.activate_trial_async,
+        "redeem": lambda: auth.redeem_card_async("a" * 16),
     }
     pending = asyncio.create_task(operations[operation]())
     await request_started.wait()
@@ -127,6 +130,7 @@ async def test_old_response_does_not_restore_or_overwrite_changed_session(
             RandomIPSession(
                 device_id="unit-device",
                 user_id=replacement_user_id,
+                access_token="r" * 64,
                 remaining_quota=3,
                 total_quota=5,
                 used_quota=2,

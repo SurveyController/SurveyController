@@ -265,25 +265,19 @@ def test_close_waits_for_shutdown_worker_completion():
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("accepted", [True, False])
-async def test_proxy_quota_waits_for_the_matching_ui_reply(accepted):
+async def test_random_ip_connection_without_legacy_account_does_not_open_redeem_form():
     harness = Harness()
 
-    async def already_claimed():
-        raise ProxyAuthenticationError("trial_already_claimed")
+    async def no_legacy_account():
+        raise ProxyAuthenticationError("not_authenticated")
 
-    harness.service._proxy_gateway.activate_trial = already_claimed
+    harness.service._proxy_gateway.ensure_authenticated_session = no_legacy_account
     pending = asyncio.create_task(
         harness.service._ensure_random_ip_ready_async(harness.service.adapter)
     )
     try:
-        await asyncio.sleep(0)
-        request = next(
-            request for request in harness.requests if request.kind == InteractionKind.QUOTA
-        )
-        assert not pending.done()
-        harness.interactions.resolve(request.request_id, accepted)
-        assert await asyncio.wait_for(pending, timeout=2) is accepted
+        assert await asyncio.wait_for(pending, timeout=2) is False
+        assert not any(request.kind == InteractionKind.QUOTA for request in harness.requests)
     finally:
         harness.close()
         await asyncio.gather(pending, return_exceptions=True)

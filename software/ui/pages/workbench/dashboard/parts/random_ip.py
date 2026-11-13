@@ -217,14 +217,13 @@ class DashboardRandomIPMixin:
         total = max(0.0, float(limit or 0.0))
         remaining_snapshot = max(0.0, float(snapshot.get("remaining_quota") or 0.0))
         remaining = min(total, remaining_snapshot) if total > 0 else remaining_snapshot
-        if total > 0 and remaining_snapshot <= 0:
-            remaining = max(0.0, total - used)
         quota_exhausted = is_quota_exhausted(
             {
                 "authenticated": authenticated,
                 "user_id": int(snapshot.get("user_id") or 0),
                 "used_quota": used,
                 "total_quota": total,
+                "remaining_quota": remaining,
             }
         )
         self.card_btn.setEnabled(True)
@@ -235,7 +234,7 @@ class DashboardRandomIPMixin:
         if authenticated:
             self.card_btn.setToolTip("通常情况下，1额度即提交1份问卷")
         else:
-            self.card_btn.setToolTip("先勾选随机IP领取试用账号，之后才能在这里兑换额度卡密")
+            self.card_btn.setToolTip("本机没有可恢复的随机IP账户，当前暂不支持新账户开通")
 
         if custom_api:
             self._sync_random_ip_usage_ring(mode="paused", percent=0, format_text="自定义")
@@ -413,11 +412,11 @@ class DashboardRandomIPMixin:
             self._ip_low_infobar.hide()
             self._ip_low_infobar_dismissed = False
             return
-        if not has_authenticated_session():
+        if not has_authenticated_session() or has_unknown_local_quota(get_session_snapshot()):
             self._ip_low_infobar.hide()
             self._ip_low_infobar_dismissed = False
             return
-        remaining = max(0.0, float(limit or 0.0) - float(count or 0.0))
+        remaining = max(0.0, float(get_session_snapshot().get("remaining_quota") or 0.0))
         limit_value = max(0.0, float(limit or 0.0))
         threshold = max(5.0, min(50.0, limit_value / 5 if limit_value > 0 else 5.0))
         self._ip_low_threshold = threshold

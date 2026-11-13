@@ -248,7 +248,7 @@ class MainWindowLifecycleMixin:
         workbench = getattr(self, "workbench", None)
         if workbench is not None and hasattr(workbench, "apply_config"):
             workbench.apply_config(cfg)
-            self.controller.refresh_random_ip_counter()
+            self.controller.refresh_random_ip_counter(connect_legacy=True)
             return
         self.runtime_page.apply_config(cfg)
         self.dashboard.apply_config(cfg)
@@ -260,7 +260,7 @@ class MainWindowLifecycleMixin:
         )
         self.strategy_page.set_rules(getattr(cfg, "answer_rules", []) or [])
         self.strategy_page.set_dimension_groups(getattr(cfg, "dimension_groups", []) or [])
-        self.controller.refresh_random_ip_counter()
+        self.controller.refresh_random_ip_counter(connect_legacy=True)
 
     def _on_random_ip_counter_update(self, count: float, limit: float, custom_api: bool) -> None:
         try:

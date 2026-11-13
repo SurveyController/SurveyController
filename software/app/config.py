@@ -11,6 +11,7 @@ from software.core.text_constants import (
     WHITESPACE_PATTERN,
 )
 from software.network.config import (
+    AUTH_SESSION_ENDPOINT,
     AUTH_TRIAL_ENDPOINT,
     CARD_REDEEM_ENDPOINT,
     IP_EXTRACT_ENDPOINT,
@@ -42,6 +43,7 @@ __all__ = [
     "USER_AGENT_PRESETS",
     "DEFAULT_FILL_TEXT",
     "AUTH_TRIAL_ENDPOINT",
+    "AUTH_SESSION_ENDPOINT",
     "CARD_REDEEM_ENDPOINT",
     "IP_EXTRACT_ENDPOINT",
     "PROXY_HEALTH_CHECK_TIMEOUT",

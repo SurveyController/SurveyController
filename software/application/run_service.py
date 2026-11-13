@@ -66,11 +66,6 @@ class _ProxyStateAdapter:
     def set_random_ip_loading(self, loading: bool, message: str = "") -> None:
         self._service.notify_random_ip_loading(bool(loading), str(message or ""))
 
-    def request_quota(self) -> Future[bool]:
-        return self._service._interactions.request(
-            InteractionRequest.create(InteractionKind.QUOTA, "random_ip_required")
-        )
-
 
 class RunApplicationService(RandomIpRuntimeService):
     def __init__(

@@ -6,7 +6,7 @@ from typing import Any, Optional
 import software.network.http as http_client
 from software.network.config import SUBMISSION_REPORT_ENDPOINT
 from software.network.proxy.policy.source import PROXY_SOURCE_BENEFIT, PROXY_SOURCE_DEFAULT
-from software.network.proxy.session import get_device_id
+from software.network.proxy.session import get_authenticated_session, invalidate_access_token
 
 
 def _normalize_proxy_provider(proxy_provider: Any) -> str:
@@ -18,10 +18,10 @@ def _normalize_proxy_provider(proxy_provider: Any) -> str:
     return "unknown"
 
 
-def _build_headers() -> dict[str, str]:
+def _build_headers(token: str) -> dict[str, str]:
     return {
         "Content-Type": "application/json",
-        "X-Device-ID": get_device_id(),
+        "Authorization": f"Bearer {token}",
     }
 
 
@@ -43,6 +43,13 @@ async def report_submission_result_async(
         return False
     if normalized_user_id <= 0:
         return False
+    try:
+        session = get_authenticated_session()
+    except Exception:
+        return False
+    if normalized_user_id != session.user_id:
+        return False
+    normalized_user_id = session.user_id
 
     payload = {
         "user_id": normalized_user_id,
@@ -56,9 +63,17 @@ async def report_submission_result_async(
         response = await http_client.apost(
             SUBMISSION_REPORT_ENDPOINT,
             json=payload,
-            headers=_build_headers(),
+            headers=_build_headers(session.access_token),
             timeout=10,
         )
+        if int(getattr(response, "status_code", 0) or 0) == 401:
+            try:
+                payload = response.json()
+            except Exception:
+                payload = None
+            if isinstance(payload, dict) and payload.get("detail") == "invalid_access_token":
+                invalidate_access_token(session)
+                return False
         response.raise_for_status()
     except Exception as exc:
         logging.info("提交结果上报失败：%s", exc, exc_info=True)

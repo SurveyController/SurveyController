@@ -115,7 +115,7 @@ class FakeProxy:
     async def sync_quota_snapshot(self, *, emit_logs=True):
         return self.get_quota_snapshot()
 
-    async def activate_trial(self):
+    async def ensure_authenticated_session(self):
         return SimpleNamespace(total_quota=5, used_quota=1)
 
     def is_quota_exhausted(self, snapshot):

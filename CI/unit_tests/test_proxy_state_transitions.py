@@ -27,6 +27,7 @@ def official_proxy(monkeypatch):
     [
         "insufficient_quota",
         "not_authenticated",
+        "invalid_access_token",
         "session_changed",
         "invalid_user_id",
         "user_id_required",

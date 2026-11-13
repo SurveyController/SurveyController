@@ -14,7 +14,11 @@ class _Response:
 @pytest.mark.parametrize("client_version", [None, "4.0.1"])
 async def test_report_submission_result_posts_expected_payload(monkeypatch, client_version) -> None:
     calls: list[dict[str, object]] = []
-    monkeypatch.setattr(submission_report, "get_device_id", lambda: "device-1")
+    monkeypatch.setattr(
+        submission_report,
+        "get_authenticated_session",
+        lambda: type("Session", (), {"user_id": 73952, "access_token": "a" * 64})(),
+    )
 
     async def fake_post(*args, **kwargs):
         calls.append({"args": args, "kwargs": kwargs})
@@ -39,7 +43,7 @@ async def test_report_submission_result_posts_expected_payload(monkeypatch, clie
         "proxy_provider": "idiot",
         "client_version": client_version or "",
     }
-    assert kwargs["headers"]["X-Device-ID"] == "device-1"
+    assert kwargs["headers"]["Authorization"] == f"Bearer {'a' * 64}"
 
 
 @pytest.mark.asyncio

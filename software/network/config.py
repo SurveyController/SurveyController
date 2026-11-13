@@ -26,6 +26,7 @@ PROXY_POOL_ORDINARY = "ordinary"
 PROXY_POOL_QUALITY = "quality"
 
 _DEFAULT_AUTH_TRIAL = "https://api-wjx.hungrym0.com/api/auth/trial"
+_DEFAULT_AUTH_SESSION = "https://api-wjx.hungrym0.com/api/auth/session"
 _DEFAULT_CARD_REDEEM = "https://api-wjx.hungrym0.com/api/cards/redeem"
 _DEFAULT_IP_EXTRACT = "https://api-wjx.hungrym0.com/api/ip/extract"
 _DEFAULT_SUBMISSION_REPORT = "https://api-wjx.hungrym0.com/api/submission/report"
@@ -55,6 +56,7 @@ def _resolve_env_value(key: str, default: str) -> str:
 
 
 AUTH_TRIAL_ENDPOINT = _resolve_env_value("AUTH_TRIAL_ENDPOINT", _DEFAULT_AUTH_TRIAL)
+AUTH_SESSION_ENDPOINT = _resolve_env_value("AUTH_SESSION_ENDPOINT", _DEFAULT_AUTH_SESSION)
 CARD_REDEEM_ENDPOINT = _resolve_env_value("CARD_REDEEM_ENDPOINT", _DEFAULT_CARD_REDEEM)
 IP_EXTRACT_ENDPOINT = _resolve_env_value("IP_EXTRACT_ENDPOINT", _DEFAULT_IP_EXTRACT)
 SUBMISSION_REPORT_ENDPOINT = _resolve_env_value(
@@ -64,6 +66,7 @@ SUBMISSION_REPORT_ENDPOINT = _resolve_env_value(
 STATUS_ENDPOINT = _resolve_env_value("STATUS_ENDPOINT", _DEFAULT_STATUS)
 
 __all__ = [
+    "AUTH_SESSION_ENDPOINT",
     "AUTH_TRIAL_ENDPOINT",
     "CARD_REDEEM_ENDPOINT",
     "IP_EXTRACT_ENDPOINT",

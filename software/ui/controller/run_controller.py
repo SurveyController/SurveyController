@@ -238,8 +238,8 @@ class RunController(QObject):
             on_done=on_done,
         )
 
-    def refresh_random_ip_counter(self) -> None:
-        self.proxy_operations.refresh_random_ip_counter()
+    def refresh_random_ip_counter(self, *, connect_legacy: bool = False) -> None:
+        self.proxy_operations.refresh_random_ip_counter(connect_legacy=connect_legacy)
 
     def sync_random_ip_counter_from_server(
         self,

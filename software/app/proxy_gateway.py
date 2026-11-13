@@ -8,7 +8,7 @@ from software.network.proxy import is_custom_proxy_api_active
 from software.network.proxy.policy.source import get_random_ip_counter_snapshot_local
 from software.network.proxy.session import (
     RandomIPAuthError,
-    activate_trial_async,
+    ensure_authenticated_session_async,
     format_random_ip_error,
     get_fresh_quota_snapshot,
     get_quota_snapshot,
@@ -65,9 +65,9 @@ class PythonProxyGateway(ProxyGatewayPort):
         except RandomIPAuthError as exc:
             raise _raise_port_error(exc) from exc
 
-    async def activate_trial(self) -> Any:
+    async def ensure_authenticated_session(self) -> Any:
         try:
-            return await activate_trial_async()
+            return await ensure_authenticated_session_async()
         except RandomIPAuthError as exc:
             raise _raise_port_error(exc) from exc
 

@@ -5,19 +5,31 @@ import asyncio
 import pytest
 
 from software.network.proxy.session import auth
+from software.network.proxy.session import client
 from software.network.proxy.session.models import RandomIPAuthError, RandomIPSession
 
 
 @pytest.fixture(autouse=True)
 def isolate_random_ip_auth_storage(monkeypatch: pytest.MonkeyPatch):
     settings = _Settings()
+    token_storage = {"value": ""}
 
     monkeypatch.setattr(auth, "_get_settings", lambda: settings)
+    monkeypatch.setattr(auth.store, "load_access_token", lambda: token_storage["value"])
+    monkeypatch.setattr(
+        auth.store,
+        "persist_access_token",
+        lambda value: token_storage.__setitem__("value", value),
+    )
     auth._session_loaded = False
     auth._session = RandomIPSession()
+    auth._session_revision = 0
+    auth._authentication_future = None
     yield settings
     auth._session_loaded = False
     auth._session = RandomIPSession()
+    auth._session_revision = 0
+    auth._authentication_future = None
 
 
 class _Settings:
@@ -58,8 +70,7 @@ def _reset_auth_state(session: RandomIPSession | None = None) -> None:
     ("detail", "expected"),
     [
         ("device_id_required", "设备标识缺失"),
-        ("trial_already_claimed", "已领取过免费试用"),
-        ("trial_rate_limited", "领取试用过于频繁"),
+        ("invalid_access_token", "登录已失效"),
         ("session_persist_failed:settings.user_id", "没能安全保存"),
         ("device_banned", "当前设备已被封禁"),
         ("user_expired", "随机IP账号已过期"),
@@ -133,6 +144,7 @@ class RandomIPSessionAuthTests:
             RandomIPSession(
                 device_id="device-2",
                 user_id=9,
+                access_token="a" * 64,
                 remaining_quota=2,
                 total_quota=5,
                 used_quota=3,
@@ -208,12 +220,24 @@ class RandomIPSessionAuthTests:
 
     def test_extract_proxy_builds_request_body_and_parses_batch_payload(self, patch_attrs) -> None:
         _reset_auth_state(
-            RandomIPSession(device_id="device-5", user_id=33, total_quota=10, quota_known=True)
+            RandomIPSession(
+                device_id="device-5",
+                user_id=33,
+                access_token="a" * 64,
+                total_quota=10,
+                quota_known=True,
+            )
         )
         posted: list[dict[str, object]] = []
 
-        async def fake_post(_url: str, *, json_body: dict[str, object], timeout: float = 10):
-            posted.append({"body": json_body, "timeout": timeout})
+        async def fake_post(
+            _url: str,
+            *,
+            json_body: dict[str, object],
+            headers: dict[str, str],
+            timeout: float = 10,
+        ):
+            posted.append({"body": json_body, "headers": headers, "timeout": timeout})
             return _Response(
                 {
                     "provider": "default",
@@ -247,6 +271,11 @@ class RandomIPSessionAuthTests:
                     "num": 2,
                     "area": "110100",
                 },
+                "headers": {
+                    "Content-Type": "application/json",
+                    **client.DEFAULT_HTTP_HEADERS,
+                    "Authorization": f"Bearer {'a' * 64}",
+                },
                 "timeout": 12.0,
             }
         ]
@@ -262,6 +291,7 @@ class RandomIPSessionAuthTests:
             RandomIPSession(
                 device_id="device-7",
                 user_id=55,
+                access_token="a" * 64,
                 remaining_quota=1,
                 total_quota=2,
                 used_quota=1,
@@ -270,8 +300,8 @@ class RandomIPSessionAuthTests:
         )
         settings = _Settings()
 
-        async def fake_redeem_post(_url: str, *, json_body: dict[str, object]):
-            assert json_body == {"user_id": 55, "card_code": "abc123"}
+        async def fake_redeem_post(_url: str, *, json_body: dict[str, object], **_kwargs):
+            assert json_body == {"card_code": "a" * 16}
             return _Response(
                 {
                     "redeemed": True,
@@ -288,7 +318,7 @@ class RandomIPSessionAuthTests:
             (auth, "_apost_json", fake_redeem_post),
         )
 
-        result = asyncio.run(auth.redeem_card_async("abc123"))
+        result = asyncio.run(auth.redeem_card_async("a" * 16))
 
         assert result["redeemed"] is True
         assert result["card_quota"] == 400.0
