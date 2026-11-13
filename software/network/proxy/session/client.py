@@ -134,32 +134,6 @@ def _network_error_detail(exc: BaseException) -> str:
     return exc_type
 
 
-def _post_json(
-    url: str,
-    *,
-    json_body: Dict[str, Any],
-    headers: Optional[Dict[str, str]] = None,
-    timeout: float = 10,
-) -> Any:
-    from .auth import _endpoint_name
-
-    try:
-        return http_client.post(
-            url,
-            json=json_body,
-            headers=headers or _build_headers(),
-            timeout=timeout,
-        )
-    except Exception as exc:
-        detail = _network_error_detail(exc)
-        logging.warning(
-            "随机IP请求失败：endpoint=%s error=%s",
-            _endpoint_name(url),
-            detail,
-        )
-        raise RandomIPAuthError(f"network_error:{detail}") from exc
-
-
 async def _apost_json(
     url: str,
     *,

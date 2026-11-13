@@ -69,10 +69,6 @@ def format_quota_value(value: Any) -> str:
     return text or "0"
 
 
-def _quota_equals(left: Any, right: Any, *, epsilon: float = 1e-9) -> bool:
-    return abs(_to_non_negative_quota(left, 0.0) - _to_non_negative_quota(right, 0.0)) <= epsilon
-
-
 def _is_valid_user_id(value: Any) -> bool:
     try:
         return int(value) > 0
@@ -173,65 +169,18 @@ def _read_payload_quota_number(
 def _resolve_quota_from_payload(
     data: Dict[str, Any],
     *,
-    fallback_session: Optional[RandomIPSession],
     log_context: str,
-) -> tuple[float, float, float, bool]:
-    fallback = fallback_session or RandomIPSession()
-    fallback_remaining, fallback_total, fallback_used = _normalize_quota_state(
-        remaining_quota=fallback.remaining_quota,
-        total_quota=fallback.total_quota,
-        used_quota=fallback.used_quota,
-    )
-    fallback_known = bool(fallback.quota_known)
+) -> tuple[float, float, float]:
     remaining_quota = _read_payload_quota_number(data, "remaining_quota", log_context=log_context)
     total_quota = _read_payload_quota_number(data, "total_quota", log_context=log_context)
     used_quota = _read_payload_quota_number(data, "used_quota", log_context=log_context)
-    valid_count = sum(value is not None for value in (remaining_quota, total_quota, used_quota))
-    quota_keys = ",".join(sorted(str(key) for key in data.keys()))
-
-    candidate: Optional[tuple[float, float, float]] = None
-    if valid_count >= 2:
-        candidate = _normalize_quota_state(
-            remaining_quota=remaining_quota,
-            total_quota=total_quota,
-            used_quota=used_quota,
-            default_total_quota=fallback_total,
-        )
-    elif valid_count == 1 and fallback_known:
-        if remaining_quota is not None:
-            candidate = _normalize_quota_state(
-                remaining_quota=remaining_quota,
-                total_quota=fallback_total,
-                default_total_quota=fallback_total,
-            )
-        elif total_quota is not None:
-            candidate = _normalize_quota_state(
-                total_quota=total_quota,
-                used_quota=fallback_used,
-                default_total_quota=total_quota,
-            )
-        elif used_quota is not None:
-            candidate = _normalize_quota_state(
-                total_quota=fallback_total,
-                used_quota=used_quota,
-                default_total_quota=fallback_total,
-            )
-
-    if candidate is not None:
-        candidate_remaining, candidate_total, candidate_used = candidate
-        return candidate_remaining, candidate_total, candidate_used, True
-
-    if valid_count <= 0:
-        logging.warning(
-            "%s 未返回可信额度字段，保留本地额度并标记待校验：keys=%s", log_context, quota_keys
-        )
-    else:
-        logging.warning(
-            "%s 只返回了部分额度字段且本地无可信额度，保留本地额度并标记待校验：keys=%s",
-            log_context,
-            quota_keys,
-        )
-    return fallback_remaining, fallback_total, fallback_used, False
+    if remaining_quota is None or total_quota is None:
+        raise RandomIPAuthError(f"invalid_response:quota_missing:{log_context}")
+    return _normalize_quota_state(
+        remaining_quota=remaining_quota,
+        total_quota=total_quota,
+        used_quota=used_quota,
+    )
 
 
 def _build_quota_snapshot(session: RandomIPSession) -> Dict[str, Any]:

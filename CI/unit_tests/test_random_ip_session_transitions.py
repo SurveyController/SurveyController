@@ -54,13 +54,16 @@ async def test_late_sync_does_not_restore_quota_consumed_by_extraction(
         if url == AUTH_SESSION_ENDPOINT:
             sync_started.set()
             await finish_sync.wait()
-            return response({"user_id": 17, "total_quota": 1, "used_quota": 0})
+            return response(
+                {"user_id": 17, "remaining_quota": 1, "total_quota": 1, "used_quota": 0}
+            )
         return response(
             {
                 "host": "1.1.1.1",
                 "port": 8000,
                 "account": "unit",
                 "password": "unit",
+                "remaining_quota": 0,
                 "total_quota": 1,
                 "used_quota": 1,
             }
@@ -95,6 +98,7 @@ async def test_old_response_does_not_restore_or_overwrite_changed_session(
         return response(
             {
                 "user_id": 17,
+                "remaining_quota": 10,
                 "total_quota": 10,
                 "used_quota": 0,
                 "host": "1.1.1.1",

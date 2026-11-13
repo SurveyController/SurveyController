@@ -174,7 +174,6 @@ def get_session_snapshot() -> Dict[str, Any]:
         "used_quota": quota["used_quota"],
         "quota_known": bool(quota.get("quota_known")),
         "has_access_token": bool(session.access_token),
-        "has_refresh_token": False,
         "has_valid_user_id": _is_valid_user_id(session.user_id),
         "session_state": _session_state_name(session),
     }
@@ -206,8 +205,6 @@ def format_random_ip_error(exc: BaseException) -> str:
     if not isinstance(exc, RandomIPAuthError):
         return str(exc or "请求失败，请稍后重试")
     detail = exc.detail
-    if detail == "device_id_required":
-        return "设备标识缺失，请重启软件后重试"
     if detail == "invalid_request_body":
         return "请求格式不正确，请更新客户端后重试"
     if detail.startswith(_SESSION_PERSIST_FAILED_DETAIL) or detail == "session_store_unavailable":
@@ -300,12 +297,9 @@ def _parse_session_payload(
         raise RandomIPAuthError("invalid_response:user_id_invalid")
     if fallback.user_id and _require_valid_user_id(raw_user_id) != fallback.user_id:
         raise RandomIPAuthError("invalid_response:user_id_mismatch")
-    normalized_remaining, normalized_total, normalized_used, quota_known = (
-        _resolve_quota_from_payload(
-            data,
-            fallback_session=fallback,
-            log_context="随机IP会话响应",
-        )
+    normalized_remaining, normalized_total, normalized_used = _resolve_quota_from_payload(
+        data,
+        log_context="随机IP会话响应",
     )
     session = RandomIPSession(
         device_id=device_id,
@@ -314,7 +308,7 @@ def _parse_session_payload(
         remaining_quota=normalized_remaining,
         total_quota=normalized_total,
         used_quota=normalized_used,
-        quota_known=quota_known,
+        quota_known=True,
     )
     return session
 
@@ -362,9 +356,7 @@ async def ensure_authenticated_session_async() -> RandomIPSession:
         token = data.get("access_token")
         if (
             not isinstance(token, str)
-            or len(token) < 64
-            or not token.isascii()
-            or any(char.isspace() for char in token)
+            or re.fullmatch(r"[a-f0-9]{64}", token) is None
             or data.get("token_type") != "Bearer"
         ):
             raise RandomIPAuthError("invalid_response:access_token")
@@ -537,19 +529,16 @@ def _apply_quota_payload(
     expected_revision: int | None = None,
 ) -> RandomIPSession:
     session = _read_session()
-    normalized_remaining, normalized_total, normalized_used, quota_known = (
-        _resolve_quota_from_payload(
-            data,
-            fallback_session=session,
-            log_context=log_context,
-        )
+    normalized_remaining, normalized_total, normalized_used = _resolve_quota_from_payload(
+        data,
+        log_context=log_context,
     )
     updated = replace(
         session,
         remaining_quota=normalized_remaining,
         total_quota=normalized_total,
         used_quota=normalized_used,
-        quota_known=quota_known,
+        quota_known=True,
     )
     return _set_session(updated, expected_revision=expected_revision)
 

@@ -88,13 +88,8 @@ class RandomIpRuntimeService:
 
     def _resolve_counter_snapshot_values(self, snapshot: Dict[str, Any]) -> tuple[float, float]:
         total = max(0.0, float(snapshot.get("total_quota") or 0.0))
-        if "remaining_quota" not in snapshot:
-            return max(0.0, float(snapshot.get("used_quota") or 0.0)), total
         remaining = max(0.0, float(snapshot.get("remaining_quota") or 0.0))
-        return (
-            max(0.0, total - remaining),
-            total,
-        )
+        return max(0.0, total - remaining), total
 
     def _show_random_ip_message(
         self,
@@ -350,7 +345,7 @@ class RandomIpRuntimeService:
     async def _try_connect_random_ip_account_async(
         self,
         adapter: Optional[Any],
-    ) -> tuple[bool, bool]:
+    ) -> bool:
         try:
             self._set_random_ip_loading(adapter, True, "connecting_account")
             session = await self._proxy_gateway.ensure_authenticated_session()
@@ -359,27 +354,24 @@ class RandomIpRuntimeService:
             self._show_random_ip_message(
                 adapter, "account_connection_failed", message, level="error"
             )
-            return False, False
+            return False
         except Exception as exc:
             self._show_random_ip_message(
                 adapter, "account_connection_failed", str(exc), level="error"
             )
-            return False, False
+            return False
         finally:
             self._set_random_ip_loading(adapter, False, "")
 
         total_quota = max(float(session.total_quota or 0.0), 0.0)
         used_quota = max(0.0, float(session.used_quota or 0.0))
         self._apply_random_ip_counter(adapter, used=used_quota, total=total_quota, custom_api=False)
-        return True, False
+        return True
 
     async def _ensure_random_ip_ready_async(self, adapter: Optional[Any]) -> bool:
         if self._proxy_gateway.has_authenticated_session():
             return True
-        connected, _ = await self._try_connect_random_ip_account_async(adapter)
-        if connected:
-            return True
-        return False
+        return await self._try_connect_random_ip_account_async(adapter)
 
     async def _toggle_random_ip_async(self, enabled: bool, adapter: Optional[Any]) -> bool:
         adapter = adapter or getattr(self, "adapter", None)

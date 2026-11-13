@@ -105,7 +105,7 @@ class FakeProxy:
         return 1.0, 5.0, True
 
     def get_fresh_quota_snapshot(self):
-        return {"used_quota": 1, "total_quota": 5}
+        return {"used_quota": 1, "remaining_quota": 4, "total_quota": 5}
 
     get_quota_snapshot = get_fresh_quota_snapshot
 

@@ -32,29 +32,24 @@ class RandomIPSessionNormalizeTests:
             _require_valid_user_id("bad")
 
     def test_resolve_quota_from_payload_accepts_complete_payload(self) -> None:
-        remaining, total, used, known = _resolve_quota_from_payload(
+        remaining, total, used = _resolve_quota_from_payload(
             {"remaining_quota": "2", "total_quota": "5", "used_quota": "3"},
-            fallback_session=None,
             log_context="test",
         )
-        assert (remaining, total, used, known) == (2.0, 5.0, 3.0, True)
+        assert (remaining, total, used) == (2.0, 5.0, 3.0)
 
-    def test_resolve_quota_from_payload_reuses_fallback_for_partial_payload(self) -> None:
-        fallback = RandomIPSession(
-            user_id=1, remaining_quota=8, total_quota=10, used_quota=2, quota_known=True
-        )
-        remaining, total, used, known = _resolve_quota_from_payload(
-            {"used_quota": "4"}, fallback_session=fallback, log_context="test"
-        )
-        assert (remaining, total, used, known) == (6.0, 10.0, 4.0, True)
-
-    def test_resolve_quota_from_payload_marks_missing_numbers_as_untrusted(self) -> None:
-        remaining, total, used, known = _resolve_quota_from_payload(
-            {"remaining_quota": "", "used_quota": "bad"},
-            fallback_session=RandomIPSession(),
-            log_context="test",
-        )
-        assert (remaining, total, used, known) == (0.0, 0.0, 0.0, False)
+    @pytest.mark.parametrize(
+        "payload",
+        [
+            {"remaining_quota": 2},
+            {"total_quota": 5},
+            {"remaining_quota": "", "total_quota": 5},
+            {"remaining_quota": 2, "total_quota": "bad"},
+        ],
+    )
+    def test_resolve_quota_from_payload_rejects_incomplete_values(self, payload) -> None:
+        with pytest.raises(RandomIPAuthError, match="invalid_response:quota_missing"):
+            _resolve_quota_from_payload(payload, log_context="test")
 
     def test_build_quota_snapshot_returns_normalized_numbers(self) -> None:
         session = RandomIPSession(

@@ -79,6 +79,50 @@ async def test_migrates_legacy_session_and_hides_token(session_state, monkeypatc
     assert auth.get_session_snapshot()["authenticated"] is True
     assert "access_token" not in auth.get_session_snapshot()
 
+    auth._session_loaded = False
+    auth._session = RandomIPSession()
+    restored = await auth.ensure_authenticated_session_async()
+
+    assert restored.user_id == 19
+    assert restored.device_id == "legacy-device"
+    assert (restored.remaining_quota, restored.total_quota, restored.used_quota) == (4, 10, 6)
+    assert restored.access_token == "a" * 64
+    assert len(calls) == 1
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "quota_payload",
+    [
+        {"total_quota": 10},
+        {"remaining_quota": 4},
+        {"remaining_quota": "invalid", "total_quota": 10},
+        {"remaining_quota": 4, "total_quota": "invalid"},
+    ],
+)
+async def test_migration_rejects_incomplete_server_quota_without_persisting_token(
+    session_state, monkeypatch, quota_payload
+):
+    _settings, token_storage = session_state
+
+    async def post(_url, **_kwargs):
+        return _response(
+            {
+                "user_id": 19,
+                "access_token": "a" * 64,
+                "token_type": "Bearer",
+                **quota_payload,
+            }
+        )
+
+    monkeypatch.setattr(auth, "_apost_json", post)
+
+    with pytest.raises(RandomIPAuthError, match="invalid_response:quota_missing"):
+        await auth.ensure_authenticated_session_async()
+
+    assert token_storage["value"] == ""
+    assert auth.has_authenticated_session() is False
+
 
 @pytest.mark.asyncio
 async def test_missing_legacy_user_does_not_send_migration_request(session_state, monkeypatch):
@@ -91,6 +135,21 @@ async def test_missing_legacy_user_does_not_send_migration_request(session_state
 
     with pytest.raises(RandomIPAuthError, match="not_authenticated"):
         await auth.ensure_authenticated_session_async()
+
+
+def test_secure_store_failure_is_not_treated_as_missing_token(session_state, monkeypatch):
+    settings, _token_storage = session_state
+    settings.values[auth._settings_key("device_id")] = "legacy-device"
+    settings.values[auth._settings_key("user_id")] = 19
+
+    def fail_load_access_token():
+        raise RandomIPAuthError("session_store_unavailable")
+
+    monkeypatch.setattr(auth.store, "load_access_token", fail_load_access_token)
+    auth._session_loaded = False
+
+    with pytest.raises(RandomIPAuthError, match="session_store_unavailable"):
+        auth._ensure_loaded()
 
 
 def test_access_token_readback_failure_rolls_back_authentication(session_state, monkeypatch):

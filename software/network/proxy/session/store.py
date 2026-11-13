@@ -64,10 +64,7 @@ def load_session(settings: Any, build_device_id: Callable[[], str]) -> RandomIPS
     remaining, total, used = _normalize_quota_state(
         remaining_quota=remaining, total_quota=total, used_quota=used
     )
-    try:
-        access_token = load_access_token() if user_id > 0 else ""
-    except RandomIPAuthError:
-        access_token = ""
+    access_token = load_access_token() if user_id > 0 else ""
     return RandomIPSession(
         device_id=device_id,
         user_id=user_id,

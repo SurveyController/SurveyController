@@ -76,7 +76,6 @@ _FATAL_AUTH_DETAILS = frozenset(
         "user_banned",
         "user_expired",
         "device_owned_by_other_user",
-        "device_id_required",
         "invalid_request_body",
         "minute_not_allowed",
         "pool_not_allowed",

@@ -46,12 +46,20 @@ class _FakeController(RandomIpRuntimeService):
         self._proxy_gateway = SimpleNamespace(
             is_custom_api_active=lambda: False,
             has_authenticated_session=lambda: False,
-            get_fresh_quota_snapshot=lambda: {"used_quota": 1, "total_quota": 5},
-            get_quota_snapshot=lambda: {"used_quota": 1, "total_quota": 5},
+            get_fresh_quota_snapshot=lambda: {
+                "used_quota": 1,
+                "remaining_quota": 4,
+                "total_quota": 5,
+            },
+            get_quota_snapshot=lambda: {
+                "used_quota": 1,
+                "remaining_quota": 4,
+                "total_quota": 5,
+            },
             get_counter_snapshot_local=lambda: (1, 5, False),
             load_session_for_startup=lambda: None,
             sync_quota_snapshot=lambda **kwargs: asyncio.sleep(
-                0, result={"used_quota": 1, "total_quota": 5}
+                0, result={"used_quota": 1, "remaining_quota": 4, "total_quota": 5}
             ),
             ensure_authenticated_session=lambda: asyncio.sleep(
                 0, result=SimpleNamespace(total_quota=5, used_quota=1)
@@ -106,7 +114,7 @@ class RunControllerRandomIPTests:
         monkeypatch.setattr(
             controller._proxy_gateway,
             "get_fresh_quota_snapshot",
-            lambda: {"used_quota": 2, "total_quota": 8},
+            lambda: {"used_quota": 2, "remaining_quota": 6, "total_quota": 8},
         )
         assert controller._get_counter_snapshot() == (2.0, 8.0, False)
 
@@ -118,7 +126,7 @@ class RunControllerRandomIPTests:
         monkeypatch.setattr(
             controller._proxy_gateway,
             "get_quota_snapshot",
-            lambda: {"used_quota": 1, "total_quota": 5},
+            lambda: {"used_quota": 1, "remaining_quota": 4, "total_quota": 5},
         )
         assert controller._get_counter_snapshot() == (1.0, 5.0, False)
 
@@ -186,7 +194,7 @@ class RunControllerRandomIPTests:
 
         async def fake_sync_quota_snapshot_from_server_async(*, emit_logs=True):
             assert emit_logs is False
-            return {"used_quota": 7, "total_quota": 12}
+            return {"used_quota": 7, "remaining_quota": 5, "total_quota": 12}
 
         monkeypatch.setattr(
             controller._proxy_gateway,
@@ -274,7 +282,7 @@ class RunControllerRandomIPTests:
 
         async def fake_sync_quota_snapshot_from_server_async(*, emit_logs=True):
             assert emit_logs is True
-            return {"used_quota": 2, "total_quota": 8}
+            return {"used_quota": 2, "remaining_quota": 6, "total_quota": 8}
 
         monkeypatch.setattr(
             controller._proxy_gateway,
@@ -319,10 +327,10 @@ class RunControllerRandomIPTests:
             "ensure_authenticated_session",
             lambda: asyncio.sleep(0, result=SimpleNamespace(total_quota=5, used_quota=1)),
         )
-        ok, fallback = asyncio.run(
+        ok = asyncio.run(
             controller._try_connect_random_ip_account_async(controller.adapter)
         )
-        assert (ok, fallback) == (True, False)
+        assert ok is True
         assert controller.adapter.messages == []
 
         async def failed_connection():
@@ -333,10 +341,10 @@ class RunControllerRandomIPTests:
             "ensure_authenticated_session",
             failed_connection,
         )
-        ok, fallback = asyncio.run(
+        ok = asyncio.run(
             controller._try_connect_random_ip_account_async(controller.adapter)
         )
-        assert (ok, fallback) == (False, False)
+        assert ok is False
 
         monkeypatch.setattr(controller._proxy_gateway, "has_authenticated_session", lambda: False)
         monkeypatch.setattr(

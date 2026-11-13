@@ -69,7 +69,6 @@ def _reset_auth_state(session: RandomIPSession | None = None) -> None:
 @pytest.mark.parametrize(
     ("detail", "expected"),
     [
-        ("device_id_required", "设备标识缺失"),
         ("invalid_access_token", "登录已失效"),
         ("session_persist_failed:settings.user_id", "没能安全保存"),
         ("device_banned", "当前设备已被封禁"),
@@ -199,18 +198,28 @@ class RandomIPSessionAuthTests:
         assert auth._settings_key("user_id") in settings.removed
         assert settings.synced == 1
 
-    def test_parse_session_payload_requires_user_id_and_keeps_fallback_quota(self) -> None:
+    def test_parse_session_payload_requires_user_id_and_complete_server_quota(self) -> None:
         with pytest.raises(RandomIPAuthError, match="user_id_missing"):
             auth._parse_session_payload({}, device_id="device-4")
         with pytest.raises(RandomIPAuthError, match="user_id_invalid"):
             auth._parse_session_payload({"user_id": 0}, device_id="device-4")
 
+        with pytest.raises(RandomIPAuthError, match="invalid_response:quota_missing"):
+            auth._parse_session_payload(
+                {"user_id": "15", "used_quota": 4},
+                device_id="device-4",
+                fallback_session=RandomIPSession(
+                    user_id=15,
+                    remaining_quota=8,
+                    total_quota=10,
+                    used_quota=2,
+                    quota_known=True,
+                ),
+            )
+
         session = auth._parse_session_payload(
-            {"user_id": "15", "used_quota": 4},
+            {"user_id": "15", "remaining_quota": 6, "total_quota": 10, "used_quota": 4},
             device_id="device-4",
-            fallback_session=RandomIPSession(
-                user_id=15, remaining_quota=8, total_quota=10, used_quota=2, quota_known=True
-            ),
         )
 
         assert session.user_id == 15
@@ -241,6 +250,9 @@ class RandomIPSessionAuthTests:
             return _Response(
                 {
                     "provider": "default",
+                    "remaining_quota": 10,
+                    "total_quota": 10,
+                    "used_quota": 0,
                     "items": [
                         {
                             "host": "8.8.8.8",
