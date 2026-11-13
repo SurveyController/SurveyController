@@ -31,6 +31,7 @@ _DEFAULT_CARD_REDEEM = "https://api-wjx.hungrym0.com/api/cards/redeem"
 _DEFAULT_IP_EXTRACT = "https://api-wjx.hungrym0.com/api/ip/extract"
 _DEFAULT_SUBMISSION_REPORT = "https://api-wjx.hungrym0.com/api/submission/report"
 _DEFAULT_STATUS = "https://api-wjx.hungrym0.com/api/status"
+_DEFAULT_RANDOM_IP_STATUS = "https://status.hungrym0.com/api/status-page/heartbeat/surveycontroller"
 
 
 def _read_windows_env_var(key: str) -> str:
@@ -64,6 +65,9 @@ SUBMISSION_REPORT_ENDPOINT = _resolve_env_value(
     _DEFAULT_SUBMISSION_REPORT,
 )
 STATUS_ENDPOINT = _resolve_env_value("STATUS_ENDPOINT", _DEFAULT_STATUS)
+RANDOM_IP_STATUS_ENDPOINT = _resolve_env_value(
+    "RANDOM_IP_STATUS_ENDPOINT", _DEFAULT_RANDOM_IP_STATUS
+)
 
 __all__ = [
     "AUTH_SESSION_ENDPOINT",
@@ -83,5 +87,6 @@ __all__ = [
     "PROXY_STATUS_TIMEOUT_SECONDS",
     "PROXY_TTL_GRACE_SECONDS",
     "STATUS_ENDPOINT",
+    "RANDOM_IP_STATUS_ENDPOINT",
     "SUBMISSION_REPORT_ENDPOINT",
 ]

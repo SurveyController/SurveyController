@@ -1,46 +1,110 @@
 from __future__ import annotations
 
 import asyncio
-from types import SimpleNamespace
+from datetime import UTC, datetime, timedelta
+
+import httpx
+import pytest
 
 import software.app.random_ip_health_adapter as health_adapter
-from software.network.http.defaults import DEFAULT_HTTP_HEADERS
+
+_STATUS_URL = "https://status.hungrym0.com/api/status-page/heartbeat/surveycontroller"
+_NOW = datetime(2026, 11, 13, 12, 0, tzinfo=UTC)
 
 
-def test_health_adapter_preserves_endpoint_headers_payload_and_timeout(monkeypatch) -> None:
-    requests: list[tuple[str, dict[str, object]]] = []
+@pytest.fixture
+def status_page(monkeypatch):
+    requests = []
 
-    async def post(url: str, **kwargs: object) -> SimpleNamespace:
-        requests.append((url, kwargs))
-        return SimpleNamespace(status_code=204)
+    class Clock(datetime):
+        @classmethod
+        def now(cls, tz=None):
+            return _NOW
 
-    monkeypatch.setattr(health_adapter.http_client, "apost", post)
+    monkeypatch.setattr(health_adapter, "datetime", Clock, raising=False)
 
-    result = asyncio.run(health_adapter.PythonRandomIpHealthAdapter().check())
+    async def forbidden_probe(*_args, **_kwargs):
+        pytest.fail("状态查询不得调用代理提取接口")
 
-    assert len(requests) == 1
-    url, kwargs = requests[0]
-    assert url == health_adapter.IP_EXTRACT_ENDPOINT
-    assert kwargs["json"] == {}
-    assert kwargs["timeout"] == 5
-    assert kwargs["headers"] == {
-        **DEFAULT_HTTP_HEADERS,
-        "X-Health-Token": "status-rzib9lqpuk3httr4",
-        "Content-Type": "application/json",
+    monkeypatch.setattr(health_adapter.http_client, "apost", forbidden_probe)
+
+    def check(payload, status_code=200):
+        async def get(url, **kwargs):
+            requests.append((url, kwargs))
+            return httpx.Response(status_code, json=payload, request=httpx.Request("GET", url))
+
+        monkeypatch.setattr(health_adapter.http_client, "aget", get)
+        return asyncio.run(health_adapter.PythonRandomIpHealthAdapter().check())
+
+    return check, requests
+
+
+@pytest.mark.parametrize(
+    ("status", "level", "text"),
+    [
+        (0, "error", "服务异常"),
+        (1, "success", "服务正常"),
+        (2, "warning", "检测中"),
+        (3, "warning", "维护中"),
+    ],
+)
+def test_status_page_maps_random_ip_monitor_state(status_page, status, level, text):
+    check, requests = status_page
+    payload = {
+        "heartbeatList": {
+            "1": [{"status": 1, "time": "2026-11-13 12:00:00"}],
+            "12": [
+                {"status": 1, "time": "2026-11-13 11:59:30", "ping": 15},
+                {"status": status, "time": "2026-11-13 12:00:00", "ping": 42},
+            ],
+        }
     }
-    assert result["level"] == "success"
-    assert result["text"].startswith("服务正常 ")
-    assert result["tooltip"].startswith("随机IP提取接口返回 HTTP 204，耗时 ")
+
+    result = check(payload)
+
+    assert result["level"] == level
+    assert result["text"].startswith(text)
+    assert "2026-11-13 12:00:00 UTC" in result["tooltip"]
+    assert requests[0][0] == _STATUS_URL
+    assert requests[0][1]["timeout"] == 5
+    assert "Authorization" not in requests[0][1]["headers"]
+    assert "X-Health-Token" not in requests[0][1]["headers"]
+    assert "json" not in requests[0][1]
 
 
-def test_health_adapter_classifies_non_success_http_status(monkeypatch) -> None:
-    async def post(_url: str, **_kwargs: object) -> SimpleNamespace:
-        return SimpleNamespace(status_code=503)
+@pytest.mark.parametrize("heartbeats", [{}, {"12": []}])
+def test_missing_random_ip_heartbeat_is_unknown(status_page, heartbeats):
+    check, _requests = status_page
 
-    monkeypatch.setattr(health_adapter.http_client, "apost", post)
+    result = check({"heartbeatList": heartbeats})
 
-    result = asyncio.run(health_adapter.PythonRandomIpHealthAdapter().check())
+    assert result["level"] == "warning"
+    assert result["text"] == "状态未知"
 
-    assert result["level"] == "error"
-    assert result["text"].startswith("异常 503")
-    assert result["tooltip"].startswith("随机IP提取接口返回 HTTP 503，耗时 ")
+
+def test_stale_heartbeat_cannot_report_service_normal(status_page):
+    check, _requests = status_page
+    heartbeat = {"status": 1, "time": (_NOW - timedelta(minutes=6)).isoformat()}
+
+    result = check({"heartbeatList": {"12": [heartbeat]}})
+
+    assert result["level"] == "warning"
+    assert result["text"] == "状态未知"
+    assert "未更新" in result["tooltip"]
+
+
+@pytest.mark.parametrize(
+    "payload", [[], {}, {"heartbeatList": []}, {"heartbeatList": {"12": "bad"}}]
+)
+def test_malformed_status_page_response_is_rejected(status_page, payload):
+    check, _requests = status_page
+
+    with pytest.raises(ValueError):
+        check(payload)
+
+
+def test_status_page_http_failure_is_not_reported_as_success(status_page):
+    check, _requests = status_page
+
+    with pytest.raises(httpx.HTTPStatusError):
+        check({"detail": "unavailable"}, status_code=503)

@@ -129,8 +129,8 @@ class DashboardRandomIPMixin:
             logging.warning("随机IP服务状态检查失败，已按未知状态处理：%s", error)
             payload = {
                 "level": "warning",
-                "text": "HTTP 0",
-                "tooltip": f"随机IP提取接口请求失败：{error}",
+                "text": "状态未知",
+                "tooltip": f"随机IP状态页查询失败：{error}",
             }
         with self._random_ip_status_fetch_lock:
             self._random_ip_status_fetching = False

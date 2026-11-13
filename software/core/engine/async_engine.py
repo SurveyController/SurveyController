@@ -15,20 +15,8 @@ from software.network.http.async_client import aclose_for_loop
 from software.network.http.client import close as close_sync_http_clients
 from surveycore.core.engine.async_scheduler import AsyncScheduler
 from surveycore.core.engine.async_status_bus import AsyncStatusBus
-from software.core.engine.runtime_control_port import (
-    RuntimeControlPort,
-    on_random_ip_loading_changed,
-)
+from software.core.engine.runtime_control_port import RuntimeControlPort
 from software.core.task import ExecutionConfig, ExecutionState
-from software.network.proxy.api import ProxyApiFatalError, fetch_proxy_batch_async
-from software.network.session_policy import (
-    _acquire_proxy_fetch_lock_async,
-    merge_prefetched_proxy_leases,
-    release_proxy_fetch_lock,
-    resolve_proxy_prefetch_request_count,
-    should_continue_proxy_prefetch,
-    wait_for_proxy_prefetch_cycle,
-)
 from software.providers.registry import parse_survey
 from software.providers.contracts import ProviderParseResult
 
@@ -269,65 +257,6 @@ class AsyncRuntimeEngine:
             "开启" if config.random_proxy_ip_enabled else "关闭",
             _format_proxy_source(config.proxy_source),
         )
-        stop_event = self._stop_event
-        if stop_event is None:
-            raise RuntimeError("AsyncRuntimeEngine stop_event 未初始化")
-
-        async def _prefetch_proxy_pool() -> None:
-            while should_continue_proxy_prefetch(state) and not stop_event.is_set():
-                request_count = resolve_proxy_prefetch_request_count(state)
-                if request_count <= 0:
-                    if await wait_for_proxy_prefetch_cycle(state, state.stop_event):
-                        return
-                    continue
-                on_random_ip_loading_changed(
-                    runtime_bridge, True, f"正在准备代理 0/{request_count}"
-                )
-                fetch_lock_acquired = False
-                try:
-                    fetch_lock_acquired = await _acquire_proxy_fetch_lock_async(
-                        state, state.stop_event
-                    )
-                    if not fetch_lock_acquired or state.stop_event.is_set() or stop_event.is_set():
-                        return
-                    request_count = resolve_proxy_prefetch_request_count(state)
-                    if request_count <= 0:
-                        continue
-                    fetched = await fetch_proxy_batch_async(
-                        expected_count=request_count,
-                        stop_signal=state.stop_event,
-                    )
-                    if state.stop_event.is_set() or stop_event.is_set():
-                        return
-                    merged_count = merge_prefetched_proxy_leases(state, fetched)
-                    if merged_count:
-                        on_random_ip_loading_changed(
-                            runtime_bridge,
-                            True,
-                            f"正在准备代理 {min(merged_count, request_count)}/{request_count}",
-                        )
-                except ProxyApiFatalError as exc:
-                    state.mark_terminal_stop(
-                        "proxy_api_error",
-                        failure_reason="proxy_unavailable",
-                        message=str(exc),
-                    )
-                    state.stop_event.set()
-                    stop_event.set()
-                    return
-                except Exception:
-                    logging.info("随机IP异步预热失败", exc_info=True)
-                finally:
-                    if fetch_lock_acquired:
-                        try:
-                            release_proxy_fetch_lock(state)
-                        except Exception:
-                            logging.info("释放随机IP异步预热锁失败", exc_info=True)
-                    on_random_ip_loading_changed(runtime_bridge, False, "")
-                if await wait_for_proxy_prefetch_cycle(state, state.stop_event):
-                    return
-
-        prefetch_task = asyncio.create_task(_prefetch_proxy_pool(), name="AsyncProxyPrefetch")
         try:
             async with asyncio.TaskGroup() as task_group:
                 for slot_index in range(active_slot_count):
@@ -355,8 +284,6 @@ class AsyncRuntimeEngine:
                 raise errors[0]
             raise ExceptionGroup("AsyncRuntimeEngine slot 运行失败", errors)
         finally:
-            prefetch_task.cancel()
-            await asyncio.gather(prefetch_task, return_exceptions=True)
             if self._stop_event is not None:
                 self._stop_event.set()
             dropped = await task_registry.drain(timeout=5.0)

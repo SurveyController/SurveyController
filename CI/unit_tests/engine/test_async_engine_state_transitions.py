@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import asyncio
 import concurrent.futures
 import threading
 
@@ -9,7 +8,6 @@ import pytest
 import software.core.engine.async_engine as async_engine
 from software.core.engine.async_engine import AsyncRuntimeEngine
 from software.core.task import ExecutionConfig, ExecutionState
-from software.network.proxy.api import ProxyApiFatalError
 
 
 @pytest.mark.parametrize("control", ["stop", "pause", "pause_resume"])
@@ -104,60 +102,3 @@ def test_concurrent_start_accepts_only_one_run(monkeypatch) -> None:
     assert len(futures) == 1
     assert len(errors) == 1 and "运行中" in errors[0]
     assert len(submitted) == 1
-
-
-@pytest.mark.asyncio
-async def test_fatal_proxy_prefetch_stops_run_and_releases_fetch_lock(monkeypatch) -> None:
-    engine = AsyncRuntimeEngine()
-    config = ExecutionConfig(random_proxy_ip_enabled=True, target_num=3)
-    state = ExecutionState(config=config)
-    state.register_proxy_waiter()
-    fetches = []
-    released = []
-    observed = []
-
-    class Runner:
-        def __init__(self, **kwargs) -> None:
-            self.context = kwargs["run_context"]
-
-        async def run(self) -> None:
-            try:
-                await asyncio.wait_for(self.context.stop_event.wait(), timeout=0.2)
-            except TimeoutError:
-                observed.append(False)
-            else:
-                observed.append(True)
-
-    async def fetch(**kwargs):
-        fetches.append(kwargs)
-        raise ProxyApiFatalError("账号额度不足")
-
-    async def wait_cycle(*args):
-        await asyncio.sleep(0)
-        return True
-
-    monkeypatch.setattr(async_engine, "AsyncSlotRunner", Runner)
-    monkeypatch.setattr(async_engine, "fetch_proxy_batch_async", fetch)
-    monkeypatch.setattr(async_engine, "wait_for_proxy_prefetch_cycle", wait_cycle)
-    real_release = async_engine.release_proxy_fetch_lock
-
-    def release(value) -> None:
-        released.append(value)
-        real_release(value)
-
-    monkeypatch.setattr(async_engine, "release_proxy_fetch_lock", release)
-
-    try:
-        await engine._run(config=config, state=state)
-    finally:
-        state.unregister_proxy_waiter()
-
-    assert observed == [True]
-    assert len(fetches) == 1
-    assert released == [state]
-    assert state.get_terminal_stop_snapshot() == (
-        "proxy_api_error",
-        "proxy_unavailable",
-        "账号额度不足",
-    )
-    assert state.stop_event.is_set()

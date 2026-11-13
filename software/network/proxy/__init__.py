@@ -42,7 +42,6 @@ from software.network.proxy.policy.source import (
 from software.network.proxy.pool import (
     HTTP_PROXY_MIN_REMAINING_TTL_SECONDS,
     get_proxy_required_ttl_seconds,
-    prefetch_proxy_pool,
     proxy_lease_has_sufficient_ttl,
 )
 from software.network.config import PROXY_SOURCE_CUSTOM, PROXY_SOURCE_DEFAULT
@@ -82,7 +81,6 @@ __all__ = [
     "is_official_proxy_source",
     "normalize_proxy_source",
     "normalize_random_ip_enabled_value",
-    "prefetch_proxy_pool",
     "proxy_lease_has_sufficient_ttl",
     "set_proxy_api_override",
     "set_proxy_area_code",

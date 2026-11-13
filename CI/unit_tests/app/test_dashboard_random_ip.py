@@ -303,7 +303,7 @@ class DashboardRandomIPTests:
 
         dashboard.refresh_random_ip_heartbeat_async()
         dashboard.heartbeat_futures[-1].set_exception(RuntimeError("boom"))
-        assert dashboard._randomIpHeartbeatUpdated.calls[-1][0]["text"] == "HTTP 0"
+        assert dashboard._randomIpHeartbeatUpdated.calls[-1][0]["text"] == "状态未知"
 
     def test_init_random_ip_status_refresh_and_async_guard(self, monkeypatch) -> None:
         dashboard = _FakeDashboard()
