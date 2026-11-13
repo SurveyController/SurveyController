@@ -1,0 +1,78 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.event_name }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
+  QT_QPA_PLATFORM: offscreen
+  PYTHONUTF8: "1"
+  SURVEY_CONTROLLER_UNIT_TEST_TIMEOUT_SECONDS: "600"
+
+jobs:
+  python:
+    name: Python CI
+    runs-on: ubuntu-slim
+    timeout-minutes: 15
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2
+        with:
+          python-version: "3.13.17"
+          enable-cache: true
+          cache-dependency-glob: |
+            pyproject.toml
+            uv.lock
+
+      - name: Install dependencies
+        run: uv sync --locked
+
+      - name: Validate application version and release tag
+        run: |
+          args=(--output build/metadata/build-info.json)
+          if [[ "$GITHUB_REF_TYPE" == "tag" ]]; then
+            args+=(--release-tag "$GITHUB_REF_NAME")
+          fi
+          uv run --no-sync python -m CI.build_tools.app_metadata "${args[@]}"
+
+      - name: Run checks in parallel
+        run: uv run --no-sync python -m CI.run_checks python
+
+  desktop:
+    name: Desktop CI
+    runs-on: windows-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2
+        with:
+          python-version: "3.13.17"
+          enable-cache: true
+          cache-dependency-glob: |
+            pyproject.toml
+            uv.lock
+
+      - name: Install dependencies
+        run: uv sync --locked
+
+      - name: Run desktop checks in parallel
+        run: uv run --no-sync python -m CI.run_checks desktop

@@ -327,9 +327,7 @@ class RunControllerRandomIPTests:
             "ensure_authenticated_session",
             lambda: asyncio.sleep(0, result=SimpleNamespace(total_quota=5, used_quota=1)),
         )
-        ok = asyncio.run(
-            controller._try_connect_random_ip_account_async(controller.adapter)
-        )
+        ok = asyncio.run(controller._try_connect_random_ip_account_async(controller.adapter))
         assert ok is True
         assert controller.adapter.messages == []
 
@@ -341,9 +339,7 @@ class RunControllerRandomIPTests:
             "ensure_authenticated_session",
             failed_connection,
         )
-        ok = asyncio.run(
-            controller._try_connect_random_ip_account_async(controller.adapter)
-        )
+        ok = asyncio.run(controller._try_connect_random_ip_account_async(controller.adapter))
         assert ok is False
 
         monkeypatch.setattr(controller._proxy_gateway, "has_authenticated_session", lambda: False)
