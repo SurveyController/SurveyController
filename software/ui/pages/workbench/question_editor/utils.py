@@ -340,12 +340,13 @@ def build_entry_info_list(
         ).strip()
         if stable_id:
             by_id[stable_id] = item
+    legacy = _align_legacy_entry_info(entries, questions_info)
     aligned: List[SurveyQuestionMeta] = []
-    for entry in entries or []:
+    for index, entry in enumerate(entries or []):
         stable_id = str(getattr(entry, "question_id", "") or "").strip()
         item = by_id.get(stable_id)
         if item is None:
-            aligned.append(_build_entry_info_fallback(entry))
+            aligned.append(legacy[index])
         else:
             aligned.append(ensure_survey_question_meta(item))
     return aligned
