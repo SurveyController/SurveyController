@@ -4,7 +4,7 @@ from typing import Any
 
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QColor
-from PySide6.QtWidgets import QHBoxLayout, QSizePolicy, QVBoxLayout, QWidget
+from PySide6.QtWidgets import QHBoxLayout, QSizePolicy, QStackedWidget, QVBoxLayout, QWidget
 from qfluentwidgets import (
     Action,
     BodyLabel,
@@ -19,12 +19,27 @@ from software.ui.pages.workbench.shared.survey_entry_card import SurveyEntryCard
 
 
 def build_dashboard_page_ui(page: Any) -> None:
-    outer = QVBoxLayout(page)
+    root_layout = QVBoxLayout(page)
+    root_layout.setContentsMargins(0, 0, 0, 0)
+    root_layout.setSpacing(0)
+
+    main_stack = QStackedWidget(page)
+    main_stack.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, False)
+    main_stack.setAutoFillBackground(False)
+    main_stack.setStyleSheet("QStackedWidget { background: transparent; border: none; }")
+    page.main_stack = main_stack
+    root_layout.addWidget(main_stack, 1)
+
+    home_view = QWidget(main_stack)
+    home_view.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, False)
+    home_view.setAutoFillBackground(False)
+    page.home_view = home_view
+    outer = QVBoxLayout(home_view)
     outer.setContentsMargins(24, 14, 24, 18)
 
-    scroll = ScrollArea(page)
+    scroll = ScrollArea(home_view)
     scroll.setWidgetResizable(True)
-    inner = QWidget(page)
+    inner = QWidget(home_view)
     inner.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, False)
     inner.setAutoFillBackground(False)
     scroll.setWidget(inner)
@@ -101,3 +116,15 @@ def build_dashboard_page_ui(page: Any) -> None:
     content_layout.addStretch(3)
     layout.addWidget(content, 1)
     outer.addWidget(scroll, 1)
+
+    wizard_host = QWidget(main_stack)
+    wizard_host.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, False)
+    wizard_host.setAutoFillBackground(False)
+    wizard_host_layout = QVBoxLayout(wizard_host)
+    wizard_host_layout.setContentsMargins(0, 0, 0, 0)
+    wizard_host_layout.setSpacing(0)
+    page.wizard_host = wizard_host
+
+    main_stack.addWidget(home_view)
+    main_stack.addWidget(wizard_host)
+    main_stack.setCurrentWidget(home_view)

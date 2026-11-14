@@ -310,6 +310,59 @@ class WorkbenchPresenter:
         issue_question_nums: List[int] | None = None,
     ) -> None:
         normalized_info = ensure_survey_question_metas(info or [])
+        def _finalize_parse_wizard(accepted: bool) -> None:
+            if accepted:
+                nonlocal pending_entries
+                if selected_issue_nums:
+                    updated_entries_by_num = {
+                        int(getattr(entry, "question_num", 0) or 0): entry
+                        for entry in selected_entries
+                        if int(getattr(entry, "question_num", 0) or 0) > 0
+                    }
+                    merged_entries = []
+                    for entry in pending_entries:
+                        question_num = int(getattr(entry, "question_num", 0) or 0)
+                        merged_entries.append(
+                            copy.deepcopy(updated_entries_by_num.get(question_num, entry))
+                        )
+                    pending_entries = merged_entries
+                self.state.set_questions(normalized_info, pending_entries)
+                self.controller.replace_question_entries(
+                    pending_entries,
+                    questions_info=normalized_info,
+                )
+                if not selected_issue_nums:
+                    self.strategy_page.set_dimension_groups([])
+                self.strategy_page.set_entries(
+                    self.state.entries,
+                    self.state.entry_questions_info,
+                )
+                self.sync_reverse_fill_context()
+                self.dashboard.update_question_meta(parsed_title, len(pending_entries))
+                log_action(
+                    "UI",
+                    "open_parse_wizard",
+                    "question_wizard",
+                    "main_window",
+                    result="accepted",
+                    payload={"question_count": len(normalized_info)},
+                )
+                if not selected_issue_nums:
+                    self.dashboard._toast(f"已完成问卷配置（共 {len(pending_entries)} 题）", "success")
+                return
+
+            current_entries = self.state.get_entries()
+            self.dashboard.update_question_meta(parsed_title, len(current_entries))
+            log_action(
+                "UI",
+                "open_parse_wizard",
+                "question_wizard",
+                "main_window",
+                result="cancelled",
+                payload={"question_count": len(normalized_info)},
+            )
+            self.host._toast("已取消自动配置，保留原有题目设置", "warning")
+
         try:
             pending_entries = copy.deepcopy(
                 self.controller.get_survey_snapshot().get("question_entries") or []
@@ -344,6 +397,16 @@ class WorkbenchPresenter:
                         "warning",
                     )
                     return
+            if not selected_issue_nums and hasattr(
+                self.dashboard, "open_inline_question_wizard"
+            ):
+                self.dashboard.open_inline_question_wizard(
+                    selected_entries,
+                    selected_info,
+                    parsed_title,
+                    on_finished=_finalize_parse_wizard,
+                )
+                return
             accepted = self.dashboard.run_question_wizard(
                 selected_entries, selected_info, parsed_title
             )
@@ -368,51 +431,4 @@ class WorkbenchPresenter:
             )
             return
 
-        if accepted:
-            if selected_issue_nums:
-                updated_entries_by_num = {
-                    int(getattr(entry, "question_num", 0) or 0): entry
-                    for entry in selected_entries
-                    if int(getattr(entry, "question_num", 0) or 0) > 0
-                }
-                merged_entries = []
-                for entry in pending_entries:
-                    question_num = int(getattr(entry, "question_num", 0) or 0)
-                    merged_entries.append(
-                        copy.deepcopy(updated_entries_by_num.get(question_num, entry))
-                    )
-                pending_entries = merged_entries
-            self.state.set_questions(normalized_info, pending_entries)
-            self.controller.replace_question_entries(
-                pending_entries,
-                questions_info=normalized_info,
-            )
-            if not selected_issue_nums:
-                self.strategy_page.set_dimension_groups([])
-            self.strategy_page.set_entries(
-                self.state.entries,
-                self.state.entry_questions_info,
-            )
-            self.sync_reverse_fill_context()
-            self.dashboard.update_question_meta(parsed_title, len(pending_entries))
-            log_action(
-                "UI",
-                "open_parse_wizard",
-                "question_wizard",
-                "main_window",
-                result="accepted",
-                payload={"question_count": len(normalized_info)},
-            )
-            return
-
-        current_entries = self.state.get_entries()
-        self.dashboard.update_question_meta(parsed_title, len(current_entries))
-        log_action(
-            "UI",
-            "open_parse_wizard",
-            "question_wizard",
-            "main_window",
-            result="cancelled",
-            payload={"question_count": len(normalized_info)},
-        )
-        self.host._toast("已取消自动配置，保留原有题目设置", "warning")
+        _finalize_parse_wizard(accepted)

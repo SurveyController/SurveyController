@@ -1,7 +1,7 @@
 import copy
 from typing import Any, Dict, List, Optional, cast
 
-from PySide6.QtCore import QEvent, QTimer, Qt, QSize
+from PySide6.QtCore import QEvent, QTimer, Qt, QSize, Signal
 from PySide6.QtGui import QGuiApplication, QResizeEvent, QShowEvent
 from PySide6.QtWidgets import (
     QDialog,
@@ -16,11 +16,14 @@ from PySide6.QtWidgets import (
 from qfluentwidgets import (
     BodyLabel,
     CardWidget,
+    FluentIcon,
     PopUpAniStackedWidget,
     PrimaryPushButton,
     PushButton,
     ScrollArea,
     SearchLineEdit,
+    SubtitleLabel,
+    TransparentToolButton,
     TreeWidget,
 )
 
@@ -40,6 +43,7 @@ from . import wizard_result_builder
 from .wizard_search import WizardSearchMixin
 from .wizard_sections import WizardSectionsMixin
 from .wizard_state import WizardRuntimeState, bind_runtime_state
+from .wizard_validation import validate_before_accept
 from .question_media_preview import MediaFetcher
 
 _VIEW_LOGIC = "logic"
@@ -86,33 +90,25 @@ class _CurrentPagePopUpStackedWidget(PopUpAniStackedWidget):
         self.updateGeometry()
 
 
-class QuestionWizardDialog(
+class QuestionWizardBase(
     WizardSearchMixin,
     WizardCardsMixin,
     WizardSectionsMixin,
-    QDialog,
 ):
-    _PREFERRED_DIALOG_SIZE = QSize(1180, 840)
-    _MIN_DIALOG_SIZE = QSize(900, 620)
-
-    def __init__(
+    def _init_wizard_state(
         self,
         entries: List[QuestionEntry],
         info: List[SurveyQuestionMeta | Dict[str, Any]],
         survey_title: Optional[str] = None,
-        parent=None,
         reliability_mode_enabled: bool = True,
         *,
         media_fetcher: MediaFetcher | None = None,
-    ):
-        super().__init__(parent)
-        self.setAttribute(Qt.WidgetAttribute.WA_DeleteOnClose, False)
-        window_title = "配置向导"
-        if survey_title:
-            window_title = f"{window_title} - {_shorten_text(survey_title, 36)}"
-        self.setWindowTitle(window_title)
-        self.resize(self._PREFERRED_DIALOG_SIZE)
-
+        embedded: bool = False,
+    ) -> None:
+        self._embedded = bool(embedded)
+        self._survey_title_text = (
+            f"配置向导 - {_shorten_text(survey_title, 36)}" if survey_title else "配置向导"
+        )
         self.entries = entries
         raw_info = list(info or [])
         self.info = build_entry_info_list(self.entries, raw_info)
@@ -157,16 +153,29 @@ class QuestionWizardDialog(
             self._show_empty_state()
 
     def _build_ui(self) -> None:
-        layout = QVBoxLayout(self)
-        layout.setContentsMargins(20, 16, 20, 16)
+        host = cast(Any, self)
+        layout = QVBoxLayout(host)
+        if self._embedded:
+            layout.setContentsMargins(16, 10, 16, 12)
+        else:
+            layout.setContentsMargins(20, 16, 20, 16)
         layout.setSpacing(12)
 
         top_row = QHBoxLayout()
         top_row.setContentsMargins(0, 0, 0, 0)
         top_row.setSpacing(12)
 
+        if self._embedded:
+            back_btn = TransparentToolButton(FluentIcon.RETURN, host)
+            back_btn.setFixedSize(34, 34)
+            back_btn.setToolTip("返回主页")
+            back_btn.clicked.connect(host.reject)
+            top_row.addWidget(back_btn)
+            title_label = SubtitleLabel(self._survey_title_text, host)
+            top_row.addWidget(title_label)
+
         top_row.addStretch(1)
-        search_edit = SearchLineEdit(self)
+        search_edit = SearchLineEdit(host)
         search_edit.setPlaceholderText("搜索题号、题干、选项、逻辑摘要")
         search_edit.setFixedWidth(360)
         search_edit.searchSignal.connect(self._handle_search)
@@ -175,17 +184,18 @@ class QuestionWizardDialog(
         self._search_edit = search_edit
         self._configure_search_popup(search_edit)
         top_row.addWidget(search_edit)
-        top_row.addStretch(1)
+        if not self._embedded:
+            top_row.addStretch(1)
 
         layout.addLayout(top_row)
 
-        status_label = BodyLabel("", self)
+        status_label = BodyLabel("", host)
         status_label.setStyleSheet("font-size: 12px;")
         _apply_label_color(status_label, "#666666", "#bfbfbf")
         self._search_status_label = status_label
         layout.addWidget(status_label)
 
-        splitter = QSplitter(Qt.Orientation.Horizontal, self)
+        splitter = QSplitter(Qt.Orientation.Horizontal, host)
         splitter.setChildrenCollapsible(False)
         splitter.setHandleWidth(8)
         splitter.setStyleSheet(
@@ -195,7 +205,7 @@ class QuestionWizardDialog(
         self._content_splitter = splitter
         layout.addWidget(splitter, 1)
 
-        left_card = CardWidget(self)
+        left_card = CardWidget(host)
         left_layout = QVBoxLayout(left_card)
         left_layout.setContentsMargins(10, 10, 10, 10)
         left_layout.setSpacing(8)
@@ -209,23 +219,25 @@ class QuestionWizardDialog(
         left_card.setMaximumWidth(_LEFT_PANEL_MAX_WIDTH)
         splitter.addWidget(left_card)
 
-        right_card = CardWidget(self)
+        right_card = CardWidget(host)
         right_layout = QVBoxLayout(right_card)
         right_layout.setContentsMargins(8, 8, 8, 8)
         right_layout.setSpacing(0)
         detail_scroll = ScrollArea(right_card)
         detail_scroll.setWidgetResizable(True)
         detail_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
-        detail_scroll.enableTransparentBackground()
         detail_stack = _CurrentPagePopUpStackedWidget(right_card)
         cast(QLayout, detail_stack.layout()).setSizeConstraint(
             QLayout.SizeConstraint.SetNoConstraint
         )
         detail_stack.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
         detail_scroll.setWidget(detail_stack)
+        detail_scroll.enableTransparentBackground()
+        detail_scroll.viewport().setAutoFillBackground(False)
+        detail_scroll.viewport().setStyleSheet("background: transparent;")
         self._detail_scroll = detail_scroll
         self._detail_stack = detail_stack
-        detail_scroll.viewport().installEventFilter(self)
+        detail_scroll.viewport().installEventFilter(host)
         right_layout.addWidget(detail_scroll, 1)
         right_card.setMinimumWidth(_RIGHT_PANEL_MIN_WIDTH)
         splitter.addWidget(right_card)
@@ -237,14 +249,14 @@ class QuestionWizardDialog(
         btn_row = QHBoxLayout()
         btn_row.setSpacing(12)
         btn_row.addStretch(1)
-        prev_btn = PushButton("上一题", self)
-        next_btn = PushButton("下一题", self)
-        cancel_btn = PushButton("取消", self)
-        ok_btn = PrimaryPushButton("保存", self)
+        prev_btn = PushButton("上一题", host)
+        next_btn = PushButton("下一题", host)
+        cancel_btn = PushButton("取消", host)
+        ok_btn = PrimaryPushButton("保存", host)
         prev_btn.clicked.connect(self._go_prev)
         next_btn.clicked.connect(self._go_next)
-        cancel_btn.clicked.connect(self.reject)
-        ok_btn.clicked.connect(self.accept)
+        cancel_btn.clicked.connect(host.reject)
+        ok_btn.clicked.connect(host.accept)
         self._prev_button = prev_btn
         self._next_button = next_btn
         btn_row.addWidget(prev_btn)
@@ -336,81 +348,14 @@ class QuestionWizardDialog(
         self._detail_scroll.verticalScrollBar().setValue(0)
 
     def resizeEvent(self, event: QResizeEvent) -> None:
-        super().resizeEvent(event)
+        cast(Any, super()).resizeEvent(event)
         QTimer.singleShot(0, self._clamp_splitter_sizes)
         QTimer.singleShot(0, self._sync_detail_content_width)
 
     def showEvent(self, event: QShowEvent) -> None:
-        super().showEvent(event)
-        self._bind_screen_change_signal()
-        QTimer.singleShot(0, self._fit_into_available_geometry)
+        cast(Any, super()).showEvent(event)
         QTimer.singleShot(0, self._clamp_splitter_sizes)
         QTimer.singleShot(0, self._sync_detail_content_width)
-
-    def _bind_screen_change_signal(self) -> None:
-        if self._screen_change_bound:
-            return
-        window_handle = self.windowHandle()
-        if window_handle is None:
-            return
-        try:
-            window_handle.screenChanged.connect(lambda _screen: self._fit_into_available_geometry())
-            self._screen_change_bound = True
-        except Exception:
-            self._screen_change_bound = False
-
-    def _resolve_target_screen(self):
-        window_handle = self.windowHandle()
-        if window_handle is not None and window_handle.screen() is not None:
-            return window_handle.screen()
-
-        parent_widget = self.parentWidget()
-        if parent_widget is not None:
-            parent_window = parent_widget.window()
-            parent_screen = parent_window.screen() if parent_window is not None else None
-            if parent_screen is not None:
-                return parent_screen
-
-        return self.screen() or QGuiApplication.primaryScreen()
-
-    def _fit_into_available_geometry(self) -> None:
-        screen = self._resolve_target_screen()
-        if screen is None:
-            return
-
-        available = screen.availableGeometry()
-        if available.width() <= 0 or available.height() <= 0:
-            return
-
-        frame_margin_width = 32
-        frame_margin_height = 40
-        max_width = max(self._MIN_DIALOG_SIZE.width(), available.width() - frame_margin_width)
-        max_height = max(self._MIN_DIALOG_SIZE.height(), available.height() - frame_margin_height)
-
-        target_width = min(self._PREFERRED_DIALOG_SIZE.width(), max_width)
-        target_height = min(self._PREFERRED_DIALOG_SIZE.height(), max_height)
-
-        self.setMinimumSize(
-            min(self._MIN_DIALOG_SIZE.width(), target_width),
-            min(self._MIN_DIALOG_SIZE.height(), target_height),
-        )
-        self.setMaximumSize(max_width, max_height)
-
-        resized_width = min(max(self.width(), self.minimumWidth()), max_width)
-        resized_height = min(max(self.height(), self.minimumHeight()), max_height)
-        if resized_width != self.width() or resized_height != self.height():
-            self.resize(resized_width, resized_height)
-
-        frame = self.frameGeometry()
-        frame.moveCenter(available.center())
-        top_left = frame.topLeft()
-        top_left.setX(
-            max(available.left(), min(top_left.x(), available.right() - frame.width() + 1))
-        )
-        top_left.setY(
-            max(available.top(), min(top_left.y(), available.bottom() - frame.height() + 1))
-        )
-        self.move(top_left)
 
     def _visible_indices_for_mode(self) -> List[int]:
         return list(range(len(self.entries)))
@@ -510,7 +455,7 @@ class QuestionWizardDialog(
         if self._empty_page is None:
             page = QWidget(self._detail_stack)
             page_layout = QVBoxLayout(page)
-            page.installEventFilter(self)
+            page.installEventFilter(cast(Any, self))
             page_layout.setContentsMargins(0, 0, 0, 0)
             empty = BodyLabel("当前无题目需要配置", page)
             empty.setAlignment(Qt.AlignmentFlag.AlignCenter)
@@ -546,7 +491,7 @@ class QuestionWizardDialog(
         if page is None:
             page = QWidget(self._detail_stack)
             page.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
-            page.installEventFilter(self)
+            page.installEventFilter(cast(Any, self))
             page_layout = QVBoxLayout(page)
             page_layout.setContentsMargins(0, 0, 0, 0)
             page_layout.setSpacing(0)
@@ -632,10 +577,6 @@ class QuestionWizardDialog(
     def _handle_search(self, keyword: str) -> None:
         self._handle_question_search(keyword)
 
-    def reject(self) -> None:
-        self._restore_entries()
-        super().reject()
-
     def get_results(self) -> Dict[int, Any]:
         return wizard_result_builder.get_results(self)
 
@@ -674,3 +615,144 @@ class QuestionWizardDialog(
 
     def get_dimensions(self) -> Dict[int, Optional[str]]:
         return wizard_result_builder.get_dimensions(self)
+
+
+class QuestionWizardPanel(QuestionWizardBase, QWidget):
+    accepted = Signal()
+    rejected = Signal()
+
+    def __init__(
+        self,
+        entries: List[QuestionEntry],
+        info: List[SurveyQuestionMeta | Dict[str, Any]],
+        survey_title: Optional[str] = None,
+        parent=None,
+        reliability_mode_enabled: bool = True,
+        *,
+        media_fetcher: MediaFetcher | None = None,
+    ):
+        super().__init__(parent)
+        self.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, False)
+        self.setAutoFillBackground(False)
+        self._init_wizard_state(
+            entries,
+            info,
+            survey_title,
+            reliability_mode_enabled,
+            media_fetcher=media_fetcher,
+            embedded=True,
+        )
+
+    def accept(self) -> None:
+        if not validate_before_accept(self):
+            return
+        self.accepted.emit()
+
+    def reject(self) -> None:
+        self._restore_entries()
+        self.rejected.emit()
+
+
+class QuestionWizardDialog(QuestionWizardBase, QDialog):
+    _PREFERRED_DIALOG_SIZE = QSize(1180, 840)
+    _MIN_DIALOG_SIZE = QSize(900, 620)
+
+    def __init__(
+        self,
+        entries: List[QuestionEntry],
+        info: List[SurveyQuestionMeta | Dict[str, Any]],
+        survey_title: Optional[str] = None,
+        parent=None,
+        reliability_mode_enabled: bool = True,
+        *,
+        media_fetcher: MediaFetcher | None = None,
+    ):
+        super().__init__(parent)
+        self.setAttribute(Qt.WidgetAttribute.WA_DeleteOnClose, False)
+        window_title = "配置向导"
+        if survey_title:
+            window_title = f"{window_title} - {_shorten_text(survey_title, 36)}"
+        self.setWindowTitle(window_title)
+        self.resize(self._PREFERRED_DIALOG_SIZE)
+        self._init_wizard_state(
+            entries,
+            info,
+            survey_title,
+            reliability_mode_enabled,
+            media_fetcher=media_fetcher,
+            embedded=False,
+        )
+
+    def showEvent(self, event: QShowEvent) -> None:
+        super().showEvent(event)
+        self._bind_screen_change_signal()
+        QTimer.singleShot(0, self._fit_into_available_geometry)
+
+    def _bind_screen_change_signal(self) -> None:
+        if self._screen_change_bound:
+            return
+        window_handle = self.windowHandle()
+        if window_handle is None:
+            return
+        try:
+            window_handle.screenChanged.connect(lambda _screen: self._fit_into_available_geometry())
+            self._screen_change_bound = True
+        except Exception:
+            self._screen_change_bound = False
+
+    def _resolve_target_screen(self):
+        window_handle = self.windowHandle()
+        if window_handle is not None and window_handle.screen() is not None:
+            return window_handle.screen()
+
+        parent_widget = self.parentWidget()
+        if parent_widget is not None:
+            parent_window = parent_widget.window()
+            parent_screen = parent_window.screen() if parent_window is not None else None
+            if parent_screen is not None:
+                return parent_screen
+
+        return self.screen() or QGuiApplication.primaryScreen()
+
+    def _fit_into_available_geometry(self) -> None:
+        screen = self._resolve_target_screen()
+        if screen is None:
+            return
+
+        available = screen.availableGeometry()
+        if available.width() <= 0 or available.height() <= 0:
+            return
+
+        frame_margin_width = 32
+        frame_margin_height = 40
+        max_width = max(self._MIN_DIALOG_SIZE.width(), available.width() - frame_margin_width)
+        max_height = max(self._MIN_DIALOG_SIZE.height(), available.height() - frame_margin_height)
+
+        target_width = min(self._PREFERRED_DIALOG_SIZE.width(), max_width)
+        target_height = min(self._PREFERRED_DIALOG_SIZE.height(), max_height)
+
+        self.setMinimumSize(
+            min(self._MIN_DIALOG_SIZE.width(), target_width),
+            min(self._MIN_DIALOG_SIZE.height(), target_height),
+        )
+        self.setMaximumSize(max_width, max_height)
+
+        resized_width = min(max(self.width(), self.minimumWidth()), max_width)
+        resized_height = min(max(self.height(), self.minimumHeight()), max_height)
+        if resized_width != self.width() or resized_height != self.height():
+            self.resize(resized_width, resized_height)
+
+        frame = self.frameGeometry()
+        frame.moveCenter(available.center())
+        top_left = frame.topLeft()
+        top_left.setX(
+            max(available.left(), min(top_left.x(), available.right() - frame.width() + 1))
+        )
+        top_left.setY(
+            max(available.top(), min(top_left.y(), available.bottom() - frame.height() + 1))
+        )
+        self.move(top_left)
+
+    def reject(self) -> None:
+        self._restore_entries()
+        super().reject()

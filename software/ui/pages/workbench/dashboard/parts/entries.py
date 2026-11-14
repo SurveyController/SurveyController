@@ -13,7 +13,9 @@ from software.ui.pages.workbench.question_editor.constants import (
     _get_entry_type_label,
 )
 from software.ui.pages.workbench.question_editor.wizard_dialog import (
+    QuestionWizardBase,
     QuestionWizardDialog,
+    QuestionWizardPanel,
 )
 from software.ui.pages.workbench.question_editor.psycho_config import (
     PSYCHO_SUPPORTED_TYPES,
@@ -27,7 +29,7 @@ _TEXT_RANDOM_MOBILE_TOKEN = "__RANDOM_MOBILE__"
 
 _TEXT_RANDOM_ID_CARD_TOKEN = "__RANDOM_ID_CARD__"
 
-WizardResultGetter = Callable[[QuestionWizardDialog], Dict[int, Any]]
+WizardResultGetter = Callable[[QuestionWizardBase], Dict[int, Any]]
 WizardEntryApplier = Callable[[QuestionEntry, Any], None]
 WizardApplyRule = tuple[WizardResultGetter, WizardEntryApplier]
 
@@ -312,11 +314,85 @@ class DashboardEntriesMixin:
             self._refresh_entry_table()
 
     def _apply_wizard_results(
-        self, entries: List[QuestionEntry], dlg: QuestionWizardDialog
+        self, entries: List[QuestionEntry], dlg: QuestionWizardBase
     ) -> None:
         for rules in (_WIZARD_DISTRIBUTION_RULES, _WIZARD_TEXT_RULES, _WIZARD_META_RULES):
             for getter, applier in rules:
                 _apply_result_updates(entries, getter(dlg), applier)
+
+    def close_inline_question_wizard(self) -> None:
+        panel = getattr(self, "_inline_wizard", None)
+        self._inline_wizard = None
+        wizard_host = getattr(self, "wizard_host", None)
+        main_stack = getattr(self, "main_stack", None)
+        home_view = getattr(self, "home_view", None)
+        if wizard_host is not None and wizard_host.layout() is not None and panel is not None:
+            wizard_host.layout().removeWidget(panel)
+        if panel is not None:
+            try:
+                if isValid(panel):
+                    panel.hide()
+                    panel.deleteLater()
+            except Exception:
+                pass
+        if main_stack is not None and home_view is not None:
+            main_stack.setCurrentWidget(home_view)
+
+    def open_inline_question_wizard(
+        self,
+        entries: List[QuestionEntry],
+        info: List[SurveyQuestionMeta | Dict[str, Any]],
+        survey_title: Optional[str] = None,
+        *,
+        on_finished: Optional[Callable[[bool], None]] = None,
+    ) -> None:
+        if not entries:
+            self._toast("请先解析问卷或手动添加题目", "warning")
+            if callable(on_finished):
+                on_finished(False)
+            return
+        wizard_host = getattr(self, "wizard_host", None)
+        main_stack = getattr(self, "main_stack", None)
+        if wizard_host is None or main_stack is None or wizard_host.layout() is None:
+            accepted = self.run_question_wizard(entries, info, survey_title)
+            if callable(on_finished):
+                on_finished(accepted)
+            return
+
+        self.close_inline_question_wizard()
+        title = survey_title if survey_title is not None else self._survey_title
+        reliability_mode_enabled = self.runtime_page.reliability_card.switchButton.isChecked()
+        media_fetcher = getattr(getattr(self, "controller", None), "fetch_question_media", None)
+        panel = QuestionWizardPanel(
+            entries,
+            info,
+            title,
+            parent=wizard_host,
+            reliability_mode_enabled=reliability_mode_enabled,
+            media_fetcher=media_fetcher,
+        )
+        self._inline_wizard = panel
+        wizard_host.layout().addWidget(panel)
+        main_stack.setCurrentWidget(wizard_host)
+
+        def _finish(accepted: bool) -> None:
+            if getattr(self, "_inline_wizard", None) is not panel:
+                return
+            applied = False
+            try:
+                if accepted:
+                    self._apply_wizard_results(entries, panel)
+                    applied = True
+            except ValueError as exc:
+                self._toast(f"配置应用失败：{exc}", "error")
+                applied = False
+            finally:
+                self.close_inline_question_wizard()
+            if callable(on_finished):
+                on_finished(applied)
+
+        panel.accepted.connect(lambda: _finish(True))
+        panel.rejected.connect(lambda: _finish(False))
 
     def run_question_wizard(
         self,

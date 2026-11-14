@@ -56,6 +56,7 @@ class DashboardPage(
         self._pending_restart = False
         self._is_closing = False
         self._clipboard_parse_ticket = 0
+        self._inline_wizard = None
         self._build_ui()
         self.config_drawer = ConfigDrawer(self, self._load_config_from_path)
         self._bind_events()
