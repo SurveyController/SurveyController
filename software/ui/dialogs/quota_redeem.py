@@ -13,17 +13,18 @@ from PySide6.QtWidgets import QHBoxLayout, QVBoxLayout, QWidget
 from qfluentwidgets import (
     BodyLabel,
     CaptionLabel,
+    CardWidget,
     FluentIcon,
-    IndeterminateProgressRing,
     IconWidget,
+    IndeterminateProgressRing,
     InfoBar,
     InfoBarPosition,
     LineEdit,
     MessageBox,
     MessageBoxBase,
-    PushButton,
-    SimpleCardWidget,
+    PushSettingCard,
     StrongBodyLabel,
+    SubtitleLabel,
     isDarkTheme,
 )
 
@@ -54,9 +55,9 @@ class QuotaRedeemDialog(MessageBoxBase):
         super().__init__(parent)
         self._submit_async_task = submit_async_task
         self.setAttribute(Qt.WidgetAttribute.WA_QuitOnClose, False)
-        self.setWindowTitle("额度兑换")
-        self.widget.setFixedWidth(540)
-        self.widget.setMinimumHeight(320)
+        self.setWindowTitle("获取随机 IP 额度")
+        self.widget.setFixedWidth(520)
+        self.widget.setMinimumHeight(340)
         self._redeeming = False
         self._redeemFinished.connect(
             self._on_redeem_finished,
@@ -66,14 +67,12 @@ class QuotaRedeemDialog(MessageBoxBase):
         self.titleRow = QWidget(self.widget)
         title_layout = QHBoxLayout(self.titleRow)
         title_layout.setContentsMargins(0, 0, 0, 0)
-        title_layout.setSpacing(8)
-        self.heroIcon = IconWidget(FluentIcon.SHOPPING_CART, self.titleRow)
+        title_layout.setSpacing(10)
+        self.heroIcon = IconWidget(FluentIcon.GLOBE, self.titleRow)
         self.heroIcon.setFixedSize(22, 22)
         title_layout.addWidget(self.heroIcon, 0, Qt.AlignmentFlag.AlignVCenter)
 
-        self.heroLabel = StrongBodyLabel("额度兑换", self.titleRow)
-        self.heroLabel.setWordWrap(True)
-        self.heroLabel.setStyleSheet("font-size: 20px; font-weight: 700;")
+        self.heroLabel = SubtitleLabel("获取随机 IP 额度", self.titleRow)
         title_layout.addWidget(self.heroLabel, 0, Qt.AlignmentFlag.AlignVCenter)
         title_layout.addStretch(1)
 
@@ -81,49 +80,54 @@ class QuotaRedeemDialog(MessageBoxBase):
         self.accountHintLabel.setWordWrap(True)
         self._apply_account_hint_style()
 
-        self.formCard = SimpleCardWidget(self.widget)
-        self.formCard.setStyleSheet(
-            "SimpleCardWidget {"
-            "padding: 0px;"
-            "border: 1px solid rgba(120, 120, 120, 0.18);"
-            "border-radius: 12px;"
-            "}"
+        self.shopCard = PushSettingCard(
+            "前往购买",
+            FluentIcon.SHOPPING_CART,
+            "购买额度卡密",
+            "如果你是大学生，可以申请学生优惠",
+            self.widget,
         )
-        form_layout = QVBoxLayout(self.formCard)
-        form_layout.setContentsMargins(16, 14, 16, 14)
-        form_layout.setSpacing(10)
-
-        self.cardCodeTitleLabel = CaptionLabel("请输入额度卡密：", self.formCard)
-        self.cardCodeEdit = LineEdit(self.formCard)
-        self.cardCodeEdit.setPlaceholderText("请输入卡密")
-        self.cardCodeEdit.setClearButtonEnabled(True)
-        self.cardCodeEdit.setMaxLength(16)
-
-        store_row = QWidget(self.formCard)
-        store_layout = QHBoxLayout(store_row)
-        store_layout.setContentsMargins(0, 0, 0, 0)
-        store_layout.setSpacing(10)
-        self.storeHintLabel = CaptionLabel(
-            "如果你是大学生，可以加入社区群聊申请优惠",
-            store_row,
-        )
-        self.storeHintLabel.setWordWrap(True)
-        self.storeButton = PushButton("前往卡密店铺", store_row)
+        self.storeButton = self.shopCard.button
         self._apply_shop_button_icon()
         self.storeButton.clicked.connect(self._open_shop)
-        store_layout.addWidget(self.storeHintLabel, 1)
-        store_layout.addWidget(self.storeButton, 0, Qt.AlignmentFlag.AlignRight)
 
-        form_layout.addWidget(self.cardCodeTitleLabel)
+        self.formCard = CardWidget(self.widget)
+        form_layout = QVBoxLayout(self.formCard)
+        form_layout.setContentsMargins(18, 14, 18, 16)
+        form_layout.setSpacing(8)
+
+        redeem_header = QHBoxLayout()
+        redeem_header.setContentsMargins(0, 0, 0, 0)
+        redeem_header.setSpacing(8)
+        redeem_icon = IconWidget(FluentIcon.TAG, self.formCard)
+        redeem_icon.setFixedSize(16, 16)
+        redeem_header.addWidget(redeem_icon, 0, Qt.AlignmentFlag.AlignVCenter)
+        self.cardCodeTitleLabel = StrongBodyLabel("卡密兑换", self.formCard)
+        redeem_header.addWidget(self.cardCodeTitleLabel, 0, Qt.AlignmentFlag.AlignVCenter)
+        redeem_header.addStretch(1)
+        form_layout.addLayout(redeem_header)
+
+        self.cardCodeHintLabel = CaptionLabel(
+            "请输入额度卡密",
+            self.formCard,
+        )
+        self.cardCodeHintLabel.setWordWrap(True)
+        form_layout.addWidget(self.cardCodeHintLabel)
+
+        self.cardCodeEdit = LineEdit(self.formCard)
+        self.cardCodeEdit.setPlaceholderText("请在此处粘贴额度卡密")
+        self.cardCodeEdit.setClearButtonEnabled(True)
+        self.cardCodeEdit.setMaxLength(16)
+        self.cardCodeEdit.setFixedHeight(36)
         form_layout.addWidget(self.cardCodeEdit)
-        form_layout.addWidget(store_row)
 
         self.loadingLabel = BodyLabel("", self.widget)
         self.loadingLabel.hide()
 
-        self.viewLayout.setSpacing(10)
+        self.viewLayout.setSpacing(12)
         self.viewLayout.addWidget(self.titleRow)
         self.viewLayout.addWidget(self.accountHintLabel)
+        self.viewLayout.addWidget(self.shopCard)
         self.viewLayout.addWidget(self.formCard)
         self.viewLayout.addWidget(self.loadingLabel)
 
