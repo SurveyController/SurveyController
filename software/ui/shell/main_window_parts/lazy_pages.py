@@ -39,6 +39,7 @@ class MainWindowLazyPagesMixin:
             FluentIcon.HOME,
             "概览",
             position=NavigationItemPosition.TOP,
+            isTransparent=True,
         )
         self.addSubInterface(
             self.runtime_page,

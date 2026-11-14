@@ -31,9 +31,7 @@ class DashboardConfigIOMixin:
         ) -> Any: ...
         def apply_config(self, cfg: Any) -> None: ...
         def _build_config(self) -> Any: ...
-        def _refresh_entry_table(self) -> None: ...
         def update_question_meta(self, title: str, count: int) -> None: ...
-        def _sync_start_button_state(self, running: bool | None = None) -> None: ...
         def window(self) -> Any: ...
 
     @staticmethod
@@ -172,7 +170,6 @@ class DashboardConfigIOMixin:
             self.workbench_state.entries,
             self.workbench_state.entry_questions_info,
         )
-        self._refresh_entry_table()
         try:
             self.update_question_meta(cfg.survey_title or "", len(cfg.question_entries or []))
         except Exception as exc:
@@ -181,7 +178,9 @@ class DashboardConfigIOMixin:
                 exc,
                 level=logging.WARNING,
             )
-        self._sync_start_button_state()
+        sync_context = getattr(self, "sync_reverse_fill_context", None)
+        if callable(sync_context):
+            sync_context()
         self.controller.refresh_random_ip_counter()
         log_action(
             "CONFIG",

@@ -3,7 +3,8 @@ from __future__ import annotations
 from types import SimpleNamespace
 
 import pytest
-from PySide6.QtCore import QObject, Signal
+from PySide6.QtCore import QObject, Qt, Signal
+from PySide6.QtWidgets import QApplication
 
 from software.core.config.schema import RuntimeConfig
 from surveycore.core.questions.config import QuestionEntry
@@ -135,9 +136,6 @@ class _FakeAiSettings:
 
 
 def _patch_page_dependencies(monkeypatch) -> None:
-    import software.ui.pages.workbench.dashboard.page as dashboard_module
-    import software.ui.pages.workbench.dashboard.parts.progress as progress_module
-    import software.ui.pages.workbench.dashboard.parts.random_ip as dash_random_ip
     import software.ui.pages.workbench.runtime_panel.proxy_sync as runtime_proxy_sync
     import software.ui.pages.workbench.runtime_panel.random_ip_card as random_ip_card
     import software.ui.pages.workbench.shared.clipboard as clipboard_module
@@ -172,18 +170,9 @@ def _patch_page_dependencies(monkeypatch) -> None:
     monkeypatch.setattr(
         runtime_proxy_sync, "apply_custom_proxy_api", lambda *_args, **_kwargs: None
     )
-    monkeypatch.setattr(dashboard_module, "load_shop_icon", lambda: None)
-    monkeypatch.setattr(dash_random_ip, "load_shop_icon", lambda: None)
-    monkeypatch.setattr(dash_random_ip, "get_session_snapshot", lambda: {"authenticated": False})
-    monkeypatch.setattr(dash_random_ip, "has_authenticated_session", lambda: False)
-    monkeypatch.setattr(
-        dash_random_ip, "get_random_ip_counter_snapshot_local", lambda: (0, 0, False)
-    )
-    monkeypatch.setattr(DashboardPage, "_init_random_ip_status_refresh", lambda self: None)
     monkeypatch.setattr(
         clipboard_module.SurveyClipboardMixin, "_on_clipboard_changed", lambda self: None
     )
-    monkeypatch.setattr(progress_module, "log_action", lambda *_args, **_kwargs: None)
 
 
 def test_runtime_page_builds_and_syncs_config_without_network(monkeypatch, qtbot) -> None:
@@ -307,7 +296,7 @@ def test_reverse_fill_page_builds_and_updates_config(monkeypatch, qtbot, tmp_pat
     assert page.stop_btn.isEnabled() is False
 
 
-def test_dashboard_page_builds_and_updates_core_state(monkeypatch, qtbot) -> None:
+def test_dashboard_page_builds_first_step_with_mica_transparency(monkeypatch, qtbot) -> None:
     _patch_page_dependencies(monkeypatch)
     controller = _FakeController()
     runtime_page = RuntimePage(controller)
@@ -322,37 +311,25 @@ def test_dashboard_page_builds_and_updates_core_state(monkeypatch, qtbot) -> Non
     qtbot.addWidget(strategy_page)
     qtbot.addWidget(page)
 
-    page._refresh_entry_table()
-    page.update_status("已提交 1/2 份", 1, 2)
-    page.update_thread_progress(
-        {
-            "target": 4,
-            "num_threads": 2,
-            "threads": [
-                {
-                    "thread_name": "Worker-1",
-                    "thread_display_name": "会话 1",
-                    "status_text": "提交中",
-                    "success_count": 1,
-                    "fail_count": 0,
-                    "step_current": 1,
-                    "step_total": 2,
-                    "running": True,
-                }
-            ],
-        }
-    )
-    assert "Worker-1" in page._thread_progress_rows
-    page.on_run_state_changed(True)
-    page.on_pause_state_changed(True, "手动暂停")
-    page.on_pause_state_changed(False, "")
-    page.on_run_state_changed(False)
-
-    assert page.entry_table.rowCount() == 1
-    assert page.progress_pct.text() == "50%"
-    assert page.start_btn.text() in {"开始执行", "重新开始"}
+    page.show()
+    QApplication.processEvents()
+    assert page.qr_btn.isVisible()
+    assert page.url_edit.isVisible()
+    assert page.parse_btn.isVisible()
+    assert [action.text() for action in page.config_command_bar.actions()] == [
+        "配置列表",
+        "载入配置",
+        "保存配置",
+    ]
+    assert "background: transparent" in page.link_card.styleSheet()
+    assert page.testAttribute(Qt.WidgetAttribute.WA_StyledBackground) is False
+    assert not hasattr(page, "target_spin")
+    assert not hasattr(page, "entry_table")
+    assert not hasattr(page, "thread_view_stack")
+    assert not hasattr(page, "progress_bar")
 
 
+@pytest.mark.skip(reason="execution progress is presented on the reverse-fill page")
 def test_dashboard_thread_progress_rows_keep_visible_after_update(monkeypatch, qtbot) -> None:
     _patch_page_dependencies(monkeypatch)
     controller = _FakeController()
@@ -398,6 +375,7 @@ def test_dashboard_thread_progress_rows_keep_visible_after_update(monkeypatch, q
     assert page.thread_progress_rows_container.sizeHint().height() > 0
 
 
+@pytest.mark.skip(reason="execution progress is presented on the reverse-fill page")
 def test_dashboard_thread_progress_shows_indeterminate_bar_while_fetching_proxy(
     monkeypatch,
     qtbot,
@@ -439,6 +417,7 @@ def test_dashboard_thread_progress_shows_indeterminate_bar_while_fetching_proxy(
     assert row["step_busy_bar"].isVisible() is True
 
 
+@pytest.mark.skip(reason="execution progress is presented on the reverse-fill page")
 def test_dashboard_thread_progress_switches_to_current_step_immediately(
     monkeypatch,
     qtbot,
@@ -502,6 +481,7 @@ def test_dashboard_thread_progress_switches_to_current_step_immediately(
     assert row["step_busy_bar"].isVisible() is True
 
 
+@pytest.mark.skip(reason="execution progress is presented on the reverse-fill page")
 def test_dashboard_thread_progress_shows_progress_bar_after_thread_finishes(
     monkeypatch, qtbot
 ) -> None:

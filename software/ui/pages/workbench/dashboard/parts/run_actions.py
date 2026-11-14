@@ -82,13 +82,30 @@ class DashboardRunActionsMixin:
         self._toast("运行编排器未初始化，无法开始执行", "error")
 
     def update_question_meta(self, title: str, count: int):
-        self.count_label.setText(f"{count} 题")
-        self.title_label.setText(title or "已配置的题目")
+        if hasattr(self, "count_label"):
+            self.count_label.setText(f"{count} 题")
+        if hasattr(self, "title_label"):
+            self.title_label.setText(title or "已配置的题目")
         self._survey_title = title or ""
-        self._refresh_platform_badge()
-        self._refresh_entry_table()
-        self._sync_start_button_state()
-        self._refresh_ip_cost_infobar()
+        refresh_cost = getattr(self, "_refresh_ip_cost_infobar", None)
+        if callable(refresh_cost):
+            refresh_cost()
+
+    def _apply_runtime_ui_state(self, state: dict) -> None:
+        if not hasattr(self, "target_spin"):
+            return
+        if state.get("target") is not None:
+            self.target_spin.blockSignals(True)
+            self.target_spin.setValue(max(1, int(state["target"])))
+            self.target_spin.blockSignals(False)
+        if state.get("threads") is not None and hasattr(self, "thread_spin"):
+            self.thread_spin.blockSignals(True)
+            self.thread_spin.setValue(max(1, int(state["threads"])))
+            self.thread_spin.blockSignals(False)
+        if state.get("random_ip_enabled") is not None and hasattr(self, "random_ip_cb"):
+            self.random_ip_cb.blockSignals(True)
+            self.random_ip_cb.setChecked(bool(state["random_ip_enabled"]))
+            self.random_ip_cb.blockSignals(False)
 
     def _current_survey_provider(self) -> str:
         snapshot_getter = getattr(self.controller, "get_survey_snapshot", None)
@@ -223,53 +240,18 @@ class DashboardRunActionsMixin:
                 level=logging.WARNING,
             )
 
-    def _apply_runtime_ui_state(self, state: dict) -> None:
-        target = state.get("target")
-        if target is not None and int(self.target_spin.value()) != int(target):
-            self.target_spin.blockSignals(True)
-            self.target_spin.setValue(max(1, int(target)))
-            self.target_spin.blockSignals(False)
-
-        self.thread_spin.setRange(1, HTTP_MAX_THREADS)
-
-        threads = state.get("threads")
-        if threads is not None and int(self.thread_spin.value()) != int(threads):
-            self.thread_spin.blockSignals(True)
-            self.thread_spin.setValue(max(1, int(threads)))
-            self.thread_spin.blockSignals(False)
-
-        random_ip_enabled = state.get("random_ip_enabled")
-        if random_ip_enabled is not None and bool(self.random_ip_cb.isChecked()) != bool(
-            random_ip_enabled
-        ):
-            self.random_ip_cb.blockSignals(True)
-            self.random_ip_cb.setChecked(bool(random_ip_enabled))
-            self.random_ip_cb.blockSignals(False)
-            self._sync_random_ip_toggle_presentation(bool(random_ip_enabled))
-
-        proxy_source = state.get("proxy_source")
-        if proxy_source is not None:
-            self._sync_proxy_source_combo(str(proxy_source))
-        self._sync_custom_proxy_api_visible()
-
-        self._refresh_ip_cost_infobar()
-
     def apply_config(self, cfg: RuntimeConfig):
         self.url_edit.setText(cfg.url)
-        self.target_spin.setValue(max(1, int(cfg.target or 1)))
-        self.thread_spin.setValue(max(1, int(cfg.threads or 1)))
-
-        self.random_ip_cb.blockSignals(True)
-        self.random_ip_cb.setChecked(bool(cfg.random_ip_enabled))
-        self.random_ip_cb.blockSignals(False)
-        self._sync_random_ip_toggle_presentation(bool(cfg.random_ip_enabled))
-        self._sync_proxy_source_combo(getattr(cfg, "proxy_source", _PROXY_SOURCE_DEFAULT))
-        self._sync_custom_proxy_api_text(getattr(cfg, "custom_proxy_api", ""))
-        self._sync_custom_proxy_api_visible(getattr(cfg, "proxy_source", _PROXY_SOURCE_DEFAULT))
-
-        self._refresh_entry_table()
-        self._sync_start_button_state()
-        self._refresh_ip_cost_infobar()
+        self._survey_title = str(cfg.survey_title or "")
+        if hasattr(self, "target_spin"):
+            self.target_spin.setValue(max(1, int(cfg.target or 1)))
+            self.thread_spin.setValue(max(1, int(cfg.threads or 1)))
+            self.random_ip_cb.blockSignals(True)
+            self.random_ip_cb.setChecked(bool(cfg.random_ip_enabled))
+            self.random_ip_cb.blockSignals(False)
+            sync_toggle = getattr(self, "_sync_random_ip_toggle_presentation", None)
+            if callable(sync_toggle):
+                sync_toggle(bool(cfg.random_ip_enabled))
 
     def _go_to_runtime_page(self) -> None:
         main_win = self.window()
@@ -315,23 +297,10 @@ class DashboardRunActionsMixin:
             )
         else:
             self.runtime_page.update_config(cfg)
-            cfg.target = max(1, self.target_spin.value())
-            cfg.threads = max(1, self.thread_spin.value())
-            cfg.random_ip_enabled = self.random_ip_cb.isChecked()
-        try:
-            source = self._selected_proxy_source()
-            cfg.proxy_source = source
-            cfg.custom_proxy_api = (
-                self.custom_proxy_api_edit.text().strip()
-                if source == _PROXY_SOURCE_CUSTOM and hasattr(self, "custom_proxy_api_edit")
-                else ""
-            )
-        except Exception as exc:
-            log_suppressed_exception(
-                "build_base_config: proxy source",
-                exc,
-                level=logging.WARNING,
-            )
+            if hasattr(self, "target_spin"):
+                cfg.target = max(1, self.target_spin.value())
+                cfg.threads = max(1, self.thread_spin.value())
+                cfg.random_ip_enabled = self.random_ip_cb.isChecked()
         cfg.answer_rules = list(self.strategy_page.get_rules() or [])
         cfg.dimension_groups = list(self.strategy_page.get_dimension_groups() or [])
         return cfg

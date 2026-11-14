@@ -214,47 +214,26 @@ class WorkbenchPresenter:
         paused = bool((snapshot or {}).get("paused"))
         pause_reason = str((snapshot or {}).get("status_text") or "")
         progress = (snapshot or {}).get("progress") or {}
-        threads = (snapshot or {}).get("threads") or {}
         random_ip = (snapshot or {}).get("random_ip") or {}
         if getattr(self, "_last_running_state", None) != running:
+            was_running = self._last_running_state
             self._last_running_state = running
-            self.dashboard.on_run_state_changed(running)
             self.reverse_fill_page.on_run_state_changed(running)
-        self.dashboard.set_random_ip_loading(
-            bool(random_ip.get("loading")),
-            str(random_ip.get("loading_message") or ""),
-        )
+            if was_running and not running and self.dashboard._pending_restart:
+                self.dashboard._pending_restart = False
+                QTimer.singleShot(0, self.run_coordinator.start)
         self.reverse_fill_page.set_random_ip_loading(
             bool(random_ip.get("loading")),
             str(random_ip.get("loading_message") or ""),
-        )
-        self.dashboard.update_status(
-            str((snapshot or {}).get("status_text") or ""),
-            int(progress.get("current") or 0),
-            int(progress.get("target") or 0),
         )
         self.reverse_fill_page.update_status(
             str((snapshot or {}).get("status_text") or ""),
             int(progress.get("current") or 0),
             int(progress.get("target") or 0),
         )
-        thread_payload = {
-            "threads": list(threads.get("rows") or []),
-            "target": int(progress.get("target") or 0),
-            "num_threads": int(threads.get("num_threads") or 0),
-            "per_thread_target": int(threads.get("per_thread_target") or 0),
-            "device_quota_fail_count": int(progress.get("device_quota_fail_count") or 0),
-            "initializing": bool((snapshot or {}).get("initialization", {}).get("active")),
-            "initializing_text": str((snapshot or {}).get("initialization", {}).get("text") or ""),
-            "initialization_logs": list(
-                (snapshot or {}).get("initialization", {}).get("logs") or []
-            ),
-        }
-        self.dashboard.update_thread_progress(thread_payload)
         pause_state = (paused, pause_reason if paused else "")
         if getattr(self, "_last_pause_state", None) != pause_state:
             self._last_pause_state = pause_state
-            self.dashboard.on_pause_state_changed(*pause_state)
             self.reverse_fill_page.on_pause_state_changed(*pause_state)
 
     def sync_reverse_fill_context(self) -> None:

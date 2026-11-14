@@ -228,9 +228,9 @@ def test_dashboard_config_load_and_save_without_workbench(monkeypatch, tmp_path)
     assert page.applied_configs == [cfg]
     assert page.workbench_state.entries == cfg.question_entries
     assert page.strategy_page.set_questions_info.call_args.args[0] == cfg.questions_info
-    assert page.refreshed == 1
+    assert page.refreshed == 0
     assert page.meta_updates == [("载入标题", 1)]
-    assert page.synced == 1
+    assert page.synced == 0
     page.controller.refresh_random_ip_counter.assert_called_once()
 
     page.controller.load_saved_config.side_effect = ValueError("broken")

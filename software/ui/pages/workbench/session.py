@@ -10,6 +10,12 @@ from surveycore.core.questions.config import QuestionEntry
 from software.core.config.schema import RuntimeConfig
 from software.application.run_plan import compile_run_plan, question_id
 from software.logging.action_logger import log_action
+from software.ui.pages.workbench.shared.run_feedback import (
+    get_completion_notified,
+    get_last_progress,
+    set_completion_notified,
+    set_last_progress,
+)
 from surveycore.providers.contracts import SurveyQuestionMeta, ensure_survey_question_metas
 from software.ui.pages.workbench.question_editor.add_dialog import (
     QuestionAddDialog,
@@ -106,6 +112,11 @@ class WorkbenchRunCoordinator:
         return self.state.has_question_entries()
 
     def is_completed_run(self) -> bool:
+        if self.reverse_fill_page is not None:
+            return bool(
+                get_completion_notified(self.reverse_fill_page)
+                or get_last_progress(self.reverse_fill_page) >= 100
+            )
         return bool(
             getattr(self.dashboard, "_completion_notified", False)
             or getattr(self.dashboard, "_last_progress", 0) >= 100
@@ -141,7 +152,7 @@ class WorkbenchRunCoordinator:
     def start(self, *, enable_reverse_fill: bool = False) -> bool:
         dashboard = self.dashboard
         if getattr(self.controller, "running", False):
-            if getattr(dashboard, "_completion_notified", False):
+            if self.is_completed_run():
                 dashboard._pending_restart = True
                 self.controller.stop_run()
                 log_action(
@@ -179,15 +190,19 @@ class WorkbenchRunCoordinator:
                 "未配置任何题目，无法开始执行（请先在'题目配置'页添加/配置题目）",
                 "warning",
             )
-            dashboard._sync_start_button_state(running=False)
+            if self.reverse_fill_page is not None:
+                self.reverse_fill_page._sync_start_button_state(running=False)
             return False
 
         if self.is_completed_run():
-            dashboard.progress_bar.setValue(0)
-            dashboard.progress_pct.setText("0%")
-            dashboard._last_progress = 0
-            dashboard._completion_notified = False
-            dashboard.status_label.setText(f"已提交 0/{cfg.target} 份 | 提交连续失败 0 次")
+            if self.reverse_fill_page is not None:
+                self.reverse_fill_page.progress_bar.setValue(0)
+                self.reverse_fill_page.progress_pct.setText("0%")
+                self.reverse_fill_page.status_label.setText(
+                    f"已提交 0/{cfg.target} 份 | 提交连续失败 0 次"
+                )
+                set_last_progress(self.reverse_fill_page, 0)
+                set_completion_notified(self.reverse_fill_page, False)
 
         self.controller.start_run(cfg)
         log_action(
@@ -208,4 +223,5 @@ class WorkbenchRunCoordinator:
         return self.start(enable_reverse_fill=True)
 
     def resume(self) -> None:
-        self.dashboard.resume_run_from_ui()
+        if self.reverse_fill_page is not None:
+            self.reverse_fill_page._on_resume_clicked()

@@ -24,6 +24,8 @@ class SurveyEntryCard(CardWidget):
         event_filter_owner: QWidget | None = None,
         trailing_widget: QWidget | None = None,
         show_parse_button: bool = False,
+        parse_inline: bool = False,
+        flat: bool = False,
     ) -> None:
         super().__init__(parent)
         self.setAcceptDrops(True)
@@ -31,20 +33,28 @@ class SurveyEntryCard(CardWidget):
         self._event_filter_owner = event_filter_owner
         self._trailing_widget = trailing_widget
         self._show_parse_button = bool(show_parse_button)
+        self._parse_inline = bool(parse_inline)
+        self._flat = bool(flat)
         self._build_ui()
         self._install_entry_filters()
 
     def _build_ui(self) -> None:
         layout = QVBoxLayout(self)
-        layout.setContentsMargins(12, 12, 12, 12)
+        if self._flat:
+            layout.setContentsMargins(0, 0, 0, 0)
+            self.setStyleSheet("background: transparent; border: none;")
+        else:
+            layout.setContentsMargins(12, 12, 12, 12)
         layout.setSpacing(8)
 
         entry_row = QHBoxLayout()
-        entry_row.setSpacing(8)
+        entry_row.setSpacing(10 if self._flat else 8)
+
+        control_height = 40 if self._flat else 36
 
         self.qr_btn = ToolButton(self)
         self.qr_btn.setIcon(FluentIcon.QRCODE)
-        self.qr_btn.setFixedSize(36, 36)
+        self.qr_btn.setFixedSize(control_height, control_height)
         self.qr_btn.setToolTip("上传问卷二维码图片")
         install_tooltip_filter(self.qr_btn)
         entry_row.addWidget(self.qr_btn)
@@ -53,6 +63,8 @@ class SurveyEntryCard(CardWidget):
         self.url_edit.setPlaceholderText("在此拖入/粘贴问卷二维码图片或输入问卷链接")
         self.url_edit.setClearButtonEnabled(True)
         self.url_edit.setAcceptDrops(True)
+        if self._flat:
+            self.url_edit.setFixedHeight(control_height)
         self._paste_only_menu = PasteOnlyMenu(self)
         self.url_edit.installEventFilter(self._paste_only_menu)
         entry_row.addWidget(self.url_edit, 1)
@@ -64,12 +76,17 @@ class SurveyEntryCard(CardWidget):
 
         self.parse_btn: PrimaryPushButton | None = None
         if self._show_parse_button:
-            button_row = QHBoxLayout()
-            button_row.setSpacing(8)
             self.parse_btn = PrimaryPushButton(FluentIcon.PLAY, "自动配置问卷", self)
-            button_row.addWidget(self.parse_btn)
-            button_row.addStretch(1)
-            layout.addLayout(button_row)
+            if self._flat:
+                self.parse_btn.setFixedHeight(control_height)
+            if self._parse_inline:
+                entry_row.addWidget(self.parse_btn)
+            else:
+                button_row = QHBoxLayout()
+                button_row.setSpacing(8)
+                button_row.addWidget(self.parse_btn)
+                button_row.addStretch(1)
+                layout.addLayout(button_row)
 
     def entry_widgets(self) -> tuple[QWidget, ...]:
         widgets: list[QWidget] = [self, self.qr_btn, self.url_edit]

@@ -263,14 +263,6 @@ class MainWindowLifecycleMixin:
         self.controller.refresh_random_ip_counter(connect_legacy=True)
 
     def _on_random_ip_counter_update(self, count: float, limit: float, custom_api: bool) -> None:
-        try:
-            self.dashboard.update_random_ip_counter(count, limit, custom_api)
-        except Exception as exc:
-            log_suppressed_exception(
-                "_on_random_ip_counter_update dashboard",
-                exc,
-                level=logging.WARNING,
-            )
         self._refresh_title_random_ip_user_id()
 
     def _refresh_title_random_ip_user_id(self) -> None:
