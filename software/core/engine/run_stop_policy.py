@@ -59,6 +59,34 @@ class RunStopPolicy:
         consume_reverse_fill_attempt: bool = True,
         reverse_fill_max_retries: int = 1,
     ) -> bool:
+        with self.state.submission_attempt_lock:
+            return self._record_failure(
+                stop_signal,
+                thread_name,
+                failure_reason=failure_reason,
+                status_text=status_text,
+                log_message=log_message,
+                threshold_override=threshold_override,
+                terminal_stop_category=terminal_stop_category,
+                force_stop_when_threshold_reached=force_stop_when_threshold_reached,
+                consume_reverse_fill_attempt=consume_reverse_fill_attempt,
+                reverse_fill_max_retries=reverse_fill_max_retries,
+            )
+
+    def _record_failure(
+        self,
+        stop_signal: Optional[StopSignalLike],
+        thread_name: Optional[str] = None,
+        *,
+        failure_reason: FailureReason = FailureReason.FILL_FAILED,
+        status_text: str = "失败重试",
+        log_message: str = "",
+        threshold_override: Optional[int] = None,
+        terminal_stop_category: str = "fail_threshold",
+        force_stop_when_threshold_reached: bool = False,
+        consume_reverse_fill_attempt: bool = True,
+        reverse_fill_max_retries: int = 1,
+    ) -> bool:
         stop_threshold = max(1, int(threshold_override or self.failure_threshold()))
         is_proxy_unavailable = failure_reason == FailureReason.PROXY_UNAVAILABLE
         with self.state.lock:
@@ -145,6 +173,22 @@ class RunStopPolicy:
         return False
 
     def record_success(
+        self,
+        stop_signal: StopSignalLike,
+        thread_name: Optional[str] = None,
+        *,
+        status_text: str = "提交成功",
+        terminal_message: str = "目标份数已达成",
+    ) -> bool:
+        with self.state.submission_attempt_lock:
+            return self._record_success(
+                stop_signal,
+                thread_name,
+                status_text=status_text,
+                terminal_message=terminal_message,
+            )
+
+    def _record_success(
         self,
         stop_signal: StopSignalLike,
         thread_name: Optional[str] = None,

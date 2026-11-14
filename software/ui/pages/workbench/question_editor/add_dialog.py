@@ -20,7 +20,7 @@ from qfluentwidgets import (
 from software.ui.widgets.no_wheel import NoWheelSpinBox
 from surveycore.core.questions.config import QuestionEntry
 from software.app.config import DEFAULT_FILL_TEXT
-from software.ui.helpers.qfluent_compat import resolve_mask_dialog_parent
+from software.ui.helpers.qfluent_compat import QFluentCompat
 
 from .constants import (
     ANSWER_WEIGHT_MAX,
@@ -37,7 +37,7 @@ from .add_preview import AddPreviewMixin
 
 class QuestionAddDialog(AddPreviewMixin, MessageBoxBase):
     def __init__(self, entries: List[QuestionEntry], parent=None):
-        resolved_parent = resolve_mask_dialog_parent(parent)
+        resolved_parent = QFluentCompat.mask_parent(parent)
         super().__init__(resolved_parent)
         self._fallback_parent = resolved_parent if resolved_parent is not parent else None
         if self._fallback_parent is not None:

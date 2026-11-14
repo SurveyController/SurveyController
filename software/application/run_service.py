@@ -4,6 +4,7 @@ import logging
 import math
 import threading
 import copy
+from collections import deque
 from concurrent.futures import Future
 from typing import Any, Callable, Dict, List, Optional
 
@@ -139,6 +140,7 @@ class RunApplicationService(RandomIpRuntimeService):
         self._state_store.lifecycle.paused = bool(value)
         if not value:
             self._state_store.lifecycle.pause_reason = ""
+            self._state_store.lifecycle.pause_reason_code = ""
 
     @property
     def _stopping(self) -> bool:
@@ -251,7 +253,7 @@ class RunApplicationService(RandomIpRuntimeService):
             raise RuntimeError("运行准备产物缺失，无法启动任务")
         execution_config = copy.deepcopy(prepared.execution_config_template)
         execution_config.proxy_ip_pool = (
-            list(proxy_pool) if execution_config.random_proxy_ip_enabled else []
+            deque(proxy_pool) if execution_config.random_proxy_ip_enabled else deque()
         )
         return (
             execution_config,

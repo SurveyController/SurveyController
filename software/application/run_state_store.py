@@ -30,6 +30,7 @@ class RunLifecycleState:
     starting: bool = False
     initializing: bool = False
     pause_reason: str = ""
+    pause_reason_code: str = ""
 
 
 class RunStateStore:

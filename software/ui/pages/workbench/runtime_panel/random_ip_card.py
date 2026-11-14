@@ -31,7 +31,7 @@ from software.ui.helpers.proxy_access import (
     load_supported_area_codes,
     test_custom_proxy_api,
 )
-from software.ui.helpers.qfluent_compat import set_indeterminate_progress_ring_active
+from software.ui.helpers.qfluent_compat import QFluentCompat
 from software.ui.widgets.setting_cards import set_widget_enabled_with_opacity
 
 _MUNICIPALITY_PROVINCE_CODES = {"110000", "120000", "310000", "500000"}
@@ -556,7 +556,7 @@ class RandomIPSettingCard(ExpandGroupSettingCard):
 
     def setLoading(self, loading: bool, message: str = "") -> None:
         active = bool(loading)
-        set_indeterminate_progress_ring_active(self.loadingRing, active)
+        QFluentCompat.set_indeterminate_progress_active(self.loadingRing, active)
         self.loadingLabel.setVisible(active)
         self.loadingLabel.setText(str(message or "正在处理...") if active else "")
         self.switchButton.setEnabled(not active)

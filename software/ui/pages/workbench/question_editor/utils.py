@@ -1,5 +1,6 @@
 from collections.abc import Mapping, Sequence
 from typing import Any, Dict, List, Optional, Tuple
+from uuid import uuid4
 
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QColor, QIntValidator
@@ -12,6 +13,7 @@ from software.providers.common import (
     normalize_survey_provider,
 )
 from surveycore.providers.contracts import SurveyQuestionMeta, ensure_survey_question_meta
+from software.application.run_plan import question_id
 from software.ui.widgets.no_wheel import NoWheelSlider
 
 
@@ -205,13 +207,14 @@ def _build_entry_info_fallback(entry: QuestionEntry) -> SurveyQuestionMeta:
     return ensure_survey_question_meta(info)
 
 
-def build_entry_info_list(
+def _align_legacy_entry_info(
     entries: Sequence[QuestionEntry],
     questions_info: Optional[Sequence[SurveyQuestionMeta | Mapping[str, Any]]],
 ) -> List[SurveyQuestionMeta]:
 
     selectable_info: List[SurveyQuestionMeta] = []
     provider_map: Dict[Tuple[str, str], List[int]] = {}
+    stable_id_map: Dict[str, List[int]] = {}
     question_num_map: Dict[int, List[int]] = {}
     title_map: Dict[str, List[int]] = {}
 
@@ -223,6 +226,8 @@ def build_entry_info_list(
             continue
         info_index = len(selectable_info)
         selectable_info.append(item)
+
+        stable_id_map.setdefault(question_id(item, index=info_index), []).append(info_index)
 
         provider_key = _normalize_provider_key(item.provider, item.provider_question_id)
         if provider_key:
@@ -253,12 +258,19 @@ def build_entry_info_list(
     for idx, entry in enumerate(entries or []):
         matched_info: Optional[SurveyQuestionMeta] = None
 
+        stable_id = str(getattr(entry, "question_id", "") or "").strip()
+        if stable_id:
+            matched_info = _take_first(stable_id_map.get(stable_id))
+
         provider_key = _normalize_provider_key(
             getattr(entry, "survey_provider", None),
             getattr(entry, "provider_question_id", None),
         )
-        if provider_key:
+        if matched_info is None and provider_key:
             matched_info = _take_first(provider_map.get(provider_key))
+
+        if matched_info is None:
+            matched_info = _take_first(stable_id_map.get(question_id(entry, index=idx)))
 
         if matched_info is None:
             question_num = _normalize_question_num(getattr(entry, "question_num", None))
@@ -277,3 +289,63 @@ def build_entry_info_list(
         aligned_info.append(matched_info or _build_entry_info_fallback(entry))
 
     return aligned_info
+
+
+def migrate_question_ids(
+    entries: Sequence[QuestionEntry],
+    questions_info: Optional[Sequence[SurveyQuestionMeta | Mapping[str, Any]]],
+) -> None:
+    normalized_info = list(questions_info or [])
+    aligned_info = _align_legacy_entry_info(entries, normalized_info)
+    for item in normalized_info:
+        if not getattr(item, "question_id", None):
+            setattr(item, "question_id", uuid4().hex)
+    for entry, info in zip(entries or [], aligned_info, strict=False):
+        entry_id = str(getattr(entry, "question_id", "") or "").strip()
+        info_id = str(getattr(info, "question_id", "") or "").strip()
+        stable_id = entry_id or info_id or uuid4().hex
+        if not entry_id:
+            setattr(entry, "question_id", stable_id)
+        setattr(info, "question_id", stable_id)
+        info_provider_key = _normalize_provider_key(
+            getattr(info, "provider", None), getattr(info, "provider_question_id", None)
+        )
+        for source_item in normalized_info:
+            source_provider_key = _normalize_provider_key(
+                getattr(source_item, "provider", None),
+                getattr(source_item, "provider_question_id", None),
+            )
+            if (
+                (not source_provider_key or source_provider_key == info_provider_key)
+                and _normalize_question_num(getattr(source_item, "num", None))
+                == _normalize_question_num(getattr(info, "num", None))
+                and _normalize_question_title(getattr(source_item, "title", None))
+                == _normalize_question_title(getattr(info, "title", None))
+            ):
+                setattr(source_item, "question_id", stable_id)
+
+
+def build_entry_info_list(
+    entries: Sequence[QuestionEntry],
+    questions_info: Optional[Sequence[SurveyQuestionMeta | Mapping[str, Any]]],
+) -> List[SurveyQuestionMeta]:
+    by_id: Dict[str, SurveyQuestionMeta | Mapping[str, Any]] = {}
+    for item in questions_info or []:
+        if not isinstance(item, (Mapping, SurveyQuestionMeta)):
+            continue
+        stable_id = str(
+            item.get("question_id", "")
+            if isinstance(item, Mapping)
+            else getattr(item, "question_id", "")
+        ).strip()
+        if stable_id:
+            by_id[stable_id] = item
+    aligned: List[SurveyQuestionMeta] = []
+    for entry in entries or []:
+        stable_id = str(getattr(entry, "question_id", "") or "").strip()
+        item = by_id.get(stable_id)
+        if item is None:
+            aligned.append(_build_entry_info_fallback(entry))
+        else:
+            aligned.append(ensure_survey_question_meta(item))
+    return aligned

@@ -38,25 +38,16 @@ def _ensure_proxy_pool_deque_locked(ctx: ExecutionState) -> deque[ProxyLease]:
 
 
 def _get_proxy_fetch_async_lock(ctx: ExecutionState) -> asyncio.Lock:
-    loop = asyncio.get_running_loop()
-    current_lock = getattr(ctx, "_proxy_fetch_async_lock", None)
-    current_loop = getattr(ctx, "_proxy_fetch_async_lock_loop", None)
-    if not isinstance(current_lock, asyncio.Lock) or current_loop is not loop:
-        current_lock = asyncio.Lock()
-        setattr(ctx, "_proxy_fetch_async_lock", current_lock)
-        setattr(ctx, "_proxy_fetch_async_lock_loop", loop)
-    return current_lock
+    return ctx.proxy_fetch_async_lock
 
 
 def is_proxy_fetch_in_progress(ctx: ExecutionState) -> bool:
-    current_lock = getattr(ctx, "_proxy_fetch_async_lock", None)
-    return isinstance(current_lock, asyncio.Lock) and current_lock.locked()
+    return ctx.proxy_fetch_async_lock.locked()
 
 
 def release_proxy_fetch_lock(ctx: ExecutionState) -> None:
-    current_lock = getattr(ctx, "_proxy_fetch_async_lock", None)
-    if isinstance(current_lock, asyncio.Lock) and current_lock.locked():
-        current_lock.release()
+    if ctx.proxy_fetch_async_lock.locked():
+        ctx.proxy_fetch_async_lock.release()
 
 
 def _active_proxy_addresses_locked(

@@ -38,9 +38,12 @@ class RuntimeTerminalStop(TypedDict, total=False):
 
 class RuntimeSnapshot(TypedDict, total=False):
     phase: str
+    phase_code: str
     running: bool
     paused: bool
     pause_reason: str
+    pause_reason_code: str
+    pause_reason_code: str
     stopping: bool
     progress: RuntimeProgress
     threads: RuntimeThreads
@@ -48,6 +51,7 @@ class RuntimeSnapshot(TypedDict, total=False):
     settings: dict[str, Any]
     random_ip: RuntimeRandomIp
     terminal_stop: RuntimeTerminalStop
+    progress_kind: dict[str, str]
 
 
 class SurveySnapshot(TypedDict, total=False):

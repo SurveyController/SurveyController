@@ -134,11 +134,11 @@ class AsyncRuntimeErrorsTests:
         assert scheduler.release_calls[0]["requeue"] is False
 
     @pytest.mark.asyncio
-    async def test_run_remote_protocol_error_uses_transport_handler(self, monkeypatch) -> None:
+    async def test_run_remote_protocol_error_stops_with_unknown_result(self, monkeypatch) -> None:
         config = ExecutionConfig(
             url="https://www.credamo.com/answer.html#/s/demo", survey_provider="credamo"
         )
-        runner, _state, _ctx, scheduler = _build_runner(config=config)
+        runner, state, _ctx, scheduler = _build_runner(config=config)
         scheduler.acquire_values = [10, None]
         seen_errors: list[BaseException] = []
         release_flags: list[bool] = []
@@ -169,10 +169,12 @@ class AsyncRuntimeErrorsTests:
 
         await runner.run()
 
-        assert isinstance(seen_errors[0], runtime_loop.http_client.RemoteProtocolError)
-        assert release_flags == [True]
-        assert scheduler.release_calls[0]["requeue"] is True
+        assert seen_errors == []
+        assert release_flags == []
+        assert scheduler.release_calls[0]["requeue"] is False
         assert runner.stop_policy.failure_calls == []
+        assert state.cur_num == 0
+        assert state.get_terminal_stop_snapshot()[0] == "submission_result_unknown"
 
     @pytest.mark.asyncio
     async def test_run_generic_exception_records_failure_and_requeues(self, monkeypatch) -> None:

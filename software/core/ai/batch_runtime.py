@@ -1,16 +1,23 @@
 from __future__ import annotations
 
 import asyncio
+import json
 from dataclasses import replace
-from typing import Any, Dict, Iterable, List, Sequence, Tuple
+from typing import Any, Dict, Iterable, List, Sequence, Tuple, cast
 
-from software.core.text_constants import DEFAULT_FILL_TEXT
-from software.core.ai.batch_models import AIBatchItem, AIBatchResult, AIPrefillSummary
+from software.core.ai.batch_models import (
+    AIBatchItem,
+    AIBatchResult,
+    AIPrefillSummary,
+    PendingAIAnswer,
+    ResolvedAIAnswer,
+)
 from software.core.ai.runtime import (
+    AIRuntimeError,
+    AIErrorKind,
     build_ai_option_fill_prompt,
     build_ai_question_prompt,
-    is_ai_option_fill_placeholder,
-    is_ai_text_placeholder,
+    is_pending_ai_answer,
 )
 from software.core.task import ExecutionState
 from software.integrations.ai.client import agenerate_answer
@@ -22,6 +29,35 @@ from surveycore.providers.answering import AnswerAction
 from surveycore.providers.contracts import SurveyQuestionMeta
 
 _PROVIDER_BATCH_MAX_CONCURRENCY = 4
+
+
+async def _generate_batch_answer(
+    item: AIBatchItem,
+    ctx: ExecutionState,
+    *,
+    validate: Any = None,
+) -> Any:
+    last_error: Exception | None = None
+    for attempt in range(1, 5):
+        try:
+            answer = await agenerate_answer(
+                item.question_content,
+                question_type=item.question_type,
+                blank_count=item.blank_count,
+                ctx=ctx,
+            )
+            return validate(answer) if validate is not None else answer
+        except Exception as exc:
+            last_error = exc
+            if isinstance(exc, AIRuntimeError) and not exc.retryable:
+                raise
+            if attempt >= 4:
+                raise AIRuntimeError(
+                    f"AI 调用失败：{exc}",
+                    kind=(exc.kind if isinstance(exc, AIRuntimeError) else AIErrorKind.UNKNOWN),
+                ) from exc
+            await asyncio.sleep(0.4)
+    raise AIRuntimeError("AI 调用失败：未知错误") from last_error
 
 
 def _item_id_for_question(question_num: int) -> str:
@@ -62,8 +98,10 @@ def _build_ai_batch_items_for_actions(
         if question is None:
             continue
 
-        placeholder_texts = [value for value in action.text_values if is_ai_text_placeholder(value)]
-        if placeholder_texts:
+        pending_answers = [
+            value for value in action.text_values if is_pending_ai_answer(value)
+        ]
+        if pending_answers:
             blank_count = len(tuple(action.text_values or ()))
             question_content = build_ai_question_prompt(
                 str(getattr(question, "title", "") or ""),
@@ -71,7 +109,8 @@ def _build_ai_batch_items_for_actions(
                 question_number=question_num,
             )
             if question_content:
-                item_id = _item_id_for_question(question_num)
+                pending = cast(PendingAIAnswer, pending_answers[0])
+                item_id = pending.item_id
                 items.append(
                     AIBatchItem(
                         item_id=item_id,
@@ -86,8 +125,9 @@ def _build_ai_batch_items_for_actions(
             str(item or "").strip() for item in list(getattr(question, "option_texts", []) or [])
         ]
         for option_index, fill_value in tuple(action.option_fill_texts or ()):
-            if not is_ai_option_fill_placeholder(fill_value):
+            if not is_pending_ai_answer(fill_value):
                 continue
+            pending_fill = cast(PendingAIAnswer, fill_value)
             normalized_option_index = int(option_index)
             option_prompt = build_ai_option_fill_prompt(
                 question_title=str(getattr(question, "title", "") or ""),
@@ -96,7 +136,7 @@ def _build_ai_batch_items_for_actions(
                 if normalized_option_index < len(option_texts)
                 else "",
             )
-            option_item_id = _item_id_for_option_fill(question_num, normalized_option_index)
+            option_item_id = pending_fill.item_id
             items.append(
                 AIBatchItem(
                     item_id=option_item_id,
@@ -118,7 +158,9 @@ def _resolved_answers_by_question_num(
         if question_num is None:
             continue
         normalized = tuple(
-            str(item or "").strip() for item in list(answers or []) if str(item or "").strip()
+            str(item or "").strip()
+            for item in answers.values
+            if str(item or "").strip()
         )
         if normalized:
             resolved[int(question_num)] = normalized
@@ -135,7 +177,7 @@ def _resolved_option_fill_answers(
         if option_key is None:
             continue
         normalized_answers = [
-            str(item or "").strip() for item in list(answers or []) if str(item or "").strip()
+            str(item or "").strip() for item in answers.values if str(item or "").strip()
         ]
         if normalized_answers:
             resolved[option_key] = normalized_answers[0]
@@ -149,7 +191,11 @@ def _raise_prefill_incomplete_error(
 ) -> None:
     failed_labels: list[str] = []
 
-    for item_id, detail in dict(result.failed or {}).items():
+    first_failure: Exception | None = None
+    for item_id, error in dict(result.failed or {}).items():
+        if first_failure is None:
+            first_failure = error
+        detail = str(error or "AI 调用失败")
         question_num = item_question_map.get(item_id)
         option_key = item_option_fill_map.get(item_id)
         if question_num is not None:
@@ -164,7 +210,14 @@ def _raise_prefill_incomplete_error(
     if failed_labels:
         parts.append("失败：" + "；".join(failed_labels[:5]))
     detail = "；".join(parts) if parts else "存在未完成题目"
-    raise RuntimeError(f"AI 批量预取未完成，已停止本轮提交：{detail}")
+    kind = first_failure.kind if isinstance(first_failure, AIRuntimeError) else AIErrorKind.UNKNOWN
+    failure = AIRuntimeError(
+        f"AI 批量预取未完成，已停止本轮提交：{detail}",
+        kind=kind,
+    )
+    if first_failure is not None:
+        raise failure from first_failure
+    raise failure
 
 
 def _normalize_provider_item_answers(item: AIBatchItem, raw_answer: Any) -> List[str]:
@@ -172,19 +225,50 @@ def _normalize_provider_item_answers(item: AIBatchItem, raw_answer: Any) -> List
         if isinstance(raw_answer, list):
             answers = [str(value or "").strip() for value in raw_answer]
         else:
-            answers = [part.strip() for part in str(raw_answer or "").split("||")]
+            try:
+                decoded = json.loads(str(raw_answer or ""))
+            except json.JSONDecodeError as exc:
+                raise AIRuntimeError(
+                    "多空答案必须是 JSON 字符串数组",
+                    kind=AIErrorKind.RESPONSE,
+                    retryable=True,
+                ) from exc
+            if not isinstance(decoded, list):
+                raise AIRuntimeError(
+                    "多空答案必须是 JSON 字符串数组",
+                    kind=AIErrorKind.RESPONSE,
+                    retryable=True,
+                )
+            answers = [str(value or "").strip() for value in decoded]
         answers = [value for value in answers if value]
         expected = int(item.blank_count or 0)
         if expected > 0 and len(answers) != expected:
-            raise RuntimeError(f"期望 {expected} 个答案，实际返回 {len(answers)} 个")
+            raise AIRuntimeError(
+                f"期望 {expected} 个答案，实际返回 {len(answers)} 个",
+                kind=AIErrorKind.RESPONSE,
+                retryable=True,
+            )
         if not answers:
-            raise RuntimeError("AI 未返回有效答案")
+            raise AIRuntimeError("AI 未返回有效答案", kind=AIErrorKind.RESPONSE, retryable=True)
         return answers
 
     answer = str(raw_answer or "").strip()
     if not answer:
-        raise RuntimeError("AI 未返回有效答案")
+        raise AIRuntimeError("AI 未返回有效答案", kind=AIErrorKind.RESPONSE, retryable=True)
     return [answer]
+
+
+def resolve_ai_answer(item: PendingAIAnswer, raw_answer: Any) -> ResolvedAIAnswer:
+    values = _normalize_provider_item_answers(
+        AIBatchItem(
+            item_id=item.item_id,
+            question_type=_question_type_for_blank_count(item.expected_count),
+            question_content="",
+            blank_count=item.expected_count if item.expected_count > 1 else None,
+        ),
+        raw_answer,
+    )
+    return ResolvedAIAnswer(item_id=item.item_id, values=tuple(values))
 
 
 async def _wait_provider_batch_result_async(
@@ -193,22 +277,24 @@ async def _wait_provider_batch_result_async(
     ctx: ExecutionState,
 ) -> AIBatchResult:
     normalized_items = list(items or [])
-    completed: Dict[str, List[str]] = {}
-    failed: Dict[str, str] = {}
+    completed: Dict[str, ResolvedAIAnswer] = {}
+    failed: Dict[str, Exception] = {}
     semaphore = asyncio.Semaphore(_PROVIDER_BATCH_MAX_CONCURRENCY)
 
     async def _run_item(item: AIBatchItem) -> None:
         async with semaphore:
             try:
-                raw_answer = await agenerate_answer(
-                    item.question_content,
-                    question_type=item.question_type,
-                    blank_count=item.blank_count,
-                    ctx=ctx,
+                pending = PendingAIAnswer(
+                    item_id=item.item_id,
+                    expected_count=int(item.blank_count or 1),
                 )
-                completed[item.item_id] = _normalize_provider_item_answers(item, raw_answer)
+                completed[item.item_id] = await _generate_batch_answer(
+                    item,
+                    ctx,
+                    validate=lambda raw, answer=pending: resolve_ai_answer(answer, raw),
+                )
             except Exception as exc:
-                failed[item.item_id] = str(exc or "AI 调用失败")
+                failed[item.item_id] = exc
 
     await asyncio.gather(*(_run_item(item) for item in normalized_items))
     return AIBatchResult(
@@ -252,13 +338,12 @@ def _apply_prefilled_answers_to_actions(
         question_num = int(getattr(action, "question_num", 0) or 0)
         updated_action = action
 
-        if question_num in resolved_answers and tuple(action.text_values or ()):
+        if question_num in resolved_answers and any(
+            is_pending_ai_answer(value) for value in tuple(action.text_values or ())
+        ):
             updated_action = replace(
                 updated_action,
-                text_values=tuple(
-                    str(item or "").strip() or DEFAULT_FILL_TEXT
-                    for item in resolved_answers[question_num]
-                ),
+                text_values=resolved_answers[question_num],
             )
 
         if tuple(updated_action.option_fill_texts or ()):
@@ -267,14 +352,15 @@ def _apply_prefilled_answers_to_actions(
             changed = False
             for option_index, raw_value in tuple(updated_action.option_fill_texts or ()):
                 normalized_option_index = int(option_index)
-                normalized_value = str(raw_value or "").strip()
-                if is_ai_option_fill_placeholder(normalized_value):
+                if is_pending_ai_answer(raw_value):
                     normalized_value = str(
                         resolved_option_fill_answers.get(
                             (question_num, normalized_option_index), ""
                         )
                     ).strip()
                     changed = True
+                else:
+                    normalized_value = str(raw_value or "").strip()
                 if normalized_value:
                     fill_map[normalized_option_index] = normalized_value
                     option_fill_texts.append((normalized_option_index, normalized_value))
@@ -345,10 +431,7 @@ def assert_no_ai_placeholders_in_actions(
         values = list(action.text_values or ())
         values.extend(value for _, value in tuple(action.option_fill_texts or ()))
         values.extend(action.selected_texts or ())
-        if any(
-            is_ai_text_placeholder(value) or is_ai_option_fill_placeholder(value)
-            for value in values
-        ):
+        if any(is_pending_ai_answer(value) for value in values):
             question_num = int(getattr(action, "question_num", 0) or 0)
             if question_num > 0:
                 question_nums.add(question_num)
@@ -362,4 +445,5 @@ __all__ = [
     "AIPrefillSummary",
     "assert_no_ai_placeholders_in_actions",
     "prefill_ai_answers_for_questions",
+    "resolve_ai_answer",
 ]

@@ -9,6 +9,7 @@ from surveycore.core.reverse_fill.schema import (
     REVERSE_FILL_STATUS_REVERSE,
     ReverseFillSpec,
 )
+from software.core.reverse_fill.intent import resolve_reverse_fill_intent
 
 _STATUS_LABELS = {
     "reverse": "正常",
@@ -40,9 +41,10 @@ _NON_ACTIONABLE_ISSUE_CATEGORIES = {"auto_handled"}
 
 def status_label_for_plan(plan: Any) -> str:
     status = str(getattr(plan, "status", "") or "")
+    intent = resolve_reverse_fill_intent(plan)
     if status == REVERSE_FILL_STATUS_FALLBACK and bool(getattr(plan, "fallback_resolved", False)):
         return "已处理"
-    if status == REVERSE_FILL_STATUS_FALLBACK and bool(getattr(plan, "fallback_ready", False)):
+    if intent.value == "use_configured_answer":
         return "可回退"
     return _STATUS_LABELS.get(status, status)
 

@@ -349,6 +349,33 @@ class HttpClientTests:
         assert isinstance(second, _FakeAsyncResponse)
         assert len(created_clients) == 1
 
+    @pytest.mark.asyncio
+    async def test_async_client_scope_owns_clients_per_run(self, monkeypatch) -> None:
+        managers = []
+
+        def _fake_create_client(manager, **kwargs):
+            del kwargs
+            managers.append(manager)
+            return _FakeAsyncClient()
+
+        monkeypatch.setattr(
+            async_http_client._AsyncClientManager,
+            "_create_client",
+            _fake_create_client,
+        )
+
+        async with async_http_client.async_client_scope():
+            first_manager = async_http_client._current_client_manager()
+            await async_http_client.get("https://example.com")
+        async with async_http_client.async_client_scope():
+            second_manager = async_http_client._current_client_manager()
+            await async_http_client.get("https://example.com")
+
+        assert first_manager is not second_manager
+        assert managers == [first_manager, second_manager]
+        assert not first_manager._clients
+        assert not second_manager._clients
+
     def test_async_client_cleanup_closes_clients_owned_by_loop(self, monkeypatch) -> None:
         manager = async_http_client._AsyncClientManager()
         client = _FakeAsyncClient()

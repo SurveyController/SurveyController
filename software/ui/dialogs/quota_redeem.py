@@ -28,7 +28,7 @@ from qfluentwidgets import (
 )
 
 from software.app.runtime_paths import get_resource_path
-from software.ui.helpers.qfluent_compat import set_indeterminate_progress_ring_active
+from software.ui.helpers.qfluent_compat import QFluentCompat
 from software.ui.helpers.proxy_access import (
     RandomIPAuthError,
     ensure_authenticated_session_async,
@@ -258,7 +258,7 @@ class QuotaRedeemDialog(MessageBoxBase):
         self.yesButton.setEnabled(not redeeming)
         self.yesButton.setText("兑换中..." if redeeming else "立即兑换")
         self._layout_yes_button_spinner()
-        set_indeterminate_progress_ring_active(self.yesButtonSpinner, redeeming)
+        QFluentCompat.set_indeterminate_progress_active(self.yesButtonSpinner, redeeming)
         if redeeming:
             self.loadingLabel.setText("正在兑换，请稍等...")
             self.loadingLabel.show()

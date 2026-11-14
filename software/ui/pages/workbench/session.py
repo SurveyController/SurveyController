@@ -8,7 +8,7 @@ from PySide6.QtWidgets import QDialog, QWidget
 
 from surveycore.core.questions.config import QuestionEntry
 from software.core.config.schema import RuntimeConfig
-from software.core.config.codec import build_runtime_config_snapshot
+from software.application.run_plan import compile_run_plan, question_id
 from software.logging.action_logger import log_action
 from surveycore.providers.contracts import SurveyQuestionMeta, ensure_survey_question_metas
 from software.ui.pages.workbench.question_editor.add_dialog import (
@@ -16,6 +16,7 @@ from software.ui.pages.workbench.question_editor.add_dialog import (
 )
 from software.ui.pages.workbench.question_editor.utils import (
     build_entry_info_list,
+    migrate_question_ids,
 )
 
 
@@ -53,6 +54,7 @@ class WorkbenchState(QObject):
         if info is not None:
             self._questions_info = ensure_survey_question_metas(info or [])
         self._entries = list(entries or [])
+        migrate_question_ids(self._entries, self._questions_info)
         self._entry_questions_info = build_entry_info_list(self._entries, self._questions_info)
         for idx, entry in enumerate(self._entries):
             if getattr(entry, "question_title", None):
@@ -69,6 +71,8 @@ class WorkbenchState(QObject):
     def append_entry(self, entry: QuestionEntry) -> None:
         if not entry:
             return
+        if not getattr(entry, "question_id", None):
+            setattr(entry, "question_id", str(question_id(entry)))
         self._entries.append(entry)
         self._entry_questions_info = build_entry_info_list(self._entries, self._questions_info)
         self.entriesChanged.emit(len(self._entries))
@@ -150,11 +154,12 @@ class WorkbenchRunCoordinator:
                 dashboard._toast("正在重新开始，请稍候...", "info", 1200)
             return False
 
-        cfg = build_runtime_config_snapshot(
+        plan = compile_run_plan(
             self.build_config(),
             question_entries=self.state.get_entries(),
             questions_info=self.state.questions_info,
         )
+        cfg = plan.config
         cfg.reverse_fill_enabled = bool(
             enable_reverse_fill and str(getattr(cfg, "reverse_fill_source_path", "") or "").strip()
         )

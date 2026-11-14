@@ -25,7 +25,7 @@ from qfluentwidgets import (
 )
 from software.logging.action_logger import bind_logged_action, log_action
 from software.ui.helpers.fluent_tooltip import install_tooltip_filter
-from software.ui.helpers.qfluent_compat import set_indeterminate_progress_ring_active
+from software.ui.helpers.qfluent_compat import QFluentCompat
 from software.ui.pages.workbench.shared.run_feedback import (
     get_completion_notified,
     get_last_pause_reason,
@@ -66,7 +66,11 @@ def _resolve_thread_step_display_percent(
     return _resolve_thread_step_percent(step_current, step_total)
 
 
-def _should_use_indeterminate_thread_step(status_text: str, *, running: bool) -> bool:
+def _should_use_indeterminate_thread_step(
+    status_text: str, *, running: bool, progress_kind: str = ""
+) -> bool:
+    if progress_kind:
+        return progress_kind in {"preparing", "submitting"} and running
     text = str(status_text or "").strip()
     if not running:
         return False
@@ -90,6 +94,7 @@ def _thread_progress_signature(
         max(0, int(item.get("step_current") or 0)),
         max(0, int(item.get("step_total") or 0)),
         bool(item.get("running", True)),
+        str(item.get("progress_kind") or ""),
     )
 
 
@@ -208,7 +213,9 @@ class DashboardProgressMixin:
             self._set_progress_bar_paused(row.get("step_bar"), paused)
             self._set_progress_bar_paused(row.get("step_busy_bar"), paused)
 
-    def _status_requires_attention_visual(self, status_text: str) -> bool:
+    def _status_requires_attention_visual(self, status_text: str, progress_kind: str = "") -> bool:
+        if progress_kind:
+            return progress_kind in {"failed", "unknown"}
         text = str(status_text or "").strip()
         if not text:
             return False
@@ -476,7 +483,7 @@ class DashboardProgressMixin:
             pass
         try:
             for busy_bar in widget.findChildren(IndeterminateProgressBar):
-                set_indeterminate_progress_ring_active(busy_bar, False)
+                QFluentCompat.set_indeterminate_progress_active(busy_bar, False)
         except RuntimeError:
             return
         except Exception:
@@ -588,6 +595,7 @@ class DashboardProgressMixin:
         step_current = max(0, int(payload.get("step_current") or 0))
         step_total = max(0, int(payload.get("step_total") or 0))
         running = bool(payload.get("running", True))
+        progress_kind = str(payload.get("progress_kind") or "")
         step_bar = row.get("step_bar")
         step_busy_bar = row.get("step_busy_bar")
         if step_bar is None or step_busy_bar is None:
@@ -596,14 +604,15 @@ class DashboardProgressMixin:
         use_indeterminate = _should_use_indeterminate_thread_step(
             status_text,
             running=running,
+            progress_kind=progress_kind,
         )
         if use_indeterminate:
             step_bar.hide()
             step_busy_bar.show()
-            set_indeterminate_progress_ring_active(step_busy_bar, True)
+            QFluentCompat.set_indeterminate_progress_active(step_busy_bar, True)
             self._set_progress_bar_paused(step_busy_bar, self._progress_paused_visual)
         else:
-            set_indeterminate_progress_ring_active(step_busy_bar, False)
+            QFluentCompat.set_indeterminate_progress_active(step_busy_bar, False)
             step_busy_bar.hide()
             step_bar.show()
             target_percent = _resolve_thread_step_display_percent(
@@ -620,6 +629,7 @@ class DashboardProgressMixin:
 
         _set_text_if_changed(row.get("status"), status_text)
         row["displayed_status_text"] = status_text
+        row["progress_kind"] = progress_kind
 
     def _sync_thread_step_widget(
         self,
@@ -629,12 +639,14 @@ class DashboardProgressMixin:
         step_current: int,
         step_total: int,
         running: bool,
+        progress_kind: str = "",
     ) -> None:
         payload = {
             "status_text": status_text,
             "step_current": step_current,
             "step_total": step_total,
             "running": running,
+            "progress_kind": progress_kind,
         }
         self._apply_thread_step_payload(row, payload)
 
@@ -714,6 +726,7 @@ class DashboardProgressMixin:
             step_current = max(0, int(item.get("step_current") or 0))
             step_total = max(0, int(item.get("step_total") or 0))
             running = bool(item.get("running", True))
+            progress_kind = str(item.get("progress_kind") or "")
 
             _set_text_if_changed(row["counter"], f"成功 {success_count} | 提交失败 {fail_count}")
             self._sync_thread_step_widget(
@@ -722,6 +735,7 @@ class DashboardProgressMixin:
                 step_current=step_current,
                 step_total=step_total,
                 running=running,
+                progress_kind=progress_kind,
             )
 
         stale = [name for name in self._thread_progress_rows if name not in seen_names]

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import copy
+from collections import deque
 import logging
 import threading
 from dataclasses import replace
@@ -22,6 +23,7 @@ from surveycore.core.reverse_fill import ReverseFillSpec
 from software.core.reverse_fill.validation import (
     build_enabled_reverse_fill_spec,
 )
+from software.core.reverse_fill.intent import resolve_reverse_fill_intent
 from software.core.task import ExecutionConfig
 from software.core.config.schema import RuntimeConfig
 from software.core.config.codec import clone_questions_info
@@ -199,7 +201,7 @@ def _build_execution_config_template(
         ),
         random_proxy_ip_enabled=bool(getattr(config, "random_ip_enabled", False)),
         proxy_source=str(getattr(config, "proxy_source", "default") or "default").strip().lower(),
-        proxy_ip_pool=[],
+        proxy_ip_pool=deque(),
         random_user_agent_enabled=bool(getattr(config, "random_ua_enabled", False)),
         user_agent_ratios=copy.deepcopy(
             dict(
@@ -220,6 +222,11 @@ def _build_execution_config_template(
         ai_system_prompt=str(getattr(config, "ai_system_prompt", "") or "").strip(),
     )
     execution_config.questions_metadata = _build_questions_metadata(questions_info)
+    if reverse_fill_spec is not None:
+        execution_config.reverse_fill_intent_by_question = {
+            int(plan.question_num): resolve_reverse_fill_intent(plan).value
+            for plan in reverse_fill_spec.question_plans
+        }
     execution_config.provider_question_metadata_map = _build_provider_question_metadata(
         questions_info
     )

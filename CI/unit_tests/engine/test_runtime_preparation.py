@@ -1,4 +1,5 @@
 from __future__ import annotations
+from collections import deque
 import threading
 import pytest
 from unittest.mock import patch
@@ -249,7 +250,7 @@ class RuntimePreparationTests:
         }
         assert artifacts.execution_config_template.answer_rules == [{"num": 1, "equals": [1]}]
         assert artifacts.execution_config_template.answer_datetime_window_ms == (0, 0)
-        assert artifacts.execution_config_template.proxy_ip_pool == []
+        assert artifacts.execution_config_template.proxy_ip_pool == deque()
         sync_proxy_duration.assert_called_once_with((12, 20), survey_provider="qq")
 
     def test_prepare_execution_artifacts_allows_missing_credamo_answer_datetime_window(

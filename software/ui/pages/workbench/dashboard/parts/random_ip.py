@@ -9,7 +9,7 @@ from qfluentwidgets import themeColor
 
 from software.ui.dialogs.quota_redeem import load_shop_icon
 from software.logging.log_utils import log_suppressed_exception
-from software.ui.helpers.qfluent_compat import set_indeterminate_progress_ring_active
+from software.ui.helpers.qfluent_compat import QFluentCompat
 from software.ui.helpers.proxy_access import (
     PROXY_SOURCE_BENEFIT,
     format_quota_value,
@@ -165,7 +165,7 @@ class DashboardRandomIPMixin:
         color = color_map.get(level, "#C77900")
         dot_style = f"background-color: {color}; border-radius: 5px;"
         try:
-            set_indeterminate_progress_ring_active(self.random_ip_status_spinner, False)
+            QFluentCompat.set_indeterminate_progress_active(self.random_ip_status_spinner, False)
             self.random_ip_status_spinner.hide()
             self.random_ip_status_dot.setStyleSheet(dot_style)
             self.random_ip_status_dot.show()
@@ -186,7 +186,7 @@ class DashboardRandomIPMixin:
             self.random_ip_status_label.setToolTip("")
             self.random_ip_status_row.setToolTip("")
             self.random_ip_status_spinner.show()
-            set_indeterminate_progress_ring_active(self.random_ip_status_spinner, True)
+            QFluentCompat.set_indeterminate_progress_active(self.random_ip_status_spinner, True)
         except Exception as exc:
             log_suppressed_exception(
                 "_apply_random_ip_heartbeat_loading", exc, level=logging.WARNING

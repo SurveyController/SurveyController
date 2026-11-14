@@ -1,9 +1,11 @@
 from __future__ import annotations
 
 import asyncio
+import contextvars
 import logging
 import threading
 import time
+from contextlib import asynccontextmanager
 from dataclasses import dataclass
 from typing import Any, Literal, cast, overload
 
@@ -244,10 +246,29 @@ class _AsyncClientManager:
 
 
 _client_manager = _AsyncClientManager()
+_scoped_client_manager: contextvars.ContextVar[_AsyncClientManager | None] = contextvars.ContextVar(
+    "surveycontroller_async_client_manager",
+    default=None,
+)
+
+
+def _current_client_manager() -> _AsyncClientManager:
+    return _scoped_client_manager.get() or _client_manager
+
+
+@asynccontextmanager
+async def async_client_scope():
+    manager = _AsyncClientManager()
+    token = _scoped_client_manager.set(manager)
+    try:
+        yield
+    finally:
+        await manager.close_for_loop(asyncio.get_running_loop())
+        _scoped_client_manager.reset(token)
 
 
 async def aclose_for_loop(loop: asyncio.AbstractEventLoop | None = None) -> None:
-    await _client_manager.close_for_loop(loop or asyncio.get_running_loop())
+    await _current_client_manager().close_for_loop(loop or asyncio.get_running_loop())
 
 
 @overload
@@ -263,7 +284,7 @@ async def request(
 
 
 async def request(method: str, url: str, **kwargs: Any) -> httpx.Response | _AsyncStreamResponse:
-    return await _client_manager.request(method, url, **kwargs)
+    return await _current_client_manager().request(method, url, **kwargs)
 
 
 @overload
@@ -315,6 +336,7 @@ async def delete(url: str, **kwargs: Any) -> httpx.Response | _AsyncStreamRespon
 
 
 __all__ = [
+    "async_client_scope",
     "delete",
     "get",
     "post",

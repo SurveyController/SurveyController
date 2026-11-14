@@ -11,7 +11,7 @@ from surveycore.core.engine.async_events import AsyncRunContext
 from software.core.engine.async_runtime_loop import AsyncSlotRunner
 from software.core.engine.engine_state import EngineState
 from software.core.engine.task_registry import TaskRegistry
-from software.network.http.async_client import aclose_for_loop
+from software.network.http.async_client import aclose_for_loop, async_client_scope
 from software.network.http.client import close as close_sync_http_clients
 from surveycore.core.engine.async_scheduler import AsyncScheduler
 from surveycore.core.engine.async_status_bus import AsyncStatusBus
@@ -227,6 +227,7 @@ class AsyncRuntimeEngine:
             self._stop_event = asyncio.Event()
             self._pause_event = asyncio.Event()
             self._state = state
+            state.proxy_fetch_async_lock = asyncio.Lock()
             if state.stop_event.is_set():
                 self._stop_event.set()
             if self._pause_requested:
@@ -258,38 +259,45 @@ class AsyncRuntimeEngine:
             _format_proxy_source(config.proxy_source),
         )
         try:
-            async with asyncio.TaskGroup() as task_group:
-                for slot_index in range(active_slot_count):
-                    task_group.create_task(
-                        AsyncSlotRunner(
-                            slot_id=slot_index + 1,
-                            config=config,
-                            state=state,
-                            run_context=run_context,
-                            scheduler=scheduler,
-                            task_registry=task_registry,
-                            app_version=self._app_version,
-                            submission_report_enabled=self._submission_report_enabled,
-                            runtime_bridge=runtime_bridge,
-                        ).run(),
-                        name=f"AsyncSlotRunner-{slot_index + 1}",
-                    )
-        except* Exception as exc_group:
-            errors = [
-                exc for exc in exc_group.exceptions if not isinstance(exc, asyncio.CancelledError)
-            ]
-            if not errors:
-                raise
-            if len(errors) == 1:
-                raise errors[0]
-            raise ExceptionGroup("AsyncRuntimeEngine slot 运行失败", errors)
+            async with async_client_scope():
+                try:
+                    async with asyncio.TaskGroup() as task_group:
+                        for slot_index in range(active_slot_count):
+                            task_group.create_task(
+                                AsyncSlotRunner(
+                                    slot_id=slot_index + 1,
+                                    config=config,
+                                    state=state,
+                                    run_context=run_context,
+                                    scheduler=scheduler,
+                                    task_registry=task_registry,
+                                    app_version=self._app_version,
+                                    submission_report_enabled=self._submission_report_enabled,
+                                    runtime_bridge=runtime_bridge,
+                                ).run(),
+                                name=f"AsyncSlotRunner-{slot_index + 1}",
+                            )
+                except* Exception as exc_group:
+                    errors = [
+                        exc
+                        for exc in exc_group.exceptions
+                        if not isinstance(exc, asyncio.CancelledError)
+                    ]
+                    if not errors:
+                        raise
+                    if len(errors) == 1:
+                        raise errors[0]
+                    raise ExceptionGroup("AsyncRuntimeEngine slot 运行失败", errors)
+                finally:
+                    if self._stop_event is not None:
+                        self._stop_event.set()
+                    dropped = await task_registry.drain(timeout=5.0)
+                    if dropped:
+                        logging.warning("任务结束时有 %d 个后台任务超时取消", dropped)
+                    await scheduler.close()
         finally:
             if self._stop_event is not None:
                 self._stop_event.set()
-            dropped = await task_registry.drain(timeout=5.0)
-            if dropped:
-                logging.warning("任务结束时有 %d 个后台任务超时取消", dropped)
-            await scheduler.close()
             state.stop_event.set()
             with self._run_lock:
                 self._stop_event = None

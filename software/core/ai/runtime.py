@@ -1,9 +1,14 @@
 import asyncio
 import logging
 import re
-from typing import List, Optional, Union
+from enum import StrEnum
+from typing import Any, Callable, List, Optional, Union, cast
+
+import httpx
 
 from software.core.task import ExecutionState
+from software.core.ai.batch_models import PendingAIAnswer
+from software.integrations.ai.errors import AIConfigurationError
 from software.logging.log_utils import log_suppressed_exception
 
 from software.integrations.ai.client import agenerate_answer
@@ -11,27 +16,27 @@ from software.core.text_constants import WHITESPACE_PATTERN
 
 
 class AIRuntimeError(RuntimeError):
-    pass
+    def __init__(
+        self,
+        message: str,
+        *,
+        kind: "AIErrorKind | None" = None,
+        retryable: bool = False,
+    ) -> None:
+        super().__init__(message)
+        self.kind = kind or AIErrorKind.UNKNOWN
+        self.retryable = bool(retryable)
+
+
+class AIErrorKind(StrEnum):
+    CONFIGURATION = "configuration"
+    NETWORK = "network"
+    RESPONSE = "response"
+    UNKNOWN = "unknown"
 
 
 _AI_FILL_MAX_ATTEMPTS = 4
 _AI_FILL_RETRY_BACKOFF_SECONDS = 0.4
-_AI_TEXT_PLACEHOLDER_PREFIX = "__AI_TEXT__"
-_AI_OPTION_FILL_PLACEHOLDER_PREFIX = "__AI_OPTION_FILL__"
-
-
-def _is_retryable_ai_generation_error(error: Exception) -> bool:
-    text = str(error or "").strip().lower()
-    if not text:
-        return True
-    non_retryable_markers = (
-        "题干为空",
-        "无法获取",
-        "请先配置 api key",
-        "ai 配置不完整",
-        "ai配置不完整",
-    )
-    return not any(marker in text for marker in non_retryable_markers)
 
 
 def is_ai_timeout_runtime_error(error: object) -> bool:
@@ -111,20 +116,22 @@ def build_ai_option_fill_prompt(
     return prompt
 
 
-def build_ai_text_placeholder(question_num: int, blank_index: int) -> str:
-    return f"{_AI_TEXT_PLACEHOLDER_PREFIX}{int(question_num or 0)}_{int(blank_index or 0)}"
+def build_pending_ai_text_answer(question_num: int, blank_index: int) -> PendingAIAnswer:
+    return PendingAIAnswer(
+        item_id=f"q{int(question_num or 0)}",
+        expected_count=max(1, int(blank_index or 0) + 1),
+    )
 
 
-def build_ai_option_fill_placeholder(question_num: int, option_index: int) -> str:
-    return f"{_AI_OPTION_FILL_PLACEHOLDER_PREFIX}{int(question_num or 0)}_{int(option_index or 0)}"
+def build_pending_ai_option_fill_answer(question_num: int, option_index: int) -> PendingAIAnswer:
+    return PendingAIAnswer(
+        item_id=f"q{int(question_num or 0)}_opt{int(option_index or 0)}",
+        expected_count=1,
+    )
 
 
-def is_ai_text_placeholder(value: object) -> bool:
-    return str(value or "").startswith(_AI_TEXT_PLACEHOLDER_PREFIX)
-
-
-def is_ai_option_fill_placeholder(value: object) -> bool:
-    return str(value or "").startswith(_AI_OPTION_FILL_PLACEHOLDER_PREFIX)
+def is_pending_ai_answer(value: object) -> bool:
+    return isinstance(value, PendingAIAnswer)
 
 
 async def agenerate_ai_answer(
@@ -142,38 +149,99 @@ async def agenerate_ai_answer(
         question_number=question_number,
     )
     if not cleaned:
-        raise AIRuntimeError("题干为空，无法调用 AI")
+        raise AIRuntimeError("题干为空，无法调用 AI", kind=AIErrorKind.CONFIGURATION)
+
+    return cast(
+        Union[str, List[str]],
+        await generate_ai_answer_with_retry(
+            cleaned,
+            question_type=question_type,
+            blank_count=blank_count,
+            ctx=ctx,
+        ),
+    )
+
+
+async def generate_ai_answer_with_retry(
+    prompt: str,
+    *,
+    question_type: str = "fill_blank",
+    blank_count: Optional[int] = None,
+    ctx: ExecutionState | None = None,
+    validate: Callable[[Any], Any] | None = None,
+    provider_call: Callable[..., Any] | None = None,
+) -> Any:
+    if not str(prompt or "").strip():
+        raise AIRuntimeError("题干为空，无法调用 AI", kind=AIErrorKind.CONFIGURATION)
 
     last_error: Exception | None = None
     for attempt in range(1, _AI_FILL_MAX_ATTEMPTS + 1):
         try:
-            answer = await agenerate_answer(
-                cleaned,
+            call = provider_call or agenerate_answer
+            answer = await call(
+                prompt,
                 question_type=question_type,
                 blank_count=blank_count,
                 ctx=ctx,
             )
+            if validate is not None:
+                return validate(answer)
             if question_type == "multi_fill_blank":
                 if not isinstance(answer, list):
                     if not answer or not str(answer).strip():
-                        raise AIRuntimeError("AI 未返回有效答案")
+                        raise AIRuntimeError(
+                            "AI 未返回有效答案",
+                            kind=AIErrorKind.RESPONSE,
+                            retryable=True,
+                        )
                     return str(answer).strip()
                 cleaned_answers: List[str] = []
                 for item in answer:
                     text = str(item or "").strip()
                     if not text:
-                        raise AIRuntimeError("AI 返回的多项填空答案包含空值")
+                        raise AIRuntimeError(
+                            "AI 返回的多项填空答案包含空值",
+                            kind=AIErrorKind.RESPONSE,
+                            retryable=True,
+                        )
                     cleaned_answers.append(text)
                 if not cleaned_answers:
-                    raise AIRuntimeError("AI 未返回有效答案")
+                    raise AIRuntimeError(
+                        "AI 未返回有效答案",
+                        kind=AIErrorKind.RESPONSE,
+                        retryable=True,
+                    )
                 return cleaned_answers
             if not answer or not str(answer).strip():
-                raise AIRuntimeError("AI 未返回有效答案")
+                raise AIRuntimeError(
+                    "AI 未返回有效答案",
+                    kind=AIErrorKind.RESPONSE,
+                    retryable=True,
+                )
             return str(answer).strip()
         except Exception as exc:
             last_error = exc
-            if attempt >= _AI_FILL_MAX_ATTEMPTS or not _is_retryable_ai_generation_error(exc):
-                raise AIRuntimeError(f"AI 调用失败：{exc}") from exc
+            if isinstance(exc, AIRuntimeError):
+                kind = exc.kind
+                retryable = exc.retryable
+            elif isinstance(exc, httpx.TransportError):
+                kind = AIErrorKind.NETWORK
+                retryable = True
+            elif isinstance(exc, httpx.HTTPStatusError):
+                kind = AIErrorKind.NETWORK
+                retryable = exc.response.status_code == 429 or exc.response.status_code >= 500
+            elif isinstance(exc, AIConfigurationError):
+                kind = AIErrorKind.CONFIGURATION
+                retryable = False
+            else:
+                kind = AIErrorKind.UNKNOWN
+                retryable = False
+            if attempt >= _AI_FILL_MAX_ATTEMPTS or not retryable:
+                raise AIRuntimeError(
+                    f"AI 调用失败：{exc}",
+                    kind=kind,
+                    retryable=False,
+                ) from exc
             logging.warning(
                 "AI 生成失败，准备重试 | attempt=%s/%s | question_type=%s | error=%s",
                 attempt,
@@ -183,5 +251,9 @@ async def agenerate_ai_answer(
             )
             await asyncio.sleep(_AI_FILL_RETRY_BACKOFF_SECONDS)
     if last_error is not None:
-        raise AIRuntimeError(f"AI 调用失败：{last_error}") from last_error
-    raise AIRuntimeError("AI 调用失败：未知错误")
+        raise AIRuntimeError(
+            f"AI 调用失败：{last_error}",
+            kind=AIErrorKind.UNKNOWN,
+            retryable=False,
+        ) from last_error
+    raise AIRuntimeError("AI 调用失败：未知错误", kind=AIErrorKind.UNKNOWN)

@@ -28,8 +28,8 @@ async def resolve_option_fill_text_from_config(
     ctx: Optional[ExecutionState] = None,
     thread_name: str = "",
     allow_ai_placeholder: bool = False,
-    ai_placeholder_text: str = DEFAULT_FILL_TEXT,
-) -> Optional[str]:
+    ai_placeholder_text: Any = DEFAULT_FILL_TEXT,
+) -> Optional[Any]:
     del driver
     raw_value = get_fill_text_from_config(fill_entries, option_index)
     if raw_value is None:
@@ -44,7 +44,7 @@ async def resolve_option_fill_text_from_config(
         if cached:
             return cached
     if allow_ai_placeholder:
-        return str(ai_placeholder_text or "").strip() or DEFAULT_FILL_TEXT
+        return ai_placeholder_text or DEFAULT_FILL_TEXT
 
     ai_prompt = build_ai_option_fill_prompt(
         question_title=question_title,

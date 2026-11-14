@@ -258,6 +258,7 @@ class RuntimeAISection(QObject):
 
     def update_config(self, cfg: RuntimeConfig):
         cfg.ai_mode = "provider"
+        cfg.ai_config_mode = "override"
         idx = self.ai_provider_combo.currentIndex()
         cfg.ai_provider = str(self.ai_provider_combo.itemData(idx)) if idx >= 0 else "deepseek"
         cfg.ai_api_key = self.ai_apikey_edit.text().strip()
@@ -336,7 +337,7 @@ class RuntimeAISection(QObject):
         self._update_ai_doc_link(provider_key)
 
     def _apply_ai_config(self, cfg: RuntimeConfig):
-        ai_config_present = getattr(cfg, "_ai_config_present", False)
+        ai_config_present = getattr(cfg, "ai_config_mode", "inherit") == "override"
         if not ai_config_present:
             ai_config = self._ai_settings.get_settings()
             cfg.ai_provider = str(ai_config.get("provider") or "deepseek")

@@ -15,7 +15,7 @@ from packaging.version import Version
 from software.app.config import app_settings, get_bool_from_qsettings
 from software.app.app_info import APP_VERSION
 from software.ui.helpers.qfluent_compat import (
-    set_indeterminate_progress_ring_active,
+    QFluentCompat,
 )
 
 
@@ -308,7 +308,7 @@ class MainWindowUpdateMixin:
             if not self._mount_title_bar_status_widget(spinner):
                 spinner.deleteLater()
                 return
-            set_indeterminate_progress_ring_active(spinner, True)
+            QFluentCompat.set_indeterminate_progress_active(spinner, True)
             self._update_checking_spinner = spinner
         except Exception:
             logging.info("显示更新检查占位失败", exc_info=True)
@@ -318,7 +318,7 @@ class MainWindowUpdateMixin:
         if spinner is None:
             return
         try:
-            set_indeterminate_progress_ring_active(spinner, False)
+            QFluentCompat.set_indeterminate_progress_active(spinner, False)
             self._clear_title_bar_status_widget(spinner)
         except Exception:
             logging.info("清理更新检查占位失败", exc_info=True)

@@ -6,12 +6,14 @@ from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple
 from software.providers.common import SURVEY_PROVIDER_WJX
 from surveycore.providers.contracts import SurveyQuestionMeta
 
+CONFIG_SCHEMA_VERSION = 2
 if TYPE_CHECKING:
     from surveycore.core.questions.config import QuestionEntry
 
 
 @dataclass
 class RuntimeConfig:
+    schema_version: int = CONFIG_SCHEMA_VERSION
     url: str = ""
     survey_title: str = ""
     survey_provider: str = SURVEY_PROVIDER_WJX
@@ -39,6 +41,7 @@ class RuntimeConfig:
     ai_api_protocol: str = "auto"
     ai_model: str = ""
     ai_system_prompt: str = ""
+    ai_config_mode: str = "inherit"
     reverse_fill_enabled: bool = False
     reverse_fill_source_path: str = ""
     reverse_fill_format: str = "auto"
@@ -48,4 +51,3 @@ class RuntimeConfig:
     dimension_groups: List[str] = field(default_factory=list)
     question_entries: List[QuestionEntry] = field(default_factory=list)
     questions_info: Optional[List[SurveyQuestionMeta]] = field(default_factory=list)
-    _ai_config_present: bool = field(default=False, init=False, repr=False)

@@ -1,4 +1,5 @@
 from __future__ import annotations
+from collections import deque
 
 import asyncio
 import threading
@@ -430,7 +431,7 @@ def test_prepared_config_is_cloned_before_injecting_proxy_leases():
     lease = ProxyLease(address="127.0.0.1:8080")
     config, state = harness.service._prepare_engine_state([lease])
     assert config is not template
-    assert config.proxy_ip_pool == [lease]
+    assert config.proxy_ip_pool == deque([lease])
     assert state.config is config
     template.single_prob[0][0] = 0.0
     assert config.single_prob[0][0] == 1.0

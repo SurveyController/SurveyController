@@ -40,8 +40,7 @@ import software.network.http as http_client
 from software.core.config.user_agents import DEFAULT_USER_AGENT
 from software.core.ai.batch_runtime import (
     assert_no_ai_placeholders_in_actions,
-    is_ai_option_fill_placeholder,
-    is_ai_text_placeholder,
+    is_pending_ai_answer,
     prefill_ai_answers_for_questions,
 )
 from software.core.config.codec import UserAgentProfile
@@ -89,7 +88,7 @@ def _headers(page_url: str, user_agent: str | None = None) -> dict[str, str]:
 def _record_action(ctx: ExecutionState, action: AnswerAction, thread_name: str = "") -> None:
     values = list(action.text_values or ()) + [value for _, value in action.option_fill_texts]
     if any(
-        is_ai_text_placeholder(value) or is_ai_option_fill_placeholder(value) for value in values
+        is_pending_ai_answer(value) for value in values
     ):
         action = replace(action, pending_distribution_choices=())
     record_answer_action(

@@ -131,6 +131,11 @@ def publish_runtime_snapshot(service: RunApplicationService, *, emit: bool = Tru
     if ctx is not None:
         try:
             thread_rows = ctx.snapshot_thread_progress()
+            with ctx.lock:
+                progress_kinds = dict(ctx.progress_kind_by_thread)
+            for row in thread_rows:
+                thread_name = str(row.get("thread_name") or "")
+                row["progress_kind"] = progress_kinds.get(thread_name, "waiting")
         except Exception:
             logging.debug("获取线程进度快照失败", exc_info=True)
         try:
@@ -160,6 +165,7 @@ def publish_runtime_snapshot(service: RunApplicationService, *, emit: bool = Tru
             "running": bool(service.running),
             "paused": bool(paused),
             "pause_reason": reason,
+            "pause_reason_code": str(service._state_store.lifecycle.pause_reason_code or ""),
             "stopping": bool(service._stopping),
             "progress": {
                 "current": current,

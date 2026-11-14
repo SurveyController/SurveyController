@@ -10,14 +10,14 @@ from surveycore.wjx.provider.answering_builders import (
 
 import math
 import random
-from typing import Any, List, Optional, Sequence
+from typing import Any, List, Optional, Sequence, cast
 
 from software.core.text_constants import DEFAULT_FILL_TEXT
 from software.core.ai.runtime import (
     AIRuntimeError,
     agenerate_ai_answer,
-    build_ai_option_fill_placeholder,
-    build_ai_text_placeholder,
+    build_pending_ai_option_fill_answer,
+    build_pending_ai_text_answer,
 )
 from surveycore.core.persona.context import apply_persona_boost
 from surveycore.core.questions.consistency import (
@@ -38,12 +38,23 @@ from surveycore.core.questions.strict_ratio import (
 from surveycore.core.questions.tendency import get_tendency_index
 from surveycore.core.questions.utils import normalize_droplist_probs, weighted_index
 from surveycore.core.reverse_fill.runtime import resolve_current_reverse_fill_answer
+from software.core.reverse_fill.intent import ReverseFillIntent
 from surveycore.core.reverse_fill.actions import build_reverse_fill_action
 from surveycore.core.reverse_fill.schema import (
     REVERSE_FILL_KIND_CHOICE,
     REVERSE_FILL_KIND_MULTI_TEXT,
     REVERSE_FILL_KIND_TEXT,
 )
+
+
+def _resolve_reverse_fill_answer(ctx: ExecutionState, question_num: int, thread_name: str):
+    intent_by_question = getattr(ctx.config, "reverse_fill_intent_by_question", {})
+    intent = str(intent_by_question.get(question_num, "use_configured_answer"))
+    if intent == ReverseFillIntent.BLOCK.value:
+        raise RuntimeError(f"第{question_num}题的反填策略禁止生成答案")
+    if intent != ReverseFillIntent.USE_SAMPLE.value:
+        return None
+    return resolve_current_reverse_fill_answer(ctx, question_num, thread_name=thread_name)
 from software.core.task import ExecutionState
 from surveycore.providers.answering import AnswerAction
 from surveycore.providers.answering.option_fill import default_missing_option_fill
@@ -70,11 +81,7 @@ async def _build_wjx_single_action(
     current = int(question.num or 0)
     option_texts = await _resolve_runtime_option_texts(driver, question)
     option_count = max(1, len(option_texts) or int(question.options or 0))
-    reverse_fill_answer = resolve_current_reverse_fill_answer(
-        ctx,
-        current,
-        thread_name=thread_name,
-    )
+    reverse_fill_answer = _resolve_reverse_fill_answer(ctx, current, thread_name)
     forced_index: Optional[int] = None
     if reverse_fill_answer is not None and reverse_fill_answer.kind == REVERSE_FILL_KIND_CHOICE:
         forced_index = _valid_forced_choice_index(reverse_fill_answer.choice_index, option_count)
@@ -134,7 +141,7 @@ async def _build_wjx_single_action(
         ctx=ctx,
         thread_name=thread_name,
         allow_ai_placeholder=allow_ai_placeholder,
-        ai_placeholder_text=build_ai_option_fill_placeholder(current, selected_index),
+        ai_placeholder_text=build_pending_ai_option_fill_answer(current, selected_index),
     )
     fill_value = default_missing_option_fill(question, selected_index, fill_value)
     selected_texts = [
@@ -170,11 +177,7 @@ async def _build_wjx_dropdown_action(
     current = int(question.num or 0)
     option_texts = await _resolve_runtime_option_texts(driver, question)
     option_count = max(1, len(option_texts) or int(question.options or 0))
-    reverse_fill_answer = resolve_current_reverse_fill_answer(
-        ctx,
-        current,
-        thread_name=thread_name,
-    )
+    reverse_fill_answer = _resolve_reverse_fill_answer(ctx, current, thread_name)
     forced_index: Optional[int] = None
     if reverse_fill_answer is not None and reverse_fill_answer.kind == REVERSE_FILL_KIND_CHOICE:
         forced_index = _valid_forced_choice_index(reverse_fill_answer.choice_index, option_count)
@@ -233,7 +236,7 @@ async def _build_wjx_dropdown_action(
         ctx=ctx,
         thread_name=thread_name,
         allow_ai_placeholder=allow_ai_placeholder,
-        ai_placeholder_text=build_ai_option_fill_placeholder(current, selected_index),
+        ai_placeholder_text=build_pending_ai_option_fill_answer(current, selected_index),
     )
     fill_value = default_missing_option_fill(question, selected_index, fill_value)
     selected_texts = [
@@ -269,11 +272,8 @@ async def _build_wjx_text_action(
     config = ctx.config
     current = int(question.num or 0)
     blank_count = max(1, int(question.text_inputs or 0))
-    reverse_fill_answer = resolve_current_reverse_fill_answer(
-        ctx,
-        current,
-        thread_name=thread_name,
-    )
+    text_values: list[Any]
+    reverse_fill_answer = _resolve_reverse_fill_answer(ctx, current, thread_name)
 
     if reverse_fill_answer is not None and reverse_fill_answer.kind == REVERSE_FILL_KIND_MULTI_TEXT:
         text_values = [
@@ -296,7 +296,7 @@ async def _build_wjx_text_action(
                 ]
             elif allow_ai_placeholder:
                 text_values = [
-                    build_ai_text_placeholder(current, blank_index)
+                    build_pending_ai_text_answer(current, blank_index)
                     for blank_index in range(blank_count)
                 ]
             else:
@@ -349,10 +349,15 @@ async def _build_wjx_text_action(
     return AnswerAction(
         question_num=current,
         kind="text",
-        text_values=tuple(
-            str(text_values[index] if index < len(text_values) else text_values[-1] or "").strip()
+        text_values=cast(
+            Any,
+            tuple(
+            text_values[index]
+            if index < len(text_values) and not isinstance(text_values[index], str)
+            else str(text_values[index] if index < len(text_values) else text_values[-1] or "").strip()
             or DEFAULT_FILL_TEXT
             for index in range(blank_count)
+            ),
         ),
         record_type="text",
     )
@@ -413,7 +418,7 @@ async def _build_wjx_multiple_action(
                 ctx=ctx,
                 thread_name=thread_name,
                 allow_ai_placeholder=allow_ai_placeholder,
-                ai_placeholder_text=build_ai_option_fill_placeholder(current, option_idx),
+                ai_placeholder_text=build_pending_ai_option_fill_answer(current, option_idx),
             )
             fill_value = default_missing_option_fill(question, option_idx, fill_value)
             if fill_value:
@@ -430,11 +435,7 @@ async def _build_wjx_multiple_action(
             record_type="multiple",
         )
 
-    reverse_fill_answer = resolve_current_reverse_fill_answer(
-        ctx,
-        current,
-        thread_name=thread_name,
-    )
+    reverse_fill_answer = _resolve_reverse_fill_answer(ctx, current, thread_name)
     if reverse_fill_answer is not None and reverse_fill_answer.kind == REVERSE_FILL_KIND_CHOICE:
         forced_index = reverse_fill_answer.choice_index
         if forced_index is not None:

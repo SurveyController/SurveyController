@@ -12,7 +12,7 @@ from qfluentwidgets import (
     TableWidget,
     TitleLabel,
 )
-from software.ui.helpers.qfluent_compat import resolve_mask_dialog_parent
+from software.ui.helpers.qfluent_compat import QFluentCompat
 
 
 class QuestionSelectorDialog(MessageBoxBase):
@@ -22,7 +22,7 @@ class QuestionSelectorDialog(MessageBoxBase):
         questions: Sequence[Dict[str, Any]],
         parent=None,
     ):
-        resolved_parent = resolve_mask_dialog_parent(parent)
+        resolved_parent = QFluentCompat.mask_parent(parent)
         super().__init__(resolved_parent)
         self._fallback_parent = resolved_parent if resolved_parent is not parent else None
         if self._fallback_parent is not None:

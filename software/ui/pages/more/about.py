@@ -38,7 +38,7 @@ from software.app.project_links import REPOSITORY_URL
 from software.ui.widgets.full_width_infobar import FullWidthInfoBar
 from software.app.runtime_paths import get_resource_path
 from software.ui.helpers.qfluent_compat import (
-    set_indeterminate_progress_ring_active,
+    QFluentCompat,
 )
 from shiboken6 import isValid
 
@@ -239,7 +239,7 @@ class AboutPage(ScrollArea):
             self.update_btn.setText("检查中...")
         else:
             self.update_btn.setText("检查更新")
-        set_indeterminate_progress_ring_active(self.update_spinner, loading)
+        QFluentCompat.set_indeterminate_progress_active(self.update_spinner, loading)
 
     @Slot(object)
     def _on_update_result(self, update_info):

@@ -3,6 +3,7 @@ from __future__ import annotations
 import logging
 from typing import List, Optional, Union
 
+from software.integrations.ai.errors import AIConfigurationError
 from software.core.task import ExecutionState
 from software.integrations.ai.protocols import (
     _CHAT_COMPLETIONS_SUFFIX,
@@ -58,13 +59,13 @@ async def agenerate_answer(
     config = get_ai_settings()
     readiness_error = get_ai_readiness_error(config)
     if readiness_error:
-        raise RuntimeError(f"AI 配置不完整：{readiness_error}")
+        raise AIConfigurationError(f"AI 配置不完整：{readiness_error}")
 
     system_prompt = str(config.get("system_prompt") or "").strip() or get_default_system_prompt()
 
     api_key = str(config.get("api_key") or "")
     if not api_key:
-        raise RuntimeError("请先配置 API Key")
+        raise AIConfigurationError("请先配置 API Key")
 
     provider = str(config.get("provider") or "deepseek")
     if provider == "custom":
@@ -72,9 +73,9 @@ async def agenerate_answer(
         api_protocol = _normalize_custom_api_protocol(config.get("api_protocol"))
         model = str(config.get("model") or "")
         if not base_url:
-            raise RuntimeError("自定义模式需要配置 Base URL")
+            raise AIConfigurationError("自定义模式需要配置 Base URL")
         if not model:
-            raise RuntimeError("自定义模式需要配置模型名称")
+            raise AIConfigurationError("自定义模式需要配置模型名称")
         resolved_protocol, request_url, has_explicit_endpoint = _resolve_custom_endpoint(
             base_url, api_protocol
         )
@@ -100,7 +101,7 @@ async def agenerate_answer(
 
     provider_config = AI_PROVIDERS.get(provider)
     if not provider_config:
-        raise RuntimeError(f"不支持的 AI 服务提供商: {provider}")
+        raise AIConfigurationError(f"不支持的 AI 服务提供商: {provider}")
     base_url = str(provider_config["base_url"])
     model = str(config.get("model") or provider_config["default_model"])
 

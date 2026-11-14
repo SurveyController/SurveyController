@@ -4,6 +4,7 @@ import asyncio
 import threading
 
 import pytest
+import httpx
 from surveycore.core.engine.async_events import AsyncRunContext
 from surveycore.core.engine.async_scheduler import AsyncScheduler
 
@@ -91,6 +92,29 @@ async def test_inflight_successes_are_committed_after_stop(monkeypatch) -> None:
     assert len(requests) == 2
     assert state.cur_num == 2
     assert state.get_terminal_stop_snapshot()[0] == "user_stopped"
+
+
+@pytest.mark.asyncio
+async def test_transport_failure_after_submit_is_unknown_and_not_retried(monkeypatch) -> None:
+    engine = AsyncRuntimeEngine()
+    config = ExecutionConfig(
+        num_threads=1,
+        target_num=1,
+        url="https://www.wjx.cn/vm/local.aspx",
+    )
+    state = ExecutionState(config=config)
+    attempts = []
+
+    async def fill(*args, **kwargs):
+        attempts.append(kwargs["thread_name"])
+        raise httpx.ReadTimeout("response lost")
+
+    monkeypatch.setattr(submitter, "fill_survey_http", fill)
+    await asyncio.wait_for(engine._run(config=config, state=state), timeout=2.0)
+
+    assert attempts == ["Slot-1"]
+    assert state.cur_num == 0
+    assert state.get_terminal_stop_snapshot()[0] == "submission_result_unknown"
 
 
 def test_stop_wakes_runner_waiting_for_submit_interval(monkeypatch) -> None:

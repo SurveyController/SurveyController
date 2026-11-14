@@ -17,6 +17,8 @@ from software.core.engine.async_round_resources import (
 from surveycore.core.engine.async_scheduler import AsyncScheduler
 from software.core.engine.failure_reason import FailureReason
 from software.core.engine.run_stop_policy import RunStopPolicy
+from software.core.engine.submission_attempt import AttemptState, SubmissionAttempt
+from software.application.run_phases import ProgressKind
 from software.core.engine.runtime_control_port import RuntimeControlPort
 from software.core.engine.task_registry import TaskRegistry
 from software.core.engine.runtime_error_handlers import (
@@ -96,17 +98,25 @@ class AsyncSlotRunner:
 
     def _update_status(self, status_text: str, *, running: bool = True) -> None:
         try:
+            self._set_progress_kind(
+                ProgressKind.PREPARING if running else ProgressKind.WAITING
+            )
             self.state.update_thread_status(self.slot_label, status_text, running=running)
         except Exception:
             logging.info("更新 slot 状态失败：%s", status_text, exc_info=True)
 
     def _update_step(self, status_text: str) -> None:
         try:
+            self._set_progress_kind(ProgressKind.SUBMITTING)
             self.state.update_thread_step(
                 self.slot_label, 0, 0, status_text=status_text, running=True
             )
         except Exception:
             logging.info("更新 slot 步骤失败：%s", status_text, exc_info=True)
+
+    def _set_progress_kind(self, progress_kind: ProgressKind) -> None:
+        with self.state.lock:
+            self.state.progress_kind_by_thread[self.slot_label] = progress_kind.value
 
     async def _update_http_step(self, status_text: str) -> None:
         await update_http_submit_step(self.state, self.slot_label, status_text)
@@ -296,6 +306,23 @@ class AsyncSlotRunner:
     def _mark_http_submit_success(self) -> bool:
         return self.stop_policy.record_success(self.stop_proxy, thread_name=self.slot_label)
 
+    def _mark_submission_result_unknown(
+        self, attempt: SubmissionAttempt, exc: BaseException
+    ) -> None:
+        attempt.resolve(AttemptState.UNKNOWN)
+        self._set_progress_kind(ProgressKind.UNKNOWN)
+        message = f"提交请求已发出，但未收到确定结果，已停止自动重试：{exc}"
+        logging.critical("会话[%s] %s", self.slot_label, message)
+        with self.state.submission_attempt_lock:
+            self.state.commit_joint_sample(self.slot_label)
+            self.state.release_reverse_fill_sample(self.slot_label, requeue=False)
+            self.state.mark_thread_finished(self.slot_label, status_text="提交结果未知")
+            self.state.mark_terminal_stop(
+                "submission_result_unknown",
+                message=message,
+            )
+        self.run_context.stop_event.set()
+
     def _report_submission_result(self, result: str) -> None:
         if not bool(self.config.random_proxy_ip_enabled):
             return
@@ -362,6 +389,7 @@ class AsyncSlotRunner:
                 break
             should_requeue_dispatch = True
             dispatch_delay_seconds = 0.0
+            attempt = SubmissionAttempt()
             try:
                 self._joint_pre_answer_timed_out = False
                 await self._update_http_step("准备请求")
@@ -410,6 +438,7 @@ class AsyncSlotRunner:
                     )
                     return submit_proxy
 
+                attempt.begin_submission()
                 finished = await self.http_submitter.submit(
                     stop_signal=self.stop_proxy,
                     proxy_address=None,
@@ -418,12 +447,15 @@ class AsyncSlotRunner:
                     submit_proxy_lease_factory=submit_proxy_lease_factory,
                 )
                 if not finished:
+                    attempt.resolve(AttemptState.REJECTED)
                     self._release_round_resources(requeue_reverse_fill=True)
                     if self.run_context.stop_requested():
                         should_requeue_dispatch = False
                         break
                     continue
 
+                attempt.resolve(AttemptState.COMMITTED)
+                self._set_progress_kind(ProgressKind.SUCCEEDED)
                 should_stop = self._mark_http_submit_success()
                 self._report_submission_result("success")
                 if should_stop or self.run_context.stop_requested():
@@ -474,6 +506,11 @@ class AsyncSlotRunner:
                     break
                 self._release_round_resources(requeue_reverse_fill=True)
             except (http_client.TransportError,) as exc:
+                if attempt.state is AttemptState.SUBMITTING:
+                    self._report_submission_result("unknown")
+                    self._mark_submission_result_unknown(attempt, exc)
+                    should_requeue_dispatch = False
+                    break
                 self._report_submission_result("failed")
                 if self._handle_http_transport_error(exc):
                     should_requeue_dispatch = False
@@ -485,6 +522,9 @@ class AsyncSlotRunner:
                     break
                 logging.exception("HTTP 会话[%s]运行异常", self.slot_label)
                 self._report_submission_result("failed")
+                if attempt.state is AttemptState.SUBMITTING:
+                    attempt.resolve(AttemptState.REJECTED)
+                    self._set_progress_kind(ProgressKind.FAILED)
                 if self.stop_policy.record_failure(
                     self.stop_proxy,
                     thread_name=self.slot_label,

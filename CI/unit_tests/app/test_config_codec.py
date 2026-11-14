@@ -1,6 +1,8 @@
 from __future__ import annotations
 from collections import Counter
 
+import pytest
+
 from software.app.config import DEFAULT_USER_AGENT, USER_AGENT_PRESETS
 from software.core.config.codec import (
     UserAgentProfile,
@@ -88,6 +90,10 @@ class ConfigCodecTests:
         )
         assert len(restored.questions_info or []) == 1
         restored_info = restored.questions_info[0]
+        restored_info.question_id = "local-question-id"
+        serialized_with_id = serialize_runtime_config(restored)
+        restored_with_id = deserialize_runtime_config(serialized_with_id)
+        assert restored_with_id.questions_info[0].question_id == "local-question-id"
         assert restored_info.provider == "qq"
         assert restored_info.provider_question_id == "question-3"
         assert restored_info.provider_page_id == "page-2"
@@ -148,6 +154,21 @@ class ConfigCodecTests:
         assert config.question_entries[0].question_type == "single"
         assert config.questions_info[0].title == "Q1"
 
+    def test_config_schema_version_migrates_legacy_and_rejects_future(self) -> None:
+        legacy = deserialize_runtime_config({"url": "https://example.test"})
+        assert legacy.schema_version == 2
+        assert legacy.ai_config_mode == "inherit"
+
+        with pytest.raises(ValueError, match="不支持的配置版本"):
+            deserialize_runtime_config({"schema_version": 3})
+
+    def test_ai_override_is_an_explicit_config_intent(self) -> None:
+        config = RuntimeConfig(ai_config_mode="override", ai_model="model-a")
+        restored = deserialize_runtime_config(serialize_runtime_config(config))
+
+        assert restored.ai_config_mode == "override"
+        assert restored.ai_model == "model-a"
+
     def test_runtime_config_export_excludes_key_by_default_and_allows_explicit_export(self) -> None:
         config = RuntimeConfig(ai_api_key="manual-export-key")
 
@@ -200,6 +221,14 @@ class ConfigCodecTests:
         assert payload["dimension"] is None
         assert payload["text_random_int_range"] == [5, 9]
         assert payload["location_parts"] == ["北京", "北京", "东城区"]
+
+    def test_question_id_survives_question_entry_roundtrip(self) -> None:
+        entry = deserialize_question_entry(
+            {"question_type": "single", "probabilities": [1], "question_id": "local-id"}
+        )
+
+        assert entry.question_id == "local-id"
+        assert serialize_question_entry(entry)["question_id"] == "local-id"
 
     def test_normalize_runtime_config_payload_covers_boundaries_and_invalid_values(self) -> None:
         cfg = normalize_runtime_config_payload(

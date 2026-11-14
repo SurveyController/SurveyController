@@ -58,7 +58,7 @@ _SYSTEM_PROMPT_BASE = (
 
 DEFAULT_SYSTEM_PROMPT_PROVIDER = (
     _SYSTEM_PROMPT_BASE + "\n\n多项填空补充规则：\n"
-    "6. 当题目有多个空位时，按空位顺序输出一个字符串，并使用 || 分隔每个答案（示例：答案1||答案2||答案3）"
+    '6. 当题目有多个空位时，按顺序只输出 JSON 字符串数组（示例：["答案1", "答案2"]）'
 )
 
 _DEFAULT_AI_SETTINGS: Dict[str, Any] = {

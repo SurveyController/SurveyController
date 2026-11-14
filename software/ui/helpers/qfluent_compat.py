@@ -68,6 +68,20 @@ def install_qfluentwidgets_animation_guards() -> None:
     _install_infobar_manager_guards(InfoBarManager)
 
 
+class QFluentCompat:
+    @staticmethod
+    def install() -> None:
+        install_qfluentwidgets_animation_guards()
+
+    @staticmethod
+    def set_indeterminate_progress_active(ring: Any, active: bool) -> None:
+        set_indeterminate_progress_ring_active(ring, active)
+
+    @staticmethod
+    def mask_parent(parent: QWidget | None) -> QWidget:
+        return resolve_mask_dialog_parent(parent)
+
+
 def _install_infobar_manager_guards(info_bar_manager_cls) -> None:
 
     def _is_alive(obj) -> bool:
@@ -397,6 +411,7 @@ def resolve_mask_dialog_parent(parent: QWidget | None) -> QWidget:
 
 
 __all__ = [
+    "QFluentCompat",
     "install_qfluentwidgets_animation_guards",
     "resolve_mask_dialog_parent",
     "set_indeterminate_progress_ring_active",

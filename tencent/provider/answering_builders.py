@@ -6,14 +6,14 @@ from surveycore.tencent.provider.answering_builders import (
 )
 
 import random
-from typing import Any, List, Optional, Sequence
+from typing import Any, List, Optional, Sequence, cast
 
 from software.core.text_constants import DEFAULT_FILL_TEXT
 from software.core.ai.runtime import (
     AIRuntimeError,
     agenerate_ai_answer,
-    build_ai_option_fill_placeholder,
-    build_ai_text_placeholder,
+    build_pending_ai_option_fill_answer,
+    build_pending_ai_text_answer,
 )
 from surveycore.core.persona.context import apply_persona_boost
 from surveycore.core.questions.consistency import (
@@ -110,7 +110,7 @@ async def _build_qq_single_action(
         ctx=ctx,
         thread_name=thread_name,
         allow_ai_placeholder=allow_ai_placeholder,
-        ai_placeholder_text=build_ai_option_fill_placeholder(current, selected_index),
+        ai_placeholder_text=build_pending_ai_option_fill_answer(current, selected_index),
     )
     fill_value = default_missing_option_fill(question, selected_index, fill_value)
     selected_texts = [
@@ -144,6 +144,7 @@ async def _build_qq_text_action(
     config = ctx.config
     current = int(question.num or 0)
     blank_count = max(1, int(getattr(question, "text_inputs", 1) or 1))
+    text_values: list[Any]
     text_entry_types = list(getattr(ctx.config, "text_entry_types", []) or [])
     multi_text_blank_modes = list(getattr(ctx.config, "multi_text_blank_modes", []) or [])
     multi_text_blank_ranges = list(getattr(ctx.config, "multi_text_blank_int_ranges", []) or [])
@@ -172,7 +173,7 @@ async def _build_qq_text_action(
             text_values = [str(item or "").strip() or DEFAULT_FILL_TEXT for item in cached_answers]
         elif allow_ai_placeholder:
             text_values = [
-                build_ai_text_placeholder(current, blank_index)
+                build_pending_ai_text_answer(current, blank_index)
                 for blank_index in range(blank_count)
             ]
         else:
@@ -202,8 +203,12 @@ async def _build_qq_text_action(
         question_num=current,
         question_id=str(question.provider_question_id or ""),
         kind="text",
-        text_values=tuple(
-            str(item or "").strip() or DEFAULT_FILL_TEXT for item in text_values[:blank_count]
+        text_values=cast(
+            Any,
+            tuple(
+            item if not isinstance(item, str) else str(item or "").strip() or DEFAULT_FILL_TEXT
+            for item in text_values[:blank_count]
+            ),
         ),
         record_type="text",
     )
@@ -274,7 +279,7 @@ async def _build_qq_dropdown_action(
         ctx=ctx,
         thread_name=thread_name,
         allow_ai_placeholder=allow_ai_placeholder,
-        ai_placeholder_text=build_ai_option_fill_placeholder(current, selected_index),
+        ai_placeholder_text=build_pending_ai_option_fill_answer(current, selected_index),
     )
     fill_value = default_missing_option_fill(question, selected_index, fill_value)
     selected_texts = [
@@ -350,7 +355,7 @@ async def _build_qq_multiple_action(
                 ctx=ctx,
                 thread_name=thread_name,
                 allow_ai_placeholder=allow_ai_placeholder,
-                ai_placeholder_text=build_ai_option_fill_placeholder(current, option_idx),
+                ai_placeholder_text=build_pending_ai_option_fill_answer(current, option_idx),
             )
             fill_value = default_missing_option_fill(question, option_idx, fill_value)
             if fill_value:

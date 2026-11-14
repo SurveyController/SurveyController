@@ -12,7 +12,7 @@ from surveycore.core.reverse_fill import (
     REVERSE_FILL_FORMAT_WJX_TEXT,
 )
 from software.core.config.answer_datetime_window import normalize_answer_datetime_window
-from software.core.config.schema import RuntimeConfig
+from software.core.config.schema import CONFIG_SCHEMA_VERSION, RuntimeConfig
 from surveycore.core.psychometrics.psychometric import normalize_target_alpha
 from surveycore.core.questions.consistency import normalize_rule_dict, sanitize_answer_rules
 from surveycore.core.questions.utils import serialize_random_int_range
@@ -73,6 +73,7 @@ _QUESTION_ENTRY_FIELDS = {
     "survey_provider",
     "provider_question_id",
     "provider_page_id",
+    "question_id",
     "ai_enabled",
     "multi_text_blank_modes",
     "multi_text_blank_ai_flags",
@@ -135,6 +136,7 @@ _SURVEY_QUESTION_META_FIELDS = {
     "unsupported",
     "unsupported_reason",
     "required",
+    "question_id",
 }
 
 _RUNTIME_CONFIG_FIELDS = {
@@ -324,6 +326,7 @@ def serialize_question_entry(entry) -> Dict[str, Any]:
         "survey_provider": normalize_survey_provider(getattr(entry, "survey_provider", None)),
         "provider_question_id": str(getattr(entry, "provider_question_id", None) or ""),
         "provider_page_id": str(getattr(entry, "provider_page_id", None) or ""),
+        "question_id": str(getattr(entry, "question_id", None) or ""),
         "ai_enabled": bool(getattr(entry, "ai_enabled", False)),
         "multi_text_blank_modes": _normalize_multi_text_blank_modes(
             getattr(entry, "multi_text_blank_modes", [])
@@ -375,7 +378,7 @@ def deserialize_question_entry(data: Dict[str, Any]):
         and isinstance(probabilities, list)
     ):
         custom_weights = list(probabilities)
-    return QuestionEntry(
+    entry = QuestionEntry(
         question_type=data.get("question_type") or "text",
         probabilities=probabilities,
         texts=data.get("texts"),
@@ -411,6 +414,10 @@ def deserialize_question_entry(data: Dict[str, Any]):
         dimension=_normalize_dimension_value(data.get("dimension")),
         psycho_bias=_normalize_psycho_bias(data),
     )
+    question_id = str(data.get("question_id") or "").strip()
+    if question_id:
+        setattr(entry, "question_id", question_id)
+    return entry
 
 
 def clone_question_entries(entries: Any) -> List[Any]:
@@ -426,7 +433,13 @@ def clone_question_entries(entries: Any) -> List[Any]:
 def clone_questions_info(
     questions: Any, *, default_provider: str = SURVEY_PROVIDER_WJX
 ) -> List[SurveyQuestionMeta]:
-    return clone_survey_question_metas(questions or [], default_provider=default_provider)
+    source = list(questions or [])
+    cloned = clone_survey_question_metas(source, default_provider=default_provider)
+    for source_item, cloned_item in zip(source, cloned, strict=False):
+        stable_id = str(getattr(source_item, "question_id", "") or "").strip()
+        if stable_id:
+            setattr(cloned_item, "question_id", stable_id)
+    return cloned
 
 
 def build_runtime_config_snapshot(
@@ -451,6 +464,10 @@ def build_runtime_config_snapshot(
     )
     snapshot.question_entries = clone_question_entries(entry_source)
     snapshot.questions_info = clone_questions_info(info_source, default_provider=default_provider)
+    for source_item, snapshot_item in zip(info_source or [], snapshot.questions_info, strict=False):
+        stable_id = str(getattr(source_item, "question_id", "") or "").strip()
+        if stable_id:
+            setattr(snapshot_item, "question_id", stable_id)
     snapshot.answer_rules = copy.deepcopy(list(getattr(snapshot, "answer_rules", []) or []))
     snapshot.dimension_groups = copy.deepcopy(list(getattr(snapshot, "dimension_groups", []) or []))
     snapshot.random_ua_ratios = copy.deepcopy(dict(getattr(snapshot, "random_ua_ratios", {}) or {}))
@@ -499,7 +516,11 @@ def normalize_runtime_config_payload(raw: Dict[str, Any]) -> RuntimeConfig:
         normalized = str(value or REVERSE_FILL_FORMAT_AUTO).strip().lower()
         return normalized if normalized in _REVERSE_FILL_FORMATS else REVERSE_FILL_FORMAT_AUTO
 
+    source_version = _as_int(raw.get("schema_version"), 1)
+    if source_version > CONFIG_SCHEMA_VERSION:
+        raise ValueError(f"不支持的配置版本：{source_version}")
     config = RuntimeConfig()
+    config.schema_version = CONFIG_SCHEMA_VERSION
     unknown_keys = set(raw or {}) - _RUNTIME_CONFIG_FIELDS
     if unknown_keys:
         logging.warning("忽略配置中的未知字段：%s", ", ".join(sorted(unknown_keys)))
@@ -558,7 +579,9 @@ def normalize_runtime_config_payload(raw: Dict[str, Any]) -> RuntimeConfig:
         "ai_system_prompt",
     }
     has_ai_keys = any(key in raw for key in ai_keys)
-    config._ai_config_present = has_ai_keys
+    config.ai_config_mode = str(raw.get("ai_config_mode") or ("override" if has_ai_keys else "inherit"))
+    if config.ai_config_mode not in {"inherit", "override"}:
+        config.ai_config_mode = "inherit"
     if has_ai_keys:
         config.ai_mode = "provider"
         config.ai_provider = str(raw.get("ai_provider") or "deepseek")
@@ -599,6 +622,11 @@ def normalize_runtime_config_payload(raw: Dict[str, Any]) -> RuntimeConfig:
             normalized_questions,
             default_provider=config.survey_provider,
         )
+        for raw_item, question in zip(questions_info_data, config.questions_info, strict=False):
+            if isinstance(raw_item, dict):
+                stable_id = str(raw_item.get("question_id") or "").strip()
+                if stable_id:
+                    setattr(question, "question_id", stable_id)
     else:
         config.questions_info = []
     config.answer_rules, _ = sanitize_answer_rules(config.answer_rules, config.questions_info or [])
@@ -612,11 +640,15 @@ def serialize_runtime_config(
 ) -> Dict[str, Any]:
     payload: Dict[str, Any] = asdict(config)
     payload["ai_mode"] = "provider"
+    payload["schema_version"] = CONFIG_SCHEMA_VERSION
     payload["question_entries"] = [
         serialize_question_entry(entry) for entry in list(config.question_entries or [])
     ]
     payload["questions_info"] = serialize_survey_question_metas(config.questions_info or [])
-    payload.pop("_ai_config_present", None)
+    for question_payload, question in zip(
+        payload["questions_info"], config.questions_info or [], strict=False
+    ):
+        question_payload["question_id"] = str(getattr(question, "question_id", "") or "")
     if not include_secrets:
         payload.pop("ai_api_key", None)
     return payload

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import pytest
+import httpx
 
 from software.core.ai import runtime as ai_runtime
 
@@ -14,7 +15,7 @@ class AiRuntimeTests:
 
         async def _raise(*_args, **_kwargs):
             calls.append(1)
-            raise RuntimeError("临时故障")
+            raise httpx.ReadTimeout("临时故障")
 
         async def _sleep(*_args, **_kwargs):
             return None
@@ -28,3 +29,19 @@ class AiRuntimeTests:
             assert "临时故障" in str(exc)
 
         assert len(calls) == 4
+
+    @pytest.mark.asyncio
+    async def test_agenerate_ai_answer_does_not_retry_unknown_program_errors(self, monkeypatch) -> None:
+        calls: list[int] = []
+
+        async def _raise(*_args, **_kwargs):
+            calls.append(1)
+            raise RuntimeError("programming defect")
+
+        monkeypatch.setattr(ai_runtime, "agenerate_answer", _raise)
+
+        with pytest.raises(ai_runtime.AIRuntimeError) as error:
+            await ai_runtime.agenerate_ai_answer("题目", question_type="fill_blank")
+
+        assert error.value.kind is ai_runtime.AIErrorKind.UNKNOWN
+        assert calls == [1]

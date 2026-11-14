@@ -1,7 +1,9 @@
 from __future__ import annotations
 
+import asyncio
 from collections import deque
 from dataclasses import dataclass, field
+import threading
 from typing import Any, cast
 
 from surveycore.core.task import (
@@ -19,7 +21,8 @@ __all__ = ["ExecutionConfig", "ExecutionState", "ProxyLease", "ThreadProgressSta
 class ExecutionConfig(CoreExecutionConfig):
     random_proxy_ip_enabled: bool = False
     proxy_source: str = "default"
-    proxy_ip_pool: list[ProxyLease] | deque[ProxyLease] = field(default_factory=deque)
+    proxy_ip_pool: deque[ProxyLease] = field(default_factory=deque)
+    reverse_fill_intent_by_question: dict[int, str] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
         self.ai_mode = "provider"
@@ -35,6 +38,13 @@ class ExecutionState(ProxyRuntimeMixin, CoreExecutionState):
     proxy_cooldown_until_by_address: dict[str, float] = field(default_factory=dict)
     _runtime_async_event: Any = field(default=None, init=False, repr=False)
     _runtime_async_event_loop: Any = field(default=None, init=False, repr=False)
+    progress_kind_by_thread: dict[str, str] = field(default_factory=dict)
+    proxy_fetch_async_lock: asyncio.Lock = field(default_factory=asyncio.Lock, init=False, repr=False)
+    submission_attempt_lock: threading.RLock = field(
+        default_factory=threading.RLock,
+        init=False,
+        repr=False,
+    )
 
     set_ai_prefill_answers = CoreExecutionState.set_free_ai_prefill_answers
     get_ai_prefill_answer = CoreExecutionState.get_free_ai_prefill_answer

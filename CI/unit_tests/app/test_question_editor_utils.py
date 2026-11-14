@@ -170,6 +170,10 @@ class QuestionEditorUtilsTests:
         info_by_num = SurveyQuestionMeta(num=2, title="二号题")
         info_by_title = SurveyQuestionMeta(num=8, title="题目三")
         skipped_description = SurveyQuestionMeta(num=7, title="描述", is_description=True)
+        editor_utils.migrate_question_ids(
+            [entry1, entry2, entry3],
+            [info_by_provider, info_by_num, info_by_title, skipped_description],
+        )
         aligned = editor_utils.build_entry_info_list(
             [entry1, entry2, entry3],
             [info_by_provider, info_by_num, info_by_title, skipped_description],

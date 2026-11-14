@@ -5,6 +5,7 @@ import threading
 from typing import TYPE_CHECKING
 
 from software.application.run_parts.preparation_job import PreparationJob
+from software.application.run_phases import PauseReason
 from software.application.runtime_port import RunRuntimePort
 from software.core.config.schema import RuntimeConfig
 from software.core.engine.failure_reason import FailureReason
@@ -58,6 +59,7 @@ class RunLifecycleCoordinator:
                 "paused": False,
                 "stopping": False,
                 "pause_reason": "",
+                "pause_reason_code": "",
                 "progress": {
                     "current": 0,
                     "target": 0,
@@ -154,14 +156,17 @@ class RunLifecycleCoordinator:
         )
         service.emit_status_snapshot()
 
-    def pause_run(self, reason: str = "") -> None:
+    def pause_run(self, reason: str | PauseReason = "") -> None:
         service = self._service
         if not service.running or service._stopping:
             return
-        service._async_engine_client.pause_run(reason)
+        service._async_engine_client.pause_run(str(reason))
         service.runtime_port.pause_run(reason)
         service._paused_state = True
         service._state_store.lifecycle.pause_reason = str(reason or "")
+        service._state_store.lifecycle.pause_reason_code = (
+            reason.value if isinstance(reason, PauseReason) else PauseReason.USER.value
+        )
         service.emit_status_snapshot()
 
     def resume_run(self) -> None:

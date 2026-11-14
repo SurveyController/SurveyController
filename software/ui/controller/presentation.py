@@ -75,6 +75,12 @@ def runtime_view(snapshot: RuntimeSnapshot) -> dict[str, Any]:
     if terminal.get("category") == "user_stopped" and not terminal.get("message"):
         terminal["message"] = "用户手动停止任务"
     view["terminal_stop"] = terminal
+    view["phase_code"] = str(snapshot.get("phase") or "idle")
+    view["pause_reason_code"] = str(snapshot.get("pause_reason_code") or "")
+    view["progress_kind"] = {
+        str(row.get("thread_name") or ""): str(row.get("progress_kind") or "waiting")
+        for row in list((snapshot.get("threads") or {}).get("rows") or [])
+    }
     return view
 
 

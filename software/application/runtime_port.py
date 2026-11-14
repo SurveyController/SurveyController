@@ -6,6 +6,7 @@ from typing import Any, Callable, Optional
 
 from software.core.engine.runtime_control_port import RuntimeControlPort
 from software.application.run_state_store import RunLifecycleState
+from software.application.run_phases import PauseReason
 from surveycore.core.engine.stop_signal import StopSignalLike
 
 
@@ -36,13 +37,17 @@ class RunRuntimePort(RuntimeControlPort):
         self._handle_random_ip_submission = handle_random_ip_submission
         self._pause_event = threading.Event()
 
-    def pause_run(self, reason: str = "") -> None:
+    def pause_run(self, reason: str | PauseReason = "") -> None:
         self._lifecycle.pause_reason = str(reason or "")
+        self._lifecycle.pause_reason_code = (
+            reason.value if isinstance(reason, PauseReason) else PauseReason.USER.value
+        )
         self._lifecycle.paused = True
         self._pause_event.set()
 
     def resume_run(self) -> None:
         self._lifecycle.pause_reason = ""
+        self._lifecycle.pause_reason_code = ""
         self._lifecycle.paused = False
         self._pause_event.clear()
 

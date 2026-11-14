@@ -12,7 +12,7 @@ from qfluentwidgets import (
     TogglePushButton,
 )
 
-from software.ui.helpers.qfluent_compat import set_indeterminate_progress_ring_active
+from software.ui.helpers.qfluent_compat import QFluentCompat
 from software.ui.widgets.setting_cards import set_widget_enabled_with_opacity
 
 
@@ -70,7 +70,7 @@ class RandomIpToggleRow(QWidget):
     def set_loading(self, loading: bool, message: str = "") -> None:
         active = bool(loading)
         text = str(message or "正在处理...") if active else ""
-        set_indeterminate_progress_ring_active(self.loading_ring, active)
+        QFluentCompat.set_indeterminate_progress_active(self.loading_ring, active)
         self.loading_label.setVisible(active)
         self.loading_label.setText(text)
         if active and self.toggle_button.hasFocus():
