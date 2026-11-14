@@ -41,32 +41,18 @@ _QQ_FILL_HTTP: HookTarget = ("tencent.provider.http_runtime", "brush_qq_http")
 _CREDAMO_FILL_HTTP: HookTarget = ("credamo.provider.http_runtime", "brush_credamo_http")
 
 
-async def _wjx_browser_runtime_removed(*_args: Any, **_kwargs: Any) -> bool:
-    raise RuntimeError("问卷星已固化为纯 HTTP 提交链路，不再支持浏览器填答兜底")
-
-
-async def _qq_browser_runtime_removed(*_args: Any, **_kwargs: Any) -> bool:
-    raise RuntimeError("腾讯问卷已固化为纯 HTTP 提交链路，不再支持浏览器填答兜底")
-
-
-async def _credamo_browser_runtime_removed(*_args: Any, **_kwargs: Any) -> bool:
-    raise RuntimeError("见数已固化为纯 HTTP 提交链路，不再支持浏览器填答兜底")
-
-
 _PROVIDER_REGISTRY: dict[str, ProviderAdapter] = {
     SURVEY_PROVIDER_WJX: CallableProviderAdapter(
         SURVEY_PROVIDER_WJX,
         ProviderAdapterHooks(
             parse_survey=build_parse_hook(SURVEY_PROVIDER_WJX, _WJX_PARSE),
             fill_survey_http=build_fill_http_hook(_WJX_FILL_HTTP),
-            fill_survey=_wjx_browser_runtime_removed,
         ),
     ),
     SURVEY_PROVIDER_QQ: CallableProviderAdapter(
         SURVEY_PROVIDER_QQ,
         ProviderAdapterHooks(
             parse_survey=build_parse_hook(SURVEY_PROVIDER_QQ, _QQ_PARSE),
-            fill_survey=_qq_browser_runtime_removed,
             fill_survey_http=build_fill_http_hook(_QQ_FILL_HTTP),
         ),
     ),
@@ -74,7 +60,6 @@ _PROVIDER_REGISTRY: dict[str, ProviderAdapter] = {
         SURVEY_PROVIDER_CREDAMO,
         ProviderAdapterHooks(
             parse_survey=build_parse_hook(SURVEY_PROVIDER_CREDAMO, _CREDAMO_PARSE),
-            fill_survey=_credamo_browser_runtime_removed,
             fill_survey_http=build_fill_http_hook(_CREDAMO_FILL_HTTP),
         ),
     ),

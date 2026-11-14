@@ -19,8 +19,8 @@ class RuntimeProjection:
     def __init__(self, service: RunApplicationService) -> None:
         self._service = service
 
-    def publish(self) -> None:
-        publish_runtime_snapshot(self._service)
+    def publish(self, *, emit: bool = True) -> None:
+        publish_runtime_snapshot(self._service, emit=emit)
 
     def emit_terminal_notice(self) -> None:
         emit_terminal_notice(self._service)
@@ -83,7 +83,7 @@ def monitor_runtime(
             logging.debug("派发最终运行态快照失败", exc_info=True)
 
 
-def publish_runtime_snapshot(service: RunApplicationService) -> None:
+def publish_runtime_snapshot(service: RunApplicationService, *, emit: bool = True) -> None:
     if service._initializing:
         service._state_store.apply_runtime_patch(
             {
@@ -101,7 +101,7 @@ def publish_runtime_snapshot(service: RunApplicationService) -> None:
                     "per_thread_target": 0,
                 },
             },
-            emit=not service._closing,
+            emit=emit and not service._closing,
         )
         return
 
@@ -122,8 +122,8 @@ def publish_runtime_snapshot(service: RunApplicationService) -> None:
         except Exception:
             logging.debug("读取终止状态失败", exc_info=True)
 
-    paused = bool(service.runtime_port.is_paused())
-    reason = str(service.runtime_port.get_pause_reason() or "")
+    paused = bool(service._paused_state)
+    reason = str(service._state_store.lifecycle.pause_reason or "")
 
     thread_rows: list[dict[str, Any]] = []
     num_threads = 0
@@ -182,14 +182,8 @@ def publish_runtime_snapshot(service: RunApplicationService) -> None:
                 "message": terminal_message,
             },
         },
-        emit=not service._closing,
+        emit=emit and not service._closing,
     )
-
-    should_force_cleanup = target > 0 and current >= target and not service._completion_cleanup_done
-    if should_force_cleanup:
-        service._completion_cleanup_done = True
-        service._schedule_cleanup()
-
 
 def emit_terminal_notice(service: RunApplicationService) -> None:
     if service._terminal_notice_emitted:

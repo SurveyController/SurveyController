@@ -172,9 +172,6 @@ def _patch_page_dependencies(monkeypatch) -> None:
     monkeypatch.setattr(
         runtime_proxy_sync, "apply_custom_proxy_api", lambda *_args, **_kwargs: None
     )
-    monkeypatch.setattr(
-        runtime_proxy_sync, "get_proxy_minute_by_answer_seconds", lambda *_args, **_kwargs: 1
-    )
     monkeypatch.setattr(dashboard_module, "load_shop_icon", lambda: None)
     monkeypatch.setattr(dash_random_ip, "load_shop_icon", lambda: None)
     monkeypatch.setattr(dash_random_ip, "get_session_snapshot", lambda: {"authenticated": False})

@@ -32,16 +32,6 @@ _NOISY_LOG_PATTERNS = (
     "QFluentWidgets Pro is now released",
     "https://qfluentwidgets.com/pages/pro",
 )
-_SUPPRESSED_RUNTIME_NOISE_PATTERNS = (
-    "WJX 页面题目快照刷新",
-    "WJX 题目处理耗时",
-    "随机代理首载：探测页面可用性",
-    "随机代理首载探测成功",
-    "随机代理首载：页面仍在加载，先保持原页追加探测",
-    "随机代理首载宽限探测成功",
-    "随机代理首载：继续等待原页面完成加载",
-    "随机代理慢加载探测成功",
-)
 _DEDUPED_LOG_STATE: dict[str, str] = {}
 _DEDUPED_LOG_LOCK = threading.Lock()
 _SESSION_LOG_HANDLER: Optional[logging.Handler] = None
@@ -59,9 +49,7 @@ def _should_filter_noise(message: str) -> bool:
     text = str(message)
     if not text.strip():
         return True
-    return any(pattern in text for pattern in _NOISY_LOG_PATTERNS) or any(
-        pattern in text for pattern in _SUPPRESSED_RUNTIME_NOISE_PATTERNS
-    )
+    return any(pattern in text for pattern in _NOISY_LOG_PATTERNS)
 
 
 def _safe_internal_log(message: str, exc: Optional[BaseException] = None) -> None:

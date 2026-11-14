@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from copy import deepcopy
+from dataclasses import dataclass
 from typing import Any, Callable, Dict, Mapping, Optional, cast
 
 from software.core.config.codec import clone_question_entries, clone_questions_info
@@ -21,6 +22,16 @@ def _deep_merge(base: Mapping[str, Any], patch: Mapping[str, Any]) -> Dict[str, 
     return merged
 
 
+@dataclass
+class RunLifecycleState:
+    running: bool = False
+    paused: bool = False
+    stopping: bool = False
+    starting: bool = False
+    initializing: bool = False
+    pause_reason: str = ""
+
+
 class RunStateStore:
     def __init__(
         self,
@@ -29,6 +40,7 @@ class RunStateStore:
         on_survey_snapshot_changed: Optional[Callable[[SurveySnapshot], Any]] = None,
     ) -> None:
         self._runtime_settings_state = RuntimeSettingsState()
+        self.lifecycle = RunLifecycleState()
         self._runtime_snapshot = self._build_runtime_snapshot()
         self._survey_snapshot = self._build_survey_snapshot()
         self._on_runtime_snapshot_changed = on_runtime_snapshot_changed

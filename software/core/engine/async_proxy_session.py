@@ -57,9 +57,6 @@ class AsyncProxySession:
         self.proxy_provider = "unknown"
         self.user_agent_profile = None
 
-    def mark_successful_proxy(self) -> None:
-        return None
-
     def release_current_proxy(self) -> None:
         self.clear_current_submit_proxy()
 

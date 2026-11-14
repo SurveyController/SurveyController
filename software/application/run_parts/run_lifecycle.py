@@ -42,13 +42,12 @@ class RunLifecycleCoordinator:
             stop_signal=stop_signal,
             notify_random_ip_loading=service.notify_random_ip_loading,
             handle_random_ip_submission=service.handle_random_ip_submission,
+            lifecycle=service._state_store.lifecycle,
         )
         service.runtime_port.set_random_ip_enabled(bool(config.random_ip_enabled))
         service._execution_state = None
         service._paused_state = False
         service._stopping = False
-        service._completion_cleanup_done = False
-        service._cleanup_scheduled = False
         service._terminal_notice_emitted = False
         service._starting = True
         service._initializing = True
@@ -87,30 +86,10 @@ class RunLifecycleCoordinator:
                 "run_preparation_failed",
                 detail,
             ),
-            on_dispatch_failed=lambda: self._handle_preparation_dispatch_failure(stop_signal),
         )
         service._preparation_job = job
         service._init_gate_thread = job.thread
         job.start()
-
-    def _handle_preparation_dispatch_failure(self, stop_signal: threading.Event) -> None:
-        service = self._service
-        if stop_signal is not service.stop_event:
-            return
-        service._starting = False
-        service._initializing = False
-        service._state_store.apply_runtime_patch(
-            {
-                "phase": "failed",
-                "initialization": {"active": False, "stage": ""},
-                "terminal_stop": {
-                    "category": "dispatch_failed",
-                    "failure_reason": "",
-                    "message": "",
-                },
-            },
-            emit=False,
-        )
 
     def stop_run(self) -> None:
         service = self._service
@@ -182,6 +161,7 @@ class RunLifecycleCoordinator:
         service._async_engine_client.pause_run(reason)
         service.runtime_port.pause_run(reason)
         service._paused_state = True
+        service._state_store.lifecycle.pause_reason = str(reason or "")
         service.emit_status_snapshot()
 
     def resume_run(self) -> None:
@@ -196,8 +176,7 @@ class RunLifecycleCoordinator:
             service.runtime_port.resume_run()
         except Exception:
             logging.debug("恢复运行时清除暂停状态失败", exc_info=True)
-        if service._paused_state:
-            service._paused_state = False
+        service._paused_state = False
         service.emit_status_snapshot()
 
 

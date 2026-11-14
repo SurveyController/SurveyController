@@ -586,9 +586,9 @@ class MainWindow(
         if event_type == "submission_verification_required":
             self._notify_submission_verification(str((event or {}).get("message") or ""))
             return
-        if event_type == "cleanup_finished":
-            self.dashboard.on_cleanup_finished()
-            self.reverse_fill_page.on_cleanup_finished()
+        if event_type == "run_finished":
+            self.dashboard.on_run_finished()
+            self.reverse_fill_page.on_run_finished()
 
     def _open_quota_request_form(self) -> bool:
         return self._open_quota_redeem_dialog()

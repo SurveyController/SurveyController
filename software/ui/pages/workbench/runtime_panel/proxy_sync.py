@@ -3,17 +3,13 @@ from __future__ import annotations
 import logging
 from typing import Any, cast
 
-from qfluentwidgets import InfoBar, InfoBarPosition
-
-from software.logging.action_logger import log_action
 from software.logging.log_utils import log_suppressed_exception
+from software.logging.action_logger import log_action
 from software.ui.helpers.proxy_access import (
     apply_custom_proxy_api,
     apply_proxy_source_settings,
-    get_proxy_minute_by_answer_seconds,
 )
 from software.ui.pages.workbench.runtime_panel.proxy_source import (
-    PROXY_SOURCE_BENEFIT,
     PROXY_SOURCE_CUSTOM,
     PROXY_SOURCE_DEFAULT,
     normalize_proxy_source,
@@ -27,7 +23,6 @@ class RuntimeProxySyncMixin:
     answer_duration_card: Any
     interval_card: Any
     random_ip_card: Any
-    _last_benefit_proxy_compatible: bool | None
 
     @staticmethod
     def _normalize_proxy_source(source: str) -> str:
@@ -67,9 +62,6 @@ class RuntimeProxySyncMixin:
             self.random_ip_card.customApiEdit.setText(str(custom_api_url or ""))
         self.random_ip_card._on_source_changed()
         self._apply_proxy_source_settings(normalized)
-        self._evaluate_benefit_proxy_compatibility(
-            show_tip=bool(show_tip and normalized == PROXY_SOURCE_BENEFIT)
-        )
         if emit_state:
             self.controller.update_runtime_settings(proxy_source=normalized)
         return normalized
@@ -102,62 +94,6 @@ class RuntimeProxySyncMixin:
                 level=logging.WARNING,
             )
 
-    def _current_survey_provider(self) -> str:
-        try:
-            return (
-                str(
-                    self.controller.get_runtime_snapshot()
-                    .get("settings", {})
-                    .get("survey_provider")
-                    or "wjx"
-                )
-                .strip()
-                .lower()
-            )
-        except Exception:
-            return "wjx"
-
-    def _current_proxy_required_minute_for_benefit(self) -> int:
-        try:
-            answer_range = self.answer_duration_card.getRange()
-            return int(
-                get_proxy_minute_by_answer_seconds(
-                    answer_range[1],
-                    survey_provider=self._current_survey_provider(),
-                )
-            )
-        except Exception as exc:
-            log_suppressed_exception(
-                "_current_proxy_required_minute_for_benefit",
-                exc,
-                level=logging.WARNING,
-            )
-            return 1
-
-    def _show_benefit_proxy_limit_tip(self, minute: int) -> None:
-        del minute
-        parent = cast(Any, self).window() or self.view
-        content = "限时福利源只支持少部分城市。如地区不可用，请切回默认代理源。"
-        InfoBar.warning(
-            "",
-            content,
-            parent=parent,
-            position=InfoBarPosition.TOP,
-            duration=4500,
-        )
-
-    def _evaluate_benefit_proxy_compatibility(self, *, show_tip: bool) -> bool:
-        if self.selected_proxy_source() != PROXY_SOURCE_BENEFIT:
-            self._last_benefit_proxy_compatible = None
-            return True
-        minute = self._current_proxy_required_minute_for_benefit()
-        compatible = True
-        previous = self._last_benefit_proxy_compatible
-        self._last_benefit_proxy_compatible = compatible
-        if show_tip and (not compatible) and previous is not False:
-            self._show_benefit_proxy_limit_tip(minute)
-        return compatible
-
     def _on_proxy_source_changed(self):
         source = self.set_proxy_source(
             self.selected_proxy_source(),
@@ -174,7 +110,6 @@ class RuntimeProxySyncMixin:
         )
 
     def _on_time_settings_changed(self, _value: Any):
-        self._evaluate_benefit_proxy_compatibility(show_tip=True)
         page = cast(Any, self)
         self.controller.update_runtime_settings(
             submit_interval=page._card_value_as_range(self.interval_card),

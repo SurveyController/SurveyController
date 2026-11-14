@@ -105,13 +105,7 @@ def shutdown_for_close(service: RunApplicationService, timeout_seconds: float = 
     deadline = time.monotonic() + max(0.0, float(timeout_seconds or 0.0))
     service._closing = True
     service._interactions.cancel_pending()
-    service._cleanup_scheduled = True
     service.stop_run()
-
-    try:
-        service.runtime_port.cleanup_targets()
-    except Exception:
-        logging.warning("关闭窗口时执行运行时兜底清理失败", exc_info=True)
 
     current = threading.current_thread()
     pending = [thread for thread in collect_shutdown_threads(service) if thread is not current]

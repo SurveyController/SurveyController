@@ -8,7 +8,7 @@ import pytest
 from PySide6.QtCore import QSettings
 from PySide6.QtGui import QImage
 
-from CI.unit_tests.application.fakes import FakeCleanup, FakeEngine, FakePreferences
+from CI.unit_tests.application.fakes import FakeEngine, FakePreferences
 from software.app.bootstrap import create_application_dependencies
 from software.app.preferences_adapter import QSettingsPreferences
 from software.application.configuration import ConfigurationService
@@ -70,9 +70,7 @@ def test_ai_adapter_uses_injected_preferences_and_existing_keys():
     store.setValue("ai/api_key", "legacy-key")
     store.setValue("ai/base_url", "https://example.test/v1")
     store.setValue("ai/model", "test-model")
-    create_application_dependencies(
-        runtime_engine=FakeEngine(), cleanup_runner=FakeCleanup(), preference_store=store
-    )
+    create_application_dependencies(runtime_engine=FakeEngine(), preference_store=store)
     adapter = PythonAiSettingsAdapter()
     assert adapter.get_settings()["api_key"] == ""
     adapter.save_settings(api_key="fake-key")
@@ -86,7 +84,6 @@ def test_ai_adapter_uses_injected_preferences_and_existing_keys():
 def test_qt_controller_preserves_queued_snapshot_and_event_order(qtbot):
     dependencies = create_application_dependencies(
         runtime_engine=FakeEngine(),
-        cleanup_runner=FakeCleanup(),
         preference_store=FakePreferences(),
     )
     controller = RunController(dependencies=dependencies)
@@ -98,7 +95,7 @@ def test_qt_controller_preserves_queued_snapshot_and_event_order(qtbot):
         controller._command_service.apply_runtime_patch(
             {"phase": "initializing", "initialization": {"active": True, "stage": "preparing"}}
         )
-        controller._command_service.emit_event(event_payload("cleanup_finished"))
+        controller._command_service.emit_event(event_payload("run_finished"))
 
     thread = threading.Thread(target=worker)
     thread.start()
@@ -107,7 +104,7 @@ def test_qt_controller_preserves_queued_snapshot_and_event_order(qtbot):
     assert [kind for kind, _ in observed] == ["state", "event"]
     assert observed[0][1]["status_text"] == "正在初始化"
     assert observed[0][1]["initialization"]["logs"] == ["正在初始化"]
-    assert observed[1][1] == {"type": "cleanup_finished"}
+    assert observed[1][1] == {"type": "run_finished"}
     controller._command_service.shutdown_for_close(0)
 
 
@@ -127,7 +124,6 @@ def test_controller_submits_random_ip_health_check_to_engine(monkeypatch) -> Non
 
     dependencies = create_application_dependencies(
         runtime_engine=engine,
-        cleanup_runner=FakeCleanup(),
         preference_store=FakePreferences(),
         random_ip_health=FakeHealth(),
     )
@@ -141,7 +137,6 @@ def test_controller_submits_random_ip_health_check_to_engine(monkeypatch) -> Non
 def test_qt_controller_responds_to_application_interaction(qtbot):
     dependencies = create_application_dependencies(
         runtime_engine=FakeEngine(),
-        cleanup_runner=FakeCleanup(),
         preference_store=FakePreferences(),
     )
     controller = RunController(dependencies=dependencies)

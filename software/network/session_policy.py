@@ -6,7 +6,6 @@ from typing import Optional
 import logging
 
 from surveycore.core.engine.stop_signal import StopSignalLike
-from software.core.engine.runtime_ui_bridge import RuntimeUiBridge
 from software.core.task import ExecutionState, ProxyLease
 from software.network.config import PROXY_MAX_PROXIES
 from software.network.proxy.pool import coerce_proxy_lease, mask_proxy_for_log
@@ -78,15 +77,6 @@ def _resolve_proxy_fetch_max_batch_size(ctx: ExecutionState) -> int:
     worker_count = max(1, int(getattr(ctx.config, "num_threads", 1) or 1))
     dynamic_limit = worker_count
     return max(1, min(int(PROXY_MAX_PROXIES or dynamic_limit), dynamic_limit))
-
-
-def _record_bad_proxy_and_maybe_pause(
-    ctx: ExecutionState,
-    runtime_bridge: Optional[RuntimeUiBridge],
-) -> bool:
-
-    _ = ctx, runtime_bridge
-    return False
 
 
 def _required_proxy_ttl_seconds(ctx: ExecutionState) -> int:

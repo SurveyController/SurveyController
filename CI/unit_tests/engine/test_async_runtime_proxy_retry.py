@@ -79,9 +79,6 @@ class AsyncRuntimeProxyRetryTests:
         monkeypatch.setattr(
             runner, "_select_session_proxy_and_ua", lambda: asyncio.sleep(0, result=(None, "UA"))
         )
-        monkeypatch.setattr(
-            runtime_loop, "_record_bad_proxy_and_maybe_pause", lambda *_args, **_kwargs: False
-        )
 
         async def fake_acquire_submit_proxy(*_args, **_kwargs):
             return SimpleNamespace(address=None, provider="unknown")

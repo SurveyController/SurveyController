@@ -8,10 +8,8 @@ from concurrent.futures import Future
 from typing import Any, Callable, Dict, List, Optional
 
 from software.application.configuration import ConfigurationService
-from software.application.constants import STOP_FORCE_WAIT_SECONDS
 from software.application.events import ApplicationEvent, event_payload
 from software.application.ports import (
-    CleanupRunnerPort,
     ExecutionPreparerPort,
     ProxyGatewayPort,
     RuntimeEnginePort,
@@ -76,7 +74,6 @@ class RunApplicationService(RandomIpRuntimeService):
         execution_preparer: ExecutionPreparerPort,
         proxy_gateway: ProxyGatewayPort,
         configuration_service: ConfigurationService,
-        cleanup_runner: CleanupRunnerPort,
         interactions: UserInteractionPort,
         dispatch_async: Callable[[Callable[[], Any]], None],
         emit_event: Callable[[ApplicationEvent], None],
@@ -87,17 +84,10 @@ class RunApplicationService(RandomIpRuntimeService):
         self._proxy_gateway = proxy_gateway
         self._configuration_service = configuration_service
         self._interactions = interactions
-        self._cleanup_runner = cleanup_runner
         self._dispatch_async = dispatch_async
         self._emit_event = emit_event
-        self._paused_state = False
-        self._stopping = False
-        self._completion_cleanup_done = False
-        self._cleanup_scheduled = False
         self._stopped_by_stop_run = False
         self._terminal_notice_emitted = False
-        self._starting = False
-        self._initializing = False
         self._init_gate_stop_event: threading.Event | None = None
         self._preparation_job: PreparationJob | None = None
         self._prepared_execution_artifacts: PreparedExecutionArtifacts | None = None
@@ -118,12 +108,12 @@ class RunApplicationService(RandomIpRuntimeService):
         self._random_ip_background_threads: set[threading.Thread] = set()
         self._random_ip_background_threads_lock = threading.Lock()
         self._last_loaded_config = RuntimeConfig()
-        self.running = False
         self._closing = False
         self.runtime_port = RunRuntimePort(
             stop_signal=self.stop_event,
             notify_random_ip_loading=self.notify_random_ip_loading,
             handle_random_ip_submission=self.handle_random_ip_submission,
+            lifecycle=self._state_store.lifecycle,
         )
         self._lifecycle = RunLifecycleCoordinator(self)
         self._runtime_projection = RuntimeProjection(self)
@@ -131,6 +121,48 @@ class RunApplicationService(RandomIpRuntimeService):
 
     def _dispatch(self, callback: Callable[[], Any]) -> None:
         self._dispatch_async(callback)
+
+    @property
+    def running(self) -> bool:
+        return bool(self._state_store.lifecycle.running)
+
+    @running.setter
+    def running(self, value: bool) -> None:
+        self._state_store.lifecycle.running = bool(value)
+
+    @property
+    def _paused_state(self) -> bool:
+        return bool(self._state_store.lifecycle.paused)
+
+    @_paused_state.setter
+    def _paused_state(self, value: bool) -> None:
+        self._state_store.lifecycle.paused = bool(value)
+        if not value:
+            self._state_store.lifecycle.pause_reason = ""
+
+    @property
+    def _stopping(self) -> bool:
+        return bool(self._state_store.lifecycle.stopping)
+
+    @_stopping.setter
+    def _stopping(self, value: bool) -> None:
+        self._state_store.lifecycle.stopping = bool(value)
+
+    @property
+    def _starting(self) -> bool:
+        return bool(self._state_store.lifecycle.starting)
+
+    @_starting.setter
+    def _starting(self, value: bool) -> None:
+        self._state_store.lifecycle.starting = bool(value)
+
+    @property
+    def _initializing(self) -> bool:
+        return bool(self._state_store.lifecycle.initializing)
+
+    @_initializing.setter
+    def _initializing(self, value: bool) -> None:
+        self._state_store.lifecycle.initializing = bool(value)
 
     def _proxy_callbacks_active(self) -> bool:
         return not self._closing
@@ -257,7 +289,6 @@ class RunApplicationService(RandomIpRuntimeService):
                 "terminal_stop": {"category": category, "failure_reason": "", "message": detail},
             }
         )
-        self._schedule_cleanup()
         self.emit_event(event_payload("run_failed", code=category, detail=detail))
 
     def _complete_preparation(
@@ -398,70 +429,22 @@ class RunApplicationService(RandomIpRuntimeService):
                 logging.warning("派发运行结束状态失败", exc_info=True)
                 if self._execution_state is execution_state and self.stop_event is stop_signal:
                     stop_signal.set()
-                    execution_state.mark_terminal_stop("dispatch_failed", overwrite=True)
-                    self.running = False
-                    self._starting = False
-                    self._initializing = False
-                    self._stopping = False
-                    self._state_store.apply_runtime_patch(
-                        {
-                            "phase": "failed",
-                            "running": False,
-                            "paused": False,
-                            "stopping": False,
-                            "initialization": {"active": False, "stage": ""},
-                            "terminal_stop": {
-                                "category": "dispatch_failed",
-                                "failure_reason": "",
-                                "message": "",
-                            },
-                        },
-                        emit=False,
-                    )
-                    self._schedule_cleanup()
+                    self._on_run_finished(emit_ui=False)
             finally:
                 if self._monitor_thread is threading.current_thread():
                     self._monitor_thread = None
 
-    def _on_run_finished(self) -> None:
+    def _on_run_finished(self, *, emit_ui: bool = True) -> None:
         self.stop_event.set()
-        self._schedule_cleanup()
-        was_active = bool(self.running or self._stopping or self._initializing)
         self._stopped_by_stop_run = False
         self._stopping = False
         self.running = False
         self._initializing = False
         self.runtime_port.resume_run()
-        if was_active:
-            self.emit_status_snapshot()
-        if not self._closing:
+        self._runtime_projection.publish(emit=emit_ui)
+        if emit_ui and not self._closing:
+            self.emit_event(event_payload("run_finished"))
             self._emit_terminal_notice_if_needed()
-
-    def _submit_cleanup_task(self, delay_seconds: float = 0.0) -> None:
-        runtime_port = self.runtime_port
-
-        def notify_finished() -> None:
-            if self.runtime_port is runtime_port and not self._closing:
-                self._emit_event(event_payload("cleanup_finished"))
-
-        def _cleanup() -> None:
-            try:
-                runtime_port.cleanup_targets()
-            except Exception:
-                logging.warning("执行运行时清理任务失败", exc_info=True)
-            finally:
-                try:
-                    self._dispatch(notify_finished)
-                except Exception:
-                    logging.debug("派发运行时清理结果失败", exc_info=True)
-
-        self._cleanup_runner.submit(_cleanup, delay_seconds=delay_seconds)
-
-    def _schedule_cleanup(self) -> None:
-        if self._cleanup_scheduled:
-            return
-        self._cleanup_scheduled = True
-        self._submit_cleanup_task(delay_seconds=STOP_FORCE_WAIT_SECONDS)
 
     def emit_status_snapshot(self) -> None:
         self._runtime_projection.publish()

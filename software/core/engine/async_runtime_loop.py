@@ -34,7 +34,6 @@ import software.network.http as http_client
 from software.network.session_policy import (
     _discard_unresponsive_proxy,
     _mark_proxy_temporarily_bad,
-    _record_bad_proxy_and_maybe_pause,
     SubmitProxyUnavailableError,
     acquire_submit_proxy,
     release_submit_proxy,
@@ -217,10 +216,6 @@ class AsyncSlotRunner:
         )
         if stopped:
             self.run_context.stop_event.set()
-            return True
-        if self.config.random_proxy_ip_enabled and _record_bad_proxy_and_maybe_pause(
-            self.state, self.runtime_bridge
-        ):
             return True
         return False
 

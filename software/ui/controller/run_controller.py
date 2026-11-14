@@ -43,7 +43,6 @@ class RunController(QObject):
         self._ui_dispatcher = UiCallbackDispatcher(self._uiCallbackQueued.emit)
         self._uiCallbackQueued.connect(self._drain_ui_callbacks)
         self._async_engine_client = self.dependencies.runtime_engine
-        self._cleanup_runner = self.dependencies.cleanup_runner
         self.preferences = self.dependencies.preferences
         self.ai_settings = self.dependencies.ai_settings
         self._state_store = RunStateStore(
@@ -57,7 +56,6 @@ class RunController(QObject):
             execution_preparer=self.dependencies.execution_preparer,
             proxy_gateway=self.dependencies.proxy_gateway,
             configuration_service=self.dependencies.configuration,
-            cleanup_runner=self._cleanup_runner,
             interactions=self._interactions,
             dispatch_async=self._dispatch_to_ui_async,
             emit_event=self._emit_controller_event,

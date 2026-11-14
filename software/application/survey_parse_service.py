@@ -177,15 +177,7 @@ class SurveyParseService:
                 self._dispatch_async(callback)
             except Exception:
                 logging.warning("派发问卷解析结果失败", exc_info=True)
-                if not self._closed and generation == self._generation:
-                    self._state_store.apply_survey_patch(
-                        {
-                            "phase": "error",
-                            "error_code": "dispatch_failed",
-                            "parse_error": "",
-                        },
-                        emit=False,
-                    )
+                callback()
 
         try:
             future = self._async_engine_client.parse_survey(normalized_url)

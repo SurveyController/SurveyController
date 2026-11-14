@@ -1,6 +1,5 @@
 import os
 import re
-from software.application.constants import STOP_FORCE_WAIT_SECONDS as _STOP_FORCE_WAIT_SECONDS
 from software.core.engine.constants import HTTP_MAX_THREADS as _HTTP_MAX_THREADS
 from software.core.config.user_agents import (
     DEFAULT_USER_AGENT as DEFAULT_USER_AGENT,
@@ -103,7 +102,6 @@ POST_SUBMIT_URL_POLL_INTERVAL = 0.05
 
 POST_SUBMIT_CLOSE_GRACE_SECONDS = 0.8
 
-STOP_FORCE_WAIT_SECONDS = _STOP_FORCE_WAIT_SECONDS
 
 QUESTION_TYPE_LABELS = {
     "radio": "单选题",

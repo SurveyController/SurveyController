@@ -7,7 +7,7 @@ from typing import Any, Mapping
 
 class ApplicationEventType(StrEnum):
     RUN_FAILED = "run_failed"
-    CLEANUP_FINISHED = "cleanup_finished"
+    RUN_FINISHED = "run_finished"
     AI_UNSTABLE = "ai_unstable"
     SUBMISSION_VERIFICATION_REQUIRED = "submission_verification_required"
 

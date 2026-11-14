@@ -8,9 +8,6 @@ from software.network import session_policy
 
 
 class SessionPolicyTests:
-    def test_record_bad_proxy_never_pauses_task(self) -> None:
-        assert not session_policy._record_bad_proxy_and_maybe_pause(ExecutionState(), object())
-
     def test_resolve_proxy_request_num_caps_by_waiters_remaining_and_worker_count(self) -> None:
         ctx = ExecutionState(config=ExecutionConfig(target_num=200, num_threads=32))
         ctx.cur_num = 10

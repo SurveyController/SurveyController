@@ -18,7 +18,7 @@ from software.ui.helpers.message_bar import (
 class RunFeedbackState:
     progress_infobar: InfoBar | None = None
     completion_notified: bool = False
-    show_end_toast_after_cleanup: bool = False
+    show_end_toast_after_run: bool = False
     last_progress: int = 0
     last_pause_reason: str = ""
 
@@ -27,7 +27,7 @@ def init_run_feedback_state(owner: Any) -> None:
     owner._run_feedback = RunFeedbackState()
     owner._progress_infobar = None
     owner._completion_notified = False
-    owner._show_end_toast_after_cleanup = False
+    owner._show_end_toast_after_run = False
     owner._last_progress = 0
     owner._last_pause_reason = ""
 
@@ -113,13 +113,13 @@ def set_completion_notified(owner: Any, value: bool) -> None:
     owner._completion_notified = bool(value)
 
 
-def get_show_end_toast_after_cleanup(owner: Any) -> bool:
-    return bool(_state(owner).show_end_toast_after_cleanup)
+def get_show_end_toast_after_run(owner: Any) -> bool:
+    return bool(_state(owner).show_end_toast_after_run)
 
 
-def set_show_end_toast_after_cleanup(owner: Any, value: bool) -> None:
-    _state(owner).show_end_toast_after_cleanup = bool(value)
-    owner._show_end_toast_after_cleanup = bool(value)
+def set_show_end_toast_after_run(owner: Any, value: bool) -> None:
+    _state(owner).show_end_toast_after_run = bool(value)
+    owner._show_end_toast_after_run = bool(value)
 
 
 def get_last_progress(owner: Any) -> int:

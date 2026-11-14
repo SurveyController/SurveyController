@@ -73,10 +73,6 @@ class ExecutionPreparerPort(Protocol):
     ) -> PreparedExecutionArtifacts: ...
 
 
-class CleanupRunnerPort(Protocol):
-    def submit(self, task: Callable[[], None], *, delay_seconds: float = 0.0) -> None: ...
-
-
 class UserInteractionPort(Protocol):
     def request(self, request: InteractionRequest) -> concurrent.futures.Future[bool]: ...
 

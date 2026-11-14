@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import time
 from typing import TYPE_CHECKING, Any, Dict, Optional, cast
 
 from PySide6.QtCore import (
@@ -31,11 +30,11 @@ from software.ui.pages.workbench.shared.run_feedback import (
     get_completion_notified,
     get_last_pause_reason,
     get_last_progress,
-    get_show_end_toast_after_cleanup,
+    get_show_end_toast_after_run,
     set_completion_notified,
     set_last_pause_reason,
     set_last_progress,
-    set_show_end_toast_after_cleanup,
+    set_show_end_toast_after_run,
 )
 
 
@@ -94,7 +93,6 @@ def _thread_progress_signature(
     )
 
 
-THREAD_STEP_MIN_VISIBLE_MS = 0
 THREAD_STEP_ANIMATION_MS = 140
 
 if TYPE_CHECKING:
@@ -129,7 +127,7 @@ class DashboardProgressMixin:
         _thread_clear_timer: QTimer
         _completion_notified: bool
         _pending_restart: bool
-        _show_end_toast_after_cleanup: bool
+        _show_end_toast_after_run: bool
         _last_progress: int
         _last_pause_reason: str
         _main_progress_indeterminate: bool
@@ -528,8 +526,6 @@ class DashboardProgressMixin:
         step_bar.setValue(0)
         step_busy_bar = IndeterminateProgressBar(start=True, parent=row_widget)
         step_busy_bar.hide()
-        step_timer = QTimer(row_widget)
-        step_timer.setSingleShot(True)
         step_layout.addWidget(step_prefix)
         step_layout.addWidget(step_bar, 1)
         step_layout.addWidget(step_busy_bar, 1)
@@ -544,13 +540,9 @@ class DashboardProgressMixin:
             "step_bar": step_bar,
             "step_busy_bar": step_busy_bar,
             "step_anim": self._create_thread_step_animation(step_bar),
-            "step_timer": step_timer,
-            "pending_step_payload": None,
             "displayed_status_text": "",
             "last_payload_signature": None,
-            "last_step_switch_ts": 0.0,
         }
-        step_timer.timeout.connect(lambda row_state=row: self._flush_pending_thread_step(row_state))
         self._set_progress_bar_paused(step_bar, self._progress_paused_visual)
         self._set_progress_bar_paused(step_busy_bar, self._progress_paused_visual)
         self._refresh_thread_progress_layout()
@@ -628,14 +620,6 @@ class DashboardProgressMixin:
 
         _set_text_if_changed(row.get("status"), status_text)
         row["displayed_status_text"] = status_text
-        row["last_step_switch_ts"] = time.monotonic()
-
-    def _flush_pending_thread_step(self, row: Dict[str, Any]) -> None:
-        pending = row.get("pending_step_payload")
-        if not isinstance(pending, dict):
-            return
-        row["pending_step_payload"] = None
-        self._apply_thread_step_payload(row, pending)
 
     def _sync_thread_step_widget(
         self,
@@ -652,36 +636,7 @@ class DashboardProgressMixin:
             "step_total": step_total,
             "running": running,
         }
-        if THREAD_STEP_MIN_VISIBLE_MS <= 0:
-            row["pending_step_payload"] = None
-            self._apply_thread_step_payload(row, payload)
-            return
-        displayed_status_text = str(row.get("displayed_status_text") or "")
-        step_timer = row.get("step_timer")
-        if displayed_status_text == str(status_text or ""):
-            if step_timer is not None:
-                try:
-                    step_timer.stop()
-                except Exception:
-                    pass
-            row["pending_step_payload"] = None
-            self._apply_thread_step_payload(row, payload)
-            return
-
-        elapsed_ms = int(
-            max(0.0, (time.monotonic() - float(row.get("last_step_switch_ts") or 0.0)) * 1000.0)
-        )
-        remaining_ms = max(0, THREAD_STEP_MIN_VISIBLE_MS - elapsed_ms)
-        if remaining_ms <= 0 or step_timer is None:
-            row["pending_step_payload"] = None
-            self._apply_thread_step_payload(row, payload)
-            return
-
-        row["pending_step_payload"] = payload
-        try:
-            step_timer.start(remaining_ms)
-        except Exception:
-            self._apply_thread_step_payload(row, payload)
+        self._apply_thread_step_payload(row, payload)
 
     def update_thread_progress(self, payload: dict):
         if not isinstance(payload, dict):
@@ -814,14 +769,14 @@ class DashboardProgressMixin:
             self.start_btn.setEnabled(self._has_question_entries())
             self.stop_btn.setEnabled(False)
             if not get_completion_notified(self):
-                set_show_end_toast_after_cleanup(self, True)
+                set_show_end_toast_after_run(self, True)
             if self._pending_restart:
                 self._pending_restart = False
                 self._on_start_clicked()
 
-    def on_cleanup_finished(self):
-        if get_show_end_toast_after_cleanup(self):
-            set_show_end_toast_after_cleanup(self, False)
+    def on_run_finished(self):
+        if get_show_end_toast_after_run(self):
+            set_show_end_toast_after_run(self, False)
             quota_fail_count = max(0, int(getattr(self, "_last_device_quota_fail_count", 0) or 0))
             if quota_fail_count > 0 and not get_completion_notified(self):
                 self._toast(

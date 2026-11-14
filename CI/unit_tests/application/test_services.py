@@ -96,7 +96,7 @@ def test_preparation_failure_never_starts_engine(preparation_error):
         harness.close()
 
 
-def test_engine_initialization_failure_resets_state_and_schedules_cleanup():
+def test_engine_initialization_failure_resets_state():
     harness = Harness()
     harness.engine.start_error = RuntimeError("engine init")
     try:
@@ -107,7 +107,6 @@ def test_engine_initialization_failure_resets_state_and_schedules_cleanup():
         )
         assert not harness.service.running
         assert harness.service.stop_event.is_set()
-        assert len(harness.cleanup.tasks) == 1
     finally:
         harness.close()
 
@@ -138,7 +137,7 @@ def test_stop_during_preparation_ignores_late_result():
         harness.close()
 
 
-def test_target_completion_cleans_once_and_keeps_semantic_snapshot():
+def test_target_completion_publishes_semantic_snapshot_and_completion_event():
     harness = Harness()
     try:
         harness.start()
@@ -151,11 +150,8 @@ def test_target_completion_cleans_once_and_keeps_semantic_snapshot():
         assert snapshot["terminal_stop"]["category"] == "target_reached"
         assert "status_text" not in snapshot
         assert "text" not in snapshot["initialization"]
-        assert len(harness.cleanup.tasks) == 1
         assert harness.requests == []
-        harness.cleanup.tasks[0][0]()
-        harness.drain()
-        assert harness.events[-1].type == "cleanup_finished"
+        assert harness.events[-1].type == "run_finished"
     finally:
         harness.close()
 
@@ -203,19 +199,13 @@ def test_engine_future_failure_is_not_reported_as_success():
         harness.close()
 
 
-def test_close_cancels_interactions_and_cleans_resources_once():
+def test_close_cancels_interactions():
     harness = Harness()
-    closed = []
-    harness.service.runtime_port.register_cleanup_target(
-        SimpleNamespace(quit=lambda: closed.append(True))
-    )
     request = InteractionRequest.create(InteractionKind.QUOTA, "random_ip_required")
     reply = harness.interactions.request(request)
     harness.close()
     assert reply.result(timeout=0) is False
-    assert closed == [True]
     harness.service.shutdown_for_close(0)
-    assert closed == [True]
 
 
 def test_shutdown_requests_engine_close_before_joining_engine_thread(monkeypatch):
@@ -409,31 +399,7 @@ def test_parse_builds_multilevel_dropdown_entry_from_provider_metadata():
     assert info.provider_page_raw["submit_values"] == ["省‐市‐区A", "省‐市‐区B"]
 
 
-def test_delayed_cleanup_remains_bound_to_finished_run():
-    harness = Harness()
-    first_closed, second_closed = [], []
-    first_port = harness.service.runtime_port
-    first_port.register_cleanup_target(SimpleNamespace(quit=lambda: first_closed.append(True)))
-    harness.service._schedule_cleanup()
-    from software.application.runtime_port import RunRuntimePort
-
-    second_port = RunRuntimePort(
-        stop_signal=Event(),
-        notify_random_ip_loading=lambda *args: None,
-        handle_random_ip_submission=lambda **kwargs: None,
-    )
-    second_port.register_cleanup_target(SimpleNamespace(quit=lambda: second_closed.append(True)))
-    harness.service.runtime_port = second_port
-    harness.cleanup.tasks[0][0]()
-    harness.drain()
-    assert first_closed == [True]
-    assert second_closed == []
-    assert harness.events == []
-    harness.close()
-    assert second_closed == [True]
-
-
-def test_preparation_dispatch_failure_records_failure_without_calling_ui():
+def test_preparation_dispatch_failure_still_applies_prepared_run():
     harness = Harness()
 
     def unavailable(callback):
@@ -442,11 +408,9 @@ def test_preparation_dispatch_failure_records_failure_without_calling_ui():
     harness.service._dispatch_async = unavailable
     harness.service.start_run(RuntimeConfig())
     harness.service._init_gate_thread.join(2)
-    assert harness.state.get_runtime_snapshot()["terminal_stop"]["category"] == "dispatch_failed"
-    assert len(harness.snapshots) >= 1
-    assert harness.snapshots[-1]["phase"] == "initializing"
-    assert not harness.engine.starts
-    assert harness.service.stop_event.is_set()
+    assert harness.state.get_runtime_snapshot()["phase"] == "running"
+    assert harness.engine.starts
+    assert harness.service.running
     harness.close()
 
 
@@ -473,7 +437,7 @@ def test_prepared_config_is_cloned_before_injecting_proxy_leases():
     harness.close()
 
 
-def test_run_completion_dispatch_failure_cleans_without_emitting_from_worker():
+def test_run_completion_dispatch_failure_preserves_business_terminal_state():
     harness = Harness()
     try:
         harness.start()
@@ -486,23 +450,10 @@ def test_run_completion_dispatch_failure_cleans_without_emitting_from_worker():
         harness.service._dispatch_async = unavailable
         harness.finish()
         snapshot = harness.state.get_runtime_snapshot()
-        assert snapshot["phase"] == "failed"
-        assert snapshot["terminal_stop"]["category"] == "dispatch_failed"
+        assert snapshot["phase"] == "finished"
+        assert snapshot["terminal_stop"]["category"] == "target_reached"
         assert not harness.service.running
-        assert len(harness.cleanup.tasks) == 1
         assert len(harness.snapshots) == delivered
-        assert harness.events == []
-    finally:
-        harness.close()
-
-
-def test_queued_cleanup_notification_does_not_affect_a_new_run():
-    harness = Harness()
-    try:
-        harness.service._schedule_cleanup()
-        harness.cleanup.tasks[0][0]()
-        harness.start()
-        assert harness.service.running
         assert harness.events == []
     finally:
         harness.close()
@@ -513,14 +464,14 @@ def test_close_drops_queued_proxy_state_and_ui_events():
     harness.service.apply_runtime_patch({"random_ip": {"used_quota": 9}})
     from software.application.events import event_payload
 
-    harness.service.emit_event(event_payload("cleanup_finished"))
+    harness.service.emit_event(event_payload("run_finished"))
     harness.close()
     assert harness.state.get_runtime_snapshot()["random_ip"]["used_quota"] == 0
     assert harness.events == []
     assert harness.snapshots == []
 
 
-def test_parse_dispatch_failure_and_close_never_apply_late_results():
+def test_parse_dispatch_failure_applies_result_and_close_rejects_later_results():
     state, engine = RunStateStore(), FakeEngine()
 
     def unavailable(callback):
@@ -539,7 +490,7 @@ def test_parse_dispatch_failure_and_close_never_apply_late_results():
             definition=SurveyDefinition(provider="wjx", title="late", questions=[]),
         )
     )
-    assert state.get_survey_snapshot()["error_code"] == "dispatch_failed"
+    assert state.get_survey_snapshot()["phase"] == "ready"
     engine.parse_future = Future()
     service.parse_survey("https://v.wjx.cn/vm/demo.aspx")
     service.close()

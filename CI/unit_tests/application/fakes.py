@@ -128,14 +128,6 @@ class FakeProxy:
         return str(error)
 
 
-class FakeCleanup:
-    def __init__(self) -> None:
-        self.tasks: list[tuple[Any, float]] = []
-
-    def submit(self, task, delay_seconds=0.0):
-        self.tasks.append((task, delay_seconds))
-
-
 def prepare(
     config: RuntimeConfig,
     *,
@@ -164,7 +156,6 @@ class Harness:
         self.snapshots = []
         self.engine = FakeEngine()
         self.repository = FakeRepository()
-        self.cleanup = FakeCleanup()
         self.interactions = InteractionBroker(self.requests.append)
         self.state = RunStateStore(on_runtime_snapshot_changed=self.snapshots.append)
         self.service = RunApplicationService(
@@ -173,7 +164,6 @@ class Harness:
             execution_preparer=preparer,
             proxy_gateway=FakeProxy(),
             configuration_service=ConfigurationService(self.repository),
-            cleanup_runner=self.cleanup,
             interactions=self.interactions,
             dispatch_async=self.callbacks.append,
             emit_event=self.events.append,

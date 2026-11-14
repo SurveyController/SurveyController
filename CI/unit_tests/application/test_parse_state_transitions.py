@@ -19,14 +19,13 @@ def test_loading_config_rejects_previous_parse_results(outcome, entry_point, qtb
     callbacks = []
     controller = None
     if entry_point == "controller":
-        from CI.unit_tests.application.fakes import FakeCleanup, FakePreferences
+        from CI.unit_tests.application.fakes import FakePreferences
         from software.app.bootstrap import create_application_dependencies
         from software.ui.controller.run_controller import RunController
 
         controller = RunController(
             dependencies=create_application_dependencies(
                 runtime_engine=engine,
-                cleanup_runner=FakeCleanup(),
                 preference_store=FakePreferences(),
             )
         )

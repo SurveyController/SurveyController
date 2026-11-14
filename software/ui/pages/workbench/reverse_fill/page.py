@@ -63,9 +63,9 @@ from software.ui.pages.workbench.shared.run_feedback import (
     set_completion_notified,
     set_last_pause_reason,
     set_last_progress,
-    set_show_end_toast_after_cleanup,
+    set_show_end_toast_after_run,
     show_feedback_toast,
-    get_show_end_toast_after_cleanup,
+    get_show_end_toast_after_run,
 )
 
 if TYPE_CHECKING:
@@ -381,7 +381,7 @@ class ReverseFillPage(SurveyClipboardMixin, QWidget):
         self._sync_start_button_state(running=False)
         self.stop_btn.setEnabled(False)
         if not get_completion_notified(self):
-            set_show_end_toast_after_cleanup(self, True)
+            set_show_end_toast_after_run(self, True)
 
     def on_pause_state_changed(self, paused: bool, reason: str = "") -> None:
         set_last_pause_reason(self, reason)
@@ -398,10 +398,10 @@ class ReverseFillPage(SurveyClipboardMixin, QWidget):
         self.resume_btn.setEnabled(False)
         self.resume_btn.hide()
 
-    def on_cleanup_finished(self) -> None:
-        if not get_show_end_toast_after_cleanup(self):
+    def on_run_finished(self) -> None:
+        if not get_show_end_toast_after_run(self):
             return
-        set_show_end_toast_after_cleanup(self, False)
+        set_show_end_toast_after_run(self, False)
 
     def _on_start_clicked(self) -> None:
         on_start_clicked(self)

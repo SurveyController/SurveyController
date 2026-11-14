@@ -23,7 +23,6 @@ class PreparationJob:
         dispatch: Callable[[Callable[[], Any]], None],
         on_prepared: Callable[[PreparedExecutionArtifacts], None],
         on_failed: Callable[[str], None],
-        on_dispatch_failed: Callable[[], None],
     ) -> None:
         self._preparer = preparer
         self._config = config
@@ -32,7 +31,6 @@ class PreparationJob:
         self._dispatch = dispatch
         self._on_prepared = on_prepared
         self._on_failed = on_failed
-        self._on_dispatch_failed = on_dispatch_failed
         self.thread = threading.Thread(
             target=self._run,
             daemon=True,
@@ -67,9 +65,8 @@ class PreparationJob:
         try:
             self._dispatch(callback)
         except Exception:
-            self._stop_signal.set()
-            self._on_dispatch_failed()
-            logging.warning("派发运行准备结果失败", exc_info=True)
+            logging.warning("派发运行准备结果失败，直接应用准备结果", exc_info=True)
+            callback()
 
 
 __all__ = ["PreparationJob"]
