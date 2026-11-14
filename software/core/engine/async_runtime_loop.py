@@ -433,12 +433,12 @@ class AsyncSlotRunner:
                         stop_signal=self.stop_proxy,
                         wait=bool(self.config.random_proxy_ip_enabled),
                     )
+                    attempt.begin_submission()
                     self.proxy_session.set_current_submit_proxy(
                         submit_proxy.address, provider=submit_proxy.provider
                     )
                     return submit_proxy
 
-                attempt.begin_submission()
                 finished = await self.http_submitter.submit(
                     stop_signal=self.stop_proxy,
                     proxy_address=None,
@@ -454,6 +454,8 @@ class AsyncSlotRunner:
                         break
                     continue
 
+                if attempt.state is AttemptState.PREPARING:
+                    attempt.begin_submission()
                 attempt.resolve(AttemptState.COMMITTED)
                 self._set_progress_kind(ProgressKind.SUCCEEDED)
                 should_stop = self._mark_http_submit_success()

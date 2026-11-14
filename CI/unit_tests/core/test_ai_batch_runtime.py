@@ -4,12 +4,40 @@ import pytest
 
 from software.core.ai import batch_runtime
 from software.core.ai.runtime import (
+    AIRuntimeError,
+    AIErrorKind,
     build_pending_ai_option_fill_answer,
     build_pending_ai_text_answer,
 )
 from software.core.task import ExecutionConfig, ExecutionState
+from software.integrations.ai.errors import AIConfigurationError
 from surveycore.providers.answering import AnswerAction
 from surveycore.providers.contracts import SurveyQuestionMeta
+
+
+@pytest.mark.asyncio
+async def test_batch_ai_configuration_error_is_not_retried(monkeypatch) -> None:
+    calls: list[int] = []
+
+    async def fail_configuration(*_args, **_kwargs):
+        calls.append(1)
+        raise AIConfigurationError("missing API key")
+
+    monkeypatch.setattr(batch_runtime, "agenerate_answer", fail_configuration)
+
+    with pytest.raises(AIRuntimeError) as error:
+        await batch_runtime._generate_batch_answer(
+            batch_runtime.AIBatchItem(
+                item_id="q1",
+                question_type="fill_blank",
+                question_content="职业",
+            ),
+            ExecutionState(config=ExecutionConfig()),
+        )
+
+    assert error.value.kind is AIErrorKind.CONFIGURATION
+    assert not error.value.retryable
+    assert calls == [1]
 
 
 def test_build_ai_batch_items_includes_only_action_matched_ai_items() -> None:

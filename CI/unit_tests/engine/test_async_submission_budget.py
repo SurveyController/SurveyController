@@ -35,6 +35,7 @@ async def test_submission_budget_bounds_accepted_requests(
     accepted = []
 
     async def fill(*args, **kwargs):
+        await kwargs["submit_proxy_lease_factory"]()
         attempt = len(attempts)
         attempts.append(kwargs["thread_name"])
         await asyncio.sleep(0)
@@ -68,6 +69,7 @@ async def test_inflight_successes_are_committed_after_stop(monkeypatch) -> None:
     requests = []
 
     async def fill(*args, **kwargs):
+        await kwargs["submit_proxy_lease_factory"]()
         requests.append(kwargs["thread_name"])
         if len(requests) == 2:
             all_started.set()
@@ -106,6 +108,7 @@ async def test_transport_failure_after_submit_is_unknown_and_not_retried(monkeyp
     attempts = []
 
     async def fill(*args, **kwargs):
+        await kwargs["submit_proxy_lease_factory"]()
         attempts.append(kwargs["thread_name"])
         raise httpx.ReadTimeout("response lost")
 
@@ -136,6 +139,7 @@ def test_stop_wakes_runner_waiting_for_submit_interval(monkeypatch) -> None:
         return await original_acquire(scheduler)
 
     async def fill(*args, **kwargs):
+        await kwargs["submit_proxy_lease_factory"]()
         requests.append(kwargs["thread_name"])
         return ProviderSubmissionResult(provider="wjx", submitted=True)
 
@@ -199,6 +203,7 @@ async def test_dispatch_wait_retires_token_when_stop_or_cancel_wins(monkeypatch,
         await original_release(token_id, **kwargs)
 
     async def fill(*args, **kwargs):
+        await kwargs["submit_proxy_lease_factory"]()
         requests.append(kwargs["thread_name"])
         return ProviderSubmissionResult(provider="wjx", submitted=True)
 

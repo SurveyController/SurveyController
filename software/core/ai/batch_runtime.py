@@ -21,6 +21,7 @@ from software.core.ai.runtime import (
 )
 from software.core.task import ExecutionState
 from software.integrations.ai.client import agenerate_answer
+from software.integrations.ai.errors import AIConfigurationError
 from software.integrations.ai.settings import (
     QUESTION_TYPE_FILL,
     QUESTION_TYPE_MULTI,
@@ -51,6 +52,12 @@ async def _generate_batch_answer(
             last_error = exc
             if isinstance(exc, AIRuntimeError) and not exc.retryable:
                 raise
+            if isinstance(exc, AIConfigurationError):
+                raise AIRuntimeError(
+                    f"AI 配置错误：{exc}",
+                    kind=AIErrorKind.CONFIGURATION,
+                    retryable=False,
+                ) from exc
             if attempt >= 4:
                 raise AIRuntimeError(
                     f"AI 调用失败：{exc}",

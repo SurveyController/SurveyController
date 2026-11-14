@@ -112,8 +112,9 @@ class AsyncRuntimeErrorsTests:
         config = ExecutionConfig(
             url="https://www.credamo.com/answer.html#/s/demo", survey_provider="credamo"
         )
-        runner, _state, _ctx, scheduler = _build_runner(config=config)
+        runner, state, _ctx, scheduler = _build_runner(config=config)
         scheduler.acquire_values = [9]
+        seen_errors: list[BaseException] = []
         monkeypatch.setattr(
             runner.http_submitter,
             "submit",
@@ -127,10 +128,16 @@ class AsyncRuntimeErrorsTests:
             "_select_session_proxy_and_ua",
             lambda: asyncio.sleep(0, result=("http://1.1.1.1:80", "UA")),
         )
-        monkeypatch.setattr(runner, "_handle_http_transport_error", lambda _exc: True)
+        monkeypatch.setattr(
+            runner,
+            "_handle_http_transport_error",
+            lambda exc: seen_errors.append(exc) or True,
+        )
 
         await runner.run()
 
+        assert len(seen_errors) == 1
+        assert state.get_terminal_stop_snapshot()[0] == ""
         assert scheduler.release_calls[0]["requeue"] is False
 
     @pytest.mark.asyncio
@@ -142,13 +149,11 @@ class AsyncRuntimeErrorsTests:
         scheduler.acquire_values = [10, None]
         seen_errors: list[BaseException] = []
         release_flags: list[bool] = []
-        monkeypatch.setattr(
-            runner.http_submitter,
-            "submit",
-            lambda **_kwargs: (_ for _ in ()).throw(
-                runtime_loop.http_client.RemoteProtocolError("server disconnected")
-            ),
-        )
+        async def submit_after_request_start(**kwargs):
+            await kwargs["submit_proxy_lease_factory"]()
+            raise runtime_loop.http_client.RemoteProtocolError("server disconnected")
+
+        monkeypatch.setattr(runner.http_submitter, "submit", submit_after_request_start)
         monkeypatch.setattr(runner, "_prepare_round_context", lambda: asyncio.sleep(0, result=True))
         monkeypatch.setattr(
             runner,
