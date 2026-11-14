@@ -94,6 +94,8 @@ class _ProxyApiTestWorker(QObject):
 
 
 class RandomIPSettingCard(ExpandGroupSettingCard):
+    areaOptionsUpdated = Signal()
+
     def __init__(self, parent=None):
         super().__init__(
             FluentIcon.GLOBE,
@@ -289,6 +291,7 @@ class RandomIPSettingCard(ExpandGroupSettingCard):
         from PySide6.QtCore import QTimer
 
         QTimer.singleShot(0, self._refreshLayout)
+        self.areaOptionsUpdated.emit()
 
     def _start_benefit_area_prefetch(self, force_refresh: bool = False) -> None:
         if self._benefit_prefetch_running or (self._benefit_prefetch_done and not force_refresh):
@@ -320,6 +323,7 @@ class RandomIPSettingCard(ExpandGroupSettingCard):
         from PySide6.QtCore import QTimer
 
         QTimer.singleShot(0, self._refreshLayout)
+        self.areaOptionsUpdated.emit()
 
     def _on_benefit_prefetch_thread_finished(self) -> None:
         self._benefit_prefetch_thread = None
@@ -415,6 +419,7 @@ class RandomIPSettingCard(ExpandGroupSettingCard):
         self._populate_cities(province_code)
         self._area_updating = False
         self._apply_area_override(self.cityCombo.currentData())
+        self.areaOptionsUpdated.emit()
 
     def _on_city_changed(self):
         if self._area_updating:

@@ -42,12 +42,6 @@ class MainWindowLazyPagesMixin:
             isTransparent=True,
         )
         self.addSubInterface(
-            self.runtime_page,
-            FluentIcon.DEVELOPER_TOOLS,
-            "运行参数",
-            position=NavigationItemPosition.TOP,
-        )
-        self.addSubInterface(
             self.strategy_page,
             FluentIcon.DICTIONARY_ADD,
             "题目策略",

@@ -9,7 +9,7 @@ def ensure_ai_ready(parent) -> bool:
     if readiness_error:
         InfoBar.warning(
             "",
-            f"请先到“运行参数”页补全 AI 配置：{readiness_error}",
+            f"请先补全 AI 配置：{readiness_error}",
             parent=parent,
             position=InfoBarPosition.TOP,
             duration=3500,

@@ -143,6 +143,9 @@ class DashboardConfigIOMixin:
                 payload={"file": os.path.basename(path)},
             )
             self._toast("已载入配置", "success")
+            open_step = getattr(self, "open_run_setup_step", None)
+            if getattr(self.workbench_state, "entries", None) and callable(open_step):
+                open_step()
             return
         try:
             cfg = self.controller.load_saved_config(path, strict=True)
@@ -191,6 +194,9 @@ class DashboardConfigIOMixin:
             payload={"file": os.path.basename(path)},
         )
         self._toast("已载入配置", "success")
+        open_step = getattr(self, "open_run_setup_step", None)
+        if getattr(cfg, "question_entries", None) and callable(open_step):
+            open_step()
 
     def _on_save_config(self):
         workbench = getattr(self.window(), "workbench", None)

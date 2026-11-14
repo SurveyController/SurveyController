@@ -206,6 +206,11 @@ class RunController(QObject):
     def get_proxy_session_snapshot(self) -> dict[str, Any]:
         return self.dependencies.proxy_gateway.get_session_snapshot()
 
+    def get_random_ip_quota_snapshot(self) -> dict[str, Any]:
+        snapshot = dict(self.get_runtime_snapshot().get("random_ip") or {})
+        snapshot.update(self.get_proxy_session_snapshot())
+        return snapshot
+
     def start_run(self, cfg: RuntimeConfig) -> None:
         self._command_service.start_run(cfg)
 

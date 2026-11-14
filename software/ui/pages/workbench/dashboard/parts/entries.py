@@ -320,7 +320,7 @@ class DashboardEntriesMixin:
             for getter, applier in rules:
                 _apply_result_updates(entries, getter(dlg), applier)
 
-    def close_inline_question_wizard(self) -> None:
+    def close_inline_question_wizard(self, *, return_home: bool = True) -> None:
         panel = getattr(self, "_inline_wizard", None)
         self._inline_wizard = None
         wizard_host = getattr(self, "wizard_host", None)
@@ -335,8 +335,58 @@ class DashboardEntriesMixin:
                     panel.deleteLater()
             except Exception:
                 pass
+        if return_home and main_stack is not None and home_view is not None:
+            main_stack.setCurrentWidget(home_view, isBack=True)
+
+    def return_to_home_view(self) -> None:
+        self.close_inline_question_wizard(return_home=False)
+        main_stack = getattr(self, "main_stack", None)
+        home_view = getattr(self, "home_view", None)
         if main_stack is not None and home_view is not None:
-            main_stack.setCurrentWidget(home_view)
+            main_stack.setCurrentWidget(home_view, isBack=True)
+
+    def open_run_setup_step(self, survey_title: str = "", question_count: int = 0) -> None:
+        main_stack = getattr(self, "main_stack", None)
+        run_setup_host = getattr(self, "run_setup_host", None)
+        run_setup_panel = getattr(self, "run_setup_panel", None)
+        if main_stack is None or run_setup_host is None or run_setup_panel is None:
+            self.return_to_home_view()
+            return
+        run_setup_panel.set_survey_summary(survey_title, question_count)
+        run_setup_panel.sync_from_runtime()
+        main_stack.setCurrentWidget(run_setup_host, isBack=False)
+
+    def _reopen_inline_wizard_from_run_setup(self) -> None:
+        entries = self.workbench_state.get_entries()
+        info = self.workbench_state.entry_questions_info or []
+        if not entries:
+            self._toast("当前没有可编辑的题目", "warning")
+            self.return_to_home_view()
+            return
+        title = getattr(self, "_survey_title", "") or ""
+
+        def _after_reedit(accepted: bool) -> None:
+            if not accepted:
+                return
+            self.workbench_state.set_questions(info, entries)
+            if getattr(self, "controller", None) is not None and hasattr(
+                self.controller, "replace_question_entries"
+            ):
+                self.controller.replace_question_entries(entries, questions_info=info)
+            strategy_page = getattr(self, "strategy_page", None)
+            if strategy_page is not None and hasattr(strategy_page, "set_entries"):
+                strategy_page.set_entries(
+                    self.workbench_state.entries,
+                    self.workbench_state.entry_questions_info,
+                )
+
+        self.open_inline_question_wizard(
+            entries,
+            info,
+            title,
+            on_finished=_after_reedit,
+            is_back=True,
+        )
 
     def open_inline_question_wizard(
         self,
@@ -345,6 +395,8 @@ class DashboardEntriesMixin:
         survey_title: Optional[str] = None,
         *,
         on_finished: Optional[Callable[[bool], None]] = None,
+        pop_out_on_cancel: bool = True,
+        is_back: bool = False,
     ) -> None:
         if not entries:
             self._toast("请先解析问卷或手动添加题目", "warning")
@@ -359,7 +411,7 @@ class DashboardEntriesMixin:
                 on_finished(accepted)
             return
 
-        self.close_inline_question_wizard()
+        self.close_inline_question_wizard(return_home=False)
         title = survey_title if survey_title is not None else self._survey_title
         reliability_mode_enabled = self.runtime_page.reliability_card.switchButton.isChecked()
         media_fetcher = getattr(getattr(self, "controller", None), "fetch_question_media", None)
@@ -373,7 +425,7 @@ class DashboardEntriesMixin:
         )
         self._inline_wizard = panel
         wizard_host.layout().addWidget(panel)
-        main_stack.setCurrentWidget(wizard_host)
+        main_stack.setCurrentWidget(wizard_host, isBack=is_back)
 
         def _finish(accepted: bool) -> None:
             if getattr(self, "_inline_wizard", None) is not panel:
@@ -387,9 +439,11 @@ class DashboardEntriesMixin:
                 self._toast(f"配置应用失败：{exc}", "error")
                 applied = False
             finally:
-                self.close_inline_question_wizard()
+                self.close_inline_question_wizard(return_home=not applied and pop_out_on_cancel)
             if callable(on_finished):
                 on_finished(applied)
+            if applied:
+                self.open_run_setup_step(title, len(entries))
 
         panel.accepted.connect(lambda: _finish(True))
         panel.rejected.connect(lambda: _finish(False))

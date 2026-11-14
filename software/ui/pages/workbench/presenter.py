@@ -219,6 +219,10 @@ class WorkbenchPresenter:
             was_running = self._last_running_state
             self._last_running_state = running
             self.reverse_fill_page.on_run_state_changed(running)
+            if was_running is not True and running:
+                switch = getattr(self.host, "switchTo", None)
+                if callable(switch):
+                    switch(self.reverse_fill_page)
             if was_running and not running and self.dashboard._pending_restart:
                 self.dashboard._pending_restart = False
                 QTimer.singleShot(0, self.run_coordinator.start)
@@ -310,6 +314,7 @@ class WorkbenchPresenter:
         issue_question_nums: List[int] | None = None,
     ) -> None:
         normalized_info = ensure_survey_question_metas(info or [])
+
         def _finalize_parse_wizard(accepted: bool) -> None:
             if accepted:
                 nonlocal pending_entries
@@ -348,7 +353,9 @@ class WorkbenchPresenter:
                     payload={"question_count": len(normalized_info)},
                 )
                 if not selected_issue_nums:
-                    self.dashboard._toast(f"已完成问卷配置（共 {len(pending_entries)} 题）", "success")
+                    self.dashboard._toast(
+                        f"已完成问卷配置（共 {len(pending_entries)} 题）", "success"
+                    )
                 return
 
             current_entries = self.state.get_entries()
@@ -397,9 +404,7 @@ class WorkbenchPresenter:
                         "warning",
                     )
                     return
-            if not selected_issue_nums and hasattr(
-                self.dashboard, "open_inline_question_wizard"
-            ):
+            if not selected_issue_nums and hasattr(self.dashboard, "open_inline_question_wizard"):
                 self.dashboard.open_inline_question_wizard(
                     selected_entries,
                     selected_info,

@@ -2,20 +2,104 @@ from __future__ import annotations
 
 from typing import Any
 
-from PySide6.QtCore import Qt
-from PySide6.QtGui import QColor
+from PySide6.QtCore import (
+    QAbstractAnimation,
+    QParallelAnimationGroup,
+    QPoint,
+    QPropertyAnimation,
+    QSize,
+    Qt,
+)
 from PySide6.QtWidgets import QHBoxLayout, QSizePolicy, QStackedWidget, QVBoxLayout, QWidget
 from qfluentwidgets import (
     Action,
-    BodyLabel,
-    CaptionLabel,
     CommandBar,
     FluentIcon,
+    LineEdit,
+    PrimaryPushButton,
+    PushButton,
     ScrollArea,
-    TitleLabel,
 )
+from qfluentwidgets.common.animation import FluentAnimation
 
-from software.ui.pages.workbench.shared.survey_entry_card import SurveyEntryCard
+from software.ui.helpers.fluent_tooltip import install_tooltip_filter
+from software.ui.pages.workbench.dashboard.run_setup_panel import DashboardRunSetupPanel
+from software.ui.widgets.paste_only_menu import PasteOnlyMenu
+
+
+class HorizontalSlideStackedWidget(QStackedWidget):
+    def __init__(self, parent: QWidget | None = None) -> None:
+        super().__init__(parent)
+        self._is_animation_enabled = True
+        self._next_index: int | None = None
+        self._ani_group = QParallelAnimationGroup(self)
+        self._cur_ani = QPropertyAnimation(self)
+        self._cur_ani.setPropertyName(b"pos")
+        self._next_ani = QPropertyAnimation(self)
+        self._next_ani.setPropertyName(b"pos")
+        self._ani_group.addAnimation(self._cur_ani)
+        self._ani_group.addAnimation(self._next_ani)
+        self._ani_group.finished.connect(self._on_ani_finished)
+
+    def setCurrentWidget(self, widget: QWidget, duration: int = 240, isBack: bool = False) -> None:
+        self.setCurrentIndex(self.indexOf(widget), duration=duration, isBack=isBack)
+
+    def setCurrentIndex(self, index: int, duration: int = 240, isBack: bool = False) -> None:
+        if index < 0 or index >= self.count() or index == self.currentIndex():
+            return
+        if not self._is_animation_enabled or not self.isVisible() or self.width() <= 0:
+            super().setCurrentIndex(index)
+            return
+
+        if self._ani_group.state() == QAbstractAnimation.State.Running:
+            self._ani_group.stop()
+            self._on_ani_finished()
+
+        current_widget = self.currentWidget()
+        next_widget = self.widget(index)
+        if current_widget is None or next_widget is None:
+            super().setCurrentIndex(index)
+            return
+
+        self._next_index = index
+        width = self.width()
+        height = self.height()
+        curve = FluentAnimation.createBezierCurve(0.1, 0.9, 0.2, 1.0)
+        anim_duration = duration or 240
+
+        current_widget.setGeometry(0, 0, width, height)
+        next_widget.setGeometry(0, 0, width, height)
+
+        next_start_x = -width if isBack else width
+        cur_end_x = width if isBack else -width
+
+        next_widget.move(next_start_x, 0)
+        next_widget.show()
+        next_widget.raise_()
+
+        self._cur_ani.setTargetObject(current_widget)
+        self._cur_ani.setDuration(anim_duration)
+        self._cur_ani.setStartValue(QPoint(0, 0))
+        self._cur_ani.setEndValue(QPoint(cur_end_x, 0))
+        self._cur_ani.setEasingCurve(curve)
+
+        self._next_ani.setTargetObject(next_widget)
+        self._next_ani.setDuration(anim_duration)
+        self._next_ani.setStartValue(QPoint(next_start_x, 0))
+        self._next_ani.setEndValue(QPoint(0, 0))
+        self._next_ani.setEasingCurve(curve)
+
+        self._ani_group.start()
+
+    def _on_ani_finished(self) -> None:
+        target_index = self._next_index
+        self._next_index = None
+        if target_index is not None and 0 <= target_index < self.count():
+            super().setCurrentIndex(target_index)
+        for i in range(self.count()):
+            widget = self.widget(i)
+            if widget is not None:
+                widget.move(0, 0)
 
 
 def build_dashboard_page_ui(page: Any) -> None:
@@ -23,10 +107,12 @@ def build_dashboard_page_ui(page: Any) -> None:
     root_layout.setContentsMargins(0, 0, 0, 0)
     root_layout.setSpacing(0)
 
-    main_stack = QStackedWidget(page)
+    main_stack = HorizontalSlideStackedWidget(page)
     main_stack.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, False)
     main_stack.setAutoFillBackground(False)
-    main_stack.setStyleSheet("QStackedWidget { background: transparent; border: none; }")
+    main_stack.setStyleSheet(
+        "HorizontalSlideStackedWidget { background: transparent; border: none; }"
+    )
     page.main_stack = main_stack
     root_layout.addWidget(main_stack, 1)
 
@@ -71,49 +157,70 @@ def build_dashboard_page_ui(page: Any) -> None:
     content_layout = QVBoxLayout(content)
     content_layout.setContentsMargins(0, 0, 0, 0)
     content_layout.setSpacing(0)
-    content_layout.addStretch(2)
-
-    title_label = TitleLabel("SurveyController", content)
-    title_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-    content_layout.addWidget(title_label)
-    content_layout.addSpacing(8)
-
-    subtitle_label = BodyLabel("输入问卷链接，或拖入 / 粘贴问卷二维码图片开始配置", content)
-    subtitle_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-    subtitle_label.setTextColor(QColor(96, 96, 96), QColor(175, 175, 175))
-    content_layout.addWidget(subtitle_label)
-    content_layout.addSpacing(28)
+    content_layout.addStretch(1)
 
     entry_row = QHBoxLayout()
     entry_row.setContentsMargins(0, 0, 0, 0)
     entry_row.addStretch(1)
-    entry = SurveyEntryCard(
-        content,
-        event_filter_owner=page,
-        show_parse_button=True,
-        parse_inline=True,
-        flat=True,
-    )
-    entry.setMaximumWidth(680)
-    entry.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred)
-    page.link_card = entry
-    page.qr_btn = entry.qr_btn
-    page.url_edit = entry.url_edit
-    if entry.parse_btn is None:
-        raise RuntimeError("SurveyEntryCard 缺少解析按钮，无法初始化主页入口")
-    page.parse_btn = entry.parse_btn
-    page._link_entry_widgets = entry.entry_widgets()
-    entry_row.addWidget(entry, 8)
+
+    entry_container = QWidget(content)
+    entry_container.setAcceptDrops(True)
+    entry_container.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
+    entry_container.setStyleSheet("background: transparent; border: none;")
+    entry_container.setMaximumWidth(760)
+    entry_container.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred)
+    entry_layout = QVBoxLayout(entry_container)
+    entry_layout.setContentsMargins(0, 0, 0, 0)
+    entry_layout.setSpacing(20)
+
+    url_edit = LineEdit(entry_container)
+    url_edit.setPlaceholderText("在此拖入/粘贴问卷二维码图片或输入问卷链接")
+    url_edit.setClearButtonEnabled(True)
+    url_edit.setAcceptDrops(True)
+    url_edit.setFixedHeight(50)
+    url_font = url_edit.font()
+    url_font.setPointSize(11)
+    url_edit.setFont(url_font)
+    paste_only_menu = PasteOnlyMenu(entry_container)
+    url_edit.installEventFilter(paste_only_menu)
+    entry_layout.addWidget(url_edit)
+
+    action_row = QHBoxLayout()
+    action_row.setContentsMargins(0, 0, 0, 0)
+    action_row.setSpacing(16)
+    action_row.addStretch(1)
+
+    qr_btn = PushButton(FluentIcon.QRCODE, "上传二维码", entry_container)
+    qr_btn.setFixedHeight(44)
+    qr_btn.setMinimumWidth(148)
+    qr_btn.setIconSize(QSize(18, 18))
+    qr_btn.setToolTip("上传问卷二维码图片")
+    install_tooltip_filter(qr_btn)
+    action_row.addWidget(qr_btn)
+
+    parse_btn = PrimaryPushButton(FluentIcon.PLAY, "自动配置问卷", entry_container)
+    parse_btn.setFixedHeight(44)
+    parse_btn.setMinimumWidth(176)
+    parse_btn.setIconSize(QSize(18, 18))
+    action_row.addWidget(parse_btn)
+
+    action_row.addStretch(1)
+    entry_layout.addLayout(action_row)
+
+    page.link_card = entry_container
+    page.qr_btn = qr_btn
+    page.url_edit = url_edit
+    page.parse_btn = parse_btn
+    page._paste_only_menu = paste_only_menu
+    page._link_entry_widgets = (entry_container, qr_btn, url_edit, parse_btn)
+    for widget in page._link_entry_widgets:
+        widget.installEventFilter(page)
+
+    entry_row.addWidget(entry_container, 8)
     entry_row.addStretch(1)
     content_layout.addLayout(entry_row)
-    content_layout.addSpacing(14)
 
-    hint_label = CaptionLabel("支持问卷星 · 腾讯问卷 · Credamo", content)
-    hint_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-    hint_label.setTextColor(QColor(120, 120, 120), QColor(135, 135, 135))
-    content_layout.addWidget(hint_label)
-
-    content_layout.addStretch(3)
+    content_layout.addStretch(1)
     layout.addWidget(content, 1)
     outer.addWidget(scroll, 1)
 
@@ -125,6 +232,21 @@ def build_dashboard_page_ui(page: Any) -> None:
     wizard_host_layout.setSpacing(0)
     page.wizard_host = wizard_host
 
+    run_setup_host = QWidget(main_stack)
+    run_setup_host.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, False)
+    run_setup_host.setAutoFillBackground(False)
+    run_setup_host_layout = QVBoxLayout(run_setup_host)
+    run_setup_host_layout.setContentsMargins(0, 0, 0, 0)
+    run_setup_host_layout.setSpacing(0)
+    run_setup_panel = DashboardRunSetupPanel(page, run_setup_host)
+    run_setup_host_layout.addWidget(run_setup_panel, 1)
+    page.run_setup_host = run_setup_host
+    page.run_setup_panel = run_setup_panel
+
+    run_setup_panel.backRequested.connect(page._reopen_inline_wizard_from_run_setup)
+    run_setup_panel.startRequested.connect(lambda: page._on_start_clicked())
+
     main_stack.addWidget(home_view)
     main_stack.addWidget(wizard_host)
+    main_stack.addWidget(run_setup_host)
     main_stack.setCurrentWidget(home_view)
