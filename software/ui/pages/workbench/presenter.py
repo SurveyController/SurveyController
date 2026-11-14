@@ -53,6 +53,7 @@ class WorkbenchPresenter:
     def _configure_pages(self) -> None:
         self.dashboard.setObjectName("dashboard")
         self.runtime_page.setObjectName("runtime")
+        self.runtime_page.hide()
         self.strategy_page.setObjectName("strategy")
         self.reverse_fill_page.setObjectName("reverse_fill")
         self.reverse_fill_page.set_open_wizard_handler(self.open_reverse_fill_wizard)
