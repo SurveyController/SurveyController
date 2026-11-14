@@ -11,12 +11,12 @@ from packaging.version import InvalidVersion, Version
 def _validated_version(value: object, source: Path) -> str:
     if not isinstance(value, str) or not value:
         raise ValueError(f"Missing application version in {source}")
+    if value != value.strip() or value[:1].lower() == "v":
+        raise ValueError(f"Invalid application version in {source}: {value!r}")
     try:
-        parsed = Version(value)
+        Version(value)
     except InvalidVersion as exc:
         raise ValueError(f"Invalid application version in {source}: {value!r}") from exc
-    if str(parsed) != value:
-        raise ValueError(f"Use the canonical version {str(parsed)!r} in {source}")
     return value
 
 

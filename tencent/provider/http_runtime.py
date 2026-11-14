@@ -87,9 +87,7 @@ def _headers(page_url: str, user_agent: str | None = None) -> dict[str, str]:
 
 def _record_action(ctx: ExecutionState, action: AnswerAction, thread_name: str = "") -> None:
     values = list(action.text_values or ()) + [value for _, value in action.option_fill_texts]
-    if any(
-        is_pending_ai_answer(value) for value in values
-    ):
+    if any(is_pending_ai_answer(value) for value in values):
         action = replace(action, pending_distribution_choices=())
     record_answer_action(
         ctx,

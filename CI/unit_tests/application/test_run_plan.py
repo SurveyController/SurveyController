@@ -25,9 +25,7 @@ def test_question_id_prefers_provider_identity_and_has_local_identity() -> None:
 
 def test_run_plan_compiles_detached_config_and_question_ids() -> None:
     config = RuntimeConfig(
-        question_entries=[
-            QuestionEntry(question_type="single", probabilities=[1], question_num=1)
-        ],
+        question_entries=[QuestionEntry(question_type="single", probabilities=[1], question_num=1)],
         questions_info=[SurveyQuestionMeta(num=1, title="满意度", provider_question_id="q1")],
     )
 
@@ -42,10 +40,11 @@ def test_run_plan_compiles_detached_config_and_question_ids() -> None:
 
 def test_run_plan_keeps_metadata_identity_when_entries_are_a_subset() -> None:
     config = RuntimeConfig(
-        question_entries=[
-            QuestionEntry(question_type="single", probabilities=[1], question_num=8)
+        question_entries=[QuestionEntry(question_type="single", probabilities=[1], question_num=8)],
+        questions_info=[
+            SurveyQuestionMeta(num=2, title="前置题"),
+            SurveyQuestionMeta(num=8, title="目标题"),
         ],
-        questions_info=[SurveyQuestionMeta(num=2, title="前置题"), SurveyQuestionMeta(num=8, title="目标题")],
     )
     config.questions_info[0].question_id = "question-2"
     config.questions_info[1].question_id = "question-8"

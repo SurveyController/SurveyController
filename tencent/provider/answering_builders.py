@@ -206,8 +206,8 @@ async def _build_qq_text_action(
         text_values=cast(
             Any,
             tuple(
-            item if not isinstance(item, str) else str(item or "").strip() or DEFAULT_FILL_TEXT
-            for item in text_values[:blank_count]
+                item if not isinstance(item, str) else str(item or "").strip() or DEFAULT_FILL_TEXT
+                for item in text_values[:blank_count]
             ),
         ),
         record_type="text",

@@ -191,6 +191,7 @@ def publish_runtime_snapshot(service: RunApplicationService, *, emit: bool = Tru
         emit=emit and not service._closing,
     )
 
+
 def emit_terminal_notice(service: RunApplicationService) -> None:
     if service._terminal_notice_emitted:
         return

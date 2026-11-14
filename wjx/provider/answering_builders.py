@@ -55,6 +55,8 @@ def _resolve_reverse_fill_answer(ctx: ExecutionState, question_num: int, thread_
     if intent != ReverseFillIntent.USE_SAMPLE.value:
         return None
     return resolve_current_reverse_fill_answer(ctx, question_num, thread_name=thread_name)
+
+
 from software.core.task import ExecutionState
 from surveycore.providers.answering import AnswerAction
 from surveycore.providers.answering.option_fill import default_missing_option_fill
@@ -352,11 +354,13 @@ async def _build_wjx_text_action(
         text_values=cast(
             Any,
             tuple(
-            text_values[index]
-            if index < len(text_values) and not isinstance(text_values[index], str)
-            else str(text_values[index] if index < len(text_values) else text_values[-1] or "").strip()
-            or DEFAULT_FILL_TEXT
-            for index in range(blank_count)
+                text_values[index]
+                if index < len(text_values) and not isinstance(text_values[index], str)
+                else str(
+                    text_values[index] if index < len(text_values) else text_values[-1] or ""
+                ).strip()
+                or DEFAULT_FILL_TEXT
+                for index in range(blank_count)
             ),
         ),
         record_type="text",

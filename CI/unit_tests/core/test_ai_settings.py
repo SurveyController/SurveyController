@@ -7,6 +7,7 @@ from software.core.config.codec import deserialize_runtime_config, serialize_run
 from software.core.config.schema import RuntimeConfig
 from software.core.task import ExecutionConfig
 from software.integrations.ai import client, settings
+from software.integrations.ai.errors import AIConfigurationError
 
 
 def test_legacy_ai_settings_ignore_persisted_key_and_preserve_other_preferences() -> None:
@@ -57,7 +58,7 @@ def test_ai_defaults_require_api_key_and_include_multi_blank_instructions() -> N
     config = settings.get_ai_settings()
     assert config["ai_mode"] == "provider"
     assert settings.get_ai_readiness_error(config) == "缺少 API Key"
-    assert "||" in config["system_prompt"]
+    assert '["答案1", "答案2"]' in config["system_prompt"]
     assert RuntimeConfig().ai_mode == "provider"
     assert ExecutionConfig().ai_mode == "provider"
 
@@ -92,7 +93,7 @@ async def test_legacy_mode_without_key_fails_before_provider_request(monkeypatch
         raise AssertionError("配置不完整时不得发送请求")
 
     monkeypatch.setattr(client, "acall_chat_completions", unexpected_request)
-    with pytest.raises(RuntimeError, match="缺少 API Key"):
+    with pytest.raises(AIConfigurationError, match="缺少 API Key"):
         await client.agenerate_answer("题目")
 
 

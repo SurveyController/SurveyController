@@ -31,7 +31,9 @@ class AiRuntimeTests:
         assert len(calls) == 4
 
     @pytest.mark.asyncio
-    async def test_agenerate_ai_answer_does_not_retry_unknown_program_errors(self, monkeypatch) -> None:
+    async def test_agenerate_ai_answer_does_not_retry_unknown_program_errors(
+        self, monkeypatch
+    ) -> None:
         calls: list[int] = []
 
         async def _raise(*_args, **_kwargs):

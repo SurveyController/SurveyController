@@ -116,8 +116,8 @@ class TestRuntimePanelCardsQtBot:
 
         calls: list[tuple[object, bool]] = []
         monkeypatch.setattr(
-            random_ip_module,
-            "set_indeterminate_progress_ring_active",
+            random_ip_module.QFluentCompat,
+            "set_indeterminate_progress_active",
             lambda ring, active: calls.append((ring, bool(active))),
         )
 
@@ -133,8 +133,8 @@ def test_random_ip_toggle_row_loading_uses_progress_ring_helper(monkeypatch, qtb
 
     calls: list[tuple[object, bool]] = []
     monkeypatch.setattr(
-        toggle_row_module,
-        "set_indeterminate_progress_ring_active",
+        toggle_row_module.QFluentCompat,
+        "set_indeterminate_progress_active",
         lambda ring, active: calls.append((ring, bool(active))),
     )
 

@@ -6,10 +6,9 @@ from typing import TYPE_CHECKING, Any
 
 from PySide6.QtGui import QColor
 
-from software.app.config import HTTP_MAX_THREADS
+from software.core.config.schema import RuntimeConfig
 from software.logging.action_logger import log_action
 from software.logging.log_utils import log_suppressed_exception
-from software.core.config.schema import RuntimeConfig
 from software.providers.common import (
     SURVEY_PROVIDER_CREDAMO,
     SURVEY_PROVIDER_QQ,
@@ -20,7 +19,11 @@ from software.providers.common import (
 from software.ui.helpers.proxy_access import apply_proxy_source_settings
 from software.ui.pages.workbench.runtime_panel.proxy_source import (
     PROXY_SOURCE_CUSTOM as _PROXY_SOURCE_CUSTOM,
+)
+from software.ui.pages.workbench.runtime_panel.proxy_source import (
     PROXY_SOURCE_DEFAULT as _PROXY_SOURCE_DEFAULT,
+)
+from software.ui.pages.workbench.runtime_panel.proxy_source import (
     normalize_proxy_source,
 )
 

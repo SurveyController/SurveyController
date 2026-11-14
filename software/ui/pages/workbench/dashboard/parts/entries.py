@@ -313,9 +313,7 @@ class DashboardEntriesMixin:
         ):
             self._refresh_entry_table()
 
-    def _apply_wizard_results(
-        self, entries: List[QuestionEntry], dlg: QuestionWizardBase
-    ) -> None:
+    def _apply_wizard_results(self, entries: List[QuestionEntry], dlg: QuestionWizardBase) -> None:
         for rules in (_WIZARD_DISTRIBUTION_RULES, _WIZARD_TEXT_RULES, _WIZARD_META_RULES):
             for getter, applier in rules:
                 _apply_result_updates(entries, getter(dlg), applier)

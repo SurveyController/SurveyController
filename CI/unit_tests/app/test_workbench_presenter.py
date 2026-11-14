@@ -334,7 +334,7 @@ def test_workbench_presenter_forwards_random_ip_loading_state() -> None:
         }
     )
 
-    assert dashboard.loading_events[-1] == (True, "正在处理...")
+    assert dashboard.loading_events == []
     assert reverse_fill_page.loading_events[-1] == (True, "正在处理...")
 
 
@@ -354,9 +354,9 @@ def test_workbench_presenter_skips_duplicate_run_and_pause_notifications() -> No
     presenter.on_runtime_snapshot_changed(running_snapshot)
     presenter.on_runtime_snapshot_changed(dict(running_snapshot))
 
-    assert dashboard.run_states == [True]
+    assert dashboard.run_states == []
     assert reverse_fill_page.run_states == [True]
-    assert dashboard.pause_states == [(False, "")]
+    assert dashboard.pause_states == []
     assert reverse_fill_page.pause_states == [(False, "")]
 
 

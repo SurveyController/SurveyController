@@ -277,8 +277,8 @@ class DashboardRandomIPTests:
     def test_status_heartbeat_fetch_and_apply(self, monkeypatch) -> None:
         dashboard = _FakeDashboard()
         monkeypatch.setattr(
-            dashboard_random_ip,
-            "set_indeterminate_progress_ring_active",
+            dashboard_random_ip.QFluentCompat,
+            "set_indeterminate_progress_active",
             lambda ring, active: setattr(ring, "active", bool(active)),
         )
         dashboard.refresh_random_ip_heartbeat_async()
@@ -308,8 +308,8 @@ class DashboardRandomIPTests:
     def test_init_random_ip_status_refresh_and_async_guard(self, monkeypatch) -> None:
         dashboard = _FakeDashboard()
         monkeypatch.setattr(
-            dashboard_random_ip,
-            "set_indeterminate_progress_ring_active",
+            dashboard_random_ip.QFluentCompat,
+            "set_indeterminate_progress_active",
             lambda ring, active: setattr(ring, "active", bool(active)),
         )
         monkeypatch.setattr("PySide6.QtCore.QTimer", _FakeTimer)

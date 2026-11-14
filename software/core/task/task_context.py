@@ -39,7 +39,9 @@ class ExecutionState(ProxyRuntimeMixin, CoreExecutionState):
     _runtime_async_event: Any = field(default=None, init=False, repr=False)
     _runtime_async_event_loop: Any = field(default=None, init=False, repr=False)
     progress_kind_by_thread: dict[str, str] = field(default_factory=dict)
-    proxy_fetch_async_lock: asyncio.Lock = field(default_factory=asyncio.Lock, init=False, repr=False)
+    proxy_fetch_async_lock: asyncio.Lock = field(
+        default_factory=asyncio.Lock, init=False, repr=False
+    )
     submission_attempt_lock: threading.RLock = field(
         default_factory=threading.RLock,
         init=False,

@@ -85,6 +85,7 @@ class CallableProviderAdapter:
             )
         return ProviderSubmissionResult(provider=self.provider, submitted=submitted)
 
+
 __all__ = [
     "CallableProviderAdapter",
     "ProviderAdapterHooks",

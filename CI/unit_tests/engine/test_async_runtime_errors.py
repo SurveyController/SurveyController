@@ -149,6 +149,7 @@ class AsyncRuntimeErrorsTests:
         scheduler.acquire_values = [10, None]
         seen_errors: list[BaseException] = []
         release_flags: list[bool] = []
+
         async def submit_after_request_start(**kwargs):
             await kwargs["submit_proxy_lease_factory"]()
             raise runtime_loop.http_client.RemoteProtocolError("server disconnected")

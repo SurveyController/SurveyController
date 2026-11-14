@@ -16,19 +16,26 @@ from software.core.config.schema import RuntimeConfig
 
 QuestionId = NewType("QuestionId", str)
 
+
 def question_id(question: SurveyQuestionMeta | Any, *, index: int = 0) -> QuestionId:
     stored = str(getattr(question, "question_id", "") or "").strip()
     if stored:
         return QuestionId(stored)
-    provider = str(
-        getattr(question, "provider", None)
-        or getattr(question, "survey_provider", None)
-        or "wjx"
-    ).strip().lower()
+    provider = (
+        str(
+            getattr(question, "provider", None)
+            or getattr(question, "survey_provider", None)
+            or "wjx"
+        )
+        .strip()
+        .lower()
+    )
     provider_id = str(getattr(question, "provider_question_id", "") or "").strip()
     page_id = str(getattr(question, "provider_page_id", "") or "").strip()
     if provider_id:
-        return QuestionId(f"{provider}:{page_id}:{provider_id}" if page_id else f"{provider}:{provider_id}")
+        return QuestionId(
+            f"{provider}:{page_id}:{provider_id}" if page_id else f"{provider}:{provider_id}"
+        )
     raw = "|".join(
         (
             provider,

@@ -284,8 +284,8 @@ class MainWindowUpdateLargeTests:
         monkeypatch.setattr(update_module, "InfoBadge", _FakeBadge)
         monkeypatch.setattr(update_module, "IndeterminateProgressRing", _FakeSpinner)
         monkeypatch.setattr(
-            update_module,
-            "set_indeterminate_progress_ring_active",
+            update_module.QFluentCompat,
+            "set_indeterminate_progress_active",
             lambda ring, active: setattr(ring, "active", bool(active)),
         )
 

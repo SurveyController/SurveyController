@@ -98,9 +98,7 @@ class AsyncSlotRunner:
 
     def _update_status(self, status_text: str, *, running: bool = True) -> None:
         try:
-            self._set_progress_kind(
-                ProgressKind.PREPARING if running else ProgressKind.WAITING
-            )
+            self._set_progress_kind(ProgressKind.PREPARING if running else ProgressKind.WAITING)
             self.state.update_thread_status(self.slot_label, status_text, running=running)
         except Exception:
             logging.info("更新 slot 状态失败：%s", status_text, exc_info=True)

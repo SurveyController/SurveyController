@@ -25,6 +25,7 @@ from software.ui.pages.workbench.runtime_panel.main import RuntimePage
 from software.ui.pages.workbench.strategy.page import QuestionStrategyPage
 from software.ui.pages.workbench.session import WorkbenchState
 
+
 class DashboardPage(
     SurveyClipboardMixin,
     DashboardSurveyParseMixin,
@@ -33,7 +34,6 @@ class DashboardPage(
     DashboardEntriesMixin,
     QWidget,
 ):
-
     def __init__(
         self,
         controller: RunController,

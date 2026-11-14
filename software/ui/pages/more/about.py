@@ -196,6 +196,8 @@ class AboutPage(ScrollArea):
             ("https://github.com/Quchaosheng", "@Quchaosheng"),
         )
         links_widget = QWidget(contributors_widget)
+        links_widget.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
+        links_widget.setMaximumWidth(520)
         links_layout = FlowLayout(links_widget, needAni=False, isTight=True)
         links_layout.setContentsMargins(0, 0, 0, 0)
         links_layout.setHorizontalSpacing(8)

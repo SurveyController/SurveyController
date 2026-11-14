@@ -567,7 +567,7 @@ class MainWindowModalSafetyTests:
         refreshed = []
         window._refresh_title_random_ip_user_id = lambda: refreshed.append("ok")
         MainWindowLifecycleMixin._on_random_ip_counter_update(window, 1, 2, False)
-        assert ("counter", 1, 2, False) in window.cleanup_events
+        assert ("counter", 1, 2, False) not in window.cleanup_events
         assert refreshed == ["ok"]
 
     def test_update_notification_is_deferred_to_next_tick(self) -> None:

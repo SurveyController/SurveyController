@@ -105,9 +105,7 @@ def _build_ai_batch_items_for_actions(
         if question is None:
             continue
 
-        pending_answers = [
-            value for value in action.text_values if is_pending_ai_answer(value)
-        ]
+        pending_answers = [value for value in action.text_values if is_pending_ai_answer(value)]
         if pending_answers:
             blank_count = len(tuple(action.text_values or ()))
             question_content = build_ai_question_prompt(
@@ -165,9 +163,7 @@ def _resolved_answers_by_question_num(
         if question_num is None:
             continue
         normalized = tuple(
-            str(item or "").strip()
-            for item in answers.values
-            if str(item or "").strip()
+            str(item or "").strip() for item in answers.values if str(item or "").strip()
         )
         if normalized:
             resolved[int(question_num)] = normalized

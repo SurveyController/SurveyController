@@ -579,7 +579,9 @@ def normalize_runtime_config_payload(raw: Dict[str, Any]) -> RuntimeConfig:
         "ai_system_prompt",
     }
     has_ai_keys = any(key in raw for key in ai_keys)
-    config.ai_config_mode = str(raw.get("ai_config_mode") or ("override" if has_ai_keys else "inherit"))
+    config.ai_config_mode = str(
+        raw.get("ai_config_mode") or ("override" if has_ai_keys else "inherit")
+    )
     if config.ai_config_mode not in {"inherit", "override"}:
         config.ai_config_mode = "inherit"
     if has_ai_keys:

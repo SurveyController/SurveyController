@@ -134,6 +134,7 @@ def test_workbench_run_coordinator_blocks_restarts_and_builds_config(monkeypatch
         progress_bar=SimpleNamespace(setValue=MagicMock()),
         progress_pct=SimpleNamespace(setText=MagicMock()),
         status_label=SimpleNamespace(setText=MagicMock()),
+        _on_resume_clicked=MagicMock(),
     )
     controller = SimpleNamespace(
         running=True,
@@ -164,16 +165,22 @@ def test_workbench_run_coordinator_blocks_restarts_and_builds_config(monkeypatch
     dashboard._last_progress = 100
     coordinator.set_reverse_fill_target(5)
     reverse_page = SimpleNamespace(
+        progress_bar=SimpleNamespace(setValue=MagicMock()),
+        progress_pct=SimpleNamespace(setText=MagicMock()),
+        status_label=SimpleNamespace(setText=MagicMock()),
+        _on_resume_clicked=MagicMock(),
         update_config=MagicMock(
             side_effect=lambda cfg: setattr(cfg, "reverse_fill_source_path", "data.xlsx")
-        )
+        ),
     )
+    session_module.set_completion_notified(reverse_page, True)
+    session_module.set_last_progress(reverse_page, 100)
     coordinator.bind_reverse_fill_page(reverse_page)
     assert coordinator.start(enable_reverse_fill=True) is True
     cfg = controller.start_run.call_args.args[0]
     assert cfg.target == 5
     assert cfg.reverse_fill_enabled is True
-    assert dashboard.progress_bar.setValue.called
+    assert reverse_page.progress_bar.setValue.called
 
     dashboard.config_builder = lambda: RuntimeConfig(target=9)
     assert coordinator.build_config().target == 9
@@ -183,7 +190,7 @@ def test_workbench_run_coordinator_blocks_restarts_and_builds_config(monkeypatch
 
     dashboard.resume_run_from_ui = MagicMock()
     coordinator.resume()
-    dashboard.resume_run_from_ui.assert_called_once()
+    reverse_page._on_resume_clicked.assert_called_once()
 
 
 def test_presenter_apply_load_build_and_url_sync(monkeypatch) -> None:

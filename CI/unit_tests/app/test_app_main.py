@@ -58,8 +58,8 @@ def test_main_returns_exit_code_and_avoids_hard_exit(monkeypatch) -> None:
         main_module, "qInstallMessageHandler", lambda _handler: events.append("qt_msg")
     )
     monkeypatch.setattr(
-        main_module,
-        "install_qfluentwidgets_animation_guards",
+        main_module.QFluentCompat,
+        "install",
         lambda: events.append("guards"),
     )
     monkeypatch.setattr(

@@ -75,13 +75,21 @@ def test_invalid_packaged_snapshot_is_rejected(source_tree, monkeypatch, payload
         app_info._load_app_version()
 
 
-@pytest.mark.parametrize("value", ["", "invalid", "v4.1.0", "4.1.0beta1", " 4.1.0 ", 410])
-def test_source_requires_a_canonical_version(tmp_path, value):
+@pytest.mark.parametrize("value", ["", "invalid", "v4.1.0", " 4.1.0 ", 410])
+def test_source_requires_a_valid_version(tmp_path, value):
     project = tmp_path / "pyproject.toml"
     project.write_text(f"[project]\nversion = {json.dumps(value)}\n", encoding="utf-8")
 
     with pytest.raises(ValueError):
         app_info.read_project_version(project)
+
+
+@pytest.mark.parametrize("value", ["4.1.0beta1", "5.0.0-beta.1"])
+def test_source_accepts_valid_noncanonical_version(tmp_path, value):
+    project = tmp_path / "pyproject.toml"
+    project.write_text(f"[project]\nversion = {json.dumps(value)}\n", encoding="utf-8")
+
+    assert app_info.read_project_version(project) == value
 
 
 @pytest.mark.parametrize("payload", ["", "[project]\nname = 'surveycontroller'\n"])
