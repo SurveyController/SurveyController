@@ -4,7 +4,7 @@ from dataclasses import dataclass, field
 from typing import Any
 
 from PySide6.QtWidgets import QButtonGroup, QWidget
-from qfluentwidgets import BodyLabel, LineEdit, PushButton, RadioButton, SwitchButton
+from qfluentwidgets import BodyLabel, LineEdit, PushButton, RadioButton
 
 from software.ui.widgets.no_wheel import NoWheelSlider
 
@@ -19,7 +19,7 @@ class WizardRuntimeState:
     multilevel_map: dict[int, MultilevelDropdownEditor] = field(default_factory=dict)
     matrix_row_slider_map: dict[int, list[list[NoWheelSlider]]] = field(default_factory=dict)
     text_edit_map: dict[int, TextEditsValue] = field(default_factory=dict)
-    ai_check_map: dict[int, SwitchButton] = field(default_factory=dict)
+    ai_check_map: dict[int, Any] = field(default_factory=dict)
     ai_label_map: dict[int, BodyLabel] = field(default_factory=dict)
     text_container_map: dict[int, QWidget] = field(default_factory=dict)
     text_add_btn_map: dict[int, PushButton] = field(default_factory=dict)
@@ -40,8 +40,8 @@ class WizardRuntimeState:
     attached_select_slider_map: dict[int, list[dict[str, Any]]] = field(default_factory=dict)
     option_fill_edit_map: dict[int, dict[int, LineEdit]] = field(default_factory=dict)
     option_fill_state_map: dict[int, dict[int, dict[str, Any]]] = field(default_factory=dict)
-    multi_text_blank_radio_groups: dict[int, list[QButtonGroup]] = field(default_factory=dict)
-    multi_text_blank_ai_checkboxes: dict[int, list[SwitchButton]] = field(default_factory=dict)
+    multi_text_blank_radio_groups: dict[int, list[Any]] = field(default_factory=dict)
+    multi_text_blank_ai_checkboxes: dict[int, list[Any]] = field(default_factory=dict)
 
 
 def bind_runtime_state(owner: Any, state: WizardRuntimeState) -> None:

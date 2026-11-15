@@ -7,22 +7,29 @@ from PySide6.QtCore import (
     QTimer,
     Qt,
 )
-from PySide6.QtWidgets import QSizePolicy, QButtonGroup, QHBoxLayout, QVBoxLayout, QWidget
+from PySide6.QtGui import QColor
+from PySide6.QtWidgets import QSizePolicy, QHBoxLayout, QVBoxLayout, QWidget
 from qfluentwidgets import (
     BodyLabel,
     CardWidget,
-    IndicatorPosition,
+    InfoBadge,
     LineEdit,
-    RadioButton,
     SegmentedWidget,
-    SwitchButton,
 )
 
 from surveycore.core.questions.config import QuestionEntry
 from surveycore.providers.contracts import SurveyQuestionMeta
-from software.ui.helpers.fluent_tooltip import install_tooltip_filters
 from software.ui.widgets.no_wheel import NoWheelSlider
 
+from .fill_mode_selector import (
+    FILL_MODE_AI,
+    FILL_MODE_ID_CARD,
+    FILL_MODE_INTEGER,
+    FILL_MODE_MOBILE,
+    FILL_MODE_NAME,
+    FILL_MODE_NONE,
+    FillModeSelector,
+)
 from .psycho_config import (
     BIAS_PRESET_CHOICES,
     build_bias_weights,
@@ -30,14 +37,7 @@ from .psycho_config import (
 )
 from .constants import ANSWER_WEIGHT_MAX, ANSWER_WEIGHT_MIN, MULTIPLE_OPTION_WEIGHT_MAX
 from .utils import _apply_label_color, _bind_slider_input
-from .wizard_sections_common import (
-    _TEXT_RANDOM_ID_CARD,
-    _TEXT_RANDOM_INTEGER,
-    _TEXT_RANDOM_MOBILE,
-    _TEXT_RANDOM_NAME,
-    _TEXT_RANDOM_NONE,
-    _apply_ai_label_state_style,
-)
+from .wizard_sections_common import _TEXT_RANDOM_NONE
 
 
 class WizardSectionsSliderMixin:
@@ -61,13 +61,6 @@ class WizardSectionsSliderMixin:
         def _resolve_option_fill_int_range(
             raw_value: Any,
         ) -> tuple[int | None, int | None]: ...
-        @staticmethod
-        def _create_integer_range_edit(
-            parent: QWidget, initial_value: int | None, placeholder: str
-        ) -> LineEdit: ...
-        def _on_option_fill_mode_toggled(self, state: Dict[str, Any], checked: bool) -> None: ...
-        def _on_option_fill_ai_toggled(self, state: Dict[str, Any], checked: bool) -> None: ...
-        def _sync_option_fill_state(self, state: Dict[str, Any]) -> None: ...
         def _refresh_ratio_preview_label(
             self,
             label: BodyLabel,
@@ -187,6 +180,15 @@ class WizardSectionsSliderMixin:
             )
             header_row.addWidget(option_widget, 1)
 
+            if opt_idx in fillable_option_set:
+                fill_badge = InfoBadge.custom(
+                    "附带填空",
+                    QColor("#038387"),
+                    QColor("#4fd1c5"),
+                    parent=card,
+                )
+                header_row.addWidget(fill_badge)
+
             has_jump = bool(info_entry.get("has_jump"))
             if has_jump:
                 jump_container = QWidget(card)
@@ -263,18 +265,21 @@ class WizardSectionsSliderMixin:
                 fill_mode, fill_ai_enabled = self._resolve_option_fill_mode(raw_fill_value)
                 range_min, range_max = self._resolve_option_fill_int_range(raw_fill_value)
 
-                fill_widget = QWidget(card)
-                fill_layout = QHBoxLayout(fill_widget)
-                fill_layout.setContentsMargins(32, 0, 0, 2)
-                fill_layout.setSpacing(10)
+                fill_container = QWidget(card)
+                fill_container.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, False)
+                fill_container.setAutoFillBackground(False)
+                fill_layout = QVBoxLayout(fill_container)
+                fill_layout.setContentsMargins(18, 2, 0, 6)
+                fill_layout.setSpacing(0)
 
-                fill_label = BodyLabel("选中此项时填写：", card)
-                fill_label.setFixedWidth(160)
-                fill_label.setStyleSheet("font-size: 12px;")
-                _apply_label_color(fill_label, "#666666", "#bfbfbf")
-                fill_layout.addWidget(fill_label)
+                selector = FillModeSelector(
+                    fill_container,
+                    list_label="指定文本",
+                    min_value=range_min,
+                    max_value=range_max,
+                )
 
-                fill_edit = LineEdit(card)
+                fill_edit = LineEdit(selector)
                 existing_fill = ""
                 if (
                     fill_mode == _TEXT_RANDOM_NONE
@@ -284,129 +289,51 @@ class WizardSectionsSliderMixin:
                     existing_fill = str(saved_option_fill_texts[opt_idx] or "").strip()
                 if existing_fill:
                     fill_edit.setText(existing_fill)
-                if entry.question_type == "single":
-                    fill_edit.setPlaceholderText("例如：无")
-                else:
-                    fill_edit.setPlaceholderText("输入命中该选项时要填写的内容")
-                fill_layout.addWidget(fill_edit, 1)
-
-                card_layout.addWidget(fill_widget)
-                option_fill_edits[opt_idx] = fill_edit
-
-                fill_mode_widget = QWidget(card)
-                fill_mode_layout = QVBoxLayout(fill_mode_widget)
-                fill_mode_layout.setContentsMargins(32, 0, 0, 6)
-                fill_mode_layout.setSpacing(6)
-
-                mode_header_row = QHBoxLayout()
-                mode_header_row.setSpacing(8)
-                mode_label = BodyLabel("填写模式：", card)
-                mode_label.setStyleSheet("font-size: 12px;")
-                _apply_label_color(mode_label, "#666666", "#bfbfbf")
-                mode_header_row.addWidget(mode_label)
-
-                mode_group = QButtonGroup(card)
-                mode_group.setExclusive(True)
-                fill_list_radio = RadioButton("使用填写文本", card)
-                fill_name_radio = RadioButton("随机姓名", card)
-                fill_mobile_radio = RadioButton("随机手机号", card)
-                fill_id_card_radio = RadioButton("随机身份证号", card)
-                fill_integer_radio = RadioButton("随机整数", card)
-                mode_group.addButton(fill_list_radio, 0)
-                mode_group.addButton(fill_name_radio, 1)
-                mode_group.addButton(fill_mobile_radio, 2)
-                mode_group.addButton(fill_id_card_radio, 3)
-                mode_group.addButton(fill_integer_radio, 4)
-
-                range_min_edit = self._create_integer_range_edit(card, range_min, "最小值")
-                range_max_edit = self._create_integer_range_edit(card, range_max, "最大值")
-                range_sep_label = BodyLabel("到", card)
-                range_sep_label.setStyleSheet("font-size: 12px;")
-                _apply_label_color(range_sep_label, "#666666", "#bfbfbf")
-
-                ai_cb = SwitchButton(card, IndicatorPosition.RIGHT)
-                ai_cb.setOnText("")
-                ai_cb.setOffText("")
-                ai_label = BodyLabel("启用 AI", card)
-                _apply_ai_label_state_style(ai_label)
-                ai_cb.setToolTip("运行时命中该选项后会调用 AI 生成补充内容")
-                ai_label.setToolTip("运行时命中该选项后会调用 AI 生成补充内容")
-                ai_cb.setChecked(fill_ai_enabled)
-                mode_header_row.addWidget(ai_cb)
-                mode_header_row.addWidget(ai_label)
-                mode_header_row.addStretch(1)
-                fill_mode_layout.addLayout(mode_header_row)
-
-                mode_row_top = QHBoxLayout()
-                mode_row_top.setSpacing(8)
-                mode_row_top.addWidget(fill_list_radio)
-                mode_row_top.addWidget(fill_name_radio)
-                mode_row_top.addWidget(fill_mobile_radio)
-                mode_row_top.addStretch(1)
-                fill_mode_layout.addLayout(mode_row_top)
-
-                mode_row_bottom = QHBoxLayout()
-                mode_row_bottom.setSpacing(8)
-                mode_row_bottom.addWidget(fill_id_card_radio)
-                mode_row_bottom.addWidget(fill_integer_radio)
-                mode_row_bottom.addWidget(range_min_edit)
-                mode_row_bottom.addWidget(range_sep_label)
-                mode_row_bottom.addWidget(range_max_edit)
-                mode_row_bottom.addStretch(1)
-                fill_mode_layout.addLayout(mode_row_bottom)
-
-                card_layout.addWidget(fill_mode_widget)
-
-                if fill_mode == _TEXT_RANDOM_NAME:
-                    fill_name_radio.setChecked(True)
-                elif fill_mode == _TEXT_RANDOM_MOBILE:
-                    fill_mobile_radio.setChecked(True)
-                elif fill_mode == _TEXT_RANDOM_ID_CARD:
-                    fill_id_card_radio.setChecked(True)
-                elif fill_mode == _TEXT_RANDOM_INTEGER:
-                    fill_integer_radio.setChecked(True)
-                else:
-                    fill_list_radio.setChecked(True)
-
-                fill_state = {
-                    "edit": fill_edit,
-                    "group": mode_group,
-                    "radios": {
-                        "list": fill_list_radio,
-                        "name": fill_name_radio,
-                        "mobile": fill_mobile_radio,
-                        "id_card": fill_id_card_radio,
-                        "integer": fill_integer_radio,
-                    },
-                    "min_edit": range_min_edit,
-                    "max_edit": range_max_edit,
-                    "ai_cb": ai_cb,
-                    "ai_label": ai_label,
+                default_placeholder = (
+                    "例如：无"
+                    if entry.question_type == "single"
+                    else "输入命中该选项时要填写的内容"
+                )
+                mode_placeholders = {
+                    FILL_MODE_NONE: default_placeholder,
+                    FILL_MODE_AI: "AI 生成",
+                    FILL_MODE_NAME: "随机姓名",
+                    FILL_MODE_MOBILE: "随机手机号",
+                    FILL_MODE_ID_CARD: "随机身份证",
                 }
-                option_fill_states[opt_idx] = fill_state
-                install_tooltip_filters(
-                    (
-                        fill_list_radio,
-                        fill_name_radio,
-                        fill_mobile_radio,
-                        fill_id_card_radio,
-                        fill_integer_radio,
-                        ai_cb,
-                        ai_label,
-                    )
-                )
-                for radio in fill_state["radios"].values():
-                    radio.toggled.connect(
-                        lambda checked, state=fill_state: self._on_option_fill_mode_toggled(
-                            state, checked
-                        )
-                    )
-                ai_cb.checkedChanged.connect(
-                    lambda checked, state=fill_state: self._on_option_fill_ai_toggled(
-                        state, checked
-                    )
-                )
-                self._sync_option_fill_state(fill_state)
+                fill_edit.setPlaceholderText(default_placeholder)
+                selector.add_inline_widget(fill_edit, 1)
+
+                active_mode = FILL_MODE_AI if fill_ai_enabled else fill_mode
+                selector.set_mode(active_mode, emit=False)
+
+                def _sync_option_fill(
+                    mode: str,
+                    edit: LineEdit = fill_edit,
+                    sel: FillModeSelector = selector,
+                    placeholders: Dict[str, str] = mode_placeholders,
+                ) -> None:
+                    is_text = mode == FILL_MODE_NONE
+                    is_integer = mode == FILL_MODE_INTEGER
+                    edit.setVisible(not is_integer)
+                    edit.setEnabled(is_text)
+                    edit.setPlaceholderText(placeholders.get(mode, ""))
+                    sel.set_trailing_stretch(is_integer)
+
+                _sync_option_fill(active_mode)
+                selector.modeChanged.connect(_sync_option_fill)
+
+                fill_layout.addWidget(selector)
+                card_layout.addWidget(fill_container)
+                option_fill_edits[opt_idx] = fill_edit
+                option_fill_states[opt_idx] = {
+                    "edit": fill_edit,
+                    "group": selector.group_proxy(),
+                    "min_edit": selector.min_edit,
+                    "max_edit": selector.max_edit,
+                    "ai_cb": selector.ai_proxy(),
+                    "selector": selector,
+                }
 
         self.slider_map[idx] = sliders
         if option_fill_edits:

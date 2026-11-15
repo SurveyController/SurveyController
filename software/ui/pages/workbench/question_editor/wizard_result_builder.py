@@ -46,7 +46,7 @@ class WizardResultSource(Protocol):
     option_fill_state_map: Dict[int, Dict[int, OptionFillState]]
     attached_select_slider_map: Dict[int, List[AttachedSelectConfig]]
     bias_preset_map: Dict[int, Any]
-    ai_check_map: Dict[int, SwitchButton]
+    ai_check_map: Dict[int, Any]
     entries: List[QuestionEntry]
 
     def _format_question_label(self, idx: int) -> str: ...

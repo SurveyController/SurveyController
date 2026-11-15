@@ -694,3 +694,195 @@ def test_question_wizard_dialog_delete_answer_row_renumbers(qtbot) -> None:
         label.text() for label in container.findChildren(BodyLabel) if label.text().endswith(".")
     ]
     assert labels[0] == "1."
+
+
+def test_question_wizard_dialog_text_fill_mode_selector_switches_contextual_controls(qtbot) -> None:
+    from software.ui.pages.workbench.question_editor.fill_mode_selector import FillModeSelector
+
+    entry = QuestionEntry(
+        question_type="text",
+        probabilities=[1],
+        texts=["默认答案"],
+        rows=1,
+        option_count=1,
+        distribution_mode="random",
+        custom_weights=None,
+        question_num=1,
+    )
+    info = [
+        SurveyQuestionMeta(
+            num=1, title="填空题", page=1, logic_parse_status=LOGIC_PARSE_STATUS_COMPLETE
+        )
+    ]
+    dlg = QuestionWizardDialog([entry], info, "demo")
+    qtbot.addWidget(dlg)
+    dlg.show()
+
+    qtbot.waitUntil(lambda: bool(dlg._entry_card_widgets))
+    card = dlg._entry_card_widgets[0]
+    selector = card.findChild(FillModeSelector)
+    assert selector is not None
+    assert selector.current_mode() == "none"
+    assert dlg.text_container_map[0].isVisibleTo(card)
+    assert not selector.range_widget.isVisibleTo(card)
+
+    selector.combo.setCurrentIndex(selector.combo.findData("ai"))
+    assert selector.current_mode() == "ai"
+    assert not dlg.text_container_map[0].isVisibleTo(card)
+    assert not selector.range_widget.isVisibleTo(card)
+    assert dlg.get_ai_flags()[0] is True
+    assert dlg.get_text_random_modes()[0] == "none"
+
+    selector.combo.setCurrentIndex(selector.combo.findData("integer"))
+    assert selector.current_mode() == "integer"
+    assert not dlg.text_container_map[0].isVisibleTo(card)
+    assert selector.range_widget.isVisibleTo(card)
+    selector.min_edit.setText("5")
+    selector.max_edit.setText("15")
+    assert dlg.get_ai_flags()[0] is False
+    assert dlg.get_text_random_modes()[0] == "integer"
+    assert dlg.get_text_random_int_ranges()[0] == [5, 15]
+
+
+def test_question_wizard_dialog_multi_text_fill_mode_selector_updates_matrix(qtbot) -> None:
+    from software.ui.pages.workbench.question_editor.fill_mode_selector import FillModeSelector
+
+    entry = QuestionEntry(
+        question_type="multi_text",
+        probabilities=[1],
+        texts=["甲||乙"],
+        rows=1,
+        option_count=1,
+        distribution_mode="random",
+        custom_weights=None,
+        question_num=1,
+    )
+    info = [
+        SurveyQuestionMeta(
+            num=1,
+            title="多项填空",
+            page=1,
+            text_inputs=2,
+            is_multi_text=True,
+            logic_parse_status=LOGIC_PARSE_STATUS_COMPLETE,
+        )
+    ]
+    dlg = QuestionWizardDialog([entry], info, "demo")
+    qtbot.addWidget(dlg)
+    dlg.show()
+
+    qtbot.waitUntil(lambda: bool(dlg._entry_card_widgets))
+    card = dlg._entry_card_widgets[0]
+    selectors = card.findChildren(FillModeSelector)
+    assert len(selectors) == 2
+
+    selectors[1].combo.setCurrentIndex(selectors[1].combo.findData("integer"))
+    selectors[1].min_edit.setText("1")
+    selectors[1].max_edit.setText("9")
+    assert dlg.text_container_map[0].isVisibleTo(card)
+    assert dlg.text_edit_map[0][0][0].isEnabled()
+    assert not dlg.text_edit_map[0][0][1].isEnabled()
+    assert selectors[1].range_widget.isVisibleTo(card)
+    assert dlg.get_multi_text_blank_modes()[0] == ["none", "integer"]
+    assert dlg.get_multi_text_blank_int_ranges()[0] == [[], [1, 9]]
+
+    selectors[0].combo.setCurrentIndex(selectors[0].combo.findData("ai"))
+    selectors[1].combo.setCurrentIndex(selectors[1].combo.findData("name"))
+    assert not dlg.text_container_map[0].isVisibleTo(card)
+    assert dlg.get_multi_text_blank_ai_flags()[0] == [True, False]
+    assert dlg.get_multi_text_blank_modes()[0] == ["none", "name"]
+
+
+def test_question_wizard_dialog_option_fill_mode_selector_updates_fill_result(qtbot) -> None:
+    from software.ui.pages.workbench.question_editor.fill_mode_selector import FillModeSelector
+
+    entry = QuestionEntry(
+        question_type="single",
+        probabilities=[1, 1],
+        texts=None,
+        rows=1,
+        option_count=2,
+        distribution_mode="custom",
+        custom_weights=[50, 50],
+        question_num=1,
+        fillable_option_indices=[0],
+        option_fill_texts=["无", None],
+    )
+    info = [
+        SurveyQuestionMeta(
+            num=1,
+            title="带填空单选",
+            page=1,
+            options=2,
+            option_texts=["其他", "B"],
+            fillable_options=[0],
+            logic_parse_status=LOGIC_PARSE_STATUS_COMPLETE,
+        )
+    ]
+    dlg = QuestionWizardDialog([entry], info, "demo")
+    qtbot.addWidget(dlg)
+    dlg.show()
+
+    qtbot.waitUntil(lambda: bool(dlg._entry_card_widgets))
+    card = dlg._entry_card_widgets[0]
+    badges = [widget.text() for widget in card.findChildren(InfoBadge)]
+    assert "附带填空" in badges
+    selector = card.findChild(FillModeSelector)
+    assert selector is not None
+    fill_edit = dlg.option_fill_edit_map[0][0]
+    assert fill_edit.isVisibleTo(card)
+    assert not selector.range_widget.isVisibleTo(card)
+
+    selector.combo.setCurrentIndex(selector.combo.findData("ai"))
+    assert fill_edit.isVisibleTo(card)
+    assert not fill_edit.isEnabled()
+    assert fill_edit.placeholderText() == "AI 生成"
+    assert dlg.get_option_fill_results()[0] == ["__AI_FILL__", None]
+
+    selector.combo.setCurrentIndex(selector.combo.findData("integer"))
+    assert not fill_edit.isVisibleTo(card)
+    assert selector.range_widget.isVisibleTo(card)
+    selector.min_edit.setText("10")
+    selector.max_edit.setText("20")
+    assert dlg.get_option_fill_results()[0] == ["__RANDOM_INT__:10:20", None]
+
+    selector.combo.setCurrentIndex(selector.combo.findData("name"))
+    assert fill_edit.isVisibleTo(card)
+    assert not fill_edit.isEnabled()
+    assert fill_edit.placeholderText() == "随机姓名"
+    assert dlg.get_option_fill_results()[0] == ["__RANDOM_NAME__", None]
+
+
+def test_question_wizard_dialog_order_question_shows_forced_random_status(qtbot) -> None:
+    from qfluentwidgets import ComboBox
+
+    entry = QuestionEntry(
+        question_type="order",
+        probabilities=[1, 1, 1],
+        texts=None,
+        rows=1,
+        option_count=3,
+        distribution_mode="random",
+        custom_weights=None,
+        question_num=1,
+    )
+    info = [
+        SurveyQuestionMeta(
+            num=1,
+            title="排序题",
+            page=1,
+            option_texts=["甲", "乙", "丙"],
+            logic_parse_status=LOGIC_PARSE_STATUS_COMPLETE,
+        )
+    ]
+    dlg = QuestionWizardDialog([entry], info, "demo")
+    qtbot.addWidget(dlg)
+    dlg.show()
+
+    qtbot.waitUntil(lambda: bool(dlg._entry_card_widgets))
+    card = dlg._entry_card_widgets[0]
+    assert card.findChild(ComboBox) is None
+    badges = [badge.text() for badge in card.findChildren(InfoBadge)]
+    labels = [label.text() for label in card.findChildren(BodyLabel)]
+    assert "强制随机排列" in badges
+    assert "不支持手动配置" in labels

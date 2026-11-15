@@ -7,10 +7,12 @@ from PySide6.QtCore import (
     QTimer,
     Qt,
 )
+from PySide6.QtGui import QColor
 from PySide6.QtWidgets import QSizePolicy, QHBoxLayout, QVBoxLayout, QWidget
 from qfluentwidgets import (
     BodyLabel,
     CardWidget,
+    InfoBadge,
     LineEdit,
     SegmentedWidget,
 )
@@ -311,11 +313,30 @@ class WizardSectionsMixin(
         option_texts: List[str],
     ) -> None:
         self._has_content = True
+        status_row = QHBoxLayout()
+        status_row.setContentsMargins(0, 2, 0, 2)
+        status_row.setSpacing(8)
+        order_badge = InfoBadge.custom(
+            "强制随机排列",
+            QColor("#9a6700"),
+            QColor("#f2c94c"),
+            parent=card,
+        )
+        order_hint = BodyLabel("不支持手动配置", card)
+        order_hint.setStyleSheet("font-size: 12px;")
+        _apply_label_color(order_hint, "#666666", "#a6a6a6")
+        status_row.addWidget(order_badge)
+        status_row.addWidget(order_hint)
+        status_row.addStretch(1)
+        card_layout.addLayout(status_row)
+
         if option_texts:
             list_container = QWidget(card)
+            list_container.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, False)
+            list_container.setAutoFillBackground(False)
             list_container.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Maximum)
             list_layout = QVBoxLayout(list_container)
-            list_layout.setContentsMargins(0, 6, 0, 0)
+            list_layout.setContentsMargins(0, 4, 0, 0)
             list_layout.setSpacing(4)
             for opt_idx, opt_text in enumerate(option_texts, 1):
                 row_label = BodyLabel(
@@ -329,7 +350,7 @@ class WizardSectionsMixin(
                     QSizePolicy.Policy.Maximum,
                 )
                 row_label.setStyleSheet("font-size: 12px;")
-                _apply_label_color(row_label, "#444444", "#e0e0e0")
+                _apply_label_color(row_label, "#666666", "#a6a6a6")
                 list_layout.addWidget(row_label)
             card_layout.addWidget(list_container)
 
