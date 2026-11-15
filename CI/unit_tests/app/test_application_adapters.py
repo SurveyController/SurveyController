@@ -30,7 +30,7 @@ def test_qsettings_adapter_keeps_existing_keys_and_python_values(tmp_path):
     old = QSettings(path, QSettings.Format.IniFormat)
     old.setValue("config_directory", "D:/已有配置")
     old.setValue("ai/provider", "custom")
-    old.setValue("window_topmost", True)
+    old.setValue("existing_preference", True)
     old.sync()
     preferences = PreferencesService(
         QSettingsPreferences(QSettings(path, QSettings.Format.IniFormat))
@@ -39,7 +39,7 @@ def test_qsettings_adapter_keeps_existing_keys_and_python_values(tmp_path):
     assert preferences.get("ai/provider") == "custom"
     preferences.set("auto_save_log_retention_count", 20)
     assert old.value("auto_save_log_retention_count") == 20
-    assert old.value("window_topmost") is True
+    assert old.value("existing_preference") is True
 
 
 def test_configuration_adapter_reads_existing_python_json_and_preserves_strict_errors(tmp_path):

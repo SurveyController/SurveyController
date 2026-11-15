@@ -6,7 +6,7 @@ import sys
 from types import SimpleNamespace
 from typing import List, cast
 
-from PySide6.QtCore import QEvent, QPoint, Qt, QTimer, Slot
+from PySide6.QtCore import QEvent, QPoint, QTimer, Slot
 from PySide6.QtGui import QGuiApplication, QIcon
 from PySide6.QtWidgets import QDialog, QStackedWidget, QWidget
 from qfluentwidgets import (
@@ -26,7 +26,6 @@ from software.app.app_info import APP_VERSION
 from software.app.bootstrap import create_application_dependencies
 from software.app.config import (
     APP_ICON_RELATIVE_PATH,
-    NAVIGATION_TEXT_VISIBLE_SETTING_KEY,
     app_settings,
     get_bool_from_qsettings,
 )
@@ -130,10 +129,6 @@ class MainWindow(
         self._apply_default_window_size()
         self._enable_window_material_effect()
 
-        settings = app_settings()
-        if get_bool_from_qsettings(settings.value("window_topmost"), False):
-            self.apply_topmost_state(True, show=False)
-
         if not self._import_check_mode:
             self._boot_splash = create_boot_splash(self)
 
@@ -161,7 +156,6 @@ class MainWindow(
         self.navigationInterface.expand(useAni=False)
         self.stackedWidget.currentChanged.connect(self._on_stack_widget_changed)
 
-        QTimer.singleShot(0, self._configure_navigation_interface)
         self._bind_controller_signals()
         self._refresh_title_random_ip_user_id()
         self.workbench.sync_reverse_fill_context()
@@ -195,23 +189,6 @@ class MainWindow(
             self.setMicaEffectEnabled(True)
         except Exception:
             logging.info("启用窗口材质效果失败", exc_info=True)
-
-    def _read_navigation_text_visible_setting(self) -> bool:
-
-        settings = app_settings()
-        stored_value = settings.value(NAVIGATION_TEXT_VISIBLE_SETTING_KEY)
-        return get_bool_from_qsettings(stored_value, True)
-
-    def _configure_navigation_interface(self):
-
-        nav = getattr(self, "navigationInterface", None)
-        if nav is None:
-            return
-        try:
-            if hasattr(nav, "setSelectedTextVisible"):
-                nav.setSelectedTextVisible(self._read_navigation_text_visible_setting())
-        except Exception:
-            logging.info("应用导航栏显示偏好失败", exc_info=True)
 
     def _apply_default_window_size(self):
 
@@ -484,26 +461,6 @@ class MainWindow(
         self._mark_startup_tutorial_hint_seen()
         self._startup_tutorial_hint_showing = False
         self._clear_startup_tutorial_refs()
-
-    def apply_topmost_state(self, checked: bool, show: bool = False):
-
-        flags = self.windowFlags()
-        already_checked = bool(flags & Qt.WindowType.WindowStaysOnTopHint)
-        if already_checked == checked:
-            return
-        if checked:
-            flags |= Qt.WindowType.WindowStaysOnTopHint
-        else:
-            flags &= ~Qt.WindowType.WindowStaysOnTopHint
-        self.setWindowFlags(flags)
-        if hasattr(self, "updateFrameless"):
-            try:
-                self.updateFrameless()
-            except Exception:
-                logging.info("刷新无边框窗口状态失败", exc_info=True)
-        self._enable_window_material_effect()
-        if show:
-            self.show()
 
     def _bind_controller_signals(self):
         self.controller.controllerEvent.connect(self._on_controller_event)

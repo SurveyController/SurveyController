@@ -9,7 +9,6 @@ if TYPE_CHECKING:
     from qfluentwidgets.common.icon import FluentIconBase
 
 from software.app.config import (
-    NAVIGATION_TEXT_VISIBLE_SETTING_KEY,
     SUBMISSION_REPORT_TELEMETRY_SETTING_KEY,
     TASK_RESULT_SYSTEM_NOTIFICATION_SETTING_KEY,
 )
@@ -27,31 +26,6 @@ class SwitchCardDefinition:
     target: str
     handler_name: str
 
-
-APPEARANCE_SWITCHES = (
-    SwitchCardDefinition(
-        attr_name="navigation_text_card",
-        icon=FluentIcon.MENU,
-        title="显示选中导航名称",
-        content="开启后左侧导航会像微软商店一样显示当前选中项的文字标签",
-        setting_key=NAVIGATION_TEXT_VISIBLE_SETTING_KEY,
-        default=True,
-        event="toggle_navigation_text_visible",
-        target="navigation_text_switch",
-        handler_name="_on_navigation_text_toggled",
-    ),
-    SwitchCardDefinition(
-        attr_name="topmost_card",
-        icon=FluentIcon.PIN,
-        title="窗口置顶",
-        content="开启后程序窗口将始终保持在最上层",
-        setting_key="window_topmost",
-        default=False,
-        event="toggle_window_topmost",
-        target="topmost_switch",
-        handler_name="_on_topmost_toggled",
-    ),
-)
 
 BEHAVIOR_SWITCHES = (
     SwitchCardDefinition(

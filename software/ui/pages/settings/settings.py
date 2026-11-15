@@ -4,7 +4,6 @@ import logging
 import os
 from typing import TYPE_CHECKING, Any, cast
 
-from PySide6.QtCore import Qt
 from PySide6.QtWidgets import QFileDialog, QVBoxLayout, QWidget
 from qfluentwidgets import (
     FluentIcon,
@@ -22,7 +21,6 @@ from software.app.config import (
     CONFIG_DIRECTORY_SETTING_KEY,
     DEFAULT_AUTO_SAVE_LOG_RETENTION_COUNT,
     DEFAULT_AUTO_SAVE_LOGS,
-    NAVIGATION_TEXT_VISIBLE_SETTING_KEY,
     SUBMISSION_REPORT_TELEMETRY_SETTING_KEY,
     TASK_RESULT_SYSTEM_NOTIFICATION_SETTING_KEY,
     app_settings,
@@ -38,10 +36,8 @@ from software.application.ports import AiSettingsPort
 from software.application.preferences import PreferencesService
 from software.app.preferences_adapter import QSettingsPreferences
 from software.logging.action_logger import bind_logged_action, log_action
-from software.logging.log_utils import log_suppressed_exception
 from software.ui.helpers.message_bar import show_message_bar
 from software.ui.pages.settings.definitions import (
-    APPEARANCE_SWITCHES,
     BEHAVIOR_SWITCHES,
     UPDATE_SWITCHES,
     SwitchCardDefinition,
@@ -57,12 +53,9 @@ if TYPE_CHECKING:
 
 class SettingsPage(ScrollArea):
     view: QWidget
-    appearance_group: SettingCardGroup
     behavior_group: SettingCardGroup
     update_group: SettingCardGroup
     tools_group: SettingCardGroup
-    navigation_text_card: SwitchSettingCard
-    topmost_card: SwitchSettingCard
     ask_save_card: SwitchSettingCard
     task_result_notification_card: SwitchSettingCard
     submission_report_telemetry_card: SwitchSettingCard
@@ -95,8 +88,6 @@ class SettingsPage(ScrollArea):
 
     def _build_defaults(self) -> dict[str, Any]:
         return {
-            NAVIGATION_TEXT_VISIBLE_SETTING_KEY: True,
-            "window_topmost": False,
             "ask_save_on_close": True,
             TASK_RESULT_SYSTEM_NOTIFICATION_SETTING_KEY: True,
             SUBMISSION_REPORT_TELEMETRY_SETTING_KEY: True,
@@ -110,9 +101,6 @@ class SettingsPage(ScrollArea):
         layout = QVBoxLayout(self.view)
         layout.setContentsMargins(24, 24, 24, 24)
         layout.setSpacing(20)
-
-        self.appearance_group = self._build_switch_group("界面外观", APPEARANCE_SWITCHES)
-        layout.addWidget(self.appearance_group)
 
         self.behavior_group = self._build_switch_group("行为设置", BEHAVIOR_SWITCHES)
         self._build_auto_save_logs_card()
@@ -146,7 +134,7 @@ class SettingsPage(ScrollArea):
         layout.addWidget(self.tools_group)
         layout.addStretch(1)
 
-        self._bind_switch_actions(APPEARANCE_SWITCHES + BEHAVIOR_SWITCHES + UPDATE_SWITCHES)
+        self._bind_switch_actions(BEHAVIOR_SWITCHES + UPDATE_SWITCHES)
         self._bind_static_actions()
 
     def _build_switch_group(
@@ -318,45 +306,6 @@ class SettingsPage(ScrollArea):
             payload={"enabled": bool(checked), "persist": persist},
         )
 
-    def _apply_navigation_text_state(self, checked: bool, persist: bool = True):
-        self._persist_bool_setting(
-            key=NAVIGATION_TEXT_VISIBLE_SETTING_KEY,
-            checked=checked,
-            event="toggle_navigation_text_visible",
-            target="navigation_text_switch",
-            persist=persist,
-        )
-        nav = getattr(self.window(), "navigationInterface", None)
-        if nav is None:
-            return
-        try:
-            if hasattr(nav, "setSelectedTextVisible"):
-                nav.setSelectedTextVisible(bool(checked))
-        except Exception as exc:
-            log_suppressed_exception(
-                "_apply_navigation_text_state: nav.setSelectedTextVisible(bool(checked))",
-                exc,
-                level=logging.WARNING,
-            )
-
-    def _apply_topmost_state(self, checked: bool, persist: bool = True):
-        self._persist_bool_setting(
-            key="window_topmost",
-            checked=checked,
-            event="toggle_window_topmost",
-            target="topmost_switch",
-            persist=persist,
-        )
-        win = self.window()
-        if win is None:
-            return
-        handler = getattr(win, "apply_topmost_state", None)
-        if callable(handler):
-            cast(Any, handler)(checked, show=True)
-            return
-        win.setWindowFlag(Qt.WindowType.WindowStaysOnTopHint, checked)
-        win.show()
-
     def _apply_ask_save_state(self, checked: bool, persist: bool = True):
         self._persist_bool_setting(
             key="ask_save_on_close",
@@ -445,12 +394,6 @@ class SettingsPage(ScrollArea):
         )
         return normalized
 
-    def _on_navigation_text_toggled(self, checked: bool):
-        self._apply_navigation_text_state(checked)
-
-    def _on_topmost_toggled(self, checked: bool):
-        self._apply_topmost_state(checked)
-
     def _on_ask_save_on_close_toggled(self, checked: bool):
         self._apply_ask_save_state(checked)
 
@@ -500,10 +443,6 @@ class SettingsPage(ScrollArea):
         self._preferences.reset()
         self._ai_settings.reset_settings()
 
-        self._set_switch_state(
-            self.navigation_text_card, self._defaults[NAVIGATION_TEXT_VISIBLE_SETTING_KEY]
-        )
-        self._set_switch_state(self.topmost_card, self._defaults["window_topmost"])
         self._set_switch_state(self.ask_save_card, self._defaults["ask_save_on_close"])
         self._set_switch_state(
             self.task_result_notification_card,
@@ -520,11 +459,6 @@ class SettingsPage(ScrollArea):
         self._set_switch_state(self.auto_update_card, self._defaults["auto_check_update"])
         self._set_config_directory_content(self._defaults[CONFIG_DIRECTORY_SETTING_KEY])
 
-        self._apply_navigation_text_state(
-            self._defaults[NAVIGATION_TEXT_VISIBLE_SETTING_KEY],
-            persist=False,
-        )
-        self._apply_topmost_state(self._defaults["window_topmost"], persist=False)
         self._apply_ask_save_state(self._defaults["ask_save_on_close"], persist=False)
         self._apply_task_result_notification_state(
             self._defaults[TASK_RESULT_SYSTEM_NOTIFICATION_SETTING_KEY],

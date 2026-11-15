@@ -67,7 +67,6 @@ get_int_from_qsettings = _get_int_from_qsettings
 get_str_from_qsettings = _get_str_from_qsettings
 
 CONFIG_DIRECTORY_SETTING_KEY = _CONFIG_DIRECTORY_SETTING_KEY
-NAVIGATION_TEXT_VISIBLE_SETTING_KEY = "navigation_selected_text_visible"
 AUTO_SAVE_LOGS_SETTING_KEY = "auto_save_logs"
 AUTO_SAVE_LOG_RETENTION_COUNT_SETTING_KEY = "auto_save_log_retention_count"
 TASK_RESULT_SYSTEM_NOTIFICATION_SETTING_KEY = "task_result_system_notification"

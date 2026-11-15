@@ -2,15 +2,14 @@ from __future__ import annotations
 
 from PySide6.QtWidgets import QWidget
 
+import software.ui.pages.settings.settings as settings_module
 from software.app.config import (
     AUTO_SAVE_LOG_RETENTION_COUNT_SETTING_KEY,
     AUTO_SAVE_LOGS_SETTING_KEY,
     CONFIG_DIRECTORY_SETTING_KEY,
-    NAVIGATION_TEXT_VISIBLE_SETTING_KEY,
     SUBMISSION_REPORT_TELEMETRY_SETTING_KEY,
     TASK_RESULT_SYSTEM_NOTIFICATION_SETTING_KEY,
 )
-import software.ui.pages.settings.settings as settings_module
 from software.ui.pages.settings.settings import SettingsPage
 
 
@@ -39,22 +38,9 @@ class _FakeSettings:
         self.synced = True
 
 
-class _FakeNavigation:
-    def __init__(self) -> None:
-        self.visible = None
-
-    def setSelectedTextVisible(self, enabled: bool) -> None:
-        self.visible = bool(enabled)
-
-
 class _FakeWindow(QWidget):
     def __init__(self) -> None:
         super().__init__()
-        self.navigationInterface = _FakeNavigation()
-        self.topmost_calls: list[tuple[bool, bool]] = []
-
-    def apply_topmost_state(self, checked: bool, show: bool = True) -> None:
-        self.topmost_calls.append((bool(checked), bool(show)))
 
 
 def test_settings_page_toggles_update_settings_and_related_widgets(qtbot, monkeypatch) -> None:
@@ -70,21 +56,16 @@ def test_settings_page_toggles_update_settings_and_related_widgets(qtbot, monkey
     )
     page = SettingsPage(parent=fake_window)
     page.show()
-    qtbot.waitUntil(lambda: page.navigation_text_card.isChecked() is True)
+    qtbot.waitUntil(lambda: page.ask_save_card.isChecked() is True)
 
     page.auto_save_logs_combo.setCurrentIndex(page.auto_save_logs_combo.findData(3))
-    page._on_navigation_text_toggled(False)
-    page._on_topmost_toggled(True)
     page._on_submission_report_telemetry_toggled(False)
     page._on_auto_save_logs_toggled(True)
     page._on_auto_save_log_retention_changed()
 
-    assert fake_settings.data[NAVIGATION_TEXT_VISIBLE_SETTING_KEY] is False
-    assert fake_window.navigationInterface.visible is False
     assert fake_settings.data[AUTO_SAVE_LOGS_SETTING_KEY] is True
     assert fake_settings.data[SUBMISSION_REPORT_TELEMETRY_SETTING_KEY] is False
     assert fake_settings.data[AUTO_SAVE_LOG_RETENTION_COUNT_SETTING_KEY] == 3
-    assert fake_window.topmost_calls[-1] == (True, True)
 
 
 def test_settings_page_reset_restores_defaults(qtbot, monkeypatch) -> None:
@@ -108,9 +89,6 @@ def test_settings_page_reset_restores_defaults(qtbot, monkeypatch) -> None:
     assert fake_settings.cleared is True
     assert fake_settings.synced is True
     assert page.auto_save_logs_card.isChecked() is page._defaults[AUTO_SAVE_LOGS_SETTING_KEY]
-    assert (
-        page.navigation_text_card.isChecked() is page._defaults[NAVIGATION_TEXT_VISIBLE_SETTING_KEY]
-    )
     assert (
         page.task_result_notification_card.isChecked()
         is page._defaults[TASK_RESULT_SYSTEM_NOTIFICATION_SETTING_KEY]

@@ -41,7 +41,7 @@ def test_configuration_and_preferences_use_injected_ports():
     preferences.set("config_directory", "D:/configs")
     assert preferences.get("config_directory") == "D:/configs"
     preferences.remove("config_directory")
-    preferences.set("window_topmost", True)
+    preferences.set("existing_preference", True)
     preferences.reset()
     assert store.values == {}
     assert store.sync_count == 4
