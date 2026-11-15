@@ -354,10 +354,32 @@ def test_workbench_presenter_skips_duplicate_run_and_pause_notifications() -> No
     presenter.on_runtime_snapshot_changed(running_snapshot)
     presenter.on_runtime_snapshot_changed(dict(running_snapshot))
 
-    assert dashboard.run_states == []
+    assert dashboard.run_states == [True]
     assert reverse_fill_page.run_states == [True]
-    assert dashboard.pause_states == []
+    assert dashboard.pause_states == [(False, "")]
     assert reverse_fill_page.pause_states == [(False, "")]
+
+
+def test_workbench_presenter_switches_to_dashboard_execution_step_on_run_start() -> None:
+    presenter = _presenter_with_fakes()
+    switched: list[Any] = []
+    opened_execution_steps: list[bool] = []
+    presenter.host.switchTo = lambda target: switched.append(target)
+    presenter.dashboard.open_execution_step = lambda: opened_execution_steps.append(True)
+
+    presenter.on_runtime_snapshot_changed(
+        {
+            "running": True,
+            "paused": False,
+            "status_text": "已提交 0/4 份 | 提交连续失败 0 次",
+            "progress": {"current": 0, "target": 4},
+            "threads": {"rows": [], "num_threads": 2, "per_thread_target": 2},
+            "random_ip": {"loading": False, "loading_message": ""},
+        }
+    )
+
+    assert opened_execution_steps == [True]
+    assert switched == [presenter.dashboard]
 
 
 def test_workbench_presenter_builds_config_snapshot_from_single_builder_path() -> None:

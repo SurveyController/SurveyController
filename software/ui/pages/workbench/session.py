@@ -7,8 +7,10 @@ from PySide6.QtCore import QObject, Signal
 from PySide6.QtWidgets import QDialog, QWidget
 
 from surveycore.core.questions.config import QuestionEntry
+from surveycore.core.questions.utils import OPTION_FILL_AI_TOKEN
 from software.core.config.schema import RuntimeConfig
 from software.application.run_plan import compile_run_plan, question_id
+from software.integrations.ai import get_ai_readiness_error
 from software.logging.action_logger import log_action
 from software.ui.pages.workbench.shared.run_feedback import (
     get_completion_notified,
@@ -111,6 +113,19 @@ class WorkbenchRunCoordinator:
     def has_question_entries(self) -> bool:
         return self.state.has_question_entries()
 
+    def _uses_ai(self) -> bool:
+        for entry in self.state.get_entries():
+            if bool(getattr(entry, "ai_enabled", False)):
+                return True
+            if any(bool(flag) for flag in (getattr(entry, "multi_text_blank_ai_flags", None) or ())):
+                return True
+            if any(
+                str(value or "").strip() == OPTION_FILL_AI_TOKEN
+                for value in (getattr(entry, "option_fill_texts", None) or ())
+            ):
+                return True
+        return False
+
     def is_completed_run(self) -> bool:
         if self.reverse_fill_page is not None:
             return bool(
@@ -193,6 +208,21 @@ class WorkbenchRunCoordinator:
             if self.reverse_fill_page is not None:
                 self.reverse_fill_page._sync_start_button_state(running=False)
             return False
+
+        if self._uses_ai():
+            readiness_error = get_ai_readiness_error()
+            if readiness_error:
+                log_action(
+                    "RUN",
+                    "start_run",
+                    "start_btn",
+                    "dashboard",
+                    result="blocked",
+                    level=logging.WARNING,
+                    payload={"reason": "ai_config_incomplete"},
+                )
+                dashboard._toast(f"请先补全 AI 配置：{readiness_error}", "warning")
+                return False
 
         if self.is_completed_run():
             if self.reverse_fill_page is not None:

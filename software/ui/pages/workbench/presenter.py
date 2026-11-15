@@ -220,10 +220,14 @@ class WorkbenchPresenter:
             was_running = self._last_running_state
             self._last_running_state = running
             self.reverse_fill_page.on_run_state_changed(running)
+            if hasattr(self.dashboard, "on_run_state_changed"):
+                self.dashboard.on_run_state_changed(running)
             if was_running is not True and running:
+                if hasattr(self.dashboard, "open_execution_step"):
+                    self.dashboard.open_execution_step()
                 switch = getattr(self.host, "switchTo", None)
                 if callable(switch):
-                    switch(self.reverse_fill_page)
+                    switch(self.dashboard)
             if was_running and not running and self.dashboard._pending_restart:
                 self.dashboard._pending_restart = False
                 QTimer.singleShot(0, self.run_coordinator.start)
@@ -236,10 +240,34 @@ class WorkbenchPresenter:
             int(progress.get("current") or 0),
             int(progress.get("target") or 0),
         )
+        if hasattr(self.dashboard, "apply_runtime_snapshot"):
+            self.dashboard.apply_runtime_snapshot(snapshot or {})
+        else:
+            if hasattr(self.dashboard, "update_status"):
+                self.dashboard.update_status(
+                    str((snapshot or {}).get("status_text") or ""),
+                    int(progress.get("current") or 0),
+                    int(progress.get("target") or 0),
+                )
+            if hasattr(self.dashboard, "update_thread_progress"):
+                threads = (snapshot or {}).get("threads") or {}
+                self.dashboard.update_thread_progress(
+                    {
+                        "target": int(progress.get("target") or 0),
+                        "num_threads": int(threads.get("num_threads") or 0),
+                        "per_thread_target": int(threads.get("per_thread_target") or 0),
+                        "threads": list(threads.get("rows") or []),
+                        "running": running,
+                        "paused": paused,
+                        "phase_code": str((snapshot or {}).get("phase_code") or ""),
+                    }
+                )
         pause_state = (paused, pause_reason if paused else "")
         if getattr(self, "_last_pause_state", None) != pause_state:
             self._last_pause_state = pause_state
             self.reverse_fill_page.on_pause_state_changed(*pause_state)
+            if hasattr(self.dashboard, "on_pause_state_changed"):
+                self.dashboard.on_pause_state_changed(*pause_state)
 
     def sync_reverse_fill_context(self) -> None:
         try:

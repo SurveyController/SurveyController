@@ -193,6 +193,26 @@ def test_workbench_run_coordinator_blocks_restarts_and_builds_config(monkeypatch
     reverse_page._on_resume_clicked.assert_called_once()
 
 
+def test_workbench_run_coordinator_checks_ai_only_before_start(monkeypatch) -> None:
+    state = WorkbenchState()
+    state.set_entries([QuestionEntry("text", None, ai_enabled=True)], [])
+    dashboard = SimpleNamespace(
+        _completion_notified=False,
+        _last_progress=0,
+        _pending_restart=False,
+        _toast=MagicMock(),
+        build_base_config=MagicMock(return_value=RuntimeConfig(target=1, threads=1)),
+    )
+    controller = SimpleNamespace(running=False, start_run=MagicMock())
+    coordinator = WorkbenchRunCoordinator(controller=controller, state=state, dashboard=dashboard)
+
+    monkeypatch.setattr(session_module, "get_ai_readiness_error", lambda: "缺少 API Key")
+
+    assert coordinator.start() is False
+    controller.start_run.assert_not_called()
+    dashboard._toast.assert_called_once_with("请先补全 AI 配置：缺少 API Key", "warning")
+
+
 def test_presenter_apply_load_build_and_url_sync(monkeypatch) -> None:
     p = _presenter()
     cfg = RuntimeConfig(

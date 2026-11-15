@@ -23,6 +23,7 @@ from qfluentwidgets import (
 from qfluentwidgets.common.animation import FluentAnimation
 
 from software.ui.helpers.fluent_tooltip import install_tooltip_filter
+from software.ui.pages.workbench.dashboard.execution_panel import DashboardExecutionPanel
 from software.ui.pages.workbench.dashboard.run_setup_panel import DashboardRunSetupPanel
 from software.ui.widgets.paste_only_menu import PasteOnlyMenu
 
@@ -246,7 +247,31 @@ def build_dashboard_page_ui(page: Any) -> None:
     run_setup_panel.backRequested.connect(page._reopen_inline_wizard_from_run_setup)
     run_setup_panel.startRequested.connect(lambda: page._on_start_clicked())
 
+    execution_host = QWidget(main_stack)
+    execution_host.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, False)
+    execution_host.setAutoFillBackground(False)
+    execution_host_layout = QVBoxLayout(execution_host)
+    execution_host_layout.setContentsMargins(0, 0, 0, 0)
+    execution_host_layout.setSpacing(0)
+    execution_panel = DashboardExecutionPanel(execution_host)
+    execution_host_layout.addWidget(execution_panel, 1)
+    page.execution_host = execution_host
+    page.execution_panel = execution_panel
+
+    execution_panel.backRequested.connect(page.return_to_run_setup_step)
+    pause_run = getattr(page.controller, "pause_run", None)
+    if callable(pause_run):
+        execution_panel.pauseRequested.connect(pause_run)
+    resume_run = getattr(page.controller, "resume_run", None)
+    if callable(resume_run):
+        execution_panel.resumeRequested.connect(resume_run)
+    stop_run = getattr(page.controller, "stop_run", None)
+    if callable(stop_run):
+        execution_panel.stopRequested.connect(stop_run)
+    execution_panel.restartRequested.connect(lambda: page._on_start_clicked())
+
     main_stack.addWidget(home_view)
     main_stack.addWidget(wizard_host)
     main_stack.addWidget(run_setup_host)
+    main_stack.addWidget(execution_host)
     main_stack.setCurrentWidget(home_view)

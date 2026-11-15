@@ -64,6 +64,31 @@ class DashboardPage(
     def set_run_coordinator(self, coordinator) -> None:
         self.run_coordinator = coordinator
 
+    def apply_runtime_snapshot(self, snapshot: dict) -> None:
+        panel = getattr(self, "execution_panel", None)
+        if panel is not None:
+            panel.apply_runtime_snapshot(snapshot)
+
+    def on_run_state_changed(self, running: bool) -> None:
+        panel = getattr(self, "execution_panel", None)
+        if panel is not None:
+            panel.on_run_state_changed(running)
+
+    def update_status(self, text: str, current: int, target: int) -> None:
+        panel = getattr(self, "execution_panel", None)
+        if panel is not None:
+            panel.update_status(text, current, target)
+
+    def update_thread_progress(self, payload: dict) -> None:
+        panel = getattr(self, "execution_panel", None)
+        if panel is not None:
+            panel.update_thread_progress(payload)
+
+    def on_pause_state_changed(self, paused: bool, reason: str = "") -> None:
+        panel = getattr(self, "execution_panel", None)
+        if panel is not None:
+            panel.on_pause_state_changed(paused, reason)
+
     def _build_ui(self):
         build_dashboard_page_ui(self)
 

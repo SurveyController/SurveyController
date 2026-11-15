@@ -1,5 +1,5 @@
 from html import escape
-from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple, cast
+from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple
 
 from PySide6.QtCore import QRegularExpression, Qt
 from PySide6.QtGui import QRegularExpressionValidator
@@ -13,7 +13,6 @@ from surveycore.core.questions.utils import (
     try_parse_random_int_range,
 )
 from surveycore.providers.contracts import SurveyQuestionMeta
-from software.ui.helpers.ai_fill import ensure_ai_ready
 from software.ui.widgets.no_wheel import NoWheelSlider
 
 from .question_media_preview import MediaFetcher, QuestionMediaThumbnail
@@ -282,10 +281,6 @@ class WizardSectionsCommonMixin:
         self._sync_option_fill_state(state)
 
     def _on_option_fill_ai_toggled(self, state: Dict[str, Any], checked: bool) -> None:
-        ai_cb = state.get("ai_cb")
-        if checked and not self._ensure_ai_checkbox_ready(ai_cb):
-            self._sync_option_fill_state(state)
-            return
         if checked:
             list_radio = state.get("radios", {}).get("list")
             if list_radio is not None:
@@ -396,13 +391,6 @@ class WizardSectionsCommonMixin:
 
     def _on_entry_ai_toggled(self, idx: int, checked: bool) -> None:
         random_mode = self.text_random_mode_map.get(idx, _TEXT_RANDOM_NONE)
-        if checked and not self._ensure_ai_checkbox_ready(self.ai_check_map.get(idx)):
-            cb = self.ai_check_map.get(idx)
-            if cb:
-                cb.setEnabled(True)
-            self._set_text_answer_enabled(idx, True)
-            self._sync_text_section_state(idx)
-            return
         if checked and random_mode != _TEXT_RANDOM_NONE:
             list_radio = self.text_random_list_radio_map.get(idx)
             self.text_random_mode_map[idx] = _TEXT_RANDOM_NONE
@@ -410,18 +398,5 @@ class WizardSectionsCommonMixin:
                 list_radio.setChecked(True)
         self._sync_text_section_state(idx)
 
-    def _ensure_ai_checkbox_ready(self, checkbox: Any) -> bool:
-        if checkbox is None:
-            return False
-        if ensure_ai_ready(cast(QWidget, self).window() or cast(QWidget, self)):
-            return True
-        checkbox.blockSignals(True)
-        checkbox.setChecked(False)
-        checkbox.blockSignals(False)
-        return False
-
     def _on_multi_text_blank_ai_toggled(self, checkbox: Any, checked: bool, sync_func: Any) -> None:
-        if checked and not self._ensure_ai_checkbox_ready(checkbox):
-            sync_func()
-            return
         sync_func()

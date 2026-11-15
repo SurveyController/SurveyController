@@ -72,7 +72,18 @@ class DashboardRunActionsMixin:
     def _on_start_clicked(self, enable_reverse_fill: bool = False):
         coordinator = getattr(self, "run_coordinator", None)
         if coordinator is not None:
-            coordinator.start(enable_reverse_fill=enable_reverse_fill)
+            started = coordinator.start(enable_reverse_fill=enable_reverse_fill)
+            if started:
+                panel = getattr(self, "execution_panel", None)
+                if panel is not None and hasattr(panel, "reset_for_new_run"):
+                    run_setup = getattr(self, "run_setup_panel", None)
+                    target = 0
+                    if run_setup is not None and hasattr(run_setup, "target_spin"):
+                        target = int(run_setup.target_spin.value())
+                    panel.reset_for_new_run(target)
+                opener = getattr(self, "open_execution_step", None)
+                if callable(opener):
+                    opener()
             return
         log_action(
             "RUN",

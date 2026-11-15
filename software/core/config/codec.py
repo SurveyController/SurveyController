@@ -143,6 +143,15 @@ _RUNTIME_CONFIG_FIELDS = {
     field.name for field in fields(RuntimeConfig) if not field.name.startswith("_")
 }
 _RUNTIME_CONFIG_FIELDS.update({"question_entries", "questions_info"})
+_LEGACY_CONFIG_ROOT_FIELDS = {
+    "answers",
+    "execution",
+    "network",
+    "psychometrics",
+    "reverseFill",
+    "schemaVersion",
+    "survey",
+}
 
 
 def _coerce_int(value: Any, default: int = 0) -> int:
@@ -522,7 +531,7 @@ def normalize_runtime_config_payload(raw: Dict[str, Any]) -> RuntimeConfig:
     config = RuntimeConfig()
     config.schema_version = CONFIG_SCHEMA_VERSION
     unknown_keys = set(raw or {}) - _RUNTIME_CONFIG_FIELDS
-    if unknown_keys:
+    if unknown_keys and not set(raw or {}).issubset(_LEGACY_CONFIG_ROOT_FIELDS):
         logging.warning("忽略配置中的未知字段：%s", ", ".join(sorted(unknown_keys)))
     config.url = str(raw.get("url") or "")
     config.survey_title = str(raw.get("survey_title") or "")

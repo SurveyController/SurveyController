@@ -354,6 +354,24 @@ class DashboardEntriesMixin:
         run_setup_panel.sync_from_runtime()
         main_stack.setCurrentWidget(run_setup_host, isBack=False)
 
+    def open_execution_step(self) -> None:
+        main_stack = getattr(self, "main_stack", None)
+        execution_host = getattr(self, "execution_host", None)
+        if main_stack is None or execution_host is None:
+            return
+        main_stack.setCurrentWidget(execution_host, isBack=False)
+
+    def return_to_run_setup_step(self) -> None:
+        main_stack = getattr(self, "main_stack", None)
+        run_setup_host = getattr(self, "run_setup_host", None)
+        run_setup_panel = getattr(self, "run_setup_panel", None)
+        if main_stack is None or run_setup_host is None:
+            self.return_to_home_view()
+            return
+        if run_setup_panel is not None and hasattr(run_setup_panel, "sync_from_runtime"):
+            run_setup_panel.sync_from_runtime()
+        main_stack.setCurrentWidget(run_setup_host, isBack=True)
+
     def _reopen_inline_wizard_from_run_setup(self) -> None:
         entries = self.workbench_state.get_entries()
         info = self.workbench_state.entry_questions_info or []
