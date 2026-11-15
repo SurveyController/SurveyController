@@ -2,12 +2,12 @@ from __future__ import annotations
 
 from PySide6.QtCore import QAbstractAnimation
 from PySide6.QtWidgets import QWidget
-from qfluentwidgets import IndeterminateProgressBar, InfoBarPosition
+from qfluentwidgets import FluentWindow, IndeterminateProgressBar, InfoBarPosition
 from shiboken6 import isValid
 
 from software.ui.helpers.message_bar import replace_message_bar, show_message_bar
 from software.ui.helpers.qfluent_compat import install_qfluentwidgets_animation_guards
-from software.ui.shell.main_window import create_window
+from software.ui.shell.main_window import MainWindow
 
 
 def test_real_infobar_top_message_bar_stays_usable_after_upgrade(qtbot) -> None:
@@ -80,7 +80,7 @@ def test_main_window_real_startup_smoke_under_upgraded_qt_stack(monkeypatch, qtb
     install_qfluentwidgets_animation_guards()
     monkeypatch.setenv("WJX_IMPORT_CHECK", "1")
 
-    window = create_window()
+    window = MainWindow()
     window._schedule_deferred_close_confirmation = lambda: None
     window.controller.request_shutdown_for_close = lambda timeout_seconds=5.0: None
 
@@ -89,8 +89,10 @@ def test_main_window_real_startup_smoke_under_upgraded_qt_stack(monkeypatch, qtb
     qtbot.waitUntil(lambda: window.isVisible(), timeout=1000)
 
     assert window.windowTitle().startswith("SurveyController v")
+    assert isinstance(window, FluentWindow)
     assert window.navigationInterface is not None
-    assert window.stackedWidget.count() >= 4
+    assert 48 < window.navigationInterface.width() <= 193
+    assert window.stackedWidget.count() >= 3
     assert window.workbench is not None
 
     window._close_request_confirmed = True

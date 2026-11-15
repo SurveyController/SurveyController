@@ -31,11 +31,13 @@ description: 面向 SurveyController 桌面端的 GUI 开发与界面修复技�
 
 ## instructions
 
-1. 先读入口和页面装配点。
+1. 先读入口、工作台装配点和目标页面。
    必读：
    - `software/app/main.py`
    - `software/ui/shell/main_window.py`
    - `software/ui/shell/main_window_parts/lazy_pages.py`
+   - `software/ui/pages/workbench/presenter.py`
+   - `software/ui/pages/workbench/session.py`
    - 相关页面模块
 2. 优先复用现有 PySide6 / QFluentWidgets 组件。
    不要自己造一套风格。
@@ -55,18 +57,25 @@ description: 面向 SurveyController 桌面端的 GUI 开发与界面修复技�
    - 相关 `software/io/` 和页面同步模块
 6. 涉及运行状态时，优先检查：
    - `software/ui/controller/`
+   - `software/ui/pages/workbench/dashboard/`
+   - `software/ui/pages/workbench/session.py`
    - `software/ui/pages/workbench/runtime_panel/`
    - `software/ui/pages/workbench/log_panel/`
-   - `software/ui/pages/workbench/dashboard/`
-7. 不要吞异常。
+   - `software/ui/pages/workbench/reverse_fill/`
+7. 主页相关改动要区分页面装配和导航懒加载：
+   - 工作台由 `WorkbenchPresenter` 在主窗口启动时装配。
+   - `DashboardPage` 内部的 `home_view`、题目向导和 `DashboardRunSetupPanel` 负责主页流程。
+   - `RuntimePage` 是共享运行配置承载对象，当前隐藏侧边栏入口；不要把它当成独立导航页重新接回去。
+   - 日志、社区、关于、捐赠和设置页仍通过 `MainWindowLazyPagesMixin` 按需加载。
+8. 不要吞异常。
    用户至少要看到清楚的错误反馈，日志里也要能追。
-8. 修改后做基本 smoke test。
+9. 修改后做基本 smoke test。
    至少确保应用能启动，并能进入相关页面。
 
 ## project_conventions
 
 - GUI 主目录是真实存在的 `software/ui/`。
-- 设置页、更多页、工作台页都通过主窗口懒加载组织，别乱改路由键。
+- 工作台由 `WorkbenchPresenter` 直接装配；设置、更多、社区和日志等辅助页通过主窗口懒加载。侧边栏路由键仍由 `software/ui/shell/main_window_parts/lazy_pages.py` 集中维护。
 - 资源路径别写死安装目录。只读资源看 `software/app/runtime_paths.py`，用户可写配置看 `software/app/user_paths.py`。
 - 改 UI 优先用 QFluentWidgets 原生组件。
 - 不要把内部解释、迁移提示、开发说明直接写进图形界面。
@@ -79,6 +88,8 @@ uv run python SurveyController.py
 uv run pytest CI/unit_tests/app
 uv run pytest CI/unit_tests/app/test_runtime_panel_cards_qtbot.py
 uv run pytest CI/unit_tests/app/test_question_wizard_dialog_qtbot.py
+uv run pytest CI/unit_tests/app/test_workbench_pages_smoke.py CI/unit_tests/app/test_workbench_presenter.py CI/unit_tests/app/test_workbench_session.py
+uv run pytest CI/unit_tests/app/test_dashboard_parts.py CI/unit_tests/app/test_dashboard_entries_run_actions.py
 uv run pytest CI/unit_tests/app/test_quota_redeem_dialog.py
 uv run python CI/python_ci.py
 uv run python CI/python_ci.py --full

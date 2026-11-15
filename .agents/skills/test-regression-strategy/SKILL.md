@@ -20,6 +20,7 @@ description: 面向 SurveyController 仓库的测试分层与回归选择技能�
 1. 先给改动分类。
    常见类别：
    - `software/ui/`、`software/ui/controller/`：UI、信号槽、页面同步
+   - `software/ui/pages/workbench/`：`WorkbenchPresenter` 装配、主页内部步骤、运行配置同步和工作台状态
    - `software/app/`、`software/io/config/`：配置、路径、迁移、序列化
    - `software/core/engine/`、`software/network/`、`software/providers/`：执行链路、HTTP、代理、并发
    - `wjx/`、`tencent/`、`credamo/`：平台 parser、题型规则、提交参数
@@ -63,7 +64,7 @@ description: 面向 SurveyController 仓库的测试分层与回归选择技能�
 按改动选远端 CI 中应覆盖的测试：
 
 - 配置、路径、序列化：`CI/unit_tests/app/` 的 codec、store、设置页用例。
-- UI 页面和工作台同步：相关 Qt 单测与离屏 smoke job。
+- UI 页面和工作台同步：相关 Qt 单测、`test_workbench_pages_smoke.py`、`test_workbench_presenter.py`、`test_workbench_session.py`，以及 dashboard parts 用例。
 - 执行引擎、异步链路、HTTP：`CI/unit_tests/engine/`、HTTP client 与 Provider HTTP runtime 用例。
 - parser、题型规则、平台字段：`CI/unit_tests/questions/`、`CI/unit_tests/providers/` 与反填解析用例。
 - 版本检查、发布：更新与元数据的离线用例；独立包构建不进入默认 CI。
@@ -72,7 +73,7 @@ description: 面向 SurveyController 仓库的测试分层与回归选择技能�
 
 - 快速检查覆盖 compile、Ruff lint/format、ty 和 unit tests。
 - 完整检查额外覆盖模块导入和主窗口离屏 smoke。
-- `CI/live_tests/test_live_runtime_regression.py` 依赖真实外部页面，不适合日常修复必跑。
+- `CI/live_tests/surveycore_regression.py` 依赖真实外部问卷和网络，不适合日常修复必跑；其可重复的逻辑回归在 `CI/unit_tests/test_surveycore_live_regression.py`。
 - 覆盖率门槛在 `CI/python_checks/common.py` 里：全仓 80%，core/application/network 85%，Provider 80%，UI 65%，并分别检查行与分支覆盖率。
 - CI 或最小本地复现生成的临时文件、覆盖率产物按仓库规则清理。
 

@@ -47,7 +47,7 @@ description: 面向 SurveyController 仓库的目录结构重构与模块拆分�
 4. 移动文件后立刻修这些东西：
    - Python import 路径
    - `__init__.py` 暴露
-   - Qt 懒加载导入路径
+   - `WorkbenchPresenter` 的工作台装配和主窗口辅助页懒加载导入路径
    - 资源文件路径
    - `CI/python_ci.py`、`CI/python_checks/`、测试文件中的路径引用
 5. 优先保留现有公开接口。
@@ -65,6 +65,8 @@ description: 面向 SurveyController 仓库的目录结构重构与模块拆分�
 - 仓库没有顶层 `tests/`，测试在 `CI/unit_tests/` 和 `CI/live_tests/`。
 - `requirements.txt` 当前不存在，依赖以 `pyproject.toml` 和 `uv.lock` 为准。
 - GUI 代码优先留在 `software/ui/`，不要把业务实现塞进页面文件。
+- 工作台页面由 `software/ui/pages/workbench/presenter.py` 统一装配；概览主页的内部步骤位于 `dashboard/`，不要通过主窗口懒加载机制装配工作台。
+- `RuntimePage` 仍可作为工作台内部共享配置承载对象，但当前不注册为侧边栏导航项。
 - 平台解析和 HTTP 提交逻辑优先留在各自 `*/provider/`。
 - 纯 HTTP 链路已经固化，`software/providers/registry.py` 明确禁用浏览器填答兜底。别把这坨屎又搬回来。
 - 改顶层目录时，同步更新 `AGENTS.md` 和 `CONTRIBUTING.md`。
@@ -88,5 +90,6 @@ rg --files software CI wjx tencent credamo
 - 是否只做本次问题需要的结构调整，没有无关大重排。
 - 文件移动后 import、测试路径、资源路径、CI 路径是否已修完。
 - `software/`、平台目录、测试目录的职责边界是否更清楚。
+- 工作台装配、主页内部导航和主窗口辅助页懒加载是否仍与现有边界一致。
 - 相关测试和检查是否已运行；没跑要说明原因。
 - 如果改了顶层目录，`AGENTS.md` 和 `CONTRIBUTING.md` 是否同步更新。

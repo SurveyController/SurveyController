@@ -6,54 +6,50 @@ import sys
 from types import SimpleNamespace
 from typing import List, cast
 
-from PySide6.QtCore import QPoint, Qt, QTimer, QEvent, Slot
-from PySide6.QtGui import QIcon, QGuiApplication
+from PySide6.QtCore import QEvent, QPoint, Qt, QTimer, Slot
+from PySide6.QtGui import QGuiApplication, QIcon
 from PySide6.QtWidgets import QDialog, QStackedWidget, QWidget
 from qfluentwidgets import (
-    InfoBar,
-    InfoBarPosition,
-    MSFluentWindow,
-    Theme,
+    FluentWindow,
     Flyout,
     FlyoutAnimationType,
+    InfoBar,
+    InfoBarPosition,
+    Theme,
     qconfig,
     setTheme,
     setThemeColor,
 )
 from shiboken6 import isValid
 
-from software.ui.dialogs.quota_redeem import QuotaRedeemDialog
-
+from software.app.app_info import APP_VERSION
 from software.app.bootstrap import create_application_dependencies
-from software.ui.controller.run_controller import RunController
-from software.ui.pages.workbench.presenter import WorkbenchPresenter
-from software.ui.shell.main_window_parts.dialogs import MainWindowDialogsMixin
-from software.ui.shell.main_window_parts.lifecycle import (
-    MainWindowLifecycleMixin,
-)
-from software.ui.shell.main_window_parts.lazy_pages import (
-    MainWindowLazyPagesMixin,
-)
-from software.ui.shell.main_window_parts.update import MainWindowUpdateMixin
 from software.app.config import (
     APP_ICON_RELATIVE_PATH,
     NAVIGATION_TEXT_VISIBLE_SETTING_KEY,
     app_settings,
     get_bool_from_qsettings,
 )
+from software.app.runtime_paths import get_resource_path
+from software.logging.action_logger import log_action
+from software.logging.log_utils import register_popup_handler
+from software.ui.controller.run_controller import RunController
+from software.ui.dialogs.quota_redeem import QuotaRedeemDialog
+from software.ui.pages.workbench.presenter import WorkbenchPresenter
+from software.ui.shell.boot import create_boot_splash, finish_boot_splash
+from software.ui.shell.main_window_parts.dialogs import MainWindowDialogsMixin
+from software.ui.shell.main_window_parts.lazy_pages import (
+    MainWindowLazyPagesMixin,
+)
+from software.ui.shell.main_window_parts.lifecycle import (
+    MainWindowLifecycleMixin,
+)
+from software.ui.shell.main_window_parts.update import MainWindowUpdateMixin
 from software.ui.shell.startup_tutorial import (
     STARTUP_TUTORIAL_HINT_SEEN_SETTING_KEY,
     TUTORIAL_DOC_URL,
     StartupTutorialFlyoutView,
 )
-from software.logging.action_logger import log_action
-from software.logging.log_utils import register_popup_handler
-from software.app.app_info import APP_VERSION
-from software.app.runtime_paths import get_resource_path
-
-from software.ui.shell.boot import create_boot_splash, finish_boot_splash
-
-_BaseFluentWindow = MSFluentWindow
 
 
 class _ImportCheckWindow(QWidget):
@@ -83,7 +79,7 @@ class MainWindow(
     MainWindowLifecycleMixin,
     MainWindowLazyPagesMixin,
     MainWindowUpdateMixin,
-    _BaseFluentWindow,
+    FluentWindow,
 ):
     _IMPORT_CHECK_ENV = "WJX_IMPORT_CHECK"
 
@@ -161,6 +157,8 @@ class MainWindow(
         self._last_logged_page = ""
 
         self._init_navigation()
+        self.navigationInterface.setExpandWidth(193)
+        self.navigationInterface.expand(useAni=False)
         self.stackedWidget.currentChanged.connect(self._on_stack_widget_changed)
 
         QTimer.singleShot(0, self._configure_navigation_interface)
