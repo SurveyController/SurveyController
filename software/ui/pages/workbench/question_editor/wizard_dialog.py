@@ -265,7 +265,7 @@ class QuestionWizardBase(
         btn_row.addWidget(ok_btn)
         layout.addLayout(btn_row)
 
-        self._set_search_status("点下拉结果或回车即可跳转")
+        self._set_search_status("")
 
     def _clamp_splitter_sizes(self, *_args) -> None:
         splitter = self._content_splitter

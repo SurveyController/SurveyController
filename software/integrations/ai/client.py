@@ -6,7 +6,6 @@ from typing import List, Optional, Union
 from software.integrations.ai.errors import AIConfigurationError
 from software.core.task import ExecutionState
 from software.integrations.ai.protocols import (
-    _CHAT_COMPLETIONS_SUFFIX,
     _RESPONSES_SUFFIX,
     acall_chat_completions,
     acall_responses_api,
@@ -67,46 +66,35 @@ async def agenerate_answer(
     if not api_key:
         raise AIConfigurationError("请先配置 API Key")
 
-    provider = str(config.get("provider") or "deepseek")
-    if provider == "custom":
-        base_url = str(config.get("base_url") or "")
-        api_protocol = _normalize_custom_api_protocol(config.get("api_protocol"))
-        model = str(config.get("model") or "")
-        if not base_url:
-            raise AIConfigurationError("自定义模式需要配置 Base URL")
-        if not model:
-            raise AIConfigurationError("自定义模式需要配置模型名称")
-        resolved_protocol, request_url, has_explicit_endpoint = _resolve_custom_endpoint(
-            base_url, api_protocol
+    base_url = str(config.get("base_url") or "")
+    api_protocol = _normalize_custom_api_protocol(config.get("api_protocol"))
+    model = str(config.get("model") or "")
+    if not base_url:
+        raise AIConfigurationError("OpenAI 兼容模式需要配置 Base URL")
+    if not model:
+        raise AIConfigurationError("OpenAI 兼容模式需要配置模型名称")
+    resolved_protocol, request_url, has_explicit_endpoint = _resolve_custom_endpoint(
+        base_url, api_protocol
+    )
+    if resolved_protocol == "responses":
+        return await acall_responses_api(
+            request_url, api_key, model, question_title, system_prompt
         )
-        if resolved_protocol == "responses":
-            return await acall_responses_api(
-                request_url, api_key, model, question_title, system_prompt
-            )
-        try:
-            return await acall_chat_completions(
-                request_url, api_key, model, question_title, system_prompt
-            )
-        except Exception as exc:
-            if (
-                has_explicit_endpoint
-                or api_protocol != "auto"
-                or not _is_endpoint_mismatch_error(exc)
-            ):
-                raise
-            fallback_url = f"{_normalize_endpoint_url(base_url)}{_RESPONSES_SUFFIX}"
-            return await acall_responses_api(
-                fallback_url, api_key, model, question_title, system_prompt
-            )
-
-    provider_config = AI_PROVIDERS.get(provider)
-    if not provider_config:
-        raise AIConfigurationError(f"不支持的 AI 服务提供商: {provider}")
-    base_url = str(provider_config["base_url"])
-    model = str(config.get("model") or provider_config["default_model"])
-
-    request_url = f"{_normalize_endpoint_url(base_url)}{_CHAT_COMPLETIONS_SUFFIX}"
-    return await acall_chat_completions(request_url, api_key, model, question_title, system_prompt)
+    try:
+        return await acall_chat_completions(
+            request_url, api_key, model, question_title, system_prompt
+        )
+    except Exception as exc:
+        if (
+            has_explicit_endpoint
+            or api_protocol != "auto"
+            or not _is_endpoint_mismatch_error(exc)
+        ):
+            raise
+        fallback_url = f"{_normalize_endpoint_url(base_url)}{_RESPONSES_SUFFIX}"
+        return await acall_responses_api(
+            fallback_url, api_key, model, question_title, system_prompt
+        )
 
 
 async def atest_connection() -> str:

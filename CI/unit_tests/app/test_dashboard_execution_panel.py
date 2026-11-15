@@ -71,8 +71,6 @@ def test_execution_panel_renders_four_progress_bar_states(qtbot) -> None:
     assert panel.overall_indeterminate_ring.isHidden() is True
     assert panel.summary_label.text() == "1 / 4 份"
     assert panel.overall_status_label.text() == "执行中"
-    assert panel.overall_fail_label.text() == "连续失败 0 次"
-    assert panel.sessions_count_label.text() == "4 个"
 
     row_percent = panel._session_rows["Slot-1"]
     assert row_percent["name"].text() == "会话 1"
@@ -102,7 +100,6 @@ def test_execution_panel_renders_four_progress_bar_states(qtbot) -> None:
     for row in panel._session_rows.values():
         assert "·" not in row["name"].text()
         assert "·" not in row["status"].text()
-        assert "·" not in row["counter"].text()
         assert "·" not in row["pct"].text()
 
 
@@ -134,7 +131,7 @@ def test_execution_panel_overall_states_and_controls(qtbot) -> None:
     )
     panel.on_pause_state_changed(True, "用户手动暂停")
     assert panel.overall_progress_ring.isPaused() is True
-    assert panel.overall_status_label.text() == "已暂停：用户手动暂停"
+    assert panel.overall_status_label.text() == "已暂停"
     assert panel.pause_resume_btn.text() == "继续执行"
 
     panel.on_run_state_changed(False)

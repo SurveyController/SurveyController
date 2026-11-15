@@ -91,22 +91,15 @@ class _FakeController(QObject):
 
 class _FakeAiSettings:
     providers = {
-        "deepseek": {
-            "label": "DeepSeek",
-            "recommended_models": ["deepseek-flash", "deepseek-v4-pro"],
-            "default_model": "deepseek-flash",
-        },
         "custom": {
             "label": "OpenAI 兼容",
-            "recommended_models": [],
-            "default_model": "",
         },
     }
 
     def __init__(self) -> None:
         self.settings = {
             "ai_mode": "provider",
-            "provider": "deepseek",
+            "provider": "custom",
             "api_key": "",
             "base_url": "",
             "api_protocol": "auto",
@@ -194,12 +187,15 @@ def test_runtime_page_builds_and_syncs_config_without_network(monkeypatch, qtbot
     assert cfg.answer_datetime_window == ("", "")
     assert cfg.ai_system_prompt
     assert cfg.ai_mode == "provider"
+    assert page.ai_section.ai_provider_combo.count() == 1
+    assert page.ai_section.ai_provider_combo.currentData() == "custom"
+    assert not hasattr(page.ai_section, "ai_model_combo")
     assert not hasattr(page.ai_section, "ai_mode_combo")
     assert not hasattr(page.ai_section, "ai_free_mode_bar")
 
 
 @pytest.mark.parametrize(
-    "provider,model", [("custom", "test-model"), ("deepseek", "deepseek-v4-pro")]
+    "provider,model", [("custom", "test-model"), ("deepseek", "legacy-model")]
 )
 def test_runtime_ai_preserves_saved_model_when_loading_legacy_config(
     monkeypatch, qtbot, provider, model
@@ -224,7 +220,7 @@ def test_runtime_ai_preserves_saved_model_when_loading_legacy_config(
     page.apply_config(cfg)
     page.update_config(cfg)
     assert cfg.ai_mode == "provider"
-    assert cfg.ai_provider == provider
+    assert cfg.ai_provider == "custom"
     assert cfg.ai_model == model
     assert cfg.ai_api_key == "test-key"
     assert cfg.ai_system_prompt == "用户提示词"

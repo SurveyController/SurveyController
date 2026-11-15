@@ -57,7 +57,7 @@ def test_saving_ai_session_keeps_new_api_key_out_of_qsettings() -> None:
 def test_ai_defaults_require_api_key_and_include_multi_blank_instructions() -> None:
     config = settings.get_ai_settings()
     assert config["ai_mode"] == "provider"
-    assert settings.get_ai_readiness_error(config) == "缺少 API Key"
+    assert settings.get_ai_readiness_error(config) == "缺少 API Key、Base URL、模型 ID"
     assert '["答案1", "答案2"]' in config["system_prompt"]
     assert RuntimeConfig().ai_mode == "provider"
     assert ExecutionConfig().ai_mode == "provider"
@@ -86,7 +86,7 @@ def test_runtime_config_normalizes_legacy_mode_without_losing_provider_fields(mo
 @pytest.mark.asyncio
 async def test_legacy_mode_without_key_fails_before_provider_request(monkeypatch) -> None:
     monkeypatch.setattr(
-        client, "get_ai_settings", lambda: {"ai_mode": "free", "provider": "deepseek"}
+        client, "get_ai_settings", lambda: {"ai_mode": "free", "provider": "custom"}
     )
 
     async def unexpected_request(*_args, **_kwargs):
@@ -95,6 +95,29 @@ async def test_legacy_mode_without_key_fails_before_provider_request(monkeypatch
     monkeypatch.setattr(client, "acall_chat_completions", unexpected_request)
     with pytest.raises(AIConfigurationError, match="缺少 API Key"):
         await client.agenerate_answer("题目")
+
+
+def test_ai_settings_normalize_legacy_builtin_provider_to_openai_compatible(monkeypatch) -> None:
+    class Store:
+        values = {
+            "ai/provider": "deepseek",
+            "ai/base_url": "https://example.test/v1",
+            "ai/model": "legacy-model",
+        }
+
+        def value(self, key, default=None):
+            return self.values.get(key, default)
+
+    monkeypatch.setattr(settings, "_get_settings_store", Store)
+    settings._RUNTIME_AI_SETTINGS = None
+
+    config = settings.get_ai_settings()
+
+    assert set(settings.AI_PROVIDERS) == {"custom"}
+    assert config["provider"] == "custom"
+    assert config["base_url"] == "https://example.test/v1"
+    assert config["model"] == "legacy-model"
+    settings._RUNTIME_AI_SETTINGS = None
 
 
 @pytest.mark.asyncio

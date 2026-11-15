@@ -35,7 +35,7 @@ class RuntimeConfig:
     reliability_mode_enabled: bool = True
     psycho_target_alpha: float = 0.85
     ai_mode: str = "provider"
-    ai_provider: str = "deepseek"
+    ai_provider: str = "custom"
     ai_api_key: str = ""
     ai_base_url: str = ""
     ai_api_protocol: str = "auto"

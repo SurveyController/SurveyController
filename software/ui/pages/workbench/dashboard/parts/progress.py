@@ -124,7 +124,6 @@ class DashboardProgressMixin:
         thread_view_question_card: QWidget
         thread_view_progress_card: QWidget
         thread_progress_panel: QWidget
-        thread_progress_hint: BodyLabel
         thread_progress_rows_container: QWidget
         thread_progress_rows_layout: QVBoxLayout
         _thread_progress_rows: Dict[str, Dict[str, Any]]
@@ -262,12 +261,6 @@ class DashboardProgressMixin:
         thread_panel_layout.setContentsMargins(0, 4, 0, 0)
         thread_panel_layout.setSpacing(6)
         thread_panel_layout.setAlignment(Qt.AlignmentFlag.AlignTop)
-        self.thread_progress_hint = BodyLabel(
-            "会话进度会在任务开始后显示", self.thread_progress_panel
-        )
-        self.thread_progress_hint.setWordWrap(True)
-        self.thread_progress_hint.setStyleSheet("color: #6b6b6b;")
-        thread_panel_layout.addWidget(self.thread_progress_hint)
         self.thread_progress_rows_container = QWidget(self.thread_progress_panel)
         self.thread_progress_rows_layout = QVBoxLayout(self.thread_progress_rows_container)
         self.thread_progress_rows_layout.setContentsMargins(0, 0, 0, 0)
@@ -467,8 +460,6 @@ class DashboardProgressMixin:
             self._dispose_thread_progress_widget(widget)
         self._thread_progress_rows.clear()
         self._last_device_quota_fail_count = 0
-        self.thread_progress_hint.show()
-        self.thread_progress_hint.setText("会话进度会在任务开始后显示")
         self._refresh_thread_progress_layout()
 
     def _dispose_thread_progress_widget(self, widget: QWidget) -> None:
@@ -657,8 +648,6 @@ class DashboardProgressMixin:
             self._set_main_progress_indeterminate(True)
             if self._thread_progress_rows:
                 self._clear_thread_progress_rows()
-            self.thread_progress_hint.show()
-            self.thread_progress_hint.setText("会话进度会在任务开始后显示")
             return
 
         self._set_main_progress_indeterminate(False)
@@ -673,19 +662,9 @@ class DashboardProgressMixin:
         if running_now:
             self._thread_clear_timer.stop()
         if not thread_rows:
-            if running_now:
-                refresh_needed = self.thread_progress_hint.isHidden()
-                self.thread_progress_hint.show()
-                previous_text = self.thread_progress_hint.text()
-                self.thread_progress_hint.setText("正在等待会话状态...")
-                if refresh_needed or previous_text != self.thread_progress_hint.text():
-                    self._refresh_thread_progress_layout()
             return
 
         layout_changed = False
-        if not self.thread_progress_hint.isHidden():
-            self.thread_progress_hint.hide()
-            layout_changed = True
         if (
             running_now
             and getattr(self, "_thread_view_current", self.THREAD_VIEW_QUESTION_LIST)
@@ -768,7 +747,6 @@ class DashboardProgressMixin:
                 self._set_main_progress_indeterminate(True)
                 self.progress_pct.setText("...")
             else:
-                self.thread_progress_hint.setText("正在准备会话进度...")
                 self._set_main_progress_indeterminate(False)
                 self._set_thread_view(self.THREAD_VIEW_PROGRESS)
             set_completion_notified(self, False)

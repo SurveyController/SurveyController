@@ -25,7 +25,6 @@ from qfluentwidgets import (
     StrongBodyLabel,
     SubtitleLabel,
     TransparentToolButton,
-    VerticalSeparator,
 )
 from shiboken6 import isValid
 
@@ -110,8 +109,7 @@ def _resolve_hero_status_text(data: dict[str, Any], current: int, target: int) -
     if stopping or phase_code == "stopping":
         return "正在停止"
     if paused or phase_code == "paused":
-        reason = str(data.get("pause_reason") or "").strip()
-        return f"已暂停：{reason}" if reason else "已暂停"
+        return "已暂停"
     if running:
         return "执行中"
     if terminal_category == "user_stopped":
@@ -224,21 +222,9 @@ class DashboardExecutionPanel(QWidget):
         self.summary_label = LargeTitleLabel("0 / 0 份", hero_widget)
         hero_info.addWidget(self.summary_label)
 
-        metrics_row = QHBoxLayout()
-        metrics_row.setContentsMargins(0, 0, 0, 0)
-        metrics_row.setSpacing(14)
-
         self.overall_status_label = StrongBodyLabel("等待开始", hero_widget)
         self.overall_status_label.setWordWrap(True)
-        metrics_row.addWidget(self.overall_status_label)
-
-        metrics_row.addWidget(VerticalSeparator(hero_widget))
-
-        self.overall_fail_label = BodyLabel("连续失败 0 次", hero_widget)
-        metrics_row.addWidget(self.overall_fail_label)
-        metrics_row.addStretch(1)
-
-        hero_info.addLayout(metrics_row)
+        hero_info.addWidget(self.overall_status_label)
         hero_info.addStretch(1)
         hero_layout.addLayout(hero_info, 1)
 
@@ -252,14 +238,7 @@ class DashboardExecutionPanel(QWidget):
         sessions_section_layout.setContentsMargins(8, 0, 8, 0)
         sessions_section_layout.setSpacing(16)
 
-        sessions_header = QHBoxLayout()
-        sessions_header.setContentsMargins(0, 0, 0, 0)
-        sessions_header.setSpacing(10)
-        sessions_header.addWidget(StrongBodyLabel("并发会话", sessions_section))
-        sessions_header.addStretch(1)
-        self.sessions_count_label = BodyLabel("0 个", sessions_section)
-        sessions_header.addWidget(self.sessions_count_label)
-        sessions_section_layout.addLayout(sessions_header)
+        sessions_section_layout.addWidget(StrongBodyLabel("并发会话", sessions_section))
 
         self.sessions_container = QWidget(sessions_section)
         self.sessions_container.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, False)
@@ -314,8 +293,6 @@ class DashboardExecutionPanel(QWidget):
         normalized_target = max(0, int(target or 0))
         self.summary_label.setText(f"0 / {normalized_target} 份")
         self.overall_status_label.setText("正在初始化")
-        self.overall_fail_label.setText("连续失败 0 次")
-        self.sessions_count_label.setText("0 个")
         self.overall_progress_ring.resume()
         self.overall_progress_ring.setValue(0)
         self.overall_progress_ring.hide()
@@ -330,8 +307,6 @@ class DashboardExecutionPanel(QWidget):
         progress = data.get("progress") or {}
         current = max(0, int(progress.get("current") or 0))
         target = max(0, int(progress.get("target") or 0))
-        failures = max(0, int(progress.get("consecutive_failures") or 0))
-        quota_failures = max(0, int(progress.get("device_quota_fail_count") or 0))
         terminal = data.get("terminal_stop") or {}
         terminal_category = str(terminal.get("category") or "")
         initializing = bool((data.get("initialization") or {}).get("active")) or (
@@ -341,10 +316,6 @@ class DashboardExecutionPanel(QWidget):
 
         self._paused = paused
         self.summary_label.setText(f"{current} / {target} 份")
-        fail_text = f"连续失败 {failures} 次"
-        if quota_failures > 0:
-            fail_text = f"{fail_text}  设备限制 {quota_failures} 次"
-        self.overall_fail_label.setText(fail_text)
 
         self._apply_overall_state(
             status_text=_resolve_hero_status_text(data, current, target),
@@ -481,8 +452,6 @@ class DashboardExecutionPanel(QWidget):
                 row["name"].setText(display_name)
 
             status_text = str(item.get("status_text") or "等待中").strip() or "等待中"
-            success_count = max(0, int(item.get("success_count") or 0))
-            fail_count = max(0, int(item.get("fail_count") or 0))
             step_current = max(0, int(item.get("step_current") or 0))
             step_total = max(0, int(item.get("step_total") or 0))
             item_running = bool(item.get("running", False))
@@ -490,9 +459,6 @@ class DashboardExecutionPanel(QWidget):
 
             if row["status"].text() != status_text:
                 row["status"].setText(status_text)
-            counter_text = f"成功 {success_count}  失败 {fail_count}"
-            if row["counter"].text() != counter_text:
-                row["counter"].setText(counter_text)
 
             mode = _resolve_session_visual_mode(
                 status_text=status_text,
@@ -519,8 +485,6 @@ class DashboardExecutionPanel(QWidget):
         if seen_names != self._session_order:
             self._session_order = seen_names
             self._relayout_session_grid()
-
-        self.sessions_count_label.setText(f"{len(self._session_order)} 个")
 
     def _create_session_row(self, display_name: str) -> dict[str, Any]:
         cell = QWidget(self.sessions_container)
@@ -555,9 +519,6 @@ class DashboardExecutionPanel(QWidget):
         cell_layout.addWidget(step_bar)
         cell_layout.addWidget(step_busy_bar)
 
-        counter_label = BodyLabel("成功 0  失败 0", cell)
-        cell_layout.addWidget(counter_label)
-
         anim = QPropertyAnimation(step_bar, QByteArray(b"value"), cell)
         anim.setDuration(_STEP_ANIMATION_MS)
         anim.setEasingCurve(QEasingCurve.Type.OutCubic)
@@ -566,7 +527,6 @@ class DashboardExecutionPanel(QWidget):
             "widget": cell,
             "name": name_label,
             "status": status_label,
-            "counter": counter_label,
             "pct": pct_label,
             "step_bar": step_bar,
             "step_busy_bar": step_busy_bar,
@@ -703,4 +663,3 @@ class DashboardExecutionPanel(QWidget):
             self._dispose_session_widget(row)
         self._session_rows.clear()
         self._session_order.clear()
-        self.sessions_count_label.setText("0 个")

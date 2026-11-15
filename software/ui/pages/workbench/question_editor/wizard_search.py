@@ -381,10 +381,7 @@ class WizardSearchMixin:
         matches = self._find_matching_question_indices(raw_text)
         self._refresh_search_popup(raw_text, matches)
         if matches:
-            shown_count = min(len(matches), 30)
-            suffix = "，回车可直接跳到当前选中项" if shown_count > 0 else ""
-            overflow = f"（下拉仅显示前 {shown_count} 条）" if len(matches) > shown_count else ""
-            status_text = f"匹配 {len(matches)} 题{overflow}，点下拉结果跳转{suffix}"
+            status_text = f"匹配 {len(matches)} 题"
             self._set_search_status(
                 status_text,
                 "#666666",
@@ -402,7 +399,7 @@ class WizardSearchMixin:
         else:
             self._search_popup = None
         self._hide_search_popup()
-        self._set_search_status("点下拉结果或回车即可跳转", "#666666", "#bfbfbf")
+        self._set_search_status("", "#666666", "#bfbfbf")
 
     def _handle_question_search(self, keyword: str) -> None:
         raw_keyword = str(keyword or "").strip()

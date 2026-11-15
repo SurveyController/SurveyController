@@ -6,17 +6,8 @@ from software.application.ports import PreferencesStorePort
 from software.io.runtime_environment import preference_store
 
 AI_PROVIDERS = {
-    "deepseek": {
-        "label": "DeepSeek",
-        "base_url": "https://api.deepseek.com/v1",
-        "recommended_models": ["deepseek-flash", "deepseek-v4-pro"],
-        "default_model": "deepseek-flash",
-    },
     "custom": {
         "label": "OpenAI 兼容",
-        "base_url": "",
-        "recommended_models": [],
-        "default_model": "",
     },
 }
 
@@ -63,7 +54,7 @@ DEFAULT_SYSTEM_PROMPT_PROVIDER = (
 
 _DEFAULT_AI_SETTINGS: Dict[str, Any] = {
     "ai_mode": AI_MODE_PROVIDER,
-    "provider": "deepseek",
+    "provider": "custom",
     "api_key": "",
     "base_url": "",
     "api_protocol": "auto",
@@ -121,9 +112,9 @@ def _load_ai_settings_from_store() -> Dict[str, Any]:
     settings = dict(_DEFAULT_AI_SETTINGS)
     store = _get_settings_store()
     provider = str(
-        store.value(f"{_AI_SETTINGS_KEY_PREFIX}provider", settings["provider"]) or "deepseek"
+        store.value(f"{_AI_SETTINGS_KEY_PREFIX}provider", settings["provider"]) or "custom"
     ).strip()
-    settings["provider"] = provider if provider in AI_PROVIDERS else "deepseek"
+    settings["provider"] = provider if provider in AI_PROVIDERS else "custom"
     settings["base_url"] = str(
         store.value(f"{_AI_SETTINGS_KEY_PREFIX}base_url", settings["base_url"]) or ""
     ).strip()
@@ -157,8 +148,8 @@ def get_ai_settings() -> Dict[str, Any]:
 
     settings = dict(_ensure_runtime_settings())
     settings["ai_mode"] = AI_MODE_PROVIDER
-    provider = str(settings.get("provider") or "deepseek").strip()
-    settings["provider"] = provider if provider in AI_PROVIDERS else "deepseek"
+    provider = str(settings.get("provider") or "custom").strip()
+    settings["provider"] = provider if provider in AI_PROVIDERS else "custom"
     settings["api_protocol"] = _normalize_custom_api_protocol(settings.get("api_protocol"))
     prompt = str(settings.get("system_prompt") or "").strip()
     settings["system_prompt"] = prompt or get_default_system_prompt()
@@ -169,8 +160,8 @@ def update_ai_session(config: Dict[str, Any]) -> Dict[str, Any]:
     global _RUNTIME_AI_SETTINGS
     normalized = dict(_DEFAULT_AI_SETTINGS)
     normalized.update(config)
-    provider = str(normalized.get("provider") or "deepseek").strip()
-    normalized["provider"] = provider if provider in AI_PROVIDERS else "deepseek"
+    provider = str(normalized.get("provider") or "custom").strip()
+    normalized["provider"] = provider if provider in AI_PROVIDERS else "custom"
     normalized["api_key"] = str(normalized.get("api_key") or "")
     normalized["base_url"] = str(normalized.get("base_url") or "").strip()
     normalized["api_protocol"] = _normalize_custom_api_protocol(normalized.get("api_protocol"))
@@ -208,8 +199,8 @@ def save_ai_settings(
     if system_prompt is not None:
         settings["system_prompt"] = str(system_prompt)
     settings["ai_mode"] = AI_MODE_PROVIDER
-    provider_value = str(settings.get("provider") or "deepseek").strip()
-    settings["provider"] = provider_value if provider_value in AI_PROVIDERS else "deepseek"
+    provider_value = str(settings.get("provider") or "custom").strip()
+    settings["provider"] = provider_value if provider_value in AI_PROVIDERS else "custom"
     settings["api_key"] = str(settings.get("api_key") or "")
     settings["base_url"] = str(settings.get("base_url") or "").strip()
     settings["api_protocol"] = _normalize_custom_api_protocol(settings.get("api_protocol"))
@@ -239,7 +230,7 @@ def reset_ai_settings() -> None:
 def get_ai_readiness_error(config: Optional[Dict[str, Any]] = None) -> str:
 
     settings = get_ai_settings() if config is None else dict(config)
-    provider = str(settings.get("provider") or "deepseek").strip() or "deepseek"
+    provider = str(settings.get("provider") or "custom").strip() or "custom"
     provider_config = AI_PROVIDERS.get(provider)
     if provider_config is None:
         return "服务提供商无效"
@@ -248,17 +239,10 @@ def get_ai_readiness_error(config: Optional[Dict[str, Any]] = None) -> str:
     if not str(settings.get("api_key") or "").strip():
         missing_fields.append("API Key")
 
-    if provider == "custom":
-        if not str(settings.get("base_url") or "").strip():
-            missing_fields.append("Base URL")
-        if not str(settings.get("model") or "").strip():
-            missing_fields.append("模型 ID")
-    else:
-        resolved_model = str(
-            settings.get("model") or provider_config.get("default_model") or ""
-        ).strip()
-        if not resolved_model:
-            missing_fields.append("模型 ID")
+    if not str(settings.get("base_url") or "").strip():
+        missing_fields.append("Base URL")
+    if not str(settings.get("model") or "").strip():
+        missing_fields.append("模型 ID")
 
     if missing_fields:
         return f"缺少 {'、'.join(missing_fields)}"

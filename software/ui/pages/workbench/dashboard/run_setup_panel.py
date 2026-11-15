@@ -273,7 +273,7 @@ class DashboardRunSetupPanel(QWidget):
         area_layout = QHBoxLayout(self.area_row)
         area_layout.setContentsMargins(0, 0, 0, 0)
         area_layout.setSpacing(10)
-        area_layout.addWidget(BodyLabel("出口地区", self.area_row))
+        area_layout.addWidget(BodyLabel("ip地区", self.area_row))
         area_layout.addStretch(1)
         self.province_combo = SearchableComboBox(self.area_row)
         self.province_combo.setMinimumWidth(130)
@@ -318,9 +318,7 @@ class DashboardRunSetupPanel(QWidget):
         ua_layout = QVBoxLayout(self.ua_container)
         ua_layout.setContentsMargins(48, 12, 48, 12)
         ua_layout.setSpacing(12)
-        ua_hint = CaptionLabel(
-            "配置不同设备类型的访问占比，三个滑块占比总和必须为 100%", self.ua_container
-        )
+        ua_hint = CaptionLabel("配置不同设备类型的访问占比", self.ua_container)
         ua_layout.addWidget(ua_hint)
         self.ua_ratio_slider = RatioSlider(
             labels={
@@ -484,7 +482,7 @@ class DashboardRunSetupPanel(QWidget):
 
                 cfg = RuntimeConfig()
                 cfg.ai_provider = (
-                    runtime_page.ai_section.ai_provider_combo.currentData() or "deepseek"
+                    runtime_page.ai_section.ai_provider_combo.currentData() or "custom"
                 )
                 cfg.ai_api_key = runtime_page.ai_section.ai_apikey_edit.text()
                 cfg.ai_base_url = runtime_page.ai_section.ai_baseurl_edit.text()

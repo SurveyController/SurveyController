@@ -595,7 +595,7 @@ def normalize_runtime_config_payload(raw: Dict[str, Any]) -> RuntimeConfig:
         config.ai_config_mode = "inherit"
     if has_ai_keys:
         config.ai_mode = "provider"
-        config.ai_provider = str(raw.get("ai_provider") or "deepseek")
+        config.ai_provider = "custom"
         config.ai_api_key = str(raw.get("ai_api_key") or "")
         config.ai_base_url = str(raw.get("ai_base_url") or "")
         config.ai_api_protocol = str(raw.get("ai_api_protocol") or "auto")

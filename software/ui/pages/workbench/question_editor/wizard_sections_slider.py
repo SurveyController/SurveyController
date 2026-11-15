@@ -285,7 +285,7 @@ class WizardSectionsSliderMixin:
                 if existing_fill:
                     fill_edit.setText(existing_fill)
                 if entry.question_type == "single":
-                    fill_edit.setPlaceholderText("例如：无；留空时仅必填输入框会自动补默认值")
+                    fill_edit.setPlaceholderText("例如：无")
                 else:
                     fill_edit.setPlaceholderText("输入命中该选项时要填写的内容")
                 fill_layout.addWidget(fill_edit, 1)

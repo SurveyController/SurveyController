@@ -56,7 +56,7 @@ class RandomUASettingCard(ExpandGroupSettingCard):
         layout.setSpacing(16)
 
         hint_label = BodyLabel(
-            "配置不同设备类型的访问占比，三个滑块占比总和必须为 100%",
+            "配置不同设备类型的访问占比",
             self._groupContainer,
         )
         hint_label.setStyleSheet("color: #606060; font-size: 12px;")

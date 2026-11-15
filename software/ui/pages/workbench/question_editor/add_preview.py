@@ -153,11 +153,6 @@ class AddPreviewMixin:
     def _rebuild_text_preview(
         self, card: CardWidget, card_layout: QVBoxLayout, q_type: str
     ) -> None:
-        hint = BodyLabel("答案列表（随机选择一个填入）：", card)
-        hint.setStyleSheet("font-size: 12px;")
-        _apply_label_color(hint, "#666666", "#bfbfbf")
-        card_layout.addWidget(hint)
-
         self.text_area_widget = QWidget(card)
         text_area_layout = QVBoxLayout(self.text_area_widget)
         text_area_layout.setContentsMargins(0, 0, 0, 0)
@@ -229,11 +224,6 @@ class AddPreviewMixin:
         option_count: int,
         rows: int,
     ) -> None:
-        hint = BodyLabel("矩阵量表：每一行都需要单独设置配比", card)
-        hint.setStyleSheet("font-size: 12px;")
-        _apply_label_color(hint, "#666666", "#bfbfbf")
-        card_layout.addWidget(hint)
-
         matrix_strategy = self._resolve_matrix_strategy()
         if matrix_strategy == "custom":
             self._ensure_matrix_weights(rows, option_count)
@@ -278,20 +268,9 @@ class AddPreviewMixin:
                     row_card_layout.addWidget(opt_widget)
 
                 card_layout.addWidget(row_card)
-        else:
-            hint_random = BodyLabel('当前为完全随机，切换为"按行配比"可编辑。', card)
-            hint_random.setStyleSheet("font-size: 12px;")
-            _apply_label_color(hint_random, "#888888", "#b0b0b0")
-            card_layout.addWidget(hint_random)
-
     def _rebuild_order_preview(
         self, card: CardWidget, card_layout: QVBoxLayout, option_count: int
     ) -> None:
-        hint = BodyLabel("排序题无需设置配比，执行时会随机排序。", card)
-        hint.setStyleSheet("font-size: 12px;")
-        _apply_label_color(hint, "#666666", "#bfbfbf")
-        card_layout.addWidget(hint)
-
         list_container = QWidget(card)
         list_layout = QVBoxLayout(list_container)
         list_layout.setContentsMargins(0, 6, 0, 0)
@@ -320,25 +299,6 @@ class AddPreviewMixin:
         is_multilevel_dropdown = q_type == "multilevel_dropdown"
         is_slider = q_type == "slider"
         strategy = self._resolve_strategy()
-        if is_slider and strategy == "random":
-            hint_text = f"滑块题：当前为完全随机，每次会在 {SLIDER_TARGET_MIN}-{SLIDER_TARGET_MAX} 范围内随机填写"
-        elif is_slider:
-            hint_text = f"滑块题：此处数值代表填写时的目标值，会做小幅抖动避免每份相同（默认 {SLIDER_TARGET_MIN}-{SLIDER_TARGET_MAX}）"
-        elif is_multiple:
-            hint_text = "每个滑块的值对应的是选项的命中概率（%）"
-        elif q_type == "multilevel_dropdown":
-            hint_text = "每条完整路径对应一个选项，可设置各路径的选择占比"
-        elif strategy == "random":
-            hint_text = "当前为完全随机，切换为自定义配比可编辑。"
-        else:
-            hint_text = "拖动滑块设置答案分布配比"
-
-        hint = BodyLabel(hint_text, card)
-        hint.setWordWrap(True)
-        hint.setStyleSheet("font-size: 12px;")
-        _apply_label_color(hint, "#666666", "#bfbfbf")
-        card_layout.addWidget(hint)
-
         count = 1 if is_slider else option_count
         default_weight = 50 if is_slider else (50 if is_multiple else 1)
         self._ensure_slider_values(count, default_weight)

@@ -8,7 +8,6 @@ from PySide6.QtCore import QObject, Qt, Signal
 from PySide6.QtWidgets import QSizePolicy, QVBoxLayout, QWidget
 from qfluentwidgets import (
     ComboBox,
-    EditableComboBox,
     ExpandGroupSettingCard,
     FluentIcon,
     IndeterminateProgressRing,
@@ -70,10 +69,6 @@ class AIPromptSettingCard(ExpandGroupSettingCard):
 
 class RuntimeAISection(QObject):
     aiTestFinished = Signal(bool, str)
-    _PROVIDER_DOCS = {
-        "deepseek": "https://api-docs.deepseek.com/zh-cn/",
-        "custom": "https://platform.openai.com/docs/api-reference/introduction",
-    }
 
     def __init__(
         self,
@@ -132,27 +127,19 @@ class RuntimeAISection(QObject):
         self.ai_provider_card = SettingCard(
             FluentIcon.CLOUD,
             "AI 服务提供商",
-            "选择 AI 服务，自定义模式支持任意 OpenAI 兼容接口",
+            "",
             self.group,
         )
         self.ai_provider_combo = ComboBox(self.ai_provider_card)
         self.ai_provider_combo.setMinimumWidth(200)
         for key, provider in self._ai_settings.providers.items():
             self.ai_provider_combo.addItem(provider.get("label", key), userData=key)
-        saved_provider = ai_config.get("provider") or "deepseek"
+        saved_provider = ai_config.get("provider") or "custom"
         if saved_provider not in self._ai_settings.providers:
-            saved_provider = "deepseek"
+            saved_provider = "custom"
         idx = self.ai_provider_combo.findData(saved_provider)
         if idx >= 0:
             self.ai_provider_combo.setCurrentIndex(idx)
-        self.ai_provider_link = HyperlinkButton(
-            FluentIcon.LINK, "", "API文档", self.ai_provider_card
-        )
-        self._update_ai_doc_link(saved_provider)
-        self.ai_provider_card.hBoxLayout.addWidget(
-            self.ai_provider_link, 0, Qt.AlignmentFlag.AlignRight
-        )
-        self.ai_provider_card.hBoxLayout.addSpacing(8)
         self.ai_provider_card.hBoxLayout.addWidget(
             self.ai_provider_combo, 0, Qt.AlignmentFlag.AlignRight
         )
@@ -162,7 +149,7 @@ class RuntimeAISection(QObject):
         self.ai_baseurl_card = SettingCard(
             FluentIcon.LINK,
             "Base URL",
-            "自定义模式下可填根地址或完整端点，程序会自动识别协议（如 https://api.example.com/v1）",
+            "",
             self.group,
         )
         self.ai_baseurl_edit = LineEdit(self.ai_baseurl_card)
@@ -178,7 +165,7 @@ class RuntimeAISection(QObject):
         self.ai_apikey_card = SettingCard(
             FluentIcon.FINGERPRINT,
             "API Key",
-            "输入对应服务的 API 密钥，获取方法请查阅服务商API文档",
+            "",
             self.group,
         )
         self.ai_apikey_edit = PasswordLineEdit(self.ai_apikey_card)
@@ -194,23 +181,16 @@ class RuntimeAISection(QObject):
         self.ai_model_card = SettingCard(
             FluentIcon.DEVELOPER_TOOLS,
             "模型 ID",
-            "请查阅所选服务商的API文档后再填写准确的模型id号，切勿随意填写",
+            "",
             self.group,
         )
 
-        self.ai_model_combo = EditableComboBox(self.ai_model_card)
-        self.ai_model_combo.setMinimumWidth(280)
-        self.ai_model_combo.setPlaceholderText("输入或选择模型名称")
         current_model = ai_config.get("model") or ""
-        if current_model:
-            self.ai_model_combo.setText(current_model)
-
         self.ai_model_edit = LineEdit(self.ai_model_card)
         self.ai_model_edit.setMinimumWidth(280)
         self.ai_model_edit.setPlaceholderText("输入模型名称")
         if current_model:
             self.ai_model_edit.setText(current_model)
-        self.ai_model_card.hBoxLayout.addWidget(self.ai_model_combo, 0, Qt.AlignmentFlag.AlignRight)
         self.ai_model_card.hBoxLayout.addWidget(self.ai_model_edit, 0, Qt.AlignmentFlag.AlignRight)
         self.ai_model_card.hBoxLayout.addSpacing(16)
         self.group.addSettingCard(self.ai_model_card)
@@ -251,7 +231,6 @@ class RuntimeAISection(QObject):
         self.ai_provider_combo.currentIndexChanged.connect(self._on_ai_provider_changed)
         self.ai_apikey_edit.editingFinished.connect(self._on_ai_apikey_changed)
         self.ai_baseurl_edit.editingFinished.connect(self._on_ai_baseurl_changed)
-        self.ai_model_combo.currentTextChanged.connect(self._on_ai_model_changed)
         self.ai_model_edit.editingFinished.connect(self._on_ai_model_edit_changed)
         self.ai_test_card.clicked.connect(self._on_ai_test_clicked)
         self.ai_prompt_card.promptEdit.textChanged.connect(self._on_ai_prompt_changed)
@@ -260,7 +239,7 @@ class RuntimeAISection(QObject):
         cfg.ai_mode = "provider"
         cfg.ai_config_mode = "override"
         idx = self.ai_provider_combo.currentIndex()
-        cfg.ai_provider = str(self.ai_provider_combo.itemData(idx)) if idx >= 0 else "deepseek"
+        cfg.ai_provider = str(self.ai_provider_combo.itemData(idx)) if idx >= 0 else "custom"
         cfg.ai_api_key = self.ai_apikey_edit.text().strip()
         cfg.ai_base_url = self.ai_baseurl_edit.text().strip()
         cfg.ai_api_protocol = "auto"
@@ -303,44 +282,14 @@ class RuntimeAISection(QObject):
         )
 
     def _update_ai_visibility(self):
-
-        idx = self.ai_provider_combo.currentIndex()
-        provider_key = str(self.ai_provider_combo.itemData(idx)) if idx >= 0 else "deepseek"
-        is_custom = provider_key == "custom"
-        self.ai_baseurl_card.setVisible(is_custom)
-
-        provider_config = self._ai_settings.providers.get(provider_key, {})
-        recommended_models = provider_config.get("recommended_models", [])
-        default_model = provider_config.get("default_model", "")
-
-        self.ai_model_combo.setVisible(not is_custom)
-        self.ai_model_edit.setVisible(is_custom)
-
-        if is_custom:
-            if not self._ai_loading:
-                self.ai_model_edit.setText("")
-                self._ai_settings.save_settings(model="")
-        else:
-            current_model = self.ai_model_combo.currentText().strip()
-            self.ai_model_combo.clear()
-            if recommended_models:
-                self.ai_model_combo.addItems(recommended_models)
-
-            self.ai_model_combo.setPlaceholderText(default_model or "输入模型名称")
-
-            if self._ai_loading:
-                self.ai_model_combo.setText(current_model or default_model)
-            else:
-                self.ai_model_combo.setText(default_model)
-                self._ai_settings.save_settings(model=default_model)
-
-        self._update_ai_doc_link(provider_key)
+        self.ai_baseurl_card.show()
+        self.ai_model_edit.show()
 
     def _apply_ai_config(self, cfg: RuntimeConfig):
         ai_config_present = getattr(cfg, "ai_config_mode", "inherit") == "override"
         if not ai_config_present:
             ai_config = self._ai_settings.get_settings()
-            cfg.ai_provider = str(ai_config.get("provider") or "deepseek")
+            cfg.ai_provider = str(ai_config.get("provider") or "custom")
             cfg.ai_api_key = str(ai_config.get("api_key") or "")
             cfg.ai_base_url = str(ai_config.get("base_url") or "")
             cfg.ai_api_protocol = str(ai_config.get("api_protocol") or "auto")
@@ -350,9 +299,9 @@ class RuntimeAISection(QObject):
                 or self._ai_settings.default_system_prompt()
             )
         if not getattr(cfg, "ai_provider", ""):
-            cfg.ai_provider = "deepseek"
+            cfg.ai_provider = "custom"
         if cfg.ai_provider not in self._ai_settings.providers:
-            cfg.ai_provider = "deepseek"
+            cfg.ai_provider = "custom"
         cfg.ai_mode = "provider"
         if not getattr(cfg, "ai_api_protocol", ""):
             cfg.ai_api_protocol = "auto"
@@ -381,7 +330,6 @@ class RuntimeAISection(QObject):
         self.ai_apikey_edit.setText(cfg.ai_api_key or "")
         self.ai_baseurl_edit.setText(cfg.ai_base_url or "")
         current_model = (cfg.ai_model or "").strip()
-        self.ai_model_combo.setText(current_model)
         self.ai_model_edit.setText(current_model)
         default_prompt = self._ai_settings.default_system_prompt()
         self._ai_system_prompt = cfg.ai_system_prompt or default_prompt
@@ -395,21 +343,9 @@ class RuntimeAISection(QObject):
         if self._ai_loading:
             return
         idx = self.ai_provider_combo.currentIndex()
-        provider_key = str(self.ai_provider_combo.itemData(idx)) if idx >= 0 else "deepseek"
+        provider_key = str(self.ai_provider_combo.itemData(idx)) if idx >= 0 else "custom"
         self._ai_settings.save_settings(provider=provider_key)
         self._update_ai_visibility()
-
-    def _update_ai_doc_link(self, provider_key: str):
-        url = self._PROVIDER_DOCS.get(provider_key, "")
-        self.ai_provider_link.setVisible(provider_key != "custom")
-        if url:
-            self.ai_provider_link.setEnabled(True)
-            self.ai_provider_link.setText("API文档")
-            self.ai_provider_link.setUrl(url)
-        else:
-            self.ai_provider_link.setEnabled(False)
-            self.ai_provider_link.setText("暂无文档")
-            self.ai_provider_link.setUrl("")
 
     def _on_ai_apikey_changed(self):
 
@@ -423,12 +359,6 @@ class RuntimeAISection(QObject):
             return
         self._ai_settings.save_settings(base_url=self.ai_baseurl_edit.text())
 
-    def _on_ai_model_changed(self, text: str):
-
-        if self._ai_loading:
-            return
-        self._ai_settings.save_settings(model=text.strip())
-
     def _on_ai_model_edit_changed(self):
 
         if self._ai_loading:
@@ -436,11 +366,7 @@ class RuntimeAISection(QObject):
         self._ai_settings.save_settings(model=self.ai_model_edit.text().strip())
 
     def _get_current_model_value(self) -> str:
-
-        idx = self.ai_provider_combo.currentIndex()
-        if idx >= 0 and self.ai_provider_combo.itemData(idx) == "custom":
-            return self.ai_model_edit.text().strip()
-        return self.ai_model_combo.currentText().strip()
+        return self.ai_model_edit.text().strip()
 
     def _on_ai_prompt_changed(self):
 
