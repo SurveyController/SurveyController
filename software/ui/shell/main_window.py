@@ -87,6 +87,9 @@ class MainWindow(
 ):
     _IMPORT_CHECK_ENV = "WJX_IMPORT_CHECK"
 
+    def eventFilter(self, obj, e):
+        return super().eventFilter(obj, e)
+
     def __init__(self, parent=None):
         self._boot_splash = None
         self._import_check_mode = (
