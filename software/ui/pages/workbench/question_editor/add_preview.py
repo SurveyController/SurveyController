@@ -268,6 +268,7 @@ class AddPreviewMixin:
                     row_card_layout.addWidget(opt_widget)
 
                 card_layout.addWidget(row_card)
+
     def _rebuild_order_preview(
         self, card: CardWidget, card_layout: QVBoxLayout, option_count: int
     ) -> None:

@@ -13,7 +13,6 @@ from PySide6.QtWidgets import (
 from qfluentwidgets import (
     BodyLabel,
     HorizontalSeparator,
-    InfoBar,
     InfoBarPosition,
     MessageBox,
     PrimaryPushButton,
@@ -22,6 +21,7 @@ from qfluentwidgets import (
     SegmentedWidget,
     TableWidget,
 )
+from software.ui.helpers.message_bar import InfoBar
 
 from surveycore.core.questions.consistency import sanitize_answer_rules
 from surveycore.providers.contracts import SurveyQuestionMeta, ensure_survey_question_metas
@@ -403,6 +403,9 @@ class QuestionStrategyPage(ScrollArea):
         info: Optional[Sequence[SurveyQuestionMeta]] = None,
     ) -> None:
         self.dimension_panel.set_entries(entries, info)
+
+    def get_entries(self) -> list[Any]:
+        return copy.deepcopy(self.dimension_panel._entries)
 
     def set_rules(self, rules: Sequence[Dict[str, Any]]) -> None:
         self.rule_panel.set_rules(rules)

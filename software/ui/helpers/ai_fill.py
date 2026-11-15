@@ -1,4 +1,5 @@
-from qfluentwidgets import InfoBar, InfoBarPosition
+from qfluentwidgets import InfoBarPosition
+from software.ui.helpers.message_bar import InfoBar
 
 from software.integrations.ai import get_ai_readiness_error
 

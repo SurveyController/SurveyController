@@ -7,7 +7,6 @@ from qfluentwidgets import (
     CaptionLabel,
     FluentIcon,
     IconWidget,
-    IndeterminateProgressBar,
     LineEdit,
     PrimaryPushButton,
     ProgressBar,
@@ -18,6 +17,7 @@ from qfluentwidgets import (
     SubtitleLabel,
     TableWidget,
 )
+from software.ui.widgets.indeterminate_progress import IndeterminateProgressBar
 
 from software.app.config import HTTP_MAX_THREADS
 from software.ui.helpers.fluent_tooltip import install_tooltip_filter

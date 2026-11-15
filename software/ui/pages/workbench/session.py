@@ -1,15 +1,12 @@
 from __future__ import annotations
 
 import logging
-from typing import Any, List, Optional
+from typing import Any
 
-from PySide6.QtCore import QObject, Signal
-from PySide6.QtWidgets import QDialog, QWidget
-
-from surveycore.core.questions.config import QuestionEntry
 from surveycore.core.questions.utils import OPTION_FILL_AI_TOKEN
+
+from software.application.run_plan import compile_run_plan
 from software.core.config.schema import RuntimeConfig
-from software.application.run_plan import compile_run_plan, question_id
 from software.integrations.ai import get_ai_readiness_error
 from software.logging.action_logger import log_action
 from software.ui.pages.workbench.shared.run_feedback import (
@@ -18,85 +15,9 @@ from software.ui.pages.workbench.shared.run_feedback import (
     set_completion_notified,
     set_last_progress,
 )
-from surveycore.providers.contracts import SurveyQuestionMeta, ensure_survey_question_metas
-from software.ui.pages.workbench.question_editor.add_dialog import (
-    QuestionAddDialog,
-)
-from software.ui.pages.workbench.question_editor.utils import (
-    build_entry_info_list,
-    migrate_question_ids,
-)
+from software.ui.pages.workbench.state import WorkbenchState
 
-
-class WorkbenchState(QObject):
-    entriesChanged = Signal(int)
-
-    def __init__(self, parent=None):
-        super().__init__(parent)
-        self._entries: List[QuestionEntry] = []
-        self._questions_info: List[SurveyQuestionMeta] = []
-        self._entry_questions_info: List[SurveyQuestionMeta] = []
-
-    @property
-    def entries(self) -> List[QuestionEntry]:
-        return self._entries
-
-    @property
-    def questions_info(self) -> List[SurveyQuestionMeta]:
-        return self._questions_info
-
-    @property
-    def entry_questions_info(self) -> List[SurveyQuestionMeta]:
-        return self._entry_questions_info
-
-    def set_questions(self, info: List[SurveyQuestionMeta], entries: List[QuestionEntry]) -> None:
-        normalized_info = ensure_survey_question_metas(info or [])
-        self._questions_info = normalized_info
-        self.set_entries(entries, normalized_info)
-
-    def set_entries(
-        self,
-        entries: List[QuestionEntry],
-        info: Optional[List[SurveyQuestionMeta]] = None,
-    ) -> None:
-        if info is not None:
-            self._questions_info = ensure_survey_question_metas(info or [])
-        self._entries = list(entries or [])
-        migrate_question_ids(self._entries, self._questions_info)
-        self._entry_questions_info = build_entry_info_list(self._entries, self._questions_info)
-        for idx, entry in enumerate(self._entries):
-            if getattr(entry, "question_title", None):
-                continue
-            if idx < len(self._entry_questions_info):
-                title = self._entry_questions_info[idx].get("title")
-                if title:
-                    entry.question_title = str(title).strip()
-        self.entriesChanged.emit(len(self._entries))
-
-    def get_entries(self) -> List[QuestionEntry]:
-        return list(self._entries)
-
-    def append_entry(self, entry: QuestionEntry) -> None:
-        if not entry:
-            return
-        if not getattr(entry, "question_id", None):
-            setattr(entry, "question_id", str(question_id(entry)))
-        self._entries.append(entry)
-        self._entry_questions_info = build_entry_info_list(self._entries, self._questions_info)
-        self.entriesChanged.emit(len(self._entries))
-
-    def open_add_question_dialog(self, parent: QWidget) -> bool:
-        dialog = QuestionAddDialog(self._entries, parent)
-        if dialog.exec() != QDialog.DialogCode.Accepted:
-            return False
-        new_entry = dialog.get_entry()
-        if not new_entry:
-            return False
-        self.append_entry(new_entry)
-        return True
-
-    def has_question_entries(self) -> bool:
-        return bool(self._entries)
+__all__ = ["WorkbenchRunCoordinator", "WorkbenchState"]
 
 
 class WorkbenchRunCoordinator:
@@ -104,8 +25,8 @@ class WorkbenchRunCoordinator:
         self.controller = controller
         self.state = state
         self.dashboard = dashboard
-        self.reverse_fill_page: Optional[Any] = None
-        self._reverse_fill_target_override: Optional[int] = None
+        self.reverse_fill_page: Any | None = None
+        self._reverse_fill_target_override: int | None = None
 
     def bind_reverse_fill_page(self, page: Any) -> None:
         self.reverse_fill_page = page
@@ -117,7 +38,9 @@ class WorkbenchRunCoordinator:
         for entry in self.state.get_entries():
             if bool(getattr(entry, "ai_enabled", False)):
                 return True
-            if any(bool(flag) for flag in (getattr(entry, "multi_text_blank_ai_flags", None) or ())):
+            if any(
+                bool(flag) for flag in (getattr(entry, "multi_text_blank_ai_flags", None) or ())
+            ):
                 return True
             if any(
                 str(value or "").strip() == OPTION_FILL_AI_TOKEN
@@ -140,29 +63,9 @@ class WorkbenchRunCoordinator:
     def set_reverse_fill_target(self, target: int) -> None:
         normalized_target = max(1, int(target or 1))
         self._reverse_fill_target_override = normalized_target
-        try:
-            updater = getattr(self.controller, "update_runtime_settings", None)
-            if not callable(updater):
-                updater = getattr(self.controller, "set_runtime_ui_state", None)
-            if callable(updater):
-                updater(target=normalized_target)
-        except Exception:
-            logging.debug("同步目标份数到运行态失败", exc_info=True)
 
     def build_config(self) -> RuntimeConfig:
-        builder = getattr(self.dashboard, "config_builder", None)
-        if callable(builder):
-            cfg = builder()
-            if not isinstance(cfg, RuntimeConfig):
-                raise TypeError("config_builder 必须返回 RuntimeConfig")
-            return cfg
-        cfg = self.dashboard.build_base_config()
-        if self.reverse_fill_page is not None:
-            try:
-                self.reverse_fill_page.update_config(cfg)
-            except Exception:
-                logging.debug("构建配置时同步反填配置失败", exc_info=True)
-        return cfg
+        return self.state.snapshot()
 
     def start(self, *, enable_reverse_fill: bool = False) -> bool:
         dashboard = self.dashboard
@@ -189,6 +92,8 @@ class WorkbenchRunCoordinator:
         cfg.reverse_fill_enabled = bool(
             enable_reverse_fill and str(getattr(cfg, "reverse_fill_source_path", "") or "").strip()
         )
+        if enable_reverse_fill:
+            cfg.threads = max(1, int(cfg.reverse_fill_threads or 1))
         if enable_reverse_fill and self._reverse_fill_target_override is not None:
             cfg.target = self._reverse_fill_target_override
         if not cfg.question_entries:

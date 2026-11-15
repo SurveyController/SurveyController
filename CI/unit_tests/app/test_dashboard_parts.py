@@ -3,11 +3,11 @@ from __future__ import annotations
 from types import SimpleNamespace
 from unittest.mock import MagicMock
 
+from surveycore.providers.contracts import SurveyQuestionMeta
+
 import software.ui.pages.workbench.dashboard.parts.config_io as config_io_module
 import software.ui.pages.workbench.dashboard.parts.survey_parse as survey_parse_module
 from software.core.config.schema import RuntimeConfig
-from surveycore.core.questions.config import QuestionEntry
-from surveycore.providers.contracts import SurveyQuestionMeta
 from software.ui.pages.workbench.dashboard.parts.config_io import DashboardConfigIOMixin
 from software.ui.pages.workbench.dashboard.parts.survey_parse import (
     _QQ_LOGIN_REQUIRED_MESSAGE,
@@ -41,7 +41,6 @@ class _DashboardDouble(DashboardSurveyParseMixin, DashboardConfigIOMixin):
             save_current_config=MagicMock(),
             refresh_random_ip_counter=MagicMock(),
         )
-        self.runtime_page = SimpleNamespace(apply_config=MagicMock())
         self.strategy_page = SimpleNamespace(
             set_questions_info=MagicMock(),
             set_entries=MagicMock(),
@@ -57,16 +56,14 @@ class _DashboardDouble(DashboardSurveyParseMixin, DashboardConfigIOMixin):
                 )
             ),
             get_entries=MagicMock(return_value=[]),
+            has_question_entries=MagicMock(return_value=False),
         )
         self.config_drawer = SimpleNamespace(open_drawer=MagicMock())
         self._survey_title = "问卷"
         self._progress_infobar = None
         self._open_wizard_after_parse = False
         self.toasts: list[tuple[str, str, int, bool]] = []
-        self.applied_configs: list[RuntimeConfig] = []
-        self.refreshed = 0
         self.meta_updates: list[tuple[str, int]] = []
-        self.synced = 0
         self._window = _FakeWindow()
 
     def _toast(
@@ -81,21 +78,8 @@ class _DashboardDouble(DashboardSurveyParseMixin, DashboardConfigIOMixin):
             self._progress_infobar = _FakeProgress()
         return self._progress_infobar
 
-    def apply_config(self, cfg: RuntimeConfig) -> None:
-        self.applied_configs.append(cfg)
-
-    def _build_config(self) -> RuntimeConfig:
-        return RuntimeConfig(target=2, threads=1)
-
-    def _refresh_entry_table(self) -> None:
-        self.refreshed += 1
-
     def update_question_meta(self, title: str, count: int) -> None:
         self.meta_updates.append((title, count))
-
-    def _sync_start_button_state(self, running: bool | None = None) -> None:
-        _ = running
-        self.synced += 1
 
     def window(self):
         return self._window
@@ -204,72 +188,25 @@ def test_dashboard_config_drawer_load_cancel_missing_and_workbench_paths(
     assert page.toasts[-1][0] == "载入失败：bad"
 
 
-def test_dashboard_config_load_and_save_without_workbench(monkeypatch, tmp_path) -> None:
+def test_dashboard_config_load_delegates_to_workbench(monkeypatch, tmp_path) -> None:
     page = _DashboardDouble()
-    page._window = _FakeWindow()
     monkeypatch.setattr(config_io_module, "log_action", lambda *_args, **_kwargs: None)
     monkeypatch.setattr(config_io_module, "get_user_config_directory", lambda: str(tmp_path))
 
-    cfg = RuntimeConfig(
-        target=4,
-        threads=2,
-        survey_title="载入标题",
-        question_entries=[QuestionEntry("single", [1, 1], question_num=1)],
-        questions_info=[SurveyQuestionMeta(num=1, title="Q1", type_code="3", option_texts=["A"])],
-    )
     config_path = tmp_path / "ok.json"
     config_path.write_text("{}", encoding="utf-8")
-    page.controller.load_saved_config.return_value = cfg
+    workbench = SimpleNamespace(load_config_from_path=MagicMock())
+    page._window = _FakeWindow(workbench)
 
     page._load_config_from_path(str(config_path))
 
-    page.controller.load_saved_config.assert_called_once_with(str(config_path), strict=True)
-    page.runtime_page.apply_config.assert_called_once_with(cfg)
-    assert page.applied_configs == [cfg]
-    assert page.workbench_state.entries == cfg.question_entries
-    assert page.strategy_page.set_questions_info.call_args.args[0] == cfg.questions_info
-    assert page.refreshed == 0
-    assert page.meta_updates == [("载入标题", 1)]
-    assert page.synced == 0
-    page.controller.refresh_random_ip_counter.assert_called_once()
+    workbench.load_config_from_path.assert_called_once_with(str(config_path))
+    assert not page.controller.load_saved_config.called
+    assert page.toasts[-1][0] == "已载入配置"
 
-    page.controller.load_saved_config.side_effect = ValueError("broken")
+    workbench.load_config_from_path.side_effect = ValueError("broken")
     page._load_config_from_path(str(config_path))
     assert page.toasts[-1][0] == "载入失败：broken"
-
-    page.controller.load_saved_config.side_effect = ValueError(
-        "配置不兼容: x -> 该配置文件损坏，请输入问卷链接/二维码重新配置：x"
-    )
-    page._load_config_from_path(str(config_path))
-    assert page.toasts[-1][0] == "该配置文件损坏，请输入问卷链接/二维码重新配置"
-
-    page.controller.load_saved_config.side_effect = ValueError(
-        "配置不兼容: x -> 该配置文件损坏，请输入问卷链接/二维码重新配置：x"
-    )
-    page._load_config_from_path(str(config_path))
-    assert page.toasts[-1][0] == "该配置文件损坏，请输入问卷链接/二维码重新配置"
-    page.controller.load_saved_config.side_effect = None
-
-    monkeypatch.setattr(
-        config_io_module.QFileDialog, "getSaveFileName", lambda *_args, **_kwargs: ("", "")
-    )
-    page._on_save_config()
-    assert not page.controller.save_current_config.called
-
-    save_path = tmp_path / "saved.json"
-    monkeypatch.setattr(
-        config_io_module.QFileDialog,
-        "getSaveFileName",
-        lambda *_args, **_kwargs: (str(save_path), ""),
-    )
-    page._on_save_config()
-    page.controller.save_current_config.assert_called_once()
-    assert page.controller.save_current_config.call_args.args[0] == str(save_path)
-    assert page.toasts[-1][0] == "配置已保存"
-
-    page.controller.save_current_config.side_effect = RuntimeError("no disk")
-    page._on_save_config()
-    assert page.toasts[-1][0] == "保存失败：no disk"
 
 
 def test_dashboard_save_uses_workbench_snapshot_when_available(monkeypatch, tmp_path) -> None:

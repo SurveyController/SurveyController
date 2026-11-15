@@ -19,9 +19,9 @@ class _Edit:
 
 class _Signal:
     def __init__(self) -> None:
-        self.values: list[str] = []
+        self.values: list[object] = []
 
-    def emit(self, value: str) -> None:
+    def emit(self, value: object) -> None:
         self.values.append(value)
 
 
@@ -55,6 +55,7 @@ def _make_page() -> SimpleNamespace:
         _toast=MagicMock(),
         _refresh_preview=MagicMock(),
         surveyUrlChanged=_Signal(),
+        configurationChanged=_Signal(),
         url_edit=_Edit("https://www.wjx.cn/vm/test.aspx"),
         file_edit=_Edit(""),
         progress_bar=_ProgressBar(),

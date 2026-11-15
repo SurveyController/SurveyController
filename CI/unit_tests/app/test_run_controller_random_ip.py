@@ -89,9 +89,12 @@ class _FakeController(RandomIpRuntimeService):
     def notify_random_ip_loading(self, loading: bool, message: str = "") -> None:
         self.loading_events.append((bool(loading), str(message)))
 
-    def refresh_random_ip_counter(self, *, adapter=None, connect_legacy=False) -> None:
+    def refresh_random_ip_counter(self, *, adapter=None, ensure_account_session=False) -> None:
         self.refresh_calls.append(adapter)
-        super().refresh_random_ip_counter(adapter=adapter, connect_legacy=connect_legacy)
+        super().refresh_random_ip_counter(
+            adapter=adapter,
+            ensure_account_session=ensure_account_session,
+        )
 
     def parent(self):
         return self._parent
@@ -380,7 +383,10 @@ class RunControllerRandomIPTests:
             return SimpleNamespace(total_quota=5, used_quota=1)
 
         monkeypatch.setattr(controller._proxy_gateway, "ensure_authenticated_session", connect)
-        controller.refresh_random_ip_counter(adapter=controller.adapter, connect_legacy=True)
+        controller.refresh_random_ip_counter(
+            adapter=controller.adapter,
+            ensure_account_session=True,
+        )
         controller.wait_random_ip_tasks()
 
         assert connected == [True]

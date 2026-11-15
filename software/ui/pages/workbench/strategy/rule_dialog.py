@@ -15,7 +15,6 @@ from qfluentwidgets import (
     CardWidget,
     CheckBox,
     ComboBox,
-    InfoBar,
     InfoBarPosition,
     PrimaryPushButton,
     PushButton,
@@ -24,6 +23,7 @@ from qfluentwidgets import (
     SubtitleLabel,
     MessageBoxBase,
 )
+from software.ui.helpers.message_bar import InfoBar
 
 from surveycore.core.questions.consistency import normalize_rule_dict
 from surveycore.providers.contracts import SurveyQuestionMeta, ensure_survey_question_metas

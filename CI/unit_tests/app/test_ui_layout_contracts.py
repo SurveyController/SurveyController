@@ -15,7 +15,6 @@ from CI.unit_tests.app.test_workbench_pages_smoke import _FakeController, _patch
 from surveycore.providers.contracts import SurveyQuestionMeta
 from software.ui.pages.workbench.dashboard.page import DashboardPage
 from software.ui.pages.workbench.reverse_fill.page import ReverseFillPage
-from software.ui.pages.workbench.runtime_panel.main import RuntimePage
 from software.ui.pages.workbench.session import WorkbenchState
 from software.ui.pages.workbench.strategy.page import QuestionStrategyPage
 
@@ -121,7 +120,6 @@ def test_workbench_pages_fit_minimum_window_width_without_horizontal_overflow(
 ) -> None:
     _patch_page_dependencies(monkeypatch)
     controller = _FakeController()
-    runtime_page = RuntimePage(controller)
     strategy_page = QuestionStrategyPage()
     reverse_fill_page = ReverseFillPage(controller)
 
@@ -129,9 +127,13 @@ def test_workbench_pages_fit_minimum_window_width_without_horizontal_overflow(
     state.set_entries(
         [], [SurveyQuestionMeta(num=1, title="Q1", type_code="3", option_texts=["A", "B"])]
     )
-    dashboard_page = DashboardPage(controller, state, runtime_page, strategy_page)
+    dashboard_page = DashboardPage(controller, state, strategy_page)
+    dashboard_page.main_stack.setCurrentWidget(dashboard_page.run_setup_host)
+    dashboard_page.run_setup_panel.timing_card.setExpand(True)
+    dashboard_page.run_setup_panel.random_ip_card.setExpand(True)
+    dashboard_page.run_setup_panel.ai_section_container.show()
 
-    for page in (runtime_page, strategy_page, reverse_fill_page, dashboard_page):
+    for page in (strategy_page, reverse_fill_page, dashboard_page):
         _show_at_guarded_size(qtbot, page)
         _assert_no_horizontal_scrollbar(page)
 
@@ -176,9 +178,9 @@ def test_workbench_pages_survive_125_percent_dpi_subprocess() -> None:
             _assert_no_horizontal_scrollbar,
         )
         from CI.unit_tests.app.test_workbench_pages_smoke import _FakeController
-        from software.ui.pages.workbench.runtime_panel.main import RuntimePage
-
-        import software.ui.pages.workbench.runtime_panel.proxy_sync as runtime_proxy_sync
+        from software.ui.pages.workbench.dashboard.page import DashboardPage
+        from software.ui.pages.workbench.session import WorkbenchState
+        from software.ui.pages.workbench.strategy.page import QuestionStrategyPage
         import software.ui.pages.workbench.runtime_panel.random_ip_card as random_ip_card
 
         random_ip_card.load_area_codes = lambda supported_only=True: [
@@ -189,12 +191,12 @@ def test_workbench_pages_survive_125_percent_dpi_subprocess() -> None:
         random_ip_card.apply_proxy_area_code = lambda _code: None
         random_ip_card.apply_custom_proxy_api = lambda _url: None
         random_ip_card.test_custom_proxy_api = lambda _url: (True, "", [])
-        runtime_proxy_sync.apply_proxy_source_settings = lambda *_args, **_kwargs: None
-        runtime_proxy_sync.apply_custom_proxy_api = lambda *_args, **_kwargs: None
-        runtime_proxy_sync.get_proxy_minute_by_answer_seconds = lambda *_args, **_kwargs: 1
-
         app = QApplication([])
-        page = RuntimePage(_FakeController())
+        page = DashboardPage(_FakeController(), WorkbenchState(), QuestionStrategyPage())
+        page.main_stack.setCurrentWidget(page.run_setup_host)
+        page.run_setup_panel.timing_card.setExpand(True)
+        page.run_setup_panel.random_ip_card.setExpand(True)
+        page.run_setup_panel.ai_section_container.show()
         page.resize(900, 640)
         page.show()
         if page.layout() is not None:

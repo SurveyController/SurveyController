@@ -4,6 +4,7 @@ from types import SimpleNamespace
 from typing import Any
 
 from surveycore.core.questions.config import QuestionEntry
+
 from software.core.config.schema import RuntimeConfig
 from software.ui.pages.workbench.session import WorkbenchRunCoordinator, WorkbenchState
 
@@ -142,7 +143,7 @@ def test_set_reverse_fill_target_updates_controller_without_touching_dashboard_s
 
     coordinator.set_reverse_fill_target(20)
 
-    assert controller.runtime_updates == [{"target": 20}]
+    assert controller.runtime_updates == []
     assert dashboard.target_spin.value() == 9
     assert dashboard.target_spin.blocked == []
 
@@ -158,7 +159,7 @@ def test_set_reverse_fill_target_normalizes_small_values_to_one() -> None:
 
     coordinator.set_reverse_fill_target(0)
 
-    assert controller.runtime_updates == [{"target": 1}]
+    assert controller.runtime_updates == []
     assert dashboard.target_spin.value() == 9
 
 
@@ -170,6 +171,7 @@ def test_start_reverse_fill_uses_reverse_fill_target_override() -> None:
         state=_state_with_one_entry(),
         dashboard=dashboard,
     )
+    coordinator.state.update_settings(reverse_fill_source_path="D:/demo.xlsx")
     coordinator.bind_reverse_fill_page(_FakeReverseFillPage())
 
     coordinator.set_reverse_fill_target(20)
@@ -190,6 +192,7 @@ def test_normal_start_ignores_reverse_fill_target_override() -> None:
         state=_state_with_one_entry(),
         dashboard=dashboard,
     )
+    coordinator.state.update_settings(target=3)
     coordinator.bind_reverse_fill_page(_FakeReverseFillPage())
 
     coordinator._reverse_fill_target_override = 20

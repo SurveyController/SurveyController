@@ -14,7 +14,6 @@ from software.app.user_paths import (
     get_user_local_data_root,
 )
 from software.core.config.schema import RuntimeConfig
-from software.core.config.codec import build_runtime_config_snapshot
 from software.logging.log_utils import (
     finalize_session_log_persistence,
     log_suppressed_exception,
@@ -32,9 +31,9 @@ class MainWindowLifecycleMixin:
         _base_window_title: str
         _close_request_pending: bool
         _close_request_confirmed: bool
+        workbench: Any
         dashboard: Any
         workbench_state: Any
-        runtime_page: Any
         strategy_page: Any
         controller: Any
 
@@ -114,17 +113,7 @@ class MainWindowLifecycleMixin:
             logging.warning("保存日志失败: %s", exc)
 
     def _collect_current_config_snapshot(self):
-        workbench = getattr(self, "workbench", None)
-        if workbench is not None and hasattr(workbench, "build_current_config_snapshot"):
-            return workbench.build_current_config_snapshot()
-        cfg = build_runtime_config_snapshot(
-            self.dashboard._build_config(),
-            question_entries=self.workbench_state.get_entries(),
-            questions_info=self.workbench_state.questions_info,
-        )
-        if hasattr(self.controller, "config"):
-            self.controller.config = cfg
-        return cfg
+        return self.workbench.build_current_config_snapshot()
 
     def _save_config_via_dialog(self, cfg) -> bool:
         configs_dir = get_user_config_directory()
@@ -245,22 +234,8 @@ class MainWindowLifecycleMixin:
         except Exception as exc:
             logging.warning("加载默认配置失败: %s", exc)
             cfg = RuntimeConfig()
-        workbench = getattr(self, "workbench", None)
-        if workbench is not None and hasattr(workbench, "apply_config"):
-            workbench.apply_config(cfg)
-            self.controller.refresh_random_ip_counter(connect_legacy=True)
-            return
-        self.runtime_page.apply_config(cfg)
-        self.dashboard.apply_config(cfg)
-        self.workbench_state.set_entries(cfg.question_entries or [], cfg.questions_info or [])
-        self.strategy_page.set_questions_info(cfg.questions_info or [])
-        self.strategy_page.set_entries(
-            self.workbench_state.entries,
-            self.workbench_state.entry_questions_info,
-        )
-        self.strategy_page.set_rules(getattr(cfg, "answer_rules", []) or [])
-        self.strategy_page.set_dimension_groups(getattr(cfg, "dimension_groups", []) or [])
-        self.controller.refresh_random_ip_counter(connect_legacy=True)
+        self.workbench.apply_config(cfg)
+        self.controller.refresh_random_ip_counter(ensure_account_session=True)
 
     def _on_random_ip_counter_update(self, count: float, limit: float, custom_api: bool) -> None:
         self._refresh_title_random_ip_user_id()

@@ -17,14 +17,12 @@ if TYPE_CHECKING:
     from PySide6.QtWidgets import QStackedWidget
     from software.ui.pages.workbench.dashboard.page import DashboardPage
     from software.ui.pages.workbench.reverse_fill.page import ReverseFillPage
-    from software.ui.pages.workbench.runtime_panel.main import RuntimePage
     from software.ui.pages.workbench.strategy.page import QuestionStrategyPage
 
 
 class MainWindowLazyPagesMixin:
     if TYPE_CHECKING:
         dashboard: DashboardPage
-        runtime_page: RuntimePage
         strategy_page: QuestionStrategyPage
         reverse_fill_page: ReverseFillPage
         stackedWidget: QStackedWidget

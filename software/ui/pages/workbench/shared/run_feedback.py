@@ -4,10 +4,11 @@ import logging
 from dataclasses import dataclass
 from typing import Any
 
-from qfluentwidgets import IndeterminateProgressRing, InfoBar, InfoBarPosition
+from qfluentwidgets import IndeterminateProgressRing, InfoBarPosition
 
 from software.logging.log_utils import log_suppressed_exception
 from software.ui.helpers.message_bar import (
+    InfoBar,
     replace_message_bar,
     reposition_message_bar,
     show_message_bar,

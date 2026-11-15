@@ -9,11 +9,11 @@ from PySide6.QtGui import QIcon
 from PySide6.QtWidgets import QWidget
 from qfluentwidgets import (
     CaptionLabel,
-    IndeterminateProgressBar,
     SplashScreen,
     TitleLabel,
     isDarkTheme,
 )
+from software.ui.widgets.indeterminate_progress import IndeterminateProgressBar
 
 from software.app.runtime_paths import get_resource_path
 from software.app.app_info import APP_VERSION

@@ -2,128 +2,14 @@ from __future__ import annotations
 
 import queue
 import threading
-from typing import Any, cast
 
 import pytest
-from PySide6.QtCore import QAbstractAnimation, QEvent
+from PySide6.QtCore import QAbstractAnimation
+from PySide6.QtWidgets import QApplication, QWidget
+from qfluentwidgets import IndeterminateProgressRing
 
 import software.ui.controller.ui_dispatcher as ui_dispatcher_module
 import software.ui.helpers.qfluent_compat as qfluent_compat
-
-
-class _FakeAniGroup:
-    def __init__(self, state: QAbstractAnimation.State = QAbstractAnimation.State.Stopped) -> None:
-        self._state = state
-        self.pause_calls = 0
-        self.resume_calls = 0
-
-    def state(self) -> QAbstractAnimation.State:
-        return self._state
-
-    def pause(self) -> None:
-        self.pause_calls += 1
-        self._state = QAbstractAnimation.State.Paused
-
-    def resume(self) -> None:
-        self.resume_calls += 1
-        self._state = QAbstractAnimation.State.Running
-
-
-class _FakeRing:
-    def __init__(
-        self,
-        *,
-        state: QAbstractAnimation.State | None = QAbstractAnimation.State.Stopped,
-        start_raises: bool = False,
-        stop_raises: bool = False,
-    ) -> None:
-        self.aniGroup = _FakeAniGroup(state) if state is not None else None
-        self._start_raises = start_raises
-        self._stop_raises = stop_raises
-        self.shown = 0
-        self.hidden = 0
-        self.started = 0
-        self.stopped = 0
-
-    def show(self) -> None:
-        self.shown += 1
-
-    def hide(self) -> None:
-        self.hidden += 1
-
-    def start(self) -> None:
-        self.started += 1
-        if self._start_raises:
-            raise RuntimeError("start failed")
-
-    def stop(self) -> None:
-        self.stopped += 1
-        if self._stop_raises:
-            raise RuntimeError("stop failed")
-
-
-class _FakeProgressBar:
-    _surveycontroller_resume_guard_installed = False
-
-    def __init__(self, *, state: QAbstractAnimation.State, is_error: bool = False) -> None:
-        self.aniGroup = _FakeAniGroup(state)
-        self._isError = is_error
-        self.start_calls = 0
-        self.update_calls = 0
-
-    def start(self) -> None:
-        self.start_calls += 1
-        self.aniGroup._state = QAbstractAnimation.State.Running
-
-    def update(self) -> None:
-        self.update_calls += 1
-
-
-class _FakeSignal:
-    def __init__(self) -> None:
-        self.callbacks: list[Any] = []
-
-    def connect(self, callback) -> None:
-        self.callbacks.append(callback)
-
-    def emit(self, *args) -> None:
-        for callback in list(self.callbacks):
-            callback(*args)
-
-
-class _FakeAnimation:
-    def __init__(self, *_args, **_kwargs) -> None:
-        self.started = 0
-        self.start_value = None
-        self.end_value = None
-
-    def start(self) -> None:
-        self.started += 1
-
-    def setDuration(self, _duration: int) -> None:
-        return
-
-    def setStartValue(self, value) -> None:
-        self.start_value = value
-
-    def setEndValue(self, value) -> None:
-        self.end_value = value
-
-
-class _FakeAnimationGroup:
-    def __init__(self, *_args, **_kwargs) -> None:
-        self.animations: list[Any] = []
-        self.started = 0
-
-    def addAnimation(self, animation) -> None:
-        self.animations.append(animation)
-
-    def removeAnimation(self, animation) -> None:
-        if animation in self.animations:
-            self.animations.remove(animation)
-
-    def start(self) -> None:
-        self.started += 1
 
 
 class _FakeQtApp:
@@ -131,229 +17,31 @@ class _FakeQtApp:
         return
 
 
-class _FakeParent:
-    def __init__(self) -> None:
-        self.filters: list[Any] = []
-        self.invalid = False
-
-    def installEventFilter(self, obj) -> None:
-        self.filters.append(obj)
-
-
-class _FakeBar:
-    def __init__(self, parent: _FakeParent, *, property_raises: bool = False) -> None:
-        self._parent = parent
-        self._props: dict[str, Any] = {}
-        self.closedSignal = _FakeSignal()
-        self.destroyed = _FakeSignal()
-        self.invalid = False
-        self.moved_to = None
-        self.property_raises = property_raises
-
-    def parent(self):
-        return self._parent
-
-    def setProperty(self, key: str, value: Any) -> None:
-        self._props[key] = value
-
-    def property(self, key: str) -> Any:
-        if self.property_raises:
-            raise RuntimeError("property unavailable")
-        return self._props.get(key)
-
-    def pos(self):
-        return (0, 0)
-
-    def move(self, value) -> None:
-        self.moved_to = value
-
-
-class _FakeQObjectOnly:
-    pass
-
-
-class _FakeManager:
-    managers: dict[str, type] = {}
-
-    def __init__(self) -> None:
-        self.infoBars: dict[Any, list[Any]] = {}
-        self.aniGroups: dict[Any, _FakeAnimationGroup] = {}
-        self.dropAnis: list[Any] = []
-        self.slideAnis: list[Any] = []
-
-    def _createSlideAni(self, _bar) -> _FakeAnimation:
-        return _FakeAnimation()
-
-    def _pos(self, _bar, size=None):
-        return ("pos", size)
-
-
-class _FakeEvent:
-    def __init__(self, event_type: QEvent.Type) -> None:
-        self._type = event_type
-
-    def type(self) -> QEvent.Type:
-        return self._type
-
-    def size(self):
-        return "resized"
-
-
 class UiHelperTests:
-    def test_set_indeterminate_progress_ring_active_handles_resume_start_and_hide(self) -> None:
-        paused_ring = _FakeRing(state=QAbstractAnimation.State.Paused)
-        qfluent_compat.set_indeterminate_progress_ring_active(paused_ring, True)
-        assert paused_ring.shown == 1
-        assert paused_ring.aniGroup is not None
-        assert paused_ring.aniGroup.resume_calls == 1
+    def test_indeterminate_progress_ring_active_state_is_explicit(self, qtbot) -> None:
+        parent = QWidget()
+        parent.resize(240, 120)
+        ring = IndeterminateProgressRing(parent, start=False)
+        qtbot.addWidget(parent)
+        parent.show()
 
-        stopped_ring = _FakeRing(state=QAbstractAnimation.State.Stopped)
-        qfluent_compat.set_indeterminate_progress_ring_active(stopped_ring, True)
-        assert stopped_ring.started == 1
+        qfluent_compat.set_indeterminate_progress_ring_active(ring, True)
+        assert ring.isVisible()
+        assert ring.aniGroup.state() == QAbstractAnimation.State.Running
 
-        no_group_ring = _FakeRing(state=None)
-        qfluent_compat.set_indeterminate_progress_ring_active(no_group_ring, True)
-        assert no_group_ring.started == 1
-
-        running_ring = _FakeRing(state=QAbstractAnimation.State.Running)
-        qfluent_compat.set_indeterminate_progress_ring_active(running_ring, False)
-        assert running_ring.stopped == 1
-        assert running_ring.hidden == 1
-
-    def test_set_indeterminate_progress_ring_active_swallows_runtime_errors(self) -> None:
-        ring = _FakeRing(state=QAbstractAnimation.State.Running, stop_raises=True)
         qfluent_compat.set_indeterminate_progress_ring_active(ring, False)
-        assert ring.hidden == 0
+        assert not ring.isVisible()
+        assert ring.aniGroup.state() == QAbstractAnimation.State.Stopped
+        assert ring.property("surveycontroller_active") is False
 
-        fallback_ring = _FakeRing(state=None, stop_raises=True)
-        qfluent_compat.set_indeterminate_progress_ring_active(fallback_ring, False)
-        assert fallback_ring.hidden == 0
+    def test_mask_dialog_parent_resolves_to_owner_window(self, qtbot, monkeypatch) -> None:
+        window = QWidget()
+        child = QWidget(window)
+        qtbot.addWidget(window)
 
-    def test_install_qfluentwidgets_animation_guards_patches_progress_class(
-        self,
-        monkeypatch: pytest.MonkeyPatch,
-    ) -> None:
-        fake_info_bar_manager = type("FakeInfoBarManager", (), {"managers": {}})
-        monkeypatch.setattr(
-            qfluent_compat,
-            "_install_infobar_manager_guards",
-            lambda cls: setattr(cls, "patched", True),
-        )
-        monkeypatch.setattr("qfluentwidgets.IndeterminateProgressBar", _FakeProgressBar)
-        monkeypatch.setattr(
-            "qfluentwidgets.components.widgets.info_bar.InfoBarManager",
-            fake_info_bar_manager,
-        )
-
-        qfluent_compat.install_qfluentwidgets_animation_guards()
-
-        paused = cast(Any, _FakeProgressBar(state=QAbstractAnimation.State.Paused))
-        paused.resume()
-        assert paused.aniGroup.resume_calls == 1
-        assert paused.update_calls == 1
-
-        stopped = cast(Any, _FakeProgressBar(state=QAbstractAnimation.State.Stopped))
-        stopped.resume()
-        assert stopped.start_calls == 1
-
-        running = cast(Any, _FakeProgressBar(state=QAbstractAnimation.State.Running))
-        running.setPaused(True)
-        assert running.aniGroup.pause_calls == 1
-        running.setPaused(False)
-        assert running.update_calls >= 1
-        assert getattr(_FakeProgressBar, "_surveycontroller_resume_guard_installed", False) is True
-        assert getattr(fake_info_bar_manager, "patched", False) is True
-
-    def test_install_infobar_manager_guards_handles_add_remove_and_event_filter(
-        self,
-        monkeypatch: pytest.MonkeyPatch,
-    ) -> None:
-        monkeypatch.setattr(qfluent_compat, "QParallelAnimationGroup", _FakeAnimationGroup)
-        monkeypatch.setattr(qfluent_compat, "QPropertyAnimation", _FakeAnimation)
-        monkeypatch.setattr(
-            qfluent_compat, "isValid", lambda obj: not getattr(obj, "invalid", False)
-        )
-        qfluent_compat._install_infobar_manager_guards(_FakeManager)
-
-        manager = cast(Any, _FakeManager())
-        parent = _FakeParent()
-        bar = _FakeBar(parent)
-
-        manager.add(bar)
-        assert parent in manager.infoBars
-        assert bar in manager.infoBars[parent]
-        assert bar.property("slideAni") is not None
-
-        second_bar = _FakeBar(parent)
-        manager.add(second_bar)
-        second_drop_ani = second_bar.property("dropAni")
-        assert second_drop_ani is not None
-        assert second_drop_ani.start_value == ("pos", None)
-        assert second_drop_ani.end_value == ("pos", None)
-
-        manager._updateDropAni(parent)
-        assert manager.slideAnis
-
-        manager.eventFilter(parent, _FakeEvent(QEvent.Type.Resize))
-        assert bar.moved_to == ("pos", "resized")
-
-        bar.closedSignal.emit()
-        assert id(bar) not in manager._surveycontroller_signal_callbacks
-
-    def test_install_infobar_manager_guards_uses_cached_animation_when_qt_property_degrades(
-        self,
-        monkeypatch: pytest.MonkeyPatch,
-    ) -> None:
-        monkeypatch.setattr(qfluent_compat, "QParallelAnimationGroup", _FakeAnimationGroup)
-        monkeypatch.setattr(qfluent_compat, "QPropertyAnimation", _FakeAnimation)
-        monkeypatch.setattr(
-            qfluent_compat, "isValid", lambda obj: not getattr(obj, "invalid", False)
-        )
-        local_manager_cls = type("LocalFakeManager", (_FakeManager,), {"managers": {}})
-        qfluent_compat._install_infobar_manager_guards(local_manager_cls)
-
-        manager = cast(Any, local_manager_cls())
-        parent = _FakeParent()
-        first_bar = _FakeBar(parent)
-        second_bar = _FakeBar(parent)
-
-        manager.add(first_bar)
-        manager.add(second_bar)
-        second_bar.setProperty("dropAni", _FakeQObjectOnly())
-
-        manager._updateDropAni(parent)
-
-        cached_drop_ani = manager._surveycontroller_bar_animations[id(second_bar)]["dropAni"]
-        assert cached_drop_ani.start_value == (0, 0)
-        assert cached_drop_ani.end_value == ("pos", None)
-
-    def test_install_infobar_manager_guards_remove_uses_cached_animation_without_qt_property(
-        self,
-        monkeypatch: pytest.MonkeyPatch,
-    ) -> None:
-        monkeypatch.setattr(qfluent_compat, "QParallelAnimationGroup", _FakeAnimationGroup)
-        monkeypatch.setattr(qfluent_compat, "QPropertyAnimation", _FakeAnimation)
-        monkeypatch.setattr(
-            qfluent_compat, "isValid", lambda obj: not getattr(obj, "invalid", False)
-        )
-        local_manager_cls = type(
-            "LocalFakeManagerRemove",
-            (_FakeManager,),
-            {"managers": {}, "_surveycontroller_remove_guard_installed": False},
-        )
-        qfluent_compat._install_infobar_manager_guards(local_manager_cls)
-
-        manager = cast(Any, local_manager_cls())
-        parent = _FakeParent()
-        first_bar = _FakeBar(parent)
-        second_bar = _FakeBar(parent, property_raises=True)
-
-        manager.add(first_bar)
-        manager.add(second_bar)
-        manager.remove(second_bar)
-
-        assert second_bar not in manager.infoBars[parent]
-        assert id(second_bar) not in manager._surveycontroller_bar_animations
+        assert qfluent_compat.resolve_mask_dialog_parent(child) is window
+        monkeypatch.setattr(QApplication, "activeWindow", lambda: window)
+        assert qfluent_compat.resolve_mask_dialog_parent(None) is window
 
     def test_ui_callback_dispatcher_covers_enqueue_drain_and_async_paths(
         self,
@@ -382,7 +70,7 @@ class UiHelperTests:
         monkeypatch.setattr(ui_dispatcher_module.threading, "current_thread", threading.main_thread)
         dispatcher.dispatch_async(lambda: calls.append("main-thread"))
 
-        queued: list[Any] = []
+        queued: list = []
         monkeypatch.setattr(ui_dispatcher_module.threading, "current_thread", lambda: object())
         monkeypatch.setattr(dispatcher, "enqueue", lambda callback: queued.append(callback) or True)
         dispatcher.dispatch_async(lambda: calls.append("background"))

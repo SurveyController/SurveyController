@@ -125,6 +125,7 @@ def browse_excel_file(page: Any) -> None:
 
 def on_reverse_fill_threads_changed(page: Any, value: int) -> None:
     page._reverse_fill_threads_value = max(1, int(value or 1))
+    page.configurationChanged.emit({"reverse_fill_threads": page._reverse_fill_threads_value})
     page._refresh_preview()
 
 
@@ -152,6 +153,9 @@ def apply_excel_source_path(page: Any, file_path: str) -> None:
         page._toast("请选择 .xlsx 表格文件", "warning", duration=2600)
         return
     page.file_edit.setText(normalized)
+    page.configurationChanged.emit(
+        {"reverse_fill_source_path": normalized, "reverse_fill_enabled": True}
+    )
     page._refresh_preview()
 
 

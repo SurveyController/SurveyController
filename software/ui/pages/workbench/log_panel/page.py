@@ -12,13 +12,13 @@ from PySide6.QtGui import QFont, QTextCursor
 from qfluentwidgets import (
     SubtitleLabel,
     PushButton,
-    InfoBar,
     InfoBarPosition,
     FluentIcon as FIF,
     isDarkTheme,
     qconfig,
     PlainTextEdit,
 )
+from software.ui.helpers.message_bar import InfoBar
 from software.logging.log_utils import (
     LOG_BUFFER_HANDLER,
     export_full_log_to_file,

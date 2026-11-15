@@ -58,11 +58,6 @@ def test_main_returns_exit_code_and_avoids_hard_exit(monkeypatch) -> None:
         main_module, "qInstallMessageHandler", lambda _handler: events.append("qt_msg")
     )
     monkeypatch.setattr(
-        main_module.QFluentCompat,
-        "install",
-        lambda: events.append("guards"),
-    )
-    monkeypatch.setattr(
         main_module.http_client,
         "prewarm",
         lambda: events.append("prewarm"),
@@ -100,7 +95,6 @@ def test_main_returns_exit_code_and_avoids_hard_exit(monkeypatch) -> None:
         "fault_on",
         "logging_on",
         "qt_msg",
-        "guards",
         "prewarm",
         "shutdown_wait",
         "logging_off",

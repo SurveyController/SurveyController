@@ -17,7 +17,6 @@ from qfluentwidgets import (
     FluentIcon,
     IconWidget,
     IndeterminateProgressRing,
-    InfoBar,
     InfoBarPosition,
     LineEdit,
     MessageBox,
@@ -27,6 +26,7 @@ from qfluentwidgets import (
     SubtitleLabel,
     isDarkTheme,
 )
+from software.ui.helpers.message_bar import InfoBar
 
 from software.app.runtime_paths import get_resource_path
 from software.ui.helpers.qfluent_compat import QFluentCompat

@@ -11,7 +11,6 @@ from qfluentwidgets import (
     ExpandGroupSettingCard,
     FluentIcon,
     IndeterminateProgressRing,
-    InfoBar,
     InfoBarIcon,
     InfoBarPosition,
     HyperlinkButton,
@@ -24,6 +23,7 @@ from qfluentwidgets import (
 )
 
 from software.ui.widgets.full_width_infobar import FullWidthInfoBar
+from software.ui.helpers.message_bar import InfoBar
 from software.ui.workers.ai_test_worker import ai_test_result
 from software.application.ports import AiSettingsPort
 from software.core.config.schema import RuntimeConfig
@@ -69,6 +69,21 @@ class AIPromptSettingCard(ExpandGroupSettingCard):
 
 class RuntimeAISection(QObject):
     aiTestFinished = Signal(bool, str)
+    configurationChanged = Signal(dict)
+
+    def _emit_configuration(self) -> None:
+        self.configurationChanged.emit(
+            {
+                "ai_mode": "provider",
+                "ai_config_mode": "override",
+                "ai_provider": str(self.ai_provider_combo.currentData() or "custom"),
+                "ai_api_key": self.ai_apikey_edit.text().strip(),
+                "ai_base_url": self.ai_baseurl_edit.text().strip(),
+                "ai_api_protocol": "auto",
+                "ai_model": self._get_current_model_value(),
+                "ai_system_prompt": self._ai_system_prompt,
+            }
+        )
 
     def __init__(
         self,
@@ -345,6 +360,7 @@ class RuntimeAISection(QObject):
         idx = self.ai_provider_combo.currentIndex()
         provider_key = str(self.ai_provider_combo.itemData(idx)) if idx >= 0 else "custom"
         self._ai_settings.save_settings(provider=provider_key)
+        self._emit_configuration()
         self._update_ai_visibility()
 
     def _on_ai_apikey_changed(self):
@@ -352,18 +368,21 @@ class RuntimeAISection(QObject):
         if self._ai_loading:
             return
         self._ai_settings.save_settings(api_key=self.ai_apikey_edit.text())
+        self._emit_configuration()
 
     def _on_ai_baseurl_changed(self):
 
         if self._ai_loading:
             return
         self._ai_settings.save_settings(base_url=self.ai_baseurl_edit.text())
+        self._emit_configuration()
 
     def _on_ai_model_edit_changed(self):
 
         if self._ai_loading:
             return
         self._ai_settings.save_settings(model=self.ai_model_edit.text().strip())
+        self._emit_configuration()
 
     def _get_current_model_value(self) -> str:
         return self.ai_model_edit.text().strip()
@@ -374,6 +393,7 @@ class RuntimeAISection(QObject):
             return
         self._ai_system_prompt = self.ai_prompt_card.prompt_text()
         self._ai_settings.save_settings(system_prompt=self._ai_system_prompt)
+        self._emit_configuration()
 
     def _on_ai_test_clicked(self):
 

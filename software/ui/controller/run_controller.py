@@ -241,8 +241,10 @@ class RunController(QObject):
             on_done=on_done,
         )
 
-    def refresh_random_ip_counter(self, *, connect_legacy: bool = False) -> None:
-        self.proxy_operations.refresh_random_ip_counter(connect_legacy=connect_legacy)
+    def refresh_random_ip_counter(self, *, ensure_account_session: bool = False) -> None:
+        self.proxy_operations.refresh_random_ip_counter(
+            ensure_account_session=ensure_account_session,
+        )
 
     def sync_random_ip_counter_from_server(
         self,
@@ -284,24 +286,11 @@ class RunController(QObject):
         self,
         path: Optional[str] = None,
         *,
-        config: Optional[RuntimeConfig] = None,
+        config: RuntimeConfig,
         include_secrets: bool = False,
     ) -> str:
-        cfg = config or build_runtime_config_snapshot(
-            RuntimeConfig(),
-            question_entries=self.get_survey_snapshot().get("question_entries") or [],
-            questions_info=self.get_survey_snapshot().get("questions_info") or [],
-        )
-        self.write_runtime_settings_to_config(cfg)
-        snapshot = self.get_survey_snapshot()
-        cfg.url = str(snapshot.get("url") or "")
-        cfg.survey_title = str(snapshot.get("survey_title") or "")
-        cfg.survey_provider = str(snapshot.get("survey_provider") or "wjx")
-        cfg.questions_info = list(snapshot.get("questions_info") or [])
-        cfg.question_entries = list(snapshot.get("question_entries") or [])
-        self.config = cfg
-        return self.dependencies.configuration.save(
-            cfg,
+        return self._command_service.save_config(
+            build_runtime_config_snapshot(config),
             path,
             include_secrets=include_secrets,
         )

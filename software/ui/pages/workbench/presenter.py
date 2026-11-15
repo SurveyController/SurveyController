@@ -2,18 +2,17 @@ from __future__ import annotations
 
 import copy
 import logging
-from typing import Any, List, Mapping, Sequence
+from collections.abc import Mapping, Sequence
+from typing import Any
 
-from PySide6.QtCore import QTimer, Qt, Slot
-
-from software.core.config.schema import RuntimeConfig
-from software.core.config.codec import build_runtime_config_snapshot
-from software.logging.action_logger import log_action
-from software.providers.common import detect_survey_provider
+from PySide6.QtCore import QSignalBlocker, Qt, QTimer, Slot
 from surveycore.providers.contracts import SurveyQuestionMeta, ensure_survey_question_metas
+
+from software.core.config.codec import build_runtime_config_snapshot
+from software.core.config.schema import RuntimeConfig
+from software.logging.action_logger import log_action
 from software.ui.pages.workbench.dashboard.page import DashboardPage
 from software.ui.pages.workbench.reverse_fill.page import ReverseFillPage
-from software.ui.pages.workbench.runtime_panel.main import RuntimePage
 from software.ui.pages.workbench.session import (
     WorkbenchRunCoordinator,
     WorkbenchState,
@@ -28,12 +27,10 @@ class WorkbenchPresenter:
         self._last_running_state: bool | None = None
         self._last_pause_state: tuple[bool, str] | None = None
         self.state = WorkbenchState(host)
-        self.runtime_page = RuntimePage(controller, host)
         self.strategy_page = QuestionStrategyPage(host)
         self.dashboard = DashboardPage(
             controller,
             self.state,
-            self.runtime_page,
             self.strategy_page,
             host,
         )
@@ -42,7 +39,6 @@ class WorkbenchPresenter:
             state=self.state,
             dashboard=self.dashboard,
         )
-        self.dashboard.config_builder = self.build_current_config
         self.dashboard.set_run_coordinator(self.run_coordinator)
         self.reverse_fill_page = ReverseFillPage(controller, host)
         self.run_coordinator.bind_reverse_fill_page(self.reverse_fill_page)
@@ -52,16 +48,18 @@ class WorkbenchPresenter:
 
     def _configure_pages(self) -> None:
         self.dashboard.setObjectName("dashboard")
-        self.runtime_page.setObjectName("runtime")
-        self.runtime_page.hide()
         self.strategy_page.setObjectName("strategy")
         self.reverse_fill_page.setObjectName("reverse_fill")
         self.reverse_fill_page.set_open_wizard_handler(self.open_reverse_fill_wizard)
 
     def _bind_workbench_signals(self) -> None:
-        self.reverse_fill_page.surveyUrlChanged.connect(self.sync_dashboard_url_from_reverse_fill)
-        self.dashboard.url_edit.textChanged.connect(self.sync_reverse_fill_url_from_dashboard)
-        self.state.entriesChanged.connect(lambda _count: self.sync_reverse_fill_context())
+        self.reverse_fill_page.surveyUrlChanged.connect(self.state.set_url)
+        self.dashboard.url_edit.textChanged.connect(self.state.set_url)
+        self.state.configChanged.connect(self._render_draft_config)
+        self.strategy_page.strategyChanged.connect(self._store_strategy_config)
+        self.reverse_fill_page.configurationChanged.connect(
+            lambda changes: self.state.update_settings(**changes)
+        )
         self.controller.surveySnapshotChanged.connect(
             self.on_survey_snapshot_changed,
             Qt.ConnectionType.QueuedConnection,
@@ -72,19 +70,62 @@ class WorkbenchPresenter:
         )
 
     def apply_config(self, cfg: RuntimeConfig) -> None:
-        self.runtime_page.apply_config(cfg)
-        self.dashboard.apply_config(cfg)
-        self.reverse_fill_page.apply_config(cfg)
-        self.state.set_entries(cfg.question_entries or [], cfg.questions_info or [])
-        self.strategy_page.set_questions_info(cfg.questions_info or [])
-        self.strategy_page.set_entries(
-            self.state.entries,
-            self.state.entry_questions_info,
+        self.state.apply_config(cfg)
+
+    def _render_draft_config(
+        self,
+        cfg: RuntimeConfig,
+        changed_fields: frozenset[str],
+    ) -> None:
+        all_fields = frozenset(cfg.__dataclass_fields__)
+        if changed_fields == all_fields:
+            self.dashboard.apply_config(cfg)
+            self.reverse_fill_page.apply_config(cfg)
+            self.strategy_page.set_questions_info(cfg.questions_info or [])
+            self.strategy_page.set_entries(self.state.entries, self.state.entry_questions_info)
+            self.strategy_page.set_rules(cfg.answer_rules or [])
+            self.strategy_page.set_dimension_groups(cfg.dimension_groups or [])
+            self.dashboard.update_question_meta(
+                cfg.survey_title or "", len(cfg.question_entries or [])
+            )
+            self.sync_reverse_fill_context()
+            return
+
+        if "url" in changed_fields:
+            self._render_survey_url(cfg.url)
+        if changed_fields & {
+            "survey_title",
+            "survey_provider",
+            "question_entries",
+            "questions_info",
+        }:
+            self.dashboard.update_question_meta(cfg.survey_title, len(cfg.question_entries or []))
+            self.strategy_page.set_questions_info(cfg.questions_info or [])
+            self.strategy_page.set_entries(self.state.entries, self.state.entry_questions_info)
+            self.sync_reverse_fill_context()
+        if "random_ip_enabled" in changed_fields:
+            self.reverse_fill_page.apply_runtime_settings(
+                {"random_ip_enabled": cfg.random_ip_enabled}
+            )
+        if "answer_rules" in changed_fields:
+            self.strategy_page.set_rules(cfg.answer_rules or [])
+        if "dimension_groups" in changed_fields:
+            self.strategy_page.set_dimension_groups(cfg.dimension_groups or [])
+
+    def _store_strategy_config(self) -> None:
+        self.state.update_settings(
+            question_entries=self.strategy_page.get_entries(),
+            answer_rules=self.strategy_page.get_rules(),
+            dimension_groups=self.strategy_page.get_dimension_groups(),
         )
-        self.strategy_page.set_rules(getattr(cfg, "answer_rules", []) or [])
-        self.strategy_page.set_dimension_groups(getattr(cfg, "dimension_groups", []) or [])
-        self.dashboard.update_question_meta(cfg.survey_title or "", len(cfg.question_entries or []))
-        self.sync_reverse_fill_context()
+
+    def _render_survey_url(self, url: str) -> None:
+        text = str(url or "").strip()
+        for editor in (self.dashboard.url_edit, self.reverse_fill_page.url_edit):
+            if str(editor.text() or "").strip() != text:
+                with QSignalBlocker(editor):
+                    editor.setText(text)
+        self.reverse_fill_page._refresh_preview()
 
     def load_saved_config(self, *, strict: bool = False) -> RuntimeConfig:
         cfg = self.controller.load_saved_config(strict=strict)
@@ -99,29 +140,16 @@ class WorkbenchPresenter:
         return cfg
 
     def build_current_config(self) -> RuntimeConfig:
-        cfg = self.dashboard.build_base_config()
-        try:
-            self.reverse_fill_page.update_config(cfg)
-        except Exception:
-            logging.debug("构建配置时同步反填配置失败", exc_info=True)
-        return cfg
+        return self.state.snapshot()
 
     def build_current_config_snapshot(self) -> RuntimeConfig:
-        cfg = build_runtime_config_snapshot(
-            self.build_current_config(),
-            question_entries=self.state.get_entries(),
-            questions_info=self.state.questions_info,
-        )
-        if hasattr(self.controller, "config"):
-            self.controller.config = cfg
-        return cfg
+        return build_runtime_config_snapshot(self.state.snapshot())
 
     @Slot(dict)
     def on_survey_snapshot_changed(self, snapshot: dict[str, Any]) -> None:
         phase = str((snapshot or {}).get("phase") or "")
         parsed_url = str((snapshot or {}).get("url") or "")
-        self.sync_dashboard_url_from_reverse_fill(parsed_url)
-        self.sync_reverse_fill_url_from_dashboard(parsed_url)
+        self.state.set_url(parsed_url)
         if phase == "error":
             self.on_survey_parse_failed(str((snapshot or {}).get("parse_error") or ""))
             return
@@ -134,100 +162,63 @@ class WorkbenchPresenter:
         questions = ensure_survey_question_metas((snapshot or {}).get("questions_info") or [])
         parsed_title = str((snapshot or {}).get("survey_title") or "") or "问卷"
         entries = list((snapshot or {}).get("question_entries") or [])
-        self._notify_dashboard_parse_succeeded(questions, parsed_title)
-        self.strategy_page.set_questions_info(questions)
+        self.state.update_settings(
+            url=parsed_url,
+            survey_title=parsed_title,
+            survey_provider=str((snapshot or {}).get("survey_provider") or "wjx"),
+        )
+        self.dashboard.present_parse_succeeded(questions, parsed_title)
+        self.reverse_fill_page.present_parse_succeeded(questions, parsed_title)
         if getattr(self.dashboard, "_open_wizard_after_parse", False):
             self.dashboard._open_wizard_after_parse = False
             info_snapshot = copy.deepcopy(questions)
             QTimer.singleShot(
                 0,
-                lambda: self.open_parse_wizard_after_parse(info_snapshot, parsed_title),
+                lambda: self.open_parse_wizard_after_parse(
+                    info_snapshot, parsed_title, entries=entries
+                ),
             )
             return
         self.state.set_questions(questions, entries)
-        self.strategy_page.set_dimension_groups([])
-        self.strategy_page.set_entries(
-            self.state.entries,
-            self.state.entry_questions_info,
-        )
         self.dashboard.update_question_meta(parsed_title, len(entries))
         self.sync_reverse_fill_context()
-
-    def on_survey_parsed(self, info: list[Any], title: str) -> None:
-        self.on_survey_snapshot_changed(
-            {
-                "phase": "ready",
-                "url": str(getattr(getattr(self.controller, "config", None), "url", "") or ""),
-                "survey_title": str(title or ""),
-                "survey_provider": str(
-                    getattr(self.controller, "survey_provider", "")
-                    or getattr(getattr(self.controller, "config", None), "survey_provider", "wjx")
-                    or "wjx"
-                ),
-                "questions_info": list(info or []),
-                "question_entries": list(getattr(self.controller, "question_entries", []) or []),
-            }
-        )
 
     @Slot(str)
     def on_survey_parse_failed(self, msg: str) -> None:
         text = str(msg or "").strip()
         self._clear_parsed_questions_state()
-        self._notify_dashboard_parse_failed(text)
-        if "问卷已暂停" in text:
-            self.dashboard._open_wizard_after_parse = False
-            return
+        self.dashboard.present_parse_failed(text)
+        self.reverse_fill_page.present_parse_failed(text)
         self.dashboard._open_wizard_after_parse = False
 
     def _clear_parsed_questions_state(self) -> None:
-        self.state.set_questions([], [])
-        self.strategy_page.set_questions_info([])
-        self.strategy_page.set_entries(
-            self.state.entries,
-            self.state.entry_questions_info,
+        self.state.update_settings(
+            question_entries=[],
+            questions_info=[],
+            survey_title="",
+            dimension_groups=[],
         )
-        self.dashboard.update_question_meta("", 0)
-        self.sync_reverse_fill_context()
-
-    def _notify_dashboard_parse_succeeded(
-        self,
-        info: list[SurveyQuestionMeta],
-        title: str,
-    ) -> None:
-        handler = getattr(self.dashboard, "_on_survey_parsed", None)
-        if callable(handler):
-            handler(list(info or []), str(title or ""))
-        reverse_handler = getattr(self.reverse_fill_page, "_on_survey_parsed", None)
-        if callable(reverse_handler):
-            reverse_handler(list(info or []), str(title or ""))
-
-    def _notify_dashboard_parse_failed(self, message: str) -> None:
-        handler = getattr(self.dashboard, "_on_survey_parse_failed", None)
-        if callable(handler):
-            handler(str(message or ""))
-        reverse_handler = getattr(self.reverse_fill_page, "_on_survey_parse_failed", None)
-        if callable(reverse_handler):
-            reverse_handler(str(message or ""))
 
     @Slot(dict)
     def on_runtime_snapshot_changed(self, snapshot: dict[str, Any]) -> None:
+        runtime_settings = (snapshot or {}).get("settings") or {}
+        if "random_ip_enabled" in runtime_settings:
+            self.state.update_settings(
+                random_ip_enabled=bool(runtime_settings["random_ip_enabled"])
+            )
         running = bool((snapshot or {}).get("running"))
         paused = bool((snapshot or {}).get("paused"))
         pause_reason = str((snapshot or {}).get("status_text") or "")
         progress = (snapshot or {}).get("progress") or {}
         random_ip = (snapshot or {}).get("random_ip") or {}
-        if getattr(self, "_last_running_state", None) != running:
+        if self._last_running_state != running:
             was_running = self._last_running_state
             self._last_running_state = running
             self.reverse_fill_page.on_run_state_changed(running)
-            if hasattr(self.dashboard, "on_run_state_changed"):
-                self.dashboard.on_run_state_changed(running)
+            self.dashboard.on_run_state_changed(running)
             if was_running is not True and running:
-                if hasattr(self.dashboard, "open_execution_step"):
-                    self.dashboard.open_execution_step()
-                switch = getattr(self.host, "switchTo", None)
-                if callable(switch):
-                    switch(self.dashboard)
+                self.dashboard.open_execution_step()
+                self.host.switchTo(self.dashboard)
             if was_running and not running and self.dashboard._pending_restart:
                 self.dashboard._pending_restart = False
                 QTimer.singleShot(0, self.run_coordinator.start)
@@ -240,87 +231,22 @@ class WorkbenchPresenter:
             int(progress.get("current") or 0),
             int(progress.get("target") or 0),
         )
-        if hasattr(self.dashboard, "apply_runtime_snapshot"):
-            self.dashboard.apply_runtime_snapshot(snapshot or {})
-        else:
-            if hasattr(self.dashboard, "update_status"):
-                self.dashboard.update_status(
-                    str((snapshot or {}).get("status_text") or ""),
-                    int(progress.get("current") or 0),
-                    int(progress.get("target") or 0),
-                )
-            if hasattr(self.dashboard, "update_thread_progress"):
-                threads = (snapshot or {}).get("threads") or {}
-                self.dashboard.update_thread_progress(
-                    {
-                        "target": int(progress.get("target") or 0),
-                        "num_threads": int(threads.get("num_threads") or 0),
-                        "per_thread_target": int(threads.get("per_thread_target") or 0),
-                        "threads": list(threads.get("rows") or []),
-                        "running": running,
-                        "paused": paused,
-                        "phase_code": str((snapshot or {}).get("phase_code") or ""),
-                    }
-                )
+        self.dashboard.apply_runtime_snapshot(snapshot or {})
         pause_state = (paused, pause_reason if paused else "")
-        if getattr(self, "_last_pause_state", None) != pause_state:
+        if self._last_pause_state != pause_state:
             self._last_pause_state = pause_state
             self.reverse_fill_page.on_pause_state_changed(*pause_state)
-            if hasattr(self.dashboard, "on_pause_state_changed"):
-                self.dashboard.on_pause_state_changed(*pause_state)
+            self.dashboard.on_pause_state_changed(*pause_state)
 
     def sync_reverse_fill_context(self) -> None:
-        try:
-            url_edit = getattr(self.dashboard, "url_edit", None)
-            url_text = url_edit.text() if url_edit is not None and hasattr(url_edit, "text") else ""
-            if hasattr(self.controller, "get_survey_snapshot"):
-                survey_provider = str(
-                    (self.controller.get_survey_snapshot().get("survey_provider") or "")
-                    or detect_survey_provider(url_text, default="")
-                    or ""
-                )
-            else:
-                survey_provider = str(
-                    getattr(self.controller, "survey_provider", "")
-                    or getattr(getattr(self.controller, "config", None), "survey_provider", "")
-                    or detect_survey_provider(url_text, default="")
-                    or ""
-                )
-            self.reverse_fill_page.set_question_context(
-                self.state.questions_info,
-                self.state.get_entries(),
-                survey_title=getattr(self.dashboard, "_survey_title", "") or "",
-                survey_provider=survey_provider,
-            )
-        except Exception:
-            logging.info("同步反填页上下文失败", exc_info=True)
+        self.reverse_fill_page.set_question_context(
+            self.state.questions_info,
+            self.state.get_entries(),
+            survey_title=self.state.snapshot().survey_title,
+            survey_provider=self.state.snapshot().survey_provider,
+        )
 
-    def sync_dashboard_url_from_reverse_fill(self, url: str) -> None:
-        text = str(url or "").strip()
-        url_edit = getattr(self.dashboard, "url_edit", None)
-        if url_edit is None or not hasattr(url_edit, "text") or not hasattr(url_edit, "setText"):
-            return
-        if str(url_edit.text() or "").strip() == text:
-            return
-        url_edit.blockSignals(True)
-        url_edit.setText(text)
-        url_edit.blockSignals(False)
-        refresh_preview = getattr(self.reverse_fill_page, "_refresh_preview", None)
-        if callable(refresh_preview):
-            refresh_preview()
-
-    def sync_reverse_fill_url_from_dashboard(self, url: str) -> None:
-        text = str(url or "").strip()
-        url_edit = getattr(self.reverse_fill_page, "url_edit", None)
-        if url_edit is None or not hasattr(url_edit, "text") or not hasattr(url_edit, "setText"):
-            return
-        if str(url_edit.text() or "").strip() == text:
-            return
-        url_edit.blockSignals(True)
-        url_edit.setText(text)
-        url_edit.blockSignals(False)
-
-    def open_reverse_fill_wizard(self, issue_question_nums: List[int]) -> None:
+    def open_reverse_fill_wizard(self, issue_question_nums: list[int]) -> None:
         info = list(self.state.questions_info or [])
         if not info:
             self.host._toast("当前还没有解析出题目，无法打开配置向导。", "warning")
@@ -331,7 +257,7 @@ class WorkbenchPresenter:
             return
         self.open_parse_wizard_after_parse(
             copy.deepcopy(info),
-            str(getattr(self.dashboard, "_survey_title", "") or "问卷"),
+            str(self.state.snapshot().survey_title or "问卷"),
             issue_question_nums=sorted(issue_nums),
         )
 
@@ -340,7 +266,8 @@ class WorkbenchPresenter:
         info: Sequence[SurveyQuestionMeta | Mapping[str, Any]],
         parsed_title: str,
         *,
-        issue_question_nums: List[int] | None = None,
+        issue_question_nums: list[int] | None = None,
+        entries: Sequence[Any] | None = None,
     ) -> None:
         normalized_info = ensure_survey_question_metas(info or [])
 
@@ -361,18 +288,6 @@ class WorkbenchPresenter:
                         )
                     pending_entries = merged_entries
                 self.state.set_questions(normalized_info, pending_entries)
-                self.controller.replace_question_entries(
-                    pending_entries,
-                    questions_info=normalized_info,
-                )
-                if not selected_issue_nums:
-                    self.strategy_page.set_dimension_groups([])
-                self.strategy_page.set_entries(
-                    self.state.entries,
-                    self.state.entry_questions_info,
-                )
-                self.sync_reverse_fill_context()
-                self.dashboard.update_question_meta(parsed_title, len(pending_entries))
                 log_action(
                     "UI",
                     "open_parse_wizard",
@@ -400,8 +315,8 @@ class WorkbenchPresenter:
             self.host._toast("已取消自动配置，保留原有题目设置", "warning")
 
         try:
-            pending_entries = copy.deepcopy(
-                self.controller.get_survey_snapshot().get("question_entries") or []
+            pending_entries = (
+                self.state.get_entries() if entries is None else copy.deepcopy(list(entries))
             )
             selected_info: list[SurveyQuestionMeta | dict[str, Any]] = list(
                 copy.deepcopy(normalized_info)
@@ -433,7 +348,7 @@ class WorkbenchPresenter:
                         "warning",
                     )
                     return
-            if not selected_issue_nums and hasattr(self.dashboard, "open_inline_question_wizard"):
+            if not selected_issue_nums:
                 self.dashboard.open_inline_question_wizard(
                     selected_entries,
                     selected_info,

@@ -3,7 +3,7 @@ from __future__ import annotations
 from typing import cast
 
 import pytest
-from PySide6.QtWidgets import QApplication
+from PySide6.QtWidgets import QApplication, QWidget
 
 from software.app.config import DEFAULT_FILL_TEXT
 from software.ui.pages.workbench.question_editor.add_dialog import QuestionAddDialog
@@ -23,13 +23,22 @@ def _select_type(dialog: QuestionAddDialog, question_type: str) -> None:
     dialog.type_combo.setCurrentIndex(index)
 
 
+def _new_dialog() -> QuestionAddDialog:
+    parent = QWidget()
+    parent.resize(960, 720)
+    parent.show()
+    dialog = QuestionAddDialog([], parent)
+    dialog._test_parent = parent
+    return dialog
+
+
 class QuestionAddDialogLargeTests:
     def test_text_preview_ai_toggle_and_accept_builds_text_entry(self, monkeypatch) -> None:
         monkeypatch.setattr(
             "software.ui.pages.workbench.question_editor.add_preview.ensure_ai_ready",
             lambda _parent: False,
         )
-        dialog = QuestionAddDialog([])
+        dialog = _new_dialog()
         _select_type(dialog, "text")
         assert dialog._resolve_q_type() == "text"
         assert not dialog.answer_count_widget.isHidden()
@@ -56,7 +65,7 @@ class QuestionAddDialogLargeTests:
         assert entry.ai_enabled is False
 
     def test_multi_text_falls_back_to_default_fill_text(self) -> None:
-        dialog = QuestionAddDialog([])
+        dialog = _new_dialog()
         _select_type(dialog, "text")
         dialog.text_add_btn.click()
         for edit in dialog._text_edits:
@@ -67,7 +76,7 @@ class QuestionAddDialogLargeTests:
         assert entry.texts == [DEFAULT_FILL_TEXT]
 
     def test_slider_and_random_strategy_hide_option_count(self) -> None:
-        dialog = QuestionAddDialog([])
+        dialog = _new_dialog()
         _select_type(dialog, "slider")
         assert dialog._resolve_q_type() == "slider"
         assert not dialog.option_row_widget.isVisible()
@@ -81,7 +90,7 @@ class QuestionAddDialogLargeTests:
         assert entry.option_count == 1
 
     def test_custom_multiple_strategy_builds_custom_weights(self) -> None:
-        dialog = QuestionAddDialog([])
+        dialog = _new_dialog()
         _select_type(dialog, "multiple")
         dialog.strategy_combo.setCurrentIndex(1)
         dialog.option_spin.setValue(3)
@@ -93,7 +102,7 @@ class QuestionAddDialogLargeTests:
         assert entry.probabilities == [5.0, 55.0, 100.0]
 
     def test_custom_slider_target_keeps_100_cap(self) -> None:
-        dialog = QuestionAddDialog([])
+        dialog = _new_dialog()
         _select_type(dialog, "slider")
         dialog.strategy_combo.setCurrentIndex(1)
         dialog._slider_values = [188.0]
@@ -103,7 +112,7 @@ class QuestionAddDialogLargeTests:
         assert entry.probabilities == [100.0]
 
     def test_order_entry_ignores_strategy_weights(self) -> None:
-        dialog = QuestionAddDialog([])
+        dialog = _new_dialog()
         _select_type(dialog, "order")
         dialog.option_spin.setValue(5)
         entry = dialog._build_entry()
@@ -112,7 +121,7 @@ class QuestionAddDialogLargeTests:
         assert entry.option_count == 5
 
     def test_location_type_builds_location_text_entry(self) -> None:
-        dialog = QuestionAddDialog([])
+        dialog = _new_dialog()
         dialog.type_combo.setCurrentText("地区题")
         assert dialog._resolve_q_type() == "location"
         assert dialog.option_row_widget.isHidden()
@@ -125,7 +134,7 @@ class QuestionAddDialogLargeTests:
         assert entry.texts == [DEFAULT_FILL_TEXT]
 
     def test_matrix_preview_and_custom_matrix_entry(self) -> None:
-        dialog = QuestionAddDialog([])
+        dialog = _new_dialog()
         _select_type(dialog, "matrix")
         dialog.option_spin.setValue(3)
         dialog.row_count_spin.setValue(2)
@@ -145,7 +154,7 @@ class QuestionAddDialogLargeTests:
         assert cast(list[list[float]], entry.custom_weights)[0] == [1.0, 2.0, 1.0]
 
     def test_sync_base_visibility_restores_option_backup(self) -> None:
-        dialog = QuestionAddDialog([])
+        dialog = _new_dialog()
         dialog.option_spin.setValue(6)
         _select_type(dialog, "slider")
         assert dialog._option_backup == 6

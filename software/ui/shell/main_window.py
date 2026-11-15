@@ -3,6 +3,7 @@ from __future__ import annotations
 import logging
 import os
 import sys
+from concurrent.futures import Future
 from types import SimpleNamespace
 from typing import List, cast
 
@@ -13,8 +14,6 @@ from qfluentwidgets import (
     FluentWindow,
     Flyout,
     FlyoutAnimationType,
-    InfoBar,
-    InfoBarPosition,
     Theme,
     qconfig,
     setTheme,
@@ -102,6 +101,7 @@ class MainWindow(
         self._async_dialog_refs = []
         self._quota_redeem_dialog = None
         self._quota_redeem_dialog_active = False
+        self._quota_redeem_waiters: list[Future[bool]] = []
         self._startup_update_check_timer = None
         self._startup_update_check_completed = False
         self._startup_update_notification_timer = None
@@ -138,7 +138,6 @@ class MainWindow(
         )
         self.workbench = WorkbenchPresenter(controller=self.controller, host=self)
         self.workbench_state = self.workbench.state
-        self.runtime_page = self.workbench.runtime_page
         self.strategy_page = self.workbench.strategy_page
         self.dashboard = self.workbench.dashboard
         self.run_coordinator = self.workbench.run_coordinator
@@ -307,9 +306,6 @@ class MainWindow(
             )
             self._last_logged_page = current_name
 
-    def _show_dialog_message(self, title: str, message: str, level: str = "info") -> None:
-        self.show_message_dialog(title, message, level=level)
-
     def _notify_ai_unstable(self) -> None:
         self._toast("AI 填空连续失败，请稍后再试", "warning", duration=3500)
 
@@ -468,47 +464,13 @@ class MainWindow(
 
     def _register_popups(self):
         def handler(kind: str, title: str, message: str):
-            def _show():
-                if kind == "confirm":
-                    return self.show_confirm_dialog(title, message)
-                if kind == "error":
-                    InfoBar.error(
-                        title,
-                        message,
-                        parent=self,
-                        position=InfoBarPosition.TOP,
-                        duration=3000,
-                    )
-                    return False
-                if kind == "warning":
-                    InfoBar.warning(
-                        title,
-                        message,
-                        parent=self,
-                        position=InfoBarPosition.TOP,
-                        duration=3000,
-                    )
-                    return True
-                InfoBar.info(
-                    title,
-                    message,
-                    parent=self,
-                    position=InfoBarPosition.TOP,
-                    duration=2500,
-                )
-                return True
-
-            return self._dispatch_to_ui(_show)
+            if kind == "confirm":
+                self.request_confirm_dialog(title, message)
+                return False
+            self._toast(message, "error" if kind == "error" else kind, 3000)
+            return kind != "error"
 
         register_popup_handler(handler)
-
-    @Slot(list, str)
-    def _on_survey_parsed(self, info: list, title: str):
-        self.workbench.on_survey_parsed(info, title)
-
-    @Slot(str)
-    def _on_survey_parse_failed(self, msg: str):
-        self.workbench.on_survey_parse_failed(msg)
 
     def _on_run_failed(self, msg: str) -> None:
         text = str(msg or "")
@@ -523,20 +485,22 @@ class MainWindow(
             self._on_run_failed(str((event or {}).get("message") or ""))
             return
         if event_type in {"dialog_message", "open_quota_request_form"}:
-            accepted = False
-            try:
-                if event_type == "dialog_message":
-                    self._show_dialog_message(
-                        str(event.get("title") or ""),
-                        str(event.get("message") or ""),
-                        str(event.get("level") or "info"),
+            request_id = str(event.get("request_id") or "")
+            if event_type == "dialog_message":
+                result = self.show_message_dialog(
+                    str(event.get("title") or ""),
+                    str(event.get("message") or ""),
+                    level=str(event.get("level") or "info"),
+                )
+            else:
+                result = self._open_quota_redeem_dialog_async()
+            if request_id:
+                result.add_done_callback(
+                    lambda future, request_id=request_id: self.controller.respond_to_interaction(
+                        request_id,
+                        bool(future.result()),
                     )
-                elif event_type == "open_quota_request_form":
-                    accepted = self._open_quota_request_form()
-            finally:
-                request_id = str(event.get("request_id") or "")
-                if request_id:
-                    self.controller.respond_to_interaction(request_id, accepted)
+                )
             return
         if event_type == "ai_unstable":
             self._notify_ai_unstable()
@@ -547,59 +511,45 @@ class MainWindow(
         if event_type == "run_finished":
             self.reverse_fill_page.on_run_finished()
 
-    def _open_quota_request_form(self) -> bool:
-        return self._open_quota_redeem_dialog()
-
-    def _open_quota_redeem_dialog(self) -> bool:
+    def _open_quota_redeem_dialog_async(self) -> Future[bool]:
+        result: Future[bool] = Future()
         dialog = getattr(self, "_quota_redeem_dialog", None)
         if dialog is not None and isValid(dialog):
-            try:
-                dialog.raise_()
-                dialog.activateWindow()
-            except Exception:
-                logging.info("额度兑换窗口前置失败", exc_info=True)
-            return False
+            dialog.raise_()
+            dialog.activateWindow()
+            self._quota_redeem_waiters.append(result)
+            return result
 
-        dlg = QuotaRedeemDialog(self, submit_async_task=self.controller.submit_ui_task)
-        self._quota_redeem_dialog = dlg
+        dialog = QuotaRedeemDialog(self, submit_async_task=self.controller.submit_ui_task)
+        self._quota_redeem_dialog = dialog
         self._quota_redeem_dialog_active = True
-        dlg.finished.connect(self._on_quota_redeem_dialog_finished_event)
-        dlg.destroyed.connect(self._on_quota_redeem_dialog_destroyed_event)
-        accepted = dlg.exec() == QDialog.DialogCode.Accepted
+        self._quota_redeem_waiters.append(result)
+        dialog.finished.connect(self._on_quota_redeem_interaction_finished)
+        dialog.destroyed.connect(self._on_quota_redeem_interaction_destroyed)
+        self._open_async_dialog(dialog, result)
+        return result
+
+    def _open_quota_redeem_dialog(self) -> Future[bool]:
+        return self._open_quota_redeem_dialog_async()
+
+    def _on_quota_redeem_interaction_finished(self, code: int) -> None:
+        accepted = code == QDialog.DialogCode.Accepted
         if accepted:
             self.controller.refresh_random_ip_counter()
-        return accepted
+        for waiter in self._quota_redeem_waiters:
+            if not waiter.done():
+                waiter.set_result(accepted)
+        self._quota_redeem_waiters.clear()
+        self._quota_redeem_dialog = None
+        self._quota_redeem_dialog_active = False
 
-    def _on_quota_redeem_dialog_finished(self, dialog: QDialog) -> None:
-        self._on_quota_redeem_dialog_destroyed(dialog)
-
-    @Slot(int)
-    def _on_quota_redeem_dialog_finished_event(self, _result: int) -> None:
-        dialog = self.sender()
-        if not isinstance(dialog, QDialog):
-            return
-        self._on_quota_redeem_dialog_finished(dialog)
-
-    def _on_quota_redeem_dialog_destroyed(self, dialog: QDialog) -> None:
-        current_dialog = getattr(self, "_quota_redeem_dialog", None)
-        if current_dialog is dialog:
-            self._quota_redeem_dialog = None
-            self._quota_redeem_dialog_active = False
-
-    @Slot()
-    def _on_quota_redeem_dialog_destroyed_event(self, *_args) -> None:
-        dialog = getattr(self, "_quota_redeem_dialog", None)
-        if isinstance(dialog, QDialog):
-            self._on_quota_redeem_dialog_destroyed(dialog)
-
-    def _sync_reverse_fill_context(self) -> None:
-        self.workbench.sync_reverse_fill_context()
-
-    def _sync_dashboard_url_from_reverse_fill(self, url: str) -> None:
-        self.workbench.sync_dashboard_url_from_reverse_fill(url)
-
-    def _sync_reverse_fill_url_from_dashboard(self, url: str) -> None:
-        self.workbench.sync_reverse_fill_url_from_dashboard(url)
+    def _on_quota_redeem_interaction_destroyed(self, *_args) -> None:
+        for waiter in self._quota_redeem_waiters:
+            if not waiter.done():
+                waiter.set_result(False)
+        self._quota_redeem_waiters.clear()
+        self._quota_redeem_dialog = None
+        self._quota_redeem_dialog_active = False
 
     def _open_reverse_fill_wizard(self, issue_question_nums: List[int]) -> None:
         self.workbench.open_reverse_fill_wizard(issue_question_nums)

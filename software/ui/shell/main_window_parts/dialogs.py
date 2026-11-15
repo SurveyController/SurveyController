@@ -1,14 +1,13 @@
 from __future__ import annotations
 
-import logging
-import threading
-from typing import TYPE_CHECKING, Any, Callable, Dict, cast
+from concurrent.futures import Future
+from typing import TYPE_CHECKING, Any, Callable, cast
 
-from PySide6.QtCore import QObject, QCoreApplication, QThread, QTimer
+from PySide6.QtCore import QObject, QThread, QTimer, Qt
 from PySide6.QtGui import QGuiApplication, QIcon
 from PySide6.QtWidgets import QApplication
 from PySide6.QtWidgets import QDialog
-from qfluentwidgets import InfoBar, InfoBarPosition, MessageBox
+from qfluentwidgets import MessageBox
 
 from software.app.config import (
     TASK_RESULT_SYSTEM_NOTIFICATION_SETTING_KEY,
@@ -16,11 +15,10 @@ from software.app.config import (
     get_bool_from_qsettings,
 )
 from software.logging.action_logger import log_action
+from software.ui.helpers.message_bar import show_message_bar
 
 
 class MainWindowDialogsMixin:
-    _UI_DISPATCH_TIMEOUT_SECONDS = 5.0
-
     if TYPE_CHECKING:
         _task_result_tray_icon: Any
         _async_dialog_refs: Any
@@ -35,73 +33,11 @@ class MainWindowDialogsMixin:
 
         return cast(QObject, self)
 
-    def _dispatch_to_ui(self, func: Callable[[], Any]) -> Any:
-        if cast(QObject, self).thread() == QThread.currentThread():
-            return func()
-        if QCoreApplication.instance() is None:
-            return func()
-
-        done = threading.Event()
-        result: Dict[str, Any] = {}
-        ticket = object()
-
-        def _wrapper():
-            if result.get("cancelled") is ticket:
-                done.set()
-                return
-            try:
-                result["value"] = func()
-            finally:
-                done.set()
-
-        QTimer.singleShot(0, self._qt_timer_context(), _wrapper)
-
-        if not done.wait(timeout=self._UI_DISPATCH_TIMEOUT_SECONDS):
-            result["cancelled"] = ticket
-            logging.warning("UI 调度超时，放弃执行回调以避免阻塞")
-            return None
-        return result.get("value")
-
     def _toast(self, text: str, level: str = "info", duration: int = 2000):
-        kind = level.lower()
-        if kind == "success":
-            InfoBar.success(
-                "",
-                text,
-                parent=self,
-                position=InfoBarPosition.TOP,
-                duration=duration,
-            )
-        elif kind == "warning":
-            InfoBar.warning(
-                "",
-                text,
-                parent=self,
-                position=InfoBarPosition.TOP,
-                duration=duration,
-            )
-        elif kind == "error":
-            InfoBar.error(
-                "",
-                text,
-                parent=self,
-                position=InfoBarPosition.TOP,
-                duration=duration,
-            )
-        else:
-            InfoBar.info(
-                "",
-                text,
-                parent=self,
-                position=InfoBarPosition.TOP,
-                duration=duration,
-            )
+        show_message_bar(parent=self, message=text, level=level, duration=duration)
 
     def _dispatch_to_ui_async(self, func: Callable[[], Any]) -> None:
         if cast(QObject, self).thread() == QThread.currentThread():
-            func()
-            return
-        if QCoreApplication.instance() is None:
             func()
             return
         QTimer.singleShot(0, self._qt_timer_context(), func)
@@ -161,58 +97,42 @@ class MainWindowDialogsMixin:
     def show_task_result_windows_notification(self, title: str, message: str) -> None:
         self.show_task_result_system_notification(title, message)
 
-    def _track_async_dialog(self, dialog: QDialog) -> None:
-        dialogs = getattr(self, "_async_dialog_refs", None)
-        if dialogs is None:
-            dialogs = []
-            self._async_dialog_refs = dialogs
-        dialogs.append(dialog)
+    def _open_async_dialog(self, dialog: QDialog, result: Future[bool]) -> None:
+        self._async_dialog_refs.append(dialog)
+        dialog.setAttribute(Qt.WidgetAttribute.WA_DeleteOnClose, True)
 
-        def _cleanup(*_args) -> None:
-            current = getattr(self, "_async_dialog_refs", None) or []
-            try:
-                current.remove(dialog)
-            except ValueError:
-                pass
+        def _finish(code: int) -> None:
+            if not result.done():
+                result.set_result(code == QDialog.DialogCode.Accepted)
 
-        dialog.destroyed.connect(_cleanup)
+        def _destroyed(*_args) -> None:
+            self._async_dialog_refs.remove(dialog)
+            if not result.done():
+                result.set_result(False)
 
-    def show_confirm_dialog(self, title: str, message: str) -> bool:
+        dialog.finished.connect(_finish)
+        dialog.destroyed.connect(_destroyed)
+        dialog.open()
 
-        def _show():
-            log_action(
-                "DIALOG",
-                "confirm",
-                "message_box",
-                "main_window",
-                result="shown",
-                detail=title,
-            )
-            box = MessageBox(title, message, self)
-            box.yesButton.setText("确定")
-            box.cancelButton.setText("取消")
-            accepted = bool(box.exec())
-            log_action(
-                "DIALOG",
-                "confirm",
-                "message_box",
-                "main_window",
-                result="confirmed" if accepted else "cancelled",
-                detail=title,
-            )
-            return accepted
-
-        return bool(self._dispatch_to_ui(_show))
-
-    def show_custom_confirm_dialog_ui(
+    def _request_message_box(
         self,
         title: str,
         message: str,
+        *,
         yes_text: str,
-        cancel_text: str,
-    ) -> bool:
+        cancel_text: str | None,
+    ) -> Future[bool]:
+        result: Future[bool] = Future()
 
-        def _show() -> bool:
+        def _cancel(*_args) -> None:
+            if not result.done():
+                result.set_result(False)
+
+        cast(QObject, self).destroyed.connect(_cancel)
+
+        def _show() -> None:
+            if result.done():
+                return
             log_action(
                 "DIALOG",
                 "confirm",
@@ -222,30 +142,43 @@ class MainWindowDialogsMixin:
                 detail=title,
             )
             box = MessageBox(title, message, self)
-            box.yesButton.setText(str(yes_text or "确定"))
-            box.cancelButton.setText(str(cancel_text or "取消"))
-            accepted = bool(box.exec())
-            log_action(
-                "DIALOG",
-                "confirm",
-                "message_box",
-                "main_window",
-                result="confirmed" if accepted else "cancelled",
-                detail=title,
-            )
-            return accepted
+            box.yesButton.setText(yes_text)
+            if cancel_text is None:
+                box.cancelButton.hide()
+            else:
+                box.cancelButton.setText(cancel_text)
 
-        return bool(self._dispatch_to_ui(_show))
+            def _complete(future: Future[bool]) -> None:
+                cast(QObject, self).destroyed.disconnect(_cancel)
+                log_action(
+                    "DIALOG",
+                    "confirm",
+                    "message_box",
+                    "main_window",
+                    result="confirmed" if future.result() else "cancelled",
+                    detail=title,
+                )
 
-    def show_message_dialog(self, title: str, message: str, *, level: str = "info") -> None:
-
-        _ = level
-
-        def _show():
-            box = MessageBox(title, message, self)
-            box.yesButton.setText("确定")
-            box.cancelButton.hide()
-            self._track_async_dialog(box)
-            box.open()
+            result.add_done_callback(_complete)
+            self._open_async_dialog(box, result)
 
         self._dispatch_to_ui_async(_show)
+        return result
+
+    def request_confirm_dialog(
+        self,
+        title: str,
+        message: str,
+        *,
+        yes_text: str = "确定",
+        cancel_text: str = "取消",
+    ) -> Future[bool]:
+        return self._request_message_box(
+            title,
+            message,
+            yes_text=yes_text,
+            cancel_text=cancel_text,
+        )
+
+    def show_message_dialog(self, title: str, message: str, *, level: str = "info") -> Future[bool]:
+        return self._request_message_box(title, message, yes_text="确定", cancel_text=None)

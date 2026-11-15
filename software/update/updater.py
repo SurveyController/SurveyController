@@ -158,25 +158,22 @@ def show_update_notification(gui) -> None:
         f"发布说明:\n{release_notes_preview}\n\n"
         f"请前往发布页下载安装：\n{release_url}\n\n是否现在打开发布页？"
     )
-    if gui.show_confirm_dialog("检查到更新", message):
+    future = gui.request_confirm_dialog("检查到更新", message)
+
+    def _on_result(done) -> None:
+        accepted = bool(done.result())
         log_action(
             "UPDATE",
             "show_update_notification",
             "update_dialog",
             "update",
-            result="accepted",
+            result="accepted" if accepted else "declined",
             payload={"version": info.get("version", "unknown")},
         )
-        webbrowser.open(release_url)
-    else:
-        log_action(
-            "UPDATE",
-            "show_update_notification",
-            "update_dialog",
-            "update",
-            result="declined",
-            payload={"version": info.get("version", "unknown")},
-        )
+        if accepted:
+            webbrowser.open(release_url)
+
+    future.add_done_callback(_on_result)
 
 
 __all__ = ["UpdateManager", "_preview_release_notes", "show_update_notification"]

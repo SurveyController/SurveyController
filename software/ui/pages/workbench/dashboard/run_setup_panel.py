@@ -1,17 +1,15 @@
 from __future__ import annotations
 
-from typing import Any, Optional
+from typing import Any, Optional, cast
 
-from PySide6.QtCore import QThread, QTime, QTimer, Qt, Signal
+from PySide6.QtCore import QSignalBlocker, QTime, Qt, Signal
 from PySide6.QtGui import QColor, QDoubleValidator
 from PySide6.QtWidgets import QHBoxLayout, QSizePolicy, QVBoxLayout, QWidget
 from qfluentwidgets import (
     BodyLabel,
     CaptionLabel,
-    ComboBox,
     ExpandGroupSettingCard,
     FluentIcon,
-    InfoBarPosition,
     LineEdit,
     PrimaryPushButton,
     ProgressBar,
@@ -25,11 +23,10 @@ from qfluentwidgets import (
     themeColor,
 )
 from qfluentwidgets.components.widgets.switch_button import IndicatorPosition
-
 from software.core.engine.constants import HTTP_MAX_THREADS
+from software.core.config.schema import RuntimeConfig
 from software.providers.common import detect_survey_provider, supports_answer_datetime_window
 from surveycore.core.questions.utils import OPTION_FILL_AI_TOKEN
-from software.ui.helpers.message_bar import show_message_bar
 from software.ui.helpers.proxy_access import (
     format_quota_value,
     has_authenticated_session,
@@ -41,16 +38,8 @@ from software.ui.pages.workbench.runtime_panel.cards import (
     AnswerDateTimeWindowSettingCard,
     DurationTimePicker,
 )
-from software.ui.pages.workbench.runtime_panel.proxy_source import (
-    PROXY_SOURCE_BENEFIT,
-    PROXY_SOURCE_CUSTOM,
-    PROXY_SOURCE_DEFAULT,
-    normalize_proxy_source,
-)
-from software.ui.pages.workbench.runtime_panel.random_ip_card import (
-    SearchableComboBox,
-    _ProxyApiTestWorker,
-)
+from software.ui.pages.workbench.runtime_panel.proxy_source import normalize_proxy_source
+from software.ui.pages.workbench.runtime_panel.random_ip_card import RandomIPSettingCard
 from software.ui.widgets.no_wheel import NoWheelSpinBox
 from software.ui.widgets.ratio_slider import RatioSlider
 from software.ui.widgets.setting_cards import (
@@ -66,16 +55,24 @@ class DashboardRunSetupPanel(QWidget):
     def __init__(self, dashboard: Any, parent: Optional[QWidget] = None) -> None:
         super().__init__(parent)
         self.dashboard = dashboard
-        self._syncing = False
-        self._test_thread: Optional[QThread] = None
-        self._test_worker: Optional[_ProxyApiTestWorker] = None
-        self.ai_section: Optional[RuntimeAISection] = None
+        self.ai_section: RuntimeAISection
         self.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, False)
         self.setAutoFillBackground(False)
         self._build_ui()
         self._bind_events()
-        self._bind_controller_signals()
-        self.sync_from_runtime()
+        self.apply_config(self.dashboard.workbench_state.snapshot())
+        ai_config = RuntimeConfig()
+        self.ai_section.update_config(ai_config)
+        self.dashboard.workbench_state.update_settings(
+            ai_mode=ai_config.ai_mode,
+            ai_config_mode=ai_config.ai_config_mode,
+            ai_provider=ai_config.ai_provider,
+            ai_api_key=ai_config.ai_api_key,
+            ai_base_url=ai_config.ai_base_url,
+            ai_api_protocol=ai_config.ai_api_protocol,
+            ai_model=ai_config.ai_model,
+            ai_system_prompt=ai_config.ai_system_prompt,
+        )
 
     def _build_ui(self) -> None:
         root = QVBoxLayout(self)
@@ -209,16 +206,8 @@ class DashboardRunSetupPanel(QWidget):
 
         proxy_group = SettingCardGroup("随机 IP 与代理", container)
 
-        self.random_ip_card = ExpandGroupSettingCard(
-            FluentIcon.GLOBE,
-            "随机 IP",
-            "开启后可模拟不同地区访问并绕过智能验证",
-            proxy_group,
-        )
-        self.random_ip_switch = SwitchButton(self.random_ip_card, IndicatorPosition.RIGHT)
-        self.random_ip_switch.setOnText("开")
-        self.random_ip_switch.setOffText("关")
-        self.random_ip_card.addWidget(self.random_ip_switch)
+        self.random_ip_card = RandomIPSettingCard(parent=proxy_group)
+        self.random_ip_switch = self.random_ip_card.switchButton
 
         quota_detail = QWidget(self.random_ip_card)
         quota_layout = QVBoxLayout(quota_detail)
@@ -239,67 +228,7 @@ class DashboardRunSetupPanel(QWidget):
         self.quota_progress_bar.setValue(0)
         quota_layout.addWidget(self.quota_progress_bar)
         self.random_ip_card.addGroupWidget(quota_detail)
-        self.random_ip_card.setExpand(True)
         proxy_group.addSettingCard(self.random_ip_card)
-
-        self.proxy_source_card = ExpandGroupSettingCard(
-            FluentIcon.VPN,
-            "代理源与地区",
-            "选择代理节点、出口地区或自定义代理 API",
-            proxy_group,
-        )
-        self.proxy_combo = ComboBox(self.proxy_source_card)
-        self.proxy_combo.addItem("默认", userData=PROXY_SOURCE_DEFAULT)
-        self.proxy_combo.addItem("限时福利", userData=PROXY_SOURCE_BENEFIT)
-        self.proxy_combo.addItem("自定义", userData=PROXY_SOURCE_CUSTOM)
-        self.proxy_combo.setMinimumWidth(160)
-        self.proxy_source_card.addWidget(self.proxy_combo)
-
-        proxy_detail = QWidget(self.proxy_source_card)
-        proxy_detail_layout = QVBoxLayout(proxy_detail)
-        proxy_detail_layout.setContentsMargins(48, 12, 48, 12)
-        proxy_detail_layout.setSpacing(10)
-
-        self.benefit_hint_label = CaptionLabel(
-            "限时福利源仅支持少部分特定城市，如有更高需求请切换至默认或自定义代理源",
-            proxy_detail,
-        )
-        self.benefit_hint_label.setWordWrap(True)
-        self.benefit_hint_label.setStyleSheet("color: #D46B08;")
-        self.benefit_hint_label.hide()
-        proxy_detail_layout.addWidget(self.benefit_hint_label)
-
-        self.area_row = QWidget(proxy_detail)
-        area_layout = QHBoxLayout(self.area_row)
-        area_layout.setContentsMargins(0, 0, 0, 0)
-        area_layout.setSpacing(10)
-        area_layout.addWidget(BodyLabel("ip地区", self.area_row))
-        area_layout.addStretch(1)
-        self.province_combo = SearchableComboBox(self.area_row)
-        self.province_combo.setMinimumWidth(130)
-        self.province_combo.setMaximumWidth(210)
-        self.city_combo = SearchableComboBox(self.area_row)
-        self.city_combo.setMinimumWidth(130)
-        self.city_combo.setMaximumWidth(210)
-        area_layout.addWidget(self.province_combo)
-        area_layout.addWidget(self.city_combo)
-        proxy_detail_layout.addWidget(self.area_row)
-
-        self.custom_api_row = QWidget(proxy_detail)
-        api_layout = QHBoxLayout(self.custom_api_row)
-        api_layout.setContentsMargins(0, 0, 0, 0)
-        api_layout.setSpacing(10)
-        api_layout.addWidget(BodyLabel("API 地址", self.custom_api_row))
-        self.custom_api_edit = LineEdit(self.custom_api_row)
-        self.custom_api_edit.setPlaceholderText("请输入代理 API 地址（仅支持 JSON 返回格式）")
-        api_layout.addWidget(self.custom_api_edit, 1)
-        self.test_api_btn = PushButton("检测", self.custom_api_row)
-        api_layout.addWidget(self.test_api_btn)
-        proxy_detail_layout.addWidget(self.custom_api_row)
-
-        self.proxy_source_card.addGroupWidget(proxy_detail)
-        self.proxy_source_card.setExpand(True)
-        proxy_group.addSettingCard(self.proxy_source_card)
         container_layout.addWidget(proxy_group)
 
         quality_group = SettingCardGroup("伪装与质量", container)
@@ -369,15 +298,12 @@ class DashboardRunSetupPanel(QWidget):
         ai_container_layout = QVBoxLayout(self.ai_section_container)
         ai_container_layout.setContentsMargins(0, 0, 0, 0)
         ai_container_layout.setSpacing(0)
-        runtime_page = getattr(self.dashboard, "runtime_page", None)
-        ai_settings = getattr(getattr(runtime_page, "ai_section", None), "_ai_settings", None)
-        if ai_settings is not None:
-            self.ai_section = RuntimeAISection(
-                self.ai_section_container,
-                self.dashboard,
-                ai_settings=ai_settings,
-            )
-            ai_container_layout.addWidget(self.ai_section.group)
+        self.ai_section = RuntimeAISection(
+            self.ai_section_container,
+            self.dashboard,
+            ai_settings=self.dashboard.controller.ai_settings,
+        )
+        ai_container_layout.addWidget(self.ai_section.group)
         self.ai_section_container.setVisible(False)
         container_layout.addWidget(self.ai_section_container)
 
@@ -402,11 +328,10 @@ class DashboardRunSetupPanel(QWidget):
 
         self.get_quota_btn.clicked.connect(self._on_get_quota_clicked)
         self.random_ip_switch.checkedChanged.connect(self._on_random_ip_toggled)
-        self.proxy_combo.currentIndexChanged.connect(self._on_proxy_source_changed)
-        self.province_combo.currentIndexChanged.connect(self._on_province_changed)
-        self.city_combo.currentIndexChanged.connect(self._on_city_changed)
-        self.custom_api_edit.editingFinished.connect(self._on_custom_api_finished)
-        self.test_api_btn.clicked.connect(self._on_test_api_clicked)
+        self.random_ip_card.proxyCombo.currentIndexChanged.connect(self._on_proxy_source_changed)
+        self.random_ip_card.provinceCombo.currentIndexChanged.connect(self._on_area_changed)
+        self.random_ip_card.cityCombo.currentIndexChanged.connect(self._on_area_changed)
+        self.random_ip_card.customApiEdit.editingFinished.connect(self._on_custom_api_finished)
 
         self.target_spin.valueChanged.connect(self._on_target_changed)
         self.thread_card.slider.valueChanged.connect(self._on_threads_changed)
@@ -420,20 +345,9 @@ class DashboardRunSetupPanel(QWidget):
         self.ua_ratio_slider.valueChanged.connect(self._on_ua_ratio_changed)
         self.reliability_switch.checkedChanged.connect(self._on_reliability_toggled)
         self.alpha_edit.editingFinished.connect(self._on_alpha_finished)
-
-        runtime_page = getattr(self.dashboard, "runtime_page", None)
-        if runtime_page is not None:
-            random_ip_card = getattr(runtime_page, "random_ip_card", None)
-            if random_ip_card is not None and hasattr(random_ip_card, "areaOptionsUpdated"):
-                random_ip_card.areaOptionsUpdated.connect(self._sync_area_from_runtime)
-
-    def _bind_controller_signals(self) -> None:
-        controller = getattr(self.dashboard, "controller", None)
-        if controller is None:
-            return
-        signal = getattr(controller, "runtimeSnapshotChanged", None)
-        if signal is not None and hasattr(signal, "connect"):
-            signal.connect(self._on_runtime_snapshot_changed)
+        self.ai_section.configurationChanged.connect(
+            lambda changes: self.dashboard.workbench_state.update_settings(**changes)
+        )
 
     def set_survey_summary(self, title: str, question_count: int) -> None:
         _ = title
@@ -459,7 +373,9 @@ class DashboardRunSetupPanel(QWidget):
         for entry in state.get_entries() or []:
             if bool(getattr(entry, "ai_enabled", False)):
                 return True
-            if any(bool(flag) for flag in (getattr(entry, "multi_text_blank_ai_flags", None) or ())):
+            if any(
+                bool(flag) for flag in (getattr(entry, "multi_text_blank_ai_flags", None) or ())
+            ):
                 return True
             if any(
                 str(value or "").strip() == OPTION_FILL_AI_TOKEN
@@ -475,114 +391,36 @@ class DashboardRunSetupPanel(QWidget):
 
         has_ai = self._has_ai_fill_entries()
         self.ai_section_container.setVisible(has_ai)
-        if has_ai and self.ai_section is not None:
-            runtime_page = getattr(self.dashboard, "runtime_page", None)
-            if runtime_page is not None:
-                from software.core.config.schema import RuntimeConfig
 
-                cfg = RuntimeConfig()
-                cfg.ai_provider = (
-                    runtime_page.ai_section.ai_provider_combo.currentData() or "custom"
-                )
-                cfg.ai_api_key = runtime_page.ai_section.ai_apikey_edit.text()
-                cfg.ai_base_url = runtime_page.ai_section.ai_baseurl_edit.text()
-                cfg.ai_model = runtime_page.ai_section._get_current_model_value()
-                cfg.ai_system_prompt = runtime_page.ai_section._ai_system_prompt
-                cfg.ai_config_mode = "override"
-                self.ai_section._apply_ai_config(cfg)
-
-    def sync_from_runtime(self) -> None:
-        runtime_page = getattr(self.dashboard, "runtime_page", None)
-        if runtime_page is None:
-            return
-        self._syncing = True
-        try:
-            self.random_ip_switch.setChecked(runtime_page.random_ip_card.switchButton.isChecked())
-            source = runtime_page.selected_proxy_source()
-            idx = self.proxy_combo.findData(source)
-            if idx >= 0:
-                self.proxy_combo.setCurrentIndex(idx)
-            self.custom_api_edit.setText(runtime_page.random_ip_card.customApiEdit.text())
-            self._sync_area_combos_from_runtime(runtime_page.random_ip_card)
-            self._update_proxy_detail_visibility(source)
-
-            self.target_spin.setValue(runtime_page.target_card.spinBox.value())
-            self.thread_card.slider.setRange(
-                runtime_page.thread_card.slider.slider.minimum(),
-                runtime_page.thread_card.slider.slider.maximum(),
-            )
-            self.thread_card.slider.setValue(runtime_page.thread_card.slider.value())
-
-            interval_range = runtime_page.interval_card.getRange()
-            self.interval_start_picker.setDurationSeconds(interval_range[0])
-            self.interval_end_picker.setDurationSeconds(interval_range[1])
-
-            duration_range = runtime_page.answer_duration_card.getRange()
-            self.duration_start_picker.setDurationSeconds(duration_range[0])
-            self.duration_end_picker.setDurationSeconds(duration_range[1])
-
-            if hasattr(runtime_page, "answer_card"):
-                self.answer_datetime_card.setDateTimeWindow(
-                    runtime_page.answer_card.getDateTimeWindow()
-                )
-
-            ua_enabled = runtime_page.random_ua_card.isChecked()
-            self.ua_switch.setChecked(ua_enabled)
-            set_widget_enabled_with_opacity(self.ua_container, ua_enabled)
-            ratios = runtime_page.random_ua_card.getRatios()
-            self.ua_ratio_slider.setValues(ratios)
-
-            reliability_enabled = runtime_page.reliability_card.isChecked()
-            alpha = runtime_page.reliability_card.get_alpha()
-            self.reliability_switch.setChecked(reliability_enabled)
-            set_widget_enabled_with_opacity(self.reliability_container, reliability_enabled)
-            self.alpha_edit.setText(f"{alpha:.2f}")
-
-            self._refresh_quota_subtitle()
-            self._refresh_conditional_sections()
-        finally:
-            self._syncing = False
-
-    def _sync_area_from_runtime(self) -> None:
-        if self._syncing:
-            return
-        runtime_page = getattr(self.dashboard, "runtime_page", None)
-        if runtime_page is None:
-            return
-        self._syncing = True
-        try:
-            self._sync_area_combos_from_runtime(runtime_page.random_ip_card)
-        finally:
-            self._syncing = False
-
-    def _sync_area_combos_from_runtime(self, random_ip_card: Any) -> None:
-        src_prov = random_ip_card.provinceCombo
-        src_city = random_ip_card.cityCombo
-        self.province_combo.clear()
-        for i in range(src_prov.count()):
-            self.province_combo.addItem(src_prov.itemText(i), userData=src_prov.itemData(i))
-        if src_prov.count() > 0:
-            self.province_combo.setCurrentIndex(max(0, src_prov.currentIndex()))
-
-        self.city_combo.clear()
-        for i in range(src_city.count()):
-            self.city_combo.addItem(src_city.itemText(i), userData=src_city.itemData(i))
-        self.city_combo.setEnabled(src_city.isEnabled())
-        if src_city.count() > 0:
-            self.city_combo.setCurrentIndex(max(0, src_city.currentIndex()))
-
-    def _on_runtime_snapshot_changed(self, _snapshot: dict) -> None:
+    def apply_runtime_snapshot(self, snapshot: dict[str, Any]) -> None:
+        settings = dict((snapshot or {}).get("settings") or {})
+        if "random_ip_enabled" in settings:
+            enabled = bool(settings["random_ip_enabled"])
+            with QSignalBlocker(self.random_ip_switch):
+                self.random_ip_switch.setChecked(enabled)
+            self.random_ip_card._sync_ip_enabled(enabled)
+        running = bool(
+            (snapshot or {}).get("running")
+            or (snapshot or {}).get("initialization", {}).get("active")
+        )
+        self.thread_card.setEnabled(not running)
         self._refresh_quota_subtitle()
+        self._refresh_conditional_sections()
+
+    def render_runtime_snapshot(self, snapshot: dict[str, Any]) -> None:
+        self.apply_runtime_snapshot(snapshot)
+
+    @staticmethod
+    def _set_duration_range(start_picker, end_picker, value) -> None:
+        low = max(0, int(value[0] if len(value) else 0))
+        high = max(low, int(value[1] if len(value) > 1 else low))
+        with QSignalBlocker(start_picker), QSignalBlocker(end_picker):
+            start_picker.setDurationSeconds(low)
+            end_picker.setDurationSeconds(high)
 
     def _refresh_quota_subtitle(self) -> None:
-        controller = getattr(self.dashboard, "controller", None)
-        if controller is None or not hasattr(controller, "get_random_ip_quota_snapshot"):
-            self.quota_ratio_label.setText("--/--")
-            self.quota_progress_bar.setPaused(True)
-            self.quota_progress_bar.setError(False)
-            self.quota_progress_bar.setValue(0)
-            return
-        snapshot = controller.get_random_ip_quota_snapshot() or {}
+        quota_reader = getattr(self.dashboard.controller, "get_random_ip_quota_snapshot", None)
+        snapshot = quota_reader() if callable(quota_reader) else {}
         count = snapshot.get("used_quota")
         limit = snapshot.get("total_quota")
         if count is None or limit is None:
@@ -638,205 +476,69 @@ class DashboardRunSetupPanel(QWidget):
             self.quota_progress_bar.setPaused(False)
             self.quota_progress_bar.setError(False)
 
-    def _update_proxy_detail_visibility(self, source: str) -> None:
-        normalized = normalize_proxy_source(source)
-        is_benefit = normalized == PROXY_SOURCE_BENEFIT
-        is_custom = normalized == PROXY_SOURCE_CUSTOM
-        self.benefit_hint_label.setVisible(is_benefit)
-        self.area_row.setVisible(not is_custom)
-        self.custom_api_row.setVisible(is_custom)
-        if is_benefit or is_custom:
-            self.proxy_source_card.setExpand(True)
-        QTimer.singleShot(0, self.proxy_source_card._adjustViewSize)
-
     def _on_get_quota_clicked(self) -> None:
-        for target in (self.window(), self.dashboard):
-            opener = getattr(target, "_open_quota_redeem_dialog", None)
-            if callable(opener):
-                opener()
-                self._refresh_quota_subtitle()
-                return
+        future = cast(Any, self.window())._open_quota_redeem_dialog_async()
+        future.add_done_callback(lambda _future: self._refresh_quota_subtitle())
 
     def _on_random_ip_toggled(self, checked: bool) -> None:
-        if self._syncing:
-            return
-        runtime_page = getattr(self.dashboard, "runtime_page", None)
-        controller = getattr(self.dashboard, "controller", None)
-        if controller is not None and hasattr(controller, "request_toggle_random_ip"):
-            accepted = controller.request_toggle_random_ip(bool(checked))
-            if not accepted:
-                fallback = bool(
-                    controller.get_runtime_snapshot()
-                    .get("settings", {})
-                    .get("random_ip_enabled", False)
-                )
-                self._syncing = True
-                self.random_ip_switch.setChecked(fallback)
-                self._syncing = False
-                return
-        if runtime_page is not None:
-            runtime_page.random_ip_card.switchButton.setChecked(bool(checked))
+        if not self.dashboard.controller.request_toggle_random_ip(bool(checked)):
+            self.apply_runtime_snapshot(self.dashboard.controller.get_runtime_snapshot())
 
     def _on_proxy_source_changed(self) -> None:
-        if self._syncing:
-            return
-        source = normalize_proxy_source(str(self.proxy_combo.currentData() or PROXY_SOURCE_DEFAULT))
-        self._update_proxy_detail_visibility(source)
-        runtime_page = getattr(self.dashboard, "runtime_page", None)
-        if runtime_page is not None:
-            runtime_page.set_proxy_source(
-                source,
-                custom_api_url=self.custom_api_edit.text().strip(),
-                emit_state=True,
-                show_tip=False,
-            )
+        source = self.random_ip_card._get_selected_source()
+        self.dashboard.workbench_state.update_settings(
+            proxy_source=source,
+            proxy_area_code=self.random_ip_card.get_area_code(),
+            custom_proxy_api=self.random_ip_card.customApiEdit.text().strip(),
+        )
 
-    def _on_province_changed(self) -> None:
-        if self._syncing:
-            return
-        runtime_page = getattr(self.dashboard, "runtime_page", None)
-        if runtime_page is None:
-            return
-        idx = self.province_combo.currentIndex()
-        if idx >= 0 and idx < runtime_page.random_ip_card.provinceCombo.count():
-            runtime_page.random_ip_card.provinceCombo.setCurrentIndex(idx)
-
-    def _on_city_changed(self) -> None:
-        if self._syncing:
-            return
-        runtime_page = getattr(self.dashboard, "runtime_page", None)
-        if runtime_page is None:
-            return
-        idx = self.city_combo.currentIndex()
-        if idx >= 0 and idx < runtime_page.random_ip_card.cityCombo.count():
-            runtime_page.random_ip_card.cityCombo.setCurrentIndex(idx)
+    def _on_area_changed(self) -> None:
+        self.dashboard.workbench_state.update_settings(
+            proxy_area_code=self.random_ip_card.get_area_code(),
+        )
 
     def _on_custom_api_finished(self) -> None:
-        if self._syncing:
-            return
-        runtime_page = getattr(self.dashboard, "runtime_page", None)
-        if runtime_page is not None:
-            runtime_page.set_custom_proxy_api(self.custom_api_edit.text().strip())
-
-    def _on_test_api_clicked(self) -> None:
-        url = self.custom_api_edit.text().strip()
-        if not url:
-            show_message_bar(
-                parent=self.window() or self,
-                title="",
-                message="请先输入代理 API 地址",
-                level="warning",
-                position=InfoBarPosition.TOP,
-            )
-            return
-        if self._test_thread is not None:
-            return
-        self.test_api_btn.setEnabled(False)
-        thread = QThread(self)
-        worker = _ProxyApiTestWorker(url)
-        worker.moveToThread(thread)
-        thread.started.connect(worker.run)
-        worker.finished.connect(self._on_test_api_finished)
-        worker.finished.connect(thread.quit)
-        worker.finished.connect(worker.deleteLater)
-        thread.finished.connect(thread.deleteLater)
-        self._test_thread = thread
-        self._test_worker = worker
-        thread.start()
-
-    def _on_test_api_finished(self, success: bool, error: str, proxies: list) -> None:
-        self._test_thread = None
-        self._test_worker = None
-        self.test_api_btn.setEnabled(True)
-        parent = self.window() or self
-        if success:
-            show_message_bar(
-                parent=parent,
-                title="",
-                message=f"代理检测成功，获取 {len(proxies)} 条代理",
-                level="success",
-                position=InfoBarPosition.TOP,
-            )
-        else:
-            show_message_bar(
-                parent=parent,
-                title="",
-                message=error or "代理检测失败",
-                level="error",
-                position=InfoBarPosition.TOP,
-            )
+        self.dashboard.workbench_state.update_settings(
+            custom_proxy_api=self.random_ip_card.customApiEdit.text().strip(),
+        )
 
     def _on_target_changed(self, value: int) -> None:
-        if self._syncing:
-            return
-        runtime_page = getattr(self.dashboard, "runtime_page", None)
-        if runtime_page is not None:
-            runtime_page.target_card.spinBox.setValue(int(value))
+        self.dashboard.workbench_state.update_settings(target=int(value))
 
     def _on_threads_changed(self, value: int) -> None:
-        if self._syncing:
-            return
-        runtime_page = getattr(self.dashboard, "runtime_page", None)
-        if runtime_page is not None:
-            runtime_page.thread_card.slider.setValue(int(value))
+        self.dashboard.workbench_state.update_settings(threads=int(value))
 
     def _on_interval_changed(self, _time: QTime) -> None:
-        if self._syncing:
-            return
         low = self.interval_start_picker.getDurationSeconds()
         high = self.interval_end_picker.getDurationSeconds()
         if high < low:
             high = low
-            self._syncing = True
-            self.interval_end_picker.setDurationSeconds(high)
-            self._syncing = False
-        runtime_page = getattr(self.dashboard, "runtime_page", None)
-        if runtime_page is not None:
-            runtime_page.interval_card.setRange((low, high))
+            with QSignalBlocker(self.interval_end_picker):
+                self.interval_end_picker.setDurationSeconds(high)
+        self.dashboard.workbench_state.update_settings(submit_interval=(low, high))
 
     def _on_duration_changed(self, _time: QTime) -> None:
-        if self._syncing:
-            return
         low = self.duration_start_picker.getDurationSeconds()
         high = self.duration_end_picker.getDurationSeconds()
         if high < low:
             high = low
-            self._syncing = True
-            self.duration_end_picker.setDurationSeconds(high)
-            self._syncing = False
-        runtime_page = getattr(self.dashboard, "runtime_page", None)
-        if runtime_page is not None:
-            runtime_page.answer_duration_card.setRange((low, high))
+            with QSignalBlocker(self.duration_end_picker):
+                self.duration_end_picker.setDurationSeconds(high)
+        self.dashboard.workbench_state.update_settings(answer_duration=(low, high))
 
     def _on_answer_datetime_changed(self, window: tuple[str, str]) -> None:
-        if self._syncing:
-            return
-        runtime_page = getattr(self.dashboard, "runtime_page", None)
-        if runtime_page is not None and hasattr(runtime_page, "answer_card"):
-            runtime_page.answer_card.setDateTimeWindow(window)
+        self.dashboard.workbench_state.update_settings(answer_datetime_window=tuple(window))
 
     def _on_ua_switch_changed(self, checked: bool) -> None:
         set_widget_enabled_with_opacity(self.ua_container, bool(checked))
-        if self._syncing:
-            return
-        runtime_page = getattr(self.dashboard, "runtime_page", None)
-        if runtime_page is not None:
-            runtime_page.random_ua_card.setChecked(bool(checked))
+        self.dashboard.workbench_state.update_settings(random_ua_enabled=bool(checked))
 
     def _on_ua_ratio_changed(self, ratios: dict[str, int]) -> None:
-        if self._syncing:
-            return
-        runtime_page = getattr(self.dashboard, "runtime_page", None)
-        if runtime_page is not None:
-            runtime_page.random_ua_card.setRatios(dict(ratios))
+        self.dashboard.workbench_state.update_settings(random_ua_ratios=dict(ratios))
 
     def _on_reliability_toggled(self, checked: bool) -> None:
         set_widget_enabled_with_opacity(self.reliability_container, bool(checked))
-        if self._syncing:
-            return
-        runtime_page = getattr(self.dashboard, "runtime_page", None)
-        if runtime_page is not None:
-            runtime_page.reliability_card.setChecked(bool(checked))
+        self.dashboard.workbench_state.update_settings(reliability_mode_enabled=bool(checked))
 
     def _current_alpha_value(self) -> float:
         try:
@@ -847,9 +549,88 @@ class DashboardRunSetupPanel(QWidget):
 
     def _on_alpha_finished(self) -> None:
         alpha = self._current_alpha_value()
-        self._syncing = True
         self.alpha_edit.setText(f"{alpha:.2f}")
-        self._syncing = False
-        runtime_page = getattr(self.dashboard, "runtime_page", None)
-        if runtime_page is not None:
-            runtime_page.reliability_card.set_alpha(alpha)
+        self.dashboard.workbench_state.update_settings(psycho_target_alpha=alpha)
+
+    def selected_proxy_source(self) -> str:
+        return normalize_proxy_source(
+            str(self.random_ip_card.proxyCombo.currentData() or "default")
+        )
+
+    def set_proxy_source(
+        self,
+        source: str,
+        custom_api_url: str | None = None,
+        *,
+        emit_state: bool = True,
+        show_tip: bool = True,
+    ) -> str:
+        normalized = normalize_proxy_source(source)
+        index = self.random_ip_card.proxyCombo.findData(normalized)
+        if index < 0:
+            index = self.random_ip_card.proxyCombo.findData("default")
+            normalized = "default"
+        with QSignalBlocker(self.random_ip_card.proxyCombo):
+            self.random_ip_card.proxyCombo.setCurrentIndex(index)
+        if custom_api_url is not None:
+            with QSignalBlocker(self.random_ip_card.customApiEdit):
+                self.random_ip_card.customApiEdit.setText(str(custom_api_url or ""))
+        self.random_ip_card._on_source_changed()
+        if emit_state:
+            self.dashboard.workbench_state.update_settings(
+                proxy_source=normalized,
+                custom_proxy_api=self.random_ip_card.customApiEdit.text().strip(),
+                proxy_area_code=self.random_ip_card.get_area_code(),
+            )
+        return normalized
+
+    def set_custom_proxy_api(self, api_url: str) -> None:
+        value = str(api_url or "").strip()
+        with QSignalBlocker(self.random_ip_card.customApiEdit):
+            self.random_ip_card.customApiEdit.setText(value)
+        self.dashboard.workbench_state.update_settings(custom_proxy_api=value)
+
+    def apply_config(self, cfg: Any) -> None:
+        with QSignalBlocker(self.target_spin):
+            self.target_spin.setValue(max(1, int(cfg.target or 1)))
+        with QSignalBlocker(self.thread_card.slider):
+            self.thread_card.slider.setValue(max(1, min(HTTP_MAX_THREADS, int(cfg.threads or 1))))
+        with QSignalBlocker(self.random_ip_switch):
+            self.random_ip_switch.setChecked(bool(cfg.random_ip_enabled))
+        self.random_ip_card._sync_ip_enabled(bool(cfg.random_ip_enabled))
+        with QSignalBlocker(self.ua_switch):
+            self.ua_switch.setChecked(bool(cfg.random_ua_enabled))
+        with QSignalBlocker(self.ua_ratio_slider):
+            self.ua_ratio_slider.setValues(
+                dict(cfg.random_ua_ratios or {"wechat": 33, "mobile": 33, "pc": 34})
+            )
+        with QSignalBlocker(self.reliability_switch):
+            self.reliability_switch.setChecked(bool(cfg.reliability_mode_enabled))
+        with QSignalBlocker(self.alpha_edit):
+            self.alpha_edit.setText(f"{float(cfg.psycho_target_alpha or 0.85):.2f}")
+        set_widget_enabled_with_opacity(self.ua_container, self.ua_switch.isChecked())
+        set_widget_enabled_with_opacity(
+            self.reliability_container, self.reliability_switch.isChecked()
+        )
+        self._set_duration_range(
+            self.interval_start_picker, self.interval_end_picker, cfg.submit_interval
+        )
+        self._set_duration_range(
+            self.duration_start_picker, self.duration_end_picker, cfg.answer_duration
+        )
+        with QSignalBlocker(self.answer_datetime_card):
+            self.answer_datetime_card.setDateTimeWindow(
+                tuple(cfg.answer_datetime_window or ("", ""))
+            )
+        source = normalize_proxy_source(str(cfg.proxy_source or "default"))
+        self.set_proxy_source(source, custom_api_url=cfg.custom_proxy_api, emit_state=False)
+        self.random_ip_card.set_area_code(cfg.proxy_area_code)
+        self.ai_section.apply_config(cfg)
+        self._refresh_quota_subtitle()
+        self._refresh_conditional_sections()
+
+    def get_reliability_mode_enabled(self) -> bool:
+        return bool(self.reliability_switch.isChecked())
+
+    def focus_answer_duration_setting(self) -> None:
+        self.duration_start_picker.setFocus()

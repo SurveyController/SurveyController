@@ -1,83 +1,130 @@
-from PySide6.QtCore import QEvent, QSize, QTimer
-from PySide6.QtWidgets import QSizePolicy
-from qfluentwidgets import InfoBar
+from PySide6.QtCore import QEvent, QSize, Qt, QTimer, Signal
+from PySide6.QtGui import QColor, QPainter
+from PySide6.QtWidgets import QFrame, QHBoxLayout, QSizePolicy, QVBoxLayout
+from qfluentwidgets import (
+    BodyLabel,
+    FluentIcon,
+    IconWidget,
+    InfoBarIcon,
+    InfoBarPosition,
+    StrongBodyLabel,
+    TransparentToolButton,
+    isDarkTheme,
+)
 
 
-class FullWidthInfoBar(InfoBar):
-    def __init__(self, *args, **kwargs):
-        self._syncing = False
-        self._parent_filter_installed = False
-        self._sync_timers = []
-        super().__init__(*args, **kwargs)
-        self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
-        self.destroyed.connect(self._clear_sync_timers)
+class FullWidthInfoBar(QFrame):
+    closedSignal = Signal()
+
+    def __init__(
+        self,
+        icon,
+        title,
+        content,
+        orient=Qt.Orientation.Horizontal,
+        isClosable=True,
+        duration=-1,
+        position=InfoBarPosition.NONE,
+        parent=None,
+    ):
+        super().__init__(parent)
+        self.icon = icon
+        self.title = str(title or "")
+        self.content = str(content or "")
+        self.position = position
+        self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred)
+        self.setMinimumWidth(0)
+        self.hBoxLayout = QHBoxLayout(self)
+        self.hBoxLayout.setContentsMargins(12, 10, 12, 10)
+        self.hBoxLayout.setSpacing(10)
+        self.iconWidget = IconWidget(icon, self)
+        self.iconWidget.setFixedSize(18, 18)
+        self.hBoxLayout.addWidget(self.iconWidget, 0, Qt.AlignmentFlag.AlignTop)
+        self.textLayout = QVBoxLayout()
+        self.textLayout.setContentsMargins(0, 0, 0, 0)
+        self.textLayout.setSpacing(3)
+        self.titleLabel = StrongBodyLabel(self.title, self)
+        self.contentLabel = BodyLabel(self.content, self)
+        for label in (self.titleLabel, self.contentLabel):
+            label.setWordWrap(True)
+            label.setMinimumWidth(0)
+            label.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred)
+            self.textLayout.addWidget(label)
+        self.titleLabel.setVisible(bool(self.title))
+        self.contentLabel.setVisible(bool(self.content))
+        self.hBoxLayout.addLayout(self.textLayout, 1)
+        self.widgetLayout = QHBoxLayout() if orient == Qt.Orientation.Horizontal else QVBoxLayout()
+        self.widgetLayout.setContentsMargins(0, 0, 0, 0)
+        self.widgetLayout.setSpacing(8)
+        if orient == Qt.Orientation.Horizontal:
+            self.hBoxLayout.addLayout(self.widgetLayout)
+        else:
+            self.textLayout.addLayout(self.widgetLayout)
+        self.closeButton = TransparentToolButton(FluentIcon.CLOSE, self)
+        self.closeButton.setFixedSize(24, 24)
+        self.closeButton.setVisible(isClosable)
+        self.closeButton.clicked.connect(self.close)
+        self.hBoxLayout.addWidget(self.closeButton, 0, Qt.AlignmentFlag.AlignTop)
+        self._background_colors = None
+        self._dismiss_timer = QTimer(self)
+        self._dismiss_timer.setSingleShot(True)
+        self._dismiss_timer.timeout.connect(self.close)
+        self._duration = duration
+
+    def changeEvent(self, event):
+        super().changeEvent(event)
+        if event.type() in {
+            QEvent.Type.PaletteChange,
+            QEvent.Type.ApplicationPaletteChange,
+            QEvent.Type.StyleChange,
+        }:
+            self.update()
+
+    def addWidget(self, widget, stretch=0):
+        self.widgetLayout.addWidget(widget, stretch)
+        self.updateGeometry()
+
+    def setTitle(self, title):
+        self.title = str(title or "")
+        self.titleLabel.setText(self.title)
+        self.titleLabel.setVisible(bool(self.title))
+        self.updateGeometry()
+
+    def setContent(self, content):
+        self.content = str(content or "")
+        self.contentLabel.setText(self.content)
+        self.contentLabel.setVisible(bool(self.content))
+        self.updateGeometry()
+
+    def setCustomBackgroundColor(self, light, dark):
+        self._background_colors = (QColor(light), QColor(dark))
+        self.update()
 
     def sizeHint(self):
         hint = super().sizeHint()
-        parent = self.parentWidget()
-        if parent is None:
-            return hint
-        width = parent.contentsRect().width()
-        if width <= 0:
-            width = parent.width()
-        if width > 0:
-            return QSize(width, hint.height())
-        return hint
+        return QSize(min(hint.width(), 640), hint.height())
 
-    def _adjustText(self):
-        if self._syncing:
-            return
-        self._syncing = True
-        try:
-            super()._adjustText()
-            self.updateGeometry()
-        finally:
-            self._syncing = False
+    def showEvent(self, event):
+        super().showEvent(event)
+        if self._duration >= 0:
+            self._dismiss_timer.start(self._duration)
 
-    def _install_parent_filter(self) -> None:
-        parent = self.parentWidget()
-        if parent is None or self._parent_filter_installed:
-            return
-        parent.installEventFilter(self)
-        self._parent_filter_installed = True
+    def closeEvent(self, event):
+        self._dismiss_timer.stop()
+        self.hide()
+        self.closedSignal.emit()
+        self.deleteLater()
+        event.accept()
 
-    def eventFilter(self, obj, e):
-        if obj is self.parentWidget() and e.type() in (
-            QEvent.Type.Resize,
-            QEvent.Type.LayoutRequest,
-            QEvent.Type.Show,
-        ):
-            self._adjustText()
-        return super().eventFilter(obj, e)
-
-    def _schedule_deferred_sync(self) -> None:
-        for delay in (0, 30, 120):
-            timer = QTimer(self)
-            timer.setSingleShot(True)
-            timer.timeout.connect(self._adjustText)
-            timer.timeout.connect(lambda timer=timer: self._drop_sync_timer(timer))
-            self._sync_timers.append(timer)
-            timer.start(delay)
-
-    def _drop_sync_timer(self, timer: QTimer) -> None:
-        try:
-            self._sync_timers.remove(timer)
-        except ValueError:
-            pass
-        timer.deleteLater()
-
-    def _clear_sync_timers(self) -> None:
-        for timer in list(self._sync_timers):
-            timer.stop()
-            timer.deleteLater()
-        self._sync_timers.clear()
-
-    def showEvent(self, e):
-        super().showEvent(e)
-        self._install_parent_filter()
-        self._schedule_deferred_sync()
-
-    def resizeEvent(self, event):
-        super().resizeEvent(event)
-        if not self._syncing:
-            self._adjustText()
+    def paintEvent(self, event):
+        colors = {
+            InfoBarIcon.SUCCESS: ("#dff6dd", "#393d1b"),
+            InfoBarIcon.WARNING: ("#fff4ce", "#433519"),
+            InfoBarIcon.ERROR: ("#fde7e9", "#442726"),
+        }.get(self.icon, ("#f4f4f4", "#2e2e2e"))
+        color = (self._background_colors or colors)[int(isDarkTheme())]
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+        painter.setPen(Qt.PenStyle.NoPen)
+        painter.setBrush(QColor(color))
+        painter.drawRoundedRect(self.rect(), 6, 6)

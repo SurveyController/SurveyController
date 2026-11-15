@@ -7,17 +7,14 @@ from typing import TYPE_CHECKING, Any, cast
 from PySide6.QtWidgets import QFileDialog, QWidget
 
 from software.app.user_paths import get_user_config_directory
-from software.core.config.codec import build_runtime_config_snapshot
 from software.io.config.store import build_default_config_filename
 from software.logging.action_logger import log_action
-from software.logging.log_utils import log_suppressed_exception
 
 
 class DashboardConfigIOMixin:
     if TYPE_CHECKING:
         controller: Any
         config_drawer: Any
-        runtime_page: Any
         workbench_state: Any
         strategy_page: Any
         _survey_title: str
@@ -30,9 +27,10 @@ class DashboardConfigIOMixin:
             show_progress: bool = False,
         ) -> Any: ...
         def apply_config(self, cfg: Any) -> None: ...
-        def _build_config(self) -> Any: ...
         def update_question_meta(self, title: str, count: int) -> None: ...
         def window(self) -> Any: ...
+
+        open_run_setup_step: Any
 
     @staticmethod
     def _format_load_config_error(exc: Exception) -> str:
@@ -115,40 +113,8 @@ class DashboardConfigIOMixin:
             )
             self._toast("文件不存在，可能已被删除", "warning")
             return
-        workbench = getattr(self.window(), "workbench", None)
-        if workbench is not None and hasattr(workbench, "load_config_from_path"):
-            try:
-                workbench.load_config_from_path(path)
-            except Exception as exc:
-                logging.error("[CONFIG] load_saved_config failed: %s", exc, exc_info=True)
-                log_action(
-                    "CONFIG",
-                    "load_config",
-                    "load_cfg_btn",
-                    "dashboard",
-                    result="failed",
-                    level=logging.ERROR,
-                    payload={"file": os.path.basename(path)},
-                    detail=exc,
-                )
-                logging.error("手动载入配置失败: %s", exc, exc_info=True)
-                self._toast(self._format_load_config_error(exc), "error")
-                return
-            log_action(
-                "CONFIG",
-                "load_config",
-                "load_cfg_btn",
-                "dashboard",
-                result="success",
-                payload={"file": os.path.basename(path)},
-            )
-            self._toast("已载入配置", "success")
-            open_step = getattr(self, "open_run_setup_step", None)
-            if getattr(self.workbench_state, "entries", None) and callable(open_step):
-                open_step()
-            return
         try:
-            cfg = self.controller.load_saved_config(path, strict=True)
+            self.window().workbench.load_config_from_path(path)
         except Exception as exc:
             logging.error("[CONFIG] load_saved_config failed: %s", exc, exc_info=True)
             log_action(
@@ -165,26 +131,6 @@ class DashboardConfigIOMixin:
             self._toast(self._format_load_config_error(exc), "error")
             return
 
-        self.runtime_page.apply_config(cfg)
-        self.apply_config(cfg)
-        self.workbench_state.set_entries(cfg.question_entries or [], cfg.questions_info or [])
-        self.strategy_page.set_questions_info(cfg.questions_info or [])
-        self.strategy_page.set_entries(
-            self.workbench_state.entries,
-            self.workbench_state.entry_questions_info,
-        )
-        try:
-            self.update_question_meta(cfg.survey_title or "", len(cfg.question_entries or []))
-        except Exception as exc:
-            log_suppressed_exception(
-                "_load_config_from_path: self.update_question_meta(...)",
-                exc,
-                level=logging.WARNING,
-            )
-        sync_context = getattr(self, "sync_reverse_fill_context", None)
-        if callable(sync_context):
-            sync_context()
-        self.controller.refresh_random_ip_counter()
         log_action(
             "CONFIG",
             "load_config",
@@ -194,20 +140,12 @@ class DashboardConfigIOMixin:
             payload={"file": os.path.basename(path)},
         )
         self._toast("已载入配置", "success")
-        open_step = getattr(self, "open_run_setup_step", None)
-        if getattr(cfg, "question_entries", None) and callable(open_step):
-            open_step()
+        if self.workbench_state.has_question_entries():
+            cfg = self.workbench_state.snapshot()
+            self.open_run_setup_step(cfg.survey_title, len(cfg.question_entries))
 
     def _on_save_config(self):
-        workbench = getattr(self.window(), "workbench", None)
-        if workbench is not None and hasattr(workbench, "build_current_config_snapshot"):
-            cfg = workbench.build_current_config_snapshot()
-        else:
-            cfg = build_runtime_config_snapshot(
-                self._build_config(),
-                question_entries=self.workbench_state.get_entries(),
-                questions_info=self.workbench_state.questions_info,
-            )
+        cfg = self.window().workbench.build_current_config_snapshot()
         configs_dir = get_user_config_directory()
         os.makedirs(configs_dir, exist_ok=True)
         default_name = build_default_config_filename(self._survey_title)

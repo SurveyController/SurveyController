@@ -25,7 +25,7 @@ class MainWindowUpdateMixin:
 
         titleBar: Any
         _toast: Any
-        show_confirm_dialog: Any
+        request_confirm_dialog: Any
         show_message_dialog: Any
         close: Any
         isVisible: Any

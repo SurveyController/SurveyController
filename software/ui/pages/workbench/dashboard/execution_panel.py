@@ -14,7 +14,6 @@ from qfluentwidgets import (
     BodyLabel,
     FluentIcon,
     HorizontalSeparator,
-    IndeterminateProgressBar,
     IndeterminateProgressRing,
     LargeTitleLabel,
     PrimaryPushButton,
@@ -26,6 +25,7 @@ from qfluentwidgets import (
     SubtitleLabel,
     TransparentToolButton,
 )
+from software.ui.widgets.indeterminate_progress import IndeterminateProgressBar
 from shiboken6 import isValid
 
 _STEP_ANIMATION_MS = 140

@@ -7,7 +7,6 @@ from PySide6.QtWidgets import QHBoxLayout, QSizePolicy, QVBoxLayout, QWidget
 from qfluentwidgets import (
     BodyLabel,
     CheckBox,
-    InfoBar,
     InfoBarIcon,
     InfoBarPosition,
     PushButton,
@@ -15,6 +14,7 @@ from qfluentwidgets import (
     TransparentPushButton,
 )
 from surveycore.core.questions.config import QuestionEntry
+from software.ui.widgets.full_width_infobar import FullWidthInfoBar
 
 from .multilevel_distribution import MultilevelDistributionWidget
 from .multilevel_paths import MultilevelPaths
@@ -54,7 +54,7 @@ class MultilevelDropdownEditor(QWidget):
         layout.addWidget(self.distribution, 1)
         self.total_label = BodyLabel(self)
         layout.addWidget(self.total_label)
-        self.error_bar = InfoBar(
+        self.error_bar = FullWidthInfoBar(
             InfoBarIcon.ERROR,
             "请选择至少一条路径",
             "",

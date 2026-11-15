@@ -2,51 +2,55 @@ from __future__ import annotations
 
 from PySide6.QtCore import QAbstractAnimation
 from PySide6.QtWidgets import QWidget
-from qfluentwidgets import FluentWindow, IndeterminateProgressBar, InfoBarPosition
+from qfluentwidgets import FluentWindow, InfoBarPosition
 from shiboken6 import isValid
 
 from software.ui.helpers.message_bar import replace_message_bar, show_message_bar
-from software.ui.helpers.qfluent_compat import install_qfluentwidgets_animation_guards
 from software.ui.shell.main_window import MainWindow
+from software.ui.widgets.indeterminate_progress import IndeterminateProgressBar
 
 
-def test_real_infobar_top_message_bar_stays_usable_after_upgrade(qtbot) -> None:
-    install_qfluentwidgets_animation_guards()
-
+def test_application_notification_stack_handles_multiple_bars_and_resize(qtbot) -> None:
     host = QWidget()
     host.resize(520, 260)
     host.show()
     qtbot.addWidget(host)
 
-    bar = show_message_bar(
+    first = show_message_bar(
         parent=host,
         title="",
-        message="升级冒烟",
+        message="第一条通知",
         level="info",
         position=InfoBarPosition.TOP,
         duration=-1,
     )
-    qtbot.waitUntil(lambda: bar.isVisible(), timeout=1000)
-    qtbot.wait(50)
+    second = show_message_bar(
+        parent=host,
+        title="警告",
+        message="第二条通知包含更长的文本用于检查换行表现",
+        level="warning",
+        position=InfoBarPosition.TOP,
+        duration=-1,
+    )
+    qtbot.waitUntil(lambda: first.isVisible() and second.isVisible(), timeout=1000)
+    stack = first.parentWidget()
+    assert stack is second.parentWidget()
+    assert first.y() < second.y()
 
-    assert bar.parent() is host
-    assert bar.position == InfoBarPosition.TOP
-    assert bar.x() >= 0
-    assert bar.y() >= 0
-
-    replace_message_bar(bar)
-    qtbot.waitUntil(lambda: (not isValid(bar)) or (not bar.isVisible()), timeout=2000)
-    host.close()
-    qtbot.waitUntil(lambda: not host.isVisible(), timeout=1000)
+    host.resize(360, 260)
+    qtbot.waitUntil(lambda: stack.width() <= 328, timeout=1000)
+    replace_message_bar(first)
+    qtbot.waitUntil(lambda: not isValid(first), timeout=1000)
+    replace_message_bar(second)
+    qtbot.waitUntil(lambda: not isValid(second), timeout=1000)
 
 
-def test_real_indeterminate_progress_bar_can_pause_resume_after_upgrade(qtbot) -> None:
-    install_qfluentwidgets_animation_guards()
-
-    bar = IndeterminateProgressBar(start=True)
+def test_application_indeterminate_progress_bar_resumes_from_stopped_and_paused(qtbot) -> None:
+    bar = IndeterminateProgressBar(start=False)
     qtbot.addWidget(bar)
     bar.show()
 
+    bar.resume()
     qtbot.waitUntil(
         lambda: bar.aniGroup.state() == QAbstractAnimation.State.Running,
         timeout=1000,
@@ -56,19 +60,16 @@ def test_real_indeterminate_progress_bar_can_pause_resume_after_upgrade(qtbot) -
         lambda: bar.aniGroup.state() == QAbstractAnimation.State.Paused,
         timeout=1000,
     )
-
     bar.setPaused(False)
     qtbot.waitUntil(
         lambda: bar.aniGroup.state() == QAbstractAnimation.State.Running,
         timeout=1000,
     )
-
     bar.stop()
     qtbot.waitUntil(
         lambda: bar.aniGroup.state() == QAbstractAnimation.State.Stopped,
         timeout=1000,
     )
-
     bar.resume()
     qtbot.waitUntil(
         lambda: bar.aniGroup.state() == QAbstractAnimation.State.Running,
@@ -76,10 +77,8 @@ def test_real_indeterminate_progress_bar_can_pause_resume_after_upgrade(qtbot) -
     )
 
 
-def test_main_window_real_startup_smoke_under_upgraded_qt_stack(monkeypatch, qtbot) -> None:
-    install_qfluentwidgets_animation_guards()
+def test_main_window_starts_without_mutating_qfluent_classes(monkeypatch, qtbot) -> None:
     monkeypatch.setenv("WJX_IMPORT_CHECK", "1")
-
     window = MainWindow()
     window._schedule_deferred_close_confirmation = lambda: None
     window.controller.request_shutdown_for_close = lambda timeout_seconds=5.0: None

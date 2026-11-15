@@ -20,16 +20,15 @@ class _FakeSignal:
         for callback in list(self.callbacks):
             callback(*args)
 
-
-class _FakeQtApp:
-    def processEvents(self) -> None:
-        return
+    def disconnect(self, callback) -> None:
+        self.callbacks.remove(callback)
 
 
 class _FakeDialogsWindow(MainWindowDialogsMixin):
     def __init__(self) -> None:
         self._thread_token: Any = object()
         self._async_dialog_refs = []
+        self.destroyed = _FakeSignal()
         self._task_result_tray_icon = None
         self.visible = True
         self.minimized = False
@@ -110,11 +109,13 @@ class _FakeLifecycleWindow(MainWindowLifecycleMixin):
         )
         self.dashboard = SimpleNamespace(
             _is_closing=False,
-            _build_config=lambda: {"dashboard": True},
-            apply_config=lambda cfg: self._record(("dashboard_apply", cfg)),
             update_random_ip_counter=lambda count, limit, custom_api: self._record(
                 ("counter", count, limit, custom_api)
             ),
+        )
+        self.workbench = SimpleNamespace(
+            apply_config=lambda cfg: self._record(("workbench_apply", cfg)),
+            build_current_config_snapshot=lambda: "snapshot",
         )
         self.workbench_state = SimpleNamespace(
             get_entries=lambda: ["entry1"],
@@ -122,9 +123,6 @@ class _FakeLifecycleWindow(MainWindowLifecycleMixin):
             entries=["entryA"],
             entry_questions_info=["entryInfoA"],
             set_entries=lambda entries, info: self._record(("set_entries", entries, info)),
-        )
-        self.runtime_page = SimpleNamespace(
-            apply_config=lambda cfg: self._record(("runtime_apply", cfg))
         )
         self.strategy_page = SimpleNamespace(
             set_questions_info=lambda info: self._record(("set_questions_info", info)),
@@ -229,6 +227,7 @@ class _FakeMessageBox:
         self.destroyed = _FakeSignal()
         self.opened = False
         self.done_calls = []
+        self.finished = _FakeSignal()
         _FakeMessageBox.instances.append(self)
 
     def exec(self):
@@ -236,6 +235,9 @@ class _FakeMessageBox:
 
     def open(self) -> None:
         self.opened = True
+
+    def setAttribute(self, *_args) -> None:
+        return
 
     def done(self, value: int) -> None:
         self.done_calls.append(int(value))
@@ -260,7 +262,7 @@ class _FakeUpdateWindow(MainWindowUpdateMixin):
 
 
 class MainWindowModalSafetyTests:
-    def test_dispatch_to_ui_uses_receiver_bound_single_shot(self) -> None:
+    def test_dispatch_to_ui_async_runs_immediately_on_ui_thread(self) -> None:
         window = _FakeDialogsWindow()
         callback_calls: list[str] = []
 
@@ -271,19 +273,14 @@ class MainWindowModalSafetyTests:
         with (
             patch(
                 "software.ui.shell.main_window_parts.dialogs.QThread.currentThread",
-                return_value=object(),
-            ),
-            patch(
-                "software.ui.shell.main_window_parts.dialogs.QCoreApplication.instance",
-                return_value=_FakeQtApp(),
+                return_value=window.thread(),
             ),
             patch(
                 "software.ui.shell.main_window_parts.dialogs.QTimer.singleShot",
-                side_effect=lambda _ms, _receiver, func: func(),
-            ),
+            ) as timer,
         ):
-            result = window._dispatch_to_ui(callback)
-        assert result == 42
+            window._dispatch_to_ui_async(callback)
+        timer.assert_not_called()
         assert callback_calls == ["done"]
 
     def test_dispatch_to_ui_async_uses_receiver_bound_single_shot(self) -> None:
@@ -295,10 +292,6 @@ class MainWindowModalSafetyTests:
                 return_value=object(),
             ),
             patch(
-                "software.ui.shell.main_window_parts.dialogs.QCoreApplication.instance",
-                return_value=_FakeQtApp(),
-            ),
-            patch(
                 "software.ui.shell.main_window_parts.dialogs.QTimer.singleShot",
                 side_effect=lambda _ms, _receiver, func: func(),
             ),
@@ -306,41 +299,13 @@ class MainWindowModalSafetyTests:
             window._dispatch_to_ui_async(lambda: callback_calls.append("done"))
         assert callback_calls == ["done"]
 
-    def test_dispatch_to_ui_timeout_cancels_late_callback_execution(self) -> None:
-        window = _FakeDialogsWindow()
-        callback_calls: list[str] = []
-        scheduled: list = []
-
-        def callback():
-            callback_calls.append("done")
-            return 42
-
-        with (
-            patch.object(window, "_UI_DISPATCH_TIMEOUT_SECONDS", 0.01),
-            patch(
-                "software.ui.shell.main_window_parts.dialogs.QThread.currentThread",
-                return_value=object(),
-            ),
-            patch(
-                "software.ui.shell.main_window_parts.dialogs.QCoreApplication.instance",
-                return_value=_FakeQtApp(),
-            ),
-            patch(
-                "software.ui.shell.main_window_parts.dialogs.QTimer.singleShot",
-                side_effect=lambda _ms, _receiver, func: scheduled.append(func),
-            ),
-        ):
-            result = window._dispatch_to_ui(callback)
-        assert result is None
-        assert callback_calls == []
-        assert len(scheduled) == 1
-        scheduled[0]()
-        assert callback_calls == []
-
     def test_toast_routes_each_level(self) -> None:
         window = _FakeDialogsWindow()
         toast = _FakeToast()
-        with patch("software.ui.shell.main_window_parts.dialogs.InfoBar", toast):
+        with patch(
+            "software.ui.shell.main_window_parts.dialogs.show_message_bar",
+            side_effect=lambda **kwargs: toast.calls.append((kwargs["level"], kwargs)),
+        ):
             window._toast("ok", level="success", duration=1)
             window._toast("warn", level="warning", duration=2)
             window._toast("bad", level="error", duration=3)
@@ -402,20 +367,34 @@ class MainWindowModalSafetyTests:
                 "software.ui.shell.main_window_parts.dialogs.log_action",
                 side_effect=lambda *args, **kwargs: logs.append((args, kwargs)),
             ),
-            patch.object(window, "_dispatch_to_ui", side_effect=lambda func: func()),
             patch.object(window, "_dispatch_to_ui_async", side_effect=lambda func: func()),
         ):
-            _FakeMessageBox.next_exec_result = True
-            assert window.show_confirm_dialog("确认", "继续吗") is True
-            _FakeMessageBox.next_exec_result = False
-            assert window.show_custom_confirm_dialog_ui("危险", "删吗", "删", "不删") is False
-            window.show_message_dialog("消息", "已打开")
+            accepted = window.request_confirm_dialog("确认", "继续吗")
+            message_box = _FakeMessageBox.instances[-1]
+            assert message_box.opened is True
+            assert accepted.done() is False
+            message_box.finished.emit(1)
+            assert accepted.result() is True
+            message = window.show_message_dialog("消息", "已打开")
+            message_box = _FakeMessageBox.instances[-1]
+            message_box.finished.emit(0)
+            assert message.result() is False
         assert len(logs) == 4
-        message_box = _FakeMessageBox.instances[-1]
-        assert message_box.opened is True
-        assert window._async_dialog_refs == [message_box]
-        message_box.destroyed.emit()
+        assert len(window._async_dialog_refs) == 2
+        for box in list(_FakeMessageBox.instances):
+            box.destroyed.emit()
         assert window._async_dialog_refs == []
+
+    def test_parent_destruction_rejects_pending_confirmation(self) -> None:
+        window = _FakeDialogsWindow()
+        with (
+            patch("software.ui.shell.main_window_parts.dialogs.MessageBox", _FakeMessageBox),
+            patch.object(window, "_dispatch_to_ui_async", side_effect=lambda func: func()),
+        ):
+            result = window.request_confirm_dialog("确认", "继续吗")
+        assert not result.done()
+        window.destroyed.emit()
+        assert result.result() is False
 
     def test_schedule_deferred_close_confirmation_retries_close_after_prompt(self) -> None:
         window = _FakeLifecycleWindow()
@@ -476,13 +455,8 @@ class MainWindowModalSafetyTests:
             MainWindowLifecycleMixin._persist_last_session_log(window)
         finalize_mock.assert_called_once_with("D:/data")
 
-        with patch(
-            "software.ui.shell.main_window_parts.lifecycle.build_runtime_config_snapshot",
-            return_value="cfg",
-        ):
-            cfg = MainWindowLifecycleMixin._collect_current_config_snapshot(window)
-        assert cfg == "cfg"
-        assert window.controller.config == "cfg"
+        cfg = MainWindowLifecycleMixin._collect_current_config_snapshot(window)
+        assert cfg == "snapshot"
 
     def test_save_config_via_dialog_and_close_confirmation_paths(self) -> None:
         _FakeMessageBox.instances.clear()
@@ -547,11 +521,11 @@ class MainWindowModalSafetyTests:
         window = _FakeLifecycleWindow()
         cfg = window.controller.load_saved_config()
         MainWindowLifecycleMixin._load_saved_config(window)
-        assert ("runtime_apply", cfg) in window.cleanup_events
-        assert ("dashboard_apply", cfg) in window.cleanup_events
-        assert ("set_entries", ["q1"], ["info1"]) in window.cleanup_events
-        assert ("rules", ["rule1"]) in window.cleanup_events
-        assert ("groups", ["dim1"]) in window.cleanup_events
+        assert ("workbench_apply", cfg) in window.cleanup_events
+        assert not any(
+            isinstance(event, tuple) and event[0] in {"dashboard_apply", "runtime_apply"}
+            for event in window.cleanup_events
+        )
         assert "refresh_counter" in window.cleanup_events
 
         window.controller.get_proxy_session_snapshot = lambda: {

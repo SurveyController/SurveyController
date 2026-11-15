@@ -120,7 +120,7 @@ class AiSettingsPort(Protocol):
 
 
 class ProxyOperationsPort(Protocol):
-    def refresh_random_ip_counter(self, *, connect_legacy: bool = False) -> None: ...
+    def refresh_random_ip_counter(self, *, ensure_account_session: bool = False) -> None: ...
 
     def request_toggle_random_ip(
         self,

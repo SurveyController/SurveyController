@@ -187,13 +187,16 @@ class RandomIpRuntimeService:
         )
 
     def _refresh_random_ip_counter_now(
-        self, adapter: Optional[Any], *, connect_legacy: bool = False
+        self,
+        adapter: Optional[Any],
+        *,
+        ensure_account_session: bool = False,
     ) -> None:
         if not adapter:
             return
         self._proxy_gateway.load_session_for_startup()
         if (
-            connect_legacy
+            ensure_account_session
             and not self._proxy_gateway.is_custom_api_active()
             and not self._proxy_gateway.has_authenticated_session()
         ):
@@ -231,7 +234,10 @@ class RandomIpRuntimeService:
         return engine_client.submit_ui_task(task_name, coro_factory)
 
     def refresh_random_ip_counter(
-        self, *, adapter: Optional[Any] = None, connect_legacy: bool = False
+        self,
+        *,
+        adapter: Optional[Any] = None,
+        ensure_account_session: bool = False,
     ) -> None:
         if not self._proxy_callbacks_active():
             return
@@ -241,7 +247,10 @@ class RandomIpRuntimeService:
         try:
             self._submit_random_ip_background_task(
                 "refresh_random_ip_counter",
-                lambda: self._refresh_random_ip_counter_now(adapter, connect_legacy=connect_legacy),
+                lambda: self._refresh_random_ip_counter_now(
+                    adapter,
+                    ensure_account_session=ensure_account_session,
+                ),
             )
         except Exception:
             logging.info("提交随机IP计数刷新任务失败", exc_info=True)

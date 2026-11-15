@@ -23,7 +23,6 @@ from qfluentwidgets import (
     PrimaryPushButton,
     HyperlinkButton,
     IndeterminateProgressRing,
-    InfoBar,
     InfoBarIcon,
     InfoBarPosition,
     ImageLabel,
@@ -36,6 +35,7 @@ from qfluentwidgets import (
 from software.app.app_info import APP_VERSION
 from software.app.project_links import REPOSITORY_URL
 from software.ui.widgets.full_width_infobar import FullWidthInfoBar
+from software.ui.helpers.message_bar import InfoBar
 from software.app.runtime_paths import get_resource_path
 from software.ui.helpers.qfluent_compat import (
     QFluentCompat,

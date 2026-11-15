@@ -2,6 +2,9 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from PySide6.QtCore import QAbstractAnimation
+from PySide6.QtWidgets import QWidget
+
 from software.ui.pages import community as community_module
 from software.ui.widgets import config_drawer as config_drawer_module
 
@@ -22,6 +25,33 @@ def test_config_drawer_opens_config_directory_via_qdesktopservices(
     drawer._open_config_folder()
 
     assert [Path(path) for path in opened] == [tmp_path]
+
+
+def test_config_drawer_reuses_one_animation_completion_connection(qtbot) -> None:
+    host = QWidget()
+    host.resize(800, 600)
+    drawer = config_drawer_module.ConfigDrawer(host)
+    qtbot.addWidget(host)
+    host.show()
+
+    drawer.open_drawer()
+    qtbot.waitUntil(
+        lambda: (
+            drawer.isVisible() and drawer._slide_anim.state() == QAbstractAnimation.State.Stopped
+        ),
+        timeout=1000,
+    )
+    drawer.close_drawer()
+    qtbot.waitUntil(lambda: not drawer.isVisible(), timeout=1000)
+    drawer.open_drawer()
+    qtbot.waitUntil(
+        lambda: (
+            drawer.isVisible() and drawer._slide_anim.state() == QAbstractAnimation.State.Stopped
+        ),
+        timeout=1000,
+    )
+    drawer.close_drawer()
+    qtbot.waitUntil(lambda: not drawer.isVisible(), timeout=1000)
 
 
 def test_config_drawer_lists_legacy_default_config_as_recovery_source(

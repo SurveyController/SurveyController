@@ -1,13 +1,13 @@
 from __future__ import annotations
 
 from types import SimpleNamespace
-from typing import Any, Dict, cast
+from typing import Any, cast
 
 from PySide6.QtWidgets import QDialog
-
-import software.ui.pages.workbench.dashboard.parts.entries as entries_module
 from surveycore.core.questions.config import QuestionEntry
 from surveycore.providers.contracts import SurveyQuestionMeta
+
+import software.ui.pages.workbench.dashboard.parts.entries as entries_module
 from software.ui.pages.workbench.dashboard.parts.entries import DashboardEntriesMixin
 
 
@@ -30,9 +30,6 @@ class _FakeWizardDialog:
 class _FakeDashboard(DashboardEntriesMixin):
     def __init__(self) -> None:
         self._survey_title = "demo"
-        self.runtime_page = SimpleNamespace(
-            reliability_card=SimpleNamespace(switchButton=_FakeSwitchButton())
-        )
         self.controller = None
         self.toast_calls: list[tuple[str, str]] = []
 
@@ -49,7 +46,7 @@ def test_run_question_wizard_cancel_does_not_raise_on_already_deleted_dialog(mon
     monkeypatch.setattr(entries_module, "QuestionWizardDialog", _FakeWizardDialog)
     monkeypatch.setattr(entries_module, "isValid", lambda _obj: False)
     entries = cast(list[QuestionEntry], [SimpleNamespace()])
-    info = cast(list[SurveyQuestionMeta | Dict[str, Any]], [cast(Dict[str, Any], {"num": 1})])
+    info = cast(list[SurveyQuestionMeta | dict[str, Any]], [cast(dict[str, Any], {"num": 1})])
 
     accepted = dashboard.run_question_wizard(entries, info, "demo")
 

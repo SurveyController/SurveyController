@@ -9,7 +9,6 @@ from qfluentwidgets import (
     CardWidget,
     ComboBox,
     HorizontalSeparator,
-    InfoBar,
     InfoBarPosition,
     LineEdit,
     MessageBox,
@@ -18,6 +17,7 @@ from qfluentwidgets import (
     SubtitleLabel,
     TitleLabel,
 )
+from software.ui.helpers.message_bar import InfoBar
 
 from software.app.config import DIMENSION_UNGROUPED, PRESET_DIMENSIONS
 from surveycore.core.questions.config import QuestionEntry

@@ -15,13 +15,22 @@ def _project(tmp_path: Path, version: str) -> Path:
     return project
 
 
-@pytest.mark.parametrize("version", ["4.1.0", "4.1.0rc2", "4.1.0.dev3", "4.1.0.post1"])
-def test_metadata_preserves_full_version_and_derives_windows_version(tmp_path, version):
+@pytest.mark.parametrize(
+    ("version", "windows_version"),
+    [
+        ("4.1.0", "4.1.0.0"),
+        ("4.1.0rc2", "4.1.0.0"),
+        ("4.1.0.dev3", "4.1.0.0"),
+        ("4.1.0.post1", "4.1.0.0"),
+        ("5.0.0-beta.1", "5.0.0.0"),
+    ],
+)
+def test_metadata_preserves_full_version_and_derives_windows_version(tmp_path, version, windows_version):
     metadata = app_metadata.build_metadata(_project(tmp_path, version), release_tag=f"v{version}")
 
     assert metadata == {
         "version": version,
-        "windows_version": "4.1.0.0",
+        "windows_version": windows_version,
         "archive_name": f"SurveyController-{version}.zip",
     }
 

@@ -1,4 +1,4 @@
-from PySide6.QtCore import Qt, QTimer, Signal
+from PySide6.QtCore import Qt, Signal
 from PySide6.QtWidgets import QGraphicsOpacityEffect, QHBoxLayout, QWidget
 from qfluentwidgets import BodyLabel, Slider
 
@@ -45,19 +45,6 @@ class ValueSlider(QWidget):
         self.valueLabel.setText(self._label_text(value))
         self.valueChanged.emit(int(value))
 
-    def _refresh_slider_visual(self) -> None:
-        adjust_handle = getattr(self.slider, "_adjustHandlePos", None)
-        if callable(adjust_handle):
-            adjust_handle()
-        self.slider.update()
-        handle = getattr(self.slider, "handle", None)
-        if handle is not None:
-            handle.update()
-
-    def _queue_slider_refresh(self) -> None:
-        self._refresh_slider_visual()
-        QTimer.singleShot(0, self._refresh_slider_visual)
-
     def setRange(self, min_val: int, max_val: int) -> None:
         min_value = int(min_val)
         max_value = max(min_value, int(max_val))
@@ -66,22 +53,17 @@ class ValueSlider(QWidget):
         self.slider.setPageStep(max(1, (max_value - min_value) // 8))
         self._refresh_label_width()
         self.setValue(max(min_value, min(max_value, self.value())))
-        self._queue_slider_refresh()
+        self.slider.updateGeometry()
 
     def setValue(self, value: int) -> None:
         minimum = self.slider.minimum()
         maximum = self.slider.maximum()
         self.slider.setValue(max(minimum, min(maximum, int(value))))
         self.valueLabel.setText(self._label_text(self.slider.value()))
-        self._queue_slider_refresh()
+        self.slider.updateGeometry()
 
     def resizeEvent(self, event) -> None:
         super().resizeEvent(event)
-        self._queue_slider_refresh()
-
-    def showEvent(self, event) -> None:
-        super().showEvent(event)
-        self._queue_slider_refresh()
 
     def value(self) -> int:
         return int(self.slider.value())

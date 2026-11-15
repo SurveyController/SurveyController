@@ -15,7 +15,6 @@ from software.app.user_paths import (
 )
 import software.network.http as http_client
 from software.logging.log_utils import setup_logging
-from software.ui.helpers.qfluent_compat import QFluentCompat
 
 _FAULT_HANDLER_STREAM = None
 
@@ -92,7 +91,6 @@ def main():
     qInstallMessageHandler(_qt_message_handler)
     app = QApplication(sys.argv)
     app.setApplicationVersion(APP_VERSION)
-    QFluentCompat.install()
 
     font = QFont("Microsoft YaHei UI" if sys.platform == "win32" else "Sans Serif", 9)
     app.setFont(font)

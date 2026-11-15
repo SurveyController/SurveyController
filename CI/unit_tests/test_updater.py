@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from concurrent.futures import Future
 from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
@@ -114,6 +115,7 @@ class UpdateHelperTests:
         ]
 
     def test_show_update_notification_opens_browser_for_manual_only_update(self) -> None:
+        confirmation: Future[bool] = Future()
         gui = SimpleNamespace(
             update_info={
                 "version": "3.2.0",
@@ -122,21 +124,25 @@ class UpdateHelperTests:
                 "manual_only": True,
                 "manual_release_url": "https://example.com/release",
             },
-            show_confirm_dialog=MagicMock(return_value=True),
+            request_confirm_dialog=MagicMock(return_value=confirmation),
         )
         with (
             patch.object(updater, "log_action"),
             patch.object(updater.webbrowser, "open") as open_mock,
         ):
             updater.show_update_notification(gui)
+            open_mock.assert_not_called()
+            confirmation.set_result(True)
         open_mock.assert_called_once_with("https://example.com/release")
 
     def test_show_update_notification_does_not_open_release_when_declined(self) -> None:
+        confirmation: Future[bool] = Future()
         gui = SimpleNamespace(
             update_info={"version": "3.2.0", "current_version": "3.1.2"},
-            show_confirm_dialog=MagicMock(return_value=False),
+            request_confirm_dialog=MagicMock(return_value=confirmation),
         )
         with patch.object(updater.webbrowser, "open") as open_mock:
             updater.show_update_notification(gui)
+            confirmation.set_result(False)
         open_mock.assert_not_called()
-        assert "自动更新" not in gui.show_confirm_dialog.call_args.args[1]
+        assert "自动更新" not in gui.request_confirm_dialog.call_args.args[1]

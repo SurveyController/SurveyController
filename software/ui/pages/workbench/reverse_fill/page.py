@@ -1,23 +1,22 @@
 from __future__ import annotations
 
 import copy
-from typing import TYPE_CHECKING, Any, Callable, List, Optional, Sequence, cast
+from collections.abc import Callable, Sequence
+from typing import TYPE_CHECKING, Any, cast
 
-from PySide6.QtCore import QEvent, Signal, Slot
+from PySide6.QtCore import QEvent, QSignalBlocker, Signal, Slot
 from PySide6.QtGui import QDragEnterEvent, QDropEvent
 from PySide6.QtWidgets import QToolButton, QWidget
 from qfluentwidgets import (
     CaptionLabel,
-    InfoBar,
     IndeterminateProgressRing,
     LineEdit,
-    PushButton,
     PrimaryPushButton,
     ProgressBar,
+    PushButton,
     StrongBodyLabel,
     TableWidget,
 )
-
 from surveycore.core.reverse_fill.schema import (
     REVERSE_FILL_FORMAT_AUTO,
     REVERSE_FILL_FORMAT_WJX_SCORE,
@@ -25,9 +24,11 @@ from surveycore.core.reverse_fill.schema import (
     REVERSE_FILL_FORMAT_WJX_TEXT,
     ReverseFillSpec,
 )
+from surveycore.providers.contracts import SurveyQuestionMeta, ensure_survey_question_metas
+
 from software.core.config.schema import RuntimeConfig
 from software.providers.common import SURVEY_PROVIDER_WJX, normalize_survey_provider
-from surveycore.providers.contracts import SurveyQuestionMeta, ensure_survey_question_metas
+from software.ui.helpers.message_bar import InfoBar
 from software.ui.pages.workbench.reverse_fill.actions import (
     apply_excel_source_path,
     bind_reverse_fill_events,
@@ -59,26 +60,27 @@ from software.ui.pages.workbench.shared.clipboard import SurveyClipboardMixin
 from software.ui.pages.workbench.shared.run_feedback import (
     get_completion_notified,
     get_last_progress,
+    get_show_end_toast_after_run,
     init_run_feedback_state,
     set_completion_notified,
     set_last_pause_reason,
     set_last_progress,
     set_show_end_toast_after_run,
     show_feedback_toast,
-    get_show_end_toast_after_run,
 )
 
 if TYPE_CHECKING:
-    from software.ui.controller.run_controller import RunController
-    from software.ui.pages.workbench.shared.random_ip_toggle_row import RandomIpToggleRow
-    from software.ui.pages.workbench.shared.survey_entry_card import SurveyEntryCard
-    from software.ui.widgets.no_wheel import NoWheelSpinBox
     from qfluentwidgets import (
-        IndeterminateProgressBar,
         ScrollArea,
         SimpleCardWidget,
         TogglePushButton,
     )
+
+    from software.ui.controller.run_controller import RunController
+    from software.ui.pages.workbench.shared.random_ip_toggle_row import RandomIpToggleRow
+    from software.ui.pages.workbench.shared.survey_entry_card import SurveyEntryCard
+    from software.ui.widgets.indeterminate_progress import IndeterminateProgressBar
+    from software.ui.widgets.no_wheel import NoWheelSpinBox
 
 _FORMAT_CHOICES = [
     (REVERSE_FILL_FORMAT_AUTO, "自动识别 (推荐)"),
@@ -90,6 +92,7 @@ _FORMAT_CHOICES = [
 
 class ReverseFillPage(SurveyClipboardMixin, QWidget):
     surveyUrlChanged = Signal(str)
+    configurationChanged = Signal(dict)
     scroll_area: "ScrollArea"
     view: QWidget
     link_card: "SurveyEntryCard"
@@ -121,19 +124,19 @@ class ReverseFillPage(SurveyClipboardMixin, QWidget):
     def __init__(self, controller: "RunController", parent=None):
         super().__init__(parent)
         self.controller = controller
-        self._questions_info: List[SurveyQuestionMeta] = []
-        self._question_entries: List[Any] = []
+        self._questions_info: list[SurveyQuestionMeta] = []
+        self._question_entries: list[Any] = []
         self._survey_provider: str = ""
         self._survey_title: str = ""
         self._parsed_url: str = ""
         self._reverse_fill_threads_value: int = 1
         self._selected_format_value: str = REVERSE_FILL_FORMAT_AUTO
         self._start_row_value: int = 1
-        self._last_spec: Optional[ReverseFillSpec] = None
+        self._last_spec: ReverseFillSpec | None = None
         self._last_error: str = ""
-        self._open_wizard_handler: Optional[Callable[[List[int]], None]] = None
-        self._run_coordinator: Optional[Any] = None
-        self._issue_question_nums: List[int] = []
+        self._open_wizard_handler: Callable[[list[int]], None] | None = None
+        self._run_coordinator: Any | None = None
+        self._issue_question_nums: list[int] = []
         self._clipboard_parse_ticket = 0
         self._preview_generation = 0
         self._preview_in_flight = False
@@ -154,22 +157,19 @@ class ReverseFillPage(SurveyClipboardMixin, QWidget):
         self._preview_dispatcher.finished.connect(self._on_preview_ready)
         self._preview_dispatcher.progress.connect(self._on_preview_progress)
         self.destroyed.connect(self._preview_cancellation.cancel_current)
-        if hasattr(self.controller, "get_runtime_snapshot"):
-            runtime_snapshot = self.controller.get_runtime_snapshot()
-            self._apply_runtime_ui_state(runtime_snapshot.get("settings") or {})
-            self.set_random_ip_loading(
-                bool(runtime_snapshot.get("random_ip", {}).get("loading")),
-                str(runtime_snapshot.get("random_ip", {}).get("loading_message") or ""),
-            )
-        elif hasattr(self.controller, "get_runtime_ui_state"):
-            self._apply_runtime_ui_state(self.controller.get_runtime_ui_state())
+        runtime_snapshot = self.controller.get_runtime_snapshot()
+        self.apply_runtime_settings(runtime_snapshot.get("settings") or {})
+        self.set_random_ip_loading(
+            bool(runtime_snapshot.get("random_ip", {}).get("loading")),
+            str(runtime_snapshot.get("random_ip", {}).get("loading_message") or ""),
+        )
         self._refresh_preview()
         self._sync_start_button_state()
 
     def _bind_events(self) -> None:
         bind_reverse_fill_events(self)
 
-    def set_open_wizard_handler(self, handler: Optional[Callable[[List[int]], None]]) -> None:
+    def set_open_wizard_handler(self, handler: Callable[[list[int]], None] | None) -> None:
         self._open_wizard_handler = handler
 
     def set_run_coordinator(self, coordinator: Any) -> None:
@@ -192,37 +192,24 @@ class ReverseFillPage(SurveyClipboardMixin, QWidget):
         self._refresh_preview()
         self._sync_start_button_state()
 
-    def update_config(self, cfg: RuntimeConfig) -> None:
-        cfg.reverse_fill_source_path = self.file_edit.text().strip()
-        cfg.reverse_fill_enabled = bool(cfg.reverse_fill_source_path)
-        cfg.reverse_fill_format = self._selected_format()
-        cfg.reverse_fill_start_row = max(1, int(self._start_row_value or 1))
-        cfg.reverse_fill_threads = max(1, int(self._reverse_fill_threads_value or 1))
-        if cfg.reverse_fill_enabled:
-            cfg.threads = max(1, int(cfg.reverse_fill_threads or 1))
-
     def apply_config(self, cfg: RuntimeConfig) -> None:
-        self.url_edit.blockSignals(True)
-        self.url_edit.setText(str(getattr(cfg, "url", "") or ""))
-        self.url_edit.blockSignals(False)
-        self.file_edit.setText(str(getattr(cfg, "reverse_fill_source_path", "") or ""))
-        self._start_row_value = max(1, int(getattr(cfg, "reverse_fill_start_row", 1) or 1))
+        with QSignalBlocker(self.url_edit):
+            self.url_edit.setText(cfg.url)
+        self.file_edit.setText(cfg.reverse_fill_source_path)
+        self._start_row_value = max(1, int(cfg.reverse_fill_start_row or 1))
         self._reverse_fill_threads_value = max(
             1,
-            int(getattr(cfg, "reverse_fill_threads", getattr(cfg, "threads", 1)) or 1),
+            int(cfg.reverse_fill_threads or 1),
         )
-        self.reverse_fill_threads_spin.blockSignals(True)
-        self.reverse_fill_threads_spin.setValue(self._reverse_fill_threads_value)
-        self.reverse_fill_threads_spin.blockSignals(False)
+        with QSignalBlocker(self.reverse_fill_threads_spin):
+            self.reverse_fill_threads_spin.setValue(self._reverse_fill_threads_value)
 
-        selected_format = str(
-            getattr(cfg, "reverse_fill_format", REVERSE_FILL_FORMAT_AUTO)
-            or REVERSE_FILL_FORMAT_AUTO
-        )
+        selected_format = str(cfg.reverse_fill_format or REVERSE_FILL_FORMAT_AUTO)
         valid_formats = {value for value, _label in _FORMAT_CHOICES}
         self._selected_format_value = (
             selected_format if selected_format in valid_formats else REVERSE_FILL_FORMAT_AUTO
         )
+        self.apply_runtime_settings({"random_ip_enabled": cfg.random_ip_enabled})
         self._refresh_preview()
 
     def _selected_format(self) -> str:
@@ -255,7 +242,7 @@ class ReverseFillPage(SurveyClipboardMixin, QWidget):
         level: str = "warning",
         duration: int = 2400,
         show_progress: bool = False,
-    ) -> Optional[InfoBar]:
+    ) -> InfoBar | None:
         return show_feedback_toast(
             self,
             message,
@@ -283,12 +270,10 @@ class ReverseFillPage(SurveyClipboardMixin, QWidget):
     def _sync_random_ip_toggle_presentation(self, enabled: bool) -> None:
         self.random_ip_row.sync_toggle_presentation(enabled)
 
-    def _apply_runtime_ui_state(self, state: dict) -> None:
-        enabled = bool((state or {}).get("random_ip_enabled", False))
-        if bool(self.random_ip_cb.isChecked()) != enabled:
-            self.random_ip_cb.blockSignals(True)
+    def apply_runtime_settings(self, settings: dict) -> None:
+        enabled = bool((settings or {}).get("random_ip_enabled", False))
+        with QSignalBlocker(self.random_ip_cb):
             self.random_ip_cb.setChecked(enabled)
-            self.random_ip_cb.blockSignals(False)
         self._sync_random_ip_toggle_presentation(enabled)
 
     def set_random_ip_loading(self, loading: bool, message: str = "") -> None:
@@ -308,7 +293,7 @@ class ReverseFillPage(SurveyClipboardMixin, QWidget):
         self.random_ip_cb.blockSignals(False)
         self._sync_random_ip_toggle_presentation(fallback_enabled)
 
-    def _sync_start_button_state(self, running: Optional[bool] = None) -> None:
+    def _sync_start_button_state(self, running: bool | None = None) -> None:
         if running is None:
             running = bool(getattr(self.controller, "running", False))
         enabled = (
@@ -453,8 +438,14 @@ class ReverseFillPage(SurveyClipboardMixin, QWidget):
     def _on_survey_parsed(self, info: list, title: str) -> None:
         on_survey_parsed(self, info, title)
 
+    def present_parse_succeeded(self, info: list, title: str) -> None:
+        self._on_survey_parsed(info, title)
+
     def _on_survey_parse_failed(self, error_msg: str) -> None:
         on_survey_parse_failed(self, error_msg)
+
+    def present_parse_failed(self, error_msg: str) -> None:
+        self._on_survey_parse_failed(error_msg)
 
     def _open_wizard(self) -> None:
         open_wizard(self)
@@ -476,7 +467,7 @@ class ReverseFillPage(SurveyClipboardMixin, QWidget):
         error: str,
         cancelled: bool,
     ) -> None:
-        preview_ready(self, ticket, cast(Optional[ReverseFillSpec], spec), error, cancelled)
+        preview_ready(self, ticket, cast(ReverseFillSpec | None, spec), error, cancelled)
 
     @Slot(int, str, int, int)
     def _on_preview_progress(self, ticket: int, stage: str, current: int, total: int) -> None:

@@ -4,15 +4,15 @@ from types import SimpleNamespace
 
 import pytest
 from PySide6.QtCore import QObject, Qt, Signal
-from PySide6.QtWidgets import QApplication
-
-from software.core.config.schema import RuntimeConfig
+from PySide6.QtWidgets import QApplication, QWidget
 from surveycore.core.questions.config import QuestionEntry
-from software.app.config import HTTP_MAX_THREADS
 from surveycore.providers.contracts import SurveyQuestionMeta
+
+from software.app.config import HTTP_MAX_THREADS
+from software.core.config.schema import RuntimeConfig
 from software.ui.pages.workbench.dashboard.page import DashboardPage
+from software.ui.pages.workbench.presenter import WorkbenchPresenter
 from software.ui.pages.workbench.reverse_fill.page import ReverseFillPage
-from software.ui.pages.workbench.runtime_panel.main import RuntimePage
 from software.ui.pages.workbench.session import WorkbenchState
 from software.ui.pages.workbench.strategy.page import QuestionStrategyPage
 
@@ -20,6 +20,8 @@ from software.ui.pages.workbench.strategy.page import QuestionStrategyPage
 class _FakeController(QObject):
     surveyParsed = Signal(list, str)
     surveyParseFailed = Signal(str)
+    surveySnapshotChanged = Signal(dict)
+    runtimeSnapshotChanged = Signal(dict)
     runtimeUiStateChanged = Signal(dict)
     runStateChanged = Signal(bool)
     randomIpLoadingChanged = Signal(bool, str)
@@ -40,12 +42,27 @@ class _FakeController(QObject):
             "answer_datetime_window": ("", ""),
         }
         self.runtime_updates: list[dict] = []
+        self.random_ip_toggle_requests: list[bool] = []
         self.parse_calls: list[str] = []
         self.stop_calls = 0
         self.resume_calls = 0
 
     def get_runtime_ui_state(self):
         return dict(self.state)
+
+    def get_runtime_snapshot(self):
+        return {
+            "settings": dict(self.state),
+            "random_ip": {"loading": False, "loading_message": ""},
+            "running": bool(self.running),
+            "paused": False,
+            "status_text": "等待配置...",
+            "progress": {"current": 0, "target": 0},
+            "threads": {"rows": [], "num_threads": 0, "per_thread_target": 0},
+        }
+
+    def get_survey_snapshot(self):
+        return {"survey_provider": self.survey_provider, "question_entries": []}
 
     def set_runtime_ui_state(self, emit: bool = True, **updates):
         self.state.update(updates)
@@ -73,6 +90,7 @@ class _FakeController(QObject):
         return False
 
     def request_toggle_random_ip(self, enabled: bool, **_kwargs) -> bool:
+        self.random_ip_toggle_requests.append(bool(enabled))
         self.set_runtime_ui_state(random_ip_enabled=bool(enabled))
         return True
 
@@ -129,7 +147,6 @@ class _FakeAiSettings:
 
 
 def _patch_page_dependencies(monkeypatch) -> None:
-    import software.ui.pages.workbench.runtime_panel.proxy_sync as runtime_proxy_sync
     import software.ui.pages.workbench.runtime_panel.random_ip_card as random_ip_card
     import software.ui.pages.workbench.shared.clipboard as clipboard_module
 
@@ -158,46 +175,34 @@ def _patch_page_dependencies(monkeypatch) -> None:
     monkeypatch.setattr(random_ip_card, "test_custom_proxy_api", lambda _url: (True, "", []))
 
     monkeypatch.setattr(
-        runtime_proxy_sync, "apply_proxy_source_settings", lambda *_args, **_kwargs: None
-    )
-    monkeypatch.setattr(
-        runtime_proxy_sync, "apply_custom_proxy_api", lambda *_args, **_kwargs: None
-    )
-    monkeypatch.setattr(
         clipboard_module.SurveyClipboardMixin, "_on_clipboard_changed", lambda self: None
     )
 
 
-def test_runtime_page_builds_and_syncs_config_without_network(monkeypatch, qtbot) -> None:
+def test_dashboard_run_setup_builds_and_syncs_config_without_network(monkeypatch, qtbot) -> None:
     _patch_page_dependencies(monkeypatch)
     controller = _FakeController()
-
-    page = RuntimePage(controller)
+    state = WorkbenchState()
+    strategy_page = QuestionStrategyPage()
+    page = DashboardPage(controller, state, strategy_page)
+    qtbot.addWidget(strategy_page)
     qtbot.addWidget(page)
 
     cfg = RuntimeConfig(target=7, threads=99, random_ip_enabled=True)
     page.apply_config(cfg)
-    page.update_config(cfg)
 
-    assert page.target_card.spinBox.value() == 7
-    assert page.thread_card.slider.slider.maximum() == HTTP_MAX_THREADS
-    assert page.answer_duration_card.getRange() == cfg.answer_duration
+    assert page.run_setup_panel.target_spin.value() == 7
+    assert page.run_setup_panel.thread_card.slider.slider.maximum() == HTTP_MAX_THREADS
+    assert page.run_setup_panel.thread_card.slider.value() == HTTP_MAX_THREADS
     assert cfg.target == 7
-    assert cfg.threads <= HTTP_MAX_THREADS
+    assert cfg.threads == 99
     assert cfg.answer_datetime_window == ("", "")
-    assert cfg.ai_system_prompt
-    assert cfg.ai_mode == "provider"
-    assert page.ai_section.ai_provider_combo.count() == 1
-    assert page.ai_section.ai_provider_combo.currentData() == "custom"
-    assert not hasattr(page.ai_section, "ai_model_combo")
-    assert not hasattr(page.ai_section, "ai_mode_combo")
-    assert not hasattr(page.ai_section, "ai_free_mode_bar")
+    assert page.run_setup_panel.ai_section.ai_provider_combo.count() == 1
+    assert page.run_setup_panel.ai_section.ai_provider_combo.currentData() == "custom"
 
 
-@pytest.mark.parametrize(
-    "provider,model", [("custom", "test-model"), ("deepseek", "legacy-model")]
-)
-def test_runtime_ai_preserves_saved_model_when_loading_legacy_config(
+@pytest.mark.parametrize("provider,model", [("custom", "test-model"), ("deepseek", "legacy-model")])
+def test_dashboard_ai_preserves_saved_model_when_loading_legacy_config(
     monkeypatch, qtbot, provider, model
 ) -> None:
     _patch_page_dependencies(monkeypatch)
@@ -211,14 +216,17 @@ def test_runtime_ai_preserves_saved_model_when_loading_legacy_config(
     }
     controller = _FakeController()
     controller.ai_settings.settings = dict(saved)
-    page = RuntimePage(controller)
+    state = WorkbenchState()
+    strategy_page = QuestionStrategyPage()
+    page = DashboardPage(controller, state, strategy_page)
     qtbot.addWidget(page)
-    assert page.ai_section._get_current_model_value() == model
+    qtbot.addWidget(strategy_page)
+    assert page.run_setup_panel.ai_section._get_current_model_value() == model
     assert controller.ai_settings.writes == []
 
     cfg = RuntimeConfig(ai_mode="free")
     page.apply_config(cfg)
-    page.update_config(cfg)
+    assert cfg.ai_mode == "provider"
     assert cfg.ai_mode == "provider"
     assert cfg.ai_provider == "custom"
     assert cfg.ai_model == model
@@ -277,8 +285,10 @@ def test_reverse_fill_page_builds_and_updates_config(monkeypatch, qtbot, tmp_pat
     page.file_edit.setText(str(xlsx))
     page._last_spec = SimpleNamespace(target_num=3)
 
-    cfg = RuntimeConfig(target=1, threads=1)
-    page.update_config(cfg)
+    changes: list[dict] = []
+    page.configurationChanged.connect(changes.append)
+    page._apply_excel_source_path(str(xlsx))
+    page._on_reverse_fill_threads_changed(3)
     page.on_run_state_changed(True)
     page.update_status("正在初始化", 0, 3)
     page.update_status("运行中", 2, 3)
@@ -286,24 +296,24 @@ def test_reverse_fill_page_builds_and_updates_config(monkeypatch, qtbot, tmp_pat
 
     assert page.parse_btn.text() == "解析"
     assert controller.parse_calls == ["https://www.wjx.cn/vm/demo.aspx"]
-    assert cfg.reverse_fill_enabled is True
-    assert cfg.reverse_fill_source_path == str(xlsx)
-    assert cfg.threads == cfg.reverse_fill_threads
+    assert changes[0] == {
+        "reverse_fill_source_path": str(xlsx),
+        "reverse_fill_enabled": True,
+    }
+    assert changes[-1] == {"reverse_fill_threads": 3}
     assert page.stop_btn.isEnabled() is False
 
 
 def test_dashboard_page_builds_first_step_with_mica_transparency(monkeypatch, qtbot) -> None:
     _patch_page_dependencies(monkeypatch)
     controller = _FakeController()
-    runtime_page = RuntimePage(controller)
     strategy_page = QuestionStrategyPage()
     state = WorkbenchState()
     state.set_entries(
         [QuestionEntry("single", [1, 1], question_num=1, question_title="Q1")],
         [SurveyQuestionMeta(num=1, title="Q1", type_code="3", option_texts=["A", "B"])],
     )
-    page = DashboardPage(controller, state, runtime_page, strategy_page)
-    qtbot.addWidget(runtime_page)
+    page = DashboardPage(controller, state, strategy_page)
     qtbot.addWidget(strategy_page)
     qtbot.addWidget(page)
 
@@ -325,196 +335,130 @@ def test_dashboard_page_builds_first_step_with_mica_transparency(monkeypatch, qt
     assert not hasattr(page, "progress_bar")
 
 
-@pytest.mark.skip(reason="execution progress is presented on the reverse-fill page")
-def test_dashboard_thread_progress_rows_keep_visible_after_update(monkeypatch, qtbot) -> None:
+def test_workbench_config_projects_random_ip_state_to_all_pages(monkeypatch, qtbot) -> None:
     _patch_page_dependencies(monkeypatch)
     controller = _FakeController()
-    runtime_page = RuntimePage(controller)
-    strategy_page = QuestionStrategyPage()
-    state = WorkbenchState()
-    page = DashboardPage(controller, state, runtime_page, strategy_page)
-    qtbot.addWidget(runtime_page)
-    qtbot.addWidget(strategy_page)
-    qtbot.addWidget(page)
-    page.show()
+    host = QWidget()
+    qtbot.addWidget(host)
+    presenter = WorkbenchPresenter(controller=controller, host=host)
 
-    controller.running = True
-    page.update_thread_progress(
-        {
-            "target": 4,
-            "num_threads": 2,
-            "threads": [
-                {
-                    "thread_name": "Slot-1",
-                    "thread_display_name": "会话 1",
-                    "status_text": "构造答案",
-                    "success_count": 1,
-                    "fail_count": 0,
-                    "step_current": 2,
-                    "step_total": 4,
-                    "running": True,
-                }
-            ],
-        }
+    presenter.apply_config(RuntimeConfig(random_ip_enabled=True))
+
+    assert presenter.dashboard.run_setup_panel.random_ip_switch.isChecked()
+    assert presenter.reverse_fill_page.random_ip_cb.isChecked()
+    assert controller.random_ip_toggle_requests == []
+
+    controller.state["random_ip_enabled"] = False
+    controller.runtimeSnapshotChanged.emit(controller.get_runtime_snapshot())
+    qtbot.waitUntil(
+        lambda: (
+            not presenter.dashboard.run_setup_panel.random_ip_switch.isChecked()
+            and not presenter.reverse_fill_page.random_ip_cb.isChecked()
+        )
     )
-    qtbot.wait(50)
-
-    row = page._thread_progress_rows["Slot-1"]
-    assert page.thread_view_stack.currentWidget() is page.thread_view_progress_card
-    assert page.thread_progress_rows_layout.count() == 1
-    assert row["status"].text() == "构造答案"
-    assert row["step_bar"].isHidden() is False
-    assert row["step_busy_bar"].isHidden() is True
-    qtbot.wait(160)
-    assert row["step_bar"].value() == 50
-    assert row["widget"].sizeHint().height() > 0
-    assert page.thread_progress_rows_container.sizeHint().height() > 0
+    assert presenter.state.snapshot().random_ip_enabled is False
 
 
-@pytest.mark.skip(reason="execution progress is presented on the reverse-fill page")
-def test_dashboard_thread_progress_shows_indeterminate_bar_while_fetching_proxy(
-    monkeypatch,
-    qtbot,
-) -> None:
+def test_workbench_user_edits_reach_saved_and_run_config(monkeypatch, qtbot, tmp_path) -> None:
     _patch_page_dependencies(monkeypatch)
     controller = _FakeController()
-    runtime_page = RuntimePage(controller)
-    strategy_page = QuestionStrategyPage()
-    state = WorkbenchState()
-    page = DashboardPage(controller, state, runtime_page, strategy_page)
-    qtbot.addWidget(runtime_page)
-    qtbot.addWidget(strategy_page)
-    qtbot.addWidget(page)
-    page.show()
+    host = QWidget()
+    qtbot.addWidget(host)
+    presenter = WorkbenchPresenter(controller=controller, host=host)
+    panel = presenter.dashboard.run_setup_panel
 
-    controller.running = True
-    page.update_thread_progress(
-        {
-            "target": 4,
-            "num_threads": 2,
-            "threads": [
-                {
-                    "thread_name": "Slot-1",
-                    "thread_display_name": "会话 1",
-                    "status_text": "获取代理",
-                    "success_count": 1,
-                    "fail_count": 0,
-                    "step_current": 0,
-                    "step_total": 0,
-                    "running": True,
-                }
-            ],
-        }
-    )
-    qtbot.wait(50)
+    presenter.dashboard.url_edit.setText("https://www.wjx.cn/vm/draft.aspx")
+    panel.target_spin.setValue(8)
+    panel.thread_card.slider.setValue(3)
+    source = tmp_path / "source.xlsx"
+    source.write_bytes(b"placeholder")
+    source_path = str(source)
+    presenter.reverse_fill_page._apply_excel_source_path(source_path)
+    presenter.reverse_fill_page.reverse_fill_threads_spin.setValue(2)
+    panel.ai_section.ai_model_edit.setText("draft-model")
+    panel.ai_section.ai_model_edit.editingFinished.emit()
 
-    row = page._thread_progress_rows["Slot-1"]
-    assert row["step_bar"].isHidden() is True
-    assert row["step_busy_bar"].isVisible() is True
+    saved = presenter.build_current_config_snapshot()
+    run = presenter.run_coordinator.build_config()
+    for config in (saved, run):
+        assert config.url == "https://www.wjx.cn/vm/draft.aspx"
+        assert config.target == 8
+        assert config.threads == 3
+        assert config.reverse_fill_source_path == source_path
+        assert config.reverse_fill_threads == 2
+        assert config.ai_model == "draft-model"
+    assert presenter.reverse_fill_page.url_edit.text() == saved.url
 
 
-@pytest.mark.skip(reason="execution progress is presented on the reverse-fill page")
-def test_dashboard_thread_progress_switches_to_current_step_immediately(
-    monkeypatch,
-    qtbot,
-) -> None:
+def test_workbench_dimension_edit_commits_and_refreshes_reverse_fill(monkeypatch, qtbot) -> None:
     _patch_page_dependencies(monkeypatch)
-    controller = _FakeController()
-    runtime_page = RuntimePage(controller)
-    strategy_page = QuestionStrategyPage()
-    state = WorkbenchState()
-    page = DashboardPage(controller, state, runtime_page, strategy_page)
-    qtbot.addWidget(runtime_page)
-    qtbot.addWidget(strategy_page)
-    qtbot.addWidget(page)
-    page.show()
-
-    controller.running = True
-    page.update_thread_progress(
-        {
-            "target": 4,
-            "num_threads": 2,
-            "threads": [
-                {
-                    "thread_name": "Slot-1",
-                    "thread_display_name": "会话 1",
-                    "status_text": "构造答案",
-                    "success_count": 1,
-                    "fail_count": 0,
-                    "step_current": 2,
-                    "step_total": 4,
-                    "running": True,
-                }
-            ],
-        }
+    host = QWidget()
+    qtbot.addWidget(host)
+    presenter = WorkbenchPresenter(controller=_FakeController(), host=host)
+    presenter.apply_config(
+        RuntimeConfig(
+            question_entries=[QuestionEntry("single", [1, 1], question_num=1, dimension="A")],
+            questions_info=[SurveyQuestionMeta(num=1, title="Q1", type_code="3", options=2)],
+            dimension_groups=["A", "B"],
+        )
     )
-    row = page._thread_progress_rows["Slot-1"]
-    assert row["status"].text() == "构造答案"
+    changes = []
+    presenter.state.configChanged.connect(lambda _config, changed: changes.append(changed))
 
-    page.update_thread_progress(
-        {
-            "target": 4,
-            "num_threads": 2,
-            "threads": [
-                {
-                    "thread_name": "Slot-1",
-                    "thread_display_name": "会话 1",
-                    "status_text": "提交问卷",
-                    "success_count": 1,
-                    "fail_count": 0,
-                    "step_current": 3,
-                    "step_total": 4,
-                    "running": True,
-                }
-            ],
-        }
-    )
+    presenter.strategy_page.dimension_panel._apply_entries_to_dimension([0], "B")
 
-    assert row["status"].text() == "提交问卷"
-    assert row["displayed_status_text"] == "提交问卷"
-    qtbot.wait(50)
-    assert row["step_bar"].isHidden() is True
-    assert row["step_busy_bar"].isVisible() is True
+    assert presenter.state.snapshot().question_entries[0].dimension == "B"
+    assert presenter.reverse_fill_page._question_entries[0].dimension == "B"
+    assert any("question_entries" in changed for changed in changes)
 
 
-@pytest.mark.skip(reason="execution progress is presented on the reverse-fill page")
-def test_dashboard_thread_progress_shows_progress_bar_after_thread_finishes(
-    monkeypatch, qtbot
-) -> None:
+def test_workbench_question_wizard_edits_current_draft(monkeypatch, qtbot) -> None:
     _patch_page_dependencies(monkeypatch)
-    controller = _FakeController()
-    runtime_page = RuntimePage(controller)
-    strategy_page = QuestionStrategyPage()
-    state = WorkbenchState()
-    page = DashboardPage(controller, state, runtime_page, strategy_page)
-    qtbot.addWidget(runtime_page)
-    qtbot.addWidget(strategy_page)
-    qtbot.addWidget(page)
-    page.show()
+    host = QWidget()
+    qtbot.addWidget(host)
+    presenter = WorkbenchPresenter(controller=_FakeController(), host=host)
+    presenter.apply_config(
+        RuntimeConfig(
+            question_entries=[QuestionEntry("single", [1, 1], question_num=1, dimension="B")],
+            questions_info=[SurveyQuestionMeta(num=1, title="Q1", type_code="3", options=2)],
+            dimension_groups=["B"],
+        )
+    )
 
-    controller.running = False
-    page.update_thread_progress(
+    def edit(entries, _info, _title):
+        assert entries[0].dimension == "B"
+        entries[0].custom_weights = [9.0, 1.0]
+        return True
+
+    monkeypatch.setattr(presenter.dashboard, "run_question_wizard", edit)
+    presenter.open_reverse_fill_wizard([1])
+
+    config = presenter.state.snapshot()
+    assert config.question_entries[0].custom_weights == [9.0, 1.0]
+    assert config.question_entries[0].dimension == "B"
+    assert config.dimension_groups == ["B"]
+
+
+def test_workbench_ready_snapshot_preserves_loaded_dimensions(monkeypatch, qtbot) -> None:
+    _patch_page_dependencies(monkeypatch)
+    host = QWidget()
+    qtbot.addWidget(host)
+    presenter = WorkbenchPresenter(controller=_FakeController(), host=host)
+    config = RuntimeConfig(
+        question_entries=[QuestionEntry("single", [1, 1], question_num=1, dimension="B")],
+        questions_info=[SurveyQuestionMeta(num=1, title="Q1", type_code="3", options=2)],
+        dimension_groups=["A", "B"],
+    )
+    presenter.apply_config(config)
+
+    presenter.on_survey_snapshot_changed(
         {
-            "target": 4,
-            "num_threads": 2,
-            "threads": [
-                {
-                    "thread_name": "Slot-1",
-                    "thread_display_name": "会话 1",
-                    "status_text": "已完成",
-                    "success_count": 1,
-                    "fail_count": 0,
-                    "step_current": 2,
-                    "step_total": 4,
-                    "running": False,
-                }
-            ],
+            "phase": "ready",
+            "url": config.url,
+            "survey_title": config.survey_title,
+            "questions_info": config.questions_info,
+            "question_entries": config.question_entries,
         }
     )
-    row = page._thread_progress_rows["Slot-1"]
-    qtbot.wait(160)
 
-    assert row["status"].text() == "已完成"
-    assert row["step_busy_bar"].isHidden() is True
-    assert row["step_bar"].isHidden() is False
-    assert row["step_bar"].value() >= 99
+    assert presenter.state.snapshot().dimension_groups == ["A", "B"]

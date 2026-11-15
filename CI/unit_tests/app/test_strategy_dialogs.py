@@ -53,6 +53,7 @@ def test_rule_dialog_helpers_normalize_mixed_values() -> None:
 
 
 def test_question_selector_filters_and_returns_unique_selected_indices(qtbot) -> None:
+    parent = _dialog_parent(qtbot)
     dialog = QuestionSelectorDialog(
         "添加题目",
         [
@@ -66,6 +67,7 @@ def test_question_selector_filters_and_returns_unique_selected_indices(qtbot) ->
             {"question_num": 2, "title": "满意度", "type_label": "单选", "entry_index": 1},
             {"question_num": 3, "title": "满意度复核", "type_label": "单选", "entry_index": 1},
         ],
+        parent=parent,
     )
     qtbot.addWidget(dialog)
 
