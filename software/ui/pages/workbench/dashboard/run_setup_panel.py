@@ -120,7 +120,7 @@ class DashboardRunSetupPanel(QWidget):
         container_layout.setContentsMargins(0, 0, 0, 0)
         container_layout.setSpacing(18)
 
-        scale_group = SettingCardGroup("执行与节奏", container)
+        scale_group = SettingCardGroup("执行控制", container)
         self.target_card = SettingCard(
             FluentIcon.DOCUMENT,
             "目标份数",
@@ -231,7 +231,7 @@ class DashboardRunSetupPanel(QWidget):
         proxy_group.addSettingCard(self.random_ip_card)
         container_layout.addWidget(proxy_group)
 
-        quality_group = SettingCardGroup("伪装与质量", container)
+        quality_group = SettingCardGroup("其他设置", container)
         self.ua_card = ExpandGroupSettingCard(
             FluentIcon.ROBOT,
             "随机 UA",

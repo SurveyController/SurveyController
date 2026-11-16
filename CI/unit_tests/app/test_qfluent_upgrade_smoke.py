@@ -33,12 +33,12 @@ def test_application_notification_stack_handles_multiple_bars_and_resize(qtbot) 
         duration=-1,
     )
     qtbot.waitUntil(lambda: first.isVisible() and second.isVisible(), timeout=1000)
-    stack = first.parentWidget()
-    assert stack is second.parentWidget()
+    assert first.parentWidget() is host
+    assert second.parentWidget() is host
     assert first.y() < second.y()
 
     host.resize(360, 260)
-    qtbot.waitUntil(lambda: stack.width() <= 328, timeout=1000)
+    qtbot.waitUntil(lambda: first.width() <= 360 and second.width() <= 360, timeout=1000)
     replace_message_bar(first)
     qtbot.waitUntil(lambda: not isValid(first), timeout=1000)
     replace_message_bar(second)

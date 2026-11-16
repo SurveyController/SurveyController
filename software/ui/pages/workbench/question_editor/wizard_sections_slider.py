@@ -178,7 +178,7 @@ class WizardSectionsSliderMixin:
                 text_width=0,
                 font_style="font-size: 13px;",
             )
-            header_row.addWidget(option_widget, 1)
+            header_row.addWidget(option_widget)
 
             if opt_idx in fillable_option_set:
                 fill_badge = InfoBadge.custom(
@@ -190,24 +190,17 @@ class WizardSectionsSliderMixin:
                 header_row.addWidget(fill_badge)
 
             has_jump = bool(info_entry.get("has_jump"))
-            if has_jump:
-                jump_container = QWidget(card)
-                jump_container.setFixedWidth(90)
-                jump_layout = QHBoxLayout(jump_container)
-                jump_layout.setContentsMargins(0, 0, 0, 0)
-                if opt_idx in jump_map:
-                    jumpto = jump_map[opt_idx]
-                    total_questions = len(self.entries)
-                    if jumpto > total_questions:
-                        jump_text = "提前结束"
-                    else:
-                        jump_text = f"跳至第{jumpto}题"
-                    jump_label = BodyLabel(jump_text, jump_container)
-                    jump_label.setStyleSheet("font-size: 11px; font-weight: 500;")
-                    _apply_label_color(jump_label, "#d93025", "#ff6b6b")
-                    jump_layout.addWidget(jump_label)
-                jump_layout.addStretch(1)
-                header_row.addWidget(jump_container)
+            if has_jump and opt_idx in jump_map:
+                jumpto = jump_map[opt_idx]
+                total_questions = len(self.entries)
+                jump_text = "提前结束" if jumpto > total_questions else f"跳至第{jumpto}题"
+                jump_badge = InfoBadge.custom(
+                    jump_text,
+                    QColor("#d93025"),
+                    QColor("#ff6b6b"),
+                    parent=card,
+                )
+                header_row.addWidget(jump_badge)
 
             slider = NoWheelSlider(Qt.Orientation.Horizontal, card)
             if entry.question_type == "slider":

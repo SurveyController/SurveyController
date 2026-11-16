@@ -1,81 +1,47 @@
-from PySide6.QtCore import QEvent, Qt
-from PySide6.QtWidgets import QVBoxLayout, QWidget
-from qfluentwidgets import InfoBarIcon, InfoBarPosition
+from PySide6.QtCore import QAbstractAnimation, Qt
+from PySide6.QtWidgets import QLayout
+from qfluentwidgets import InfoBar as FluentInfoBar
+from qfluentwidgets import InfoBarManager, InfoBarPosition, TextWrap
 from shiboken6 import isValid
 
-from software.ui.widgets.full_width_infobar import FullWidthInfoBar
 
+class InfoBar(FluentInfoBar):
+    def __init__(
+        self,
+        icon,
+        title,
+        content,
+        orient=Qt.Orientation.Horizontal,
+        isClosable=True,
+        duration=1000,
+        position=InfoBarPosition.TOP_RIGHT,
+        parent=None,
+    ):
+        super().__init__(
+            icon=icon,
+            title=title,
+            content=content,
+            orient=orient,
+            isClosable=isClosable,
+            duration=duration,
+            position=position,
+            parent=parent,
+        )
+        self.hBoxLayout.setSizeConstraint(QLayout.SizeConstraint.SetFixedSize)
 
-class _NotificationStack(QWidget):
-    def __init__(self, parent, position):
-        super().__init__(parent)
-        self.position = position
-        self.setObjectName(f"notificationStack{position.name}")
-        self._layout = QVBoxLayout(self)
-        self._layout.setContentsMargins(0, 0, 0, 0)
-        self._layout.setSpacing(12)
-        parent.installEventFilter(self)
-
-    def add_bar(self, bar):
-        self._layout.addWidget(bar)
-        bar.closedSignal.connect(lambda: self.remove_bar(bar))
-        bar.show()
-        self.relayout()
-        self.show()
-        self.raise_()
-
-    def remove_bar(self, bar):
-        self._layout.removeWidget(bar)
-        if self._layout.count():
-            self.relayout()
-        else:
-            self.hide()
-
-    def relayout(self):
+    def _adjustText(self):
         parent = self.parentWidget()
-        if parent is None:
-            return
-        width = max(1, min(640, parent.width() - 32))
-        bars = []
-        for index in range(self._layout.count()):
-            item = self._layout.itemAt(index)
-            widget = item.widget() if item is not None else None
-            if widget is not None:
-                bars.append(widget)
-        self._layout.activate()
-        height = sum(max(bar.minimumSizeHint().height(), bar.sizeHint().height()) for bar in bars)
-        height += max(0, len(bars) - 1) * self._layout.spacing()
-        if self.position in {InfoBarPosition.TOP_LEFT, InfoBarPosition.BOTTOM_LEFT}:
-            x = 16
-        elif self.position in {InfoBarPosition.TOP_RIGHT, InfoBarPosition.BOTTOM_RIGHT}:
-            x = parent.width() - width - 16
-        else:
-            x = (parent.width() - width) // 2
-        bottom = self.position in {
-            InfoBarPosition.BOTTOM,
-            InfoBarPosition.BOTTOM_LEFT,
-            InfoBarPosition.BOTTOM_RIGHT,
-        }
-        y = parent.height() - height - 16 if bottom else 16
-        self.setGeometry(max(0, x), max(0, y), width, height)
+        max_w = 640 if parent is None else max(200, min(640, parent.width() - 32))
+        avail = max(110, max_w - 120)
+        if self.orient == Qt.Orientation.Horizontal and self.title:
+            title_w = self.titleLabel.fontMetrics().horizontalAdvance(self.title)
+            avail = max(110, avail - min(title_w + 16, avail // 2))
+        title_chars = max(int((max_w - 120) / 7), 16)
+        content_chars = max(int(avail / 7), 16)
+        self.titleLabel.setText(TextWrap.wrap(self.title, title_chars, False)[0])
+        self.contentLabel.setText(TextWrap.wrap(self.content, content_chars, False)[0])
+        self.adjustSize()
 
-    def event(self, event):
-        result = super().event(event)
-        if event.type() == QEvent.Type.LayoutRequest:
-            self.relayout()
-        return result
-
-    def eventFilter(self, watched, event):
-        if watched is self.parentWidget() and event.type() in {
-            QEvent.Type.Resize,
-            QEvent.Type.Show,
-            QEvent.Type.WindowStateChange,
-        }:
-            self.relayout()
-        return super().eventFilter(watched, event)
-
-
-class InfoBar(FullWidthInfoBar):
     @classmethod
     def new(
         cls,
@@ -90,36 +56,19 @@ class InfoBar(FullWidthInfoBar):
     ):
         if parent is None:
             raise ValueError("通知必须指定所属窗口")
-        if position == InfoBarPosition.NONE:
-            bar = cls(icon, title, content, orient, isClosable, duration, position, parent)
-            bar.show()
-            return bar
-        parent = parent.window()
-        name = f"notificationStack{position.name}"
-        stack = parent.findChild(
-            _NotificationStack, name, Qt.FindChildOption.FindDirectChildrenOnly
+        target_parent = parent if position == InfoBarPosition.NONE else (parent.window() or parent)
+        w = cls(
+            icon,
+            title,
+            content,
+            orient=orient,
+            isClosable=isClosable,
+            duration=duration,
+            position=position,
+            parent=target_parent,
         )
-        if stack is None:
-            stack = _NotificationStack(parent, position)
-        bar = cls(icon, title, content, orient, isClosable, duration, position, stack)
-        stack.add_bar(bar)
-        return bar
-
-    @classmethod
-    def info(cls, title, content, **kwargs):
-        return cls.new(InfoBarIcon.INFORMATION, title, content, **kwargs)
-
-    @classmethod
-    def success(cls, title, content, **kwargs):
-        return cls.new(InfoBarIcon.SUCCESS, title, content, **kwargs)
-
-    @classmethod
-    def warning(cls, title, content, **kwargs):
-        return cls.new(InfoBarIcon.WARNING, title, content, **kwargs)
-
-    @classmethod
-    def error(cls, title, content, **kwargs):
-        return cls.new(InfoBarIcon.ERROR, title, content, **kwargs)
+        w.show()
+        return w
 
 
 def show_message_bar(
@@ -147,8 +96,18 @@ def replace_message_bar(current):
 
 
 def reposition_message_bar(bar):
-    if bar is not None and isValid(bar):
-        parent = bar.parentWidget()
-        stack = parent if isinstance(parent, _NotificationStack) else parent.parentWidget()
-        if isinstance(stack, _NotificationStack):
-            stack.relayout()
+    if bar is None or not isValid(bar):
+        return
+    bar.adjustSize()
+    if bar.position == InfoBarPosition.NONE or bar.parentWidget() is None:
+        return
+    manager = InfoBarManager.make(bar.position)
+    bars = manager.infoBars.get(bar.parentWidget())
+    if not bars or bar not in bars:
+        return
+    target = manager._pos(bar)
+    slide_ani = bar.property("slideAni")
+    if slide_ani is not None and slide_ani.state() == QAbstractAnimation.State.Running:
+        slide_ani.setEndValue(target)
+    else:
+        bar.move(target)

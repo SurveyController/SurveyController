@@ -25,7 +25,9 @@ def _project(tmp_path: Path, version: str) -> Path:
         ("5.0.0-beta.1", "5.0.0.0"),
     ],
 )
-def test_metadata_preserves_full_version_and_derives_windows_version(tmp_path, version, windows_version):
+def test_metadata_preserves_full_version_and_derives_windows_version(
+    tmp_path, version, windows_version
+):
     metadata = app_metadata.build_metadata(_project(tmp_path, version), release_tag=f"v{version}")
 
     assert metadata == {

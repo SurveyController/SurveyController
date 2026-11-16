@@ -77,19 +77,13 @@ async def agenerate_answer(
         base_url, api_protocol
     )
     if resolved_protocol == "responses":
-        return await acall_responses_api(
-            request_url, api_key, model, question_title, system_prompt
-        )
+        return await acall_responses_api(request_url, api_key, model, question_title, system_prompt)
     try:
         return await acall_chat_completions(
             request_url, api_key, model, question_title, system_prompt
         )
     except Exception as exc:
-        if (
-            has_explicit_endpoint
-            or api_protocol != "auto"
-            or not _is_endpoint_mismatch_error(exc)
-        ):
+        if has_explicit_endpoint or api_protocol != "auto" or not _is_endpoint_mismatch_error(exc):
             raise
         fallback_url = f"{_normalize_endpoint_url(base_url)}{_RESPONSES_SUFFIX}"
         return await acall_responses_api(
