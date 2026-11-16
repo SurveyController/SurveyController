@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 from concurrent.futures import Future
 from types import SimpleNamespace
 from typing import Any, cast
@@ -108,19 +109,35 @@ class _FakeDialog:
 
 
 class QuotaRedeemDialogTests:
-    def test_validate_without_authenticated_session_shows_warning(
+    def test_first_redemption_submits_without_requiring_an_old_account(
         self,
         monkeypatch: pytest.MonkeyPatch,
     ) -> None:
-        dialog = _FakeDialog()
+        dialog = _FakeDialog(card_code="a" * 16)
         info_bar = _FakeInfoBar()
         monkeypatch.setattr(quota_redeem, "InfoBar", info_bar)
         monkeypatch.setattr(quota_redeem, "has_authenticated_session", lambda: False)
         monkeypatch.setattr(quota_redeem, "get_session_snapshot", lambda: {})
+        monkeypatch.setattr(quota_redeem, "MessageBox", _FakeMessageBox)
+        monkeypatch.setattr(_FakeMessageBox, "next_exec_result", True)
+        redeemed = []
+
+        async def redeem(card_code):
+            redeemed.append(card_code)
+            return {"redeemed": True, "card_quota": 400}
+
+        def submit(_name, factory):
+            future = Future()
+            future.set_result(asyncio.run(factory()))
+            return future
+
+        monkeypatch.setattr(quota_redeem, "redeem_card_async", redeem)
+        dialog._submit_async_task = submit
 
         assert dialog.validate() is False
-        assert info_bar.calls[0][0] == "warning"
-        assert "不支持新账户开通" in info_bar.calls[0][1][1]
+        assert redeemed == ["a" * 16]
+        assert dialog._redeemFinished.emitted == [(True, {"redeemed": True, "card_quota": 400})]
+        assert info_bar.calls == []
 
     def test_validate_with_empty_card_code_shows_warning(
         self,
@@ -182,7 +199,7 @@ class QuotaRedeemDialogTests:
         monkeypatch.setattr(quota_redeem, "has_authenticated_session", lambda: False)
 
         dialog._refresh_account_hint()
-        assert "不支持新账户开通" in dialog.accountHintLabel.text()
+        assert "首次兑换将自动开通" in dialog.accountHintLabel.text()
 
         monkeypatch.setattr(quota_redeem, "get_session_snapshot", lambda: {"user_id": 42})
         monkeypatch.setattr(quota_redeem, "has_authenticated_session", lambda: True)

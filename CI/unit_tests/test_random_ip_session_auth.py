@@ -13,9 +13,16 @@ from software.network.proxy.session.models import RandomIPAuthError, RandomIPSes
 def isolate_random_ip_auth_storage(monkeypatch: pytest.MonkeyPatch):
     settings = _Settings()
     token_storage = {"value": ""}
+    activation_storage = {"value": ""}
 
     monkeypatch.setattr(auth, "_get_settings", lambda: settings)
     monkeypatch.setattr(auth.store, "load_access_token", lambda: token_storage["value"])
+    monkeypatch.setattr(auth.store, "load_activation_token", lambda: activation_storage["value"])
+    monkeypatch.setattr(
+        auth.store,
+        "persist_activation_token",
+        lambda value: activation_storage.__setitem__("value", value),
+    )
     monkeypatch.setattr(
         auth.store,
         "persist_access_token",
@@ -86,6 +93,191 @@ def _reset_auth_state(session: RandomIPSession | None = None) -> None:
 def test_format_random_ip_error_maps_backend_details(detail: str, expected: str) -> None:
     exc = RandomIPAuthError(detail, retry_after_seconds=9)
     assert expected in auth.format_random_ip_error(exc)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("stale_user_id", [0, 38852])
+async def test_first_redemption_activates_without_an_existing_account(monkeypatch, stale_user_id):
+    _reset_auth_state(RandomIPSession(device_id="new-device", user_id=stale_user_id))
+    requests = []
+
+    async def post(url, *, json_body, headers):
+        requests.append((url, json_body, headers))
+        if url == auth.AUTH_TRIAL_ENDPOINT:
+            return _Response({"detail": "invalid_user_id"}, 401)
+        assert url == auth.CARD_REDEEM_ENDPOINT
+        token = json_body["activation_token"]
+        assert len(token) == 64
+        assert auth.store.load_activation_token() == token
+        assert headers["X-Device-ID"] == "new-device"
+        assert "Authorization" not in headers
+        return _Response(
+            {
+                "user_id": 73,
+                "access_token": token,
+                "token_type": "Bearer",
+                "redeemed": True,
+                "card_quota": 400,
+                "remaining_quota": 400,
+                "total_quota": 400,
+                "detail": "redeem_card_redeemed",
+            }
+        )
+
+    monkeypatch.setattr(auth, "_apost_json", post)
+    result = await auth.redeem_card_async("a" * 16)
+    assert result["redeemed"] is True
+    assert result["remaining_quota"] == 400
+    assert auth.get_session_snapshot()["user_id"] == 73
+    assert auth.has_authenticated_session()
+    assert auth.store.load_access_token() == auth._session.access_token
+    assert auth.store.load_activation_token() == ""
+    assert len(requests) == (2 if stale_user_id else 1)
+
+
+@pytest.mark.asyncio
+async def test_activation_recovers_after_lost_response_and_client_restart(monkeypatch):
+    _reset_auth_state(RandomIPSession(device_id="new-device"))
+    attempted_tokens = []
+
+    async def post(_url, *, json_body, **_kwargs):
+        token = json_body["activation_token"]
+        attempted_tokens.append(token)
+        if len(attempted_tokens) == 1:
+            raise RandomIPAuthError("network_error:response_lost")
+        return _Response(
+            {
+                "user_id": 73,
+                "access_token": token,
+                "token_type": "Bearer",
+                "redeemed": False,
+                "card_quota": 400,
+                "remaining_quota": 400,
+                "total_quota": 400,
+                "detail": "redeem_card_redeemed",
+            }
+        )
+
+    monkeypatch.setattr(auth, "_apost_json", post)
+    with pytest.raises(RandomIPAuthError, match="response_lost"):
+        await auth.redeem_card_async("a" * 16)
+    _reset_auth_state(RandomIPSession(device_id="new-device"))
+    recovered = await auth.redeem_card_async("a" * 16)
+    assert recovered["redeemed"] is False
+    assert attempted_tokens[0] == attempted_tokens[1]
+    assert auth.has_authenticated_session()
+
+
+@pytest.mark.asyncio
+async def test_activation_does_not_spend_a_card_before_recovery_credential_is_saved(monkeypatch):
+    _reset_auth_state(RandomIPSession(device_id="new-device"))
+
+    def fail_save(_token):
+        raise RandomIPAuthError("session_persist_failed:token")
+
+    async def post(*_args, **_kwargs):
+        pytest.fail("redemption must not reach the server without a saved recovery credential")
+
+    monkeypatch.setattr(auth.store, "persist_activation_token", fail_save)
+    monkeypatch.setattr(auth, "_apost_json", post)
+    with pytest.raises(RandomIPAuthError, match="session_persist_failed"):
+        await auth.redeem_card_async("a" * 16)
+    assert not auth.has_authenticated_session()
+
+
+@pytest.mark.asyncio
+async def test_activation_keeps_recovery_credential_when_session_save_fails(monkeypatch):
+    _reset_auth_state(RandomIPSession(device_id="new-device"))
+    tokens = []
+
+    async def post(_url, *, json_body, **_kwargs):
+        token = json_body["activation_token"]
+        tokens.append(token)
+        return _Response(
+            {
+                "user_id": 73,
+                "access_token": token,
+                "token_type": "Bearer",
+                "redeemed": len(tokens) == 1,
+                "card_quota": 400,
+                "remaining_quota": 400,
+                "total_quota": 400,
+                "detail": "redeem_card_redeemed",
+            }
+        )
+
+    original_set = auth._set_session
+
+    def fail_save(*_args, **_kwargs):
+        raise RandomIPAuthError("session_persist_failed:settings.user_id")
+
+    monkeypatch.setattr(auth, "_apost_json", post)
+    monkeypatch.setattr(auth, "_set_session", fail_save)
+    with pytest.raises(RandomIPAuthError, match="session_persist_failed"):
+        await auth.redeem_card_async("a" * 16)
+    assert auth.store.load_activation_token() == tokens[0]
+    monkeypatch.setattr(auth, "_set_session", original_set)
+    assert (await auth.redeem_card_async("a" * 16))["redeemed"] is False
+    assert tokens[0] == tokens[1]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "detail", ["device_banned", "user_banned", "device_not_bound", "network_error:timeout"]
+)
+async def test_old_account_errors_do_not_fall_back_to_new_activation(monkeypatch, detail):
+    _reset_auth_state(RandomIPSession(device_id="old-device", user_id=38852))
+
+    async def post(url, **_kwargs):
+        assert url == auth.AUTH_TRIAL_ENDPOINT
+        raise RandomIPAuthError(detail)
+
+    monkeypatch.setattr(auth, "_apost_json", post)
+    with pytest.raises(RandomIPAuthError, match=detail):
+        await auth.redeem_card_async("a" * 16)
+    assert auth.get_session_snapshot()["user_id"] == 38852
+
+
+@pytest.mark.asyncio
+async def test_late_activation_response_cannot_replace_a_switched_account(monkeypatch):
+    _reset_auth_state(RandomIPSession(device_id="new-device"))
+    started = asyncio.Event()
+    finish = asyncio.Event()
+
+    async def post(_url, *, json_body, **_kwargs):
+        started.set()
+        await finish.wait()
+        return _Response(
+            {
+                "user_id": 73,
+                "access_token": json_body["activation_token"],
+                "token_type": "Bearer",
+                "redeemed": True,
+                "card_quota": 400,
+                "remaining_quota": 400,
+                "total_quota": 400,
+            }
+        )
+
+    monkeypatch.setattr(auth, "_apost_json", post)
+    pending = asyncio.create_task(auth.redeem_card_async("a" * 16))
+    await started.wait()
+    auth._set_session(
+        RandomIPSession(
+            device_id="other-device",
+            user_id=19,
+            access_token="b" * 64,
+            remaining_quota=10,
+            total_quota=10,
+            quota_known=True,
+        )
+    )
+    expected = auth.get_session_snapshot()
+    finish.set()
+    with pytest.raises(RandomIPAuthError, match="session_changed"):
+        await pending
+    assert auth.get_session_snapshot() == expected
+    assert auth.store.load_activation_token()
 
 
 class RandomIPSessionAuthTests:

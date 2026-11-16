@@ -32,7 +32,6 @@ from software.app.runtime_paths import get_resource_path
 from software.ui.helpers.qfluent_compat import QFluentCompat
 from software.ui.helpers.proxy_access import (
     RandomIPAuthError,
-    ensure_authenticated_session_async,
     format_quota_value,
     format_random_ip_error,
     get_session_snapshot,
@@ -167,15 +166,6 @@ class QuotaRedeemDialog(MessageBoxBase):
         if self._redeeming:
             self._show_pending_warning()
             return False
-        if not has_authenticated_session() and not get_session_snapshot().get("has_valid_user_id"):
-            InfoBar.warning(
-                "",
-                "本机没有可恢复的随机IP账户，当前暂不支持新账户开通",
-                parent=self,
-                position=InfoBarPosition.TOP,
-                duration=2600,
-            )
-            return False
         card_code = str(self.cardCodeEdit.text() or "").strip()
         if not card_code:
             InfoBar.warning(
@@ -211,7 +201,7 @@ class QuotaRedeemDialog(MessageBoxBase):
         try:
             future = self._submit_async_task(
                 "quota_card_redemption",
-                lambda: self._redeem_after_account_connection(card_code),
+                lambda: redeem_card_async(card_code),
             )
         except Exception as exc:
             self._redeemFinished.emit(False, exc)
@@ -226,10 +216,6 @@ class QuotaRedeemDialog(MessageBoxBase):
         future.add_done_callback(_on_redeem_done)
         return False
 
-    async def _redeem_after_account_connection(self, card_code: str) -> dict[str, Any]:
-        await ensure_authenticated_session_async()
-        return await redeem_card_async(card_code)
-
     def reject(self) -> None:
         if self._redeeming:
             self._show_pending_warning()
@@ -241,9 +227,9 @@ class QuotaRedeemDialog(MessageBoxBase):
         snapshot = get_session_snapshot()
         if not has_authenticated_session():
             text = (
-                "将尝试连接本机保存的旧随机IP账户"
+                "将优先恢复本机账户；账户记录失效时凭卡密重新开通"
                 if snapshot.get("has_valid_user_id")
-                else "本机没有可恢复的随机IP账户，当前暂不支持新账户开通"
+                else "首次兑换将自动开通随机IP账户并保存登录凭据"
             )
             self.accountHintLabel.setText(text)
             return
@@ -303,9 +289,14 @@ class QuotaRedeemDialog(MessageBoxBase):
         if success:
             data = payload if isinstance(payload, dict) else {}
             quota = format_quota_value(float(data.get("card_quota") or 0.0))
+            message = (
+                f"兑换成功，已到账 {quota}！"
+                if data.get("redeemed", True)
+                else "已恢复上次兑换的账户，额度未重复增加"
+            )
             InfoBar.success(
                 "",
-                f"兑换成功，已到账 {quota}！",
+                message,
                 parent=self,
                 position=InfoBarPosition.TOP,
                 duration=3200,

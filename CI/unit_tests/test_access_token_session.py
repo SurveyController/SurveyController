@@ -6,6 +6,7 @@ from types import SimpleNamespace
 import pytest
 
 from software.network.proxy.session import auth
+from software.network.proxy.session import store
 from software.network.proxy.session.models import RandomIPAuthError, RandomIPSession
 
 
@@ -28,6 +29,39 @@ class _Settings:
 
 def _response(payload: object, status_code: int = 200):
     return SimpleNamespace(status_code=status_code, json=lambda: payload)
+
+
+def test_activation_credential_uses_secure_storage_and_keeps_access_token(monkeypatch):
+    secrets = {"random_ip/access_token": "a" * 64}
+    monkeypatch.setattr(store, "_token_store_supported", lambda: True)
+    monkeypatch.setattr(
+        store,
+        "read_secret",
+        lambda key: SimpleNamespace(
+            status="ok" if key in secrets else "not_found", value=secrets.get(key, "")
+        ),
+    )
+    monkeypatch.setattr(store, "set_secret", lambda key, value: secrets.__setitem__(key, value))
+    monkeypatch.setattr(store, "delete_secret", lambda key: secrets.pop(key, None))
+    store.persist_activation_token("b" * 64)
+    assert store.load_activation_token() == "b" * 64
+    store.persist_activation_token("")
+    assert store.load_activation_token() == ""
+    assert store.load_access_token() == "a" * 64
+
+
+def test_activation_credential_requires_successful_secure_readback(monkeypatch):
+    monkeypatch.setattr(store, "_token_store_supported", lambda: True)
+    monkeypatch.setattr(store, "set_secret", lambda _key, _value: None)
+    monkeypatch.setattr(store, "read_secret", lambda _key: SimpleNamespace(status="not_found"))
+    with pytest.raises(RandomIPAuthError, match="session_persist_failed:activation_token"):
+        store.persist_activation_token("a" * 64)
+
+
+def test_activation_does_not_claim_to_save_credentials_on_unsupported_platforms(monkeypatch):
+    monkeypatch.setattr(store, "_token_store_supported", lambda: False)
+    with pytest.raises(RandomIPAuthError, match="session_store_unavailable"):
+        store.persist_activation_token("a" * 64)
 
 
 @pytest.fixture

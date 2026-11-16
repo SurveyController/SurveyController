@@ -16,6 +16,7 @@ from .normalize import (
 )
 
 _TOKEN_KEY = "random_ip/access_token"
+_ACTIVATION_TOKEN_KEY = "random_ip/activation_token"
 _SESSION_FIELDS = ("user_id", "remaining_quota", "total_quota", "used_quota", "quota_known")
 
 
@@ -28,9 +29,13 @@ def _token_store_supported() -> bool:
 
 
 def load_access_token() -> str:
+    return _load_token(_TOKEN_KEY)
+
+
+def _load_token(key: str) -> str:
     if not _token_store_supported():
         return ""
-    result = read_secret(_TOKEN_KEY)
+    result = read_secret(key)
     if result.status == "not_found":
         return ""
     if result.status != "ok":
@@ -39,14 +44,28 @@ def load_access_token() -> str:
 
 
 def persist_access_token(token: str) -> None:
+    _persist_token(_TOKEN_KEY, token)
+
+
+def load_activation_token() -> str:
+    return _load_token(_ACTIVATION_TOKEN_KEY)
+
+
+def persist_activation_token(token: str) -> None:
+    if token and not _token_store_supported():
+        raise RandomIPAuthError("session_store_unavailable")
+    _persist_token(_ACTIVATION_TOKEN_KEY, token)
+
+
+def _persist_token(key: str, token: str) -> None:
     if not _token_store_supported():
         return
     if token:
-        set_secret(_TOKEN_KEY, token)
+        set_secret(key, token)
     else:
-        delete_secret(_TOKEN_KEY)
-    if load_access_token() != token:
-        raise RandomIPAuthError("session_persist_failed:access_token")
+        delete_secret(key)
+    if _load_token(key) != token:
+        raise RandomIPAuthError(f"session_persist_failed:{key.rsplit('/', 1)[-1]}")
 
 
 def load_session(settings: Any, build_device_id: Callable[[], str]) -> RandomIPSession:

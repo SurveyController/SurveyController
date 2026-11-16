@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import re
+import secrets
 import threading
 from concurrent.futures import Future
 from dataclasses import replace
@@ -260,7 +261,9 @@ def format_random_ip_error(exc: BaseException) -> str:
     if detail == "upstream_rejected":
         return "上游代理服务拒绝了请求，请稍后重试"
     if detail == "not_authenticated":
-        return "本机没有可恢复的随机IP账户，当前暂不支持新账户开通"
+        return "请先使用额度卡密开通随机IP账户"
+    if detail == "activation_conflict":
+        return "当前设备已有账户或激活记录，请连接原账户后重试；卡密未被本次请求消耗"
     if detail == "session_changed":
         return "随机IP会话已更新，请重试"
     if detail.startswith("network_error:"):
@@ -544,19 +547,39 @@ def _apply_quota_payload(
 
 
 async def redeem_card_async(card_code: str) -> Dict[str, Any]:
-    with _session_lock:
-        session = _require_authenticated_session()
-        session_revision = _session_revision
     normalized_card_code = str(card_code or "").strip()
     if re.fullmatch(r"[a-z0-9]{16}", normalized_card_code) is None:
         raise RandomIPAuthError("invalid_redeem_card_code")
+    session = _read_session()
+    if not _has_complete_session(session) and _is_valid_user_id(session.user_id):
+        try:
+            await ensure_authenticated_session_async()
+        except RandomIPAuthError as exc:
+            if exc.detail != "invalid_user_id":
+                raise
+    with _session_lock:
+        session = _read_session()
+        session_revision = _session_revision
+        activating = not _has_complete_session(session)
+        body = {"card_code": normalized_card_code}
+        activation_token = ""
+        if activating:
+            activation_token = store.load_activation_token() or secrets.token_hex(32)
+            store.persist_activation_token(activation_token)
+            body["activation_token"] = activation_token
+        headers = _build_headers(
+            access_token=session.access_token if not activating else "",
+            device_id=session.device_id if activating else "",
+        )
     response = await _apost_json(
         CARD_REDEEM_ENDPOINT,
-        json_body={"card_code": normalized_card_code},
-        headers=_build_headers(access_token=session.access_token),
+        json_body=body,
+        headers=headers,
     )
     if int(getattr(response, "status_code", 0) or 0) != 200:
-        raise _response_error(response, session, sensitive_values=(normalized_card_code,))
+        raise _response_error(
+            response, session, sensitive_values=(normalized_card_code, activation_token)
+        )
     try:
         data = response.json()
     except Exception:
@@ -564,11 +587,23 @@ async def redeem_card_async(card_code: str) -> Dict[str, Any]:
     if not isinstance(data, dict):
         raise RandomIPAuthError("invalid_response")
 
-    updated_session = _apply_quota_payload(
-        data,
-        log_context="随机IP额度卡密兑换响应",
-        expected_revision=session_revision,
-    )
+    if activating:
+        if data.get("access_token") != activation_token or data.get("token_type") != "Bearer":
+            raise RandomIPAuthError("invalid_response:access_token")
+        candidate = _parse_session_payload(data, device_id=session.device_id)
+        candidate.access_token = activation_token
+        updated_session = _set_session(
+            candidate, verify_auth_persistence=True, expected_revision=session_revision
+        )
+        if updated_session.access_token != activation_token:
+            raise RandomIPAuthError("session_changed")
+        store.persist_activation_token("")
+    else:
+        updated_session = _apply_quota_payload(
+            data,
+            log_context="随机IP额度卡密兑换响应",
+            expected_revision=session_revision,
+        )
     redeemed = bool(data.get("redeemed"))
     card_quota = _to_non_negative_quota(data.get("card_quota"), 0.0)
     detail = str(data.get("detail") or "").strip()
