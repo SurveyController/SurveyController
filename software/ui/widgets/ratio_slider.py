@@ -35,7 +35,7 @@ class RatioSlider(QWidget):
             slider = QfSlider(Qt.Orientation.Horizontal, self)
             slider.setRange(0, 100)
             slider.setValue(33)
-            slider.setMinimumWidth(250)
+            slider.setMinimumWidth(140)
             slider.valueChanged.connect(lambda v, k=key: self._on_slider_changed(k, v))
             self.sliders[key] = slider
             row.addWidget(slider, 1)

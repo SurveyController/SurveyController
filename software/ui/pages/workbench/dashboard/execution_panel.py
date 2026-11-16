@@ -252,7 +252,7 @@ class DashboardExecutionPanel(QWidget):
         container_layout.addWidget(sessions_section)
         container_layout.addStretch(1)
 
-        host_layout.addWidget(container, 8)
+        host_layout.addWidget(container, 1000)
         host_layout.addStretch(1)
         root.addWidget(scroll, 1)
 

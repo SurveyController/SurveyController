@@ -161,10 +161,12 @@ class DashboardRunSetupPanel(QWidget):
         interval_row.setSpacing(10)
         interval_label = BodyLabel("提交间隔", timing_detail)
         interval_label.setFixedWidth(72)
-        self.interval_start_picker = DurationTimePicker(timing_detail, max_seconds=300)
-        self.interval_end_picker = DurationTimePicker(timing_detail, max_seconds=300)
-        self.interval_start_picker.setFixedWidth(200)
-        self.interval_end_picker.setFixedWidth(200)
+        self.interval_start_picker = DurationTimePicker(
+            timing_detail, max_seconds=300, column_width=88
+        )
+        self.interval_end_picker = DurationTimePicker(
+            timing_detail, max_seconds=300, column_width=88
+        )
         interval_row.addWidget(interval_label)
         interval_row.addStretch(1)
         interval_row.addWidget(self.interval_start_picker)
@@ -177,10 +179,12 @@ class DashboardRunSetupPanel(QWidget):
         duration_row.setSpacing(10)
         duration_label = BodyLabel("作答时长", timing_detail)
         duration_label.setFixedWidth(72)
-        self.duration_start_picker = DurationTimePicker(timing_detail, max_seconds=86399)
-        self.duration_end_picker = DurationTimePicker(timing_detail, max_seconds=86399)
-        self.duration_start_picker.setFixedWidth(200)
-        self.duration_end_picker.setFixedWidth(200)
+        self.duration_start_picker = DurationTimePicker(
+            timing_detail, max_seconds=86399, column_width=88
+        )
+        self.duration_end_picker = DurationTimePicker(
+            timing_detail, max_seconds=86399, column_width=88
+        )
         duration_row.addWidget(duration_label)
         duration_row.addStretch(1)
         duration_row.addWidget(self.duration_start_picker)
@@ -308,7 +312,7 @@ class DashboardRunSetupPanel(QWidget):
         container_layout.addWidget(self.ai_section_container)
 
         container_layout.addStretch(1)
-        host_layout.addWidget(container, 8)
+        host_layout.addWidget(container, 1000)
         host_layout.addStretch(1)
 
         root.addWidget(scroll, 1)

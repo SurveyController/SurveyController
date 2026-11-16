@@ -164,7 +164,7 @@ class RandomIPSettingCard(ExpandGroupSettingCard):
         self.proxyCombo.addItem("默认", userData=_PROXY_SOURCE_DEFAULT)
         self.proxyCombo.addItem("限时福利", userData=_PROXY_SOURCE_BENEFIT)
         self.proxyCombo.addItem("自定义", userData=_PROXY_SOURCE_CUSTOM)
-        self.proxyCombo.setMinimumWidth(200)
+        self.proxyCombo.setMinimumWidth(160)
         source_row.addWidget(self.proxyCombo)
         layout.addLayout(source_row)
 
@@ -176,8 +176,8 @@ class RandomIPSettingCard(ExpandGroupSettingCard):
         area_layout.addStretch(1)
         self.provinceCombo = SearchableComboBox(self.areaRow)
         self.cityCombo = SearchableComboBox(self.areaRow)
-        self.provinceCombo.setMinimumWidth(160)
-        self.cityCombo.setMinimumWidth(200)
+        self.provinceCombo.setMinimumWidth(130)
+        self.cityCombo.setMinimumWidth(150)
         area_layout.addWidget(self.provinceCombo)
         area_layout.addWidget(self.cityCombo)
         layout.addWidget(self.areaRow)
@@ -187,24 +187,35 @@ class RandomIPSettingCard(ExpandGroupSettingCard):
             "限时福利源只支持少部分特定城市，如有更高需求请切换至默认或自备代理源",
             self._groupContainer,
         )
+        self.benefitHintLabel.setWordWrap(True)
         self.benefitHintLabel.setStyleSheet("color: #D46B08; font-size: 12px;")
         self.benefitHintLabel.hide()
         layout.addWidget(self.benefitHintLabel)
 
     def _build_custom_api_row(self, layout: QVBoxLayout) -> None:
         self.customApiRow = QWidget(self._groupContainer)
-        api_layout = QHBoxLayout(self.customApiRow)
-        api_layout.setContentsMargins(0, 0, 0, 0)
-        api_layout.addWidget(BodyLabel("API 地址", self.customApiRow))
+        api_container_layout = QVBoxLayout(self.customApiRow)
+        api_container_layout.setContentsMargins(0, 0, 0, 0)
+        api_container_layout.setSpacing(6)
+
+        api_header = QHBoxLayout()
+        api_header.setContentsMargins(0, 0, 0, 0)
+        api_header.setSpacing(8)
+        api_header.addWidget(BodyLabel("API 地址", self.customApiRow))
         api_hint = BodyLabel("*不计费。仅支持json返回格式", self.customApiRow)
+        api_hint.setWordWrap(True)
         api_hint.setStyleSheet("color: red; font-size: 11px;")
-        api_layout.addWidget(api_hint)
-        api_layout.addStretch(1)
+        api_header.addWidget(api_hint, 1)
+        api_container_layout.addLayout(api_header)
+
+        api_input_row = QHBoxLayout()
+        api_input_row.setContentsMargins(0, 0, 0, 0)
+        api_input_row.setSpacing(8)
 
         self.customApiEdit = LineEdit(self.customApiRow)
         self.customApiEdit.setPlaceholderText("请输入代理api地址")
-        self.customApiEdit.setMinimumWidth(420)
-        api_layout.addWidget(self.customApiEdit)
+        self.customApiEdit.setMinimumWidth(180)
+        api_input_row.addWidget(self.customApiEdit, 1)
 
         self.testBtnContainer = QWidget(self.customApiRow)
         test_layout = QHBoxLayout(self.testBtnContainer)
@@ -214,6 +225,7 @@ class RandomIPSettingCard(ExpandGroupSettingCard):
         self.testApiBtn.setFixedWidth(60)
         self.testApiSpinner = IndeterminateProgressRing(self.testBtnContainer)
         self.testApiSpinner.setFixedSize(20, 20)
+        self.testApiSpinner.setStrokeWidth(2)
         self.testApiSpinner.hide()
         self.testApiStatus = IconInfoBadge(
             FluentIcon.INFO, self.testBtnContainer, InfoLevel.INFOAMTION
@@ -221,7 +233,9 @@ class RandomIPSettingCard(ExpandGroupSettingCard):
         self.testApiStatus.hide()
         for widget in (self.testApiBtn, self.testApiSpinner, self.testApiStatus):
             test_layout.addWidget(widget)
-        api_layout.addWidget(self.testBtnContainer)
+        api_input_row.addWidget(self.testBtnContainer)
+        api_container_layout.addLayout(api_input_row)
+
         self.customApiRow.hide()
         layout.addWidget(self.customApiRow)
 

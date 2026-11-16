@@ -55,12 +55,12 @@ class ConditionRulePanel(QWidget):
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(12)
 
-        layout.addWidget(
-            BodyLabel(
-                "适用于“选择了该选项，那么下一题就只能从这些选项中选”或“选择了该选项，那么下一题就不能从这些选项中选”的条件规则设置",
-                self,
-            )
+        hint_label = BodyLabel(
+            "适用于“选择了该选项，那么下一题就只能从这些选项中选”或“选择了该选项，那么下一题就不能从这些选项中选”的条件规则设置",
+            self,
         )
+        hint_label.setWordWrap(True)
+        layout.addWidget(hint_label)
 
         btn_row = QHBoxLayout()
         self.add_btn = PrimaryPushButton("新增条件规则", self)

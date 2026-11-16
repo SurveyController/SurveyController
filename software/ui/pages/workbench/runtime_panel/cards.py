@@ -192,13 +192,14 @@ class DurationSecondFormatter(DigitFormatter):
 
 
 class DurationTimePicker(TimePickerBase):
-    def __init__(self, parent=None, max_seconds: int = 86399):
+    def __init__(self, parent=None, max_seconds: int = 86399, column_width: int = 120):
         super().__init__(parent=parent, showSeconds=True)
         self.max_seconds = max(0, int(max_seconds or 0))
         self._duration_seconds = 0
         minute_max = max(0, self.max_seconds // 60)
-        self.addColumn("分钟", range(0, minute_max + 1), 120, formatter=DurationMinuteFormatter())
-        self.addColumn("秒", range(0, 60), 120, formatter=DurationSecondFormatter())
+        width = max(60, int(column_width))
+        self.addColumn("分钟", range(0, minute_max + 1), width, formatter=DurationMinuteFormatter())
+        self.addColumn("秒", range(0, 60), width, formatter=DurationSecondFormatter())
 
     def getDurationSeconds(self) -> int:
         return self._duration_seconds
@@ -237,8 +238,8 @@ class DurationTimePicker(TimePickerBase):
 class ZhHourMinuteTimePicker(TimePickerBase):
     def __init__(self, parent=None):
         super().__init__(parent=parent, showSeconds=False)
-        self.addColumn("时", range(0, 24), 120, formatter=DigitFormatter())
-        self.addColumn("分", range(0, 60), 120, formatter=MiniuteFormatter())
+        self.addColumn("时", range(0, 24), 80, formatter=DigitFormatter())
+        self.addColumn("分", range(0, 60), 80, formatter=MiniuteFormatter())
 
     def setTime(self, time: QTime):
         if not isinstance(time, QTime) or not time.isValid() or time.isNull():
