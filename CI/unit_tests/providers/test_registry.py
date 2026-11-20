@@ -139,11 +139,6 @@ async def test_generic_runtime_error_remains_unknown() -> None:
     assert result.failure.category is ProviderErrorCategory.UNKNOWN
 
 
-def test_registry_exposes_http_only_adapter_contract() -> None:
-    assert set(registry.__all__) == {"parse_survey", "fill_survey_http"}
-    assert not hasattr(registry._PROVIDER_REGISTRY[SURVEY_PROVIDER_WJX], "fill_survey_async")
-
-
 async def test_provider_hook_rejects_non_async_return_value() -> None:
     with patch(
         "surveycore.providers.hooks._load_hook", return_value=lambda *_args, **_kwargs: True

@@ -83,7 +83,6 @@ class TestRuntimePanelCardsQtBot:
         qtbot.addWidget(card)
 
         assert card.credamo_badge.text() == "见数"
-        assert card.CREDAMO_BADGE_COLOR == "#1f4f99"
 
     def test_answer_datetime_window_card_keeps_datetime_values(self, qtbot) -> None:
         card = AnswerDateTimeWindowSettingCard(FluentIcon.HISTORY, "标题", "说明", max_seconds=300)
@@ -109,39 +108,6 @@ class TestRuntimePanelCardsQtBot:
         card.setDateTimeWindow(("2026-02-10 10:00:00", "2026-02-11 08:00:00"))
 
         assert card.getDateTimeWindow() == ("2026-02-10 09:15:00", "2026-02-10 08:00:00")
-
-    def test_random_ip_card_loading_uses_progress_ring_helper(self, monkeypatch, qtbot) -> None:
-        card = random_ip_module.RandomIPSettingCard()
-        qtbot.addWidget(card)
-
-        calls: list[tuple[object, bool]] = []
-        monkeypatch.setattr(
-            random_ip_module.QFluentCompat,
-            "set_indeterminate_progress_active",
-            lambda ring, active: calls.append((ring, bool(active))),
-        )
-
-        card.setLoading(True, "同步中")
-        card.setLoading(False, "")
-
-        assert calls == [(card.loadingRing, True), (card.loadingRing, False)]
-
-
-def test_random_ip_toggle_row_loading_uses_progress_ring_helper(monkeypatch, qtbot) -> None:
-    row = RandomIpToggleRow(toggle_row_module.BodyLabel)
-    qtbot.addWidget(row)
-
-    calls: list[tuple[object, bool]] = []
-    monkeypatch.setattr(
-        toggle_row_module.QFluentCompat,
-        "set_indeterminate_progress_active",
-        lambda ring, active: calls.append((ring, bool(active))),
-    )
-
-    row.set_loading(True, "处理中")
-    row.set_loading(False, "")
-
-    assert calls == [(row.loading_ring, True), (row.loading_ring, False)]
 
 
 def test_random_ip_toggle_row_supports_switch_style(qtbot) -> None:

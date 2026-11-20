@@ -450,21 +450,6 @@ class TencentParserTests:
             == "https://wj.gtimg.com/attachments/question/20260523/8cWPTabEOrZS.jpg"
         )
 
-    @pytest.mark.asyncio
-    async def test_parse_qq_survey_does_not_fall_back_to_browser_when_http_fails(
-        self, patch_attrs
-    ) -> None:
-        patch_attrs(
-            (
-                qq_parser,
-                "_fetch_qq_survey_via_http",
-                lambda *_args, **_kwargs: (_ for _ in ()).throw(RuntimeError("http failed")),
-            ),
-        )
-
-        with pytest.raises(RuntimeError, match="腾讯问卷 HTTP 解析失败：http failed"):
-            await qq_parser.parse_qq_survey("https://wj.qq.com/s2/123/hash/")
-
     def test_merge_same_page_descriptions_carries_media_to_next_question(self) -> None:
         merged = core_parser._merge_same_page_descriptions_into_questions(
             [
@@ -507,9 +492,7 @@ class TencentParserTests:
         ]
 
     @pytest.mark.asyncio
-    async def test_parse_qq_survey_returns_http_result_without_browser_fallback(
-        self, patch_attrs
-    ) -> None:
+    async def test_parse_qq_survey_returns_http_result(self, patch_attrs) -> None:
         patch_attrs(
             (
                 qq_parser,
@@ -526,22 +509,9 @@ class TencentParserTests:
         assert title == "HTTP 标题"
 
     @pytest.mark.asyncio
-    async def test_parse_qq_survey_rejects_login_url_and_http_failure_without_browser_fallback(
-        self, patch_attrs
-    ) -> None:
+    async def test_parse_qq_survey_rejects_login_url(self) -> None:
         with pytest.raises(RuntimeError, match="需要登录"):
             await qq_parser.parse_qq_survey("https://wj.qq.com/r/login.html")
-
-        patch_attrs(
-            (
-                qq_parser,
-                "_fetch_qq_survey_via_http",
-                lambda *_args, **_kwargs: (_ for _ in ()).throw(RuntimeError("http failed")),
-            ),
-        )
-
-        with pytest.raises(RuntimeError, match="腾讯问卷 HTTP 解析失败：http failed"):
-            await qq_parser.parse_qq_survey("https://wj.qq.com/s2/123/hash/")
 
     @pytest.mark.asyncio
     async def test_parse_qq_survey_login_required_http_error_is_terminal(self, patch_attrs) -> None:

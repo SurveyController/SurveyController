@@ -109,3 +109,19 @@ def test_loading_config_cancels_pending_parse_and_allows_new_parse():
     assert snapshot["url"] == "https://v.wjx.cn/vm/current.aspx"
     assert snapshot["survey_title"] == "当前问卷"
     service.close()
+
+
+def test_parse_survey_completes_url_scheme_before_dispatch():
+    state, engine = RunStateStore(), FakeEngine()
+    service = SurveyParseService(
+        async_engine_client=engine,
+        state_store=state,
+        emit_event=lambda event: None,
+        dispatch_async=lambda callback: callback(),
+    )
+
+    service.parse_survey("www.wjx.cn/vm/current.aspx")
+
+    assert engine.parsed_url == "https://www.wjx.cn/vm/current.aspx"
+    assert state.get_survey_snapshot()["url"] == "https://www.wjx.cn/vm/current.aspx"
+    service.close()

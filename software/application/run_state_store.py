@@ -6,7 +6,11 @@ from typing import Any, Callable, Dict, Mapping, Optional, cast
 
 from software.core.config.codec import clone_question_entries, clone_questions_info
 from software.core.config.schema import RuntimeConfig
-from software.providers.common import detect_survey_provider, normalize_survey_provider
+from software.providers.common import (
+    detect_survey_provider,
+    normalize_survey_parse_url,
+    normalize_survey_provider,
+)
 from software.application.models import RuntimeSnapshot, SurveySnapshot
 from software.application.runtime_settings_state import RuntimeSettingsState
 
@@ -184,14 +188,15 @@ class RunStateStore:
 
     def hydrate_from_config(self, config: RuntimeConfig, *, emit: bool = True) -> None:
         self.sync_runtime_settings_from_config(config, emit=False)
+        normalized_url = normalize_survey_parse_url(getattr(config, "url", ""))
         provider = normalize_survey_provider(
             getattr(config, "survey_provider", None),
-            default=detect_survey_provider(getattr(config, "url", "")),
+            default=detect_survey_provider(normalized_url),
         )
         self.apply_survey_patch(
             {
                 "phase": "ready" if list(getattr(config, "question_entries", []) or []) else "idle",
-                "url": str(getattr(config, "url", "") or ""),
+                "url": normalized_url,
                 "survey_title": str(getattr(config, "survey_title", "") or ""),
                 "survey_provider": provider,
                 "questions_info": list(getattr(config, "questions_info", []) or []),

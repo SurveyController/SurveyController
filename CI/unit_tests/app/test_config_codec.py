@@ -278,7 +278,6 @@ class ConfigCodecTests:
         assert cfg.random_ip_enabled is True
         assert cfg.proxy_source == "default"
         assert cfg.random_ua_enabled is False
-        assert not hasattr(cfg, "random_ua_keys")
         assert cfg.random_ua_ratios == {"wechat": 33, "mobile": 33, "pc": 34}
         assert cfg.reverse_fill_format == "auto"
         assert cfg.reverse_fill_start_row == 1

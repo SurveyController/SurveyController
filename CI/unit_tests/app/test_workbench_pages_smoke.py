@@ -227,7 +227,6 @@ def test_dashboard_ai_preserves_saved_model_when_loading_legacy_config(
     cfg = RuntimeConfig(ai_mode="free")
     page.apply_config(cfg)
     assert cfg.ai_mode == "provider"
-    assert cfg.ai_mode == "provider"
     assert cfg.ai_provider == "custom"
     assert cfg.ai_model == model
     assert cfg.ai_api_key == "test-key"
@@ -329,10 +328,6 @@ def test_dashboard_page_builds_first_step_with_mica_transparency(monkeypatch, qt
     ]
     assert "background: transparent" in page.link_card.styleSheet()
     assert page.testAttribute(Qt.WidgetAttribute.WA_StyledBackground) is False
-    assert not hasattr(page, "target_spin")
-    assert not hasattr(page, "entry_table")
-    assert not hasattr(page, "thread_view_stack")
-    assert not hasattr(page, "progress_bar")
 
 
 def test_workbench_config_projects_random_ip_state_to_all_pages(monkeypatch, qtbot) -> None:

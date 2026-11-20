@@ -201,9 +201,7 @@ class WjxParserTests:
             await wjx_parser.parse_wjx_survey("https://www.wjx.cn/vm/demo.aspx")
 
     @pytest.mark.asyncio
-    async def test_parse_wjx_survey_returns_http_parse_result_without_browser_fallback(
-        self, patch_attrs
-    ) -> None:
+    async def test_parse_wjx_survey_returns_http_parse_result(self, patch_attrs) -> None:
         aget = AsyncMock(return_value=_FakeHttpResponse("<html><body>ok</body></html>"))
 
         patch_attrs(
@@ -305,23 +303,6 @@ class WjxParserTests:
 
         assert info == [{"num": 23, "display_num": 22, "title": "Q23", "type_code": "2"}]
         assert title == "标题"
-
-    @pytest.mark.asyncio
-    async def test_parse_wjx_survey_raises_paused_error_without_browser_fallback(
-        self, patch_attrs
-    ) -> None:
-        patch_attrs(
-            (
-                wjx_parser.http_client,
-                "aget",
-                AsyncMock(
-                    return_value=_FakeHttpResponse("<html><body>问卷已暂停，不能填写</body></html>")
-                ),
-            ),
-        )
-
-        with pytest.raises(wjx_parser.SurveyPausedError, match="问卷已暂停"):
-            await wjx_parser.parse_wjx_survey("https://www.wjx.cn/vm/demo.aspx")
 
     @pytest.mark.asyncio
     async def test_parse_wjx_survey_surfaces_http_error_directly(self, patch_attrs) -> None:

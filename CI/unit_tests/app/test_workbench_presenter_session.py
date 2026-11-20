@@ -258,6 +258,19 @@ def test_presenter_apply_load_build_and_url_sync(monkeypatch) -> None:
     p.reverse_fill_page._refresh_preview.assert_called()
 
 
+def test_build_config_completes_url_scheme_before_run():
+    p = _presenter()
+    coordinator = WorkbenchRunCoordinator(
+        controller=p.controller,
+        state=p.state,
+        dashboard=p.dashboard,
+    )
+
+    p.state.set_url("www.wjx.cn/vm/demo.aspx")
+
+    assert coordinator.build_config().url == "https://www.wjx.cn/vm/demo.aspx"
+
+
 def test_presenter_parse_success_failed_and_reverse_fill_wizard(monkeypatch) -> None:
     p = _presenter()
     monkeypatch.setattr(presenter_module.QTimer, "singleShot", lambda _delay, callback: callback())

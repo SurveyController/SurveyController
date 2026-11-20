@@ -209,7 +209,7 @@ def test_dashboard_config_load_delegates_to_workbench(monkeypatch, tmp_path) -> 
     assert page.toasts[-1][0] == "载入失败：broken"
 
 
-def test_dashboard_save_uses_workbench_snapshot_when_available(monkeypatch, tmp_path) -> None:
+def test_dashboard_save_uses_workbench_snapshot(monkeypatch, tmp_path) -> None:
     page = _DashboardDouble()
     monkeypatch.setattr(config_io_module, "log_action", lambda *_args, **_kwargs: None)
     monkeypatch.setattr(config_io_module, "get_user_config_directory", lambda: str(tmp_path))
@@ -225,5 +225,6 @@ def test_dashboard_save_uses_workbench_snapshot_when_available(monkeypatch, tmp_
 
     page._on_save_config()
 
-    assert not hasattr(page.controller, "config")
-    page.controller.save_current_config.assert_called_once()
+    page.controller.save_current_config.assert_called_once_with(
+        str(tmp_path / "saved.json"), config=snapshot, include_secrets=True
+    )

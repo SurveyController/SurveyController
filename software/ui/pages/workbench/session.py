@@ -9,6 +9,7 @@ from software.application.run_plan import compile_run_plan
 from software.core.config.schema import RuntimeConfig
 from software.integrations.ai import get_ai_readiness_error
 from software.logging.action_logger import log_action
+from software.providers.common import normalize_survey_parse_url
 from software.ui.pages.workbench.shared.run_feedback import (
     get_completion_notified,
     get_last_progress,
@@ -65,7 +66,9 @@ class WorkbenchRunCoordinator:
         self._reverse_fill_target_override = normalized_target
 
     def build_config(self) -> RuntimeConfig:
-        return self.state.snapshot()
+        config = self.state.snapshot()
+        config.url = normalize_survey_parse_url(config.url)
+        return config
 
     def start(self, *, enable_reverse_fill: bool = False) -> bool:
         dashboard = self.dashboard

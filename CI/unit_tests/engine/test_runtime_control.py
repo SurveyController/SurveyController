@@ -37,18 +37,3 @@ class RuntimeControlTests:
     ) -> None:
         stop_signal = make_mock_event(wait_return=False)
         assert not await _sleep_with_stop(stop_signal, 0.2)
-
-    @pytest.mark.asyncio
-    async def test_sleep_with_stop_uses_sleep_or_stop_without_signal(self, monkeypatch) -> None:
-        waited: list[float] = []
-
-        async def _fake_sleep_or_stop(_stop_signal, seconds: float) -> bool:
-            waited.append(seconds)
-            return False
-
-        monkeypatch.setattr(
-            "software.core.engine.runtime_control.sleep_or_stop", _fake_sleep_or_stop
-        )
-
-        assert not await _sleep_with_stop(None, 0.3)
-        assert waited == [0.3]

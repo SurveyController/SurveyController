@@ -9,7 +9,7 @@ from surveycore.core.questions.config import QuestionEntry
 from surveycore.providers.contracts import SurveyQuestionMeta, ensure_survey_question_metas
 
 from software.core.config.schema import RuntimeConfig
-from software.providers.common import detect_survey_provider
+from software.providers.common import detect_survey_provider, normalize_survey_parse_url
 from software.ui.pages.workbench.question_editor.utils import (
     build_entry_info_list,
     migrate_question_ids,
@@ -41,6 +41,7 @@ class WorkbenchState(QObject):
 
     def apply_config(self, config: RuntimeConfig) -> None:
         self._config = deepcopy(config)
+        self._config.url = normalize_survey_parse_url(self._config.url)
         self._prepare_entries()
         self.configChanged.emit(self.snapshot(), frozenset(self._config.__dataclass_fields__))
 

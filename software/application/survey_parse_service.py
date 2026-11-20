@@ -10,7 +10,7 @@ from software.application.events import ApplicationEvent
 from software.application.ports import RuntimeEnginePort
 from software.application.run_state_store import RunStateStore
 from software.core.config.schema import RuntimeConfig
-from software.providers.common import is_supported_survey_url
+from software.providers.common import is_supported_survey_url, normalize_survey_parse_url
 from software.providers.contracts import ProviderFailure, ProviderParseResult
 from surveycore.core.questions.config import build_default_question_entries
 from surveycore.providers.contracts import SurveyDefinition
@@ -50,7 +50,7 @@ class SurveyParseService:
             return
         self._generation += 1
         generation = self._generation
-        normalized_url = str(url or "").strip()
+        normalized_url = normalize_survey_parse_url(url)
         if not normalized_url:
             self._state_store.apply_survey_patch(
                 {

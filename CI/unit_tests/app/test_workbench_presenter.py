@@ -273,7 +273,6 @@ def test_workbench_presenter_applies_config_to_workbench_pages() -> None:
     assert dashboard.applied == [cfg]
     assert reverse_fill_page.applied == [cfg]
     assert strategy_page.rules == [{"kind": "demo"}]
-    assert not hasattr(presenter, "runtime_page")
 
 
 def test_workbench_presenter_survey_parsed_updates_state_and_context() -> None:
@@ -329,6 +328,14 @@ def test_workbench_presenter_renders_url_from_state_without_looping() -> None:
     assert presenter.state.snapshot().url == "https://reverse.example"
     assert dashboard.url_edit.text() == "https://reverse.example"
     assert reverse_fill_page.url_edit.text() == "https://reverse.example"
+
+
+def test_workbench_state_preserves_url_while_editing() -> None:
+    presenter = _presenter_with_fakes()
+
+    presenter.state.set_url("www.wjx.cn/vm/demo.aspx")
+
+    assert presenter.state.snapshot().url == "www.wjx.cn/vm/demo.aspx"
 
 
 def test_workbench_presenter_forwards_random_ip_loading_state() -> None:

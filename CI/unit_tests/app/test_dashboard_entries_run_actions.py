@@ -57,7 +57,7 @@ def test_wizard_result_updates_normalize_weights_and_keep_entry_contract() -> No
     assert entries[0].dimension == "体验"
 
 
-def test_run_question_wizard_applies_results_without_legacy_entry_table(monkeypatch) -> None:
+def test_run_question_wizard_applies_results(monkeypatch) -> None:
     page = _DashboardDouble()
 
     class _AcceptedDialog:
@@ -139,7 +139,6 @@ def test_run_question_wizard_applies_results_without_legacy_entry_table(monkeypa
         is True
     )
     assert selected_entries[0].custom_weights == [3.0, 7.0]
-    assert not hasattr(page, "entry_table")
 
 
 def test_dashboard_start_and_summary_use_real_run_setup_surface(monkeypatch) -> None:
