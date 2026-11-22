@@ -3,17 +3,16 @@ from __future__ import annotations
 import asyncio
 
 import pytest
-
-import software.core.engine.async_runtime_loop as runtime_loop
-from software.core.ai.runtime import AIRuntimeError
-from software.core.engine.failure_reason import FailureReason
-from software.core.task import ExecutionConfig
 from surveycore.providers.errors import (
     SubmissionVerificationRequiredError,
     SurveyProviderUnavailableAtRuntimeError,
 )
 
+import software.core.engine.async_runtime_loop as runtime_loop
 from CI.unit_tests.engine.async_runtime_loop_fakes import _build_runner
+from software.core.ai.runtime import AIRuntimeError
+from software.core.engine.failure_reason import FailureReason
+from software.core.task import ExecutionConfig, ProxyLease
 
 
 class AsyncRuntimeErrorsTests:
@@ -181,6 +180,52 @@ class AsyncRuntimeErrorsTests:
         assert runner.stop_policy.failure_calls == []
         assert state.cur_num == 0
         assert state.get_terminal_stop_snapshot()[0] == "submission_result_unknown"
+
+    @pytest.mark.asyncio
+    async def test_run_proxy_error_requeues_without_unknown_result(self, monkeypatch) -> None:
+        config = ExecutionConfig(
+            url="https://www.wjx.cn/vm/demo.aspx",
+            survey_provider="wjx",
+            random_proxy_ip_enabled=True,
+        )
+        config.proxy_ip_pool.append(ProxyLease(address="http://1.1.1.1:80", source="unit"))
+        runner, state, _ctx, scheduler = _build_runner(config=config)
+        scheduler.acquire_values = [10, None]
+        seen_errors: list[BaseException] = []
+        reported_results: list[str] = []
+        release_flags: list[bool] = []
+
+        async def submit_via_proxy(**kwargs):
+            await kwargs["submit_proxy_lease_factory"]()
+            raise runtime_loop.http_client.ProxyError("631 Internal Server Error")
+
+        monkeypatch.setattr(runner.http_submitter, "submit", submit_via_proxy)
+        monkeypatch.setattr(runner, "_prepare_round_context", lambda: asyncio.sleep(0, result=True))
+        monkeypatch.setattr(
+            runner,
+            "_select_session_proxy_and_ua",
+            lambda: asyncio.sleep(0, result=(None, "UA")),
+        )
+        monkeypatch.setattr(runner, "_report_submission_result", reported_results.append)
+        monkeypatch.setattr(
+            runner,
+            "_handle_http_transport_error",
+            lambda exc: seen_errors.append(exc) or False,
+        )
+        monkeypatch.setattr(
+            runner,
+            "_release_round_resources",
+            lambda *, requeue_reverse_fill: release_flags.append(requeue_reverse_fill),
+        )
+
+        await runner.run()
+
+        assert len(seen_errors) == 1
+        assert isinstance(seen_errors[0], runtime_loop.http_client.ProxyError)
+        assert reported_results == ["failed"]
+        assert release_flags == [True]
+        assert scheduler.release_calls[0]["requeue"] is True
+        assert state.get_terminal_stop_snapshot()[0] == ""
 
     @pytest.mark.asyncio
     async def test_run_generic_exception_records_failure_and_requeues(self, monkeypatch) -> None:

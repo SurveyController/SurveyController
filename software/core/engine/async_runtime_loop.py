@@ -506,6 +506,13 @@ class AsyncSlotRunner:
                     break
                 self._release_round_resources(requeue_reverse_fill=True)
             except (http_client.TransportError,) as exc:
+                if isinstance(exc, http_client.ProxyError):
+                    self._report_submission_result("failed")
+                    if self._handle_http_transport_error(exc):
+                        should_requeue_dispatch = False
+                        break
+                    self._release_round_resources(requeue_reverse_fill=True)
+                    continue
                 if attempt.state is AttemptState.SUBMITTING:
                     self._report_submission_result("unknown")
                     self._mark_submission_result_unknown(attempt, exc)
