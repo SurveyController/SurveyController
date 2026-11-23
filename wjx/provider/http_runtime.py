@@ -2,10 +2,12 @@ from __future__ import annotations
 
 import logging
 import random
+import ssl
 import time
 import uuid
 from dataclasses import replace
 from typing import Any
+from urllib.parse import urlsplit, urlunsplit
 
 from surveycore.wjx.provider.http_runtime import (
     WJX_PROXY_SUBMISSION_VERIFICATION_MESSAGE as WJX_PROXY_SUBMISSION_VERIFICATION_MESSAGE,
@@ -88,6 +90,11 @@ def _raise_submit_rejected(
 
 _WJX_PAGE_LOAD_TIMEOUT_SECONDS = 20
 _WJX_SUBMIT_TIMEOUT_SECONDS = 30
+_WJX_HTTP_FALLBACK_TRANSPORT_ERRORS = (
+    http_client.ProxyError,
+    http_client.ConnectionError,
+    http_client.ConnectTimeout,
+)
 
 
 def _resolve_user_agent(user_agent: str | None) -> str:
@@ -95,6 +102,24 @@ def _resolve_user_agent(user_agent: str | None) -> str:
     if text:
         return text
     return str(DEFAULT_USER_AGENT or USER_AGENT_PRESETS.get("pc_web", {}).get("ua") or "").strip()
+
+
+def _http_url(url: str) -> str | None:
+    parsed = urlsplit(str(url or "").strip())
+    if parsed.scheme.lower() != "https" or not parsed.netloc:
+        return None
+    return urlunsplit(("http", parsed.netloc, parsed.path, parsed.query, ""))
+
+
+def _has_tls_certificate_error(exc: BaseException) -> bool:
+    pending: BaseException | None = exc
+    seen: set[int] = set()
+    while pending is not None and id(pending) not in seen:
+        seen.add(id(pending))
+        if isinstance(pending, ssl.SSLCertVerificationError):
+            return True
+        pending = pending.__cause__ or pending.__context__
+    return False
 
 
 def _record_action(ctx: ExecutionState, action: AnswerAction, thread_name: str = "") -> None:
@@ -295,21 +320,47 @@ async def brush_wjx_http(
             logging.debug(
                 "问卷星 HTTP 提交使用随机IP：%s", mask_proxy_for_log(submit_proxy_address)
             )
-        response = await http_client.apost(
-            submit_url,
-            params=params,
-            data={"submitdata": submitdata, "sceneId": scene_id},
-            headers={
-                **headers,
-                "Accept": "text/plain, */*; q=0.01",
-                "Content-Type": "application/x-www-form-urlencoded; charset=UTF-8",
-                "Origin": f"https://{domain}",
-                "X-Requested-With": "XMLHttpRequest",
-            },
-            timeout=_WJX_SUBMIT_TIMEOUT_SECONDS,
-            proxies=submit_proxies,
-        )
-        response.raise_for_status()
+        submit_headers = {
+            **headers,
+            "Accept": "text/plain, */*; q=0.01",
+            "Content-Type": "application/x-www-form-urlencoded; charset=UTF-8",
+            "Origin": f"https://{domain}",
+            "X-Requested-With": "XMLHttpRequest",
+        }
+        submit_data = {"submitdata": submitdata, "sceneId": scene_id}
+        request_kwargs = {
+            "params": params,
+            "data": submit_data,
+            "headers": submit_headers,
+            "timeout": _WJX_SUBMIT_TIMEOUT_SECONDS,
+            "proxies": submit_proxies,
+            "allow_redirects": False,
+        }
+        try:
+            response = await http_client.apost(submit_url, **request_kwargs)
+        except _WJX_HTTP_FALLBACK_TRANSPORT_ERRORS as exc:
+            if _has_tls_certificate_error(exc):
+                raise
+            if stop_signal is not None and stop_signal.is_set():
+                return False
+            fallback_headers = {
+                **submit_headers,
+                "Origin": f"http://{domain}",
+                "Referer": _http_url(config.url) or config.url,
+            }
+            logging.info("问卷星 HTTPS 提交连接失败，尝试 HTTP 提交")
+            response = await http_client.apost(
+                f"http://{domain}/joinnew/processjq.ashx",
+                **{**request_kwargs, "headers": fallback_headers},
+            )
+        try:
+            response.raise_for_status()
+        except http_client.HTTPError as exc:
+            if exc.response.is_redirect:
+                raise SurveyProviderUnavailableAtRuntimeError(
+                    "问卷星提交请求收到重定向，已停止本轮"
+                ) from exc
+            raise
         await update_http_submit_step(ctx, thread_name, "校验结果")
         response_text = str(response.text or "").strip()
         if classify_wjx_submit_response(response_text) != WjxSubmitResult.SUCCESS:
