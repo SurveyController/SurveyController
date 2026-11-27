@@ -34,7 +34,8 @@ async def report_submission_result_async(
     enabled: bool = True,
     client_version: Optional[str] = None,
 ) -> bool:
-    if not enabled:
+    normalized_result = str(result or "").strip().lower()
+    if not enabled or normalized_result not in {"success", "failed"}:
         return False
 
     try:
@@ -54,7 +55,7 @@ async def report_submission_result_async(
     payload = {
         "user_id": normalized_user_id,
         "survey_url": str(survey_url or "").strip(),
-        "result": str(result or "").strip().lower(),
+        "result": normalized_result,
         "proxy_provider": _normalize_proxy_provider(proxy_provider),
         "client_version": str(client_version or "").strip(),
     }

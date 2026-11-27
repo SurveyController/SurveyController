@@ -13,7 +13,12 @@ from software.core.engine.async_engine import AsyncRuntimeEngine
 from software.core.engine.async_runtime_loop import AsyncSlotRunner
 from software.core.engine.task_registry import TaskRegistry
 from software.core.task import ExecutionConfig, ExecutionState
-from software.providers.contracts import ProviderSubmissionResult
+from software.network.http.submission import post_submission
+from software.providers.contracts import (
+    ProviderErrorCategory,
+    ProviderFailure,
+    ProviderSubmissionResult,
+)
 
 
 @pytest.mark.parametrize(
@@ -94,6 +99,48 @@ async def test_inflight_successes_are_committed_after_stop(monkeypatch) -> None:
     assert len(requests) == 2
     assert state.cur_num == 2
     assert state.get_terminal_stop_snapshot()[0] == "user_stopped"
+
+
+@pytest.mark.asyncio
+async def test_connection_timeout_retries_even_with_business_failure_threshold_one(
+    monkeypatch,
+) -> None:
+    engine = AsyncRuntimeEngine()
+    config = ExecutionConfig(
+        num_threads=1,
+        target_num=1,
+        stop_on_fail_enabled=True,
+        fail_threshold=1,
+        url="https://www.wjx.cn/vm/local.aspx",
+    )
+    state = ExecutionState(config=config)
+    attempts = 0
+
+    async def post(url, **_kwargs):
+        nonlocal attempts
+        attempts += 1
+        if attempts == 1:
+            raise httpx.ConnectTimeout("")
+        return httpx.Response(200, request=httpx.Request("POST", url))
+
+    async def fill(*args, **kwargs):
+        await kwargs["submit_proxy_lease_factory"]()
+        try:
+            await post_submission(post, config.url)
+        except httpx.TransportError as exc:
+            return ProviderSubmissionResult(
+                provider="wjx",
+                submitted=False,
+                failure=ProviderFailure("wjx", ProviderErrorCategory.NETWORK, str(exc), exc),
+            )
+        return ProviderSubmissionResult(provider="wjx", submitted=True)
+
+    monkeypatch.setattr(submitter, "fill_survey_http", fill)
+    await asyncio.wait_for(engine._run(config=config, state=state), timeout=5)
+
+    assert attempts == 2
+    assert state.cur_num == 1
+    assert state.get_terminal_stop_snapshot()[0] == "target_reached"
 
 
 @pytest.mark.asyncio

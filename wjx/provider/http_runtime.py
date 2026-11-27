@@ -55,6 +55,7 @@ from surveycore.core.questions.distribution import record_pending_distribution_c
 from software.core.task import ExecutionConfig, ExecutionState
 from software.network.proxy.pool import mask_proxy_for_log
 from software.network.http.defaults import DEFAULT_HTTP_HEADERS
+from software.network.http.submission import SubmissionConnectionError, post_submission
 from software.network.session_policy import SubmitProxyUnavailableError, mark_submit_proxy_success
 from surveycore.providers.answering import AnswerAction
 from surveycore.providers.answering.recording import record_answer_action
@@ -89,12 +90,6 @@ def _raise_submit_rejected(
 
 
 _WJX_PAGE_LOAD_TIMEOUT_SECONDS = 20
-_WJX_SUBMIT_TIMEOUT_SECONDS = 30
-_WJX_HTTP_FALLBACK_TRANSPORT_ERRORS = (
-    http_client.ProxyError,
-    http_client.ConnectionError,
-    http_client.ConnectTimeout,
-)
 
 
 def _resolve_user_agent(user_agent: str | None) -> str:
@@ -332,14 +327,13 @@ async def brush_wjx_http(
             "params": params,
             "data": submit_data,
             "headers": submit_headers,
-            "timeout": _WJX_SUBMIT_TIMEOUT_SECONDS,
             "proxies": submit_proxies,
             "allow_redirects": False,
         }
         try:
-            response = await http_client.apost(submit_url, **request_kwargs)
-        except _WJX_HTTP_FALLBACK_TRANSPORT_ERRORS as exc:
-            if _has_tls_certificate_error(exc):
+            response = await post_submission(http_client.apost, submit_url, **request_kwargs)
+        except SubmissionConnectionError as exc:
+            if exc.pool_timeout or _has_tls_certificate_error(exc):
                 raise
             if stop_signal is not None and stop_signal.is_set():
                 return False
@@ -349,7 +343,8 @@ async def brush_wjx_http(
                 "Referer": _http_url(config.url) or config.url,
             }
             logging.info("问卷星 HTTPS 提交连接失败，尝试 HTTP 提交")
-            response = await http_client.apost(
+            response = await post_submission(
+                http_client.apost,
                 f"http://{domain}/joinnew/processjq.ashx",
                 **{**request_kwargs, "headers": fallback_headers},
             )

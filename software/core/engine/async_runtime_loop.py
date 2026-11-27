@@ -3,7 +3,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import random
-from typing import Any, Callable, Optional, cast
+from typing import Any, Callable, Literal, Optional
 
 from software.core.ai.runtime import AIRuntimeError
 from surveycore.core.engine.async_events import AsyncRunContext, ThreadEventProxy
@@ -33,6 +33,7 @@ from surveycore.providers.errors import (
     SurveyProviderUnavailableAtRuntimeError,
 )
 import software.network.http as http_client
+from software.network.http.submission import SubmissionConnectionError
 from software.network.session_policy import (
     _discard_unresponsive_proxy,
     _mark_proxy_temporarily_bad,
@@ -44,6 +45,8 @@ from software.network.proxy.session import get_session_snapshot
 from software.network.proxy.api import ProxyApiFatalError
 from software.network.submission_report import report_submission_result_async
 from surveycore.providers.http_progress import update_http_submit_step
+
+_NETWORK_RETRY_DELAY_SECONDS = 1.0
 
 
 class AsyncSlotRunner:
@@ -205,20 +208,13 @@ class AsyncSlotRunner:
         return await self.round_resources.run_pre_answer_step_with_joint_lease(label, operation)
 
     def _handle_proxy_unavailable(self, *, status_text: str, log_message: str) -> bool:
-        threshold_getter = getattr(self.stop_policy, "proxy_unavailable_threshold", None)
-        threshold_value = threshold_getter() if callable(threshold_getter) else None
-        threshold_override = (
-            int(cast(int, threshold_value))
-            if threshold_value is not None
-            else max(1, int(self.config.fail_threshold or 1), int(self.config.num_threads or 1))
-        )
         stopped = self.stop_policy.record_failure(
             self.stop_proxy,
             thread_name=self.slot_label,
             failure_reason=FailureReason.PROXY_UNAVAILABLE,
             status_text=status_text,
             log_message=log_message,
-            threshold_override=threshold_override,
+            threshold_override=self.stop_policy.proxy_unavailable_threshold(),
             terminal_stop_category="proxy_unavailable_threshold",
             consume_reverse_fill_attempt=False,
         )
@@ -309,7 +305,9 @@ class AsyncSlotRunner:
     ) -> None:
         attempt.resolve(AttemptState.UNKNOWN)
         self._set_progress_kind(ProgressKind.UNKNOWN)
-        message = f"提交请求已发出，但未收到确定结果，已停止自动重试：{exc}"
+        error_type = type(exc).__name__
+        detail = f"{error_type}: {exc}" if str(exc) else error_type
+        message = f"提交可能已到达服务端，未收到确定结果，已停止自动重试：{detail}"
         logging.critical("会话[%s] %s", self.slot_label, message)
         with self.state.submission_attempt_lock:
             self.state.commit_joint_sample(self.slot_label)
@@ -321,7 +319,7 @@ class AsyncSlotRunner:
             )
         self.run_context.stop_event.set()
 
-    def _report_submission_result(self, result: str) -> None:
+    def _report_submission_result(self, result: Literal["success", "failed"]) -> None:
         if not bool(self.config.random_proxy_ip_enabled):
             return
         try:
@@ -354,14 +352,12 @@ class AsyncSlotRunner:
         }
 
     def _handle_http_transport_error(self, exc: BaseException) -> bool:
-        if self.proxy_session.proxy_address:
-            try:
-                _discard_unresponsive_proxy(self.state, self.proxy_session.proxy_address)
-            except Exception:
-                logging.info("废弃 HTTP 连接失败代理失败", exc_info=True)
+        proxy_address = self.proxy_session.proxy_address
+        if proxy_address and isinstance(exc, SubmissionConnectionError) and not exc.pool_timeout:
+            _discard_unresponsive_proxy(self.state, proxy_address)
         return self._handle_proxy_unavailable(
-            status_text="代理连接失败" if self.proxy_session.proxy_address else "网络请求失败",
-            log_message=f"HTTP 请求失败，本轮按失败处理：{exc}",
+            status_text="代理连接失败，等待重试" if proxy_address else "网络请求失败，等待重试",
+            log_message=f"HTTP 请求失败，本轮可重试：{type(exc).__name__} {exc}",
         )
 
     async def _run_http_runtime(self) -> None:
@@ -445,7 +441,8 @@ class AsyncSlotRunner:
                     submit_proxy_lease_factory=submit_proxy_lease_factory,
                 )
                 if not finished:
-                    attempt.resolve(AttemptState.REJECTED)
+                    if attempt.state is AttemptState.SUBMITTING:
+                        attempt.resolve(AttemptState.REJECTED)
                     self._release_round_resources(requeue_reverse_fill=True)
                     if self.run_context.stop_requested():
                         should_requeue_dispatch = False
@@ -481,6 +478,7 @@ class AsyncSlotRunner:
                 break
             except SubmitProxyUnavailableError as exc:
                 self._release_round_resources(requeue_reverse_fill=True)
+                dispatch_delay_seconds = _NETWORK_RETRY_DELAY_SECONDS
                 if self._handle_proxy_unavailable(
                     status_text="代理获取失败",
                     log_message=f"提交前未获取到随机 IP，本轮跳过提交：{exc}",
@@ -505,20 +503,15 @@ class AsyncSlotRunner:
                     should_requeue_dispatch = False
                     break
                 self._release_round_resources(requeue_reverse_fill=True)
-            except (http_client.TransportError,) as exc:
-                if isinstance(exc, http_client.ProxyError):
-                    self._report_submission_result("failed")
-                    if self._handle_http_transport_error(exc):
-                        should_requeue_dispatch = False
-                        break
-                    self._release_round_resources(requeue_reverse_fill=True)
-                    continue
-                if attempt.state is AttemptState.SUBMITTING:
-                    self._report_submission_result("unknown")
+            except http_client.TransportError as exc:
+                if attempt.state is AttemptState.SUBMITTING and not isinstance(
+                    exc, SubmissionConnectionError
+                ):
                     self._mark_submission_result_unknown(attempt, exc)
                     should_requeue_dispatch = False
                     break
                 self._report_submission_result("failed")
+                dispatch_delay_seconds = _NETWORK_RETRY_DELAY_SECONDS
                 if self._handle_http_transport_error(exc):
                     should_requeue_dispatch = False
                     break

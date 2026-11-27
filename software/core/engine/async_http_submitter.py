@@ -77,10 +77,11 @@ class AsyncHttpSubmitter:
 def _record_provider_failure(failure: ProviderFailure, *, operation: str) -> None:
     category = failure.category.value
     logging.error(
-        "Provider[%s] %s失败 category=%s: %s",
+        "Provider[%s] %s失败 category=%s error=%s %s",
         failure.provider,
         operation,
         category,
+        type(failure.exception).__name__,
         failure.message,
     )
     add_note = getattr(failure.exception, "add_note", None)

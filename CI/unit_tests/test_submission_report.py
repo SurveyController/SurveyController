@@ -12,7 +12,10 @@ class _Response:
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("client_version", [None, "4.0.1"])
-async def test_report_submission_result_posts_expected_payload(monkeypatch, client_version) -> None:
+@pytest.mark.parametrize("result", ["success", "failed"])
+async def test_report_submission_result_posts_expected_payload(
+    monkeypatch, client_version, result
+) -> None:
     calls: list[dict[str, object]] = []
     monkeypatch.setattr(
         submission_report,
@@ -29,7 +32,7 @@ async def test_report_submission_result_posts_expected_payload(monkeypatch, clie
     assert await submission_report.report_submission_result_async(
         user_id="73952",
         survey_url="https://www.wjx.cn/vm/demo.aspx",
-        result="success",
+        result=result,
         proxy_provider="benefit",
         enabled=True,
         client_version=client_version,
@@ -39,11 +42,27 @@ async def test_report_submission_result_posts_expected_payload(monkeypatch, clie
     assert kwargs["json"] == {
         "user_id": 73952,
         "survey_url": "https://www.wjx.cn/vm/demo.aspx",
-        "result": "success",
+        "result": result,
         "proxy_provider": "idiot",
         "client_version": client_version or "",
     }
     assert kwargs["headers"]["Authorization"] == f"Bearer {'a' * 64}"
+
+
+@pytest.mark.asyncio
+async def test_unknown_submission_result_never_reaches_report_api(monkeypatch) -> None:
+    def unexpected_reporting(*_args, **_kwargs):
+        pytest.fail("未知结果不应触发上报")
+
+    monkeypatch.setattr(submission_report, "get_authenticated_session", unexpected_reporting)
+    monkeypatch.setattr(submission_report.http_client, "apost", unexpected_reporting)
+
+    assert not await submission_report.report_submission_result_async(
+        user_id=73952,
+        survey_url="https://www.wjx.cn/vm/demo.aspx",
+        result="unknown",
+        proxy_provider="default",
+    )
 
 
 @pytest.mark.asyncio

@@ -13,6 +13,7 @@ from CI.unit_tests.engine.async_runtime_loop_fakes import _build_runner
 from software.core.ai.runtime import AIRuntimeError
 from software.core.engine.failure_reason import FailureReason
 from software.core.task import ExecutionConfig, ProxyLease
+from software.network.http.submission import post_submission
 
 
 class AsyncRuntimeErrorsTests:
@@ -148,6 +149,7 @@ class AsyncRuntimeErrorsTests:
         scheduler.acquire_values = [10, None]
         seen_errors: list[BaseException] = []
         release_flags: list[bool] = []
+        reported_results: list[str] = []
 
         async def submit_after_request_start(**kwargs):
             await kwargs["submit_proxy_lease_factory"]()
@@ -171,11 +173,13 @@ class AsyncRuntimeErrorsTests:
             return False
 
         monkeypatch.setattr(runner, "_handle_http_transport_error", handle_transport_error)
+        monkeypatch.setattr(runner, "_report_submission_result", reported_results.append)
 
         await runner.run()
 
         assert seen_errors == []
         assert release_flags == []
+        assert reported_results == []
         assert scheduler.release_calls[0]["requeue"] is False
         assert runner.stop_policy.failure_calls == []
         assert state.cur_num == 0
@@ -195,9 +199,12 @@ class AsyncRuntimeErrorsTests:
         reported_results: list[str] = []
         release_flags: list[bool] = []
 
+        async def failing_post(*_args, **_kwargs):
+            raise runtime_loop.http_client.ProxyError("631 Internal Server Error")
+
         async def submit_via_proxy(**kwargs):
             await kwargs["submit_proxy_lease_factory"]()
-            raise runtime_loop.http_client.ProxyError("631 Internal Server Error")
+            return await post_submission(failing_post, config.url)
 
         monkeypatch.setattr(runner.http_submitter, "submit", submit_via_proxy)
         monkeypatch.setattr(runner, "_prepare_round_context", lambda: asyncio.sleep(0, result=True))
@@ -221,10 +228,12 @@ class AsyncRuntimeErrorsTests:
         await runner.run()
 
         assert len(seen_errors) == 1
-        assert isinstance(seen_errors[0], runtime_loop.http_client.ProxyError)
+        assert isinstance(seen_errors[0], runtime_loop.SubmissionConnectionError)
+        assert isinstance(seen_errors[0].__cause__, runtime_loop.http_client.ProxyError)
         assert reported_results == ["failed"]
         assert release_flags == [True]
         assert scheduler.release_calls[0]["requeue"] is True
+        assert scheduler.release_calls[0]["delay_seconds"] > 0
         assert state.get_terminal_stop_snapshot()[0] == ""
 
     @pytest.mark.asyncio

@@ -129,8 +129,9 @@ async def test_bad_certificate_does_not_fall_back(monkeypatch, submit_wjx) -> No
 
     monkeypatch.setattr(http_runtime.http_client, "apost", post)
 
-    with pytest.raises(httpx.ConnectError):
+    with pytest.raises(http_runtime.SubmissionConnectionError) as error:
         await submit_wjx()
+    assert isinstance(error.value.__cause__, httpx.ConnectError)
     assert [call[0] for call in calls] == [_HTTPS_SUBMIT_URL]
 
 

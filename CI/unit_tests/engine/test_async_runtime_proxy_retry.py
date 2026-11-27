@@ -4,6 +4,7 @@ import asyncio
 from types import SimpleNamespace
 
 import pytest
+import httpx
 
 import software.core.engine.async_runtime_loop as runtime_loop
 from software.core.engine.failure_reason import FailureReason
@@ -137,7 +138,10 @@ class AsyncRuntimeProxyRetryTests:
         assert state.get_terminal_stop_snapshot()[0] == ""
 
     @pytest.mark.asyncio
-    async def test_http_transport_error_discards_proxy_without_cooldown(self) -> None:
+    @pytest.mark.parametrize("error_class", [httpx.ConnectTimeout, httpx.PoolTimeout])
+    async def test_only_proxy_connection_errors_discard_proxy(
+        self, monkeypatch, error_class
+    ) -> None:
         config = ExecutionConfig(
             url="https://www.wjx.cn/vm/demo.aspx",
             survey_provider="wjx",
@@ -146,13 +150,20 @@ class AsyncRuntimeProxyRetryTests:
         runner, state, _ctx, _scheduler = _build_runner(config=config)
         proxy_address = "http://1.1.1.1:80"
         runner.proxy_session.proxy_address = proxy_address
+        discarded = []
+        monkeypatch.setattr(
+            runtime_loop,
+            "_discard_unresponsive_proxy",
+            lambda _state, address: discarded.append(address),
+        )
 
         assert (
             runner._handle_http_transport_error(
-                runtime_loop.http_client.ConnectTimeout("proxy bad")
+                runtime_loop.SubmissionConnectionError(error_class(""))
             )
             is False
         )
 
         assert not state.is_proxy_in_cooldown(proxy_address)
-        assert runner.stop_policy.failure_calls[0]["status_text"] == "代理连接失败"
+        assert discarded == ([proxy_address] if error_class is httpx.ConnectTimeout else [])
+        assert runner.stop_policy.failure_calls[0]["status_text"] == "代理连接失败，等待重试"

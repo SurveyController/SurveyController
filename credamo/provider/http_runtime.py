@@ -69,6 +69,7 @@ from surveycore.providers.http_logic import build_http_logic_plan
 from surveycore.providers.http_progress import update_http_submit_step
 from software.network.session_policy import SubmitProxyUnavailableError, mark_submit_proxy_success
 from software.network.http.defaults import DEFAULT_HTTP_HEADERS
+from software.network.http.submission import post_submission
 from software.providers.contracts import ProviderSubmissionRejectedError
 
 from surveycore.credamo.provider.answering_builders import build_answer_action
@@ -268,7 +269,8 @@ async def _save_answers(
 ) -> Mapping[str, Any]:
     answer_token = init_data.answer_token
     content = json.dumps(body, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
-    response = await session.post(
+    response = await post_submission(
+        session.post,
         (
             f"{origin.rstrip('/')}/v1/survey/answer/noauth/save"
             f"?timeCode={init_data.time_code}&answerToken={answer_token}"
@@ -281,7 +283,6 @@ async def _save_answers(
             answer_token=answer_token,
             json_body=True,
         ),
-        timeout=_CREDAMO_REQUEST_TIMEOUT_SECONDS,
     )
     payload = _json_payload(response, "提交")
     try:

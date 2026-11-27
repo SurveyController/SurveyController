@@ -54,6 +54,7 @@ from surveycore.providers.http_logic import build_http_logic_plan
 from surveycore.providers.http_progress import update_http_submit_step
 from software.network.session_policy import SubmitProxyUnavailableError, mark_submit_proxy_success
 from software.network.http.defaults import DEFAULT_HTTP_HEADERS
+from software.network.http.submission import post_submission
 from surveycore.providers.contracts import SurveyQuestionMeta
 from surveycore.providers.errors import SubmissionVerificationRequiredError
 from software.providers.contracts import ProviderSubmissionRejectedError
@@ -74,9 +75,6 @@ def _raise_qq_submit_failed(payload: Mapping[str, Any]) -> None:
         raise
     except RuntimeError as exc:
         raise ProviderSubmissionRejectedError(str(exc)) from exc
-
-
-_QQ_SUBMIT_TIMEOUT_SECONDS = 30
 
 
 def _headers(page_url: str, user_agent: str | None = None) -> dict[str, str]:
@@ -337,7 +335,8 @@ async def brush_qq_http(
         if bool(getattr(config, "random_proxy_ip_enabled", False)) and not submit_proxy_address:
             raise SubmitProxyUnavailableError("提交前未获取到随机 IP")
         submit_proxies = _proxy_arg(submit_proxy_address)
-        response = await http_client.apost(
+        response = await post_submission(
+            http_client.apost,
             f"https://wj.qq.com/api/v2/respondent/surveys/{survey_id}/answers",
             params={
                 "pv_uid": str(uuid.uuid4()),
@@ -346,7 +345,6 @@ async def brush_qq_http(
             },
             json=submit_body,
             headers=submit_headers,
-            timeout=_QQ_SUBMIT_TIMEOUT_SECONDS,
             proxies=submit_proxies,
         )
         response.raise_for_status()
