@@ -39,7 +39,7 @@ class RandomIpToggleRow(QWidget):
         else:
             self.toggle_button = cast(Any, TogglePushButton(self))
             self.toggle_button.setMinimumHeight(36)
-        self.loading_ring = IndeterminateProgressRing(self)
+        self.loading_ring = IndeterminateProgressRing(self, start=False)
         self.loading_ring.setFixedSize(18, 18)
         self.loading_ring.setStrokeWidth(2)
         self.loading_ring.hide()

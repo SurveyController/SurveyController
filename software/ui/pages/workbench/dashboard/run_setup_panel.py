@@ -398,6 +398,7 @@ class DashboardRunSetupPanel(QWidget):
 
     def apply_runtime_snapshot(self, snapshot: dict[str, Any]) -> None:
         settings = dict((snapshot or {}).get("settings") or {})
+        random_ip = (snapshot or {}).get("random_ip") or {}
         if "random_ip_enabled" in settings:
             enabled = bool(settings["random_ip_enabled"])
             with QSignalBlocker(self.random_ip_switch):
@@ -409,6 +410,9 @@ class DashboardRunSetupPanel(QWidget):
         )
         self.thread_card.setEnabled(not running)
         self._refresh_quota_subtitle()
+        self.random_ip_card.setLoading(
+            bool(random_ip.get("loading")), str(random_ip.get("loading_message") or "")
+        )
         self._refresh_conditional_sections()
 
     def render_runtime_snapshot(self, snapshot: dict[str, Any]) -> None:
@@ -485,8 +489,9 @@ class DashboardRunSetupPanel(QWidget):
         future.add_done_callback(lambda _future: self._refresh_quota_subtitle())
 
     def _on_random_ip_toggled(self, checked: bool) -> None:
-        if not self.dashboard.controller.request_toggle_random_ip(bool(checked)):
-            self.apply_runtime_snapshot(self.dashboard.controller.get_runtime_snapshot())
+        controller = self.dashboard.controller
+        controller.request_toggle_random_ip(bool(checked))
+        self.apply_runtime_snapshot(controller.get_runtime_snapshot())
 
     def _on_proxy_source_changed(self) -> None:
         source = self.random_ip_card._get_selected_source()

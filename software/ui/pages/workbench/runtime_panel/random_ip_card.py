@@ -125,14 +125,13 @@ class RandomIPSettingCard(ExpandGroupSettingCard):
         self._sync_ip_enabled(False)
 
     def _build_header_widgets(self) -> None:
-        self.loadingRing = IndeterminateProgressRing(self)
+        self.loadingRing = IndeterminateProgressRing(self, start=False)
         self.loadingRing.setFixedSize(18, 18)
         self.loadingRing.setStrokeWidth(2)
         self.loadingRing.hide()
         self.addWidget(self.loadingRing)
 
         self.loadingLabel = BodyLabel("", self)
-        self.loadingLabel.setStyleSheet("color: #606060; font-size: 12px;")
         self.loadingLabel.hide()
         self.addWidget(self.loadingLabel)
 
@@ -578,4 +577,4 @@ class RandomIPSettingCard(ExpandGroupSettingCard):
         QFluentCompat.set_indeterminate_progress_active(self.loadingRing, active)
         self.loadingLabel.setVisible(active)
         self.loadingLabel.setText(str(message or "正在处理...") if active else "")
-        self.switchButton.setEnabled(not active)
+        set_widget_enabled_with_opacity(self.switchButton, not active)

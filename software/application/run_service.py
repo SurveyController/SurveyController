@@ -62,9 +62,6 @@ class _ProxyStateAdapter:
     def set_random_ip_enabled(self, enabled: bool) -> None:
         self._service.sync_random_ip_enabled(bool(enabled))
 
-    def set_random_ip_loading(self, loading: bool, message: str = "") -> None:
-        self._service.notify_random_ip_loading(bool(loading), str(message or ""))
-
 
 class RunApplicationService(RandomIpRuntimeService):
     def __init__(

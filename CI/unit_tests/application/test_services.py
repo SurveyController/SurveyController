@@ -256,6 +256,72 @@ def test_close_waits_for_shutdown_worker_completion():
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("quota_error", [False, True])
+async def test_random_ip_loading_covers_account_and_quota_check(monkeypatch, quota_error):
+    harness = Harness()
+    service = harness.service
+    gateway = service._proxy_gateway
+    pending = Future()
+    account_wait = asyncio.Event()
+    quota_wait = asyncio.Event()
+    account_ready = asyncio.Event()
+    quota_ready = asyncio.Event()
+    task = None
+
+    async def connect():
+        account_wait.set()
+        await account_ready.wait()
+        return SimpleNamespace(total_quota=5, used_quota=1)
+
+    async def sync_quota():
+        quota_wait.set()
+        await quota_ready.wait()
+        if quota_error:
+            raise ProxyAuthenticationError("同步额度失败")
+        return {"remaining_quota": 4, "total_quota": 5}
+
+    def submit(_name, operation):
+        nonlocal task
+        task = asyncio.create_task(operation())
+        return pending
+
+    monkeypatch.setattr(gateway, "is_custom_api_active", lambda: False)
+    monkeypatch.setattr(gateway, "ensure_authenticated_session", connect)
+    monkeypatch.setattr(gateway, "sync_quota_snapshot", sync_quota)
+    monkeypatch.setattr(harness.engine, "submit_ui_task", submit)
+    monkeypatch.setattr(service, "refresh_random_ip_counter", lambda: None)
+
+    try:
+        assert service.request_toggle_random_ip(True)
+        await asyncio.wait_for(account_wait.wait(), timeout=2)
+        harness.drain()
+        assert harness.state.get_runtime_snapshot()["random_ip"]["loading_stage"] == (
+            "connecting_account"
+        )
+        assert not service.request_toggle_random_ip(False)
+
+        account_ready.set()
+        await asyncio.wait_for(quota_wait.wait(), timeout=2)
+        harness.drain()
+        assert harness.state.get_runtime_snapshot()["random_ip"]["loading_stage"] == "syncing_quota"
+        assert all(snapshot["random_ip"]["loading"] for snapshot in harness.snapshots)
+
+        quota_ready.set()
+        assert task is not None
+        pending.set_result(await asyncio.wait_for(task, timeout=2))
+        harness.drain()
+        snapshot = harness.state.get_runtime_snapshot()
+        assert snapshot["settings"]["random_ip_enabled"] is not quota_error
+        assert not snapshot["random_ip"]["loading"]
+        assert snapshot["random_ip"]["total_quota"] == 5
+    finally:
+        if task is not None and not task.done():
+            task.cancel()
+            await asyncio.gather(task, return_exceptions=True)
+        harness.close()
+
+
+@pytest.mark.asyncio
 async def test_random_ip_connection_without_legacy_account_does_not_open_redeem_form():
     harness = Harness()
 

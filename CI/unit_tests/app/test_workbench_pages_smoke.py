@@ -354,6 +354,55 @@ def test_workbench_config_projects_random_ip_state_to_all_pages(monkeypatch, qtb
     assert presenter.state.snapshot().random_ip_enabled is False
 
 
+@pytest.mark.parametrize("enable_succeeded", [True, False])
+def test_random_ip_switch_waits_for_balance(monkeypatch, qtbot, enable_succeeded) -> None:
+    _patch_page_dependencies(monkeypatch)
+    controller = _FakeController()
+    host = QWidget()
+    qtbot.addWidget(host)
+    presenter = WorkbenchPresenter(controller=controller, host=host)
+    panel = presenter.dashboard.run_setup_panel
+    card = panel.random_ip_card
+    reverse_page = presenter.reverse_fill_page
+    read_snapshot = controller.get_runtime_snapshot
+    quota_state = {"loading": False, "loading_message": ""}
+
+    def snapshot():
+        return {**read_snapshot(), "random_ip": dict(quota_state)}
+
+    def request_toggle(enabled):
+        controller.random_ip_toggle_requests.append(enabled)
+        quota_state.update(loading=True, loading_message="正在连接随机 IP 账户")
+        controller.runtimeSnapshotChanged.emit(snapshot())
+        return True
+
+    monkeypatch.setattr(controller, "get_runtime_snapshot", snapshot)
+    monkeypatch.setattr(controller, "request_toggle_random_ip", request_toggle)
+
+    card.switchButton.setChecked(True)
+
+    assert not card.switchButton.isEnabled()
+    assert not card.loadingRing.isHidden()
+    assert card.loadingRing.property("surveycontroller_active")
+    qtbot.waitUntil(lambda: not reverse_page.random_ip_cb.isEnabled())
+
+    quota_state["loading_message"] = "正在同步服务端额度"
+    controller.runtimeSnapshotChanged.emit(snapshot())
+    QApplication.processEvents()
+    assert not card.switchButton.isEnabled()
+
+    controller.state["random_ip_enabled"] = enable_succeeded
+    quota_state.update(loading=False, loading_message="")
+    controller.runtimeSnapshotChanged.emit(snapshot())
+    qtbot.waitUntil(lambda: card.switchButton.isEnabled() and reverse_page.random_ip_cb.isEnabled())
+
+    assert card.loadingRing.isHidden()
+    assert not card.loadingRing.property("surveycontroller_active")
+    assert card.switchButton.isChecked() is enable_succeeded
+    assert reverse_page.random_ip_cb.isChecked() is enable_succeeded
+    assert controller.random_ip_toggle_requests == [True]
+
+
 def test_workbench_user_edits_reach_saved_and_run_config(monkeypatch, qtbot, tmp_path) -> None:
     _patch_page_dependencies(monkeypatch)
     controller = _FakeController()

@@ -280,18 +280,13 @@ class ReverseFillPage(SurveyClipboardMixin, QWidget):
         self.random_ip_row.set_loading(loading, message)
 
     def _on_random_ip_toggled(self, enabled: bool) -> None:
-        self._sync_random_ip_toggle_presentation(bool(enabled))
-        if self.controller.request_toggle_random_ip(bool(enabled)):
-            return
-        fallback_enabled = bool(
-            self.controller.get_runtime_snapshot()
-            .get("settings", {})
-            .get("random_ip_enabled", False)
+        self.controller.request_toggle_random_ip(bool(enabled))
+        snapshot = self.controller.get_runtime_snapshot()
+        self.apply_runtime_settings(snapshot.get("settings") or {})
+        random_ip = snapshot.get("random_ip") or {}
+        self.set_random_ip_loading(
+            bool(random_ip.get("loading")), str(random_ip.get("loading_message") or "")
         )
-        self.random_ip_cb.blockSignals(True)
-        self.random_ip_cb.setChecked(fallback_enabled)
-        self.random_ip_cb.blockSignals(False)
-        self._sync_random_ip_toggle_presentation(fallback_enabled)
 
     def _sync_start_button_state(self, running: bool | None = None) -> None:
         if running is None:

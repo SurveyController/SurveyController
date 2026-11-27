@@ -135,22 +135,6 @@ class RandomIpRuntimeService:
         except Exception:
             logging.info("更新随机IP开关失败", exc_info=True)
 
-    def _set_random_ip_loading(
-        self, adapter: Optional[Any], loading: bool, message: str = ""
-    ) -> None:
-        if not self._proxy_callbacks_active():
-            return
-        try:
-            self.notify_random_ip_loading(bool(loading), str(message or ""))
-        except Exception:
-            logging.info("广播随机IP加载状态失败", exc_info=True)
-        if not adapter:
-            return
-        try:
-            adapter.set_random_ip_loading(bool(loading), str(message or ""))
-        except Exception:
-            logging.info("更新随机IP加载状态失败", exc_info=True)
-
     def _get_counter_snapshot(self) -> tuple[float, float, bool]:
         custom_api = bool(self._proxy_gateway.is_custom_api_active())
         if not custom_api and self._proxy_gateway.has_authenticated_session():
@@ -356,7 +340,6 @@ class RandomIpRuntimeService:
         adapter: Optional[Any],
     ) -> bool:
         try:
-            self._set_random_ip_loading(adapter, True, "connecting_account")
             session = await self._proxy_gateway.ensure_authenticated_session()
         except ProxyAuthenticationError as exc:
             message = self._proxy_gateway.format_error(exc)
@@ -369,9 +352,6 @@ class RandomIpRuntimeService:
                 adapter, "account_connection_failed", str(exc), level="error"
             )
             return False
-        finally:
-            self._set_random_ip_loading(adapter, False, "")
-
         total_quota = max(float(session.total_quota or 0.0), 0.0)
         used_quota = max(0.0, float(session.used_quota or 0.0))
         self._apply_random_ip_counter(adapter, used=used_quota, total=total_quota, custom_api=False)
@@ -380,6 +360,7 @@ class RandomIpRuntimeService:
     async def _ensure_random_ip_ready_async(self, adapter: Optional[Any]) -> bool:
         if self._proxy_gateway.has_authenticated_session():
             return True
+        self.notify_random_ip_loading(True, "connecting_account")
         return await self._try_connect_random_ip_account_async(adapter)
 
     async def _toggle_random_ip_async(self, enabled: bool, adapter: Optional[Any]) -> bool:
@@ -405,7 +386,7 @@ class RandomIpRuntimeService:
             custom_api=False,
         )
         try:
-            self._set_random_ip_loading(adapter, True, "syncing_quota")
+            self.notify_random_ip_loading(True, "syncing_quota")
             snapshot = await self._proxy_gateway.sync_quota_snapshot()
         except Exception as exc:
             message = self._proxy_gateway.format_error(exc)
@@ -413,9 +394,6 @@ class RandomIpRuntimeService:
             self._set_random_ip_enabled(adapter, False)
             self._refresh_random_ip_counter_now(adapter)
             return False
-        finally:
-            self._set_random_ip_loading(adapter, False, "")
-
         used_quota, total_quota = self._resolve_counter_snapshot_values(snapshot)
         self._apply_random_ip_counter(adapter, used=used_quota, total=total_quota, custom_api=False)
         if self._proxy_gateway.is_quota_exhausted({"authenticated": True, **snapshot}):
@@ -486,15 +464,17 @@ class RandomIpRuntimeService:
                 return False
             self._random_ip_toggle_active = True
 
-        self.notify_random_ip_loading(True, "processing")
+        if enabled:
+            self.notify_random_ip_loading(True, "processing")
 
         def _finish(final_enabled: bool) -> None:
             with self._random_ip_toggle_lock:
                 self._random_ip_toggle_active = False
             if not self._proxy_callbacks_active():
                 return
-            self.notify_random_ip_loading(False, "")
             self.sync_random_ip_enabled(bool(final_enabled))
+            if enabled:
+                self.notify_random_ip_loading(False, "")
             if callable(on_done):
                 try:
                     on_done(bool(final_enabled))
@@ -508,7 +488,8 @@ class RandomIpRuntimeService:
             logging.warning("随机IP异步切换提交失败", exc_info=True)
             with self._random_ip_toggle_lock:
                 self._random_ip_toggle_active = False
-            self.notify_random_ip_loading(False, "")
+            if enabled:
+                self.notify_random_ip_loading(False, "")
             return False
 
         def _on_done_callback(done_future: Any) -> None:
