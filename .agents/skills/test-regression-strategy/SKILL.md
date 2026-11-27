@@ -74,7 +74,6 @@ description: 面向 SurveyController 仓库的测试分层与回归选择技能�
 - 快速检查覆盖 compile、Ruff lint/format、ty 和 unit tests。
 - 完整检查额外覆盖模块导入和主窗口离屏 smoke。
 - `CI/live_tests/surveycore_regression.py` 依赖真实外部问卷和网络，不适合日常修复必跑；其可重复的逻辑回归在 `CI/unit_tests/test_surveycore_live_regression.py`。
-- 覆盖率门槛在 `CI/python_checks/common.py` 里：全仓 80%，core/application/network 85%，Provider 80%，UI 65%，并分别检查行与分支覆盖率。
 - CI 或最小本地复现生成的临时文件、覆盖率产物按仓库规则清理。
 
 ## common_commands

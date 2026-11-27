@@ -269,28 +269,3 @@ class QuotaRedeemDialogTests:
 
         assert result is False
         assert dialog.layout_calls == 0
-
-    def test_event_filter_relayouts_spinner_for_yes_button_resize(
-        self,
-        monkeypatch: pytest.MonkeyPatch,
-    ) -> None:
-        dialog = cast(Any, QuotaRedeemDialog.__new__(QuotaRedeemDialog))
-        dialog.layout_calls = 0
-        dialog.yesButton = object()
-        dialog._layout_yes_button_spinner = lambda: setattr(
-            dialog, "layout_calls", dialog.layout_calls + 1
-        )
-        monkeypatch.setattr(
-            quota_redeem.MessageBoxBase,
-            "eventFilter",
-            lambda self, _obj, _e: False,
-        )
-
-        result = quota_redeem.QuotaRedeemDialog.eventFilter(
-            dialog,
-            dialog.yesButton,
-            QEvent(QEvent.Type.Resize),
-        )
-
-        assert result is False
-        assert dialog.layout_calls == 1

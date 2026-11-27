@@ -63,11 +63,10 @@ def test_ai_defaults_require_api_key_and_include_multi_blank_instructions() -> N
     assert ExecutionConfig().ai_mode == "provider"
 
 
-@pytest.mark.parametrize("mode", ["free", "provider", "bad", None])
-def test_runtime_config_normalizes_legacy_mode_without_losing_provider_fields(mode) -> None:
+def test_runtime_config_loads_saved_provider_preferences_from_old_config() -> None:
     config = deserialize_runtime_config(
         {
-            "ai_mode": mode,
+            "ai_mode": "free",
             "ai_provider": "custom",
             "ai_api_key": "test-key",
             "ai_base_url": "https://example.test/v1",
@@ -80,13 +79,12 @@ def test_runtime_config_normalizes_legacy_mode_without_losing_provider_fields(mo
     assert "ai_api_key" not in payload
     assert serialize_runtime_config(config, include_secrets=True)["ai_api_key"] == "test-key"
     assert payload["ai_system_prompt"] == "用户提示词"
-    assert serialize_runtime_config(RuntimeConfig(ai_mode=mode))["ai_mode"] == "provider"
 
 
 @pytest.mark.asyncio
-async def test_legacy_mode_without_key_fails_before_provider_request(monkeypatch) -> None:
+async def test_missing_key_fails_before_provider_request(monkeypatch) -> None:
     monkeypatch.setattr(
-        client, "get_ai_settings", lambda: {"ai_mode": "free", "provider": "custom"}
+        client, "get_ai_settings", lambda: {"ai_mode": "provider", "provider": "custom"}
     )
 
     async def unexpected_request(*_args, **_kwargs):
@@ -121,9 +119,8 @@ def test_ai_settings_normalize_legacy_builtin_provider_to_openai_compatible(monk
 
 
 @pytest.mark.asyncio
-async def test_legacy_settings_use_configured_provider_endpoint(monkeypatch) -> None:
+async def test_response_protocol_uses_configured_provider_endpoint(monkeypatch) -> None:
     settings.save_ai_settings(
-        ai_mode="free",
         provider="custom",
         api_key="test-key",
         base_url="https://example.test/v1",

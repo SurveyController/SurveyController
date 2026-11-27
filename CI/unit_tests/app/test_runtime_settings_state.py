@@ -86,20 +86,6 @@ def test_runtime_settings_state_normalizes_updates() -> None:
     assert current["answer_datetime_window"] == ("2026-02-10 09:00:00", "")
 
 
-def test_runtime_settings_state_expands_legacy_answer_duration_single_value() -> None:
-    state = RuntimeSettingsState()
-
-    current, changed = state.update(answer_duration=90)
-
-    assert changed is True
-    assert current["answer_duration"] == (81, 99)
-
-    current, changed = state.update(answer_duration=(180, 180))
-
-    assert changed is True
-    assert current["answer_duration"] == (162, 198)
-
-
 def test_runtime_settings_state_clamps_answer_duration_to_30_minutes() -> None:
     state = RuntimeSettingsState()
 

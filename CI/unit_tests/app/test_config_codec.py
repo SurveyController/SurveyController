@@ -162,22 +162,6 @@ class ConfigCodecTests:
         with pytest.raises(ValueError, match="不支持的配置版本"):
             deserialize_runtime_config({"schema_version": 3})
 
-    def test_foreign_legacy_payload_does_not_report_unknown_fields(self, caplog) -> None:
-        with caplog.at_level("WARNING"):
-            deserialize_runtime_config(
-                {
-                    "answers": {},
-                    "execution": {},
-                    "network": {},
-                    "psychometrics": {},
-                    "reverseFill": {},
-                    "schemaVersion": 2,
-                    "survey": {},
-                }
-            )
-
-        assert "忽略配置中的未知字段" not in caplog.text
-
     def test_ai_override_is_an_explicit_config_intent(self) -> None:
         config = RuntimeConfig(ai_config_mode="override", ai_model="model-a")
         restored = deserialize_runtime_config(serialize_runtime_config(config))

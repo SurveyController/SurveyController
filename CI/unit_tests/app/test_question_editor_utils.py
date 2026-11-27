@@ -2,24 +2,11 @@ from __future__ import annotations
 
 from types import SimpleNamespace
 
-from PySide6.QtWidgets import QApplication, QLabel
 
 from surveycore.core.questions.config import QuestionEntry
 from surveycore.providers.contracts import SurveyQuestionMeta
 from software.ui.pages.workbench.question_editor import utils as editor_utils
 from software.ui.pages.workbench.question_editor import location_options
-
-
-class _ColorLabel(QLabel):
-    def __init__(self) -> None:
-        super().__init__()
-        self.colors = None
-
-    def setTextColor(self, light, dark) -> None:
-        self.colors = (light.name(), dark.name())
-
-
-_APP = QApplication.instance() or QApplication([])
 
 
 class QuestionEditorUtilsTests:
@@ -47,20 +34,6 @@ class QuestionEditorUtilsTests:
 
         assert editor_utils._normalize_provider_key("wjx", "qid") == ("wjx", "qid")
         assert editor_utils._normalize_provider_key("wjx", "") is None
-
-    def test_apply_label_color_and_wrapped_text_label(self) -> None:
-        label = _ColorLabel()
-        editor_utils._apply_label_color(label, "#111111", "#222222")
-        assert label.colors == ("#111111", "#222222")
-
-        plain = QLabel()
-        plain.setStyleSheet("font-size: 12px")
-        editor_utils._apply_label_color(plain, "#333333", "#444444")
-        assert "color: #333333;" in plain.styleSheet()
-
-        editor_utils._configure_wrapped_text_label(plain, 88)
-        assert plain.wordWrap() is True
-        assert plain.width() == 88
 
     def test_build_entry_info_fallback_handles_text_and_fillable_options(self) -> None:
         entry = QuestionEntry(

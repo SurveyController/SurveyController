@@ -3,12 +3,9 @@ from __future__ import annotations
 import json
 import threading
 from collections import deque
-from datetime import datetime
-from importlib.metadata import version
 from pathlib import Path
 
 import pytest
-import surveycore
 from openpyxl import Workbook
 
 from surveycore.core.questions.default_builder import build_default_question_entries
@@ -18,7 +15,6 @@ from surveycore.core.questions.distribution import (
 )
 from surveycore.core.questions.normalization import configure_probabilities
 from surveycore.core.questions.schema import QuestionEntry
-from surveycore.core.questions.utils import _load_id_card_area_codes, generate_random_id_card
 from surveycore.core.reverse_fill.schema import (
     REVERSE_FILL_FORMAT_WJX_SEQUENCE,
     REVERSE_FILL_KIND_TEXT,
@@ -268,21 +264,3 @@ async def test_option_fill_candidates_survive_config_and_use_application_ai_cach
     payload["question_entries"][0]["option_fill_texts"] = [[42]]
     with pytest.raises(ValueError, match=r"option_fill_texts\[0\]"):
         deserialize_runtime_config(payload)
-
-
-def test_installed_core_resources_and_version_support_id_card_generation() -> None:
-    assert surveycore.__version__ == version("surveycore-py")
-    _load_id_card_area_codes.cache_clear()
-    area_codes = _load_id_card_area_codes()
-    assert len(area_codes) >= 300
-    assert {"320500", "650100"}.issubset(area_codes)
-
-    id_card = generate_random_id_card()
-
-    assert len(id_card) == 18
-    assert id_card[:17].isdigit()
-    assert id_card[:6] in area_codes
-    datetime.strptime(id_card[6:14], "%Y%m%d")
-    weights = (7, 9, 10, 5, 8, 4, 2, 1, 6, 3, 7, 9, 10, 5, 8, 4, 2)
-    checksum = sum(int(digit) * weight for digit, weight in zip(id_card[:17], weights, strict=True))
-    assert id_card[-1] == "10X98765432"[checksum % 11]

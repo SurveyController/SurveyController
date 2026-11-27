@@ -9,7 +9,6 @@ from PySide6.QtCore import (
     QEvent,
     QIODevice,
     QMimeData,
-    QPoint,
     QPointF,
     QUrl,
     Qt,
@@ -125,7 +124,7 @@ def test_clipboard_drag_drop_and_keypress_paths(monkeypatch, qtbot, tmp_path) ->
     url_mime = QMimeData()
     url_mime.setUrls([QUrl.fromLocalFile(str(image_path))])
     drag_event = QDragEnterEvent(
-        QPoint(1, 1),
+        QPointF(1, 1),
         Qt.DropAction.CopyAction,
         url_mime,
         Qt.MouseButton.LeftButton,

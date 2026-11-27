@@ -353,6 +353,9 @@ def test_parse_success_failure_invalid_url_and_engine_submission_failure(caplog)
     assert state.get_survey_snapshot()["error_code"] == "url_required"
     service.parse_survey("https://example.com")
     assert state.get_survey_snapshot()["error_code"] == "url_unsupported"
+    service.parse_survey("0 ?")
+    assert state.get_survey_snapshot()["error_code"] == "url_unsupported"
+    assert not hasattr(engine, "parsed_url")
     service.parse_survey("https://v.wjx.cn/vm/demo.aspx")
     engine.parse_future.set_result(
         ProviderParseResult(

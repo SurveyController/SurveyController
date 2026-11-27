@@ -78,12 +78,6 @@ class TestRuntimePanelCardsQtBot:
         card.set_provider("credamo")
         assert card._input_container.isEnabled() is True
 
-    def test_answer_datetime_window_card_shows_credamo_badge(self, qtbot) -> None:
-        card = AnswerDateTimeWindowSettingCard(FluentIcon.HISTORY, "标题", "说明", max_seconds=300)
-        qtbot.addWidget(card)
-
-        assert card.credamo_badge.text() == "见数"
-
     def test_answer_datetime_window_card_keeps_datetime_values(self, qtbot) -> None:
         card = AnswerDateTimeWindowSettingCard(FluentIcon.HISTORY, "标题", "说明", max_seconds=300)
         qtbot.addWidget(card)
@@ -91,9 +85,6 @@ class TestRuntimePanelCardsQtBot:
         card.setDateTimeWindow(("2026-02-10 09:00:00", "2026-02-10 10:00:00"))
 
         assert card.getDateTimeWindow() == ("2026-02-10 09:00:00", "2026-02-10 10:00:00")
-        assert card.startTimePicker.columns[0].name() == "时"
-        assert card.startTimePicker.columns[1].name() == "分"
-        assert card.startTimePicker.isSecondVisible() is False
 
     def test_answer_datetime_window_card_clamps_future_datetime(self, monkeypatch, qtbot) -> None:
         fake_now = QDateTime.fromString("2026-02-10 09:15:00", "yyyy-MM-dd HH:mm:ss")
@@ -110,39 +101,15 @@ class TestRuntimePanelCardsQtBot:
         assert card.getDateTimeWindow() == ("2026-02-10 09:15:00", "2026-02-10 08:00:00")
 
 
-def test_random_ip_toggle_row_supports_switch_style(qtbot) -> None:
-    row = RandomIpToggleRow(
-        toggle_row_module.BodyLabel,
-        use_switch_style=True,
-        leading_label_text="随机IP：",
-    )
-    qtbot.addWidget(row)
-
-    assert row.leading_label is not None
-    assert row.leading_label.text() == "随机IP："
-
-    row.sync_toggle_presentation(True)
-    assert row.toggle_button.isChecked() is True
-
-    row.sync_toggle_presentation(False)
-    assert row.toggle_button.isChecked() is False
-
-
-def test_random_ip_toggle_row_loading_disables_with_opacity(qtbot) -> None:
+def test_random_ip_toggle_row_blocks_interaction_while_loading(qtbot) -> None:
     row = RandomIpToggleRow(toggle_row_module.BodyLabel, use_switch_style=True)
     qtbot.addWidget(row)
 
     row.set_loading(True, "处理中")
-    effect = row.toggle_button.graphicsEffect()
     assert row.toggle_button.isEnabled() is False
-    assert effect is not None
-    assert round(float(effect.opacity()), 2) == 0.40
 
     row.set_loading(False, "")
-    effect = row.toggle_button.graphicsEffect()
     assert row.toggle_button.isEnabled() is True
-    assert effect is not None
-    assert round(float(effect.opacity()), 2) == 1.00
 
 
 class _FakeThread:

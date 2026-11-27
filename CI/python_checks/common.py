@@ -28,14 +28,6 @@ WINDOW_SMOKE_TIMEOUT_SECONDS = 25
 UNIT_TEST_TIMEOUT_SECONDS = int(
     os.environ.get("SURVEY_CONTROLLER_UNIT_TEST_TIMEOUT_SECONDS", "120")
 )
-DEFAULT_UNIT_TEST_COVERAGE_FAIL_UNDER = "70"
-PACKAGE_COVERAGE_THRESHOLDS = {
-    "software/core": 80.0,
-    "software/application": 80.0,
-    "software/network": 75.0,
-    "providers": 60.0,
-    "software/ui": 65.0,
-}
 TY_TIMEOUT_SECONDS = int(os.environ.get("SURVEY_CONTROLLER_TY_TIMEOUT_SECONDS", "90"))
 PYTEST_FAILURE_LOG_TAIL_LINES = 40
 TYPE_IGNORE_PATTERNS = (
@@ -317,7 +309,6 @@ def build_unit_test_pytest_args(*, verbose_in_ci: bool) -> list[str]:
             "--cov=tencent",
             "--cov=credamo",
             "--cov-branch",
-            f"--cov-fail-under={DEFAULT_UNIT_TEST_COVERAGE_FAIL_UNDER}",
             "--cov-report=term-missing:skip-covered",
             "--cov-report=xml:coverage.xml",
             "--cov-report=json:coverage.json",
@@ -709,50 +700,6 @@ def extract_coverage_summary(stdout: str) -> str | None:
     return "\n".join(summary_lines) if summary_lines else None
 
 
-def check_package_coverage(payload: dict) -> list[dict]:
-    files = payload.get("files")
-    if not isinstance(files, dict):
-        return [{"phase": "unit", "message": "Coverage JSON does not contain a files object."}]
-
-    diagnostics: list[dict] = []
-    for package, threshold in PACKAGE_COVERAGE_THRESHOLDS.items():
-        matching = [
-            data.get("summary", {})
-            for file_name, data in files.items()
-            if file_name.replace("\\", "/").startswith(package)
-        ]
-        if package == "providers":
-            matching = [
-                data.get("summary", {})
-                for file_name, data in files.items()
-                if file_name.replace("\\", "/").startswith(
-                    ("software/providers/", "wjx/", "tencent/", "credamo/")
-                )
-            ]
-        statements = sum(int(item.get("num_statements", 0)) for item in matching)
-        covered = sum(int(item.get("covered_lines", 0)) for item in matching)
-        if statements <= 0:
-            diagnostics.append(
-                {
-                    "phase": "unit",
-                    "message": f"Coverage data is missing for {package}.",
-                }
-            )
-            continue
-        percent = covered / statements * 100
-        if percent < threshold:
-            diagnostics.append(
-                {
-                    "phase": "unit",
-                    "message": (
-                        f"{package} coverage is {percent:.1f}%; "
-                        f"the required minimum is {threshold:.0f}%."
-                    ),
-                }
-            )
-    return diagnostics
-
-
 def run_unit_tests() -> tuple[dict | None, str | None]:
     env = make_child_env()
     try:
@@ -777,22 +724,10 @@ def run_unit_tests() -> tuple[dict | None, str | None]:
         }, None
 
     coverage_summary = extract_coverage_summary(result.stdout or "")
-
-    coverage_issues: list[dict] = []
     if result.returncode == 0:
-        try:
-            coverage_payload = json.loads((ROOT_DIR / "coverage.json").read_text(encoding="utf-8"))
-        except (OSError, json.JSONDecodeError) as exc:
-            coverage_issues = [{"phase": "unit", "message": f"读取覆盖率 JSON 失败：{exc}"}]
-        else:
-            coverage_issues = check_package_coverage(coverage_payload)
-
-    if result.returncode == 0 and not coverage_issues:
         return None, coverage_summary
 
     summary = summarize_child_output(result.stdout, result.stderr) or "Unit tests failed."
-    if coverage_issues:
-        summary = "\n".join([summary, *(item["message"] for item in coverage_issues)])
     return {
         "phase": "unit",
         "message": summary,

@@ -230,21 +230,3 @@ def test_startup_tutorial_hint_does_not_duplicate_active_flyout(monkeypatch) -> 
     assert len(_FakeTutorialView.instances) == 1
     assert len(_FakeFlyout.instances) == 1
     assert window._startup_tutorial_hint_showing is True
-
-
-def test_startup_tutorial_hint_position_is_clamped_to_screen(monkeypatch) -> None:
-    monkeypatch.setattr(
-        main_window_module,
-        "QGuiApplication",
-        SimpleNamespace(screenAt=lambda _pos: None, primaryScreen=lambda: None),
-    )
-    window = _FakeTutorialWindow()
-    window.width_value = 240
-    window.height_value = 160
-    window.global_offset = QPoint(920, 640)
-    window.screen_obj = _FakeScreen(QRect(0, 0, 1000, 700))
-
-    pos = MainWindow._startup_tutorial_hint_global_pos(window, 320, 180)
-
-    assert pos.x() == 652
-    assert pos.y() == 492

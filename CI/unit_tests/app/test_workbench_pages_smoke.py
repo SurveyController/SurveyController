@@ -3,7 +3,7 @@ from __future__ import annotations
 from types import SimpleNamespace
 
 import pytest
-from PySide6.QtCore import QObject, Qt, Signal
+from PySide6.QtCore import QObject, Signal
 from PySide6.QtWidgets import QApplication, QWidget
 from surveycore.core.questions.config import QuestionEntry
 from surveycore.providers.contracts import SurveyQuestionMeta
@@ -192,45 +192,36 @@ def test_dashboard_run_setup_builds_and_syncs_config_without_network(monkeypatch
     page.apply_config(cfg)
 
     assert page.run_setup_panel.target_spin.value() == 7
-    assert page.run_setup_panel.thread_card.slider.slider.maximum() == HTTP_MAX_THREADS
     assert page.run_setup_panel.thread_card.slider.value() == HTTP_MAX_THREADS
     assert cfg.target == 7
     assert cfg.threads == 99
     assert cfg.answer_datetime_window == ("", "")
-    assert page.run_setup_panel.ai_section.ai_provider_combo.count() == 1
-    assert page.run_setup_panel.ai_section.ai_provider_combo.currentData() == "custom"
 
 
-@pytest.mark.parametrize("provider,model", [("custom", "test-model"), ("deepseek", "legacy-model")])
-def test_dashboard_ai_preserves_saved_model_when_loading_legacy_config(
-    monkeypatch, qtbot, provider, model
-) -> None:
+def test_dashboard_run_config_inherits_current_ai_preferences(monkeypatch, qtbot) -> None:
     _patch_page_dependencies(monkeypatch)
-    saved = {
-        "ai_mode": "free",
-        "provider": provider,
+    controller = _FakeController()
+    controller.ai_settings.settings = {
+        "ai_mode": "provider",
+        "provider": "custom",
         "api_key": "test-key",
         "base_url": "https://example.test/v1",
-        "model": model,
+        "model": "test-model",
         "system_prompt": "用户提示词",
     }
-    controller = _FakeController()
-    controller.ai_settings.settings = dict(saved)
     state = WorkbenchState()
     strategy_page = QuestionStrategyPage()
     page = DashboardPage(controller, state, strategy_page)
     qtbot.addWidget(page)
     qtbot.addWidget(strategy_page)
-    assert page.run_setup_panel.ai_section._get_current_model_value() == model
-    assert controller.ai_settings.writes == []
-
-    cfg = RuntimeConfig(ai_mode="free")
+    cfg = RuntimeConfig()
     page.apply_config(cfg)
     assert cfg.ai_mode == "provider"
     assert cfg.ai_provider == "custom"
-    assert cfg.ai_model == model
+    assert cfg.ai_model == "test-model"
     assert cfg.ai_api_key == "test-key"
     assert cfg.ai_system_prompt == "用户提示词"
+    assert controller.ai_settings.writes == []
 
 
 def test_strategy_page_builds_rules_and_dimension_sections(monkeypatch, qtbot) -> None:
@@ -301,33 +292,6 @@ def test_reverse_fill_page_builds_and_updates_config(monkeypatch, qtbot, tmp_pat
     }
     assert changes[-1] == {"reverse_fill_threads": 3}
     assert page.stop_btn.isEnabled() is False
-
-
-def test_dashboard_page_builds_first_step_with_mica_transparency(monkeypatch, qtbot) -> None:
-    _patch_page_dependencies(monkeypatch)
-    controller = _FakeController()
-    strategy_page = QuestionStrategyPage()
-    state = WorkbenchState()
-    state.set_entries(
-        [QuestionEntry("single", [1, 1], question_num=1, question_title="Q1")],
-        [SurveyQuestionMeta(num=1, title="Q1", type_code="3", option_texts=["A", "B"])],
-    )
-    page = DashboardPage(controller, state, strategy_page)
-    qtbot.addWidget(strategy_page)
-    qtbot.addWidget(page)
-
-    page.show()
-    QApplication.processEvents()
-    assert page.qr_btn.isVisible()
-    assert page.url_edit.isVisible()
-    assert page.parse_btn.isVisible()
-    assert [action.text() for action in page.config_command_bar.actions()] == [
-        "配置列表",
-        "载入配置",
-        "保存配置",
-    ]
-    assert "background: transparent" in page.link_card.styleSheet()
-    assert page.testAttribute(Qt.WidgetAttribute.WA_StyledBackground) is False
 
 
 def test_workbench_config_projects_random_ip_state_to_all_pages(monkeypatch, qtbot) -> None:

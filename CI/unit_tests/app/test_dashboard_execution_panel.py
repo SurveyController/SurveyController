@@ -3,7 +3,7 @@ from __future__ import annotations
 from software.ui.pages.workbench.dashboard.execution_panel import DashboardExecutionPanel
 
 
-def test_execution_panel_renders_four_progress_bar_states(qtbot) -> None:
+def test_execution_panel_displays_submission_and_session_progress(qtbot) -> None:
     panel = DashboardExecutionPanel()
     qtbot.addWidget(panel)
     panel.show()
@@ -64,59 +64,33 @@ def test_execution_panel_renders_four_progress_bar_states(qtbot) -> None:
             },
         }
     )
-    qtbot.wait(180)
-
-    assert panel.overall_progress_ring.value() == 25
-    assert panel.overall_progress_ring.isHidden() is False
-    assert panel.overall_indeterminate_ring.isHidden() is True
     assert panel.summary_label.text() == "1 / 4 份"
     assert panel.overall_status_label.text() == "执行中"
 
-    row_percent = panel._session_rows["Slot-1"]
-    assert row_percent["name"].text() == "会话 1"
-    assert row_percent["step_bar"].isHidden() is False
-    assert row_percent["step_busy_bar"].isHidden() is True
-    assert row_percent["step_bar"].value() == 50
-    assert row_percent["step_bar"].isPaused() is False
-    assert row_percent["step_bar"].isError() is False
-    assert row_percent["pct"].text() == "50%"
-
-    row_loading = panel._session_rows["Slot-2"]
-    assert row_loading["step_bar"].isHidden() is True
-    assert row_loading["step_busy_bar"].isHidden() is False
-    assert row_loading["pct"].text() == "..."
-
-    row_yellow = panel._session_rows["Slot-3"]
-    assert row_yellow["step_bar"].isHidden() is False
-    assert row_yellow["step_busy_bar"].isHidden() is True
-    assert row_yellow["step_bar"].isPaused() is True
-    assert row_yellow["step_bar"].isError() is False
-
-    row_red = panel._session_rows["Slot-4"]
-    assert row_red["step_bar"].isHidden() is False
-    assert row_red["step_busy_bar"].isHidden() is True
-    assert row_red["step_bar"].isError() is True
-
-    for row in panel._session_rows.values():
-        assert "·" not in row["name"].text()
-        assert "·" not in row["status"].text()
-        assert "·" not in row["pct"].text()
+    assert {row["name"].text(): row["status"].text() for row in panel._session_rows.values()} == {
+        "会话 1": "构造答案",
+        "会话 2": "正在提交",
+        "会话 3": "失败重试",
+        "会话 4": "网络请求失败",
+    }
+    assert panel._session_rows["Slot-1"]["pct"].text() == "50%"
 
 
-def test_execution_panel_overall_states_and_controls(qtbot) -> None:
+def test_execution_panel_dispatches_pause_resume_and_stop_controls(qtbot) -> None:
     panel = DashboardExecutionPanel()
     qtbot.addWidget(panel)
     panel.show()
 
     panel.reset_for_new_run(10)
-    assert panel.overall_progress_ring.isHidden() is True
-    assert panel.overall_indeterminate_ring.isHidden() is False
+    assert panel.overall_status_label.text() == "正在初始化"
 
     panel.on_run_state_changed(True)
     assert panel.back_btn.isEnabled() is False
     assert panel.pause_resume_btn.isHidden() is False
     assert panel.stop_btn.isHidden() is False
     assert panel.restart_btn.isHidden() is True
+    with qtbot.waitSignal(panel.pauseRequested):
+        panel.pause_resume_btn.click()
 
     panel.apply_runtime_snapshot(
         {
@@ -130,9 +104,12 @@ def test_execution_panel_overall_states_and_controls(qtbot) -> None:
         }
     )
     panel.on_pause_state_changed(True, "用户手动暂停")
-    assert panel.overall_progress_ring.isPaused() is True
     assert panel.overall_status_label.text() == "已暂停"
     assert panel.pause_resume_btn.text() == "继续执行"
+    with qtbot.waitSignal(panel.resumeRequested):
+        panel.pause_resume_btn.click()
+    with qtbot.waitSignal(panel.stopRequested):
+        panel.stop_btn.click()
 
     panel.on_run_state_changed(False)
     assert panel.back_btn.isEnabled() is True

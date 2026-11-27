@@ -7,6 +7,10 @@ import pytest
 from CI.python_checks import common
 
 
+def test_window_smoke_uses_offscreen_qt_platform() -> None:
+    assert common.make_window_smoke_env()["QT_QPA_PLATFORM"] == "offscreen"
+
+
 def test_run_unicode_escape_check_reports_ci_unicode_escape(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:

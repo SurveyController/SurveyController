@@ -12,6 +12,11 @@ from PySide6.QtGui import QGuiApplication, QImage
 from PySide6.QtWidgets import QApplication
 
 
+def pytest_configure() -> None:
+    os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+    os.environ.setdefault("WJX_IMPORT_CHECK", "1")
+
+
 class _InMemoryClipboard(QObject):
     dataChanged = Signal()
 

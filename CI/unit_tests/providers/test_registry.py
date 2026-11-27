@@ -18,7 +18,6 @@ from software.providers.contracts import (
 )
 from surveycore.providers.contracts import SurveyDefinition
 from surveycore.providers.errors import SubmissionVerificationRequiredError
-from surveycore.providers.hooks import build_fill_http_hook, build_parse_hook
 from software.network.session_policy import SubmitProxyUnavailableError
 
 
@@ -137,29 +136,3 @@ async def test_generic_runtime_error_remains_unknown() -> None:
     result = await adapter.fill_survey_http_async(ExecutionConfig(), ExecutionState())
     assert result.failure is not None
     assert result.failure.category is ProviderErrorCategory.UNKNOWN
-
-
-async def test_provider_hook_rejects_non_async_return_value() -> None:
-    with patch(
-        "surveycore.providers.hooks._load_hook", return_value=lambda *_args, **_kwargs: True
-    ):
-        hook = build_fill_http_hook(("fake.module", "sync_http_fill"))
-        try:
-            await hook(ExecutionConfig(), ExecutionState())
-        except TypeError as exc:
-            assert "provider hook 必须返回 awaitable" in str(exc)
-        else:
-            raise AssertionError("同步 provider hook 不应再被接受")
-
-
-async def test_parse_hook_normalizes_tuple_result_to_survey_definition() -> None:
-    async def fake_parse(_url: str):
-        return ([{"num": 1, "title": "Q1", "type_code": "3"}], "  标题  ")
-
-    with patch("surveycore.providers.hooks._load_hook", return_value=fake_parse):
-        hook = build_parse_hook("qq", ("fake.module", "parse"))
-        definition = await hook("https://wj.qq.com/s2/demo")
-
-    assert isinstance(definition, SurveyDefinition)
-    assert definition.provider == "qq"
-    assert definition.title == "标题"

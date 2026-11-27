@@ -111,7 +111,18 @@ def test_loading_config_cancels_pending_parse_and_allows_new_parse():
     service.close()
 
 
-def test_parse_survey_completes_url_scheme_before_dispatch():
+@pytest.mark.parametrize(
+    ("user_input", "expected_url"),
+    [
+        ("  WWW.WJX.CN/vm/current.aspx  ", "https://www.wjx.cn/vm/current.aspx"),
+        ("wj.qq.com/s2/123/Abc", "https://wj.qq.com/s2/123/Abc"),
+        (
+            "www.credamo.com/s/demo/",
+            "https://www.credamo.com/answer.html#/s/demo/",
+        ),
+    ],
+)
+def test_parse_survey_dispatches_supported_links_in_canonical_form(user_input, expected_url):
     state, engine = RunStateStore(), FakeEngine()
     service = SurveyParseService(
         async_engine_client=engine,
@@ -120,8 +131,10 @@ def test_parse_survey_completes_url_scheme_before_dispatch():
         dispatch_async=lambda callback: callback(),
     )
 
-    service.parse_survey("www.wjx.cn/vm/current.aspx")
+    service.parse_survey(user_input)
 
-    assert engine.parsed_url == "https://www.wjx.cn/vm/current.aspx"
-    assert state.get_survey_snapshot()["url"] == "https://www.wjx.cn/vm/current.aspx"
+    assert engine.parsed_url == expected_url
+    snapshot = state.get_survey_snapshot()
+    assert snapshot["phase"] == "parsing"
+    assert snapshot["url"] == expected_url
     service.close()
