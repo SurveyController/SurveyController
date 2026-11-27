@@ -3376,7 +3376,7 @@ wheels = [
 
 [[package]]
 name = "surveycontroller"
-version = "5.0.1"
+version = "5.0.2"
 source = { virtual = "." }
 dependencies = [
     { name = "httpx" },
