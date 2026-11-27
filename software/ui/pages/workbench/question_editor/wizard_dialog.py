@@ -28,6 +28,7 @@ from qfluentwidgets import (
 )
 
 from surveycore.core.questions.config import QuestionEntry
+from surveycore.models import OptionFillText
 from surveycore.providers.contracts import SurveyQuestionMeta
 
 from .utils import (
@@ -586,7 +587,7 @@ class QuestionWizardBase(
     def get_location_results(self) -> Dict[int, List[str]]:
         return wizard_result_builder.get_location_results(self)
 
-    def get_option_fill_results(self) -> Dict[int, List[Optional[str]]]:
+    def get_option_fill_results(self) -> dict[int, list[OptionFillText]]:
         return wizard_result_builder.get_option_fill_results(self)
 
     def get_text_random_modes(self) -> Dict[int, str]:

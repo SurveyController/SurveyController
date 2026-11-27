@@ -3409,7 +3409,7 @@ requires-dist = [
     { name = "packaging" },
     { name = "pyside6", specifier = "==6.12.0" },
     { name = "pyside6-fluent-widgets", specifier = "==1.11.3" },
-    { name = "surveycore-py", specifier = "==0.2.0" },
+    { name = "surveycore-py", specifier = "==0.3.0" },
     { name = "zxing-cpp" },
 ]
 
@@ -3427,15 +3427,15 @@ dev = [
 
 [[package]]
 name = "surveycore-py"
-version = "0.2.0"
+version = "0.3.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "httpx" },
     { name = "selectolax" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/71/07/9fa0f7d163f63cf28a755719fc3d2a70ae3c6469bbc08073069ebf81d1b8/surveycore_py-0.2.0.tar.gz", hash = "sha256:f2be9c454b51dd7f599bf0369cdb61e09444b9d9a33a77da63849f5bd3781b14", size = 173546, upload-time = "2026-11-09T09:59:24.054Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/5c/d2/3d8800a1b47ecf74e32d63a46c25f509c8a5bdd9f70c5451d387c9492a92/surveycore_py-0.3.0.tar.gz", hash = "sha256:cb1fe8715beae293cc00abb42fedd8d1b0708128fdb7d04144d78c7e342134e1", size = 173180, upload-time = "2026-11-27T13:28:37.193Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/92/8d/70acb78a224d2596038069914d9a27f1283753bbc85fa052057c7cde4b47/surveycore_py-0.2.0-py3-none-any.whl", hash = "sha256:98dd9d95e18c644f92bed1282c28c545ece9bf258863638b76bae7065f68df24", size = 213054, upload-time = "2026-11-09T09:59:22.803Z" },
+    { url = "https://files.pythonhosted.org/packages/44/0a/828a7e5349d176ea4eb2f4b36c89c5cc2a47580522e7337d06c12670a200/surveycore_py-0.3.0-py3-none-any.whl", hash = "sha256:5c7d7feb7fd6a928695904f0fa9eb1ffecbf86e7fc85550461b6474e5b9fcb48", size = 213383, upload-time = "2026-11-27T13:28:35.808Z" },
 ]
 
 [[package]]

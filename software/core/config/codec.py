@@ -15,7 +15,7 @@ from software.core.config.answer_datetime_window import normalize_answer_datetim
 from software.core.config.schema import CONFIG_SCHEMA_VERSION, RuntimeConfig
 from surveycore.core.psychometrics.psychometric import normalize_target_alpha
 from surveycore.core.questions.consistency import normalize_rule_dict, sanitize_answer_rules
-from surveycore.core.questions.utils import serialize_random_int_range
+from surveycore.core.questions.utils import serialize_random_int_range, validate_option_fill_texts
 from software.providers.common import (
     SURVEY_PROVIDER_WJX,
     detect_survey_provider,
@@ -375,6 +375,8 @@ def deserialize_question_entry(data: Dict[str, Any]):
     mode_raw = data.get("distribution_mode") or "random"
     probabilities = data.get("probabilities")
     custom_weights = data.get("custom_weights")
+    option_fill_texts = data.get("option_fill_texts")
+    validate_option_fill_texts(option_fill_texts)
     if (
         mode_raw == "custom"
         and _prob_config_is_unset(probabilities)
@@ -415,7 +417,7 @@ def deserialize_question_entry(data: Dict[str, Any]):
         ),
         text_random_mode=str(data.get("text_random_mode") or "none"),
         text_random_int_range=_normalize_random_int_range(data.get("text_random_int_range")),
-        option_fill_texts=data.get("option_fill_texts"),
+        option_fill_texts=option_fill_texts,
         fillable_option_indices=data.get("fillable_option_indices"),
         attached_option_selects=list(data.get("attached_option_selects") or []),
         is_location=bool(data.get("is_location")),

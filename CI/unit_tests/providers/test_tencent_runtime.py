@@ -5,9 +5,12 @@ from types import SimpleNamespace
 import pytest
 
 from software.core.task import ExecutionConfig, ExecutionState
+from surveycore.core.questions.default_builder import build_default_question_entries
+from surveycore.core.questions.normalization import configure_probabilities
 from surveycore.providers.answering import AnswerAction
-from surveycore.providers.contracts import SurveyQuestionMeta
+from surveycore.providers.contracts import SurveyQuestionMeta, build_survey_definition
 from tencent.provider import http_runtime as qq_http
+from tencent.provider.parser import _standardize_qq_questions
 
 from CI.unit_tests.providers.http_runtime_fakes import _FakeResponse
 
@@ -312,7 +315,7 @@ async def test_qq_http_runtime_skips_description_metadata(monkeypatch) -> None:
                 {
                     "id": "q-13-7d39",
                     "type": "matrix_star",
-                    "options": [{"id": "o1", "text": "1"}, {"id": "o2", "text": "2"}],
+                    "star_num": 2,
                     "sub_titles": [{"id": "g-101-ae7c", "text": "专业"}],
                     "page_id": "p1",
                 },
@@ -331,20 +334,30 @@ async def test_qq_http_runtime_skips_description_metadata(monkeypatch) -> None:
 
     async def fake_post(*_args, **kwargs):
         captured.update(kwargs)
-        return _FakeResponse(payload={"code": "OK"})
+        return _FakeResponse(payload={"code": "OK", "data": {"answer_hash": "hash-ok"}})
+
+    async def fake_request_qq_api(*_args, **_kwargs):
+        return {"code": "OK", "data": {"answer_session": {"last_submitted_at": 1}}}
 
     monkeypatch.setattr(qq_http, "_fetch_submit_source", fake_fetch)
     monkeypatch.setattr(qq_http, "build_answer_action", fake_build_action)
     monkeypatch.setattr(qq_http.http_client, "apost", fake_post)
+    monkeypatch.setattr(qq_http, "_request_qq_api", fake_request_qq_api)
 
-    with pytest.raises(
-        RuntimeError,
-        match="腾讯问卷第6题暂不支持：当前版本暂不支持腾讯问卷矩阵量表题，请改用 v3.2.2 旧版本",
-    ):
-        await qq_http.brush_qq_http(config, state)
-
-    assert built_questions == []
-    assert captured == {}
+    assert await qq_http.brush_qq_http(config, state)
+    assert built_questions == [6]
+    assert captured["json"]["answer_survey"]["pages"] == [
+        {
+            "id": "p1",
+            "questions": [
+                {
+                    "id": "q-13-7d39",
+                    "type": "matrix_star",
+                    "groups": [{"id": "g-101-ae7c", "text": "1"}],
+                }
+            ],
+        }
+    ]
 
 
 @pytest.mark.asyncio
@@ -393,15 +406,69 @@ async def test_qq_http_runtime_uses_latest_dynamic_ids_for_score_questions(monke
 
     async def fake_post(*_args, **kwargs):
         captured.update(kwargs)
-        return _FakeResponse(payload={"code": "OK"})
+        return _FakeResponse(payload={"code": "OK", "data": {"answer_hash": "hash-ok"}})
+
+    async def fake_request_qq_api(*_args, **_kwargs):
+        return {"code": "OK", "data": {"answer_session": {"last_submitted_at": 1}}}
+
+    monkeypatch.setattr(qq_http, "_fetch_submit_source", fake_fetch)
+    monkeypatch.setattr(qq_http.http_client, "apost", fake_post)
+    monkeypatch.setattr(qq_http, "_request_qq_api", fake_request_qq_api)
+
+    assert await qq_http.brush_qq_http(config, state)
+    assert captured["json"]["answer_survey"]["pages"] == [
+        {"id": "p1", "questions": [{"id": "q-15-new", "type": "nps", "text": "3"}]}
+    ]
+
+
+@pytest.mark.asyncio
+async def test_qq_http_runtime_encodes_configured_chained_select_path(monkeypatch) -> None:
+    raw_question = {
+        "id": "q1",
+        "type": "chained_selects",
+        "title": "地区",
+        "page_id": "p1",
+        "levels": ["省", "市"],
+        "groups": [["a", "甲省", [["x", "甲市"], ["y", "乙市"]]]],
+    }
+    questions = build_survey_definition(
+        "qq", "地区调查", _standardize_qq_questions([raw_question])
+    ).questions
+    assert questions[0].option_texts == ["甲省 / 甲市", "甲省 / 乙市"]
+    entries = build_default_question_entries(questions)
+    assert entries[0].question_type == "dropdown"
+    entries[0].distribution_mode = "custom"
+    entries[0].probabilities = [0, 100]
+    entries[0].custom_weights = [0, 100]
+    config = ExecutionConfig(
+        url="https://wj.qq.com/s2/123/hash/",
+        survey_provider="qq",
+        questions_metadata={question.num: question for question in questions},
+    )
+    configure_probabilities(entries, config)
+    captured = {}
+
+    async def fake_fetch(*_args, **_kwargs):
+        return "", {}, [raw_question]
+
+    async def fake_post(*_args, **kwargs):
+        captured.update(kwargs)
+        return _FakeResponse(payload={"code": "OK", "data": {"answer_hash": "hash-ok"}})
 
     monkeypatch.setattr(qq_http, "_fetch_submit_source", fake_fetch)
     monkeypatch.setattr(qq_http.http_client, "apost", fake_post)
 
-    with pytest.raises(
-        RuntimeError,
-        match="腾讯问卷第8题暂不支持：当前版本暂不支持腾讯问卷量表题，请改用 v3.2.2 旧版本",
-    ):
-        await qq_http.brush_qq_http(config, state)
-
-    assert captured == {}
+    assert await qq_http.brush_qq_http(config, ExecutionState(config=config))
+    assert captured["json"]["answer_survey"]["pages"] == [
+        {
+            "id": "p1",
+            "questions": [
+                {
+                    "id": "q1",
+                    "type": "chained_selects",
+                    "id_list": ["a", "y"],
+                    "text_list": ["甲省", "乙市"],
+                }
+            ],
+        }
+    ]

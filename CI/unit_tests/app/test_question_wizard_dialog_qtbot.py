@@ -806,7 +806,7 @@ def test_question_wizard_dialog_option_fill_mode_selector_updates_fill_result(qt
         custom_weights=[50, 50],
         question_num=1,
         fillable_option_indices=[0],
-        option_fill_texts=["无", None],
+        option_fill_texts=[["无", "不便说明\n谢谢"], None],
     )
     info = [
         SurveyQuestionMeta(
@@ -832,6 +832,11 @@ def test_question_wizard_dialog_option_fill_mode_selector_updates_fill_result(qt
     fill_edit = dlg.option_fill_edit_map[0][0]
     assert fill_edit.isVisibleTo(card)
     assert not selector.range_widget.isVisibleTo(card)
+    assert fill_edit.toPlainText() == "无\n不便说明\n谢谢"
+    assert dlg.get_option_fill_results()[0] == [["无", "不便说明\n谢谢"], None]
+
+    fill_edit.setPlainText("意见一\n\n 意见二 ")
+    assert dlg.get_option_fill_results()[0] == [["意见一", "意见二"], None]
 
     selector.combo.setCurrentIndex(selector.combo.findData("ai"))
     assert fill_edit.isVisibleTo(card)

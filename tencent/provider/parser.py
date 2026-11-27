@@ -146,10 +146,7 @@ async def parse_qq_survey(url: str) -> Tuple[List[Dict[str, Any]], str]:
         _raise_if_qq_login_required(exc)
         logging.exception("腾讯问卷 HTTP 解析失败，url=%r", url)
         message = str(exc or "").strip() or "腾讯问卷 HTTP 解析失败"
-        if not (
-            message.startswith("腾讯问卷 HTTP 解析失败：")
-            or message.startswith("腾讯问卷当前版本暂不支持")
-        ):
+        if not message.startswith("腾讯问卷 HTTP 解析失败："):
             message = f"腾讯问卷 HTTP 解析失败：{message}"
         raise RuntimeError(message) from exc
 

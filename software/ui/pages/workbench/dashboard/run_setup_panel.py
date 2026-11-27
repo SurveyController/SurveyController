@@ -26,7 +26,7 @@ from qfluentwidgets.components.widgets.switch_button import IndicatorPosition
 from software.core.engine.constants import HTTP_MAX_THREADS
 from software.core.config.schema import RuntimeConfig
 from software.providers.common import detect_survey_provider, supports_answer_datetime_window
-from surveycore.core.questions.utils import OPTION_FILL_AI_TOKEN
+from software.core.questions.text_values import has_ai_option_fill_text
 from software.ui.helpers.proxy_access import (
     format_quota_value,
     has_authenticated_session,
@@ -381,10 +381,7 @@ class DashboardRunSetupPanel(QWidget):
                 bool(flag) for flag in (getattr(entry, "multi_text_blank_ai_flags", None) or ())
             ):
                 return True
-            if any(
-                str(value or "").strip() == OPTION_FILL_AI_TOKEN
-                for value in (getattr(entry, "option_fill_texts", None) or ())
-            ):
+            if has_ai_option_fill_text(getattr(entry, "option_fill_texts", None)):
                 return True
         return False
 

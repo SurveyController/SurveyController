@@ -4,7 +4,7 @@ from dataclasses import dataclass, field
 from typing import Any
 
 from PySide6.QtWidgets import QButtonGroup, QWidget
-from qfluentwidgets import BodyLabel, LineEdit, PushButton, RadioButton
+from qfluentwidgets import BodyLabel, LineEdit, PlainTextEdit, PushButton, RadioButton
 
 from software.ui.widgets.no_wheel import NoWheelSlider
 
@@ -38,7 +38,7 @@ class WizardRuntimeState:
     )
     bias_preset_map: dict[int, Any] = field(default_factory=dict)
     attached_select_slider_map: dict[int, list[dict[str, Any]]] = field(default_factory=dict)
-    option_fill_edit_map: dict[int, dict[int, LineEdit]] = field(default_factory=dict)
+    option_fill_edit_map: dict[int, dict[int, PlainTextEdit]] = field(default_factory=dict)
     option_fill_state_map: dict[int, dict[int, dict[str, Any]]] = field(default_factory=dict)
     multi_text_blank_radio_groups: dict[int, list[Any]] = field(default_factory=dict)
     multi_text_blank_ai_checkboxes: dict[int, list[Any]] = field(default_factory=dict)

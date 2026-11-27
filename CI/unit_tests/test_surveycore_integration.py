@@ -35,6 +35,10 @@ from surveycore.wjx.provider.html_parser import parse_survey_questions_from_html
 from software.core.config.codec import deserialize_runtime_config, serialize_runtime_config
 from software.core.config.schema import RuntimeConfig
 from software.core.engine.run_stop_policy import RunStopPolicy
+from software.core.questions.text_values import (
+    has_ai_option_fill_text,
+    resolve_option_fill_text_from_config,
+)
 from software.core.reverse_fill.validation import build_reverse_fill_spec
 from software.core.task import ExecutionConfig, ExecutionState, ProxyLease
 
@@ -219,6 +223,51 @@ def test_application_target_counts_successful_submissions_after_failures() -> No
     assert stop.is_set()
     assert policy.record_success(stop) is True
     assert state.cur_num == 3
+
+
+@pytest.mark.asyncio
+async def test_option_fill_candidates_survive_config_and_use_application_ai_cache(
+    monkeypatch,
+) -> None:
+    saved = RuntimeConfig(
+        question_entries=[
+            QuestionEntry(
+                "single",
+                [0, 100, 0],
+                option_count=3,
+                question_num=1,
+                option_fill_texts=["旧答案", ["候选", " __AI_FILL__ "], None],
+            )
+        ]
+    )
+    payload = json.loads(json.dumps(serialize_runtime_config(saved)))
+    restored = deserialize_runtime_config(payload)
+    assert restored.question_entries[0].option_fill_texts == [
+        "旧答案",
+        ["候选", " __AI_FILL__ "],
+        None,
+    ]
+    assert has_ai_option_fill_text(restored.question_entries[0].option_fill_texts)
+
+    config = ExecutionConfig()
+    configure_probabilities(restored.question_entries, config)
+    fills = config.single_option_fill_texts[0]
+    state = ExecutionState(config=config)
+    state.set_ai_option_fill_prefill_answers("slot", {(1, 1): "AI 答案"})
+    monkeypatch.setattr("surveycore.core.questions.utils.random.choice", lambda choices: choices[1])
+
+    assert await resolve_option_fill_text_from_config(fills, 0) == "旧答案"
+    assert (
+        await resolve_option_fill_text_from_config(
+            fills, 1, question_number=1, thread_name="slot", ctx=state
+        )
+        == "AI 答案"
+    )
+    assert await resolve_option_fill_text_from_config(fills, 2) is None
+
+    payload["question_entries"][0]["option_fill_texts"] = [[42]]
+    with pytest.raises(ValueError, match=r"option_fill_texts\[0\]"):
+        deserialize_runtime_config(payload)
 
 
 def test_installed_core_resources_and_version_support_id_card_generation() -> None:

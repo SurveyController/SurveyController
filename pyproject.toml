@@ -10,7 +10,7 @@ dependencies = [
     "packaging",
     "PySide6==6.12.0",
     "PySide6-Fluent-Widgets==1.11.3",
-    "surveycore-py==0.2.0",
+    "surveycore-py==0.3.0",
     "zxing-cpp",
 ]
 

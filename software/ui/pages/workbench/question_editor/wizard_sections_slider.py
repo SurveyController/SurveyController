@@ -14,6 +14,7 @@ from qfluentwidgets import (
     CardWidget,
     InfoBadge,
     LineEdit,
+    PlainTextEdit,
     SegmentedWidget,
 )
 
@@ -46,7 +47,7 @@ class WizardSectionsSliderMixin:
         entries: List[QuestionEntry]
         bias_preset_map: Dict[int, Any]
         slider_map: Dict[int, List[NoWheelSlider]]
-        option_fill_edit_map: Dict[int, Dict[int, LineEdit]]
+        option_fill_edit_map: Dict[int, Dict[int, PlainTextEdit]]
         option_fill_state_map: Dict[int, Dict[int, Dict[str, Any]]]
 
         def _resolve_slider_bounds(self, idx: int, entry: QuestionEntry) -> tuple[int, int]: ...
@@ -142,7 +143,7 @@ class WizardSectionsSliderMixin:
             )
         fillable_option_set = set(fillable_option_indices)
         saved_option_fill_texts = list(getattr(entry, "option_fill_texts", []) or [])
-        option_fill_edits: Dict[int, LineEdit] = {}
+        option_fill_edits: Dict[int, PlainTextEdit] = {}
         option_fill_states: Dict[int, Dict[str, Any]] = {}
         for rule in info_entry.get("jump_rules") or []:
             oi = rule.get("option_index")
@@ -255,8 +256,9 @@ class WizardSectionsSliderMixin:
                     if opt_idx < len(saved_option_fill_texts)
                     else None
                 )
-                fill_mode, fill_ai_enabled = self._resolve_option_fill_mode(raw_fill_value)
-                range_min, range_max = self._resolve_option_fill_int_range(raw_fill_value)
+                scalar_fill = raw_fill_value if isinstance(raw_fill_value, str) else None
+                fill_mode, fill_ai_enabled = self._resolve_option_fill_mode(scalar_fill)
+                range_min, range_max = self._resolve_option_fill_int_range(scalar_fill)
 
                 fill_container = QWidget(card)
                 fill_container.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, False)
@@ -272,21 +274,14 @@ class WizardSectionsSliderMixin:
                     max_value=range_max,
                 )
 
-                fill_edit = LineEdit(selector)
-                existing_fill = ""
-                if (
-                    fill_mode == _TEXT_RANDOM_NONE
-                    and not fill_ai_enabled
-                    and opt_idx < len(saved_option_fill_texts)
-                ):
-                    existing_fill = str(saved_option_fill_texts[opt_idx] or "").strip()
-                if existing_fill:
-                    fill_edit.setText(existing_fill)
-                default_placeholder = (
-                    "例如：无"
-                    if entry.question_type == "single"
-                    else "输入命中该选项时要填写的内容"
-                )
+                fill_edit = PlainTextEdit(selector)
+                fill_edit.setFixedHeight(64)
+                fill_edit.setTabChangesFocus(True)
+                if isinstance(raw_fill_value, list):
+                    fill_edit.setPlainText("\n".join(raw_fill_value))
+                elif fill_mode == _TEXT_RANDOM_NONE and not fill_ai_enabled and scalar_fill:
+                    fill_edit.setPlainText(scalar_fill)
+                default_placeholder = "每行一个候选答案"
                 mode_placeholders = {
                     FILL_MODE_NONE: default_placeholder,
                     FILL_MODE_AI: "AI 生成",
@@ -302,7 +297,7 @@ class WizardSectionsSliderMixin:
 
                 def _sync_option_fill(
                     mode: str,
-                    edit: LineEdit = fill_edit,
+                    edit: PlainTextEdit = fill_edit,
                     sel: FillModeSelector = selector,
                     placeholders: Dict[str, str] = mode_placeholders,
                 ) -> None:
@@ -321,6 +316,10 @@ class WizardSectionsSliderMixin:
                 option_fill_edits[opt_idx] = fill_edit
                 option_fill_states[opt_idx] = {
                     "edit": fill_edit,
+                    "initial_text": fill_edit.toPlainText(),
+                    "initial_value": raw_fill_value
+                    if fill_mode == _TEXT_RANDOM_NONE and not fill_ai_enabled
+                    else None,
                     "group": selector.group_proxy(),
                     "min_edit": selector.min_edit,
                     "max_edit": selector.max_edit,

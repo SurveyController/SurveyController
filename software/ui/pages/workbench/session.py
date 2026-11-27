@@ -3,7 +3,7 @@ from __future__ import annotations
 import logging
 from typing import Any
 
-from surveycore.core.questions.utils import OPTION_FILL_AI_TOKEN
+from software.core.questions.text_values import has_ai_option_fill_text
 
 from software.application.run_plan import compile_run_plan
 from software.core.config.schema import RuntimeConfig
@@ -43,10 +43,7 @@ class WorkbenchRunCoordinator:
                 bool(flag) for flag in (getattr(entry, "multi_text_blank_ai_flags", None) or ())
             ):
                 return True
-            if any(
-                str(value or "").strip() == OPTION_FILL_AI_TOKEN
-                for value in (getattr(entry, "option_fill_texts", None) or ())
-            ):
+            if has_ai_option_fill_text(getattr(entry, "option_fill_texts", None)):
                 return True
         return False
 

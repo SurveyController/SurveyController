@@ -188,10 +188,8 @@ class TencentParserTests:
         assert second["is_rating"]
         assert second["option_texts"] == ["3", "4", "5", "6"]
         assert second["rating_max"] == 4
-        assert second["unsupported"] is True
-        assert (
-            second["unsupported_reason"] == "当前版本暂不支持腾讯问卷量表题，请改用 v3.2.2 旧版本"
-        )
+        assert second["unsupported"] is False
+        assert second["unsupported_reason"] == ""
 
         third = normalized[2]
         assert third["unsupported"]
@@ -200,32 +198,35 @@ class TencentParserTests:
         assert second["display_num"] == 2
         assert third["display_num"] == 3
 
-    def test_build_parse_result_blocks_tencent_score_and_matrix_star_questions(self) -> None:
-        with pytest.raises(RuntimeError, match="请改用 v3.2.2 旧版本"):
-            qq_parser._build_qq_parse_result(
-                [
-                    {
-                        "id": "q1",
-                        "type": "star",
-                        "title": "综合满意度",
-                        "star_begin_num": 1,
-                        "star_num": 5,
-                        "page_id": "p1",
-                        "page": 1,
-                    },
-                    {
-                        "id": "q2",
-                        "type": "matrix_star",
-                        "title": "矩阵满意度",
-                        "sub_titles": [{"text": "服务态度"}],
-                        "star_num": 5,
-                        "page_id": "p1",
-                        "page": 1,
-                    },
-                ],
-                raw_title="腾讯问卷",
-                empty_error_message="empty",
-            )
+    def test_build_parse_result_supports_tencent_score_and_matrix_star_questions(self) -> None:
+        questions, _ = qq_parser._build_qq_parse_result(
+            [
+                {
+                    "id": "q1",
+                    "type": "star",
+                    "title": "综合满意度",
+                    "star_num": 3,
+                    "revert_sort": True,
+                    "page_id": "p1",
+                    "page": 1,
+                },
+                {
+                    "id": "q2",
+                    "type": "matrix_star",
+                    "title": "矩阵满意度",
+                    "sub_titles": [{"id": "g1", "text": "服务态度"}],
+                    "star_num": 3,
+                    "page_id": "p1",
+                    "page": 1,
+                },
+            ],
+            raw_title="腾讯问卷",
+            empty_error_message="empty",
+        )
+        assert [question["type_code"] for question in questions] == ["5", "6"]
+        assert [question["unsupported"] for question in questions] == [False, False]
+        assert questions[0]["option_texts"] == ["3", "2", "1"]
+        assert questions[1]["option_texts"] == ["1", "2", "3"]
 
     def test_standardize_qq_questions_marks_description_and_merges_into_next_question(self) -> None:
         description_question = {

@@ -263,11 +263,7 @@ async def brush_qq_http(
             ).strip()
             if not page_id:
                 raise RuntimeError(f"腾讯问卷第{int(action.question_num or 0)}题缺少 page_id")
-            question_answer = _question_answer(raw_source, action)
-            if isinstance(question_answer, list):
-                page_questions.setdefault(page_id, []).extend(question_answer)
-            else:
-                page_questions.setdefault(page_id, []).append(question_answer)
+            page_questions.setdefault(page_id, []).append(_question_answer(raw_source, action))
 
         if not page_questions:
             raise RuntimeError("腾讯问卷没有生成可提交答案")

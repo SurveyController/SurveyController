@@ -3,7 +3,7 @@ from __future__ import annotations
 from typing import Any, Dict, List, Optional, Protocol, Tuple, cast
 
 from PySide6.QtWidgets import QButtonGroup
-from qfluentwidgets import LineEdit, SwitchButton
+from qfluentwidgets import LineEdit, PlainTextEdit, SwitchButton
 
 from software.app.config import DEFAULT_FILL_TEXT
 from surveycore.core.questions.config import QuestionEntry
@@ -12,6 +12,7 @@ from surveycore.core.questions.utils import (
     build_random_int_token,
     serialize_random_int_range,
 )
+from surveycore.models import OptionFillText
 from surveycore.providers.contracts import SurveyQuestionMeta
 from software.ui.widgets.no_wheel import NoWheelSlider
 
@@ -121,8 +122,8 @@ def get_location_results(source: WizardResultSource) -> Dict[int, List[str]]:
     return result
 
 
-def get_option_fill_results(source: WizardResultSource) -> Dict[int, List[Optional[str]]]:
-    result: Dict[int, List[Optional[str]]] = {}
+def get_option_fill_results(source: WizardResultSource) -> dict[int, list[OptionFillText]]:
+    result: dict[int, list[OptionFillText]] = {}
     for idx, state_map in source.option_fill_state_map.items():
         if not state_map:
             continue
@@ -130,7 +131,7 @@ def get_option_fill_results(source: WizardResultSource) -> Dict[int, List[Option
         option_count = int(info.get("options") or 0)
         max_index = max(state_map.keys()) if state_map else -1
         normalized_count = max(option_count, max_index + 1, 0)
-        values: List[Optional[str]] = [None] * normalized_count
+        values: list[OptionFillText] = [None] * normalized_count
         for option_index, state in state_map.items():
             if 0 <= option_index < normalized_count:
                 values[option_index] = _build_option_fill_value(state)
@@ -240,7 +241,7 @@ def get_dimensions(source: WizardResultSource) -> Dict[int, Optional[str]]:
     return result
 
 
-def _build_option_fill_value(state: OptionFillState) -> Optional[str]:
+def _build_option_fill_value(state: OptionFillState) -> OptionFillText:
     ai_checkbox = cast(Optional[SwitchButton], state.get("ai_cb"))
     if ai_checkbox is not None and ai_checkbox.isChecked():
         return OPTION_FILL_AI_TOKEN
@@ -261,9 +262,17 @@ def _build_option_fill_value(state: OptionFillState) -> Optional[str]:
             max_edit.text().strip() if max_edit is not None else "",
         )
 
-    edit = cast(Optional[LineEdit], state.get("edit"))
-    raw_value = edit.text().strip() if edit is not None else ""
-    return raw_value or None
+    edit = cast(PlainTextEdit | None, state.get("edit"))
+    if edit is None:
+        return None
+    raw_value = edit.toPlainText()
+    initial_value = state.get("initial_value")
+    if raw_value == state.get("initial_text") and initial_value is not None:
+        return initial_value
+    candidates = [text for line in raw_value.splitlines() if (text := line.strip())]
+    if len(candidates) > 1:
+        return candidates
+    return candidates[0] if candidates else None
 
 
 def _resolve_random_mode(group: QButtonGroup) -> str:

@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from PySide6.QtWidgets import QButtonGroup, QRadioButton
-from qfluentwidgets import LineEdit
+from qfluentwidgets import LineEdit, PlainTextEdit
 
 from surveycore.core.questions.config import QuestionEntry
 from surveycore.core.questions.utils import OPTION_FILL_AI_TOKEN
@@ -150,15 +150,20 @@ def test_wizard_result_builder_collects_normal_results(qtbot) -> None:
 def test_wizard_result_builder_option_fill_modes_and_defaults(qtbot) -> None:
     host = _Host()
     host.text_edit_map = {0: [_line(""), _line("  ")]}
+    text_edit = PlainTextEdit()
+    text_edit.setPlainText("  custom  ")
+    empty_edit = PlainTextEdit()
+    qtbot.addWidget(text_edit)
+    qtbot.addWidget(empty_edit)
     host.option_fill_state_map = {
         0: {
-            0: {"ai_cb": _Check(True), "group": _radio_group(0), "edit": _line("manual")},
+            0: {"ai_cb": _Check(True), "group": _radio_group(0), "edit": text_edit},
             1: {"group": _radio_group(1)},
             2: {"group": _radio_group(2)},
             3: {"group": _radio_group(3)},
             4: {"group": _radio_group(4), "min_edit": _line("5"), "max_edit": _line("9")},
-            5: {"group": _radio_group(0), "edit": _line("  custom  ")},
-            6: {"group": _radio_group(0), "edit": _line("")},
+            5: {"group": _radio_group(0), "edit": text_edit},
+            6: {"group": _radio_group(0), "edit": empty_edit},
         }
     }
 
